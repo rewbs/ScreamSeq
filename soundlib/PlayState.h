@@ -99,6 +99,9 @@ public:
 	{
 		return m_nBufferCount == m_nSamplesPerTick;
 	}
+#if defined(OPENMPT_EDITOR_CORE)
+	constexpr uint32 SamplesIntoTick() const noexcept { return m_nSamplesPerTick - m_nBufferCount; }
+#endif
 
 	constexpr uint32 TicksOnRow() const noexcept
 	{

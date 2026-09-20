@@ -1,0 +1,30 @@
+[ 15%] Built target TrackerFLAC
+[ 86%] Built target OpenMPTCore
+[ 86%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleArchive.cpp.o
+[ 86%] Linking CXX static library libTrackerEditor.a
+[100%] Built target TrackerEditor
+[100%] Linking CXX executable instrument-envelope-tests
+[100%] Built target instrument-envelope-tests
+[ 15%] Built target TrackerFLAC
+[ 85%] Built target OpenMPTCore
+[ 98%] Built target TrackerEditor
+[100%] Linking CXX executable automation-tools-tests
+[100%] Built target automation-tools-tests
+[ 15%] Built target TrackerFLAC
+[ 85%] Built target OpenMPTCore
+[ 98%] Built target TrackerEditor
+[100%] Linking CXX executable sample-archive-tests
+[100%] Built target sample-archive-tests
+[ 14%] Built target TrackerFLAC
+[ 80%] Built target OpenMPTCore
+[ 93%] Built target TrackerEditor
+[ 96%] Built target TrackerPlugins
+[100%] Built target TrackerMac
+[100%] Linking CXX executable sample-project-tests
+[100%] Built target sample-project-tests
+[  0%] Built target RealtimeAudit
+[ 15%] Built target TrackerFLAC
+[ 85%] Built target OpenMPTCore
+[ 98%] Built target TrackerEditor
+[100%] Linking CXX executable native-reverse-loop-tests
+[100%] Built target native-reverse-loop-tests

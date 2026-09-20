@@ -1,0 +1,9 @@
+PASS filename multisamples: notes/accidentals/octaves, family isolation, ordinal alignment, variants and duplicate/root bounds
+Real library: 22387 samples indexed in 3.395 s
+PASS actual Clav family: 109 samples, numbered-key +2 octave alignment, C-0…C-9
+Search '': 22387 matches in 21.36 ms
+Search '808 "bass drum"': 331 matches in 95.48 ms
+Search 'Junos chords': 82 matches in 93.65 ms
+Search 'snare -maschine': 1255 matches in 104.83 ms
+Search '"From Mars" WAV': 21856 matches in 92.37 ms
+PASS sample library: inherited tags, search, pagination, hidden files, roots, cache, rescan, preview cancellation and offline audio

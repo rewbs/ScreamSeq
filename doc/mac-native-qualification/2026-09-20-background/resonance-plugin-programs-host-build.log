@@ -1,0 +1,18 @@
+[ 12%] Built target TrackerFLAC
+[ 77%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 93%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/VST3Host.mm.o
+[ 95%] Linking CXX static library libTrackerPlugins.a
+[ 95%] Built target TrackerPlugins
+[ 96%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 96%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioDevice.mm.o
+[ 96%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioExport.mm.o
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:1502:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:722:
+/Users/rewbs/code/openmpt/mac/Bridge/InstrumentEnvelopeToolsAPI.inc:13:57: warning: 'auto' deduced as 'id' in declaration of 'value' [-Wauto-var-id]
+   13 |       auto info=[&](const InstrumentEnvelope &envelope){auto value=[instrumentEnvelopeInfo(envelope,maximum) mutableCopy];
+      |                                                         ^~~~~~~~~~
+[ 98%] Building CXX object CMakeFiles/TrackerMac.dir/Audio/NativeInstrument.cpp.o
+1 warning generated.
+[ 98%] Linking CXX static library libTrackerMac.a
+[100%] Built target TrackerMac

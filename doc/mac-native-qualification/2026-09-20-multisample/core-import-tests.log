@@ -1,0 +1,2 @@
+PASS multisample: roots, nearest-note zones, duplicate/out-of-range rejection, atomic Undo/Redo, native recall and measured offline pitch in MPT/IT/XM
+PASS bulk sample import: preflight/rollback, one Undo, exact PCM/rate/channels, instrument mapping, API revision and preview decoder

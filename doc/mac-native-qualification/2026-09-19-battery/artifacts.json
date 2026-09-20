@@ -1,0 +1,8 @@
+{
+  "archive": "bin/mac-native/distribution/Resonance-0.1.0-arm64.zip",
+  "bytes": 3740535,
+  "sha256": "57aded85e73c67c0f294417e599a579bb7571d0283209437d8a470518a99e015",
+  "sourceFingerprint": "122bfadc0c03dcc1eb7f37a364253a83c266e07308fa7b4ce29ad0838bd21871",
+  "signature": "codesign --verify --deep --strict passed",
+  "zipIntegrity": "passed, archived build manifest matches app"
+}

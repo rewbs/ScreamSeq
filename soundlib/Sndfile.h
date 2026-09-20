@@ -990,6 +990,10 @@ private:
 	std::pair<mixsample_t *, mixsample_t *> GetChannelOffsets(const ModChannel &chn, CHANNELINDEX channel);
 public:
 	bool FadeSong(uint32 msec);
+#if defined(OPENMPT_EDITOR_CORE)
+	// Finish native routing tails with the same output stage as ordinary chunks.
+	void ProcessNativeTail(const float *left, const float *right, samplecount_t count, IAudioTarget &target);
+#endif
 private:
 	void ProcessDSP(uint32 countChunk);
 	void ProcessPlugins(uint32 nCount);
@@ -1007,13 +1011,35 @@ public:
 	void SetMixerSettings(const MixerSettings &mixersettings);
 	void SetResamplerSettings(const CResamplerSettings &resamplersettings);
 	void InitPlayer(bool bReset=false);
+#if defined(OPENMPT_EDITOR_CORE)
+	// The native host observes the exact musical position before each mix chunk.
+	// Set only while stopped. The observer may not allocate, block or throw.
+	// Called at a row boundary before note/effect processing. False ends immediately.
+	void *nativeTransportContext = nullptr;
+	bool (*nativeTransportRow)(void *) noexcept = nullptr;
+	void *nativePrepareContext = nullptr;
+	uint32 (*nativePrepareMix)(void *, uint32) noexcept = nullptr;
+	void TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect = 0, uint8 parameter = 0);
+	void ApplyNativeNoteEffect(CHANNELINDEX channel, uint8 effect, uint8 parameter);
+	void *nativeMixContext = nullptr;
+	void (*nativeMixObserver)(void *, const PlayState &, uint32) noexcept = nullptr;
+	// Prepared host pitch curves for this mix chunk. Only explicitly controlled
+	// channels use the per-sample path; legacy songs keep their normal mixer.
+	std::array<const double *, MAX_BASECHANNELS> nativePitchRatios{};
+	void PrepareRealtime() { m_visitedRows.PrepareRealtime(); m_PlayState.m_midiMacroScratchSpace.reserve(65536); }
+	bool RealtimeCapacityExceeded() const noexcept { return m_visitedRows.RealtimeExhausted(); }
+#endif
 	void SetDspEffects(uint32 DSPMask);
 	uint32 GetSampleRate() const { return m_MixerSettings.gdwMixingFreq; }
 #ifndef NO_EQ
 	void SetEQGains(const uint32 *pGains, const uint32 *pFreqs, bool bReset = false) { m_EQ.SetEQGains(pGains, pFreqs, bReset, m_MixerSettings.gdwMixingFreq); } // 0=-12dB, 32=+12dB
 #endif // NO_EQ
 public:
-	bool ReadNote();
+	bool ReadNote(
+#ifdef OPENMPT_EDITOR_CORE
+		CHANNELINDEX nativeRefresh = CHANNELINDEX_INVALID
+#endif
+	);
 	bool ProcessRow();
 	bool ProcessEffects();
 	std::pair<bool, bool> NextRow(PlayState &playState, const bool breakRow) const;

@@ -38,6 +38,49 @@ struct MixLoopState
 	uint32 maxSamples = 0;
 	const uint8 ITPingPongDiff;
 	const bool precisePingPongLoops;
+#ifdef OPENMPT_EDITOR_CORE
+	static constexpr uint32 NativeFrames = 256;
+	static_assert(NativeReverseLoopState::HistoryFrames >= InterpolationLookaheadBufferSize);
+	alignas(16) std::array<int16, (NativeFrames + 2 * InterpolationLookaheadBufferSize) * 2> nativeScratch;
+	SamplePosition nativeRebase;
+	bool nativeScratchActive = false;
+	bool nativeCrossedEnd = false;
+
+	uint32 NativeSampleCount(ModChannel &chn, uint32 count)
+	{
+		auto &state = chn.nativeReverseLoop;
+		state.Attach(chn.pModSample, chn.nLoopStart, chn.nLoopEnd, chn.InSustainLoop(), chn.position);
+		chn.position = state.Advance(chn.position);
+		const auto fraction = chn.position.GetFract();
+		const auto limit = (int64(NativeFrames - 1) << 32) - fraction;
+		count = std::min<uint32>(count, uint32(std::min<int64>(count, limit / chn.increment.GetRaw() + 1)));
+		const auto last = (int64(fraction) + chn.increment.GetRaw() * (count - 1)) >> 32;
+		const auto frames = uint32(last) + 1 + 2 * InterpolationLookaheadBufferSize;
+		const auto first = int64(chn.position.GetInt()) - InterpolationLookaheadBufferSize;
+		const auto stride = chn.pModSample->GetBytesPerSample();
+		auto *out = reinterpret_cast<std::byte *>(nativeScratch.data());
+		const auto *in = chn.pModSample->sampleb();
+		for(uint32 i = 0; i < frames; ++i)
+		{
+			const auto source = state.SourceFrame(first + i, chn.pModSample->nLength);
+			std::memcpy(out + size_t(i) * stride, in + size_t(source) * stride, stride);
+		}
+		nativeRebase = SamplePosition(chn.position.GetInt() - InterpolationLookaheadBufferSize, 0);
+		chn.position -= nativeRebase;
+		chn.pCurrentSample = nativeScratch.data();
+		nativeScratchActive = true;
+		return count;
+	}
+	void RestoreNativePosition(ModChannel &chn)
+	{
+		if(!nativeScratchActive) return;
+		chn.position += nativeRebase;
+		nativeCrossedEnd = chn.position >= SamplePosition(chn.nLoopEnd, 0);
+		chn.position = chn.nativeReverseLoop.Advance(chn.position);
+		chn.pCurrentSample = samplePointer;
+		nativeScratchActive = false;
+	}
+#endif
 
 	MixLoopState(const CSoundFile &sndFile, const ModChannel &chn)
 		: ITPingPongDiff{sndFile.m_playBehaviour[kITPingPongMode] ? uint8(1) : uint8(0)}
@@ -98,8 +141,14 @@ struct MixLoopState
 	}
 
 	// Check how many samples can be rendered without encountering loop or sample end, and also update loop position / direction
-	MPT_ATTR_ALWAYSINLINE MPT_INLINE_FORCE uint32 GetSampleCount(ModChannel &chn, uint32 nSamples) const
+	MPT_ATTR_ALWAYSINLINE MPT_INLINE_FORCE uint32 GetSampleCount(ModChannel &chn, uint32 nSamples)
 	{
+#ifdef OPENMPT_EDITOR_CORE
+		nativeCrossedEnd = false;
+		if(nSamples && chn.nLength && samplePointer && chn.increment.IsPositive() && chn.HasNativeReverseLoop())
+			return NativeSampleCount(chn, nSamples);
+		chn.ExitNativeReverseLoop();
+#endif
 		const int32 nLoopStart = chn.dwFlags[CHN_LOOP] ? chn.nLoopStart : 0;
 		SamplePosition nInc = chn.increment;
 
@@ -355,11 +404,30 @@ std::pair<mixsample_t *, mixsample_t *> CSoundFile::GetChannelOffsets(const ModC
 
 bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bool doMix)
 {
+#ifdef OPENMPT_EDITOR_CORE
+	const CHANNELINDEX nativeParent = chn.nMasterChn ? chn.nMasterChn - 1 : channel;
+	const double *nativeRatios = nativeParent < nativePitchRatios.size() && !chn.isPreviewNote ? nativePitchRatios[nativeParent] : nullptr;
+	const auto unpitchedIncrement = chn.increment;
+	struct RestoreNativeIncrement
+	{
+		ModChannel &channel;
+		SamplePosition original;
+		bool active;
+		~RestoreNativeIncrement()
+		{
+			if(active && !channel.increment.IsZero())
+				channel.increment = SamplePosition((channel.increment.IsNegative() ? -1 : 1) * std::abs(original.GetRaw()));
+		}
+	} restoreIncrement{chn, unpitchedIncrement, nativeRatios != nullptr};
+#endif
 	if(chn.pCurrentSample || chn.nLOfs || chn.nROfs)
 	{
 		auto [pOfsL, pOfsR] = GetChannelOffsets(chn, channel);
 
 		uint32 functionNdx = MixFuncTable::ResamplingModeToMixFlags(static_cast<ResamplingMode>(chn.resamplingMode));
+#ifdef OPENMPT_EDITOR_CORE
+		if(nativeRatios) functionNdx = MixFuncTable::ResamplingModeToMixFlags(m_Resampler.m_Settings.SrcMode);
+#endif
 		if(chn.dwFlags[CHN_16BIT]) functionNdx |= MixFuncTable::ndx16Bit;
 		if(chn.dwFlags[CHN_STEREO]) functionNdx |= MixFuncTable::ndxStereo;
 #ifndef NO_FILTER
@@ -414,6 +482,14 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 		do
 		{
 			uint32 nrampsamples = nsamples;
+#ifdef OPENMPT_EDITOR_CORE
+			if(nativeRatios && !unpitchedIncrement.IsZero())
+			{
+				const auto raw = std::clamp(std::abs(double(unpitchedIncrement.GetRaw())) * nativeRatios[count - nsamples], 1., double(uint64(1) << 60));
+				chn.increment = SamplePosition(static_cast<int64>(raw) * (chn.increment.IsNegative() ? -1 : 1));
+				nrampsamples = 1;
+			}
+#endif
 			int32 nSmpCount;
 			if(chn.nRampLength > 0)
 			{
@@ -482,6 +558,9 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 				addToMix = true;
 			}
 
+#ifdef OPENMPT_EDITOR_CORE
+			mixLoopState.RestoreNativePosition(chn);
+#endif
 			nsamples -= nSmpCount;
 			if (chn.nRampLength)
 			{
@@ -503,7 +582,11 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 				}
 			}
 
-			const bool pastLoopEnd = chn.position.GetUInt() >= chn.nLoopEnd && chn.dwFlags[CHN_LOOP];
+			const bool pastLoopEnd = (chn.position.GetUInt() >= chn.nLoopEnd
+#ifdef OPENMPT_EDITOR_CORE
+				|| mixLoopState.nativeCrossedEnd
+#endif
+				) && chn.dwFlags[CHN_LOOP];
 			const bool pastSampleEnd = chn.position.GetUInt() >= chn.nLength && !chn.dwFlags[CHN_LOOP] && chn.nLength && !chn.nMasterChn;
 			const bool doSampleSwap = m_playBehaviour[kMODSampleSwap] && chn.swapSampleIndex && chn.swapSampleIndex <= GetNumSamples() && chn.pModSample != &Samples[chn.swapSampleIndex];
 			if((pastLoopEnd || pastSampleEnd) && doSampleSwap)
@@ -522,6 +605,9 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 				}
 #endif
 				const ModSample &smp = Samples[chn.swapSampleIndex];
+#ifdef OPENMPT_EDITOR_CORE
+				chn.nativeReverseLoop.Reset();
+#endif
 				chn.pModSample = &smp;
 				chn.pCurrentSample = smp.samplev();
 				chn.dwFlags = (chn.dwFlags & CHN_CHANNELFLAGS) | smp.uFlags;
@@ -538,7 +624,11 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 				mixLoopState.UpdateLookaheadPointers(chn);
 				if(!chn.pCurrentSample)
 					break;
-			} else if(pastLoopEnd && !doSampleSwap && m_playBehaviour[kMODOneShotLoops] && chn.nLoopStart == 0)
+			} else if(pastLoopEnd && !doSampleSwap && m_playBehaviour[kMODOneShotLoops] && chn.nLoopStart == 0
+#ifdef OPENMPT_EDITOR_CORE
+				&& !chn.HasNativeReverseLoop()
+#endif
+				)
 			{
 				// ProTracker "oneshot" loops (if loop start is 0, play the whole sample once and then repeat until loop end)
 				chn.position.SetInt(0);

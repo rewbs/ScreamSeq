@@ -9,6 +9,8 @@
 
 
 #include "stdafx.h"
+#include "../common/FileReader.h"
+#include <cfloat>
 #include "Sndfile.h"
 #ifdef MODPLUG_TRACKER
 #include "../mptrack/TrackerSettings.h"
@@ -1126,8 +1128,13 @@ bool CSoundFile::SaveSFZInstrument(INSTRUMENTINDEX nInstr, std::ostream &f, cons
 	const mpt::PathString sampleBaseName = mpt::PathString::FromNative(mpt::trim(filename.GetFilenameBase().AsNative(), whitespaceDirName));
 	const mpt::PathString sampleDirName = (sampleBaseName.empty() ? P_("Samples") : sampleBaseName)  + P_("/");
 	const mpt::PathString sampleBasePath = filename.GetDirectoryWithDrive() + sampleDirName;
-	if(!mpt::native_fs{}.is_directory(sampleBasePath) && !::CreateDirectory(sampleBasePath.AsNative().c_str(), nullptr))
-		return false;
+	#if defined(OPENMPT_EDITOR_CORE) && !MPT_OS_WINDOWS
+    std::error_code directoryError;
+    if(!std::filesystem::is_directory(sampleBasePath.ToUTF8(),directoryError) && !std::filesystem::create_directory(sampleBasePath.ToUTF8(),directoryError))return false;
+#else
+    if(!mpt::native_fs{}.is_directory(sampleBasePath) && !::CreateDirectory(sampleBasePath.AsNative().c_str(), nullptr))
+        return false;
+#endif
 
 	const double tickDuration = m_PlayState.m_nSamplesPerTick / static_cast<double>(m_MixerSettings.gdwMixingFreq);
 

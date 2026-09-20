@@ -619,19 +619,25 @@ bool CSoundFile::CreateInternal(FileReader file, ModLoadingFlags loadFlags)
 		if(SampleHasPath(nSmp) && (loadFlags & loadSampleData))
 		{
 			mpt::PathString filename = GetSamplePath(nSmp);
+#if defined(OPENMPT_EDITOR_CORE) && !MPT_OS_WINDOWS
+            auto portable = filename.ToUTF8();std::replace(portable.begin(), portable.end(), '\\', '/');filename = mpt::PathString::FromUTF8(portable);
+#endif
 			if(file.GetOptionalFileName())
 			{
 				filename = mpt::RelativePathToAbsolute(filename, file.GetOptionalFileName()->GetDirectoryWithDrive());
-			} else if(GetpModDoc() != nullptr)
+			}
+#ifdef MODPLUG_TRACKER
+            else if(GetpModDoc() != nullptr)
 			{
 				filename = mpt::RelativePathToAbsolute(filename, GetpModDoc()->GetPathNameMpt().GetDirectoryWithDrive());
 			}
-			filename = filename.Simplify();
+			#endif // MODPLUG_TRACKER
+            filename = filename.Simplify();
 			if(!LoadExternalSample(nSmp, filename))
 			{
 #ifndef MODPLUG_TRACKER
 				// OpenMPT has its own way of reporting this error in CModDoc.
-				AddToLog(LogError, MPT_UFORMAT("Unable to load sample {}: {}")(i, filename.ToUnicode()));
+				AddToLog(LogError, MPT_UFORMAT("Unable to load sample {}: {}")(nSmp, filename.ToUnicode()));
 #endif // MODPLUG_TRACKER
 			}
 		} else

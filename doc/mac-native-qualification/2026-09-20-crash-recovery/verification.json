@@ -1,0 +1,11 @@
+{
+  "binarySHA256": "a1093b0ecb34fe968bae22930426dfe58d888618919c68b6ec8c7f85c5d2804b",
+  "sourceFingerprint": "1289827a2915f33e181ca92950d8aee786013cde099e05ef8f1bfc09fae2ccf6",
+  "sourceFiles": 392,
+  "oldPreciseTimingBuildUnchanged": "04b8d4f7471fdf597b6db5023d63ab61a662996e9eb219233f30c220300dfc7b",
+  "preservedSongSHA256": "af931af47500442f1eb3fe969c1f8c8179aea8ee65464c0b26cc3ecbe8d3eaf8",
+  "backgroundCTestSuitesPassed": 59,
+  "nativeAppCrashRecovery": "passed",
+  "preservedSongOpened": "passed without changing source",
+  "signature": "verified deep strict"
+}

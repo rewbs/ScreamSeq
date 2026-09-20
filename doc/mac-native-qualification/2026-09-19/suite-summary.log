@@ -1,0 +1,28 @@
+PASS atomic edits, grouped undo, sample processing/rollback, pattern/order undo, exact native roundtrip, bounded queue, loop termination at 44.1/48/96 kHz; max callback 184.292 us
+PASS fixture test.mod
+PASS fixture test.xm
+PASS fixture test.s3m
+PASS fixture test.mptm
+PASS Apple AU subtype 1819304307: state recall, stereo render, live/offline parity, finite output, latency 0 s
+PASS Apple AU subtype 1752195443: state recall, stereo render, live/offline parity, finite output, latency 0 s
+PASS Apple AU subtype 1819112562: state recall, stereo render, live/offline parity, finite output, latency 0.0122 s
+PASS sample-timed AU automation at 44100 Hz across 128/512-frame buffers
+PASS sample-timed AU automation at 48000 Hz across 128/512-frame buffers
+PASS sample-timed AU automation at 96000 Hz across 128/512-frame buffers
+PASS isolated AU scan; project/module/state roundtrip; loss-prevention; offline effect render; effect history/state/automation restoration; bounded concurrent MIDI queue
+PASS CoreMIDI loopback, running status, clock interleave, note releases, timestamps and disconnect
+PASS recovery generations, newest selection across documents, failed-write retention, document-scoped cleanup
+PASS editor layouts and native keyboard transport/remapping, note lifecycle, safe sample indices, undo routing, deferred bulk edits, selection bounds and envelope node editing
+PASS AU export 1819112562: 97 latency frames trimmed, 4800 tail frames, max difference 0
+PASS AU export 1684368505: 0 latency frames trimmed, 1004716 tail frames, max difference 0
+PASS dry WAV fidelity, exact export duration, latency, tail and failed-export preservation
+PASS 60-second, 127-channel/1024-row render with concurrent editing/audition/panic: 451 batches, 0 safely rejected, 250 peak voices, 245.792 us max, zero intercepted allocations/releases/locks
+PASS 30 render comparisons; zero intercepted allocation, release or mutex calls. /Users/rewbs/code/openmpt/bin/mac-native/audio-test-results.json
+PASS Core Audio start/stop 0: 752 callbacks, 128.958 us maximum, 0 overruns, 48000 Hz / 128 frames, p99.9 <= 130 us
+PASS Core Audio start/stop 1: 752 callbacks, 50.916 us maximum, 0 overruns, 48000 Hz / 128 frames, p99.9 <= 60 us
+PASS Core Audio start/stop 2: 752 callbacks, 33.25 us maximum, 0 overruns, 48000 Hz / 128 frames, p99.9 <= 40 us
+PASS live AU/Core Audio: 752 callbacks, 45.916 us maximum, 0 overruns
+300-second Core Audio/AU measurement: 112504 callbacks, max 1751.54 us, p99.9 <= 150 us, 0 overruns at 48000 Hz / 128 frames
+PASS 300-second Core Audio/AU soak, 127 channels, concurrent edits/audition: 112504 callbacks, 1751.54 us maximum, 0 overruns
+Callback duration p99.9 <= 150 us (10 us histogram buckets)
+PASS isolated AU scan; project/module/state roundtrip; loss-prevention; offline effect render; effect history/state/automation restoration; bounded concurrent MIDI queue

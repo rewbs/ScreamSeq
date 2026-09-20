@@ -1,0 +1,64 @@
+-- Configuring done (0.2s)
+-- Generating done (0.3s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-background
+[  1%] Built target RealtimeAudit
+[ 10%] Built target TrackerFLAC
+[ 11%] Built target ResonanceFixture
+[ 11%] Built target plugin-inventory-tests
+[ 56%] Built target OpenMPTCore
+[ 65%] Built target TrackerEditor
+[ 66%] Built target tracker-core-tests
+[ 66%] Built target native-reverse-loop-tests
+[ 68%] Built target TrackerPlugins
+[ 69%] Built target sample-snap-tests
+[ 69%] Built target sample-crossfade-tests
+[ 69%] Built target sample-drawing-tests
+[ 69%] Built target sample-copy-tests
+[ 70%] Built target sample-archive-tests
+[ 70%] Built target sample-clipboard-tests
+[ 70%] Built target sample-processing-tests
+[ 71%] Built target automation-tools-tests
+[ 73%] Built target pattern-tools-tests
+[ 73%] Built target pattern-commands-tests
+[ 74%] Built target render-audit
+[ 75%] Built target plugin-scanner
+[ 75%] Built target filter-tests
+[ 75%] Built target plugin-tests
+[ 75%] Built target oversampling-tests
+[ 76%] Built target stress-tests
+[ 78%] Built target routing-prototype-tests
+[ 78%] Built target mixer-graph-tests
+[ 78%] Built target mixer-runtime-tests
+[ 78%] Built target sidechain-tests
+[ 79%] Built target qualification-fixture
+[ 80%] Built target plugin-lifecycle-tests
+[ 82%] Built target TrackerMac
+[ 84%] Built target sample-loop-tests
+[ 84%] Built target sample-crossfade-project-tests
+[ 85%] Built target sample-session-tests
+[ 86%] Built target sample-project-tests
+[ 87%] Built target eq-effects-tests
+[ 87%] Built target native-effects-tests
+[ 88%] Built target comb-tests
+[ 89%] Built target distortion-tests
+[ 91%] Built target cabinet-tests
+[ 91%] Built target lofi-tests
+[ 92%] Built target dynamics-tests
+[ 92%] Built target maximizer-tests
+[ 93%] Built target session-tests
+[ 93%] Built target bus-compressor-tests
+[ 93%] Built target device-tests
+[ 94%] Built target native-song-tests
+[ 94%] Built target loopback-tests
+[ 94%] Built target midi-tests
+[ 96%] Built target export-tests
+[ 96%] Built target native-mixer-tests
+[ 96%] Built target rack-tests
+[ 97%] Built target multi-bus-tests
+[ 98%] Built target mixer-device-tests
+[ 99%] Built target native-plugin-tests
+[100%] Built target musical-automation-tests
+[100%] Built target automation-tests
+/Users/rewbs/code/openmpt/bin/mac-background/Resonance.app/Contents/MacOS/plugin-scanner: replacing existing signature
+/Users/rewbs/code/openmpt/bin/mac-background/Resonance.app: replacing existing signature
+Built /Users/rewbs/code/openmpt/bin/mac-background/Resonance.app

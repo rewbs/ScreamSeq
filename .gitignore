@@ -980,3 +980,14 @@
 /test/test.saved.xm
 /unarchiver/*.d
 /unarchiver/*.o
+
+# ScreamSeq native development outputs
+/*.abi.json
+/*.swiftmodule
+/*.swiftdoc
+/*.swiftsourceinfo
+/src/openmpt/soundfile_write/*.o
+**/__pycache__/
+**/.DS_Store
+/.venv/
+/mac/.venv/

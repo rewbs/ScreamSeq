@@ -1,0 +1,32 @@
+[ 12%] Built target TrackerFLAC
+[ 13%] Built target ResonanceFixture
+[ 78%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 93%] Built target TrackerPlugins
+[ 93%] Built target plugin-scanner
+[ 98%] Built target TrackerMac
+[ 98%] Building OBJCXX object CMakeFiles/plugin-preset-session-tests.dir/Tests/PluginPresetSessionTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:52:9: warning: 'auto' deduced as 'id' in declaration of 'inspected' [-Wauto-var-id]
+   52 |         auto inspected = call(@"plugin.preset.inspect", @{@"path": path})[@"data"];
+      |         ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:58:11: warning: 'auto' deduced as 'id' in declaration of 'instrument' [-Wauto-var-id]
+   58 |           auto instrument = call(@"instrument.create", @{}, true)[@"data"][@"instrument"];
+      |           ^~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:64:9: warning: 'auto' deduced as 'id' in declaration of 'envelope' [-Wauto-var-id]
+   64 |         auto envelope = call(@"automation.pattern.get", @{@"pattern": @0})[@"data"];
+      |         ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:66:9: warning: 'auto' deduced as 'id' in declaration of 'beforePorts' [-Wauto-var-id]
+   66 |         auto beforePorts = call(@"plugin.buses.get", @{@"slot": @0})[@"data"];
+      |         ^~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:67:9: warning: 'auto' deduced as 'id' in declaration of 'touched' [-Wauto-var-id]
+   67 |         auto touched = call(@"automation.target.get", @{})[@"data"][@"token"];
+      |         ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:82:9: warning: 'auto' deduced as 'id' in declaration of 'stale' [-Wauto-var-id]
+   82 |         auto stale = [load mutableCopy]; stale[@"expectedRevision"] = revision;
+      |         ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:91:9: warning: 'auto' deduced as 'id' in declaration of 'neighbor' [-Wauto-var-id]
+   91 |         auto neighbor = call(@"plugin.parameters.get", @{@"slot": @0})[@"data"];
+      |         ^~~~~~~~~~~~~
+7 warnings generated.
+[100%] Linking CXX executable plugin-preset-session-tests
+[100%] Built target plugin-preset-session-tests

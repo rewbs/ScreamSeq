@@ -1,0 +1,14 @@
+[ 12%] Built target TrackerFLAC
+[ 78%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 92%] Building CXX object CMakeFiles/TrackerPlugins.dir/Audio/PluginAssignments.cpp.o
+[ 92%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/AudioUnitHost.mm.o
+[ 93%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/VST3Host.mm.o
+[ 93%] Linking CXX static library libTrackerPlugins.a
+[ 95%] Built target TrackerPlugins
+[ 96%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 96%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioDevice.mm.o
+[ 96%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioExport.mm.o
+[ 98%] Building CXX object CMakeFiles/TrackerMac.dir/Audio/NativeInstrument.cpp.o
+[ 98%] Linking CXX static library libTrackerMac.a
+[100%] Built target TrackerMac

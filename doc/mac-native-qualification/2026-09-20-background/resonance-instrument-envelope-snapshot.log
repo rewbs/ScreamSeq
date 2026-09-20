@@ -1,0 +1,15 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-background
+    Start  3: instrument-envelopes
+1/5 Test  #3: instrument-envelopes .............   Passed    0.48 sec
+    Start  7: native-reverse-loops
+2/5 Test  #7: native-reverse-loops .............   Passed    1.42 sec
+    Start 15: sample-archive
+3/5 Test #15: sample-archive ...................   Passed    0.44 sec
+    Start 17: sample-project
+4/5 Test #17: sample-project ...................   Passed    0.95 sec
+    Start 20: automation-tools
+5/5 Test #20: automation-tools .................   Passed    0.42 sec
+
+100% tests passed, 0 tests failed out of 5
+
+Total Test time (real) =   3.70 sec

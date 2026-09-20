@@ -1,0 +1,4 @@
+Unity 44100 native-group=0 legacy-to-mixer=9.31323e-07
+Unity 48000 native-group=0 legacy-to-mixer=7.52509e-07
+Unity 96000 native-group=0 legacy-to-mixer=0
+PASS note tracks: stable grouping, atomic rejection, structural Undo, five-format native roundtrip, column mutes, unity audio at three rates and callback audit

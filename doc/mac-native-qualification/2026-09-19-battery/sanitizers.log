@@ -1,0 +1,88 @@
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-sanitized
+[ 16%] Built target TrackerFLAC
+[ 97%] Built target OpenMPTCore
+[ 98%] Built target TrackerEditor
+[100%] Built target tracker-core-tests
+[ 15%] Built target TrackerFLAC
+[ 15%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/AudioUnitHost.mm.o
+[ 16%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/VST3Host.mm.o
+[ 92%] Built target OpenMPTCore
+[ 94%] Built target TrackerEditor
+[ 94%] Linking CXX static library libTrackerPlugins.a
+[ 95%] Built target TrackerPlugins
+[ 95%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Plugins/PluginInventory.mm.o
+[ 96%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 97%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[ 98%] Building OBJCXX object CMakeFiles/session-tests.dir/Tests/SessionTests.mm.o
+[100%] Linking CXX executable session-tests
+[100%] Built target session-tests
+[ 15%] Built target TrackerFLAC
+[ 17%] Built target TrackerPlugins
+[ 94%] Built target OpenMPTCore
+[ 95%] Built target TrackerEditor
+[ 98%] Built target TrackerMac
+[ 98%] Linking CXX executable export-tests
+[100%] Built target export-tests
+[ 15%] Built target TrackerFLAC
+[ 17%] Built target TrackerPlugins
+[ 94%] Built target OpenMPTCore
+[ 95%] Built target TrackerEditor
+[ 98%] Built target TrackerMac
+[100%] Linking CXX executable midi-tests
+[100%] Built target midi-tests
+[100%] Built target TrackerPlugins
+[100%] Building OBJCXX object CMakeFiles/plugin-scanner.dir/Plugins/Scanner.mm.o
+[100%] Linking CXX executable plugin-scanner
+[100%] Built target plugin-scanner
+[ 15%] Built target TrackerFLAC
+[ 17%] Built target TrackerPlugins
+[ 17%] Building OBJCXX object CMakeFiles/ResonanceFixture.dir/Tests/FixtureVST3.mm.o
+[ 17%] Built target plugin-scanner
+[ 92%] Built target OpenMPTCore
+[ 94%] Built target TrackerEditor
+[ 97%] Built target TrackerMac
+[ 97%] Linking CXX CFBundle shared module test-plugins/ResonanceFixture.vst3/Contents/MacOS/ResonanceFixture
+[100%] Built target ResonanceFixture
+[100%] Building OBJCXX object CMakeFiles/native-plugin-tests.dir/Tests/NativePluginTests.mm.o
+[100%] Linking CXX executable native-plugin-tests
+[100%] Built target native-plugin-tests
+[ 15%] Built target TrackerFLAC
+[ 17%] Built target TrackerPlugins
+[ 19%] Built target ResonanceFixture
+[ 19%] Built target plugin-scanner
+[ 94%] Built target OpenMPTCore
+[ 95%] Built target TrackerEditor
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/automation-tests.dir/Tests/AutomationTests.mm.o
+[100%] Linking CXX executable automation-tests
+[100%] Built target automation-tests
+[ 50%] Building OBJCXX object CMakeFiles/plugin-inventory-tests.dir/Plugins/PluginInventory.mm.o
+[ 50%] Building OBJCXX object CMakeFiles/plugin-inventory-tests.dir/Tests/PluginInventoryTests.mm.o
+[100%] Linking OBJCXX executable plugin-inventory-tests
+[100%] Built target plugin-inventory-tests
+[ 66%] Built target TrackerPlugins
+[ 66%] Building OBJCXX object CMakeFiles/plugin-lifecycle-tests.dir/Tests/PluginLifecycleTests.mm.o
+[100%] Linking CXX executable plugin-lifecycle-tests
+[100%] Built target plugin-lifecycle-tests
+PASS atomic edits, grouped undo, sample processing/rollback, pattern/order undo, exact native roundtrip, bounded queue, loop termination at 44.1/48/96 kHz; max callback 1285 us
+PASS fixture test.mod
+PASS fixture test.xm
+PASS fixture test.s3m
+PASS fixture test.mptm
+PASS isolated AU scan; project/module/state roundtrip; loss-prevention; offline effect render; effect history/state/automation restoration; bounded concurrent MIDI queue
+PASS automation API: atomic/dry-run patterns, validation, optimistic revisions, native edits, undo, PCM, instruments, AU/VST3 state/parameters, automation and project persistence; no audio output
+PASS AU export 1819112562: 97 latency frames trimmed, 4800 tail frames, max difference 0
+PASS AU export 1684368505: 0 latency frames trimmed, 1004716 tail frames, max difference 0
+PASS dry WAV fidelity, exact export duration, latency, tail and failed-export preservation
+PASS CoreMIDI loopback, running status, clock interleave, note releases, timestamps and disconnect
+PASS VST3 discovery, gain, processor/controller state, sample-timed automation at 44.1/48/96k, allocation auditing disabled for this sanitizer run
+PASS VST3 tracker instrument notes, row note-off, automation, live/offline parity, allocation auditing disabled for this sanitizer run
+PASS instrument latency alignment with sample voices
+PASS VST3 keyboard preview and release
+PASS Apple AU instrument note-on, output, note-off and state recall
+PASS VST3 project save/reopen, instrument assignment, parameter persistence and WAV fidelity
+PASS plugin cache: cold/warm/restart, explicit rescan, empty inventory, invalid/truncated cache, failed rescan preservation, unwritable cache
+PASS AU worker lifecycle: main-thread create/configure/initialize/state/restore/dispose, failure cleanup, worker render; no windows or devices

@@ -1,0 +1,54 @@
+PASS plugin picker: cached-list explanation, AU/VST3 labels and selection, Rescan, empty-list Add disabled, controls fit; layout checked offscreen without focus or audio
+PASS recovery generations, newest selection across documents, failed-write retention, document-scoped cleanup
+PASS navigation socket: cursor/follow read/write, strict coordinates/types, stale cursor/song, retry/no-op, preserved document/history/transport
+PASS note-track socket: group/create/mute/ungroup, dry-run/stale/no-op/strict validation, routing protection, one-step Undo, mixer removal/disable, empty appended columns and intact original cells
+PASS plugin library socket: stable clean descriptors, search/format/kind/category/hidden/favorite filters, separate revision, persistence boundary, preview/retry/no-op/stale/strict fields and unchanged song/history/transport
+PASS pattern tools through socket: exact preview/apply, stale revisions, seeded generation, masks, loss guards, invalid requests, mix paste, bounded large previews and atomic undo
+PASS row tools socket: insert/delete, exact masked previews, tail/removal loss guards, strict counts, preserved exterior fields, retry/stale/no-op/one-step history
+PASS native save/module export socket: dry run, strict paths/overwrite, stale revisions, v4 payload, unchanged history and native UI save destination
+PASS sample socket: exact preview/apply, ranges/channels/curves, clipping, strict options, bounded replies, retry/stale protection, no-op redo, waveform and PCM undo
+PASS sample clipboard socket: copy/set/paged reads, four paste modes, exact previews/loops/PCM, cut/delete/undo, no-op redo, strict inputs, stale clipboard and empty-sample resampling
+PASS sample drawing socket: exact linear/step/channel PCM, preview/apply, bounded changes, clipping, unchanged settings, one-step undo, no-op redo, retry/stale and strict validation
+PASS sample snapping socket: independent zero/grid boundaries, stereo choices, ties/directions/endpoints, bounded search, strict input and unchanged revision/PCM/redo
+PASS crossfade socket: exact PCM/geometry, preview/apply/retry/stale, period changes, constant-audio no-op/redo, strict parameters and invalid loop rejection
+PASS normal/sustain loop API: atomic preview/apply/history, retry/stale, omitted targets, no-op/redo, crossfade integration and strict fields
+PASS arrangement socket: stable identities, annotations, no-op revisions, invalid input, section movement and unified document undo
+PASS musical automation socket: envelope copy/flip/ramp/repeat paste, deterministic humanization, exact preview/retry/stale/no-op undo, strict points, stable identity and conflicting-clock guard
+PASS mixer socket: routing, cycle rejection, strict values, input/output balance, previews, stale/retry/no-op gestures, undo and meters
+PASS multi-bus socket: native indices, layout discovery, activation, dry run, stale edits, Undo/Redo output routing and sidechain sources
+PASS automation target socket: stable identity, live reads, batch order, no implicit lane, reordering/removal/history, rejected edits and strict fields
+PASS built-in socket: utilities, Digital Filter, EQ5/EQ10/Mixer EQ, Comb Filter, Distortion, LofiMat, Cabinet Simulator, Compressor/Bus Compressor/Gate/Maximizer/sidechains/meters, units/scales, precise edits and undo
+PASS preset socket: native files, dry runs, baseline state, atomic overwrite, independent file/song revisions, retry/read freshness, type/decoder rejection and Undo/Redo
+PASS timing socket: fractional BPM, musical mode/beat/bar/groove, exact preview/retry/stale/no-op/history, strict fields, native document display and legacy patch parity
+PASS alias socket: stable owners/MIDI channels, preview/retry/stale/no-op/Undo, conflicts and strict validation, reorder, presets, v5 persistence and legacy reassignment
+PASS command catalog socket: format metadata, extended prefixes, strict read, preview, field-preserving apply, stale rejection and undo
+PASS independent pattern navigation: allocated pattern switch, shorter-pattern clamp, automatic follow off, unchanged song revision and restoration after structural undo
+PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output
+PASS navigation socket: cursor/follow read/write, strict coordinates/types, stale cursor/song, retry/no-op, preserved document/history/transport
+PASS note-track socket: group/create/mute/ungroup, dry-run/stale/no-op/strict validation, routing protection, one-step Undo, mixer removal/disable, empty appended columns and intact original cells
+PASS plugin library socket: stable clean descriptors, search/format/kind/category/hidden/favorite filters, separate revision, persistence boundary, preview/retry/no-op/stale/strict fields and unchanged song/history/transport
+PASS pattern tools through socket: exact preview/apply, stale revisions, seeded generation, masks, loss guards, invalid requests, mix paste, bounded large previews and atomic undo
+PASS row tools socket: insert/delete, exact masked previews, tail/removal loss guards, strict counts, preserved exterior fields, retry/stale/no-op/one-step history
+PASS native save/module export socket: dry run, strict paths/overwrite, stale revisions, v4 payload, unchanged history and native UI save destination
+PASS sample socket: exact preview/apply, ranges/channels/curves, clipping, strict options, bounded replies, retry/stale protection, no-op redo, waveform and PCM undo
+PASS sample clipboard socket: copy/set/paged reads, four paste modes, exact previews/loops/PCM, cut/delete/undo, no-op redo, strict inputs, stale clipboard and empty-sample resampling
+PASS sample drawing socket: exact linear/step/channel PCM, preview/apply, bounded changes, clipping, unchanged settings, one-step undo, no-op redo, retry/stale and strict validation
+PASS sample snapping socket: independent zero/grid boundaries, stereo choices, ties/directions/endpoints, bounded search, strict input and unchanged revision/PCM/redo
+PASS crossfade socket: exact PCM/geometry, preview/apply/retry/stale, period changes, constant-audio no-op/redo, strict parameters and invalid loop rejection
+PASS normal/sustain loop API: atomic preview/apply/history, retry/stale, omitted targets, no-op/redo, crossfade integration and strict fields
+PASS arrangement socket: stable identities, annotations, no-op revisions, invalid input, section movement and unified document undo
+PASS musical automation socket: envelope copy/flip/ramp/repeat paste, deterministic humanization, exact preview/retry/stale/no-op undo, strict points, stable identity and conflicting-clock guard
+PASS mixer socket: routing, cycle rejection, strict values, input/output balance, previews, stale/retry/no-op gestures, undo and meters
+PASS multi-bus socket: native indices, layout discovery, activation, dry run, stale edits, Undo/Redo output routing and sidechain sources
+PASS automation target socket: stable identity, live reads, batch order, no implicit lane, reordering/removal/history, rejected edits and strict fields
+PASS built-in socket: utilities, Digital Filter, EQ5/EQ10/Mixer EQ, Comb Filter, Distortion, LofiMat, Cabinet Simulator, Compressor/Bus Compressor/Gate/Maximizer/sidechains/meters, units/scales, precise edits and undo
+PASS preset socket: native files, dry runs, baseline state, atomic overwrite, independent file/song revisions, retry/read freshness, type/decoder rejection and Undo/Redo
+PASS timing socket: fractional BPM, musical mode/beat/bar/groove, exact preview/retry/stale/no-op/history, strict fields, native document display and legacy patch parity
+PASS alias socket: stable owners/MIDI channels, preview/retry/stale/no-op/Undo, conflicts and strict validation, reorder, presets, v5 persistence and legacy reassignment
+PASS command catalog socket: format metadata, extended prefixes, strict read, preview, field-preserving apply, stale rejection and undo
+PASS independent pattern navigation: allocated pattern switch, shorter-pattern clamp, automatic follow off, unchanged song revision and restoration after structural undo
+PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output
+PASS native startup file: populated 127-channel document, ready UI context and API; no windows or audio
+Mixer strip diagnostic: 240 buses, 600 meter updates 192.9 ms, 9 control sets allocated through full traversal (not display cadence)
+Plugin browser 4096-entry load and search: 27.57 ms (offscreen diagnostic, not a presentation gate)
+PASS editor layouts and native keyboard transport/remapping, note lifecycle, safe sample indices, undo routing, deferred bulk edits, selection bounds and envelope node editing

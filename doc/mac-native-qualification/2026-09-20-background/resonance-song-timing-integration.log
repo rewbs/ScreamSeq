@@ -1,0 +1,17 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-background
+    Start  3: song-timing-session
+1/3 Test  #3: song-timing-session ..............   Passed    0.64 sec
+    Start  4: song-timing
+2/3 Test  #4: song-timing ......................   Passed    0.24 sec
+    Start 46: musical-automation
+3/3 Test #46: musical-automation ...............***Failed    0.50 sec
+FAIL Fractional-tempo grooved envelopes are sample-exact across callback sizes
+
+
+67% tests passed, 1 tests failed out of 3
+
+Total Test time (real) =   1.38 sec
+
+The following tests FAILED:
+	 46 - musical-automation (Failed)
+Errors while running CTest

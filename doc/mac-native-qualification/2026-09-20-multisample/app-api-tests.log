@@ -1,0 +1,2 @@
+PASS actual app multisample: full-family detection, octave suggestion, explicit roots, dry run/retry/stale/types, atomic failures, nearest zones, note mapping, Undo/Redo and native relaunch
+PASS actual app sample library: cached restart, folder search/tags/pagination, hidden files, rescan/removal, strict API revisions/types, waveform and silent preview, atomic import/dry run/retry/Undo/Redo and save

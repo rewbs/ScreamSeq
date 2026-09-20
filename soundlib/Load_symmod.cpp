@@ -1259,7 +1259,7 @@ bool CSoundFile::ReadSymMOD(FileReader &file, ModLoadingFlags loadFlags)
 				filename = file.GetOptionalFileName()->GetDirectoryWithDrive() + filename.GetFilename();
 			
 			if(!LoadExternalSample(sample, filename))
-				AddToLog(LogError, MPT_UFORMAT("Unable to load sample {}: {}")(sample, filename));
+				AddToLog(LogError, MPT_UFORMAT("Unable to load sample {}: {}")(sample, filename.ToUnicode()));
 			else
 				ResetSamplePath(sample);
 

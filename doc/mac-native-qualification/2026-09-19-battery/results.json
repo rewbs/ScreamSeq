@@ -1,0 +1,34 @@
+{
+  "rescanSeconds": 30.5071370000951,
+  "warmCacheSeconds": 0.0015359167009592056,
+  "inventoryCount": 75,
+  "battery": [
+    {
+      "format": "VST3",
+      "loadSeconds": 3.529066125396639,
+      "stateBytes": 51126,
+      "parameters": 2224,
+      "probe": {
+        "valid": true,
+        "latency": 0,
+        "parameters": 2224
+      },
+      "appLoadRestoreRemove": "passed"
+    },
+    {
+      "format": "AU",
+      "loadSeconds": 3.174177958164364,
+      "stateBytes": 51218,
+      "parameters": 128,
+      "probe": {
+        "valid": true,
+        "latency": 0,
+        "parameters": 128
+      },
+      "appLoadRestoreRemove": "passed"
+    }
+  ],
+  "restartCacheSeconds": 0.28524887515231967,
+  "hardwareAudioOutput": false,
+  "visibleWindows": false
+}

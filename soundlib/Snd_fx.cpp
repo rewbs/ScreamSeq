@@ -244,6 +244,16 @@ public:
 				if(chn.dwFlags[CHN_PINGPONGFLAG]) inc.Negate();
 			}
 
+#ifdef OPENMPT_EDITOR_CORE
+			if(inc.IsPositive() && chn.HasNativeReverseLoop())
+			{
+				auto &loop = chn.nativeReverseLoop;
+				loop.Attach(chn.pModSample, chn.nLoopStart, chn.nLoopEnd, chn.InSustainLoop(), chn.position);
+				chn.position = loop.Advance(chn.position + inc);
+				continue;
+			}
+			chn.ExitNativeReverseLoop();
+#endif
 			chn.position += inc;
 
 			if(chn.position >= sampleEnd || (chn.position < loopStart && inc.IsNegative()))
@@ -1802,7 +1812,11 @@ void CSoundFile::InstrumentChange(PlayState &playState, CHANNELINDEX channel, ui
 	chn.nLoopStart = pSmp->nLoopStart;
 	chn.nLoopEnd = pSmp->nLoopEnd;
 	// ProTracker "oneshot" loops (if loop start is 0, play the whole sample once and then repeat until loop end)
-	if(m_playBehaviour[kMODOneShotLoops] && chn.nLoopStart == 0) chn.nLoopEnd = pSmp->nLength;
+	if(m_playBehaviour[kMODOneShotLoops] && chn.nLoopStart == 0
+#ifdef OPENMPT_EDITOR_CORE
+		&& !(pSmp->nativeReverseLoops & 1)
+#endif
+		) chn.nLoopEnd = pSmp->nLength;
 	chn.dwFlags |= (pSmp->uFlags & CHN_SAMPLEFLAGS);
 
 	// IT Compatibility: Autovibrato reset
@@ -1991,6 +2005,9 @@ void CSoundFile::NoteChange(ModChannel &chn, int note, bool bPorta, bool bResetE
 	{
 		chn.nNote = static_cast<ModCommand::NOTE>(note);
 	}
+#ifdef OPENMPT_EDITOR_CORE
+	if(!bPorta) ++chn.nativeNoteGeneration;
+#endif
 	chn.m_CalculateFreq = true;
 	chn.isPaused = false;
 
@@ -2079,6 +2096,9 @@ void CSoundFile::NoteChange(ModChannel &chn, int note, bool bPorta, bool bResetE
 
 		if(!bPorta || (!chn.nLength && !(GetType() & MOD_TYPE_S3M)))
 		{
+#ifdef OPENMPT_EDITOR_CORE
+			chn.nativeReverseLoop.Reset();
+#endif
 			chn.pModSample = pSmp;
 			chn.nLength = pSmp->nLength;
 			chn.nLoopEnd = pSmp->nLength;
@@ -2107,7 +2127,15 @@ void CSoundFile::NoteChange(ModChannel &chn, int note, bool bPorta, bool bResetE
 				if (chn.nLength > chn.nLoopEnd) chn.nLength = chn.nLoopEnd;
 			}
 			// ProTracker "oneshot" loops (if loop start is 0, play the whole sample once and then repeat until loop end)
-			if(m_playBehaviour[kMODOneShotLoops] && chn.nLoopStart == 0) chn.nLoopEnd = chn.nLength = pSmp->nLength;
+			if(m_playBehaviour[kMODOneShotLoops] && chn.nLoopStart == 0
+#ifdef OPENMPT_EDITOR_CORE
+				&& !chn.HasNativeReverseLoop()
+#endif
+				) chn.nLoopEnd = chn.nLength = pSmp->nLength;
+
+#ifdef OPENMPT_EDITOR_CORE
+			if(chn.HasNativeReverseLoop()) chn.dwFlags.reset(CHN_PINGPONGFLAG);
+#endif
 
 			if(chn.dwFlags[CHN_REVERSE] && chn.nLength > 0)
 			{
@@ -2623,6 +2651,59 @@ void CSoundFile::StopOldNNA(ModChannel &chn, CHANNELINDEX channel)
 	}
 }
 
+
+#if defined(OPENMPT_EDITOR_CORE)
+// Execute the first tick of a note-local command at the precise onset. The
+// caller installs its command for remaining *ordinary* ticks of this row;
+// it never reprocesses other channels or advances their envelopes/LFOs.
+void CSoundFile::ApplyNativeNoteEffect(CHANNELINDEX channel, uint8 effect, uint8 parameter)
+{
+	auto &chn = m_PlayState.Chn[channel];
+	switch(effect)
+	{
+	case CMD_VOLUME: chn.nVolume = std::min<uint8>(64, parameter) * 4; chn.dwFlags.set(CHN_FASTVOLRAMP); break;
+	case CMD_PANNING8: Panning(chn, parameter, Pan8bit); break;
+	case CMD_OFFSET:
+		if(parameter) chn.oldOffset = uint32(parameter) << 8;
+		SampleOffset(chn, chn.oldOffset + (uint32(chn.nOldHiOffset) << 16)); break;
+	case CMD_CHANNELVOLUME: chn.nGlobalVol = std::min<uint8>(64, parameter); chn.dwFlags.set(CHN_FASTVOLRAMP); break;
+	case CMD_PORTAMENTOUP: PortamentoUp(channel, parameter, false); break;
+	case CMD_PORTAMENTODOWN: PortamentoDown(channel, parameter, false); break;
+	case CMD_VOLUMESLIDE: VolumeSlide(chn, parameter); break;
+	case CMD_CHANNELVOLSLIDE: ChannelVolSlide(chn, parameter); break;
+	case CMD_PANNINGSLIDE: PanningSlide(chn, parameter); break;
+	case CMD_VIBRATO: Vibrato(chn, parameter); break;
+	case CMD_VIBRATOVOL: VolumeSlide(chn, parameter); Vibrato(chn, 0); break;
+	case CMD_FINEVIBRATO: FineVibrato(chn, parameter); break;
+	case CMD_TREMOLO: Tremolo(chn, parameter); break;
+	case CMD_PANBRELLO: Panbrello(chn, parameter); break;
+	case CMD_ARPEGGIO:
+		if(parameter || !(GetType() & (MOD_TYPE_XM | MOD_TYPE_MOD))) {
+			chn.nCommand = CMD_ARPEGGIO; if(parameter) chn.nArpeggio = parameter;
+		} break;
+	case CMD_TREMOR:
+		if(m_playBehaviour[kITTremor]) {
+			if(parameter && !m_SongFlags[SONG_ITOLDEFFECTS]) {
+				if(parameter & 0xF0) parameter -= 0x10;
+				if(parameter & 0x0F) parameter -= 1;
+				chn.nTremorParam = parameter;
+			}
+			chn.nTremorCount |= 0x80;
+		} else if(m_playBehaviour[kFT2Tremor]) chn.nTremorCount |= 0x80;
+		chn.nCommand = CMD_TREMOR; if(parameter) chn.nTremorParam = parameter; break;
+	case CMD_SETENVPOSITION:
+		chn.VolEnv.nEnvPosition = parameter;
+		if(!m_playBehaviour[kFT2SetPanEnvPos] || chn.VolEnv.flags[ENV_SUSTAIN])
+			chn.PanEnv.nEnvPosition = chn.PitchEnv.nEnvPosition = parameter;
+		break;
+	case CMD_MODCMDEX: ExtendedMODCommands(channel, parameter); break;
+	case CMD_S3MCMDEX: ExtendedS3MCommands(channel, parameter); break;
+	// MIDI macros are applied by ReadNote, after the onset's envelopes.
+	default: break;
+	}
+	if(m_playBehaviour[kST3EffectMemory] && effect && parameter) UpdateS3MEffectMemory(chn, parameter);
+}
+#endif
 
 bool CSoundFile::ProcessEffects()
 {
@@ -5432,10 +5513,16 @@ void CSoundFile::ExtendedChannelEffect(ModChannel &chn, uint32 param, PlayState 
 		break;
 	// S9E: Go forward
 	case 0x0E:
+#ifdef OPENMPT_EDITOR_CORE
+		chn.ExitNativeReverseLoop();
+#endif
 		chn.dwFlags.reset(CHN_PINGPONGFLAG);
 		break;
 	// S9F: Go backward (and set playback position to the end if sample just started)
 	case 0x0F:
+#ifdef OPENMPT_EDITOR_CORE
+		chn.ExitNativeReverseLoop();
+#endif
 		if(chn.position.IsZero() && chn.nLength && (chn.rowCommand.IsNote() || !chn.dwFlags[CHN_LOOP]))
 		{
 			chn.position.Set(chn.nLength - 1, SamplePosition::fractMax);
@@ -5729,6 +5816,9 @@ void CSoundFile::SampleOffset(ModChannel &chn, SmpLength param) const
 				return;
 		}
 
+#ifdef OPENMPT_EDITOR_CORE
+		chn.nativeReverseLoop.Reset();
+#endif
 		if(m_SongFlags[SONG_PT_MODE])
 		{
 			// ProTracker compatibility: PT1/2-style funky 9xx offset command
@@ -5774,6 +5864,9 @@ void CSoundFile::SampleOffset(ModChannel &chn, SmpLength param) const
 		}
 	} else if ((param < chn.nLength) && (GetType() & (MOD_TYPE_MTM | MOD_TYPE_DMF | MOD_TYPE_MDL | MOD_TYPE_PLM)))
 	{
+#ifdef OPENMPT_EDITOR_CORE
+		chn.nativeReverseLoop.Reset();
+#endif
 		// Some trackers can also call offset effects without notes next to them...
 		chn.position.Set(param);
 	}
@@ -5784,6 +5877,9 @@ void CSoundFile::ReverseSampleOffset(ModChannel &chn, ModCommand::PARAM param) c
 {
 	if(chn.pModSample != nullptr && chn.pModSample->nLength > 0)
 	{
+#ifdef OPENMPT_EDITOR_CORE
+		chn.nativeReverseLoop.Reset();
+#endif
 		chn.dwFlags.set(CHN_PINGPONGFLAG);
 		chn.dwFlags.reset(CHN_LOOP);
 		chn.nLength = chn.pModSample->nLength;  // If there was a loop, extend sample to whole length.
@@ -5799,6 +5895,9 @@ void CSoundFile::DigiBoosterSampleReverse(ModChannel &chn, ModCommand::PARAM par
 {
 	if(chn.isFirstTick && chn.pModSample != nullptr && chn.pModSample->nLength > 0)
 	{
+#ifdef OPENMPT_EDITOR_CORE
+		chn.nativeReverseLoop.Reset();
+#endif
 		chn.dwFlags.set(CHN_PINGPONGFLAG);
 		chn.nLength = chn.pModSample->nLength;  // If there was a loop, extend sample to whole length.
 		chn.position.Set(chn.nLength - 1, 0);
@@ -6004,7 +6103,12 @@ void CSoundFile::RetrigNote(CHANNELINDEX nChn, int param, int offset)
 			retrigCount = 0;
 		// IT compatibility: see previous IT compatibility comment =)
 		if(itS3Mstyle)
+		{
+#ifdef OPENMPT_EDITOR_CORE
+			chn.nativeReverseLoop.Reset();
+#endif
 			chn.position.Set(0);
+		}
 
 		offset--;
 		if(chn.pModSample != nullptr && !chn.pModSample->uFlags[CHN_ADLIB] && offset >= 0 && offset <= static_cast<int>(std::size(chn.pModSample->cues)))
@@ -6173,6 +6277,9 @@ void CSoundFile::NoteCut(CHANNELINDEX nChn, uint32 nTick, bool cutSample)
 
 void CSoundFile::KeyOff(ModChannel &chn) const
 {
+#ifdef OPENMPT_EDITOR_CORE
+	if(chn.pModSample && chn.InSustainLoop()) chn.ExitNativeReverseLoop();
+#endif
 	const bool keyIsOn = !chn.dwFlags[CHN_KEYOFF];
 	chn.dwFlags.set(CHN_KEYOFF);
 	if(chn.pModInstrument != nullptr && !chn.VolEnv.flags[ENV_ENABLED])

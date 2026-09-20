@@ -1,0 +1,3 @@
+PASS 65480 reversed-curve reference values; clipboard/repeat/insert, scoped transforms, deterministic humanization, collisions, bounds and five-format native history
+PASS native song identities, metadata, order/section history, no-op/invalid atomicity, all five module formats, project v4 roundtrip, v1/v2/v3 migration and loss prevention
+PASS pattern automation curves, exact knots, callback-size independence, repeats, seek, stable plugin identity, realtime audit, API preview, no-op history and project persistence

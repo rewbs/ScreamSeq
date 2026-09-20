@@ -1,0 +1,48 @@
+import AppKit
+extension InterfaceTests {
+  static var aliasData:[String:Any]{["plugin":"synth","name":"Shared synth","isInstrument":true,
+    "assignments":[["instrument":1,"channel":2,"available":true],["instrument":2,"channel":7,"available":true]],
+    "instruments":[["instrument":1,"name":"Lead","owner":"synth"],["instrument":2,"name":"Bass","owner":"synth"],
+      ["instrument":3,"name":"Drums","owner":""],["instrument":4,"name":"Other synth","owner":"other"]]]}
+  static func pluginInstrumentsFixture()->PluginInstrumentsEditor {
+    let view=PluginInstrumentsEditor(plugin:"synth");view.onRequest={_,_,reply in reply(["result":["revision":"song:1","data":aliasData]])};view.load();view.onRequest=nil;return view
+  }
+  static func pluginInstrumentsChecks() throws {
+    let view=PluginInstrumentsEditor(plugin:"synth")
+    var calls=[(String,[String:Any])](),replies=[([String:Any])->Void]()
+    view.onRequest={method,params,reply in calls.append((method,params));replies.append(reply)}
+    view.apply(dryRun:false);try require(calls.isEmpty,"Unloaded alias panel cannot submit")
+    view.load();view.load();view.add()
+    try require(calls.count==1 && view.pending && !view.applyButton.isEnabled,"Pending alias reads cannot duplicate or edit")
+    replies.removeFirst()(["result":["revision":"song:1","data":aliasData]])
+    try require(view.routes.count==2 && view.routes[1].channel==7 && view.available==[3],"Available instruments exclude other owners and draft duplicates")
+    let row=view.tableView(view.table,viewFor:view.table.tableColumns[0],row:0) as! PluginInstrumentRow
+    let old=row.onChannel
+    view.add();try require(view.routes.last==PluginInstrumentRoute(instrument:3,channel:1) && !view.addButton.isEnabled,"Add uses an existing unassigned instrument and unused MIDI channel")
+    old?(5);try require(view.routes[0].channel==2,"Recycled row handlers cannot retarget a changed draft")
+    view.edit(row:0,channel:16,generation:view.generation)
+    view.edit(row:0,instrument:4,generation:view.generation)
+    try require(view.routes[0]==PluginInstrumentRoute(instrument:1,channel:16),"Other plugins' instruments cannot be stolen by the native panel")
+    view.apply(dryRun:true)
+    let expected=view.routes
+    try require(calls.last?.0=="plugin.instruments.set" && calls.last?.1["plugin"] as? String=="synth" && calls.last?.1["expectedRevision"] as? String=="song:1" && (calls.last?.1["assignments"] as? [[String:Int]])?[0]["channel"]==16,"Alias edits share the stable-identity revision API")
+    view.edit(row:0,remove:true,generation:view.generation);view.apply(dryRun:false)
+    try require(view.routes==expected && calls.count==2,"Pending routing cannot change or submit twice")
+    replies.removeFirst()(["result":["revision":"song:1","data":["routing":aliasData,"wouldChange":true]]])
+    try require(view.routes==expected,"Preview preserves the unsaved draft")
+    view.apply(dryRun:false);replies.removeFirst()(["error":["message":"Song changed; reload"]])
+    try require(view.routes==expected && view.revision=="song:1" && view.status.stringValue=="Song changed; reload","Stale alias edits retain their draft without silent rebase")
+    view.load();var mismatched=aliasData;mismatched["plugin"]="neighbor"
+    replies.removeFirst()(["result":["revision":"song:2","data":mismatched]])
+    try require(view.revision=="song:1" && view.routes==expected,"Replies for another plugin never replace this editor")
+    view.load();replies.removeFirst()(["result":["revision":"song:3","data":aliasData]])
+    view.edit(row:1,remove:true,generation:view.generation);view.edit(row:0,remove:true,generation:view.generation);view.apply(dryRun:false)
+    var empty=aliasData;empty["assignments"]=[[String:Any]]()
+    replies.removeFirst()(["result":["revision":"song:4","data":["routing":empty,"wouldChange":true]]])
+    try require(view.routes.isEmpty && view.revision=="song:4" && view.status.stringValue.contains("Undo effect change"),"Explicit empty list unassigns the plugin through one saved operation")
+    let editor=PluginEditor(frame:.zero);try require(!editor.instrumentsButton.isEnabled,"Empty plugin panel disables instrument routing")
+    editor.update(model:PatternModel(["nativePlugins":[["name":"Synth","isInstrument":true,"instrumentAssignments":[["instrument":1,"channel":2],["instrument":2,"channel":7]]]]]),values:[])
+    var selected = -1;editor.onInstruments={selected=$0};editor.instrumentsButton.invoke()
+    try require(selected==0 && editor.instrumentsButton.title=="Instruments (2)…","Native action selects the visible instrument plugin and reports alias count")
+  }
+}

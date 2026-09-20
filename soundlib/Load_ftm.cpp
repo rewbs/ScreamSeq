@@ -9,6 +9,9 @@
 
 
 #include "stdafx.h"
+#ifdef MPT_EXTERNAL_SAMPLES
+#include "../common/mptFileIO.h"
+#endif
 #include "Loaders.h"
 
 OPENMPT_NAMESPACE_BEGIN

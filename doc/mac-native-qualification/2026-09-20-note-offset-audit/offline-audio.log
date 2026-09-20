@@ -1,0 +1,15 @@
+Offset workflow: row 0, units 0, measured delay 0 frames at 48000 Hz
+Offset workflow: row 0, units 1, measured delay 1 frames at 48000 Hz
+Offset workflow: row 0, units 1234, measured delay 109 frames at 48000 Hz
+Offset workflow: row 0, units 16384, measured delay 1440 frames at 48000 Hz
+Offset workflow: row 0, units 32768, measured delay 2880 frames at 48000 Hz
+Offset workflow: row 0, units 49152, measured delay 4320 frames at 48000 Hz
+Offset workflow: row 0, units 65535, measured delay 5760 frames at 48000 Hz
+Offset workflow: row 1, units 0, measured delay 0 frames at 48000 Hz
+Offset workflow: row 1, units 1, measured delay 1 frames at 48000 Hz
+Offset workflow: row 1, units 1234, measured delay 109 frames at 48000 Hz
+Offset workflow: row 1, units 16384, measured delay 1440 frames at 48000 Hz
+Offset workflow: row 1, units 32768, measured delay 2880 frames at 48000 Hz
+Offset workflow: row 1, units 49152, measured delay 4320 frames at 48000 Hz
+Offset workflow: row 1, units 65535, measured delay 5760 frames at 48000 Hz
+PASS sample/AU/VST3 precise note timing, same-row releases, repeat, tempo/groove, callback partitions, timestamp capture, realtime audit, API offset workflow and project recall

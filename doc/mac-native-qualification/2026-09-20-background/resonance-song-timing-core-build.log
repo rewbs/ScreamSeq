@@ -1,0 +1,14 @@
+[  0%] Built target RealtimeAudit
+[ 15%] Built target TrackerFLAC
+[ 86%] Built target OpenMPTCore
+[100%] Built target TrackerEditor
+[100%] Building CXX object CMakeFiles/song-timing-tests.dir/Tests/SongTimingTests.cpp.o
+[100%] Linking CXX executable song-timing-tests
+[100%] Built target song-timing-tests
+[ 14%] Built target TrackerFLAC
+[ 81%] Built target OpenMPTCore
+[ 93%] Built target TrackerEditor
+[ 96%] Built target TrackerPlugins
+[ 96%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 96%] Linking CXX static library libTrackerMac.a
+[100%] Built target TrackerMac

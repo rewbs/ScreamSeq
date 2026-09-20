@@ -1,0 +1,19 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-sanitized
+    Start  1: native-reverse-loops
+1/7 Test  #1: native-reverse-loops .............   Passed   14.38 sec
+    Start  2: sample-loops
+2/7 Test  #2: sample-loops .....................   Passed   11.60 sec
+    Start  4: sample-crossfade
+3/7 Test  #4: sample-crossfade .................   Passed    1.97 sec
+    Start  7: sample-copy
+4/7 Test  #7: sample-copy ......................   Passed    2.17 sec
+    Start  8: sample-clipboard
+5/7 Test  #8: sample-clipboard .................   Passed    1.40 sec
+    Start  9: sample-archive
+6/7 Test  #9: sample-archive ...................   Passed    1.45 sec
+    Start 12: sample-session
+7/7 Test #12: sample-session ...................   Passed    0.85 sec
+
+100% tests passed, 0 tests failed out of 7
+
+Total Test time (real) =  33.82 sec

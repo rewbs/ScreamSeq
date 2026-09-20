@@ -1,0 +1,3 @@
+Mixer strip diagnostic: 240 buses, 600 meter updates 185.3 ms, 9 control sets allocated through full traversal (not display cadence)
+Plugin browser 4096-entry load and search: 25.92 ms (offscreen diagnostic, not a presentation gate)
+PASS editor layouts and native keyboard transport/remapping, note lifecycle, safe sample indices, undo routing, deferred bulk edits, selection bounds and envelope node editing

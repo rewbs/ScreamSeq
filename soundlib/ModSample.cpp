@@ -134,6 +134,9 @@ void ModSample::Convert(MODTYPE fromType, MODTYPE toType)
 void ModSample::Initialize(MODTYPE type)
 {
 	FreeSample();
+#ifdef OPENMPT_EDITOR_CORE
+	nativeReverseLoops = 0;
+#endif
 	nLength = 0;
 	nLoopStart = nLoopEnd = 0;
 	nSustainStart = nSustainEnd = 0;
@@ -303,6 +306,9 @@ void ModSample::FreeSample(void *samplePtr)
 // Set loop points and update loop wrap-around buffer
 void ModSample::SetLoop(SmpLength start, SmpLength end, bool enable, bool pingpong, CSoundFile &sndFile)
 {
+#ifdef OPENMPT_EDITOR_CORE
+	if(!enable || pingpong) nativeReverseLoops &= ~uint8(1);
+#endif
 	nLoopStart = start;
 	nLoopEnd = end;
 	LimitMax(nLoopEnd, nLength);
@@ -322,6 +328,9 @@ void ModSample::SetLoop(SmpLength start, SmpLength end, bool enable, bool pingpo
 // Set sustain loop points and update loop wrap-around buffer
 void ModSample::SetSustainLoop(SmpLength start, SmpLength end, bool enable, bool pingpong, CSoundFile &sndFile)
 {
+#ifdef OPENMPT_EDITOR_CORE
+	if(!enable || pingpong) nativeReverseLoops &= ~uint8(2);
+#endif
 	nSustainStart = start;
 	nSustainEnd = end;
 	LimitMax(nLoopEnd, nLength);

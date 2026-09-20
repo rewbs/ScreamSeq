@@ -1,0 +1,16 @@
+{
+  "status": "stopped at user request",
+  "checkpoint": "/Users/rewbs/code/openmpt/bin/mac-checkpoints/2026-09-20-factory-programs/Resonance.app",
+  "sourceFingerprint": "4436d65ee65502f3aed500a12d8f5a9638e68661b363b7353d4f94c62b75babc",
+  "executableSHA256": {
+    "bin/mac-native/Resonance.app": "c2a016b66a2ff5e9bb6b62558900dae6d47469dbd580ad8cf5c626b1953a8d8d",
+    "bin/mac-stable/Resonance.app": "c2a016b66a2ff5e9bb6b62558900dae6d47469dbd580ad8cf5c626b1953a8d8d",
+    "bin/mac-background/Resonance.app": "b021497bfb7c44636689ecbd606c5fbe18ee62d5d79fdc4cb943e41deb2e450c",
+    "bin/mac-checkpoints/2026-09-20-factory-programs/Resonance.app": "b021497bfb7c44636689ecbd606c5fbe18ee62d5d79fdc4cb943e41deb2e450c"
+  },
+  "productionSources": "match packaged source hashes",
+  "signature": "background and archive verified with codesign --verify --deep --strict",
+  "verification": "54 selected safe core suites; both API hosts; windowless startup; picker/recovery; corrected final offscreen suite; 4 targeted ASan/UBSan suites passed",
+  "excluded": "Physical MIDI and stress suites; live UI/audio/MIDI; commercial plugin loading",
+  "testCorrection": "Combined run ended on a Swift test-fixture extra bracket. Corrected final interface suite passed. Only that test source differed from the packaged build; manifest refreshed and app re-signed without production code changes."
+}

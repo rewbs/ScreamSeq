@@ -1,0 +1,9 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-background
+    Start 3: precise-notes
+1/2 Test #3: precise-notes ....................   Passed    1.39 sec
+    Start 4: pattern-pitch
+2/2 Test #4: pattern-pitch ....................   Passed    1.66 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   3.05 sec

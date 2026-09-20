@@ -24,6 +24,9 @@ void ModChannel::Reset(ResetFlags resetMask, const CSoundFile &sndFile, CHANNELI
 	{
 		// IT compatibility: Initial "last note memory" of channel is C-0 (so a lonely instrument number without note will play that note).
 		// Test case: InitialNoteMemory.it
+#ifdef OPENMPT_EDITOR_CORE
+		nativeNoteGeneration = 0;
+#endif
 		nNote = nNewNote = (sndFile.m_playBehaviour[kITInitialNoteMemory] ? NOTE_MIN : NOTE_NONE);
 		nArpeggioLastNote = lastMidiNoteWithoutArp = NOTE_NONE;
 		nNewIns = nOldIns = 0;
@@ -62,6 +65,9 @@ void ModChannel::Reset(ResetFlags resetMask, const CSoundFile &sndFile, CHANNELI
 
 	if(resetMask & resetSetPosAdvanced)
 	{
+#ifdef OPENMPT_EDITOR_CORE
+		nativeReverseLoop.Reset();
+#endif
 		increment = SamplePosition(0);
 		nPeriod = 0;
 		position.Set(0);
@@ -119,6 +125,9 @@ void ModChannel::Reset(ResetFlags resetMask, const CSoundFile &sndFile, CHANNELI
 
 void ModChannel::Stop()
 {
+#ifdef OPENMPT_EDITOR_CORE
+	nativeReverseLoop.Reset();
+#endif
 	nPeriod = 0;
 	increment.Set(0);
 	position.Set(0);
@@ -176,6 +185,25 @@ bool ModChannel::InSustainLoop() const noexcept
 {
 	return (dwFlags & (CHN_LOOP | CHN_KEYOFF)) == CHN_LOOP && pModSample->uFlags[CHN_SUSTAINLOOP];
 }
+
+#ifdef OPENMPT_EDITOR_CORE
+bool ModChannel::HasNativeReverseLoop() const noexcept
+{
+	if(!pModSample || !dwFlags[CHN_LOOP] || dwFlags[CHN_PINGPONGLOOP] || nLoopStart >= nLoopEnd || nLoopEnd > pModSample->nLength)
+		return false;
+	const bool held = InSustainLoop();
+	return (pModSample->nativeReverseLoops & (held ? 2 : 1)) &&
+		nLoopStart == (held ? pModSample->nSustainStart : pModSample->nLoopStart) &&
+		nLoopEnd == (held ? pModSample->nSustainEnd : pModSample->nLoopEnd);
+}
+
+void ModChannel::ExitNativeReverseLoop() noexcept
+{
+	if(!nativeReverseLoop.sample) return;
+	position = nativeReverseLoop.PhysicalPosition(position);
+	nativeReverseLoop.Reset();
+}
+#endif
 
 
 void ModChannel::SetInstrumentPan(int32 pan, const CSoundFile &sndFile)

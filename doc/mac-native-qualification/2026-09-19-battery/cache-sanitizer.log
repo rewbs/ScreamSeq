@@ -1,0 +1,1 @@
+PASS plugin cache: cold/warm/restart, explicit rescan, empty inventory, invalid/truncated cache, failed rescan preservation, unwritable cache

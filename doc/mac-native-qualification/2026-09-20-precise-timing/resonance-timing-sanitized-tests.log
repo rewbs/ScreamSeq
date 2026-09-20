@@ -1,0 +1,13 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-sanitized
+    Start 2: precise-ramps
+1/4 Test #2: precise-ramps ....................   Passed    2.12 sec
+    Start 3: precise-notes
+2/4 Test #3: precise-notes ....................   Passed   11.25 sec
+    Start 4: pattern-pitch
+3/4 Test #4: pattern-pitch ....................   Passed   16.22 sec
+    Start 5: pattern-performance
+4/4 Test #5: pattern-performance ..............   Passed   11.50 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =  41.09 sec

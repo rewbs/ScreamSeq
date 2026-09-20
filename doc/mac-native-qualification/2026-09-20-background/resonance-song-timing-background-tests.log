@@ -1,0 +1,157 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-background
+      Start  1: plugin-presets
+ 1/50 Test  #1: plugin-presets ...................   Passed    0.01 sec
+      Start  2: plugin-preset-session
+ 2/50 Test  #2: plugin-preset-session ............   Passed    0.62 sec
+      Start  3: song-timing-session
+ 3/50 Test  #3: song-timing-session ..............   Passed    0.65 sec
+      Start  4: song-timing
+ 4/50 Test  #4: song-timing ......................   Passed    0.25 sec
+      Start  5: native-reverse-loops
+ 5/50 Test  #5: native-reverse-loops .............   Passed    1.44 sec
+      Start  6: sample-loops
+ 6/50 Test  #6: sample-loops .....................   Passed    2.22 sec
+      Start  7: sample-crossfade-project
+ 7/50 Test  #7: sample-crossfade-project .........   Passed    1.45 sec
+      Start  8: sample-crossfade
+ 8/50 Test  #8: sample-crossfade .................   Passed    0.50 sec
+      Start  9: sample-snap
+ 9/50 Test  #9: sample-snap ......................   Passed    0.48 sec
+      Start 10: sample-drawing
+10/50 Test #10: sample-drawing ...................   Passed    0.45 sec
+      Start 11: sample-copy
+11/50 Test #11: sample-copy ......................   Passed    0.48 sec
+      Start 12: sample-clipboard
+12/50 Test #12: sample-clipboard .................   Passed    0.53 sec
+      Start 13: sample-archive
+13/50 Test #13: sample-archive ...................   Passed    0.47 sec
+      Start 14: sample-processing
+14/50 Test #14: sample-processing ................   Passed    0.64 sec
+      Start 15: sample-project
+15/50 Test #15: sample-project ...................   Passed    0.94 sec
+      Start 16: sample-session
+16/50 Test #16: sample-session ...................   Passed    0.45 sec
+      Start 17: tracker-core
+17/50 Test #17: tracker-core .....................   Passed    0.56 sec
+      Start 18: automation-tools
+18/50 Test #18: automation-tools .................   Passed    0.41 sec
+      Start 19: pattern-tools
+19/50 Test #19: pattern-tools ....................   Passed    0.53 sec
+      Start 20: pattern-commands
+20/50 Test #20: pattern-commands .................   Passed    0.40 sec
+      Start 21: plugins
+21/50 Test #21: plugins ..........................   Passed    0.46 sec
+      Start 22: native-effects
+22/50 Test #22: native-effects ...................   Passed    7.40 sec
+      Start 23: eq-effects
+23/50 Test #23: eq-effects .......................   Passed    1.63 sec
+      Start 24: comb
+24/50 Test #24: comb .............................   Passed    0.80 sec
+      Start 25: filters
+25/50 Test #25: filters ..........................   Passed    0.50 sec
+      Start 26: oversampling
+26/50 Test #26: oversampling .....................   Passed    0.42 sec
+      Start 27: distortion
+27/50 Test #27: distortion .......................   Passed    2.03 sec
+      Start 28: lofi
+28/50 Test #28: lofi .............................   Passed    0.57 sec
+      Start 29: cabinet
+29/50 Test #29: cabinet ..........................   Passed   38.96 sec
+      Start 30: dynamics
+30/50 Test #30: dynamics .........................   Passed    1.12 sec
+      Start 31: maximizer
+31/50 Test #31: maximizer ........................   Passed    1.70 sec
+      Start 32: bus-compressor
+32/50 Test #32: bus-compressor ...................   Passed    1.78 sec
+      Start 33: session
+33/50 Test #33: session ..........................   Passed    0.62 sec
+      Start 34: native-song
+34/50 Test #34: native-song ......................   Passed    0.51 sec
+      Start 35: export
+35/50 Test #35: export ...........................   Passed    0.54 sec
+      Start 36: routing-prototype
+36/50 Test #36: routing-prototype ................   Passed    0.52 sec
+      Start 37: mixer-runtime
+37/50 Test #37: mixer-runtime ....................   Passed    0.43 sec
+      Start 38: native-mixer
+38/50 Test #38: native-mixer .....................   Passed    1.27 sec
+      Start 39: sidechains
+39/50 Test #39: sidechains .......................   Passed    0.38 sec
+      Start 40: multi-bus
+40/50 Test #40: multi-bus ........................   Passed    0.89 sec
+      Start 41: rack
+41/50 Test #41: rack .............................   Passed    0.66 sec
+      Start 42: mixer-graph
+42/50 Test #42: mixer-graph ......................   Passed    0.37 sec
+      Start 43: native-plugins
+43/50 Test #43: native-plugins ...................   Passed    0.56 sec
+      Start 44: musical-automation
+44/50 Test #44: musical-automation ...............   Passed    0.38 sec
+      Start 45: automation
+45/50 Test #45: automation .......................   Passed    0.51 sec
+      Start 46: plugin-inventory
+46/50 Test #46: plugin-inventory .................   Passed    0.01 sec
+      Start 47: plugin-lifecycle
+47/50 Test #47: plugin-lifecycle .................   Passed    1.42 sec
+      Start 48: note-track
+48/50 Test #48: note-track .......................   Passed    0.83 sec
+      Start 49: plugin-library
+49/50 Test #49: plugin-library ...................   Passed    0.02 sec
+      Start 50: automation-target
+50/50 Test #50: automation-target ................   Passed    0.45 sec
+
+100% tests passed, 0 tests failed out of 50
+
+Total Test time (real) =  81.29 sec
+PASS plugin picker: cached-list explanation, AU/VST3 labels and selection, Rescan, empty-list Add disabled, controls fit; layout checked offscreen without focus or audio
+PASS recovery generations, newest selection across documents, failed-write retention, document-scoped cleanup
+PASS navigation socket: cursor/follow read/write, strict coordinates/types, stale cursor/song, retry/no-op, preserved document/history/transport
+PASS note-track socket: group/create/mute/ungroup, dry-run/stale/no-op/strict validation, routing protection, one-step Undo, mixer removal/disable, empty appended columns and intact original cells
+PASS plugin library socket: stable clean descriptors, search/format/kind/category/hidden/favorite filters, separate revision, persistence boundary, preview/retry/no-op/stale/strict fields and unchanged song/history/transport
+PASS pattern tools through socket: exact preview/apply, stale revisions, seeded generation, masks, loss guards, invalid requests, mix paste, bounded large previews and atomic undo
+PASS row tools socket: insert/delete, exact masked previews, tail/removal loss guards, strict counts, preserved exterior fields, retry/stale/no-op/one-step history
+PASS native save/module export socket: dry run, strict paths/overwrite, stale revisions, v4 payload, unchanged history and native UI save destination
+PASS sample socket: exact preview/apply, ranges/channels/curves, clipping, strict options, bounded replies, retry/stale protection, no-op redo, waveform and PCM undo
+PASS sample clipboard socket: copy/set/paged reads, four paste modes, exact previews/loops/PCM, cut/delete/undo, no-op redo, strict inputs, stale clipboard and empty-sample resampling
+PASS sample drawing socket: exact linear/step/channel PCM, preview/apply, bounded changes, clipping, unchanged settings, one-step undo, no-op redo, retry/stale and strict validation
+PASS sample snapping socket: independent zero/grid boundaries, stereo choices, ties/directions/endpoints, bounded search, strict input and unchanged revision/PCM/redo
+PASS crossfade socket: exact PCM/geometry, preview/apply/retry/stale, period changes, constant-audio no-op/redo, strict parameters and invalid loop rejection
+PASS normal/sustain loop API: atomic preview/apply/history, retry/stale, omitted targets, no-op/redo, crossfade integration and strict fields
+PASS arrangement socket: stable identities, annotations, no-op revisions, invalid input, section movement and unified document undo
+PASS musical automation socket: envelope copy/flip/ramp/repeat paste, deterministic humanization, exact preview/retry/stale/no-op undo, strict points, stable identity and conflicting-clock guard
+PASS mixer socket: routing, cycle rejection, strict values, input/output balance, previews, stale/retry/no-op gestures, undo and meters
+PASS multi-bus socket: native indices, layout discovery, activation, dry run, stale edits, Undo/Redo output routing and sidechain sources
+PASS automation target socket: stable identity, live reads, batch order, no implicit lane, reordering/removal/history, rejected edits and strict fields
+PASS built-in socket: utilities, Digital Filter, EQ5/EQ10/Mixer EQ, Comb Filter, Distortion, LofiMat, Cabinet Simulator, Compressor/Bus Compressor/Gate/Maximizer/sidechains/meters, units/scales, precise edits and undo
+PASS preset socket: native files, dry runs, baseline state, atomic overwrite, independent file/song revisions, retry/read freshness, type/decoder rejection and Undo/Redo
+PASS timing socket: fractional BPM, musical mode/beat/bar/groove, exact preview/retry/stale/no-op/history, strict fields, native document display and legacy patch parity
+PASS command catalog socket: format metadata, extended prefixes, strict read, preview, field-preserving apply, stale rejection and undo
+PASS independent pattern navigation: allocated pattern switch, shorter-pattern clamp, automatic follow off, unchanged song revision and restoration after structural undo
+PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output
+PASS navigation socket: cursor/follow read/write, strict coordinates/types, stale cursor/song, retry/no-op, preserved document/history/transport
+PASS note-track socket: group/create/mute/ungroup, dry-run/stale/no-op/strict validation, routing protection, one-step Undo, mixer removal/disable, empty appended columns and intact original cells
+PASS plugin library socket: stable clean descriptors, search/format/kind/category/hidden/favorite filters, separate revision, persistence boundary, preview/retry/no-op/stale/strict fields and unchanged song/history/transport
+PASS pattern tools through socket: exact preview/apply, stale revisions, seeded generation, masks, loss guards, invalid requests, mix paste, bounded large previews and atomic undo
+PASS row tools socket: insert/delete, exact masked previews, tail/removal loss guards, strict counts, preserved exterior fields, retry/stale/no-op/one-step history
+PASS native save/module export socket: dry run, strict paths/overwrite, stale revisions, v4 payload, unchanged history and native UI save destination
+PASS sample socket: exact preview/apply, ranges/channels/curves, clipping, strict options, bounded replies, retry/stale protection, no-op redo, waveform and PCM undo
+PASS sample clipboard socket: copy/set/paged reads, four paste modes, exact previews/loops/PCM, cut/delete/undo, no-op redo, strict inputs, stale clipboard and empty-sample resampling
+PASS sample drawing socket: exact linear/step/channel PCM, preview/apply, bounded changes, clipping, unchanged settings, one-step undo, no-op redo, retry/stale and strict validation
+PASS sample snapping socket: independent zero/grid boundaries, stereo choices, ties/directions/endpoints, bounded search, strict input and unchanged revision/PCM/redo
+PASS crossfade socket: exact PCM/geometry, preview/apply/retry/stale, period changes, constant-audio no-op/redo, strict parameters and invalid loop rejection
+PASS normal/sustain loop API: atomic preview/apply/history, retry/stale, omitted targets, no-op/redo, crossfade integration and strict fields
+PASS arrangement socket: stable identities, annotations, no-op revisions, invalid input, section movement and unified document undo
+PASS musical automation socket: envelope copy/flip/ramp/repeat paste, deterministic humanization, exact preview/retry/stale/no-op undo, strict points, stable identity and conflicting-clock guard
+PASS mixer socket: routing, cycle rejection, strict values, input/output balance, previews, stale/retry/no-op gestures, undo and meters
+PASS multi-bus socket: native indices, layout discovery, activation, dry run, stale edits, Undo/Redo output routing and sidechain sources
+PASS automation target socket: stable identity, live reads, batch order, no implicit lane, reordering/removal/history, rejected edits and strict fields
+PASS built-in socket: utilities, Digital Filter, EQ5/EQ10/Mixer EQ, Comb Filter, Distortion, LofiMat, Cabinet Simulator, Compressor/Bus Compressor/Gate/Maximizer/sidechains/meters, units/scales, precise edits and undo
+PASS preset socket: native files, dry runs, baseline state, atomic overwrite, independent file/song revisions, retry/read freshness, type/decoder rejection and Undo/Redo
+PASS timing socket: fractional BPM, musical mode/beat/bar/groove, exact preview/retry/stale/no-op/history, strict fields, native document display and legacy patch parity
+PASS command catalog socket: format metadata, extended prefixes, strict read, preview, field-preserving apply, stale rejection and undo
+PASS independent pattern navigation: allocated pattern switch, shorter-pattern clamp, automatic follow off, unchanged song revision and restoration after structural undo
+PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output
+PASS native startup file: populated 127-channel document, ready UI context and API; no windows or audio
+Mixer strip diagnostic: 240 buses, 600 meter updates 181.8 ms, 9 control sets allocated through full traversal (not display cadence)
+Plugin browser 4096-entry load and search: 26.99 ms (offscreen diagnostic, not a presentation gate)
+PASS editor layouts and native keyboard transport/remapping, note lifecycle, safe sample indices, undo routing, deferred bulk edits, selection bounds and envelope node editing

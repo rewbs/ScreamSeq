@@ -1,0 +1,16 @@
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-sanitized
+[ 14%] Built target TrackerFLAC
+[ 16%] Built target ResonanceFixture
+[ 19%] Built target TrackerPlugins
+[ 20%] Built target plugin-scanner
+[ 94%] Built target OpenMPTCore
+[ 95%] Built target TrackerEditor
+[ 95%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 96%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/automation-tests.dir/Tests/AutomationTests.mm.o
+[100%] Linking CXX executable automation-tests
+[100%] Built target automation-tests
+PASS automation API: atomic/dry-run patterns, validation, optimistic revisions, native edits, undo, PCM, instruments, AU/VST3 state/parameters, automation and project persistence; no audio output

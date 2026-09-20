@@ -1,0 +1,45 @@
+[ 12%] Built target TrackerFLAC
+[ 77%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 93%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/VST3Host.mm.o
+[ 95%] Linking CXX static library libTrackerPlugins.a
+[ 95%] Built target TrackerPlugins
+[ 95%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:1504:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:725:
+/Users/rewbs/code/openmpt/mac/Bridge/InstrumentEnvelopeToolsAPI.inc:13:57: warning: 'auto' deduced as 'id' in declaration of 'value' [-Wauto-var-id]
+   13 |       auto info=[&](const InstrumentEnvelope &envelope){auto value=[instrumentEnvelopeInfo(envelope,maximum) mutableCopy];
+      |                                                         ^~~~~~~~~~
+1 warning generated.
+[ 95%] Linking CXX static library libTrackerMac.a
+[100%] Built target TrackerMac
+[  0%] Building OBJCXX object CMakeFiles/ResonanceFixture.dir/Tests/FixtureVST3.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/FixtureVST3.mm:334:57: error: reference to 'CString' is ambiguous
+  334 |   tresult PLUGIN_API getProgramInfo(ProgramListID,int32,CString,String128) override{return kNotImplemented;}
+      |                                                         ^
+/Users/rewbs/code/openmpt/mac/ThirdParty/vst3/pluginterfaces/base/ftypes.h:98:23: note: candidate found by name lookup is 'Steinberg::CString'
+   98 |         typedef const tchar* CString;
+      |                              ^
+/Users/rewbs/code/openmpt/mac/ThirdParty/vst3/pluginterfaces/vst/vsttypes.h:80:22: note: candidate found by name lookup is 'Steinberg::Vst::CString'
+   80 | typedef const char8* CString;   ///< C-String
+      |                      ^
+/Users/rewbs/code/openmpt/mac/Tests/FixtureVST3.mm:334:76: error: non-virtual member function marked 'override' hides virtual member function
+  334 |   tresult PLUGIN_API getProgramInfo(ProgramListID,int32,CString,String128) override{return kNotImplemented;}
+      |                                                                            ^
+/Users/rewbs/code/openmpt/mac/ThirdParty/vst3/pluginterfaces/vst/ivstunits.h:181:29: note: hidden overloaded virtual function 'Steinberg::Vst::IUnitInfo::getProgramInfo' declared here: type mismatch at 3rd parameter ('CString' (aka 'const char *') vs 'CString' (aka 'const char16_t *'))
+  181 |         virtual tresult PLUGIN_API getProgramInfo (ProgramListID listId, int32 programIndex,
+      |                                    ^
+/Users/rewbs/code/openmpt/mac/Tests/FixtureVST3.mm:131:7: warning: abstract class is marked 'final' [-Wabstract-final-class]
+  131 | class Fixture final : public IComponent, public IAudioProcessor, public IEditController, public IUnitInfo {
+      |       ^
+/Users/rewbs/code/openmpt/mac/ThirdParty/vst3/pluginterfaces/vst/ivstunits.h:181:29: note: unimplemented pure virtual method 'getProgramInfo' in 'Fixture'
+  181 |         virtual tresult PLUGIN_API getProgramInfo (ProgramListID listId, int32 programIndex,
+      |                                    ^
+/Users/rewbs/code/openmpt/mac/Tests/FixtureVST3.mm:389:24: error: allocating an object of abstract class type 'Fixture'
+  389 |     auto *plugin = new Fixture(instrument, delayed, programs);
+      |                        ^
+1 warning and 3 errors generated.
+make[3]: *** [CMakeFiles/ResonanceFixture.dir/Tests/FixtureVST3.mm.o] Error 1
+make[2]: *** [CMakeFiles/ResonanceFixture.dir/all] Error 2
+make[1]: *** [CMakeFiles/ResonanceFixture.dir/rule] Error 2
+make: *** [ResonanceFixture] Error 2

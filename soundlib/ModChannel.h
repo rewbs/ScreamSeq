@@ -17,6 +17,9 @@
 #include "modcommand.h"
 #include "Paula.h"
 #include "tuningbase.h"
+#ifdef OPENMPT_EDITOR_CORE
+#include "NativeReverseLoop.h"
+#endif
 
 #include <bitset>
 
@@ -83,6 +86,12 @@ struct ModChannel
 	uint32 nRampLength;
 
 	const ModSample *pModSample;  // Currently assigned sample slot (may already be stopped)
+#ifdef OPENMPT_EDITOR_CORE
+	NativeReverseLoopState nativeReverseLoop;
+	uint64 nativeNoteGeneration = 0; // Accepted onsets for native modulation envelopes.
+	bool HasNativeReverseLoop() const noexcept;
+	void ExitNativeReverseLoop() noexcept;
+#endif
 	Paula::State paulaState;
 	InstrumentSynth::States synthState;
 

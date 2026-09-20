@@ -19,7 +19,7 @@
 
 OPENMPT_NAMESPACE_BEGIN
 
-#if defined(MPT_BUILD_DEBUG) || defined(MPT_BUILD_FUZZER)
+#if (defined(MPT_BUILD_DEBUG) || defined(MPT_BUILD_FUZZER)) && !defined(OPENMPT_EDITOR_CORE)
 #define MPT_VERIFY_ROWVISITOR_LOOPSTATE
 #endif  // MPT_BUILD_DEBUG || MPT_BUILD_FUZZER
 
@@ -66,6 +66,7 @@ protected:
 #endif
 			return m_hash != FNV1a_BASIS;
 		}
+		uint64 Hash() const noexcept { return m_hash; }
 	};
 
 	using LoopStateSet = std::vector<LoopState>;
@@ -79,8 +80,23 @@ protected:
 	ROWINDEX m_rowsSpentInLoops = 0;
 	const SEQUENCEINDEX m_sequence;
 
+#if defined(OPENMPT_EDITOR_CORE)
+	struct RealtimeEntry { uint64 generation = 0, hash = 0; uint32 orderRow = 0; };
+	std::vector<RealtimeEntry> m_realtimeEntries;
+	std::vector<size_t> m_realtimeOffsets;
+	std::vector<uint64> m_realtimeRows;
+	uint64 m_realtimeGeneration = 1;
+	bool m_realtimeExhausted = false;
+#endif
+
 public:
 	RowVisitor(const CSoundFile &sndFile, SEQUENCEINDEX sequence = SEQUENCEINDEX_INVALID);
+
+#if defined(OPENMPT_EDITOR_CORE)
+	// Called only while stopped. The render path uses generation stamps, never allocation or clearing.
+	void PrepareRealtime();
+	bool RealtimeExhausted() const noexcept { return m_realtimeExhausted; }
+#endif
 	
 	void MoveVisitedRowsFrom(RowVisitor &other) noexcept;
 

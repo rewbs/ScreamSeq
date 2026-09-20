@@ -1,0 +1,58 @@
+[  0%] Building OBJCXX object CMakeFiles/plugin-preset-tests.dir/Tests/PluginPresetTests.mm.o
+[  0%] Building OBJCXX object CMakeFiles/plugin-preset-tests.dir/Plugins/PluginPreset.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:44:7: warning: 'auto' deduced as 'id' in declaration of 'auOther' [-Wauto-var-id]
+   44 |       auto auOther = [au mutableCopy]; auOther[@"name"] = @"New name";
+      |       ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:50:7: warning: 'auto' deduced as 'id' in declaration of 'builtin' [-Wauto-var-id]
+   50 |       auto builtin = [plugin mutableCopy]; builtin[@"format"] = @"Built-in"; builtin[@"classID"] = @"resonance.gain";
+      |       ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:52:7: warning: 'auto' deduced as 'id' in declaration of 'otherBuiltin' [-Wauto-var-id]
+   52 |       auto otherBuiltin = [builtin mutableCopy]; otherBuiltin[@"classID"] = @"resonance.filter";
+      |       ^~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:54:7: warning: 'auto' deduced as 'id' in declaration of 'malformed' [-Wauto-var-id]
+   54 |       auto malformed = [NSPropertyListSerialization propertyListWithData:original options:NSPropertyListMutableContainers format:nil error:nil];
+      |       ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:59:7: warning: 'auto' deduced as 'id' in declaration of 'bad' [-Wauto-var-id]
+   59 |       auto bad = [malformed mutableCopy]; bad[@"version"] = @2; writeBad(bad);
+      |       ^~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:63:38: warning: 'auto' deduced as 'id' in declaration of 'badPlugin' [-Wauto-var-id]
+   63 |       bad = [malformed mutableCopy]; auto badPlugin = [plugin mutableCopy]; badPlugin[@"classID"] = @"bad"; bad[@"plugin"] = badPlugin; writeBad(bad);
+      |                                      ^~~~~~~~~~~~~~
+6 warnings generated.
+[100%] Linking OBJCXX executable plugin-preset-tests
+[100%] Built target plugin-preset-tests
+[ 12%] Built target TrackerFLAC
+[ 13%] Built target ResonanceFixture
+[ 78%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 93%] Built target TrackerPlugins
+[ 93%] Built target plugin-scanner
+[ 93%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Plugins/PluginPreset.mm.o
+[ 93%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 95%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[ 98%] Building OBJCXX object CMakeFiles/plugin-preset-session-tests.dir/Tests/PluginPresetSessionTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:52:9: warning: 'auto' deduced as 'id' in declaration of 'inspected' [-Wauto-var-id]
+   52 |         auto inspected = call(@"plugin.preset.inspect", @{@"path": path})[@"data"];
+      |         ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:58:11: warning: 'auto' deduced as 'id' in declaration of 'instrument' [-Wauto-var-id]
+   58 |           auto instrument = call(@"instrument.create", @{}, true)[@"data"][@"instrument"];
+      |           ^~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:64:9: warning: 'auto' deduced as 'id' in declaration of 'envelope' [-Wauto-var-id]
+   64 |         auto envelope = call(@"automation.pattern.get", @{@"pattern": @0})[@"data"];
+      |         ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:66:9: warning: 'auto' deduced as 'id' in declaration of 'beforePorts' [-Wauto-var-id]
+   66 |         auto beforePorts = call(@"plugin.buses.get", @{@"slot": @0})[@"data"];
+      |         ^~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:67:9: warning: 'auto' deduced as 'id' in declaration of 'touched' [-Wauto-var-id]
+   67 |         auto touched = call(@"automation.target.get", @{})[@"data"][@"token"];
+      |         ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:82:9: warning: 'auto' deduced as 'id' in declaration of 'stale' [-Wauto-var-id]
+   82 |         auto stale = [load mutableCopy]; stale[@"expectedRevision"] = revision;
+      |         ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:91:9: warning: 'auto' deduced as 'id' in declaration of 'neighbor' [-Wauto-var-id]
+   91 |         auto neighbor = call(@"plugin.parameters.get", @{@"slot": @0})[@"data"];
+      |         ^~~~~~~~~~~~~
+7 warnings generated.
+[100%] Linking CXX executable plugin-preset-session-tests
+[100%] Built target plugin-preset-session-tests

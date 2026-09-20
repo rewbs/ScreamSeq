@@ -1,0 +1,1 @@
+mac/test-interface.sh: line 9: 50750 Trace/BPT trap: 5          "$tracker_build/interface-tests" "$@"

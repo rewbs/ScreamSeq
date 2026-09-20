@@ -1,0 +1,27 @@
+[ 12%] Built target TrackerFLAC
+[ 13%] Built target ResonanceFixture
+[ 15%] Built target RealtimeAudit
+[ 78%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 95%] Built target TrackerPlugins
+[ 95%] Built target plugin-scanner
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/plugin-alias-tests.dir/Tests/PluginAliasTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:72:7: warning: 'auto' deduced as 'id' in declaration of 'root' [-Wauto-var-id]
+   72 |       auto root=[[NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil] mutableCopy];
+      |       ^~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:73:7: warning: 'auto' deduced as 'id' in declaration of 'item' [-Wauto-var-id]
+   73 |       auto item=[dictionary(descriptor) mutableCopy];const auto captured=probe.state();item[@"state"]=[NSData dataWithBytes:captured.state.data() length:captured.state.size()];
+      |       ^~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:81:78: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   81 |     auto call=[&](NSString *method,NSDictionary *values,bool mutation=false){auto p=[values mutableCopy];if(mutation)p[@"expectedRevision"]=session.automationRevision;
+      |                                                                              ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:88:5: warning: 'auto' deduced as 'id' in declaration of 'routing' [-Wauto-var-id]
+   88 |     auto routing=call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"];
+      |     ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:98:5: warning: 'auto' deduced as 'id' in declaration of 'broken' [-Wauto-var-id]
+   98 |     auto broken=[root mutableCopy];broken[@"version"]=@4;[[NSPropertyListSerialization dataWithPropertyList:broken format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:file atomically:YES];
+      |     ^~~~~~~~~~~
+5 warnings generated.
+[100%] Linking CXX executable plugin-alias-tests
+[100%] Built target plugin-alias-tests

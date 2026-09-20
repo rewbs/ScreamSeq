@@ -1,0 +1,116 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-background
+      Start  1: plugin-presets
+ 1/51 Test  #1: plugin-presets ...................   Passed    0.02 sec
+      Start  2: plugin-preset-session
+ 2/51 Test  #2: plugin-preset-session ............   Passed    0.61 sec
+      Start  3: plugin-aliases
+ 3/51 Test  #3: plugin-aliases ...................***Failed    0.69 sec
+Actual WAV preserves each channel and saved plugin parameter
+
+      Start  4: song-timing-session
+ 4/51 Test  #4: song-timing-session ..............   Passed    0.60 sec
+      Start  5: song-timing
+ 5/51 Test  #5: song-timing ......................   Passed    0.24 sec
+      Start  6: native-reverse-loops
+ 6/51 Test  #6: native-reverse-loops .............   Passed    1.41 sec
+      Start  7: sample-loops
+ 7/51 Test  #7: sample-loops .....................   Passed    2.12 sec
+      Start  8: sample-crossfade-project
+ 8/51 Test  #8: sample-crossfade-project .........   Passed    1.13 sec
+      Start  9: sample-crossfade
+ 9/51 Test  #9: sample-crossfade .................   Passed    0.53 sec
+      Start 10: sample-snap
+10/51 Test #10: sample-snap ......................   Passed    0.49 sec
+      Start 11: sample-drawing
+11/51 Test #11: sample-drawing ...................   Passed    0.50 sec
+      Start 12: sample-copy
+12/51 Test #12: sample-copy ......................   Passed    0.57 sec
+      Start 13: sample-clipboard
+13/51 Test #13: sample-clipboard .................   Passed    0.51 sec
+      Start 14: sample-archive
+14/51 Test #14: sample-archive ...................   Passed    0.48 sec
+      Start 15: sample-processing
+15/51 Test #15: sample-processing ................   Passed    0.64 sec
+      Start 16: sample-project
+16/51 Test #16: sample-project ...................***Failed    0.54 sec
+FAIL Reject malformed project version without replacement
+
+      Start 17: sample-session
+17/51 Test #17: sample-session ...................   Passed    0.48 sec
+      Start 18: tracker-core
+18/51 Test #18: tracker-core .....................   Passed    0.51 sec
+      Start 19: automation-tools
+19/51 Test #19: automation-tools .................   Passed    0.43 sec
+      Start 20: pattern-tools
+20/51 Test #20: pattern-tools ....................   Passed    0.57 sec
+      Start 21: pattern-commands
+21/51 Test #21: pattern-commands .................   Passed    0.41 sec
+      Start 22: plugins
+22/51 Test #22: plugins ..........................   Passed    0.44 sec
+      Start 23: native-effects
+23/51 Test #23: native-effects ...................   Passed    7.56 sec
+      Start 24: eq-effects
+24/51 Test #24: eq-effects .......................   Passed    2.00 sec
+      Start 25: comb
+25/51 Test #25: comb .............................   Passed    0.85 sec
+      Start 26: filters
+26/51 Test #26: filters ..........................   Passed    0.53 sec
+      Start 27: oversampling
+27/51 Test #27: oversampling .....................   Passed    0.45 sec
+      Start 28: distortion
+28/51 Test #28: distortion .......................   Passed    2.52 sec
+      Start 29: lofi
+29/51 Test #29: lofi .............................   Passed    0.73 sec
+      Start 30: cabinet
+30/51 Test #30: cabinet ..........................   Passed   39.65 sec
+      Start 31: dynamics
+31/51 Test #31: dynamics .........................   Passed    1.22 sec
+      Start 32: maximizer
+32/51 Test #32: maximizer ........................   Passed    1.86 sec
+      Start 33: bus-compressor
+33/51 Test #33: bus-compressor ...................   Passed    1.16 sec
+      Start 34: session
+34/51 Test #34: session ..........................   Passed    0.59 sec
+      Start 35: native-song
+35/51 Test #35: native-song ......................   Passed    0.49 sec
+      Start 36: export
+36/51 Test #36: export ...........................   Passed    0.55 sec
+      Start 37: routing-prototype
+37/51 Test #37: routing-prototype ................   Passed    0.52 sec
+      Start 38: mixer-runtime
+38/51 Test #38: mixer-runtime ....................   Passed    0.40 sec
+      Start 39: native-mixer
+39/51 Test #39: native-mixer .....................   Passed    1.28 sec
+      Start 40: sidechains
+40/51 Test #40: sidechains .......................   Passed    0.38 sec
+      Start 41: multi-bus
+41/51 Test #41: multi-bus ........................   Passed    0.87 sec
+      Start 42: rack
+42/51 Test #42: rack .............................   Passed    0.66 sec
+      Start 43: mixer-graph
+43/51 Test #43: mixer-graph ......................   Passed    0.38 sec
+      Start 44: native-plugins
+44/51 Test #44: native-plugins ...................   Passed    0.58 sec
+      Start 45: musical-automation
+45/51 Test #45: musical-automation ...............   Passed    0.77 sec
+      Start 46: automation
+46/51 Test #46: automation .......................   Passed    0.53 sec
+      Start 47: plugin-inventory
+47/51 Test #47: plugin-inventory .................   Passed    0.02 sec
+      Start 48: plugin-lifecycle
+48/51 Test #48: plugin-lifecycle .................   Passed    0.53 sec
+      Start 49: note-track
+49/51 Test #49: note-track .......................   Passed    0.70 sec
+      Start 50: plugin-library
+50/51 Test #50: plugin-library ...................   Passed    0.02 sec
+      Start 51: automation-target
+51/51 Test #51: automation-target ................   Passed    0.50 sec
+
+96% tests passed, 2 tests failed out of 51
+
+Total Test time (real) =  82.24 sec
+
+The following tests FAILED:
+	  3 - plugin-aliases (Failed)
+	 16 - sample-project (Failed)
+Errors while running CTest

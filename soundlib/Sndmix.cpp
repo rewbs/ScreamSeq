@@ -107,6 +107,22 @@ void CSoundFile::InitPlayer(bool bReset)
 }
 
 
+#if defined(OPENMPT_EDITOR_CORE)
+void CSoundFile::ProcessNativeTail(const float *left, const float *right, samplecount_t count, IAudioTarget &target)
+{
+	MPT_ASSERT(count <= MIXBUFFERSIZE && m_MixerSettings.gnChannels == 2);
+#ifdef MPT_INTMIXER
+	FloatToStereoMix(left, right, MixSoundBuffer, count, m_PlayConfig.getFloatToInt());
+#else
+	InterleaveStereo(left, right, MixSoundBuffer, count);
+#endif
+	if(m_PlayConfig.getGlobalVolumeAppliesToMaster()) ProcessGlobalVolume(count);
+	if(m_MixerSettings.m_nStereoSeparation != MixerSettings::StereoSeparationScale) ProcessStereoSeparation(count);
+	if(m_MixerSettings.DSPMask) ProcessDSP(count);
+	target.Process(mpt::audio_span_interleaved<mixsample_t>(MixSoundBuffer, 2, count));
+}
+#endif
+
 bool CSoundFile::FadeSong(uint32 msec)
 {
 	samplecount_t nsamples = Util::muldiv(msec, m_MixerSettings.gdwMixingFreq, 1000);
@@ -253,7 +269,11 @@ samplecount_t CSoundFile::Read(samplecount_t count, IAudioTarget &target, IAudio
 			} else
 			{
 				// No new pattern data
-				if(IsRenderingToDisc())
+				if(IsRenderingToDisc()
+#if defined(OPENMPT_EDITOR_CORE)
+				   || m_PlayState.m_flags[SONG_ENDREACHED]
+#endif
+				)
 				{
 					// Disable song fade when rendering or when requested in libopenmpt.
 					m_PlayState.m_flags.set(SONG_ENDREACHED);
@@ -285,8 +305,11 @@ samplecount_t CSoundFile::Read(samplecount_t count, IAudioTarget &target, IAudio
 
 		MPT_ASSERT(m_PlayState.m_nBufferCount > 0); // assert that we have actually something to do
 
-		const samplecount_t countChunk = std::min({ static_cast<samplecount_t>(MIXBUFFERSIZE), static_cast<samplecount_t>(m_PlayState.m_nBufferCount), static_cast<samplecount_t>(countToRender) });
+		samplecount_t countChunk = std::min({ static_cast<samplecount_t>(MIXBUFFERSIZE), static_cast<samplecount_t>(m_PlayState.m_nBufferCount), static_cast<samplecount_t>(countToRender) });
 
+#if defined(OPENMPT_EDITOR_CORE)
+		if(nativePrepareMix) countChunk = std::clamp<samplecount_t>(nativePrepareMix(nativePrepareContext, countChunk), 1, countChunk);
+#endif
 		if(m_MixerSettings.NumInputChannels > 0)
 		{
 			ProcessInputChannels(source, countChunk);
@@ -302,6 +325,9 @@ samplecount_t CSoundFile::Read(samplecount_t count, IAudioTarget &target, IAudio
 			inputMonitor->get().Process(mpt::audio_span_planar<const mixsample_t>(buffers, m_MixerSettings.NumInputChannels, countChunk));
 		}
 
+#if defined(OPENMPT_EDITOR_CORE)
+		if(nativeMixObserver) nativeMixObserver(nativeMixContext, m_PlayState, countChunk);
+#endif
 		CreateStereoMix(countChunk);
 
 		if(m_opl)
@@ -443,6 +469,13 @@ bool CSoundFile::ProcessRow()
 	while(++m_PlayState.m_nTickCount >= m_PlayState.TicksOnRow())
 	{
 		const auto [ignoreRow, patternTransition] = NextRow(m_PlayState, m_PlayState.m_flags[SONG_BREAKTOROW]);
+#if defined(OPENMPT_EDITOR_CORE)
+		if(nativeTransportRow && !nativeTransportRow(nativeTransportContext))
+		{
+			m_PlayState.m_flags.set(SONG_ENDREACHED);
+			return false;
+		}
+#endif
 
 #ifdef MODPLUG_TRACKER
 		HandleRowTransitionEvents(patternTransition);
@@ -2099,9 +2132,20 @@ std::pair<SamplePosition, uint32> CSoundFile::GetChannelIncrement(const ModChann
 ////////////////////////////////////////////////////////////////////////////////////////////
 // Handles envelopes & mixer setup
 
-bool CSoundFile::ReadNote()
+bool CSoundFile::ReadNote(
+#ifdef OPENMPT_EDITOR_CORE
+	CHANNELINDEX nativeRefresh
+#endif
+)
 {
-#ifdef MODPLUG_TRACKER
+#ifdef OPENMPT_EDITOR_CORE
+	const bool refresh = nativeRefresh != CHANNELINDEX_INVALID;
+#else
+	constexpr bool refresh = false;
+#endif
+	if(!refresh)
+	{
+#if defined(MODPLUG_TRACKER) || defined(OPENMPT_EDITOR_CORE)
 	// Checking end of row ?
 	if(m_PlayState.m_flags[SONG_PAUSED])
 	{
@@ -2120,6 +2164,7 @@ bool CSoundFile::ReadNote()
 	m_PlayState.m_globalScriptState.NextTick(m_PlayState, *this);
 	m_PlayState.m_nSamplesPerTick = GetTickDuration(m_PlayState);
 	m_PlayState.m_nBufferCount = m_PlayState.m_nSamplesPerTick;
+	}
 
 	// Master Volume + Pre-Amplification / Attenuation setup
 	uint32 nMasterVol;
@@ -2160,9 +2205,18 @@ bool CSoundFile::ReadNote()
 
 	////////////////////////////////////////////////////////////////////////////////////
 	// Update channels data
-	m_nMixChannels = 0;
+	if(!refresh) m_nMixChannels = 0;
+#ifdef OPENMPT_EDITOR_CORE
+	else {
+		auto end = std::remove(m_PlayState.ChnMix.begin(), m_PlayState.ChnMix.begin() + m_nMixChannels, nativeRefresh);
+		m_nMixChannels = static_cast<CHANNELINDEX>(end - m_PlayState.ChnMix.begin());
+	}
+#endif
 	for(CHANNELINDEX nChn = 0; nChn < m_PlayState.Chn.size(); nChn++)
 	{
+#ifdef OPENMPT_EDITOR_CORE
+		if(refresh && nChn != nativeRefresh) continue;
+#endif
 		ModChannel &chn = m_PlayState.Chn[nChn];
 		// Increment age of NNA channels
 		if(chn.nMasterChn && nChn < GetNumChannels() && chn.nnaChannelAge < Util::MaxValueOfType(chn.nnaChannelAge))
@@ -2621,6 +2675,75 @@ bool CSoundFile::ReadNote()
 	return true;
 }
 
+
+#ifdef OPENMPT_EDITOR_CORE
+void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect, uint8 parameter)
+{
+	if(channel >= GetNumChannels()) return;
+	auto &chn = m_PlayState.Chn[channel];
+	if(chn.dwFlags[CHN_MUTE | CHN_SYNCMUTE]) return;
+	const auto row = chn.rowCommand;
+	chn.rowCommand.Clear();
+	chn.rowCommand.note = note;
+	chn.rowCommand.instr = static_cast<uint8>(instrument);
+	chn.rowCommand.command = static_cast<EffectCommand>(effect);
+	chn.rowCommand.param = parameter;
+	if(ModCommand::IsNote(note))
+	{
+		chn.nNewNote = chn.nLastNote = note;
+		const auto nna = CheckNNA(channel, instrument, note, false);
+		if(nna != CHANNELINDEX_INVALID)
+		{
+			auto &old = m_PlayState.Chn[nna];
+			// The moved voice has already been prepared for this tick. Do not
+			// advance its envelopes/LFOs again just because another note arrived.
+			if(!old.nVolume || !old.nFadeOutVol) {
+				old.newLeftVol = old.newRightVol = 0;
+				old.dwFlags.set(CHN_FASTVOLRAMP | CHN_VOLUMERAMP);
+				ProcessRamping(old);
+			}
+			if(std::find(m_PlayState.ChnMix.begin(), m_PlayState.ChnMix.begin() + m_nMixChannels, nna) == m_PlayState.ChnMix.begin() + m_nMixChannels)
+				m_PlayState.ChnMix[m_nMixChannels++] = nna;
+		}
+		chn.RestorePanAndFilter();
+		if(instrument) InstrumentChange(m_PlayState, channel, instrument, false, true);
+		else if(chn.nNewIns) InstrumentChange(m_PlayState, channel, chn.nNewIns, false, true);
+		chn.nNewIns = 0;
+		NoteChange(chn, note, false, true, false, channel);
+		chn.nVolume = static_cast<int32>((uint32(velocity) * 256 + 63) / 127);
+		chn.dwFlags.set(CHN_FASTVOLRAMP);
+		const auto tick = m_PlayState.m_nTickCount;
+		const bool first = m_PlayState.m_flags[SONG_FIRSTTICK];
+		const bool channelFirst = chn.isFirstTick;
+		m_PlayState.m_nTickCount = 0;
+		m_PlayState.m_flags.set(SONG_FIRSTTICK);
+		chn.isFirstTick = true;
+		ApplyNativeNoteEffect(channel, effect, parameter);
+		ReadNote(channel);
+		m_PlayState.m_nTickCount = tick;
+		m_PlayState.m_flags.set(SONG_FIRSTTICK, first);
+		chn.isFirstTick = channelFirst;
+	} else {
+		const bool sustain = chn.InSustainLoop();
+		NoteChange(chn, note, false, false, false, channel);
+		if(note == NOTE_KEYOFF && !chn.pModInstrument && !sustain) chn.nVolume = 0;
+		if(!chn.nVolume || !chn.nFadeOutVol || note == NOTE_NOTECUT) {
+			chn.newLeftVol = chn.newRightVol = 0;
+			chn.dwFlags.set(CHN_FASTVOLRAMP | CHN_VOLUMERAMP);
+			ProcessRamping(chn);
+		}
+	}
+	if(chn.HasMIDIOutput()) {
+		const auto realNote = ModCommand::IsNote(note) ? chn.pModInstrument->NoteMap[note - NOTE_MIN] : note;
+		SendMIDINote(channel, realNote, effect == CMD_VOLUME ? static_cast<uint16>(std::min<uint8>(parameter, 64) * 4) : static_cast<uint16>(velocity * 2));
+	}
+	chn.rowCommand = row;
+	if(effect && ModCommand::IsNote(note)) {
+		chn.rowCommand.command = static_cast<EffectCommand>(effect);
+		chn.rowCommand.param = parameter;
+	}
+}
+#endif
 
 void CSoundFile::ProcessMacroOnChannel(CHANNELINDEX nChn)
 {

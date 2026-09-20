@@ -11,6 +11,9 @@
 #include "mptPathString.h"
 
 #include <vector>
+#if defined(OPENMPT_EDITOR_CORE)
+#include <filesystem>
+#endif
 
 #if defined(MODPLUG_TRACKER) && MPT_OS_WINDOWS
 #include <tchar.h>
@@ -22,6 +25,11 @@ OPENMPT_NAMESPACE_BEGIN
 
 namespace mpt
 {
+#if defined(OPENMPT_EDITOR_CORE) && !MPT_OS_WINDOWS
+mpt::PathString AbsolutePathToRelative(const mpt::PathString &p,const mpt::PathString &relativeTo){auto path=std::filesystem::path(p.ToUTF8());auto base=std::filesystem::path(relativeTo.ToUTF8());if(base.empty())return p;return PathString::FromUTF8(path.lexically_proximate(base).string());}
+mpt::PathString RelativePathToAbsolute(const mpt::PathString &p,const mpt::PathString &relativeTo){auto path=std::filesystem::path(p.ToUTF8());auto base=std::filesystem::path(relativeTo.ToUTF8());return PathString::FromUTF8((path.is_absolute()?path:base/path).lexically_normal().string());}
+#endif
+
 
 
 

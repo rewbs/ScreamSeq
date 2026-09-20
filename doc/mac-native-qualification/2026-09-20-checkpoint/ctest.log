@@ -1,0 +1,91 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-native
+      Start  1: native-reverse-loops
+ 1/43 Test  #1: native-reverse-loops .............   Passed    1.61 sec
+      Start  2: sample-loops
+ 2/43 Test  #2: sample-loops .....................   Passed    3.76 sec
+      Start  3: sample-crossfade-project
+ 3/43 Test  #3: sample-crossfade-project .........   Passed    1.16 sec
+      Start  4: sample-crossfade
+ 4/43 Test  #4: sample-crossfade .................   Passed    0.81 sec
+      Start  5: sample-snap
+ 5/43 Test  #5: sample-snap ......................   Passed    0.52 sec
+      Start  6: sample-drawing
+ 6/43 Test  #6: sample-drawing ...................   Passed    0.58 sec
+      Start  7: sample-copy
+ 7/43 Test  #7: sample-copy ......................   Passed    0.55 sec
+      Start  8: sample-clipboard
+ 8/43 Test  #8: sample-clipboard .................   Passed    0.57 sec
+      Start  9: sample-archive
+ 9/43 Test  #9: sample-archive ...................   Passed    0.47 sec
+      Start 10: sample-processing
+10/43 Test #10: sample-processing ................   Passed    0.60 sec
+      Start 11: sample-project
+11/43 Test #11: sample-project ...................   Passed    0.95 sec
+      Start 12: sample-session
+12/43 Test #12: sample-session ...................   Passed    0.44 sec
+      Start 13: tracker-core
+13/43 Test #13: tracker-core .....................   Passed    0.48 sec
+      Start 14: pattern-tools
+14/43 Test #14: pattern-tools ....................   Passed    0.44 sec
+      Start 15: plugins
+15/43 Test #15: plugins ..........................   Passed    0.44 sec
+      Start 16: native-effects
+16/43 Test #16: native-effects ...................   Passed    8.00 sec
+      Start 17: eq-effects
+17/43 Test #17: eq-effects .......................   Passed    1.74 sec
+      Start 18: comb
+18/43 Test #18: comb .............................   Passed    0.87 sec
+      Start 19: filters
+19/43 Test #19: filters ..........................   Passed    0.50 sec
+      Start 20: oversampling
+20/43 Test #20: oversampling .....................   Passed    0.40 sec
+      Start 21: distortion
+21/43 Test #21: distortion .......................   Passed    3.19 sec
+      Start 22: lofi
+22/43 Test #22: lofi .............................   Passed    0.65 sec
+      Start 23: cabinet
+23/43 Test #23: cabinet ..........................   Passed   42.97 sec
+      Start 24: dynamics
+24/43 Test #24: dynamics .........................   Passed    1.66 sec
+      Start 25: maximizer
+25/43 Test #25: maximizer ........................   Passed    1.76 sec
+      Start 26: bus-compressor
+26/43 Test #26: bus-compressor ...................   Passed    1.16 sec
+      Start 27: session
+27/43 Test #27: session ..........................   Passed    0.56 sec
+      Start 28: native-song
+28/43 Test #28: native-song ......................   Passed    1.14 sec
+      Start 29: midi
+29/43 Test #29: midi .............................   Passed    0.52 sec
+      Start 30: export
+30/43 Test #30: export ...........................   Passed    0.57 sec
+      Start 31: stress
+31/43 Test #31: stress ...........................   Passed    0.80 sec
+      Start 32: routing-prototype
+32/43 Test #32: routing-prototype ................   Passed    0.50 sec
+      Start 33: mixer-runtime
+33/43 Test #33: mixer-runtime ....................   Passed    0.40 sec
+      Start 34: native-mixer
+34/43 Test #34: native-mixer .....................   Passed    1.26 sec
+      Start 35: sidechains
+35/43 Test #35: sidechains .......................   Passed    0.37 sec
+      Start 36: multi-bus
+36/43 Test #36: multi-bus ........................   Passed    0.88 sec
+      Start 37: rack
+37/43 Test #37: rack .............................   Passed    0.65 sec
+      Start 38: mixer-graph
+38/43 Test #38: mixer-graph ......................   Passed    0.34 sec
+      Start 39: native-plugins
+39/43 Test #39: native-plugins ...................   Passed    0.56 sec
+      Start 40: musical-automation
+40/43 Test #40: musical-automation ...............   Passed    0.53 sec
+      Start 41: automation
+41/43 Test #41: automation .......................   Passed    0.48 sec
+      Start 42: plugin-inventory
+42/43 Test #42: plugin-inventory .................   Passed    0.01 sec
+      Start 43: plugin-lifecycle
+43/43 Test #43: plugin-lifecycle .................   Passed    0.50 sec
+
+100% tests passed, 0 tests failed out of 43
+
+Total Test time (real) =  86.39 sec

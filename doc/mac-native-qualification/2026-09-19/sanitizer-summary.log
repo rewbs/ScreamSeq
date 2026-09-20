@@ -1,0 +1,10 @@
+PASS atomic edits, grouped undo, sample processing/rollback, pattern/order undo, exact native roundtrip, bounded queue, loop termination at 44.1/48/96 kHz; max callback 3256.29 us
+PASS fixture test.mod
+PASS fixture test.xm
+PASS fixture test.s3m
+PASS fixture test.mptm
+PASS isolated AU scan; project/module/state roundtrip; loss-prevention; offline effect render; effect history/state/automation restoration; bounded concurrent MIDI queue
+PASS AU export 1819112562: 97 latency frames trimmed, 4800 tail frames, max difference 0
+PASS AU export 1684368505: 0 latency frames trimmed, 1004716 tail frames, max difference 0
+PASS dry WAV fidelity, exact export duration, latency, tail and failed-export preservation
+PASS CoreMIDI loopback, running status, clock interleave, note releases, timestamps and disconnect

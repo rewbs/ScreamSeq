@@ -1,0 +1,20 @@
+[ 12%] Built target TrackerFLAC
+[ 13%] Built target ResonanceFixture
+[ 78%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 95%] Built target TrackerPlugins
+[ 95%] Built target plugin-scanner
+[ 95%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 95%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[ 98%] Linking CXX executable plugin-alias-tests
+[100%] Built target plugin-alias-tests
+[ 12%] Built target TrackerFLAC
+[ 13%] Built target ResonanceFixture
+[ 78%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 95%] Built target TrackerPlugins
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/rack-tests.dir/Tests/RackTests.mm.o
+[100%] Linking CXX executable rack-tests
+[100%] Built target rack-tests

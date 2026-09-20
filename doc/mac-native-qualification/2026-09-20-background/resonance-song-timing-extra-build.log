@@ -1,0 +1,49 @@
+[ 14%] Built target TrackerFLAC
+[ 16%] Built target RealtimeAudit
+[ 85%] Built target OpenMPTCore
+[ 86%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/TrackerDocument.cpp.o
+[ 86%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SongTiming.cpp.o
+[ 86%] Linking CXX static library libTrackerEditor.a
+[100%] Built target TrackerEditor
+[100%] Building CXX object CMakeFiles/song-timing-tests.dir/Tests/SongTimingTests.cpp.o
+[100%] Linking CXX executable song-timing-tests
+[100%] Built target song-timing-tests
+[ 13%] Built target TrackerFLAC
+[ 78%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 95%] Built target TrackerPlugins
+[ 96%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 96%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/song-timing-session-tests.dir/Tests/SongTimingSessionTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/SongTimingSessionTests.mm:16:73: warning: 'auto' deduced as 'id' in declaration of 'params' [-Wauto-var-id]
+   16 |     auto call=[&](NSString *method,NSDictionary *p,bool mutation=false){auto params=[p mutableCopy];if(mutation)params[@"expectedRevision"]=session.automationRevision;
+      |                                                                         ^~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SongTimingSessionTests.mm:18:5: warning: 'auto' deduced as 'id' in declaration of 'before' [-Wauto-var-id]
+   18 |     auto before=call(@"document.timing.get",@{})[@"data"];
+      |     ^~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SongTimingSessionTests.mm:20:45: warning: 'auto' deduced as 'id' in declaration of 'edited' [-Wauto-var-id]
+   20 |     call(@"document.timing.set",patch,true);auto edited=call(@"document.timing.get",@{})[@"data"];
+      |                                             ^~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SongTimingSessionTests.mm:33:75: warning: 'auto' deduced as 'id' in declaration of 'bad' [-Wauto-var-id]
+   33 |       auto damaged=packSongSnapshot(parts.module,parts.samples,malformed);auto bad=[root mutableCopy];bad[@"module"]=[NSData dataWithBytes:damaged.data() length:damaged.size()];
+      |                                                                           ^~~~~~~~
+4 warnings generated.
+[100%] Linking CXX executable song-timing-session-tests
+[100%] Built target song-timing-session-tests
+[ 13%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 16%] Built target RealtimeAudit
+[ 79%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 95%] Built target TrackerPlugins
+[ 95%] Linking CXX executable plugin-scanner
+[ 98%] Built target TrackerMac
+[ 98%] Built target plugin-scanner
+[100%] Building OBJCXX object CMakeFiles/musical-automation-tests.dir/Tests/MusicalAutomationTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/MusicalAutomationTests.mm:208:9: warning: 'auto' deduced as 'id' in declaration of 'actual' [-Wauto-var-id]
+  208 |         auto actual = call(@"automation.pattern.get", @{@"pattern":@0})[@"data"];
+      |         ^~~~~~~~~~~
+1 warning generated.
+[100%] Linking CXX executable musical-automation-tests
+[100%] Built target musical-automation-tests

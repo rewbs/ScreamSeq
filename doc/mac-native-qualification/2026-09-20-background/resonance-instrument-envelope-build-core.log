@@ -1,0 +1,15 @@
+[ 15%] Built target TrackerFLAC
+[ 86%] Built target OpenMPTCore
+[ 86%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/AutomationTools.cpp.o
+[ 86%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/InstrumentEnvelopeTools.cpp.o
+/Users/rewbs/code/openmpt/editor/InstrumentEnvelopeTools.cpp:60:39: error: expected unqualified-id
+   60 |   if (before.nReleaseNode != OpenMPT::ENV_RELEASE_NODE_UNSET) after.nReleaseNode = anchor(before.nReleaseNode, true);
+      |                                       ^
+/Users/rewbs/code/openmpt/soundlib/Snd_defs.h:419:32: note: expanded from macro 'ENV_RELEASE_NODE_UNSET'
+  419 | #define ENV_RELEASE_NODE_UNSET  0xFF
+      |                                 ^
+1 error generated.
+make[3]: *** [CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/InstrumentEnvelopeTools.cpp.o] Error 1
+make[2]: *** [CMakeFiles/TrackerEditor.dir/all] Error 2
+make[1]: *** [CMakeFiles/instrument-envelope-tests.dir/rule] Error 2
+make: *** [instrument-envelope-tests] Error 2

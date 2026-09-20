@@ -12,6 +12,10 @@
 
 #include "stdafx.h"
 #include "Loaders.h"
+#ifdef MPT_EXTERNAL_SAMPLES
+#include "../common/mptFileIO.h"
+#include "mpt/fs/fs.hpp"
+#endif
 
 OPENMPT_NAMESPACE_BEGIN
 

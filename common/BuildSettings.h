@@ -143,7 +143,7 @@
 
 #if defined(LIBOPENMPT_BUILD)
 
-#ifdef MPT_WITH_FLAC
+#if defined(MPT_WITH_FLAC) && !defined(OPENMPT_EDITOR_CORE)
 #error "Building libopenmpt with FLAC is useless and not a supported configuration. Please fix your build system to not list libflac as a dependency for libopenmpt itself. It is only a dependency of openmpt123."
 #endif
 
@@ -158,7 +158,7 @@
 #if defined(LIBOPENMPT_BUILD_TEST)
 #define ENABLE_TESTS
 #define MPT_ENABLE_PLAYBACK_TRACE
-#else
+#elif !defined(OPENMPT_EDITOR_CORE)
 #define MODPLUG_NO_FILESAVE
 #endif
 #if defined(MPT_BUILD_ANALZYED) || defined(MPT_BUILD_DEBUG) || defined(MPT_BUILD_CHECKED) || defined(ENABLE_TESTS)
@@ -169,7 +169,7 @@
 //#define MPT_ALL_LOGGING
 #define MPT_COMPONENT_MANAGER 0
 //#define MPT_EXTERNAL_SAMPLES
-#if defined(ENABLE_TESTS) || defined(MPT_BUILD_HACK_ARCHIVE_SUPPORT)
+#if defined(ENABLE_TESTS) || defined(MPT_BUILD_HACK_ARCHIVE_SUPPORT) || defined(OPENMPT_EDITOR_CORE)
 #define MPT_ENABLE_CHARSET_LOCALE
 #else
 //#define MPT_ENABLE_CHARSET_LOCALE
@@ -184,6 +184,11 @@
 #define NO_DSP
 #define NO_EQ
 #define NO_AGC
+
+#if defined(OPENMPT_EDITOR_CORE)
+#define MPT_EXTERNAL_SAMPLES
+#define MPT_ENABLE_FILEIO
+#endif
 
 #endif // LIBOPENMPT_BUILD
 

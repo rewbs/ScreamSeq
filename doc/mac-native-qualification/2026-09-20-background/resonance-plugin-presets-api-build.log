@@ -1,0 +1,16 @@
+[ 13%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 77%] Built target OpenMPTCore
+[ 91%] Built target TrackerEditor
+[ 94%] Built target TrackerPlugins
+[ 95%] Built target plugin-scanner
+[ 95%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Plugins/PluginPreset.mm.o
+[ 97%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+/Users/rewbs/code/openmpt/mac/Plugins/PluginPreset.mm:98:3: warning: 'auto' deduced as 'id' in declaration of 'result' [-Wauto-var-id]
+   98 |   auto result = [summary(decode(bytes)) mutableCopy]; result[@"path"] = path; result[@"written"] = @(!dryRun);
+      |   ^~~~~~~~~~~
+1 warning generated.
+[ 97%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[ 98%] Linking CXX executable automation-tests
+[100%] Built target automation-tests

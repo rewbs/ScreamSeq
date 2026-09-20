@@ -1,0 +1,19 @@
+-- Configuring done (0.1s)
+-- Generating done (0.2s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-sanitized
+[ 11%] Built target TrackerFLAC
+[ 13%] Building OBJCXX object CMakeFiles/ResonanceFixture.dir/Tests/FixtureVST3.mm.o
+[ 76%] Built target OpenMPTCore
+[ 89%] Built target TrackerEditor
+[ 89%] Linking CXX CFBundle shared module test-plugins/ResonanceFixture.vst3/Contents/MacOS/ResonanceFixture
+[ 91%] Built target TrackerPlugins
+[ 92%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Plugins/PluginLibrary.mm.o
+[ 94%] Built target ResonanceFixture
+[ 94%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 95%] Built target plugin-scanner
+[ 97%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/automation-target-tests.dir/Tests/AutomationTargetTests.mm.o
+[100%] Linking CXX executable automation-target-tests
+[100%] Built target automation-target-tests
+PASS automation target: native/API/VST3 gestures, identity across rack/history, read isolation, session reset; no windows or audio output

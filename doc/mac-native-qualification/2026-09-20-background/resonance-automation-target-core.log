@@ -1,0 +1,25 @@
+-- Configuring done (0.1s)
+-- Generating done (0.2s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-background
+[ 11%] Built target TrackerFLAC
+[ 13%] Building OBJCXX object CMakeFiles/ResonanceFixture.dir/Tests/FixtureVST3.mm.o
+[ 76%] Built target OpenMPTCore
+[ 89%] Built target TrackerEditor
+[ 89%] Linking CXX CFBundle shared module test-plugins/ResonanceFixture.vst3/Contents/MacOS/ResonanceFixture
+[ 91%] Built target TrackerPlugins
+[ 91%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 92%] Built target ResonanceFixture
+[ 94%] Built target plugin-scanner
+[ 95%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/automation-target-tests.dir/Tests/AutomationTargetTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/AutomationTargetTests.mm:24:7: warning: 'auto' deduced as 'id' in declaration of 'initial' [-Wauto-var-id]
+   24 |       auto initial = target();
+      |       ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/AutomationTargetTests.mm:76:7: warning: 'auto' deduced as 'id' in declaration of 'custom' [-Wauto-var-id]
+   76 |       auto custom = target();
+      |       ^~~~~~~~~~~
+2 warnings generated.
+[100%] Linking CXX executable automation-target-tests
+[100%] Built target automation-target-tests
+PASS automation target: native/API/VST3 gestures, identity across rack/history, read isolation, session reset; no windows or audio output

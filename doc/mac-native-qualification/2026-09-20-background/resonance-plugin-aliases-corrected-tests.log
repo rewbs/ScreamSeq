@@ -1,0 +1,9 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-background
+    Start  3: plugin-aliases
+1/2 Test  #3: plugin-aliases ...................   Passed    1.27 sec
+    Start 16: sample-project
+2/2 Test #16: sample-project ...................   Passed    1.25 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   2.53 sec

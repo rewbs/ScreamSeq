@@ -1,0 +1,14 @@
+[2026-09-19 12:40:47.304] [info] BTM3ElastiqueWrapper V3 Pro
+[2026-09-19 12:40:47.306] [info] BTM3ElastiqueWrapper V3 Efficient
+[2026-09-19 12:40:47.409] [info] BTM3ElastiqueWrapper V3 Pro
+[2026-09-19 12:40:47.410] [info] BTM3ElastiqueWrapper V3 Efficient
+[2026-09-19 12:40:47.462] [info] BTM3ElastiqueWrapper V3 Pro
+[2026-09-19 12:40:47.463] [info] BTM3ElastiqueWrapper V3 Efficient
+objc[34651]: Class ControlResponder is implemented in both /Library/Audio/Plug-Ins/VST3/Battery 4.vst3/Contents/MacOS/Battery 4 (0x122dff328) and /Library/Audio/Plug-Ins/Components/Battery 4.component/Contents/MacOS/Battery 4 (0x13217b4d8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[34651]: Class PanelDelegate is implemented in both /Library/Audio/Plug-Ins/VST3/Battery 4.vst3/Contents/MacOS/Battery 4 (0x122dff378) and /Library/Audio/Plug-Ins/Components/Battery 4.component/Contents/MacOS/Battery 4 (0x13217b528). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+[2026-09-19 12:40:56.169] [info] BTM3ElastiqueWrapper V3 Pro
+[2026-09-19 12:40:56.170] [info] BTM3ElastiqueWrapper V3 Efficient
+[2026-09-19 12:40:56.258] [info] BTM3ElastiqueWrapper V3 Pro
+[2026-09-19 12:40:56.259] [info] BTM3ElastiqueWrapper V3 Efficient
+[2026-09-19 12:40:56.304] [info] BTM3ElastiqueWrapper V3 Pro
+[2026-09-19 12:40:56.305] [info] BTM3ElastiqueWrapper V3 Efficient

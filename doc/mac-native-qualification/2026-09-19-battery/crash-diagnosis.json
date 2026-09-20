@@ -1,0 +1,130 @@
+{
+  "sourceReport": "Resonance-2026-09-19-120426.ips",
+  "exception": {
+    "codes": "0x0000000000000001, 0x000000018f8884fc",
+    "rawCodes": [
+      1,
+      6703056124
+    ],
+    "type": "EXC_BREAKPOINT",
+    "signal": "SIGTRAP"
+  },
+  "crashedQueue": "org.resonance.document",
+  "frames": [
+    {
+      "image": "libdispatch.dylib",
+      "symbol": "_dispatch_assert_queue_fail",
+      "offset": 120
+    },
+    {
+      "image": "libdispatch.dylib",
+      "symbol": "dispatch_assert_queue$V2.cold.1",
+      "offset": 116
+    },
+    {
+      "image": "libdispatch.dylib",
+      "symbol": "dispatch_assert_queue",
+      "offset": 108
+    },
+    {
+      "image": "HIToolbox",
+      "symbol": "islGetInputSourceListWithAdditions",
+      "offset": 160
+    },
+    {
+      "image": "HIToolbox",
+      "symbol": "isValidateInputSourceRef",
+      "offset": 88
+    },
+    {
+      "image": "HIToolbox",
+      "symbol": "TSMGetInputSourceProperty",
+      "offset": 36
+    },
+    {
+      "image": "Battery 4",
+      "symbol": "NI::UIA::DETAIL::Keys::init()",
+      "offset": 12192
+    },
+    {
+      "image": "Battery 4",
+      "symbol": "NI::UIA::Lib::init()",
+      "offset": 16
+    },
+    {
+      "image": "Battery 4",
+      "symbol": "BAppModule::init()",
+      "offset": 196
+    },
+    {
+      "image": "Battery 4",
+      "symbol": "NI::UIA::AppModule::create()",
+      "offset": 144
+    },
+    {
+      "image": "Battery 4",
+      "symbol": "NIAudioUnitSynthFactory",
+      "offset": 32
+    },
+    {
+      "image": "AudioToolboxCore",
+      "symbol": "APComponent::newInstance(unsigned int, bool, void (OpaqueAudioComponentInstance*, int) block_pointer)",
+      "offset": 516
+    },
+    {
+      "image": "AudioToolboxCore",
+      "symbol": "instantiate(OpaqueAudioComponent*, unsigned int, AudioComponentOpeningMode, void (OpaqueAudioComponentInstance*, int) block_pointer)",
+      "offset": 372
+    },
+    {
+      "image": "AudioToolboxCore",
+      "symbol": "__AudioComponentInstanceNew_block_invoke",
+      "offset": 120
+    },
+    {
+      "image": "AudioToolboxCore",
+      "symbol": "Synchronously",
+      "offset": 132
+    },
+    {
+      "image": "AudioToolboxCore",
+      "symbol": "AudioComponentInstanceNew",
+      "offset": 240
+    },
+    {
+      "image": "Resonance",
+      "symbol": "Tracker::NativePlugin::NativePlugin(Tracker::PluginState const&, double, bool)",
+      "offset": 344
+    },
+    {
+      "image": "Resonance",
+      "symbol": "Tracker::PluginChain::PluginChain(std::__1::vector<Tracker::PluginState, std::__1::allocator<Tracker::PluginState>> const&, double, bool, std::__1::vector<Tracker::ParameterChange, std::__1::allocator<Tracker::ParameterChange>> const&, unsigned long long)",
+      "offset": 384
+    },
+    {
+      "image": "Resonance",
+      "symbol": "Tracker::AudioDevice::setPlugins(std::__1::vector<Tracker::PluginState, std::__1::allocator<Tracker::PluginState>> const&, std::__1::vector<Tracker::ParameterChange, std::__1::allocator<Tracker::ParameterChange>> const&, bool)",
+      "offset": 172
+    },
+    {
+      "image": "Resonance",
+      "symbol": "-[TrackerSession restorePluginGraph:automation:]",
+      "offset": 284
+    },
+    {
+      "image": "Resonance",
+      "symbol": "-[TrackerSession applyPluginGraph:automation:]",
+      "offset": 316
+    },
+    {
+      "image": "Resonance",
+      "symbol": "-[TrackerSession addPlugin:error:]",
+      "offset": 1076
+    },
+    {
+      "image": "Resonance",
+      "symbol": "closure #1 in closure #2 in AppController.addPlugin()",
+      "offset": 68
+    }
+  ]
+}

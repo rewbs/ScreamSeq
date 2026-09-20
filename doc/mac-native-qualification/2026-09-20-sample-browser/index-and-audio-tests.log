@@ -1,0 +1,7 @@
+Real library: 22387 samples indexed in 1.785 s
+Search '': 22387 matches in 13.34 ms
+Search '808 "bass drum"': 331 matches in 68.50 ms
+Search 'Junos chords': 82 matches in 64.56 ms
+Search 'snare -maschine': 1255 matches in 69.60 ms
+Search '"From Mars" WAV': 21856 matches in 58.67 ms
+PASS sample library: inherited tags, search, pagination, hidden files, roots, cache, rescan, preview cancellation and offline audio

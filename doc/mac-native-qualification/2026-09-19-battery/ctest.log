@@ -1,0 +1,25 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-native
+      Start  1: tracker-core
+ 1/10 Test  #1: tracker-core .....................   Passed    0.10 sec
+      Start  2: plugins
+ 2/10 Test  #2: plugins ..........................   Passed    0.43 sec
+      Start  3: session
+ 3/10 Test  #3: session ..........................   Passed    0.90 sec
+      Start  4: midi
+ 4/10 Test  #4: midi .............................   Passed    0.47 sec
+      Start  5: export
+ 5/10 Test  #5: export ...........................   Passed    0.51 sec
+      Start  6: stress
+ 6/10 Test  #6: stress ...........................   Passed    0.32 sec
+      Start  7: native-plugins
+ 7/10 Test  #7: native-plugins ...................   Passed    0.50 sec
+      Start  8: automation
+ 8/10 Test  #8: automation .......................   Passed    0.45 sec
+      Start  9: plugin-inventory
+ 9/10 Test  #9: plugin-inventory .................   Passed    0.35 sec
+      Start 10: plugin-lifecycle
+10/10 Test #10: plugin-lifecycle .................   Passed    0.42 sec
+
+100% tests passed, 0 tests failed out of 10
+
+Total Test time (real) =   4.46 sec

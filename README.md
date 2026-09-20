@@ -1,3 +1,22 @@
+# ScreamSeq
+
+![ScreamSeq icon](assets/branding/ScreamSeq.png)
+
+A native tracker DAW built on OpenMPT, with precise note timing, sample instruments, AU/VST3 hosting, musical automation, a shared audio/modulation graph and an agent-facing editing API. This is an independent derivative, not an official OpenMPT release.
+
+The macOS app uses AppKit, Metal and Core Audio. A Windows-native sibling is planned alongside it, sharing musical data and DSP while using native Windows UI/audio facilities.
+
+- [Build and use the macOS application](mac/README.md)
+- [Architecture and development workflow](doc/SCREAMSEQ_ARCHITECTURE.md)
+- [Graph workflow](mac/GRAPH_WORKFLOW.md), [precise notes](mac/PRECISE_NOTES.md), [agent API](mac/AUTOMATION.md)
+- [Project agent skills](.agents/skills/) and [Windows agent kickoff prompt](doc/WINDOWS_AGENT_PROMPT.md)
+- [License](LICENSE) and [branding/compatibility notes](assets/branding/BRANDING.md)
+
+New projects use `.screamseq`; legacy `.resonance` projects remain readable. Stable legacy plugin and storage identifiers are intentionally retained.
+
+The original upstream repository information follows.
+
+---
 
 README
 ======

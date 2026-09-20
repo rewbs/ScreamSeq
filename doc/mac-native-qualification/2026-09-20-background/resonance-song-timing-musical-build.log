@@ -1,0 +1,15 @@
+[ 13%] Built target TrackerFLAC
+[ 14%] Built target RealtimeAudit
+[ 16%] Built target ResonanceFixture
+[ 79%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 95%] Built target TrackerPlugins
+[ 95%] Built target plugin-scanner
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/musical-automation-tests.dir/Tests/MusicalAutomationTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/MusicalAutomationTests.mm:208:9: warning: 'auto' deduced as 'id' in declaration of 'actual' [-Wauto-var-id]
+  208 |         auto actual = call(@"automation.pattern.get", @{@"pattern":@0})[@"data"];
+      |         ^~~~~~~~~~~
+1 warning generated.
+[100%] Linking CXX executable musical-automation-tests
+[100%] Built target musical-automation-tests

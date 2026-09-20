@@ -1,0 +1,61 @@
+[ 12%] Built target TrackerFLAC
+[ 83%] Built target OpenMPTCore
+[ 83%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/TrackLayout.cpp.o
+[ 83%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/TrackerDocument.cpp.o
+[ 83%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/PatternTools.cpp.o
+[ 85%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/NativeSong.cpp.o
+[ 85%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/ArrangementTools.cpp.o
+[ 85%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/MixerGraph.cpp.o
+[ 85%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/MixerRuntime.cpp.o
+[ 85%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleDocument.cpp.o
+[ 85%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleSplice.cpp.o
+[ 85%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleCopy.cpp.o
+[ 87%] Linking CXX static library libTrackerEditor.a
+[ 98%] Built target TrackerEditor
+[ 98%] Building CXX object CMakeFiles/mixer-graph-tests.dir/Tests/MixerGraphTests.cpp.o
+[100%] Linking CXX executable mixer-graph-tests
+[100%] Built target mixer-graph-tests
+[  0%] Built target RealtimeAudit
+[ 13%] Built target TrackerFLAC
+[ 85%] Built target OpenMPTCore
+[100%] Built target TrackerEditor
+[100%] Building CXX object CMakeFiles/mixer-runtime-tests.dir/Tests/MixerRuntimeTests.cpp.o
+[100%] Linking CXX executable mixer-runtime-tests
+[100%] Built target mixer-runtime-tests
+[ 11%] Built target TrackerFLAC
+[ 11%] Built target RealtimeAudit
+[ 14%] Built target ResonanceFixture
+[ 78%] Built target OpenMPTCore
+[ 91%] Built target TrackerEditor
+[ 91%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/AudioUnitHost.mm.o
+[ 91%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/VST3Host.mm.o
+[ 91%] Linking CXX static library libTrackerPlugins.a
+[ 92%] Built target TrackerPlugins
+[ 94%] Building OBJCXX object CMakeFiles/plugin-scanner.dir/Plugins/Scanner.mm.o
+[ 94%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 94%] Linking CXX executable plugin-scanner
+[ 94%] Built target plugin-scanner
+[ 94%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioDevice.mm.o
+[ 94%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioExport.mm.o
+[ 94%] Building CXX object CMakeFiles/TrackerMac.dir/Audio/NativeInstrument.cpp.o
+[ 95%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/native-mixer-tests.dir/Tests/NativeMixerTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/NativeMixerTests.mm:104:7: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  104 |       auto p = [params mutableCopy]; if (write) p[@"expectedRevision"] = session.automationRevision;
+      |       ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/NativeMixerTests.mm:111:7: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  111 |       auto p = [params mutableCopy]; p[@"expectedRevision"] = revision;
+      |       ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/NativeMixerTests.mm:122:5: warning: 'auto' deduced as 'id' in declaration of 'group' [-Wauto-var-id]
+  122 |     auto group = call(@"mixer.bus.add", @{@"kind": @"group", @"name": @"Rhythm"}, true)[@"data"][@"bus"];
+      |     ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/NativeMixerTests.mm:123:5: warning: 'auto' deduced as 'id' in declaration of 'space' [-Wauto-var-id]
+  123 |     auto space = call(@"mixer.bus.add", @{@"kind": @"return", @"name": @"Space"}, true)[@"data"][@"bus"];
+      |     ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/NativeMixerTests.mm:145:5: warning: 'auto' deduced as 'id' in declaration of 'loaded' [-Wauto-var-id]
+  145 |     auto loaded = call(@"mixer.get", @{})[@"data"];
+      |     ^~~~~~~~~~~
+5 warnings generated.
+[100%] Linking CXX executable native-mixer-tests
+[100%] Built target native-mixer-tests
