@@ -101,10 +101,28 @@ TimelineOperations: `document.timing.get/set`,
 `automation.formula.reference/preview`.
 
 PatternOperations: `pattern.effects.get/set`, `pattern.performance.get/set`,
-`pattern.effect.set`, current `pattern.notes.get/set`, and `pattern.transform`.
-The grid and FX inspector use these guarded transactions. Sparse immutable FX/
+`pattern.effect.set`, current `pattern.notes.get/set`, `pattern.transform` and `pattern.paste`.
+The grid, FX inspector and precise-note dock use these guarded transactions. Sparse immutable FX/
 note caches are charged before commit and reused across unrelated edits. See
-`../PATTERN_FX_PROGRESS.md` for evidence and outstanding clipboard/precise-note UI.
+`../PATTERN_FX_PROGRESS.md` for the earlier checkpoint and
+`../PATTERN_NOTES_PROGRESS.md` for clipboard and precise-note editor evidence.
+
+The precise-note dock keeps a captured row draft with row/beat offsets, snap,
+velocity, note-local effects, off/cut, duplicates and retriggers. Check validates;
+Apply merges untouched pattern events and creates one document Undo step. A stale
+draft stays visible and cannot overwrite newer music. Use target explicitly
+reloads the notes inspector's pinned/follow target. In-flight completions preserve
+newer fields and navigation focus. The hit list is virtual; dense canvas rows
+draw 256 cached bins plus the selected event. Sparse grid lookup uses binary
+search and displays a precise-hit marker. Delete on a note with precise hits
+clears that row's note events and ordinary note fields together, preserving FX.
+
+Pattern clipboard text matches Mac's Pattern 2 payload and legacy Pattern 1
+import. Stable parameter bindings remap by target, and pasted FX expand the
+destination's column count atomically. The native clipboard uses Unicode text;
+inspection uses private text and never changes the desktop clipboard. Copy and
+parse tasks use immutable inputs off the UI thread. Paste retains its captured
+destination and revision even if the cursor moves while parsing.
 
 Controller file operations: `document.save`, plus explicit Windows extension
 `document.open`. Save requires absolute UTF-8 paths and `.screamseq`/`.resonance`,

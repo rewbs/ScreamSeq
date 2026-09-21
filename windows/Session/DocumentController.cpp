@@ -53,6 +53,13 @@ std::optional<Tracker::PatternCommand> DocumentView::effect(unsigned p,unsigned 
   if(column==0){const auto v=cell(p,r,c);if(!OpenMPT::ModCommand::IsPcNote(v.note)&&(v.effect||v.parameter)){Tracker::PatternCommand result;result.position=r*Tracker::performanceUnitsPerRow;result.kind=Tracker::PatternCommandKind::TrackerEffect;result.effect=v.effect;result.parameter=v.parameter;return result;}}
   return {};
 }
+std::span<const PatternNoteView> DocumentView::notesAt(unsigned p,unsigned r,unsigned c) const {
+  const auto &notes=nativePattern->notes;
+  const auto compare=[](const auto &e,const auto &key){return std::tuple(e.pattern,e.channel,e.note.position/Tracker::performanceUnitsPerRow)<key;};
+  const auto first=std::lower_bound(notes.begin(),notes.end(),std::tuple(p,c,r),compare);
+  const auto last=std::lower_bound(first,notes.end(),std::tuple(p,c,r+1),compare);
+  return {first,last};
+}
 DocumentController::DocumentController(const std::filesystem::path &input,std::string identity,
   std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,std::function<void()> beforeView,size_t maxCacheBytes,
   std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters)

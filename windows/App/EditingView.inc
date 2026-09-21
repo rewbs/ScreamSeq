@@ -27,6 +27,14 @@
     }
     void clearPatternSelection() {
         effectPrefix.clear();
+        if(!selecting&&column==0&&!view->notesAt(patternIndex,row,channel).empty()) {
+            const auto pattern=patternIndex,targetRow=row,targetChannel=channel;const auto revision=view->session.revision,identity=documentId;
+            auto snapshot=documentOperation("pattern.notes.get",{{"pattern",pattern}});
+            if(documentId!=identity||view->session.revision!=revision)throw std::runtime_error("Document changed while loading precise notes");
+            Json events=Json::array();for(const auto &e:snapshot.at("events"))if(e.at("channel")!=targetChannel||e.at("position").get<unsigned>()/65536!=targetRow)events.push_back(e);
+            documentOperation("pattern.notes.set",{{"expectedRevision",revision},{"pattern",pattern},{"events",events},
+                {"clearRows",Json::array({{{"row",targetRow},{"channel",targetChannel}}})}});return;
+        }
         if(!selecting && column>=3) {
             edit("pattern.effect.set",{{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",(column-3)/2},{"command",nullptr}});
             return;
@@ -130,55 +138,43 @@
         edit("pattern.apply",{{"cells",Json::array({cell})}});
         if(column==0) advance();return true;
     }
-    Json rectangle(bool clear) const {
-        Json cells=Json::array();auto selected=selection();
-        const auto nr=selected.at("endRow").get<uint64_t>()-selected.at("startRow").get<uint64_t>()+1;
-        const auto nc=selected.at("endChannel").get<uint64_t>()-selected.at("startChannel").get<uint64_t>()+1;
-        if(nr*nc>4096) throw ScreamSeq::Api::ApiError(-32602,"Select at most 4096 cells per operation");
-        for(unsigned r=selected.at("startRow");r<=selected.at("endRow").get<unsigned>();++r)
-            for(unsigned c=selected.at("startChannel");c<=selected.at("endChannel").get<unsigned>();++c) {
-                auto v=clear ? Tracker::Cell{} : view->cell(patternIndex,r,c);
-                cells.push_back({{"pattern",patternIndex},{"row",r},{"channel",c},{"note",v.note},{"instrument",v.instrument},
-                    {"volumeCommand",v.volumeCommand},{"volume",v.volume},{"effect",v.effect},{"parameter",v.parameter}});
-            }
-        return cells;
-    }
     void copyCells() {
-        const auto region=selection();
-        if(std::any_of(view->nativePattern->effects.begin(),view->nativePattern->effects.end(),[&](const auto &e){return e.pattern==patternIndex&&e.channel>=region.at("startChannel").get<unsigned>()&&e.channel<=region.at("endChannel").get<unsigned>()&&e.command.position/Tracker::performanceUnitsPerRow>=region.at("startRow").get<unsigned>()&&e.command.position/Tracker::performanceUnitsPerRow<=region.at("endRow").get<unsigned>();}))
-            throw std::runtime_error("This selection has native FX. Pattern 2 clipboard support is pending; no partial copy was made");
-        auto s=selection();Json payload={{"row",s.at("startRow")},{"channel",s.at("startChannel")},{"cells",rectangle(false)}};
-        auto data=payload.dump();if(data.size()>1024*1024) throw std::runtime_error("Copy at most 4096 cells");
-        // Private QA editing must not replace the musician's desktop clipboard.
-        if(inspection) {inspectionClipboard=std::move(data);return;}
-        auto memory=GlobalAlloc(GMEM_MOVEABLE,data.size()+1);if(!memory) throw std::bad_alloc();
+        const auto region=selection();const auto clipboardSequence=inspection?0:GetClipboardSequenceNumber();
+        auto data=await(std::async(std::launch::async,[snapshot=view,p=patternIndex,region]{return ScreamSeq::patternClipboardText(*snapshot,p,
+            region.at("startRow"),region.at("endRow"),region.at("startChannel"),region.at("endChannel"));}));
+        if(inspection){inspectionClipboard=std::move(data);status=L"Pattern selection copied";return;}
+        if(GetClipboardSequenceNumber()!=clipboardSequence){status=L"Clipboard changed while preparing the selection / copy cancelled";return;}
+        const auto text=wide(data);const auto bytes=(text.size()+1)*sizeof(wchar_t);
+        auto memory=GlobalAlloc(GMEM_MOVEABLE,bytes);if(!memory) throw std::bad_alloc();
         auto target=GlobalLock(memory);if(!target) {GlobalFree(memory);throw std::runtime_error("Cannot allocate clipboard data");}
-        memcpy(target,data.c_str(),data.size()+1);GlobalUnlock(memory);
+        memcpy(target,text.c_str(),bytes);GlobalUnlock(memory);
         if(!OpenClipboard(window)) {GlobalFree(memory);throw std::runtime_error("Clipboard busy");}
-        const bool published=EmptyClipboard() && SetClipboardData(RegisterClipboardFormatW(L"ScreamSeq.PatternCells.v1"),memory);
+        if(GetClipboardSequenceNumber()!=clipboardSequence){CloseClipboard();GlobalFree(memory);status=L"Clipboard changed / copy cancelled";return;}
+        const bool published=EmptyClipboard() && SetClipboardData(CF_UNICODETEXT,memory);
         CloseClipboard();if(!published) {GlobalFree(memory);throw std::runtime_error("Cannot publish pattern clipboard");}
+        status=L"Pattern selection copied / all FX columns and bindings";
     }
-    void pasteCells() {
+    void pasteCells(const std::string &mode="overwrite") {
+        const auto origin=position();const auto revision=view->session.revision;
         std::string text=inspectionClipboard;
         if(!inspection) {
             if(!OpenClipboard(window)) throw std::runtime_error("Clipboard busy");
-            auto memory=GetClipboardData(RegisterClipboardFormatW(L"ScreamSeq.PatternCells.v1"));
-            if(memory) {auto size=GlobalSize(memory);if(size && size<=1024*1024) {auto p=static_cast<const char *>(GlobalLock(memory));if(p) {text.assign(p,strnlen(p,size));GlobalUnlock(memory);}}}
+            auto memory=GetClipboardData(CF_UNICODETEXT);std::wstring value;
+            if(memory) {const auto bytes=GlobalSize(memory);if(bytes&&bytes<=2*(ScreamSeq::maximumPatternClipboardBytes+1)+64) {
+                const auto data=static_cast<const wchar_t *>(GlobalLock(memory));
+                if(data){const auto count=wcsnlen(data,bytes/sizeof(wchar_t));if(count<bytes/sizeof(wchar_t))value.assign(data,count);GlobalUnlock(memory);}
+            }}
             CloseClipboard();
+            if(!value.empty()) {
+                const auto bytes=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,value.data(),int(value.size()),nullptr,0,nullptr,nullptr);
+                if(!bytes||size_t(bytes)>ScreamSeq::maximumPatternClipboardBytes)throw std::runtime_error("Invalid or oversized pattern clipboard text");
+                text.resize(bytes);WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,value.data(),int(value.size()),text.data(),bytes,nullptr,nullptr);
+            }
         }
-        if(text.empty()) throw std::runtime_error("Clipboard has no ScreamSeq cells");
-        auto payload=Json::parse(text);auto cells=payload.at("cells");
-        auto coordinate=[](const Json &v) {if(!v.is_number_integer() || v<0 || v>65535) throw std::runtime_error("Invalid clipboard coordinate");};
-        coordinate(payload.at("row"));coordinate(payload.at("channel"));
-        if(!cells.is_array() || cells.empty() || cells.size()>4096) throw std::runtime_error("Clipboard needs 1..4096 cells");
-        for(const auto &c:cells) {coordinate(c.at("row"));coordinate(c.at("channel"));}
-        for(auto &c:cells) {c["row"]=int(c.at("row"))-int(payload.at("row"))+int(row);c["channel"]=int(c.at("channel"))-int(payload.at("channel"))+int(channel);c["pattern"]=patternIndex;}
-        std::set<std::pair<int,int>> occupied;
-        for(const auto &e:view->nativePattern->effects)if(e.pattern==patternIndex)occupied.emplace(int(e.command.position/Tracker::performanceUnitsPerRow),int(e.channel));
-        for(const auto &cell:cells)
-            if(occupied.contains({cell.at("row").get<int>(),cell.at("channel").get<int>()}))
-                throw std::runtime_error("The paste destination has native FX. Pattern 2 clipboard support is pending; no partial paste was made");
-        edit("pattern.apply",{{"cells",cells}});
+        auto payload=await(std::async(std::launch::async,[text=std::move(text)]{return ScreamSeq::parsePatternClipboard(text);}));
+        payload["pattern"]=origin.at("pattern");payload["startRow"]=origin.at("row");payload["startChannel"]=origin.at("channel");
+        payload["mode"]=mode;payload["clip"]=true;payload["expectedRevision"]=revision;
+        documentOperation("pattern.paste",payload);status=L"Pattern pasted / document Undo available";
     }
     std::filesystem::path chooseFile(bool save) {
         std::vector<wchar_t> path(32768);if(save) wcscpy_s(path.data(),path.size(),L"Untitled.screamseq");

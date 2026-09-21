@@ -70,7 +70,11 @@ tests using the old fixed channel width; their mouse coordinates and blank-area
 expectations were updated for partial-channel rendering. The initial CTest run
 found unbuilt optional executables; the final run follows their explicit build.
 
-## Remaining
+## Remaining at this historical checkpoint
+
+The later `PATTERN_NOTES_PROGRESS.md` implements the clipboard and precise-note
+UI items below and fixes the note-local catalogue lifetime bug exposed by the
+new editor tests. This file preserves evidence for its original source/build.
 
 Pattern 2 clipboard support, including binding remapping, is pending. The old
 cell clipboard rejects source or destination selections containing native FX,

@@ -45,6 +45,7 @@
     }
     void openEffectEditor(const std::string &code="",bool reload=false) {
         if(busy)throw std::runtime_error("Wait for the document worker before opening an FX draft");
+        noteEditorOpen=false;
         if(effectDraftExists&&!reload) {
             effectEditorOpen=true;
             workspaceState.show("notes",position(),cursorSample(),false);layoutControls();SetFocus(controls.at(effectValue));

@@ -291,7 +291,7 @@ Standalone test hosts still advertise only their implemented method sets.
 ## Pattern FX and precise notes
 
 `pattern.effects.get/set`, their `pattern.performance.get/set` aliases,
-`pattern.effect.set`, current `pattern.notes.get/set`, and `pattern.transform`
+`pattern.effect.set`, current `pattern.notes.get/set`, `pattern.transform` and `pattern.paste`
 are integrated. Use the shared Mac schema for payloads and `pattern.commands`
 for source-format IDs, masks and two-character display codes. FX columns are
 0–7; cursor code/value fields are `3+2*column` and `4+2*column`. Commands and
@@ -299,9 +299,19 @@ precise notes use 65536 units per row. Replacement APIs preserve omitted
 collections; single-cell clear uses `command:null`. Reads expose unresolved
 bindings without silently retargeting them. Writes require `expectedRevision`.
 
-The native FX inspector uses these same transactions. The old cell clipboard
-rejects selections containing native FX until Pattern 2 support is complete.
-Precise-note event controls remain pending despite the complete API path.
+The native FX and precise-note inspectors use these same transactions. A precise
+row draft captures its target and revision, preserves unrelated events, and saves
+through one `pattern.notes.set` transaction. `workspace.get.noteEditor` reports
+its target, selected event, count, pending/stale status and logical canvas bounds.
+
+The native clipboard publishes Mac's `ScreamSeq Pattern 2` Unicode text format,
+including relative FX and only the referenced stable bindings. It also accepts
+legacy `Resonance Pattern 1` text. `pattern.paste` supports overwrite, merge and
+mix, field masks, explicit clipping, bounded preview and one Undo. The native
+actions use clipping; API requests default to rejecting an oversized destination.
+Ctrl+Shift+V mixes into empty fields; Merge Paste is in the command palette.
+Parsing/serialization runs off the UI thread, bounded to 16 MiB and 262144 cells.
+Clipboard source and destination are captured before asynchronous work.
 
 ## Plugin rack integration
 

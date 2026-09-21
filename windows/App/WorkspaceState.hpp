@@ -54,12 +54,12 @@ public:
 		capture(id,position,sample);
 		if(takeFocus) focus=id;
 	}
-	WorkspaceGeometry geometry(float width,float height) const {
+	WorkspaceGeometry geometry(float width,float height,float minimumLowerHeight=128) const {
 		WorkspaceGeometry g;
 		const float left=170, top=88, bottom=std::max(top+180,height-44);
 		const bool compose=layout!="Pattern focus";
 		const float right=visible() ? width-std::clamp(rightWidth,300.0f,std::max(300.0f,width-left-350)) : width-8;
-		const float split=compose ? bottom-std::clamp(lowerHeight,128.0f,std::max(128.0f,bottom-top-180)) : bottom;
+		const float split=compose ? bottom-std::clamp(std::max(lowerHeight,minimumLowerHeight),128.0f,std::max(128.0f,bottom-top-180)) : bottom;
 		g.pattern={left,top,std::max(1.0f,right-left-6),std::max(1.0f,split-top-6)};
 		if(visible()) { g.inspector={right,top,std::max(1.0f,width-right-8),std::max(1.0f,split-top-6)}; g.verticalDivider={right-6,top,6,split-top}; }
 		if(compose) {

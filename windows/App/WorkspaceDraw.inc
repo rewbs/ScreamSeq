@@ -41,8 +41,10 @@
 					s.fill(x+fieldStart(column)-1,y,fieldWidth(column)+2,rowHeight,0x56416f);
 					s.outline(x-2,y,channelWidth(c)-1,rowHeight,workspaceState.focus=="pattern" ? 0x9f85c8 : 0x6b627d);
 				}
-				const auto v=view->displayCell(patternIndex,rr,c);
-				s.text(v.substr(0,3),x,y,24,v.substr(0,3)==L"..." ? 0x49596a : 0x76d5d8);
+                const auto v=view->displayCell(patternIndex,rr,c);
+                const auto precise=view->notesAt(patternIndex,rr,c);
+                s.text(!precise.empty()&&v.substr(0,3)==L"..."?view->noteNames[precise.front().note.note]:v.substr(0,3),x,y,24,!precise.empty()?accent:v.substr(0,3)==L"..."?0x49596a:0x76d5d8);
+                if(!precise.empty())s.fill(x+25,y+4,2,rowHeight-8,accent);
 				s.text(v.substr(4,2),x+28.8f,y,18,v.substr(4,2)==L".." ? 0x49596a : 0xc1cbd6);
 				s.text(v.substr(7,3),x+50.4f,y,24,v.substr(7,3)==L"..." ? 0x49596a : gold);
                 for(unsigned fx=0;fx<view->effectColumns.at(c);++fx) {
@@ -68,7 +70,7 @@
 				s.text((view->instruments ? L"Instrument    " : L"Sample slot   ")+std::to_wstring(cell.instrument),x,y,w);y+=24;
 				s.text(L"Volume        "+(cell.volumeCommand ? std::to_wstring(cell.volume) : L"--"),x,y,w,gold);y+=24;
 				s.uiText(L"Ordinary pattern cell / no draft",x,y,w,muted);y+=28;
-				s.uiText(L"Precise-note editing unavailable",x,y,w,muted);y+=20;
+                s.uiText(std::to_wstring(view->notesAt(pp,pr,pc).size())+L" precise hits / Enter opens timing editor",x,y,w,accent);y+=20;
 				s.uiText(L"Return keeps the original opening row.",x,y,w,muted);
 			} else {
 				const auto sample=state.sample;const auto data=view->samples.contains(sample) ? view->samples.at(sample) : Json::object();
@@ -91,6 +93,7 @@
 		if(workspaceState.layout!="Pattern focus") {
             if(sampleEditorVisible()) drawSampleEditor();
             else if(effectEditorVisible()) drawEffectEditor();
+            else if(noteEditorVisible()) drawNoteEditor();
             else drawPluginEditor();
 			s.fill(g.horizontalDivider.x,g.horizontalDivider.y,g.horizontalDivider.w,g.horizontalDivider.h,0x344151);
 			if(workspaceState.visible()) s.fill(g.verticalDivider.x,g.verticalDivider.y,g.verticalDivider.w,g.verticalDivider.h,0x344151);

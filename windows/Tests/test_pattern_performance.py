@@ -260,6 +260,123 @@ class PatternPerformanceTests(unittest.TestCase):
         self.write('document.open', path=str(path))
         self.assertEqual(self.read('pattern.effects.get', pattern=0), configured)
 
+    def test_pattern2_paste_binding_remap_history_and_reopen(self):
+        self.write('plugin.add', descriptor=self.read('plugin.discover', format='Built-in')[0])
+        plugin = self.doc()['data']['nativePlugins'][0]['instanceID']
+        parameter = next(p for p in self.read('plugin.parameters.get', slot=0) if p['writable'] and p['canSlide'])
+        self.write('pattern.effects.set', pattern=0, bindings=[dict(id=1, plugin=plugin, parameter=parameter['id'], name='Original name')],
+                   commands=[dict(channel=2, position=65536, column=0, kind='pitch-set', value=3)])
+        self.write('pattern.notes.set', pattern=0, events=[dict(channel=0, position=16384, note=61)])
+        notes = self.read('pattern.notes.get', pattern=0)
+        speed = next(p['command'] for p in self.read('pattern.commands')['effect'] if p['name'] == 'Set Speed')
+        payload = dict(pattern=0, startRow=4, startChannel=0, rows=2, channels=2,
+            cells=[[61, 1, 1, 50, 0, 0], [0]*6, [255, 0, 0, 0, 0, 0], [65, 2, 0, 0, 0, 0]],
+            effects=[dict(channel=0, position=16384, column=7, kind='parameter-set', binding=23, value=.25),
+                     dict(channel=1, position=65536+8192, column=0, kind='note-cut'),
+                     dict(channel=1, position=0, column=3, kind='tracker', effect=speed, parameter=3)],
+            bindings=[dict(id=23, plugin=plugin, parameter=parameter['id'], name='Clipboard name')])
+        before, old_cells, old_fx = self.doc(), self.cells(), self.read('pattern.effects.get', pattern=0)
+        preview = self.write('pattern.paste', **payload, dryRun=True)
+        self.assertTrue(preview['effectsChanged'])
+        self.assertEqual(self.doc(), before)
+        self.write('pattern.paste', **payload)
+        result = self.read('pattern.effects.get', pattern=0)
+        self.assertEqual([c['count'] for c in result['columns'][:2]], [8, 4])
+        self.assertEqual(len(result['bindings']), 1)
+        self.assertEqual(result['bindings'][0]['name'], 'Original name')
+        self.assertEqual(next(c['binding'] for c in result['commands'] if c['column'] == 7), 1)
+        self.assertEqual([c for c in result['commands'] if c['channel'] == 2], old_fx['commands'])
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), notes)
+        before = self.doc()
+        self.assertEqual(self.write('pattern.paste', **payload)['changedCells'], 0)
+        self.assertEqual(self.doc(), before)
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.cells(), old_cells)
+        self.assertEqual(self.read('pattern.effects.get', pattern=0), old_fx)
+        self.write('history.redo', domain='document')
+        path = self.folder / 'pattern2.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.read('pattern.effects.get', pattern=0), result)
+        # An imported unresolved target is retained under a free binding ID.
+        self.write('pattern.paste', pattern=0, startRow=9, startChannel=1, rows=1, channels=1,
+            cells=[[0]*6], effects=[dict(channel=0, position=0, column=0, kind='parameter-set', binding=1, value=.5)],
+            bindings=[dict(id=1, plugin='Missing clipboard instrument', parameter=765, name='Preserved')])
+        result = self.read('pattern.effects.get', pattern=0)
+        self.assertEqual([(b['id'], b['resolved']) for b in result['bindings']], [(1, True), (2, False)])
+
+    def test_pattern2_mix_merge_masks_clipping_and_atomic_rejection(self):
+        speed = next(p['command'] for p in self.read('pattern.commands')['effect'] if p['name'] == 'Set Speed')
+        original = [dict(channel=0, position=4*65536+100, column=0, kind='note-cut'),
+                    dict(channel=0, position=4*65536, column=2, kind='pitch-set', value=5)]
+        self.write('pattern.effects.set', pattern=0, columns=[dict(channel=0, count=3)], commands=original)
+        payload = dict(pattern=0, startRow=4, startChannel=0, rows=1, channels=1, cells=[[0, 0, 0, 0, speed, 3]])
+        self.write('pattern.paste', **payload, mode='mix')
+        fx = self.read('pattern.effects.get', pattern=0)
+        self.assertEqual({c['kind'] for c in fx['commands']}, {'note-cut', 'pitch-set'})
+        self.write('pattern.paste', **payload, mode='merge')
+        fx = self.read('pattern.effects.get', pattern=0)
+        self.assertEqual({c['kind'] for c in fx['commands']}, {'tracker', 'pitch-set'})
+        self.write('pattern.paste', **payload)
+        self.assertEqual([c['kind'] for c in self.read('pattern.effects.get', pattern=0)['commands']], ['tracker'])
+        self.write('history.undo', domain='document')
+        before = self.read('pattern.effects.get', pattern=0)
+        self.write('pattern.paste', **dict(payload, cells=[[67, 0, 0, 0, 0, 0]]), fields=['note'])
+        self.assertEqual(self.read('pattern.effects.get', pattern=0), before)
+        before = self.doc()
+        invalid = [dict(payload, rows=2), dict(payload, cells=[[True, 0, 0, 0, 0, 0]]),
+            dict(payload, effects=[dict(channel=0, position=0, column=0, kind='tracker', effect=speed)]),
+            dict(payload, cells=[[252, 0, 0, 0, 0, 0]], effects=[dict(channel=0, position=0, column=0, kind='note-cut')]),
+            dict(payload, effects=[dict(channel=0, position=0, column=1, kind='note-cut')]*2),
+            dict(payload, effects=[dict(channel=0, position=0, column=1, kind='parameter-set', binding=9, value=.5)]),
+            dict(payload, startRow=63, rows=2, cells=[[0]*6]*2)]
+        for request in invalid:
+            with self.subTest(request=request), self.assertRaises(ApiError):
+                self.write('pattern.paste', **request)
+            self.assertEqual(self.doc(), before)
+        self.write('pattern.paste', pattern=0, startRow=63, startChannel=7, rows=2, channels=2,
+            cells=[[61, 1, 0, 0, 0, 0]]*4, clip=True,
+            effects=[dict(channel=0, position=0, column=7, kind='note-cut'), dict(channel=1, position=65536, column=6, kind='note-cut')])
+        self.assertEqual(self.read('pattern.effects.get', pattern=0)['columns'][7]['count'], 8)
+
+    def test_native_pattern2_clipboard_preserves_all_fx_and_one_undo(self):
+        self.write('pattern.apply', cells=[dict(pattern=0, row=4, channel=0, note=65, instrument=1)])
+        self.write('pattern.effects.set', pattern=0, columns=[dict(channel=0, count=8)], commands=[
+            dict(channel=0, position=4*65536+16384, column=0, kind='note-cut'),
+            dict(channel=0, position=4*65536, column=7, kind='pitch-slide', value=7, duration=65536, pitchRange=12)])
+        self.navigate(row=4, channel=0, column=0)
+        self.desktop.send(self.desktop.hwnd(self.pid), 0x111, 124)
+        self.navigate(row=10, channel=1)
+        before, before_fx = self.cells(), self.read('pattern.effects.get', pattern=0)
+        self.desktop.send(self.desktop.hwnd(self.pid), 0x111, 125)
+        fx = self.read('pattern.effects.get', pattern=0)
+        self.assertEqual(fx['columns'][1]['count'], 8)
+        pasted = [c for c in fx['commands'] if c['channel'] == 1]
+        self.assertEqual(len(pasted), 2)
+        self.assertEqual(sorted(c['position'] for c in pasted), [10*65536, 10*65536+16384])
+        self.assertEqual(next(c['note'] for c in self.cells() if c['row']==10 and c['channel']==1), 65)
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.cells(), before)
+        self.assertEqual(self.read('pattern.effects.get', pattern=0), before_fx)
+
+    def test_large_pattern_paste_preview_bound_and_late_validation(self):
+        self.write('document.patch', channels=8)
+        pattern = self.write('pattern.create', rows=128)['pattern']
+        payload = dict(pattern=pattern, startRow=0, startChannel=0, rows=100, channels=8, cells=[[61, 1, 0, 0, 0, 0]]*800)
+        before = self.doc()
+        preview = self.write('pattern.paste', **payload, dryRun=True)
+        self.assertEqual(preview['changedCells'], 800)
+        self.assertEqual(len(preview['changes']), 512)
+        self.assertTrue(preview['previewTruncated'])
+        self.assertEqual(self.doc(), before)
+        payload['cells'][-1] = [999, 1, 0, 0, 0, 0]
+        with self.assertRaises(ApiError):
+            self.write('pattern.paste', **payload)
+        self.assertEqual(self.doc(), before)
+        payload['cells'][-1] = [61, 1, 0, 0, 0, 0]
+        self.write('pattern.paste', **payload)
+        self.assertEqual(self.read('pattern.get', pattern=pattern, startRow=99, rowCount=1)['cells'][-1]['note'], 61)
+
     def test_parameter_bindings_unresolved_preservation_and_whole_batch_rejection(self):
         descriptor = self.read('plugin.discover', format='Built-in')[0]
         self.write('plugin.add', descriptor=descriptor)
@@ -296,6 +413,8 @@ class PatternPerformanceTests(unittest.TestCase):
         before_cells = self.cells()
         empty = self.read('pattern.notes.get', pattern=0)
         self.assertEqual(empty['events'], [])
+        self.assertGreater(len(empty['effects']), 4)
+        self.assertTrue(any(p['command'] == 0 for p in empty['effects']))
         self.assertTrue(all('allowedParameters' in p and 'displayCode' in p for p in empty['effects']))
         events = [dict(channel=0, row=0, offsetRows=.25, note=61, instrument=1, velocity=100),
                   dict(channel=0, position=65536, note=255),

@@ -28,15 +28,33 @@ Json effectObjects(const Document &document,unsigned pattern){const auto &song=d
   for(const auto &c:native.performance.commands)if(c.pattern==native.patterns.at(pattern).id){const auto track=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &t){return t.second.id==c.track;});result.push_back(commandObject(c,track->first));}return result;
 }
 unsigned rowsPerBeat(const Document &d,unsigned pattern){const auto &s=d.song();return std::max(1u,s.Patterns[pattern].GetOverrideSignature()?unsigned(s.Patterns[pattern].GetRowsPerBeat()):s.m_nDefaultRowsPerBeat?unsigned(s.m_nDefaultRowsPerBeat):4u);}
-Json noteEffects(Document &d){auto result=Json::array();DocumentOperations operations(d);for(auto entry:operations.invoke("pattern.commands",Json::object()).at("effect")){Json values=Json::array();const auto command=entry.at("command").get<uint8_t>();for(int p=entry.at("minimum");p<=entry.at("maximum").get<int>();++p)if((p&entry.at("parameterMask").get<int>())==entry.at("parameterValue").get<int>()&&OpenMPT::NativeNoteEffectSupported(command,uint8_t(p)))values.push_back(p);if(!values.empty()){entry["allowedParameters"]=values;if(std::find(values.begin(),values.end(),entry.at("suggestedParameter"))==values.end())entry["suggestedParameter"]=values[0];if(command==CMD_NONE)entry["description"]="No continuing effect for this hit. Ends the previous hit's effect; ordinary row effects stay active until a hit overrides them.";if(command==CMD_S3MCMDEX&&entry.at("parameterValue")==0x90)entry["description"]="Local sound control: 90 surround off, 91 surround on, 9E play forward, 9F play backward.";result.push_back(std::move(entry));}}return result;}
+Json noteEffects(Document &d) {
+  auto result=Json::array();DocumentOperations operations(d);
+  // Keep the owner alive: .at() on a temporary returns a dangling range in C++20.
+  const auto catalog=operations.invoke("pattern.commands",Json::object());
+  for(auto entry:catalog.at("effect")) {
+    Json values=Json::array();const auto command=entry.at("command").get<uint8_t>();
+    for(int p=entry.at("minimum");p<=entry.at("maximum").get<int>();++p)
+      if((p&entry.at("parameterMask").get<int>())==entry.at("parameterValue").get<int>()&&OpenMPT::NativeNoteEffectSupported(command,uint8_t(p)))values.push_back(p);
+    if(values.empty())continue;
+    entry["allowedParameters"]=values;
+    if(std::find(values.begin(),values.end(),entry.at("suggestedParameter"))==values.end())entry["suggestedParameter"]=values[0];
+    if(command==CMD_NONE)entry["description"]="No continuing effect for this hit. Ends the previous hit's effect; ordinary row effects stay active until a hit overrides them.";
+    if(command==CMD_S3MCMDEX&&entry.at("parameterValue")==0x90)entry["description"]="Local sound control: 90 surround off, 91 surround on, 9E play forward, 9F play backward.";
+    result.push_back(std::move(entry));
+  }
+  return result;
+}
 }
 #include "PatternTransform.inc"
+#include "PatternPaste.inc"
 PatternOperations::PatternOperations(Tracker::Document &d,std::function<void()> stop,PatternHostHooks host):document_(d),stop_(std::move(stop)),host_(std::move(host)){}
 std::vector<std::string> PatternOperations::reads(){return {"pattern.performance.get","pattern.effects.get","pattern.notes.get"};}
-std::vector<std::string> PatternOperations::writes(){return {"pattern.performance.set","pattern.effects.set","pattern.effect.set","pattern.notes.set","pattern.transform"};}
+std::vector<std::string> PatternOperations::writes(){return {"pattern.performance.set","pattern.effects.set","pattern.effect.set","pattern.notes.set","pattern.transform","pattern.paste"};}
 Json PatternOperations::invoke(const std::string &method,const Json &input){
   using namespace Tracker;const auto &song=document_.song();Json p=input;
   if(method=="pattern.transform")return transformPattern(document_,p,stop_,host_);
+  if(method=="pattern.paste")return pastePattern(document_,p,stop_,host_);
   const auto index=uint16_t(integer(field(p,"pattern"),0,UINT16_MAX));need(song.Patterns.IsValidPat(index),"Pattern does not exist");
   const auto pattern=document_.native().patterns.at(index).id;const auto rows=song.Patterns[index].GetNumRows();const uint32_t end=uint32_t(rows)*performanceUnitsPerRow;
   std::optional<std::tuple<uint16_t,uint16_t,uint8_t>> single;

@@ -1,5 +1,10 @@
 # Windows continuation — 2026-09-21
 
+Latest editor continuation: `PATTERN_NOTES_PROGRESS.md` records Mac Pattern 2
+clipboard/binding remap, the native precise-note row draft and timing canvas,
+the corrected note-local catalogue lifetime, and current qualification. The
+broader work and installed-plugin limitations remain in `PARITY_PLAN.md`.
+
 ## Latest: upstream integration and installed plugins
 
 The default upstream branch is `codex/screamseq` (there is no `main`). Changes

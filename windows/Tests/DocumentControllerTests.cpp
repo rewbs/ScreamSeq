@@ -1,6 +1,7 @@
 #include "windows/Session/DocumentController.hpp"
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"
+#include "windows/App/PatternClipboard.hpp"
 #include "common/mptString.h"
 #include <iostream>
 
@@ -215,6 +216,37 @@ void patternPerformanceTests(const std::filesystem::path &directory) {
   std::cout<<"PASS immutable FX/note cache, no-op/dry-run reuse, history/reopen and precommit budget guard\n";
 }
 
+void patternClipboardTests(const std::filesystem::path &directory) {
+  DocumentController c({},"pattern-clipboard",[]{},[](const auto &){});
+  const auto notes=call(c,"pattern.notes.get",{{"pattern",0}});
+  need(notes.at("effects").size()>4,"Note-local catalog must own its nonempty source range");
+  invoke(c,"pattern.paste",{{"pattern",0},{"startRow",4},{"startChannel",1},{"rows",1},{"channels",1},
+    {"cells",Json::array({Json::array({65,1,1,40,0,0})})},
+    {"effects",Json::array({{{"channel",0},{"position",16384},{"column",7},{"kind","parameter-set"},{"binding",23},{"value",0.25}}})},
+    {"bindings",Json::array({{{"id",23},{"plugin","Preserved missing plugin"},{"parameter",456},{"name","Timbre Ω"}}})}});
+  auto snapshot=c.view();const auto text=patternClipboardText(*snapshot,0,4,4,1,1);
+  need(text.starts_with("ScreamSeq Pattern 2\n"),"Native clipboard must use Mac's text header");
+  const auto payload=parsePatternClipboard(text);
+  need(payload.at("cells")[0]==Json::array({65,1,1,40,0,0}),"Clipboard changed six-field tracker bytes");
+  need(payload.at("effects")[0].at("channel")==0&&payload.at("effects")[0].at("position")==16384&&payload.at("effects")[0].at("column")==7,"Clipboard lost relative native FX coordinates");
+  need(payload.at("bindings").size()==1&&payload.at("bindings")[0].size()==4,"Clipboard must include only referenced stable binding fields");
+  need(parsePatternClipboard("ScreamSeq Pattern 2\r\n"+payload.dump())==payload,"Windows newline clipboard is not portable");
+  const auto legacy=parsePatternClipboard("Resonance Pattern 1\r\n3D,01,01,40,00,00\tFF,00,00,00,00,00\r\n00,00,00,00,00,00\tFE,00,00,00,00,00");
+  need(legacy.at("rows")==2&&legacy.at("channels")==2&&legacy.at("cells")[1][0]==255&&legacy.at("cells")[3][0]==254,"Legacy text import changed dimensions or special notes");
+  for(const auto bad:{"ScreamSeq Pattern 2\n[]","ScreamSeq Pattern 2\n{\"unexpected\":0}","Resonance Pattern 1\n01,02","Resonance Pattern 1\nZZ,00,00,00,00,00","Resonance Pattern 1\n01,00,00,00,00,00\t","ScreamSeq Pattern 9\n{}"}) {
+    bool rejected=false;try{parsePatternClipboard(bad);}catch(const std::exception &){rejected=true;}need(rejected,"Malformed clipboard accepted");
+  }
+  bool rejected=false;try{parsePatternClipboard(std::string(maximumPatternClipboardBytes+1,'x'));}catch(const std::exception &){rejected=true;}need(rejected,"Oversized clipboard accepted");
+  auto request=payload;request["pattern"]=0;request["startRow"]=10;request["startChannel"]=2;
+  invoke(c,"pattern.paste",request);need(c.view()->effectColumns[2]==8&&c.view()->effect(0,10,2,7)->position==10*65536+16384,"Copied text did not restore FX 8");
+  invoke(c,"pattern.notes.set",{{"pattern",0},{"events",Json::array({{{"channel",2},{"position",10*65536+20},{"note",61}},{{"channel",2},{"position",10*65536+30000},{"note",255}},{{"channel",2},{"position",11*65536},{"note",62}}})}});
+  need(c.view()->notesAt(0,10,2).size()==2&&c.view()->notesAt(0,11,2).size()==1&&c.view()->notesAt(0,10,1).empty()&&c.view()->notesAt(1,10,2).empty(),"Sparse note lookup crossed a row, channel or pattern");
+  need(snapshot->notesAt(0,10,2).empty(),"Note cache mutated an older view");
+  const auto path=directory/"pattern2-worker.screamseq";invoke(c,"document.save",{{"path",path.generic_string()}});
+  invoke(c,"document.open",{{"path",path.generic_string()}});need(c.view()->notesAt(0,10,2).size()==2&&c.view()->effect(0,10,2,7)->position==10*65536+16384,"Native reopen lost clipboard FX or precise-note indexes");
+  std::cout<<"PASS Mac Pattern 2 text, CRLF, stable bindings, legacy hex, malformed/oversized rejection, sparse note boundaries and native reopen\n";
+}
+
 void programDryRunTests(const std::filesystem::path &scanner,const std::filesystem::path &cache) {
   Tracker::WindowsVST3::configure(scanner.generic_string(),cache.generic_string());
   unsigned stops=0;DocumentController c({},"program-dry-run",[&]{++stops;},[](const auto &){});
@@ -244,6 +276,7 @@ void programDryRunTests(const std::filesystem::path &scanner,const std::filesyst
 
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--pattern-clipboard") {patternClipboardTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--pattern-performance") {patternPerformanceTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==4 && std::string(argv[1])=="--program-dry-run") {programDryRunTests(std::filesystem::u8path(argv[2]),std::filesystem::u8path(argv[3]));return 0;}
     if(argc==3 && std::string(argv[1])=="--fixtures") {

@@ -51,6 +51,7 @@ struct DocumentView {
   Tracker::Cell cell(unsigned p,unsigned r,unsigned c) const;
   std::wstring displayCell(unsigned p,unsigned r,unsigned c) const;
   std::optional<Tracker::PatternCommand> effect(unsigned p,unsigned r,unsigned c,unsigned column) const;
+  std::span<const PatternNoteView> notesAt(unsigned p,unsigned r,unsigned c) const;
 };
 // One serial document owner. Work, cache construction and retired cache disposal
 // run here. service() is called ONLY by the UI thread for playback hooks.

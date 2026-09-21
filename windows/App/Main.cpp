@@ -9,6 +9,7 @@
 #include "ApiDispatch.hpp"
 #include "WorkspaceState.hpp"
 #include "CommandPalette.hpp"
+#include "PatternClipboard.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -35,6 +36,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     undoCommand=122, redoCommand=123, copyCommand=124, pasteCommand=125, clearCommand=126,
     patternChooser=130, orderChooser=131, octaveChooser=132, stepChooser=133, effectColumnChooser=134, sampleCommandBase=200,
     patternReverse=140,patternRotate=141,patternExpand=142,patternShrink=143,patternInsertRows=144,patternDeleteRows=145,patternTransposeUp=146,patternTransposeDown=147,
+    patternPasteMix=148,patternPasteMerge=149,
     sampleImportCommand=201,sampleAllCommand=202,sampleReverseCommand=203,sampleNormalizeCommand=204,
     sampleFadeInCommand=205,sampleFadeOutCommand=206,sampleTrimCommand=207,sampleLoopCommand=208,
     sampleRangeCommand=209,sampleCopyCommand=210,samplePasteCommand=211,sampleCutCommand=212,sampleClearCommand=213,
@@ -46,7 +48,10 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
     pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,
     effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
-    effectBinding=346,effectApply=347,effectReload=348,effectSearch=349;
+    effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,
+    noteList=360,notePitch=361,noteInstrument=362,noteVelocity=363,noteOffset=364,noteUnitControl=365,
+    noteSnapControl=366,noteEffectControl=367,noteParameter=368,noteAdd=369,noteRemove=370,noteCheck=371,
+    noteApply=372,noteReload=373,noteReplace=374,noteRepeat=375,noteRepeatCount=376,noteEndVelocity=377;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -211,6 +216,11 @@ public:
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
 			{"octave",octave},{"editStep",editStep},{"documentBusy",busy},
             {"sampleEditor",sampleEditorSnapshot()},
+            {"noteEditor",{{"visible",noteEditorVisible()},{"pattern",notePattern},{"row",noteRow},{"channel",noteChannel},
+                {"expectedRevision",noteRevision},{"stale",noteDocument!=documentId||noteRevision!=view->session.revision},
+                {"pending",notePending},{"draftCount",noteDraft.size()},{"selected",noteSelected},
+                {"selectedEvent",noteSelected>=0?noteDraft.at(size_t(noteSelected)):Json()},
+                {"timeline",rect(noteTimelineRect())},{"status",utf8Path(noteStatus)}}},
             {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
                 {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
                 {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
@@ -367,6 +377,7 @@ public:
     #include "SampleEditor.inc"
     #include "PluginEditor.inc"
     #include "PatternEditor.inc"
+    #include "PreciseNoteEditor.inc"
 	#include "WorkspaceDraw.inc"
 	void draw() {
         frameRequested=false;
@@ -447,6 +458,11 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             SetTextColor(reinterpret_cast<HDC>(wp),RGB(212,224,235));SetBkColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));
             SetDCBrushColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
         case WM_COMMAND:
+            if(LOWORD(wp)==noteInstrument||LOWORD(wp)==noteVelocity||LOWORD(wp)==noteOffset||LOWORD(wp)==noteParameter||LOWORD(wp)==noteRepeatCount||LOWORD(wp)==noteEndVelocity) {
+                if(HIWORD(wp)==EN_CHANGE)app->noteFieldChanged();return 0;
+            }
+            if((LOWORD(wp)==notePitch||LOWORD(wp)==noteUnitControl||LOWORD(wp)==noteSnapControl||LOWORD(wp)==noteEffectControl)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
+            if(LOWORD(wp)==noteList&&HIWORD(wp)!=LBN_SELCHANGE&&HIWORD(wp)!=LBN_DBLCLK)return 0;
             if(LOWORD(wp)==effectSearch){if(HIWORD(wp)==EN_CHANGE)app->filterEffects();return 0;}
             if(LOWORD(wp)>=effectValue&&LOWORD(wp)<=effectRange)return 0;
             if((LOWORD(wp)==effectKind||LOWORD(wp)==effectBinding)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
@@ -462,8 +478,9 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		case WM_KEYDOWN:case WM_SYSKEYDOWN: if(app->key(wp)) return 0;break;
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
-		case WM_LBUTTONUP: app->dragging=0;ReleaseCapture();return 0;
-		case WM_CAPTURECHANGED:app->dragging=0;return 0;
+        case WM_LBUTTONDBLCLK:app->noteMouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),true);return 0;
+		case WM_LBUTTONUP: app->noteMouseUp();app->dragging=0;ReleaseCapture();return 0;
+		case WM_CAPTURECHANGED:app->noteMouseUp();app->dragging=0;return 0;
 		case WM_MOUSEWHEEL:if(GET_KEYSTATE_WPARAM(wp)&MK_SHIFT)app->scrollHorizontal(-GET_WHEEL_DELTA_WPARAM(wp));else app->scroll(GET_WHEEL_DELTA_WPARAM(wp));return 0;
         case WM_MOUSEHWHEEL:app->scrollHorizontal(GET_WHEEL_DELTA_WPARAM(wp));return 0;
 		case WM_SETCURSOR: {
@@ -508,7 +525,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		if(audioTest && (inspection || !seconds)) throw std::runtime_error("Audio test requires --seconds and cannot use inspection mode");
 		SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 		Application app(projectPath); app.inspection = inspection;app.silentOutput=silentOutput;
-		WNDCLASSW klass{}; klass.lpfnWndProc = windowProc; klass.hInstance = instance;
+		WNDCLASSW klass{}; klass.style=CS_DBLCLKS;klass.lpfnWndProc = windowProc; klass.hInstance = instance;
 		klass.lpszClassName = L"ScreamSeqWindowsDevelopment"; klass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
 		klass.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(101));
 		if(!RegisterClassW(&klass)) throw std::runtime_error("Cannot register native window");
