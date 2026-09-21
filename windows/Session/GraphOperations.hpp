@@ -4,7 +4,7 @@
 #include <functional>
 #include <string>
 #include <vector>
-namespace Tracker { class Document; }
+namespace Tracker { class Document; struct NativeSong; }
 namespace ScreamSeq {
 using Json = nlohmann::json;
 struct GraphRackRecord {
@@ -30,6 +30,7 @@ struct GraphHostHooks {
   // Must return the requested real slot's baseline state, never an automated
   // live state. Throw ApiError for absent/unavailable slots. No fallback recipe.
   std::function<GraphRackClone(uint32_t)> cloneRackSlot;
+  std::function<void(const Tracker::NativeSong &)> validateCandidate;
 };
 // Control-thread only. Caller checks/removes expectedRevision and constructs the
 // outer Mac response envelope. This layer returns result.data, not fake host data.

@@ -7,7 +7,7 @@
     std::vector<size_t> visibleEffectChoices;
     int effectSelected=-1;
     std::wstring effectEditorStatus=L"Enter on an FX cell to edit";
-    bool effectEditorVisible() const {return effectEditorOpen&&workspaceState.layout!="Pattern focus"&&!sampleEditorVisible();}
+    bool effectEditorVisible() const {return !mixerEditorVisible()&&effectEditorOpen&&workspaceState.layout!="Pattern focus"&&!sampleEditorVisible();}
     ScreamSeq::WorkspaceRect effectEditorRect() const {const auto g=geometry();return {g.graph.x,g.graph.y,g.automation.x+g.automation.w-g.graph.x,g.graph.h};}
     std::wstring effectField(int id) const {
         const auto h=controls.at(id);const int count=GetWindowTextLengthW(h);std::wstring value(size_t(count)+1,0);
@@ -44,6 +44,7 @@
         SendMessageW(controls.at(effectKind),CB_SETCURSEL,selected,0);
     }
     void openEffectEditor(const std::string &code="",bool reload=false) {
+        mixerEditorOpen=false;
         if(busy)throw std::runtime_error("Wait for the document worker before opening an FX draft");
         noteEditorOpen=false;
         if(effectDraftExists&&!reload) {

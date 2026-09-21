@@ -91,7 +91,8 @@
 			s.unclip();s.outline(p.x,p.y,p.w,p.h,workspaceState.focus==workspaceState.active ? 0x6edac5 : 0x303b49);
 		}
 		if(workspaceState.layout!="Pattern focus") {
-            if(sampleEditorVisible()) drawSampleEditor();
+            if(mixerEditorVisible())drawMixerEditor();
+            else if(sampleEditorVisible()) drawSampleEditor();
             else if(effectEditorVisible()) drawEffectEditor();
             else if(noteEditorVisible()) drawNoteEditor();
             else drawPluginEditor();

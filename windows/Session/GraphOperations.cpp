@@ -314,6 +314,7 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
       std::erase_if(d.modulation,[&](const auto &e){return e.source==nodeID||e.target==nodeID;});
     }
     reconcileEnvelopeLinks(next,song); next.validate(song);
+    if(host_.validateCandidate)host_.validateCandidate(next);
     const bool changed=next!=document_.native();
     if(changed&&!dry) {
       if((next.mixer!=document_.native().mixer||!sameSignalProcessing(next.signal,document_.native().signal))&&stopPlayback_) stopPlayback_();

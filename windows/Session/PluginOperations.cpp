@@ -42,6 +42,21 @@ PluginOperations::PluginOperations(Tracker::Document &d,Project::ProjectState &p
   std::function<void(std::span<const ParameterChange>)> liveParameters)
   :document_(d),project_(p),stop_(std::move(stop)),liveParameters_(std::move(liveParameters)){}
 PluginOperations::~PluginOperations()=default;
+std::vector<GraphRackRecord> PluginOperations::graphRack() const {
+  std::vector<GraphRackRecord> result;const auto states=projectPluginStates(project_);
+  for(size_t i=0;i<states.size();++i){const auto &s=states[i];GraphRackRecord item{descriptor(s.descriptor),s.instanceID,uint32_t(i),s.bypass};for(auto a:pluginAssignments(s))item.instruments.push_back(uint16_t(a.instrument));result.push_back(std::move(item));}
+  return result;
+}
+GraphRackClone PluginOperations::cloneRackSlot(uint32_t index) {
+  const auto states=projectPluginStates(project_);need(index<states.size(),"Plugin rack slot no longer exists");
+  (void)editor(index); // Availability is real; never fabricate a missing recipe.
+  const auto &s=states[index];const auto &d=s.descriptor;GraphRackClone result;
+  result.recipe={d.format,d.name,d.path,d.classID,d.type,d.subtype,d.manufacturer,s.state,s.auxiliaryInputs,s.auxiliaryOutputs};
+  result.instrument=d.instrument||d.type==audioUnitMusicDeviceType;for(auto a:pluginAssignments(s))result.instruments.push_back(uint16_t(a.instrument));return result;
+}
+std::vector<PluginAudioBus> PluginOperations::audioBuses(size_t index,bool required) {
+  try{return editor(index).buses();}catch(const std::exception &){if(required)throw;return {};}
+}
 std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","automation.target.get"};}
 std::vector<std::string> PluginOperations::writes(){return {"plugin.add","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.editor.open","plugin.editor.close"};}
 size_t PluginOperations::slot(const Json &p) const {

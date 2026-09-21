@@ -11,7 +11,7 @@
     uint32_t selectedParameter=0,pluginDraftParameter=0;
     bool settingPluginFields=false,pluginDraft=false,refreshingPlugins=false,pluginLibraryLoaded=false;
     std::wstring pluginDetailStatus=L"Select a plugin to edit its parameters";
-    bool pluginEditorVisible() const {return workspaceState.layout!="Pattern focus" && !sampleEditorVisible() && !effectEditorVisible() && !noteEditorVisible();}
+    bool pluginEditorVisible() const {return !mixerEditorVisible()&&workspaceState.layout!="Pattern focus" && !sampleEditorVisible() && !effectEditorVisible() && !noteEditorVisible();}
     int selectedPluginSlot() const {
         const auto &rack=view->session.document.at("nativePlugins");
         for(size_t i=0;i<rack.size();++i) if(rack[i].at("instanceID")==selectedPlugin) return int(i);

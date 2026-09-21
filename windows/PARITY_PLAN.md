@@ -17,7 +17,7 @@ device and plugin hosting belong to each platform. See
 | Unified 1–8 FX columns, ordinary tracker commands plus PS/PL/BS/BL/NC | Shared engine/API, variable native grid, two-character entry, searchable FX inspector, stable bindings, row transforms and Pattern 2 clipboard with binding remap integrated. FX 1→FX 8/4 PCM is identical at three rates and four block sizes. See `PATTERN_FX_PROGRESS.md` and `PATTERN_NOTES_PROGRESS.md`. | Broader row-tool controls, first-letter completion and visible layout/accessibility qualification. |
 | Precise note cut and plugin trigger instruments | Shared semantics/persistence, current precise-note API, native row-draft editor and timing/velocity canvas, NC inspector, empty trigger API, native creation/assignment and independent history integrated. Installed Surge XT trigger PCM/WASAPI checks pass with documented fixture constraints. | Broader instrument/routing qualification, foreground visual/accessibility verification and live native-edit publication. |
 | Project container 6 / metadata 17; RSONGS2 snapshots | Current-only native open/save, strict rejection of historical native wrappers, opaque-state retention, sample-exact save/reopen tests. MOD/XM/IT/S3M import remains available. | Obtain a newly exported Mac format-17 fixture and perform Windows→Mac→Windows reopen. The supplied format-14 reference is historical and is not silently migrated. |
-| Explicit disconnected mixer/plugin destinations | Shared mixer behavior and Windows metadata roundtrip accept output/target 0. | Connect live mixer/graph API and controls; exercise disconnect with sends, history and reopen through the UI. |
+| Explicit disconnected mixer/plugin destinations | Actual-app mixer/graph API and native bus controls integrated; live control batches, disconnection, sends, history, real VST3 ports and reopen tested. See `MIXER_GRAPH_PROGRESS.md`. | Native sends/inserts/sidechains and graph canvas; broader routing and long-session qualification. |
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields and sample waveform markers integrated. | Envelope editor markers and audition UI, including overlapping voices and release tails. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
 | Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, native program/port controls, independent history and editor ownership integrated; live parameter batches and editor gestures reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. | Live opaque-state replacement (including Surge's first-open zoom state), native alias controls, presets/library, explicit path resolution, graph/mixer connections and missing-plugin recovery. |
@@ -51,9 +51,10 @@ in force. A fresh fetch during this continuation found no newer upstream commits
    semantics before polishing their Windows controls. Support the same API
    inputs and rejection rules; verify history and persistence with the shared
    model. Complete independent ruler/timeline display and focus behavior.
-3. **Graph, mixer, automation and envelope editors.** Supply real rack activity,
-   parameter, baseline and conflict hooks to the existing operation layers.
-   Passing isolated operations does not mean the app exposes them. Complete
+3. **Graph, mixer, automation and envelope editors.** Real rack activity,
+   parameter, baseline and conflict hooks are integrated into the actual app.
+   The native mixer bus dock and guarded operations have app, worker, PCM and
+   live WASAPI coverage; see `MIXER_GRAPH_PROGRESS.md`. Complete
    graph routing, disconnected outputs, curve/formula editing and both envelope
    bank levels, with retained drawing, meaningful context menus and keyboard use.
 4. **Recording and workspace.** Device selection, MIDI input and mapping,

@@ -16,6 +16,7 @@
 #include <map>
 #include "../Audio/WasapiDevice.hpp"
 #include <shellapi.h>
+#include <shlobj.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -51,7 +52,10 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,
     noteList=360,notePitch=361,noteInstrument=362,noteVelocity=363,noteOffset=364,noteUnitControl=365,
     noteSnapControl=366,noteEffectControl=367,noteParameter=368,noteAdd=369,noteRemove=370,noteCheck=371,
-    noteApply=372,noteReload=373,noteReplace=374,noteRepeat=375,noteRepeatCount=376,noteEndVelocity=377;
+    noteApply=372,noteReload=373,noteReplace=374,noteRepeat=375,noteRepeatCount=376,noteEndVelocity=377,
+    mixerCommand=400,mixerList=401,mixerEnable=402,mixerAdd=403,mixerRemove=404,mixerReload=405,
+    mixerApply=406,mixerMute=407,mixerSolo=408,mixerOutput=409,mixerName=410,
+    mixerPreGain=411,mixerPrePan=412,mixerGain=413,mixerPan=414,mixerWidth=415,mixerTiming=416;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -216,6 +220,8 @@ public:
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
 			{"octave",octave},{"editStep",editStep},{"documentBusy",busy},
             {"sampleEditor",sampleEditorSnapshot()},
+            {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
+                {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
             {"noteEditor",{{"visible",noteEditorVisible()},{"pattern",notePattern},{"row",noteRow},{"channel",noteChannel},
                 {"expectedRevision",noteRevision},{"stale",noteDocument!=documentId||noteRevision!=view->session.revision},
                 {"pending",notePending},{"draftCount",noteDraft.size()},{"selected",noteSelected},
@@ -314,23 +320,30 @@ public:
         waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();
     }
     bool supportsDocumentOperations() const override {return true;}
-    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();auto p=ScreamSeq::PluginOperations::reads();r.insert(r.end(),p.begin(),p.end());auto fx=ScreamSeq::PatternOperations::reads();r.insert(r.end(),fx.begin(),fx.end());return r;}
-    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();auto p=ScreamSeq::PluginOperations::writes();r.insert(r.end(),p.begin(),p.end());auto fx=ScreamSeq::PatternOperations::writes();r.insert(r.end(),fx.begin(),fx.end());return r;}
+    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::EnvelopeOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     Json documentOperation(const std::string &method,const Json &params) override {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
         try {auto result=await(controller->invoke(method,params));refreshDocument();return result;}
         catch(...) {refreshDocument();throw;}
     }
-    explicit Application(const std::filesystem::path &input={}) {
+    explicit Application(const std::filesystem::path &input={},bool inspectionMode=false,std::optional<std::filesystem::path> catalogue={}) : inspection(inspectionMode) {
         GUID id{};ScreamSeq::check(CoCreateGuid(&id),"Create session identity");
         wchar_t buffer[40]{};StringFromGUID2(id,buffer,40);for(auto ch:std::wstring_view(buffer)) documentId+=char(ch);
+        ScreamSeq::PlaybackHooks playback;
+        playback.feedback=[this]{
+            ScreamSeq::PlaybackFeedback result;result.playing=device.running();result.sampleRate=lastRate?lastRate:48000;
+            if(result.playing&&preparedPlayback){result.latency=preparedPlayback->chain().latency();result.meters=preparedPlayback->chain().mixerMeters();result.activity=preparedPlayback->chain().graphActivity();}
+            return result;
+        };
+        playback.controls=[this](const std::vector<Tracker::MixerControls> &values){return !device.running()||(preparedPlayback&&preparedPlayback->chain().mixerControls(values));};
         controller=std::make_unique<ScreamSeq::DocumentController>(input,documentId,[this]{stop();},[this](const auto &edits){
             if(device.running() && renderer && !renderer->enqueue(edits)) {stop();status=L"Edit committed; playback stopped because live queue was full";}
         },std::function<void()>{},64u*1024u*1024u,[this](std::span<const Tracker::ParameterChange> changes){
             if(device.running() && preparedPlayback && !preparedPlayback->chain().enqueueParameters(changes)) {
                 stop();status=L"Plugin edit committed; playback stopped because live queue was full or unavailable";
             }
-        });
+        },std::move(playback),std::move(catalogue));
         view=controller->view();documentId=view->session.documentId;patternIndex=view->patterns.begin()->first;
         cpuDraw.reserve(120000);submitIntervals.reserve(120000);updateInspector();
         status=input.empty() ? L"Ready / select a pattern cell or a sample" : L"Project opened";
@@ -378,6 +391,7 @@ public:
     #include "PluginEditor.inc"
     #include "PatternEditor.inc"
     #include "PreciseNoteEditor.inc"
+    #include "MixerEditor.inc"
 	#include "WorkspaceDraw.inc"
 	void draw() {
         frameRequested=false;
@@ -442,7 +456,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		case ScreamSeq::ApiDispatch::message: if(app->api && !app->refreshingPlugins) app->api->drain(); return 0;
 		case WM_CLOSE: if(app->busy) {app->stop();return 0;} if(!app->protectUnsaved()) return 0;break;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
-        case WM_TIMER: if(wp==1)app->pluginTimer();return 0;
+        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();return 0;
 		case WM_DPICHANGED: {
 			auto rect = reinterpret_cast<RECT *>(lp);
 			SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE); return 0;
@@ -458,6 +472,9 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             SetTextColor(reinterpret_cast<HDC>(wp),RGB(212,224,235));SetBkColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));
             SetDCBrushColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
         case WM_COMMAND:
+            if(LOWORD(wp)>=mixerName&&LOWORD(wp)<=mixerTiming){if(HIWORD(wp)==EN_CHANGE)app->mixerFieldChanged();return 0;}
+            if(LOWORD(wp)==mixerOutput&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
+            if(LOWORD(wp)==mixerList&&HIWORD(wp)!=LBN_SELCHANGE)return 0;
             if(LOWORD(wp)==noteInstrument||LOWORD(wp)==noteVelocity||LOWORD(wp)==noteOffset||LOWORD(wp)==noteParameter||LOWORD(wp)==noteRepeatCount||LOWORD(wp)==noteEndVelocity) {
                 if(HIWORD(wp)==EN_CHANGE)app->noteFieldChanged();return 0;
             }
@@ -501,7 +518,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		if(!argv) throw std::runtime_error("Cannot parse command line");
 		std::vector<std::wstring> args(argv, argv + argc); LocalFree(argv);
 		bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false;
-		double seconds = 0; std::filesystem::path report,projectPath,pluginCache;
+		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride;
 		for(size_t i = 1; i < args.size(); ++i) {
 			if(args[i] == L"--offline-test") offline = true;
             else if(args[i]==L"--offline-hosted-test") hostedOffline=true;
@@ -513,6 +530,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			else if(args[i] == L"--report" && i + 1 < args.size()) report = args[++i];
 			else if(args[i] == L"--project" && i + 1 < args.size()) projectPath = args[++i];
             else if(args[i]==L"--vst3-test-cache" && i+1<args.size()) pluginCache=args[++i];
+            else if(args[i]==L"--envelope-test-catalogue" && i+1<args.size()) catalogueOverride=args[++i];
 			else throw std::runtime_error("Unknown/incomplete command-line argument");
 		}
 		if(seconds < 0 || seconds > 1800 || !std::isfinite(seconds)) throw std::runtime_error("Invalid test duration");
@@ -524,7 +542,16 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         if(hostedOffline) {if(report.empty()) throw std::runtime_error("Hosted offline test requires --report");offlineHostedTest(projectPath,report);return 0;}
 		if(audioTest && (inspection || !seconds)) throw std::runtime_error("Audio test requires --seconds and cannot use inspection mode");
 		SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-		Application app(projectPath); app.inspection = inspection;app.silentOutput=silentOutput;
+        std::optional<std::filesystem::path> catalogue;
+        if(!catalogueOverride.empty()) {
+            if(!inspection||!catalogueOverride.is_absolute())throw std::runtime_error("An absolute private envelope catalogue requires inspection mode");
+            catalogue=catalogueOverride;
+        } else if(!inspection&&!audioTest) {
+            PWSTR local{};ScreamSeq::check(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local),"Find envelope catalogue directory");
+            try{catalogue=std::filesystem::path(local)/L"org.resonance.tracker"/L"envelope-catalogue-v1.json";}catch(...){CoTaskMemFree(local);throw;}
+            CoTaskMemFree(local);
+        }
+		Application app(projectPath,inspection,std::move(catalogue));app.silentOutput=silentOutput;
 		WNDCLASSW klass{}; klass.style=CS_DBLCLKS;klass.lpfnWndProc = windowProc; klass.hInstance = instance;
 		klass.lpszClassName = L"ScreamSeqWindowsDevelopment"; klass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
 		klass.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(101));

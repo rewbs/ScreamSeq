@@ -144,6 +144,9 @@ public:
 	const NativeSong &native() const { return native_; }
 	void restoreNative(NativeSong metadata); // validated project load, no history
 	void annotate(const std::function<void(NativeSong &)> &change);
+    // Prepare all validation/history allocation before publishing live controls.
+    // beforeCommit must not mutate this Document; throwing leaves it unchanged.
+    void annotate(const std::function<void(NativeSong &)> &change,const std::function<void()> &beforeCommit);
 	std::vector<std::byte> serialize(); // Unchecked module base; use save/validateModuleSampleExport for export.
 	std::vector<std::byte> snapshotData(); // Module + exact sample/timing/title/pattern/order corrections.
 	bool editable() const;

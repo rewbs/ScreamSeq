@@ -48,9 +48,12 @@ class AppApiTests(unittest.TestCase):
             with self.assertRaises(ApiError) as unsupported:
                 client.call('pattern.apply', {'expectedRevision': revision})
             self.assertEqual(unsupported.exception.code, -32602)
-            with self.assertRaises(ApiError) as unsupported:
+            graph = client.call('graph.create', {'expectedRevision': revision, 'name': 'App graph'})
+            self.assertTrue(graph['data']['wouldChange'])
+            self.assertEqual(client.call('graph.get')['data']['library'][0]['id'], graph['data']['graph'])
+            with self.assertRaises(ApiError) as stale:
                 client.call('graph.create', {'expectedRevision': revision})
-            self.assertEqual(unsupported.exception.code, -32601)
+            self.assertEqual(stale.exception.code, -32001)
         finally:
             # Terminate only the PID created by this test, never discovery's first app.
             process.terminate()

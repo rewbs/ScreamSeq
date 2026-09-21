@@ -62,8 +62,8 @@ std::span<const PatternNoteView> DocumentView::notesAt(unsigned p,unsigned r,uns
 }
 DocumentController::DocumentController(const std::filesystem::path &input,std::string identity,
   std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,std::function<void()> beforeView,size_t maxCacheBytes,
-  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters)
-  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),thread_([this]{loop();}) {
+  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters,PlaybackHooks playbackHooks,std::optional<std::filesystem::path> cataloguePath)
+  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),playbackHooks_(std::move(playbackHooks)),cataloguePath_(std::move(cataloguePath)),thread_([this]{loop();}) {
   auto task=std::make_shared<std::packaged_task<void()>>([this,input]{open(input);});
   auto done=task->get_future();
   {std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();
@@ -294,17 +294,23 @@ void DocumentController::validateAssetCandidate(const Tracker::Document &candida
   if(added>maxCacheBytes_ || view_->cacheBytes>maxCacheBytes_-added)
     throw Api::ApiError(-32602,"Import needs more document view cache headroom");
 }
+PlaybackFeedback DocumentController::playbackFeedback() {
+  PlaybackFeedback result;if(playbackHooks_.feedback)onMain([&]{result=playbackHooks_.feedback();});return result;
+}
 Json DocumentController::operation(const std::string &method,Json params) {
   if(publicationPending_) publish();
   if(method=="synchronizeView") return Json::object();
   if(method=="flushPluginEditors") {keys(params,{"force"});const auto count=plugins_->openEditorCount();if(plugins_->flushEditors(flag(params,"force")) || count!=plugins_->openEditorCount())publish();return Json::object();}
-  if(method=="document.save" || method=="document.open" || method.starts_with("plugin.") || method.starts_with("history.")) {
+  if(method=="document.save" || method=="document.open" || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("envelope.")) {
     const auto count=plugins_->openEditorCount();
     if(plugins_->flushEditors(true) || count!=plugins_->openEditorCount())publish();
   }
   auto writes=DocumentOperations::writes();auto timelineWrites=TimelineOperations::writes();writes.insert(writes.end(),timelineWrites.begin(),timelineWrites.end());
   const auto assetWrites=AssetOperations::writes();writes.insert(writes.end(),assetWrites.begin(),assetWrites.end());
   const auto patternWrites=PatternOperations::writes();writes.insert(writes.end(),patternWrites.begin(),patternWrites.end());
+  auto graphMethods=GraphOperations::reads();const auto graphWrites=GraphOperations::writes();writes.insert(writes.end(),graphWrites.begin(),graphWrites.end());graphMethods.insert(graphMethods.end(),graphWrites.begin(),graphWrites.end());
+  auto mixerMethods=MixerOperations::reads();const auto mixerWrites=MixerOperations::writes();writes.insert(writes.end(),mixerWrites.begin(),mixerWrites.end());mixerMethods.insert(mixerMethods.end(),mixerWrites.begin(),mixerWrites.end());
+  auto envelopeMethods=EnvelopeOperations::reads();const auto envelopeWrites=EnvelopeOperations::writes();writes.insert(writes.end(),envelopeWrites.begin(),envelopeWrites.end());envelopeMethods.insert(envelopeMethods.end(),envelopeWrites.begin(),envelopeWrites.end());
   auto patternMethods=PatternOperations::reads();patternMethods.insert(patternMethods.end(),patternWrites.begin(),patternWrites.end());
   const bool patternMethod=std::find(patternMethods.begin(),patternMethods.end(),method)!=patternMethods.end();
   auto pluginMethods=PluginOperations::reads();auto pluginWrites=PluginOperations::writes();writes.insert(writes.end(),pluginWrites.begin(),pluginWrites.end());pluginMethods.insert(pluginMethods.end(),pluginWrites.begin(),pluginWrites.end());
@@ -344,6 +350,19 @@ Json DocumentController::operation(const std::string &method,Json params) {
     }
   } else if(pluginMethod) {
     result=plugins_->invoke(method,params);
+  } else if(std::find(graphMethods.begin(),graphMethods.end(),method)!=graphMethods.end()) {
+    GraphHostHooks hooks;hooks.rack=[&]{return plugins_->graphRack();};hooks.cloneRackSlot=[&](uint32_t slot){return plugins_->cloneRackSlot(slot);};
+    hooks.activity=[&]{return playbackFeedback().activity;};hooks.validateCandidate=[&](const Tracker::NativeSong &next){Tracker::validatePluginCapacity(projectPluginStates(project_),next.mixer.buses.size());};
+    GraphOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
+  } else if(std::find(mixerMethods.begin(),mixerMethods.end(),method)!=mixerMethods.end()) {
+    MixerHostHooks hooks;hooks.plugins=projectPluginStates(project_);hooks.buses=[&](size_t slot,bool required){return plugins_->audioBuses(slot,required);};hooks.feedback=[&]{return playbackFeedback();};
+    if(playbackHooks_.controls)hooks.controls=[&](const auto &controls){bool accepted=false;onMain([&]{accepted=playbackHooks_.controls(controls);});return accepted;};
+    MixerOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
+  } else if(std::find(envelopeMethods.begin(),envelopeMethods.end(),method)!=envelopeMethods.end()) {
+    const auto &rack=project_.preserved.at("plugins");auto slotOf=[&](const std::string &id){auto it=std::find_if(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==id;});return size_t(it-rack.begin());};
+    EnvelopeHostHooks hooks;hooks.parameterAvailable=[&](const std::string &id,uint32_t parameter){const auto slot=slotOf(id);if(slot>=rack.size())return false;try{const auto parameters=plugins_->invoke("plugin.parameters.get",{{"slot",slot}});return std::any_of(parameters.begin(),parameters.end(),[&](const auto &p){return p.at("id")==parameter;});}catch(const std::exception &){return false;}};
+    hooks.parameterAutomationConflicts=[&](const std::string &id,uint32_t parameter){const auto slot=slotOf(id);for(const auto &event:project_.preserved.at("automation"))if(event.at(0)==slot&&event.at(1)==parameter)return true;return false;};
+    EnvelopeOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks),cataloguePath_);result=operations.invoke(method,params);
   } else if(patternMethod) {
     PatternHostHooks hooks;for(const auto &p:project_.preserved.at("plugins"))hooks.plugins.push_back(p.at("instanceID").get<std::string>());
     hooks.parameters=[&](size_t slot){try{return plugins_->invoke("plugin.parameters.get",{{"slot",slot}});}catch(const std::exception &){return Json::array();}};

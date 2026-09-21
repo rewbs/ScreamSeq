@@ -8,7 +8,7 @@
     unsigned sampleAnchor=0;
     std::string sampleDragId, sampleDragRevision;
     SampleRange sampleDragBefore;
-    bool sampleEditorVisible() const {return workspaceState.layout!="Pattern focus" && workspaceState.active=="samples" && workspaceState.visible();}
+    bool sampleEditorVisible() const {return !mixerEditorVisible()&&workspaceState.layout!="Pattern focus" && workspaceState.active=="samples" && workspaceState.visible();}
     unsigned selectedSample() const {return workspaceState.panel("samples").sample;}
     std::string selectedSampleId() const {
         auto it=view->samples.find(selectedSample());return it==view->samples.end() ? std::string{} : it->second.at("id").get<std::string>();

@@ -16,6 +16,8 @@
 > Unified pattern FX, precise-note API, shared row tools and native FX inspector:
 > `PATTERN_FX_PROGRESS.md`. The next checkpoint implements Pattern 2 clipboard,
 > binding remap and the native precise-note dock: `PATTERN_NOTES_PROGRESS.md`.
+> Graph/mixer/envelope app integration and native mixer bus dock:
+> `MIXER_GRAPH_PROGRESS.md`. Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

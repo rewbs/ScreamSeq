@@ -15,7 +15,7 @@
     float fieldWidth(unsigned column) const {return column<3?std::array<float,3>{22,15,22}[column]:(column%2?15.0f:58.0f);}
 	ScreamSeq::WorkspaceGeometry geometry() const {
 		RECT r{};GetClientRect(window,&r);float s=GetDpiForWindow(window)/96.0f;
-        return workspaceState.geometry(r.right/s,r.bottom/s,noteEditorVisible()?260.0f:128.0f);
+        return workspaceState.geometry(r.right/s,r.bottom/s,(noteEditorVisible()||mixerEditorVisible())?260.0f:128.0f);
 	}
 	unsigned visibleRows() const { return std::max(1u,unsigned(std::max(0.0f,geometry().pattern.h-gridHeader)/rowHeight)); }
     unsigned firstChannel() const {float x=0;for(unsigned c=0;c<view->channels;++c){x+=channelWidth(c);if(x>horizontalScroll)return c;}return view->channels-1;}
@@ -47,6 +47,7 @@
 		place(playCommand,174,12,64,26);place(stopCommand,242,12,60,26);place(followCommand,306,12,90,26);
 		place(paletteCommand,402,12,154,26);
 		place(composeCommand,174,52,80,26);place(patternCommand,258,52,106,26);place(soundCommand,368,52,108,26);
+        place(mixerCommand,480,52,76,26);
         place(openCommand,10,292,68,25);place(saveCommand,82,292,74,25);place(saveAsCommand,10,322,146,25);
         place(undoCommand,10,354,68,25);place(redoCommand,82,354,74,25);
         place(patternChooser,10,389,146,250);place(orderChooser,10,420,146,250);
@@ -88,6 +89,7 @@
         layoutPluginControls(place);
         layoutEffectControls(place);
         layoutNoteControls(place);
+        layoutMixerControls(place);
 		SetWindowTextW(controls.at(followCommand),follow ? L"Follow on [F]" : L"Detached [F]");
 		SetWindowTextW(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
 		for(auto [id,h]:controls) InvalidateRect(h,nullptr,FALSE);
@@ -124,7 +126,9 @@
         installPluginControls();
         installEffectControls();
         installNoteControls();
+        installMixerControls();
 		std::vector<ScreamSeq::WorkspaceCommand> commands={
+            {mixerCommand,L"Mix / Open mixer controls and routing",L""},
             {effectsCommand,L"Pattern / Inspect FX and parameter bindings",L"Enter on an FX cell"},
             {patternPasteMix,L"Pattern / Mix paste into empty fields",L"Ctrl+Shift+V"},
             {patternPasteMerge,L"Pattern / Merge nonempty clipboard fields",L""},
@@ -164,7 +168,8 @@
 	}
 	void command(int id) {
 		try {
-            if(noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
+            if(id==notesCommand||id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==soundCommand)mixerEditorOpen=false;
+            if(mixerControlCommand(id) || noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
             else if(id==openCommand) openFile();
             else if(id==saveCommand || id==saveAsCommand) saveFile(id==saveAsCommand);
             else if(id==undoCommand || id==redoCommand) edit(id==undoCommand ? "history.undo" : "history.redo",{{"domain","document"}});
@@ -207,7 +212,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
+            if(!(id>=mixerCommand&&id<=mixerTiming) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
     bool handleKey(WPARAM code) {
@@ -235,6 +240,7 @@
             if(key==VK_RETURN){command(effectApply);return true;}
         }
         if(noteKey(key,ctrl,alt,shift))return true;
+        if(mixerKey(key))return true;
         if(textOwnsKeyboard() && key!=VK_ESCAPE) return false;
         if(ctrl && key=='I') {command(sampleImportCommand);return true;}
         if(ctrl && key=='O') {command(openCommand);return true;}

@@ -5,6 +5,23 @@ not full macOS API parity. The attached host determines document-operation suppo
 query the running instance's `api.describe` for its current method catalog. Do not
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
+The actual application now also registers `graph.*`, `mixer.*` and
+`envelope.bank.*` / `envelope.catalogue.*` operations. Their fields match the
+existing Mac schema. Graph recipe copies use the real rack's saved baseline;
+envelope parameter targets resolve real plugin parameters and automation
+conflicts. Mixer control-only writes and previews use the prepared audio queue;
+queue refusal returns `-32002` without changing history or the saved mixer.
+Routing changes validate before stopping playback. `workspace.get.mixerEditor`
+reports the native dock's captured bus/revision and draft state. The full graph
+and curve editors remain outstanding.
+
+The normal Windows envelope catalogue lives at
+`%LOCALAPPDATA%/org.resonance.tracker/envelope-catalogue-v1.json`. Reading an absent
+catalogue creates no file. Inspection/audio tests disable the normal catalogue;
+inspection can opt into an absolute private file with
+`--envelope-test-catalogue <path>`. Publication uses its own
+`expectedCatalogueRevision` and does not create document Undo history.
+
 The app must
 explicitly opt in and publish its **exact pipe path containing its PID** to the
 user; there is no global endpoint discovery and the client never guesses.

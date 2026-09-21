@@ -1,5 +1,6 @@
 #pragma once
 #include "HostedProject.hpp"
+#include "GraphOperations.hpp"
 #include <deque>
 #include <functional>
 #include <map>
@@ -35,6 +36,9 @@ public:
   static std::vector<std::string> writes();
   Json invoke(const std::string &,const Json &);
   bool flushEditors(bool force=false); // Debounce gestures; save/close forces capture.
+  std::vector<GraphRackRecord> graphRack() const;
+  GraphRackClone cloneRackSlot(uint32_t);
+  std::vector<Tracker::PluginAudioBus> audioBuses(size_t,bool required=false);
   bool canUndo() const {return !undo_.empty();}
   bool canRedo() const {return !redo_.empty();}
   size_t openEditorCount() const {return openEditors_.size();}

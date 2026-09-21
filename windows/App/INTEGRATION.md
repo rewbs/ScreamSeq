@@ -107,6 +107,28 @@ note caches are charged before commit and reused across unrelated edits. See
 `../PATTERN_FX_PROGRESS.md` for the earlier checkpoint and
 `../PATTERN_NOTES_PROGRESS.md` for clipboard and precise-note editor evidence.
 
+GraphOperations, MixerOperations and EnvelopeOperations are now dispatched by
+the actual app and advertised by `api.describe`. Graphs resolve real rack IDs,
+saved recipes, assignments and prepared playback activity. Candidate mixer bus
+counts are checked against plugin adapter capacity. Envelope targets use real
+plugin parameter/conflict hooks; inspection catalogue storage is explicitly
+private. See `../MIXER_GRAPH_PROGRESS.md` for current evidence and limits.
+
+The native mixer dock has a captured, revision-guarded bus draft, compact numeric
+controls, main-output selection (including disconnect), mute/solo, group creation
+and removal, reload, Apply, keyboard access and stereo meters. Unfinished fields
+survive navigation and stale revisions; async completion checks draft generation.
+It reuses the same API operations as external clients. Painting reads retained
+UI state, with meter snapshots collected by a UI timer. Full graph/curve editors,
+insert/send/sidechain controls and simultaneous independent lower docks remain.
+
+Mixer gain/balance/width/mute/solo updates publish one bounded control batch on
+the single UI producer. The shared Document prepares Undo storage before that
+publication and rolls it back if the queue refuses. Successful previews are
+transient; a no-op bus write restores saved controls without creating history.
+Validated topology changes stop/join playback before committing. This is not
+live structural graph replacement.
+
 The precise-note dock keeps a captured row draft with row/beat offsets, snap,
 velocity, note-local effects, off/cut, duplicates and retriggers. Check validates;
 Apply merges untouched pattern events and creates one document Undo step. A stale

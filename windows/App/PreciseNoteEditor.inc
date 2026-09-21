@@ -8,7 +8,7 @@
     Json noteDragBefore=Json::array();
     std::array<unsigned,256> noteDensity{};
     std::wstring noteStatus=L"Enter on a note to inspect precise hits";
-    bool noteEditorVisible() const {return noteEditorOpen&&!effectEditorOpen&&workspaceState.layout!="Pattern focus"&&!sampleEditorVisible();}
+    bool noteEditorVisible() const {return !mixerEditorVisible()&&noteEditorOpen&&!effectEditorOpen&&workspaceState.layout!="Pattern focus"&&!sampleEditorVisible();}
     bool noteBelongs(const Json &e) const {return e.at("channel")==noteChannel&&e.at("position").get<unsigned>()/Tracker::performanceUnitsPerRow==noteRow;}
     std::wstring noteOffsetText(unsigned units) const {std::wostringstream s;s<<std::setprecision(10)<<double(units)/65536.0/(noteUnits==0?noteRowsPerBeat:1);return s.str();}
     void installNoteControls() {
@@ -84,6 +84,7 @@
         frameRequested=true;
     }
     void openNoteEditor(bool reload=false) {
+        mixerEditorOpen=false;
         if(busy||notePending)throw std::runtime_error("Wait for the current document operation");
         noteEditorOpen=true;effectEditorOpen=false;workspaceState.lowerHeight=std::max(workspaceState.lowerHeight,320.0f);
         if(noteCaptured&&!reload){layoutControls();SetFocus(controls.at(noteList));return;}

@@ -4,6 +4,8 @@
 #include "HostedProject.hpp"
 #include "PluginOperations.hpp"
 #include "PatternOperations.hpp"
+#include "EnvelopeOperations.hpp"
+#include "MixerOperations.hpp"
 #include "../Api/SessionAdapter.hpp"
 #include "../Project/NativeProject.hpp"
 #include <atomic>
@@ -79,6 +81,8 @@ class DocumentController {
   std::function<void()> stop_;
   std::function<void(const std::vector<Tracker::Edit>&)> edits_;
   std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters_;
+  PlaybackHooks playbackHooks_;
+  std::optional<std::filesystem::path> cataloguePath_;
   std::thread thread_; // Start only after every worker dependency is initialized.
   void loop();
   void onMain(std::function<void()> task);
@@ -87,6 +91,7 @@ class DocumentController {
   void publish();
   void preflightGrowth(const std::string &method,const Json &params);
   void validateAssetCandidate(const Tracker::Document &candidate) const;
+  PlaybackFeedback playbackFeedback();
   void open(const std::filesystem::path &path);
   std::string revision() const;
   Json operation(const std::string &method,Json params);
@@ -94,7 +99,8 @@ public:
   DocumentController(const std::filesystem::path &input,std::string identity,
     std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,
     std::function<void()> beforeView={},size_t maxCacheBytes=64u*1024u*1024u,
-    std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={});
+    std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={},PlaybackHooks playbackHooks={},
+    std::optional<std::filesystem::path> cataloguePath={});
   ~DocumentController();
   bool publicationPending() const {return publicationPending_.load();}
   std::shared_ptr<const DocumentView> view();

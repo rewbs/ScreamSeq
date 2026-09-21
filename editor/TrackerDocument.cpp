@@ -528,6 +528,10 @@ void Document::restoreNative(NativeSong metadata)
 }
 void Document::annotate(const std::function<void(NativeSong &)> &change)
 {
+    annotate(change,{});
+}
+void Document::annotate(const std::function<void(NativeSong &)> &change,const std::function<void()> &beforeCommit)
+{
 	if(!editable()) throw std::runtime_error("This document is read-only.");
 	auto next = native_;
 	change(next);
@@ -537,7 +541,12 @@ void Document::annotate(const std::function<void(NativeSong &)> &change)
 	entry.nativeBefore = native_;
 	entry.nativeAfter = next;
 	undo_.reserve(undo_.size() + 1);
+    static_assert(std::is_nothrow_move_assignable_v<NativeSong>);
 	undo_.push_back(std::move(entry));
+    // MSVC map move construction may allocate its sentinel. Stage the history
+    // entry before publishing, and roll it back if the live queue refuses it.
+    try { if(beforeCommit)beforeCommit(); }
+    catch(...) { undo_.pop_back();throw; }
 	native_ = std::move(next);
 	redo_.clear();
 	++revision;
