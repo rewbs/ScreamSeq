@@ -10,6 +10,12 @@
     std::map<std::string,std::string> pendingPluginTriggers; // Plugin ID -> created instrument ID awaiting assignment.
     uint32_t selectedParameter=0,pluginDraftParameter=0;
     bool settingPluginFields=false,pluginDraft=false,refreshingPlugins=false,pluginLibraryLoaded=false;
+    std::unique_ptr<ScreamSeq::PluginInstrumentsWindow> pluginInstruments;
+    void openPluginInstruments(){
+        if(pluginInstruments&&(pluginInstruments->visible()||pluginInstruments->retainedDraft())){pluginInstruments->show();return;}
+        const auto slot=selectedPluginSlot();if(slot<0||!view->session.document.at("nativePlugins")[slot].value("isInstrument",false))throw std::runtime_error("Select an instrument plugin");
+        pluginInstruments=std::make_unique<ScreamSeq::PluginInstrumentsWindow>(window,selectedPlugin,[this](const auto &method,const auto &params){return documentOperation(method,params);},[this]{return std::pair(documentId,view->session.revision);});pluginInstruments->show();
+    }
     std::wstring pluginDetailStatus=L"Select a plugin to edit its parameters";
     bool pluginEditorVisible() const {return !graphEditorVisible()&&!mixerEditorVisible()&&workspaceState.layout!="Pattern focus" && !sampleEditorVisible() && !effectEditorVisible() && !noteEditorVisible();}
     int selectedPluginSlot() const {
@@ -22,16 +28,16 @@
             {pluginAdd,L"Add"},{pluginRescan,L"Rescan"},{pluginEditor,L"Editor"},{pluginBypass,L"Bypass"},
             {pluginRemove,L"Remove"},{pluginUp,L"Up"},{pluginDown,L"Down"},{pluginUndo,L"Undo FX"},{pluginRedo,L"Redo FX"},
             {pluginApply,L"Apply"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"},{pluginNewInstrument,L"New trigger"},
-            {pluginLoadProgram,L"Load program"},{pluginTogglePort,L"Enable port"}})
+            {pluginLoadProgram,L"Load program"},{pluginTogglePort,L"Enable port"},{pluginAliases,L"Assigned instruments…"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(int id:{pluginLibrary,pluginParameter,pluginInstrument,pluginPage,pluginProgram,pluginPort})
             controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         controls[pluginList]=CreateWindowExW(0,L"LISTBOX",L"Plugin rack",WS_CHILD|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(pluginList)),GetModuleHandleW(nullptr),nullptr);
         controls[pluginValue]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(pluginValue)),GetModuleHandleW(nullptr),nullptr);
         SendMessageW(controls.at(pluginValue),EM_SETLIMITTEXT,64,0);
-        for(auto label:{L"Parameters",L"Factory programs",L"Audio ports"})SendMessageW(controls.at(pluginPage),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
+        for(auto label:{L"Parameters",L"Factory programs",L"Audio ports",L"Instrument assignments"})SendMessageW(controls.at(pluginPage),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         SendMessageW(controls.at(pluginPage),CB_SETCURSEL,0,0);
-        for(int id=pluginList;id<=pluginTogglePort;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
+        for(int id=pluginList;id<=pluginAliases;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
     }
     void syncPluginRack() {
         if(!controls.contains(pluginList)) return;
@@ -143,8 +149,10 @@
         place(pluginParameter,x,y+99,parameterWidth,240,show && pluginDetailPage==0 && r.h>=132);place(pluginValue,x+parameterWidth+6,y+99,86,24,show && pluginDetailPage==0 && r.h>=132);place(pluginApply,x+parameterWidth+98,y+99,68,24,show && pluginDetailPage==0 && r.h>=132);
         place(pluginProgram,x,y+99,r.w-360,300,show && pluginDetailPage==1 && r.h>=132);place(pluginLoadProgram,r.x+r.w-120,y+99,112,24,show && pluginDetailPage==1 && r.h>=132);
         place(pluginPort,x,y+99,r.w-360,300,show && pluginDetailPage==2 && r.h>=132);place(pluginTogglePort,r.x+r.w-120,y+99,112,24,show && pluginDetailPage==2 && r.h>=132);
+        place(pluginAliases,x,y+99,r.w-242,26,show&&pluginDetailPage==3&&r.h>=132);
         const auto slot=selectedPluginSlot();const bool selected=slot>=0;const auto plugin=selected?view->session.document.at("nativePlugins")[slot]:Json::object();
         const bool instrument=selected && plugin.value("isInstrument",false);
+        EnableWindow(controls.at(pluginAliases),instrument);
         place(pluginInstrument,x,y+131,r.w-424,220,show && instrument && pluginDetailPage==0 && r.h>=164);place(pluginNewInstrument,r.x+r.w-188,y+131,108,24,show && instrument && pluginDetailPage==0 && r.h>=164);place(pluginAssign,r.x+r.w-76,y+131,68,24,show && instrument && pluginDetailPage==0 && r.h>=164);
         EnableWindow(controls.at(pluginNewInstrument),instrument);SetWindowTextW(controls.at(pluginNewInstrument),pendingPluginTriggers.contains(selectedPlugin)?L"Retry assign":L"New trigger");
         for(int id:{pluginEditor,pluginBypass,pluginRemove,pluginUp,pluginDown,pluginAssign}) EnableWindow(controls.at(id),selected);
@@ -162,12 +170,13 @@
         SetWindowTextW(controls.at(pluginTogglePort),!port.is_null()&&port.at("active").get<bool>()?L"Disable port":L"Enable port");
     }
     bool pluginCommand(int id) {
-        if(id<pluginList || id>pluginTogglePort)return false;
+        if(id<pluginList || id>pluginAliases)return false;
         if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         workspaceState.focus="plugins";
+        if(id==pluginAliases){openPluginInstruments();return true;}
         if(id==pluginsCommand) {noteEditorOpen=false;effectEditorOpen=false;workspaceState.layout="Compose";workspaceState.active="notes";SetFocus(controls.at(pluginList));return true;}
         if(id==pluginPage){if(pluginDraft){SendMessageW(controls.at(pluginPage),CB_SETCURSEL,pluginDetailPage,0);throw std::runtime_error("Apply the draft or press Escape before changing the detail page");}
-            const auto page=SendMessageW(controls.at(pluginPage),CB_GETCURSEL,0,0);if(page>=0&&page<3){pluginDetailPage=int(page);pluginDetailsTarget.clear();}SetFocus(controls.at(pluginPage));return true;}
+            const auto page=SendMessageW(controls.at(pluginPage),CB_GETCURSEL,0,0);if(page>=0&&page<4){pluginDetailPage=int(page);pluginDetailsTarget.clear();}SetFocus(controls.at(pluginPage));return true;}
         if(id==pluginList) {
             if(pluginDraft) {SendMessageW(controls.at(pluginList),LB_SETCURSEL,selectedPluginSlot(),0);throw std::runtime_error("Apply the parameter draft or press Escape before selecting another plugin");}
             const auto slot=SendMessageW(controls.at(pluginList),LB_GETCURSEL,0,0);if(slot!=LB_ERR)selectedPlugin=listedPlugins.at(size_t(slot)).at("instanceID").get<std::string>();pluginDetailsTarget.clear();return true;
@@ -231,7 +240,7 @@
         auto r=sampleEditorRect();auto &s=*surface;s.fill(r.x,r.y,r.w,r.h,0x171f29);s.fill(r.x,r.y,r.w,32,0x232e3b);
         s.uiText(L"PLUGINS  /  "+std::to_wstring(listedPlugins.size())+L" in rack",r.x+12,r.y+8,210,0x72dcc6);
         if(listedPlugins.empty())s.uiText(L"Add an effect or instrument",r.x+18,r.y+76,194,0x8fa8ba);
-        if(r.h>=161 && pluginDetailPage!=0)s.uiText(pluginExtrasError?pluginDetailStatus:pluginDraft?L"Program selection / Load applies / Escape discards":pluginDetailPage==1?L"Factory settings replace the saved state in one plugin Undo step":L"Enable auxiliary ports here; routing remains a separate assignment",r.x+230,r.y+134,r.w-242,pluginDraft||pluginExtrasError?0xe2b86c:0x8fa8ba);
+        if(r.h>=161 && pluginDetailPage!=0)s.uiText(pluginExtrasError?pluginDetailStatus:pluginDraft?L"Program selection / Load applies / Escape discards":pluginDetailPage==1?L"Factory settings replace the saved state in one plugin Undo step":pluginDetailPage==2?L"Enable auxiliary ports here; routing remains a separate assignment":L"Share one plugin across tracker instruments and MIDI channels",r.x+230,r.y+134,r.w-242,pluginDraft||pluginExtrasError?0xe2b86c:0x8fa8ba);
         else if(r.h>=161 && (selectedPluginSlot()<0 || !view->session.document.at("nativePlugins")[selectedPluginSlot()].value("isInstrument",false)))
             s.uiText(pluginDraft?L"Parameter draft / Enter applies / Escape discards":pluginDetailStatus,r.x+230,r.y+134,r.w-242,pluginDraft?0xe2b86c:0x8fa8ba);
     }

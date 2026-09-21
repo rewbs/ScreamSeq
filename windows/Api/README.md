@@ -426,6 +426,25 @@ replacing opaque state. Native program selections retain their captured revision
 until Load or Escape. The rack also exposes selective auxiliary-port controls;
 `document.get.nativePlugins` includes `auxiliaryInputs` and `auxiliaryOutputs`.
 
+`plugin.instruments.set` now returns the Mac contract: `wouldChange`, `dryRun`
+and `routing` (the proposed get-shaped inventory/assignments). No-ops retain
+revision/history and preserved opaque fields. `instrument.plugin.set` includes
+`wouldChange` and validates capacity before either dry run or commit. Effect
+plugins reject alias writes even for an empty list. The legacy `plugin.assign`
+replaces the primary, retains other aliases, preserves a promoted alias's MIDI
+channel and moves an instrument from its previous owner atomically; zero clears
+all assignments. Whole-list `plugin.instruments.set` rejects ownership conflicts.
+Shared duplicate/ownership/capacity failures use invalid parameters (`-32602`)
+before playback or history changes, matching Mac.
+
+The rack's Instrument assignments page and command palette open a modeless
+native editor. `workspace.get.pluginInstruments` exposes its captured plugin,
+document/revision, selection, draft, inventory and status. Preview/Apply use
+the same API; changes use plugin Undo. Close retains the draft. Reload explicitly
+refreshes it, and Discard/close releases a draft even after its source is removed.
+Reopening a visible/dirty window preserves its captured plugin when rack
+selection changes. See `../PLUGIN_ALIASES_PROGRESS.md` for evidence and limits.
+
 Discovery reads the cache. Explicit `rescan:true` scans installed VST3 roots
 through the isolated scanner; failures are reported with module paths while
 successful scans remain available. The exact class/path/architecture/hash guard

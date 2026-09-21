@@ -155,12 +155,15 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
   if(method=="instrument.plugin.set") {
     keys(p,{"instrument","plugin","channel","dryRun"});auto instrument=uint32_t(integer(field(p,"instrument"),1,document_.song().GetNumInstruments()));need(document_.song().Instruments[instrument],"Instrument does not exist");auto id=text(field(p,"plugin"),128);auto channel=uint32_t(integer(p.value("channel",Json(1)),1,16));
     auto states=projectPluginStates(project_);bool found=id.empty();
-    for(size_t i=0;i<states.size();++i){auto &s=states[i];
+    bool changed=false;
+    try{for(size_t i=0;i<states.size();++i){auto &s=states[i];const auto before=pluginAssignments(s);
       if(s.instanceID==id){need(s.descriptor.instrument||s.descriptor.type==audioUnitMusicDeviceType,"Choose an instrument plugin");auto a=pluginAssignments(s);auto existing=std::find_if(a.begin(),a.end(),[&](const auto &v){return v.instrument==instrument;});if(existing==a.end())a.push_back({instrument,channel});else existing->channel=channel;setPluginAssignments(s,a);found=true;}
       else removePluginAssignment(s,instrument);
-      rack[i]["instrument"]=s.instrument;rack[i]["instrumentAssignments"]=record(s).at("instrumentAssignments");
+      if(before!=pluginAssignments(s)){changed=true;rack[i]["instrument"]=s.instrument;rack[i]["instrumentAssignments"]=record(s).at("instrumentAssignments");}
     }
-    need(found,"Plugin instance no longer exists");if(!dry)commit(std::move(rack),std::move(automation));return {{"instrument",instrument},{"plugin",id},{"channel",channel},{"dryRun",dry}};
+    need(found,"Plugin instance no longer exists");validatePluginCapacity(states,document_.native().mixer.buses.size());
+    }catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+    if(changed&&!dry)commit(std::move(rack),std::move(automation));return {{"instrument",instrument},{"plugin",id},{"channel",channel},{"wouldChange",changed},{"dryRun",dry}};
   }
   const auto index=slot(p);auto states=projectPluginStates(project_);const auto &state=states.at(index);
   if(method=="plugin.parameters.get"){keys(p,{"slot"});return parameters(editor(index));}
@@ -172,11 +175,36 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
   if(method=="plugin.instruments.get"||method=="plugin.instruments.set"||method=="plugin.assign") {
     const bool get=method=="plugin.instruments.get",assign=method=="plugin.assign";
     if(get)keys(p,{"plugin"});else if(assign)keys(p,{"slot","instrument","dryRun"});else keys(p,{"plugin","assignments","dryRun"});
-    auto next=state;if(!get){std::vector<PluginInstrumentAlias> a;if(assign){auto i=uint32_t(integer(field(p,"instrument"),0,document_.song().GetNumInstruments()));if(i)a.push_back({i,1});}else{const auto &v=field(p,"assignments");need(v.is_array()&&v.size()<=255,"Invalid instrument assignments");for(const auto &entry:v){keys(entry,{"instrument","channel"});a.push_back({uint32_t(integer(field(entry,"instrument"),1,document_.song().GetNumInstruments())),uint32_t(integer(field(entry,"channel"),1,16))});}}
-      need(a.empty()||next.descriptor.instrument||next.descriptor.type==audioUnitMusicDeviceType,"Effects cannot own tracker instruments");for(auto v:a)need(document_.song().Instruments[v.instrument],"Assigned instrument does not exist");setPluginAssignments(next,a);states[index]=next;validatePluginCapacity(states,document_.native().mixer.buses.size());rack[index]["instrument"]=next.instrument;rack[index]["instrumentAssignments"]=record(next).at("instrumentAssignments");if(!dry)commit(rack,automation);}
+    auto &next=states[index];bool changed=false;
+    // Capture only the tiny routing lists, not another copy of every vendor's
+    // opaque saved state, to compare the proposed assignments with the baseline.
+    std::vector<std::vector<PluginInstrumentAlias>> previous;
+    if(!get)for(const auto &s:states)previous.push_back(pluginAssignments(s));
+    if(!get){try{
+      need(next.descriptor.instrument||next.descriptor.type==audioUnitMusicDeviceType,"Select an instrument plugin");
+      std::vector<PluginInstrumentAlias> a;
+      if(assign){
+        const auto instrument=uint32_t(integer(field(p,"instrument"),0,document_.song().GetNumInstruments()));
+        if(instrument){
+          const auto previous=pluginAssignments(next);const auto found=std::find_if(previous.begin(),previous.end(),[&](const auto &v){return v.instrument==instrument;});
+          a.push_back({instrument,found==previous.end()?1:found->channel});
+          for(auto alias:next.aliases)if(alias.instrument!=instrument)a.push_back(alias);
+          for(size_t i=0;i<states.size();++i)if(i!=index)removePluginAssignment(states[i],instrument);
+        }
+      }else{
+        const auto &v=field(p,"assignments");need(v.is_array()&&v.size()<=255,"Invalid instrument assignments");
+        for(const auto &entry:v){keys(entry,{"instrument","channel"});a.push_back({uint32_t(integer(field(entry,"instrument"),1,document_.song().GetNumInstruments())),uint32_t(integer(field(entry,"channel"),1,16))});}
+      }
+      for(auto v:a)need(document_.song().Instruments[v.instrument],"Assigned instrument does not exist");
+      setPluginAssignments(next,a);validatePluginCapacity(states,document_.native().mixer.buses.size());
+      for(size_t i=0;i<states.size();++i)if(previous[i]!=pluginAssignments(states[i])){changed=true;rack[i]["instrument"]=states[i].instrument;rack[i]["instrumentAssignments"]=record(states[i]).at("instrumentAssignments");}
+      }catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+      if(changed&&!dry)commit(rack,automation);
+    }
     Json assignments=Json::array(),instruments=Json::array();for(auto a:pluginAssignments(next))assignments.push_back({{"instrument",a.instrument},{"channel",a.channel},{"available",a.instrument<=document_.song().GetNumInstruments()&&bool(document_.song().Instruments[a.instrument])}});
     for(unsigned i=1;i<=document_.song().GetNumInstruments();++i)if(document_.song().Instruments[i]){std::string owner;for(const auto &s:states)for(auto a:pluginAssignments(s))if(a.instrument==i)owner=s.instanceID;instruments.push_back({{"instrument",i},{"name",OpenMPT::mpt::ToCharset(OpenMPT::mpt::Charset::UTF8,document_.song().GetCharsetInternal(),document_.song().GetInstrumentName(i))},{"owner",owner}});}
-    return {{"plugin",state.instanceID},{"name",state.descriptor.name},{"isInstrument",state.descriptor.instrument},{"assignments",assignments},{"instruments",instruments}};
+    Json routing={{"plugin",state.instanceID},{"name",state.descriptor.name},{"isInstrument",state.descriptor.instrument||state.descriptor.type==audioUnitMusicDeviceType},{"assignments",assignments},{"instruments",instruments}};
+    if(get)return routing;if(assign)return Json::object();return {{"wouldChange",changed},{"dryRun",dry},{"routing",routing}};
   }
   if(method=="plugin.remove") {keys(p,{"slot","dryRun"});rack.erase(rack.begin()+index);Json remaining=Json::array();for(auto point:automation){auto s=point.at(0).get<size_t>();if(s==index)continue;if(s>index)point[0]=s-1;remaining.push_back(std::move(point));}automation=std::move(remaining);}
   else if(method=="plugin.move") {keys(p,{"slot","direction","dryRun"});const auto direction=number(field(p,"direction"),-1,1);need(direction==-1||direction==1,"Direction must be -1 or 1");const auto target=int(index)+int(direction);if(target<0||target>=rack.size())return Json::object();std::swap(rack[index],rack[target]);for(auto &point:automation){if(point[0]==index)point[0]=target;else if(point[0]==target)point[0]=index;}}

@@ -26,6 +26,8 @@
 > `ENVELOPE_BANK_PROGRESS.md`. Full parity remains active.
 > Expanded native formula workbench, completion/reference and full bank-range
 > previews: `FORMULA_WORKBENCH_PROGRESS.md`. Full parity remains active.
+> Native plugin instrument aliases/MIDI channels and corrected alias API/primary
+> assignment semantics: `PLUGIN_ALIASES_PROGRESS.md`. Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

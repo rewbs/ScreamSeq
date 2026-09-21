@@ -13,6 +13,7 @@
 #include "GraphCanvas.hpp"
 #include "AutomationCanvas.hpp"
 #include "EnvelopeBankWindow.hpp"
+#include "PluginInstrumentsWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -50,7 +51,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginList=300,pluginLibrary=301,pluginAdd=302,pluginRescan=303,pluginEditor=304,
     pluginBypass=305,pluginRemove=306,pluginUp=307,pluginDown=308,pluginUndo=309,pluginRedo=310,
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
-    pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,
+    pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,pluginAliases=323,
     effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
     effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,
     noteList=360,notePitch=361,noteInstrument=362,noteVelocity=363,noteOffset=364,noteUnitControl=365,
@@ -238,6 +239,7 @@ public:
             {"formulaWorkbench",formulaWorkbench?formulaWorkbench->snapshot():Json{{"visible",false}}},
             {"formulaReference",formulaReference?formulaReference->snapshot():Json{{"visible",false}}},
             {"envelopeBank",envelopeBank?envelopeBank->snapshot():Json{{"visible",false}}},
+            {"pluginInstruments",pluginInstruments?pluginInstruments->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
             {"noteEditor",{{"visible",noteEditorVisible()},{"pattern",notePattern},{"row",noteRow},{"channel",noteChannel},

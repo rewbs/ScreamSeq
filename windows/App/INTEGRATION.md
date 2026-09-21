@@ -14,6 +14,8 @@ sampling fix are covered in `../GRAPH_CURVES_PROGRESS.md`. The modeless envelope
 bank and its two reuse levels are covered in `../ENVELOPE_BANK_PROGRESS.md`.
 The modeless formula workbench and reference are covered in
 `../FORMULA_WORKBENCH_PROGRESS.md`.
+Native shared-plugin instrument assignments and MIDI channels are covered in
+`../PLUGIN_ALIASES_PROGRESS.md`.
 Song overview remains pending.
 
 ## Owner boundaries
