@@ -195,6 +195,8 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
   let formula = NSTextField(string:"mix(start, end, t)")
   let formulaHelp = Theme.label("t / beatOffset: 0–1 · start, end: 0–1 · beat: pattern beats · beats: segment beats",size:10,color:Theme.muted)
   var formulaBox: NSStackView!
+  var formulaWorkbench: FormulaWorkbench?
+  var bankWindow:EnvelopeBankWindow?
   var formulaPreviewWork: DispatchWorkItem?, formulaPreviewGeneration = 0
   let viewportLabel = Theme.label("Whole pattern",size:10,color:Theme.muted)
   let pointRow = NSTextField(string: "0"), pointValue = NSTextField(string: "50")
@@ -237,7 +239,9 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     canvas.toolTip = "Pinch or Option-scroll to zoom time; scroll to pan. Shift-Option-scroll zooms values. Fit resets both axes."
     formula.setAccessibilityLabel("Selected point curve formula");formula.delegate=self
     formula.font=NSFont.monospacedSystemFont(ofSize:12,weight:.regular)
-    formulaBox=stack(.vertical,[formula,formulaHelp,Theme.label("Try mix(start,end,t^3) or L + 0.15*sin(tau*beats). Math errors fall back to linear; output stays 0–1.",size:10,color:Theme.muted)],spacing:3)
+    let formulaRow=stack(.horizontal,[formula,ActionButton("Expand…"){[weak self] in self?.expandFormula()},ActionButton("Reference"){[weak self] in FormulaWorkbench.showReference(self?.onRequest)}],spacing:4)
+    formula.setContentHuggingPriority(.defaultLow,for:.horizontal)
+    formulaBox=stack(.vertical,[formulaRow,formulaHelp,Theme.label("Autocomplete while typing or ⌃Space in the expanded editor. Apply saves the envelope draft.",size:10,color:Theme.muted)],spacing:3)
     formulaBox.stretchAcrossAxis();formulaBox.isHidden=true
     let right = stack(.vertical, [
       stack(.horizontal, [labeled("SELECTED POINT → NEXT", curve), labeled("SNAP", snap), NSView(), enabled]),
@@ -252,7 +256,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     left.heightAnchor.constraint(equalTo: editors.heightAnchor).isActive = true
     right.heightAnchor.constraint(equalTo: editors.heightAnchor).isActive = true
     canvas.heightAnchor.constraint(greaterThanOrEqualToConstant: 150).isActive = true
-    let targetRow = stack(.horizontal, [plugin, ActionButton("Use last touched") { [weak self] in self?.useLastTouched() }])
+    let targetRow = stack(.horizontal, [plugin, ActionButton("Envelope bank…") { [weak self] in self?.showBank() }, ActionButton("Use last touched") { [weak self] in self?.useLastTouched() }])
     plugin.setContentHuggingPriority(.defaultLow, for: .horizontal)
     let content = stack(.vertical, [heading, targetRow, editors, makeTools(),
       stack(.horizontal, [
@@ -267,6 +271,13 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     content.fill(self, inset: 20); content.stretchAcrossAxis()
   }
   required init?(coder: NSCoder) { fatalError() }
+  func showBank(){
+    if let bankWindow,bankWindow.window?.isVisible==true{bankWindow.window?.makeKeyAndOrderFront(nil);return}
+    guard !loading,let parameterID,model.nativePlugins.indices.contains(pluginIndex),let plugin=model.nativePlugins[pluginIndex]["instanceID"] as? String,let onRequest else{return}
+    let target:[String:Any]=["kind":"parameter","pattern":model.pattern,"plugin":plugin,"parameter":parameterID]
+    let shape:[String:Any] = ["span":canvas.rows*256,"rowsPerBeat":model.rowsPerBeat,"points":canvas.points.map(\.dictionary)]
+    let points=canvas.points,pattern=model.pattern;bankWindow?.close();bankWindow=EnvelopeBankWindow(title:"Pattern \(model.pattern)",target:target,shape:canvas.points.isEmpty ? nil:shape,revision:revision,request:onRequest,canReplace:{[weak self] in (self?.hasDraft==false || self?.canvas.points==points) && self?.model.pattern==pattern && self?.parameterID==parameterID && self?.pluginIndex==self?.model.nativePlugins.firstIndex(where:{$0["instanceID"] as? String==plugin})},applied:{[weak self] in self?.hasDraft=false;self?.load()})
+  }
   func configureDocked() {
     guard let body=subviews.first as? NSStackView,body.arrangedSubviews.count>=6 else{return}
     heading.isHidden=true;body.arrangedSubviews.last?.isHidden=true;body.spacing=6
@@ -326,7 +337,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
   func controlTextDidChange(_ notification: Notification) {
     if notification.object as? NSTextField === formula {
       guard let selected=canvas.selected,canvas.points.indices.contains(selected) else{return}
-      canvas.points[selected].formula=formula.stringValue;markDraft()
+      canvas.points[selected].formula=formula.stringValue;markDraft();FormulaCatalog.suggest(formula.currentEditor() as? NSTextView)
     } else { filter() }
   }
   func filter() {
@@ -365,6 +376,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     canvas.curve = point.curve
     formulaBox.isHidden = point.curve != "scripted"
     formula.stringValue = point.formula
+    if point.curve=="scripted"{FormulaCatalog.load(onRequest)}
     pointRow.stringValue = String(format: "%.8g", Double(point.position) / 256)
     pointValue.stringValue = String(format: "%.6g", point.value * 100)
     curve.selectItem(at: curves.firstIndex(of: point.curve) ?? 1)
@@ -389,6 +401,19 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
       }
     }
     formulaPreviewWork=work;DispatchQueue.main.asyncAfter(deadline:.now()+0.15,execute:work)
+  }
+  func control(_ control:NSControl,textView:NSTextView,completions words:[String],forPartialWordRange range:NSRange,indexOfSelectedItem index:UnsafeMutablePointer<Int>)->[String]{
+    guard control === formula else{return words};index.pointee = -1;return FormulaCatalog.completions(textView.string,range:range)
+  }
+  func expandFormula(){
+    if let formulaWorkbench,formulaWorkbench.window?.isVisible==true{formulaWorkbench.window?.makeKeyAndOrderFront(nil);return}
+    guard let selected=canvas.selected,canvas.points.indices.contains(selected),canvas.points[selected].curve=="scripted" else{return}
+    let token=draftGeneration,revision=self.revision
+    formulaWorkbench?.close()
+    formulaWorkbench=FormulaWorkbench(source:canvas.points[selected].formula,title:"Pattern \(model.pattern) · formula",points:canvas.points.map(\.dictionary),selected:selected,rows:canvas.rows,rowsPerBeat:model.rowsPerBeat,request:onRequest){[weak self] text in
+      guard let self,self.draftGeneration==token,self.revision==revision,self.canvas.selected==selected,self.canvas.points.indices.contains(selected) else{return false}
+      self.canvas.points[selected].formula=text;self.formula.stringValue=text;self.markDraft();return true
+    }
   }
   func setPoint() {
     guard let row = Double(pointRow.stringValue), let value = Double(pointValue.stringValue),

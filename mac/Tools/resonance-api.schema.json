@@ -13456,7 +13456,7 @@
                   "position": {
                     "type": "integer",
                     "minimum": 0,
-                    "maximum": 1048575
+                    "maximum": 16777215
                   },
                   "value": {
                     "type": "number",
@@ -13512,7 +13512,7 @@
             "rows": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 4096
+              "maximum": 65536
             },
             "rowsPerBeat": {
               "type": "number",
@@ -13522,17 +13522,22 @@
             "start": {
               "type": "number",
               "minimum": 0,
-              "maximum": 1048576
+              "maximum": 16777216
             },
             "end": {
               "type": "number",
               "minimum": 0,
-              "maximum": 1048576
+              "maximum": 16777216
             },
             "samples": {
               "type": "integer",
               "minimum": 2,
               "maximum": 4096
+            },
+            "span": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16777216
             }
           },
           "required": [
@@ -13966,6 +13971,883 @@
       ],
       "additionalProperties": false,
       "description": "Assign the ordinary channel/group subgraph; null clears it. Amount and wet mix are independent."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.formula.reference"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Authoritative completion snippets, values, functions, and bounded expression reference."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "envelope.bank.list"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "parameter"
+                    },
+                    "pattern": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "plugin": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "parameter": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 4294967295
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "pattern",
+                    "plugin",
+                    "parameter"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "graph"
+                    },
+                    "graph": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    "node": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    "pattern": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "graph",
+                    "node",
+                    "pattern"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "volume",
+                        "pan",
+                        "pitch"
+                      ]
+                    },
+                    "instrument": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "instrument"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Read song-local templates and links; optional target adds its current shape and linkedTemplate."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "envelope.bank.save"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "shape": {
+              "type": "object",
+              "properties": {
+                "span": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 16777216
+                },
+                "rowsPerBeat": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65536
+                },
+                "points": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 4096,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "position": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 16777215
+                      },
+                      "value": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "curve": {
+                        "enum": [
+                          "step",
+                          "linear",
+                          "smooth",
+                          "exponential",
+                          "logarithmic",
+                          "step-next",
+                          "exponential-reverse",
+                          "logarithmic-reverse",
+                          "scripted"
+                        ]
+                      },
+                      "formula": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "description": "Bounded math expression. Required with scripted curve. start/end are normalized, t or beatOffset is segment progress, beat is pattern position in beats, beats is elapsed segment beats. Terminal segments extend to pattern end and end equals start."
+                      }
+                    },
+                    "required": [
+                      "position",
+                      "value"
+                    ],
+                    "additionalProperties": false,
+                    "allOf": [
+                      {
+                        "if": {
+                          "properties": {
+                            "curve": {
+                              "const": "scripted"
+                            }
+                          },
+                          "required": [
+                            "curve"
+                          ]
+                        },
+                        "then": {
+                          "required": [
+                            "formula"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "instrument": {
+                  "type": "boolean"
+                },
+                "flags": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 31
+                },
+                "markers": {
+                  "type": "array",
+                  "minItems": 5,
+                  "maxItems": 5,
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  }
+                }
+              },
+              "required": [
+                "span",
+                "points"
+              ],
+              "additionalProperties": false
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "parameter"
+                    },
+                    "pattern": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "plugin": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "parameter": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 4294967295
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "pattern",
+                    "plugin",
+                    "parameter"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "graph"
+                    },
+                    "graph": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    "node": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    "pattern": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "graph",
+                    "node",
+                    "pattern"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "volume",
+                        "pan",
+                        "pitch"
+                      ]
+                    },
+                    "instrument": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "instrument"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "expectedRevision"
+          ],
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "shape"
+              ],
+              "not": {
+                "required": [
+                  "target"
+                ]
+              }
+            },
+            {
+              "required": [
+                "target"
+              ],
+              "not": {
+                "required": [
+                  "shape"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Create a song template or update a master and all linked uses atomically. Copies remain unchanged."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "envelope.bank.apply"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "template": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "parameter"
+                    },
+                    "pattern": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "plugin": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "parameter": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 4294967295
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "pattern",
+                    "plugin",
+                    "parameter"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "graph"
+                    },
+                    "graph": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    "node": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    "pattern": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "graph",
+                    "node",
+                    "pattern"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "volume",
+                        "pan",
+                        "pitch"
+                      ]
+                    },
+                    "instrument": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "instrument"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "linked": {
+              "type": "boolean"
+            },
+            "span": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "template",
+            "target",
+            "linked",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Apply a song template as a linked use or independent copy. Pattern points fit the whole pattern. Instrument span uses ticks; curved shapes bake within half a value unit or reject."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "envelope.bank.unlink"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "parameter"
+                    },
+                    "pattern": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "plugin": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "parameter": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 4294967295
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "pattern",
+                    "plugin",
+                    "parameter"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "graph"
+                    },
+                    "graph": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    "node": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    "pattern": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "graph",
+                    "node",
+                    "pattern"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "volume",
+                        "pan",
+                        "pitch"
+                      ]
+                    },
+                    "instrument": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "instrument"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "target",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Make the target independent, preserving its playable points."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "envelope.bank.remove"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Remove an unused song template. Linked uses must be made independent first."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "envelope.catalogue.list"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Read the app-wide template catalogue with its independent revision. No live links into songs."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "envelope.catalogue.publish"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "template": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "catalogueID": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "expectedCatalogueRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "template",
+            "expectedCatalogueRevision",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Explicitly publish a saved song template as a new catalogue copy, or replace catalogueID. Guard both song and catalogue revisions. External catalogue writes are not song Undo."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "envelope.catalogue.import"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "catalogueID": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "expectedCatalogueRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "catalogueID",
+            "expectedCatalogueRevision",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Copy catalogue entry into the song bank under a fresh local identity. Later catalogue updates do not change it."
     }
   ]
 }

@@ -1,6 +1,7 @@
 #import "TrackerSession.h"
 #include "../Audio/AudioDevice.hpp"
 #include "../Audio/AudioExport.hpp"
+#include "editor/CurveFormulaReference.hpp"
 #include "../Audio/MidiInput.hpp"
 #include "../Plugins/PluginInventory.hpp"
 #include "../Plugins/PluginLibrary.hpp"
@@ -23,6 +24,7 @@
 #include <chrono>
 #include <cmath>
 #include <fcntl.h>
+#include <sys/file.h>
 #include <limits>
 #include <poll.h>
 #include <signal.h>
@@ -34,6 +36,7 @@ namespace {
 #include "TrackLayout.inc"
 #include "SongTiming.inc"
 #include "InstrumentEnvelopeTools.inc"
+#include "EnvelopeCatalogue.inc"
 #include "PluginPrograms.inc"
 void failure(NSError **e, const std::exception &ex) {
   if (e)

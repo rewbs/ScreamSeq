@@ -11,6 +11,7 @@ extension AppController {
     let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
     guard !modifiers.contains(.command), !modifiers.contains(.option) else { return false }
     let focus = focusedView(event)
+    if focus is FormulaCodeView, modifiers == [.control], event.keyCode == 49 { return false }
     // These responders have an actual local binding: text insertion, sample preview,
     // control activation, or Return's default action. Modified Space remains global.
     if !modifiers.contains(.control) {

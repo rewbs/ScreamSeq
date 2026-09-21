@@ -12,6 +12,7 @@ final class InstrumentEnvelopeToolsEditor: NSView {
   private(set) var revision:String?,pending=false,preview:[String:Any]?,baseline:[String:Any]=[:]
   private var previewSignature:NSDictionary?
   var onRequest:((String,[String:Any],@escaping([String:Any])->Void)->Void)?
+  var bankWindow:EnvelopeBankWindow?
   var applyButton:ActionButton!
   let operations=["flip-time","flip-values","shift","scale","ramp","sine","humanize","paste","insert"]
   init(instrument:String,kind:String,clipboard:InstrumentEnvelopeClipboard=InstrumentEnvelopeClipboard()) {
@@ -39,7 +40,7 @@ final class InstrumentEnvelopeToolsEditor: NSView {
     settings.stretchAcrossAxis()
     let content=stack(.vertical,[Theme.label("Instrument envelope tools",size:22,weight:.semibold),title,canvas,markers,
       stack(.horizontal,[operation,Theme.label("Ticks",size:12),start,Theme.label("to",size:12),end,NSView()],spacing:12),settings,
-      explanation,stack(.horizontal,[copy,check,applyButton!,reload,NSView()],spacing:12),status],spacing:14)
+      explanation,stack(.horizontal,[ActionButton("Envelope bank…"){[weak self] in self?.showBank()},copy,check,applyButton!,reload,NSView()],spacing:12),status],spacing:14)
     content.stretchAcrossAxis();content.translatesAutoresizingMaskIntoConstraints=false;addSubview(content)
     NSLayoutConstraint.activate([content.leadingAnchor.constraint(equalTo:leadingAnchor,constant:24),content.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-24),
       content.topAnchor.constraint(equalTo:topAnchor,constant:24),content.bottomAnchor.constraint(lessThanOrEqualTo:bottomAnchor,constant:-20)])
@@ -54,6 +55,7 @@ final class InstrumentEnvelopeToolsEditor: NSView {
     for i in values.indices {valueRows[i].isHidden=i>=config.count;if i<config.count {labels[i].stringValue=config[i].0;values[i].stringValue=config[i].1;values[i].setAccessibilityLabel(config[i].0)}}
     if !baseline.isEmpty {show(baseline)};preview=nil;previewSignature=nil;controls()
   }
+  func showBank(){if let bankWindow,bankWindow.window?.isVisible==true{bankWindow.window?.makeKeyAndOrderFront(nil);return};guard !pending,preview==nil,let revision,let onRequest else{status.stringValue="Apply or reload the tool preview before opening the bank.";return};bankWindow?.close();bankWindow=EnvelopeBankWindow(title:kind.capitalized,target:["kind":kind,"instrument":instrument],shape:nil,revision:revision,request:onRequest,canReplace:{[weak self] in self?.preview==nil && self?.pending==false},applied:{[weak self] in self?.load()})}
   private var signature:NSDictionary { ["operation":operation.indexOfSelectedItem,"start":start.stringValue,"end":end.stringValue,"values":values.map(\.stringValue)] }
   private func accepts(_ data:[String:Any])->Bool {data["instrument"] as? String==instrument && data["envelope"] as? String==kind}
   func load() {

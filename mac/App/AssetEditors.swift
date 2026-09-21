@@ -545,6 +545,7 @@ final class InstrumentEditor: NSView {
     mapTo = numberField(119, label: "Keymap last note"), mapSample = NSPopUpButton()
   var index = 1, keymap = [Int](repeating: 0, count: 128)
   var onEnvelopeTools: ((Int) -> Void)?
+  var onEnvelopeBank: ((Int) -> Void)?
   var envelopeToolsButton: ActionButton!
   var onSelect: ((Int) -> Void)?, onApply: (([String: Any]) -> Void)?, onCreate: (() -> Void)?,
     onImport: (() -> Void)?
@@ -625,7 +626,7 @@ final class InstrumentEditor: NSView {
     let content = stack(
       .vertical,
       [
-        top, stack(.horizontal, [envelopeType, envelopeToolsButton!, NSView(), filter], spacing: 8),
+        top, stack(.horizontal, [envelopeType, envelopeToolsButton!, ActionButton("Envelope bank…"){[weak self] in guard let self,self.envelope.canEdit() else{return};self.onEnvelopeBank?(self.envelopeType.indexOfSelectedItem)}, NSView(), filter], spacing: 8),
         envelope,
         stack(
           .horizontal,

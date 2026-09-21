@@ -1293,3 +1293,74 @@ graph instead. Both additions use document Undo and native persistence. Graph
 activity for instrument copies has role `instrument`, the originating instrument
 ID and destination channel bus. Empty `instrument` on other activity entries means
 there is no instrument-specific source.
+
+## Envelope bank and formula workbench
+
+`automation.formula.reference` returns the authoritative `symbols` (name, valid
+insertion snippet, category, description) and expression limits. The native
+**Expand…** formula editor has a resizable multiline draft, completion while
+typing / Control-Space, a searchable reference and a live preview. **Use formula**
+returns to the captured point; **Apply** in its envelope saves the musical edit.
+A changed target or newer draft cannot be overwritten by an older workbench.
+`automation.formula.preview` also accepts `span` for a precise terminal segment
+boundary (1–rows×256); `rows` can be 1–65536 for bank shapes.
+
+Every envelope editor has an **Envelope bank…** / **Bank…** control. The bank has
+**This song** and **App catalogue** tiers. Links exist only within the song. A
+song carries its complete bank, links, and playable points; neither rendering
+nor project reopening requires the app catalogue. Native metadata version 14
+stores this feature (independent of the outer project container version).
+
+- `envelope.bank.list {target?}` returns `entries`, `links`, and optionally the
+  current target `shape` and `linkedTemplate` (empty when independent).
+- `envelope.bank.save {name, shape|target, id?, dryRun?}` creates a template;
+  supplying `id` explicitly updates that master and all its linked uses in one
+  document Undo. `target` captures saved data; `shape` can save an editor draft.
+- `envelope.bank.apply {template, target, linked, span?, dryRun?}` loads a linked
+  use or independent copy. `envelope.bank.unlink {target, dryRun?}` keeps the
+  playable points while removing the link. Direct edits to linked points reject
+  with an instruction to edit the master or unlink first.
+- `envelope.bank.remove {id, dryRun?}` removes an unused template.
+- `envelope.catalogue.list {}` returns `revision` and independent `entries`.
+- `envelope.catalogue.publish {template, expectedCatalogueRevision, catalogueID?,
+  name?, dryRun?}` explicitly creates a catalogue copy; `catalogueID` explicitly
+  replaces a chosen catalogue entry. Saving a song master never publishes it.
+- `envelope.catalogue.import {catalogueID, expectedCatalogueRevision, name?,
+  dryRun?}` copies into the song with a fresh local identity and document Undo.
+  Replacing a catalogue entry does not change earlier imports or songs.
+
+All writes require `expectedRevision` from a song read. Catalogue writes also
+compare the catalogue revision under a nonblocking interprocess lock and use an
+atomic file replacement. Catalogue publication is outside document Undo; imports
+and all song-bank edits use document Undo. Tests isolate the catalogue with
+`RESONANCE_AUTOMATION_TEST_DIRECTORY`.
+
+Public `target` forms:
+
+```json
+{"kind":"parameter","pattern":0,"plugin":"persistent-instance-id","parameter":1}
+{"kind":"graph","graph":"n100","node":"n104","pattern":0}
+{"kind":"volume","instrument":"n42"}
+```
+
+Instrument kinds are `volume`, `pan`, `pitch`; instrument IDs are stable IDs,
+not slots. Persisted links use resolved stable target identities. Pattern
+cloning retains links with fresh target identities. Deleting a target prunes
+its links; resizing a pattern refits its linked envelopes.
+
+A `shape` has `span` (exclusive, 1–16777216), `rowsPerBeat` (default 4), and
+1–4096 ordered `points` using the ordinary normalized automation point format,
+including outgoing curve and formula. Pattern application fits the complete
+shape to the target pattern, rejecting point collisions. Bank positions use
+256 units per displayed row. Captured instrument shapes use 256 units per tick.
+Optional instrument fields are `instrument:true`, envelope flag bits `flags`,
+and five positional `markers` (loop start/end, sustain start/end, release).
+Release `4294967295` means unset. Captured markers and flags survive copying.
+
+Instrument application materializes linear integer tick/value points. Curved
+or scripted templates are sampled and simplified with a maximum half-unit
+error (on the 0–64 scale) at every tick; a template exceeding the format's point
+budget is rejected. This is an explicit conversion, not realtime formula
+execution inside legacy instrument envelopes. Original instrument templates
+retain their duration; non-instrument templates fit the current instrument's
+duration (49 ticks for an empty envelope), unless `span` is supplied in ticks.

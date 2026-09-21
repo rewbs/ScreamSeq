@@ -98,6 +98,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)panic;
 - (NSData *)serializedData;
 + (BOOL)exportData:(NSData *)data path:(NSString *)path error:(NSError **)error;
++ (NSDictionary *)formulaReference;
 // Independent decoder for library audition: no song, history or audio-device mutation.
 + (nullable NSDictionary *)inspectSampleFile:(NSString *)path error:(NSError **)error;
 @end

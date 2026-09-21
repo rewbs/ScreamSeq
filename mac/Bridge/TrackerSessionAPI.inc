@@ -1,5 +1,10 @@
 // Included inside TrackerSession's implementation so the API uses the same
 // document, validation, audio queue and histories as the native editors.
++ (NSDictionary *)formulaReference {
+  NSMutableArray *symbols=[NSMutableArray array];
+  for(const auto &s:Tracker::curveFormulaSymbols)[symbols addObject:@{@"name":@(s.name.data()),@"insert":@(s.insert.data()),@"category":@(s.category.data()),@"description":@(s.description.data())}];
+  return @{@"symbols":symbols,@"notes":@(Tracker::curveFormulaNotes.data())};
+}
 - (NSString *)automationRevision {
   return [NSString stringWithFormat:@"%@:%llu:%llu:%u", _automationDocumentID, (unsigned long long)_document->revision,
                                     (unsigned long long)_pluginRevision,
@@ -12,13 +17,13 @@
     string(method, 80);
     object(p);
     NSArray *reads = @[
-      @"transport.get", @"automation.formula.preview", @"graph.get", @"graph.automation.get", @"graph.plugin.get",
+      @"envelope.bank.list", @"envelope.catalogue.list", @"transport.get", @"automation.formula.preview", @"automation.formula.reference", @"graph.get", @"graph.automation.get", @"graph.plugin.get",
       @"recording.get", @"pattern.notes.get", @"pattern.performance.get", @"instrument.envelope.get", @"instrument.envelope.copy",
       @"plugin.programs.get", @"plugin.instruments.get", @"document.timing.get", @"track.get", @"api.describe", @"document.get", @"pattern.get", @"pattern.commands", @"sample.get", @"sample.waveform.get", @"sample.snap.get", @"sample.pcm.get", @"sample.clipboard.get", @"instrument.get",
       @"plugin.preset.inspect", @"plugin.library.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
     ];
     NSArray *writes = @[
-      @"transport.play", @"transport.stop", @"transport.loop", @"graph.plugin.set", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.routes.set", @"graph.controller", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
+      @"envelope.bank.save", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.loop", @"graph.plugin.set", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.routes.set", @"graph.controller", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
       @"recording.start", @"recording.capture", @"recording.stop", @"recording.commit", @"recording.discard", @"pattern.notes.set", @"pattern.performance.set", @"instrument.envelope.transform",
       @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule",
       @"sequence.select", @"sample.patch",          @"sample.process",    @"sample.import", @"sample.importMany", @"sample.clipboard.copy", @"sample.clipboard.set", @"sample.cut", @"sample.delete", @"sample.paste",
@@ -69,7 +74,9 @@
       };
     };
 
-    if ([method isEqual:@"api.describe"]) {
+    if ([method isEqual:@"automation.formula.reference"]) {allowed(@[]);result=[TrackerSession formulaReference];
+#include "EnvelopeBankAPI.inc"
+    } else if ([method isEqual:@"api.describe"]) {
       allowed(@[]);
       result = @{
         @"protocol" : @"ScreamSeq local API",
@@ -79,6 +86,11 @@
         @"coordinates" : @"Patterns, rows, channels, orders and plugin slots are zero-based. Samples and instruments "
                          @"are one-based; zero means none.",
         @"noteEncoding" : @"0=empty; 1=C-0, 49=C-4, 61=C-5. Special notes and format command IDs follow document.get.",
+        @"envelopeBank":@{@"metadataVersion":@14,@"templates":@256,@"links":@4096,
+          @"semantics":@"Song-local links only. bank.save with id updates the master and every linked use as one document Undo. apply linked:false makes an independent copy. unlink preserves points. Catalogue publish/import are explicit copies with a separate expectedCatalogueRevision; catalogue writes are outside song Undo.",
+          @"targets":@"parameter: pattern index, persistent plugin identity and parameter ID; graph: graph/node stable IDs and pattern index; volume/pan/pitch: stable instrument ID.",
+          @"conversion":@"Pattern templates fit the complete pattern. Instruments retain their tick duration when captured; automation shapes fit the existing instrument duration or explicit span in ticks. Curves bake to whole ticks and integer values 0..64, within half a value unit at every tick, or reject if the format point budget cannot represent them. Loops/sustain/carry/release are captured with instrument templates.",
+          @"editing":@"Edit the master through bank.save, or unlink before changing a linked use directly. New targets become enabled; existing automation enabled state is retained. All musical edits require expectedRevision and support dryRun."},
         @"automationRate" : @48000,
         @"maxPatternCells" : @4096,
         @"patternPerformance": @{@"unitsPerRow":@(performanceUnitsPerRow), @"maximumColumns":@(maximumEffectColumns),
@@ -1055,17 +1067,18 @@
     } else if ([method isEqual:@"transport.loop"]) {
       allowed(@[@"enabled"]); const bool enabled = boolean(p[@"enabled"]); [self setPlaybackLoop:enabled]; result = @{@"loop": @(enabled)};
     } else if ([method isEqual:@"automation.formula.preview"]) {
-      allowed(@[@"points", @"rows", @"rowsPerBeat", @"start", @"end", @"samples"]);
-      const auto rows = uint32_t(integer(p[@"rows"],1,4096));
+      allowed(@[@"points", @"rows", @"rowsPerBeat", @"span", @"start", @"end", @"samples"]);
+      const auto rows = uint32_t(integer(p[@"rows"],1,65536));
       const auto rowsPerBeat = number(p[@"rowsPerBeat"] ?: @4,1,65535);
-      const auto start = number(p[@"start"] ?: @0,0,rows*256);
-      const auto end = number(p[@"end"] ?: @(rows*256),start,rows*256);
+      const auto span=uint32_t(integer(p[@"span"]?:@(rows*256),1,rows*256));
+      const auto start = number(p[@"start"] ?: @0,0,span);
+      const auto end = number(p[@"end"] ?: @(span),start,span);
       const auto count = uint32_t(integer(p[@"samples"] ?: @1024,2,4096));
       std::vector<AutomationPoint> points;
-      for(id raw:array(p[@"points"],4096)) points.push_back(decodeAutomationPoint(raw,rows*256-1));
-      validateAutomationPoints(points,rows*256);
+      for(id raw:array(p[@"points"],4096)) points.push_back(decodeAutomationPoint(raw,span-1));
+      validateAutomationPoints(points,span);
       NSMutableArray *values=[NSMutableArray arrayWithCapacity:count];
-      for(uint32_t i=0;i<count;++i) { const double position=start+(end-start)*i/(count-1); [values addObject:@[@(position),@(automationValue(points,position,rows*256,rowsPerBeat))]]; }
+      for(uint32_t i=0;i<count;++i) { const double position=start+(end-start)*i/(count-1); [values addObject:@[@(position),@(automationValue(points,position,span,rowsPerBeat))]]; }
       result=@{@"values":values, @"fallback":@"Domain errors use linear interpolation; output is clamped to 0..1"};
     } else if ([method isEqual:@"automation.pattern.get"]) {
       allowed(@[@"pattern"]);
@@ -1135,6 +1148,7 @@
         if (existing == next.automation.end()) next.automation.push_back(std::move(replacement));
         else *existing = std::move(replacement);
       }
+      reconcileEnvelopeLinks(next,song);
       try { next.validate(song); } catch (const std::invalid_argument &e) { throw Error(-32602, e.what()); }
       const bool changed = next != _document->native();
       if (!dryRun && changed) {

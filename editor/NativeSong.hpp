@@ -9,6 +9,7 @@
 #include "PatternPerformance.hpp"
 #include "PreciseNotes.hpp"
 #include "SignalGraph.hpp"
+#include "EnvelopeBank.hpp"
 
 namespace Tracker {
 // Stable, project-local identities and UTF-8 metadata. Module playback stays in
@@ -41,6 +42,8 @@ struct NativeSong {
   std::vector<PreciseNote> preciseNotes;
   std::vector<NativeNoteTrack> noteTracks;
   std::map<uint64_t, bool> columnMutes; // Overrides; absence preserves imported mute state.
+  std::vector<EnvelopeTemplate> envelopeBank;
+  std::vector<EnvelopeLink> envelopeLinks;
   NativeEntity makeEntity();
   void reconcile(const OpenMPT::CSoundFile &song);
   void clonePatternAutomation(uint64_t source, uint64_t destination);

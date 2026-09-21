@@ -11,6 +11,8 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
   private(set) var graph:String?,node:String?,patternIndex=0,revision="",hasDraft=false,loading=false
   private var patterns=[[String:Any]](),rowsPerBeat=4,generation=0,previewGeneration=0
   private var previewWork:DispatchWorkItem?
+  var bankWindow:EnvelopeBankWindow?
+  var formulaBox:NSStackView!,formulaWorkbench:FormulaWorkbench?
   override init(frame:NSRect){
     super.init(frame:frame)
     pattern.target=self;pattern.action = #selector(changePattern);pattern.setAccessibilityLabel("Graph automation pattern")
@@ -24,8 +26,10 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     canvas.onEdit = {[weak self] in self?.markDraft()};canvas.onSelect = {[weak self] in self?.showPoint()};canvas.onViewport = {[weak self] in self?.preview()}
     canvas.setAccessibilityLabel("Subgraph pattern automation curve");canvas.heightAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
     let controls=stack(.horizontal,[heading,pattern,curve,snap,enabled,NSView(),ActionButton("−"){[weak self] in self?.canvas.zoom(0.5)},ActionButton("+"){[weak self] in self?.canvas.zoom(2)},ActionButton("Fit"){[weak self] in self?.canvas.fit()}],spacing:4)
-    let footer=stack(.horizontal,[Theme.label("Row",size:11),row,Theme.label("%",size:11),value,ActionButton("Set point"){[weak self] in self?.setPoint()},ActionButton("Delete"){[weak self] in self?.canvas.removeSelected()},ActionButton("Ramp"){[weak self] in self?.ramp()},NSView(),ActionButton("Reload / discard"){[weak self] in self?.load()},ActionButton("Apply"){[weak self] in self?.apply()}],spacing:4)
-    let body=stack(.vertical,[controls,formula,canvas,footer,status],spacing:4);body.stretchAcrossAxis();body.fill(self,inset:6)
+    let footer=stack(.horizontal,[ActionButton("Bank…"){[weak self] in self?.showBank()},Theme.label("Row",size:11),row,Theme.label("%",size:11),value,ActionButton("Set point"){[weak self] in self?.setPoint()},ActionButton("Delete"){[weak self] in self?.canvas.removeSelected()},ActionButton("Ramp"){[weak self] in self?.ramp()},NSView(),ActionButton("Reload / discard"){[weak self] in self?.load()},ActionButton("Apply"){[weak self] in self?.apply()}],spacing:4)
+    formulaBox=stack(.horizontal,[formula,ActionButton("Expand…"){[weak self] in self?.expandFormula()},ActionButton("Reference"){[weak self] in FormulaWorkbench.showReference(self?.onRequest)}],spacing:4)
+    formula.setContentHuggingPriority(.defaultLow,for:.horizontal);formulaBox.isHidden=true
+    let body=stack(.vertical,[controls,formulaBox!,canvas,footer,status],spacing:4);body.stretchAcrossAxis();body.fill(self,inset:6)
     for popup in [pattern,curve,snap]{popup.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
     heading.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
   }
@@ -64,12 +68,33 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
   @objc func changeSnap(){canvas.snap=[256,128,64,1][max(0,snap.indexOfSelectedItem)]}
   @objc func changeCurve(){canvas.curve=curves[max(0,curve.indexOfSelectedItem)];if let i=canvas.selected,canvas.points.indices.contains(i){let p=canvas.points[i];canvas.replaceSelected(position:p.position,value:p.value,curve:canvas.curve)}}
   func showPoint(){
-    guard let i=canvas.selected,canvas.points.indices.contains(i)else{formula.isHidden=true;return}
+    guard let i=canvas.selected,canvas.points.indices.contains(i)else{formula.isHidden=true;formulaBox.isHidden=true;return}
     let p=canvas.points[i];row.stringValue=String(format:"%.8g",Double(p.position)/256);value.stringValue=String(format:"%.6g",p.value*100)
     curve.selectItem(at:curves.firstIndex(of:p.curve) ?? 1);canvas.curve=p.curve;formula.isHidden=p.curve != "scripted";formula.stringValue=p.formula
+    formulaBox.isHidden=formula.isHidden;if p.curve=="scripted"{FormulaCatalog.load(onRequest)}
   }
   func controlTextDidChange(_ notification:Notification){
-    if notification.object as? NSTextField === formula,let i=canvas.selected,canvas.points.indices.contains(i){canvas.points[i].formula=formula.stringValue};markDraft()
+    if notification.object as? NSTextField === formula,let i=canvas.selected,canvas.points.indices.contains(i){canvas.points[i].formula=formula.stringValue;FormulaCatalog.suggest(formula.currentEditor() as? NSTextView)};markDraft()
+  }
+  func control(_ control:NSControl,textView:NSTextView,completions words:[String],forPartialWordRange range:NSRange,indexOfSelectedItem index:UnsafeMutablePointer<Int>)->[String]{
+    guard control === formula else{return words};index.pointee = -1;return FormulaCatalog.completions(textView.string,range:range)
+  }
+  func expandFormula(){
+    if let formulaWorkbench,formulaWorkbench.window?.isVisible==true{formulaWorkbench.window?.makeKeyAndOrderFront(nil);return}
+    guard let selected=canvas.selected,canvas.points.indices.contains(selected),canvas.points[selected].curve=="scripted" else{return}
+    let token=generation,revision=self.revision,graph=self.graph,node=self.node,pattern=patternIndex
+    formulaWorkbench?.close()
+    formulaWorkbench=FormulaWorkbench(source:canvas.points[selected].formula,title:"\(heading.stringValue) · formula",points:canvas.points.map(\.dictionary),selected:selected,rows:canvas.rows,rowsPerBeat:rowsPerBeat,request:onRequest){[weak self] text in
+      guard let self,self.generation==token,self.revision==revision,self.graph==graph,self.node==node,self.patternIndex==pattern,self.canvas.selected==selected,self.canvas.points.indices.contains(selected) else{return false}
+      self.canvas.points[selected].formula=text;self.formula.stringValue=text;self.markDraft();return true
+    }
+  }
+  func showBank(){
+    if let bankWindow,bankWindow.window?.isVisible==true{bankWindow.window?.makeKeyAndOrderFront(nil);return}
+    guard !loading,let graph,let node,let onRequest else{return};let points=canvas.points,pattern=patternIndex
+    let target:[String:Any]=["kind":"graph","graph":graph,"node":node,"pattern":patternIndex]
+    let shape:[String:Any]=["span":canvas.rows*256,"rowsPerBeat":rowsPerBeat,"points":canvas.points.map(\.dictionary)]
+    bankWindow?.close();bankWindow=EnvelopeBankWindow(title:heading.stringValue,target:target,shape:canvas.points.isEmpty ? nil:shape,revision:revision,request:onRequest,canReplace:{[weak self] in (self?.hasDraft==false || self?.canvas.points==points) && self?.graph==graph && self?.node==node && self?.patternIndex==pattern},applied:{[weak self] in self?.hasDraft=false;self?.load();self?.onChanged?()})
   }
   func setPoint(){
     guard let r=Double(row.stringValue),let v=Double(value.stringValue),r.isFinite,v.isFinite,r>=0,r<Double(canvas.rows),v>=0,v<=100 else{status.stringValue="Use a row inside the pattern and 0–100%.";return}

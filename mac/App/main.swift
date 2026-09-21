@@ -42,6 +42,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var pluginProgramsWindow: NSWindow?
   var pluginInstrumentsWindow: NSWindow?
   var instrumentEnvelopeToolsWindow: NSWindow?
+  var instrumentEnvelopeBank:EnvelopeBankWindow?
   let instrumentEnvelopeClipboard=InstrumentEnvelopeClipboard()
   let tempoLabel = Theme.label("124", size: 20, mono: true)
   let infoLabel = Theme.label("Pattern 00", size: 13, weight: .semibold)
@@ -951,6 +952,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     sampleEditor.onInstrument = { [weak self] in self?.addInstrument() }
     instrumentEditor.onCreate = { [weak self] in self?.addInstrument() }
     instrumentEditor.onImport = { [weak self] in self?.importInstrument() }
+    instrumentEditor.onEnvelopeBank = { [weak self] kind in self?.showInstrumentEnvelopeBank(kind) }
     instrumentEditor.onEnvelopeTools = { [weak self] kind in self?.showInstrumentEnvelopeTools(kind) }
     instrumentEditor.envelope.canEdit = { [weak self] in
       self.map { !$0.busy && $0.model.editable } ?? false

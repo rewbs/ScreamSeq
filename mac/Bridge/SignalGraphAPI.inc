@@ -31,6 +31,7 @@
       } else if([method isEqual:@"graph.clone"]) {
         allowed(@[@"graph",@"name",@"number",@"dryRun"]);auto copy=definition(p[@"graph"]);copy.id=next.makeEntity().id;affected=copy.id;copy.number=p[@"number"]?uint16_t(integer(p[@"number"],1,999)):newNumber();copy.name=string(p[@"name"]?:@(copy.name.c_str()),256).UTF8String;
         std::map<uint64_t,uint64_t> mapping;for(auto &node:copy.nodes){const auto id=next.makeEntity().id;mapping[node.id]=id;node.id=id;}
+        for(const auto &l:std::vector<EnvelopeLink>(next.envelopeLinks))if(l.target.kind==EnvelopeTargetKind::Graph&&mapping.contains(l.target.owner)){auto link=l;link.target.owner=mapping.at(l.target.owner);next.envelopeLinks.push_back(link);}
         for(auto &e:copy.audio){e.source=mapping.at(e.source);e.target=mapping.at(e.target);}for(auto &e:copy.modulation){e.source=mapping.at(e.source);e.target=mapping.at(e.target);}graph.library.push_back(std::move(copy));
       } else if([method isEqual:@"graph.update"]) {
         allowed(@[@"definition",@"dryRun"]);NSMutableDictionary *replacement=[object(p[@"definition"]) mutableCopy];auto &previous=definition(replacement[@"id"]);
@@ -85,6 +86,7 @@
         if(p[@"lanes"])for(id rawLane:array(p[@"lanes"],240)){auto l=object(rawLane);keys(l,@[@"target",@"count"]);const auto target=bus(l[@"target"]);auto count=uint8_t(integer(l[@"count"],0,8));if(count)graph.lanes[target]=count;else graph.lanes.erase(target);}
         if(p[@"commands"]){std::erase_if(graph.commands,[&](const auto &c){return c.pattern==pattern;});for(id rawCommand:array(p[@"commands"],65536)){NSMutableDictionary *c=[object(rawCommand) mutableCopy];require(c[@"pattern"]==nil,"Pattern is supplied once for the command set");c[@"pattern"]=nativeID(pattern);if([c[@"kind"] isEqual:@"clear"]&&!c[@"graph"])c[@"graph"]=@"";graph.commands.push_back(decodeSignalCommand(c));}}
       } else throw Error(-32601,"Unknown graph method");
+      reconcileEnvelopeLinks(next,song);
       try{next.validate(song);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
       const bool changed=next!=_document->native();if(changed&&!dry){if(next.mixer!=_document->native().mixer||!sameSignalProcessing(next.signal,_document->native().signal))_audio->stop();_document->annotate([&](NativeSong &native){native=next;});}
       result=@{@"dryRun":@(dry),@"wouldChange":@(changed),@"graph":affected?nativeID(affected):@"",@"node":nodeID?nativeID(nodeID):@""};

@@ -35,6 +35,7 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
     sequence.orders.resize(s.Order(OpenMPT::SEQUENCEINDEX(i)).size());
     for (auto &slot : sequence.orders) if (!slot.id) slot = makeEntity();
   }
+  reconcileEnvelopeLinks(*this,s);
   // Structural edits own their loss semantics (e.g. shrinking a pattern).
   // Preserve surviving points and never let a removed identity retarget a lane.
   for (auto lane = automation.begin(); lane != automation.end();) {
@@ -93,6 +94,7 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
     if(pattern==patterns.end())return true;
     std::erase_if(lane.points,[&](const auto &point){return point.position>=uint64_t(s.Patterns[pattern->first].GetNumRows())*256;});return lane.points.empty();
   });
+  reconcileEnvelopeLinks(*this,s);
   std::set<uint64_t> surviving;
   for (const auto &[index, track] : tracks) surviving.insert(track.id);
   std::erase_if(columnMutes, [&](const auto &entry) { return !surviving.contains(entry.first); });
@@ -114,6 +116,7 @@ void NativeSong::clonePatternAutomation(uint64_t source, uint64_t destination) {
   std::vector<MusicalAutomationLane> copies;
   for (const auto &lane : automation) if (lane.pattern == source) {
     auto copy = lane; copy.id = makeEntity().id; copy.pattern = destination;
+    for(const auto &link:std::vector<EnvelopeLink>(envelopeLinks))if(link.target.kind==EnvelopeTargetKind::Parameter&&link.target.owner==lane.id){auto l=link;l.target.owner=copy.id;envelopeLinks.push_back(l);}
     copies.push_back(std::move(copy));
   }
   automation.insert(automation.end(), copies.begin(), copies.end());
@@ -127,6 +130,7 @@ void NativeSong::clonePatternAutomation(uint64_t source, uint64_t destination) {
     auto lane=std::find_if(node.envelopes.begin(),node.envelopes.end(),[&](const auto &e){return e.pattern==source;});
     if(lane!=node.envelopes.end()){auto copy=*lane;copy.pattern=destination;node.envelopes.push_back(std::move(copy));}
   }
+  for(const auto &link:std::vector<EnvelopeLink>(envelopeLinks))if(link.target.kind==EnvelopeTargetKind::Graph&&link.target.pattern==source){auto l=link;l.target.pattern=destination;envelopeLinks.push_back(l);}
   std::vector<PreciseNote> notes;
   for(const auto &note:preciseNotes)if(note.pattern==source){auto copy=note;copy.pattern=destination;notes.push_back(copy);}
   preciseNotes.insert(preciseNotes.end(),notes.begin(),notes.end());
@@ -231,10 +235,12 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   signal.validate(graphTargets,graphPatterns,graphInstruments);
   signalRoutingGraph(mixer,signal).validate(trackIDs);
   for(const auto &definition:signal.library){check({definition.id,{},{},0});for(const auto &node:definition.nodes)check({node.id,{},{},0});}
+  for(const auto &e:envelopeBank)check({e.id,e.name,{},0});
+  validateEnvelopeBank(*this,s);
   if (bytes() > 16 * 1024 * 1024) throw std::invalid_argument("Native song metadata exceeds 16 MB");
 }
 bool NativeSong::hasAnnotations() const {
-  if (!signal.empty() || !preciseNotes.empty() || !performance.empty() || !automation.empty() || mixer.active() || !noteTracks.empty() || !columnMutes.empty()) return true;
+  if (!envelopeBank.empty() || !envelopeLinks.empty() || !signal.empty() || !preciseNotes.empty() || !performance.empty() || !automation.empty() || mixer.active() || !noteTracks.empty() || !columnMutes.empty()) return true;
   auto has = [](const NativeEntity &e) { return !e.name.empty() || !e.annotation.empty() || e.color; };
   for (const auto *items : {&patterns, &tracks, &samples, &instruments})
     for (const auto &[index, item] : *items) if (has(item)) return true;
@@ -255,6 +261,8 @@ size_t NativeSong::bytes() const {
     for (const auto &slot : sequence.orders) add(slot);
   }
   for (const auto &lane : automation) { n += sizeof(lane) + lane.plugin.size() + lane.points.size() * sizeof(AutomationPoint); for(const auto &p:lane.points) n+=p.formula.bytes(); }
+  n+=envelopeLinks.size()*sizeof(EnvelopeLink);
+  for(const auto &e:envelopeBank){n+=sizeof(e)+e.name.size()+e.shape.points.size()*sizeof(AutomationPoint);for(const auto &p:e.shape.points)n+=p.formula.bytes();}
   return n;
 }
 } // namespace Tracker

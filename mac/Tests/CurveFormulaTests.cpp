@@ -1,4 +1,5 @@
 #include "editor/MusicalAutomation.hpp"
+#include "editor/CurveFormulaReference.hpp"
 #include "GraphRealtimeAudit.hpp"
 #include <iostream>
 using namespace Tracker;
@@ -12,6 +13,7 @@ int main(){try {
   for(const std::string text:std::vector<std::string>{"", "process.exit()", "foo", "sin(1,2)", "mix(1,2)", "1 +", "start = 3", std::string(40,'(')+"1"+std::string(40,')'),std::string(2049,'1')}){bool rejected=false;try{CurveFormula f(text);}catch(const std::invalid_argument &){rejected=true;}check(rejected,"Invalid/unbounded formula must reject");}
   std::vector<AutomationPoint> p{{256,.2,AutomationCurve::Scripted,CurveFormula("mix(start,end,t^2)")},{512,.8,AutomationCurve::Scripted,CurveFormula("start*(1-t)")}};
   check(automationValue(p,0,1024)==.2,"Before first anchor holds");check(std::abs(automationValue(p,384,1024)-.35)<1e-12,"Segment normalized progress");check(std::abs(automationValue(p,768,1024)-.4)<1e-12,"Last scripted node runs through envelope end");check(automationValue(p,1024,1024)==0,"Last node has t=1 at envelope end");
+  for(const auto &symbol:curveFormulaSymbols){CurveFormula f(std::string(symbol.insert));check(std::isfinite(f.evaluate(c)),"Reference and completion snippets compile and evaluate");}
   CurveFormula noise("noise(beats*2,17)");check(noise.evaluate(c)==noise.evaluate(c),"Noise is deterministic");
   std::cout<<"Bounded expression compiler and scripted segments passed\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

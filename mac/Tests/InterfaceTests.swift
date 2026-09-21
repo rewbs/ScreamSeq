@@ -798,6 +798,7 @@ struct InterfaceFailure: Error { let message: String }
       try patternPerformanceChecks()
       try pluginInstrumentsChecks()
       try instrumentEnvelopeChecks()
+      try envelopeBankChecks()
       try navigationChecks()
       try noteTrackChecks()
       try pluginBrowserChecks()

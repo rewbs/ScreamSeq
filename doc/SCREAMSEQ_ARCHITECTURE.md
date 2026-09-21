@@ -43,3 +43,13 @@ Build on macOS with `SCREAMSEQ_BUILD_DIR=bin/mac-screamseq SCREAMSEQ_BUILD_JOBS=
 The root `.agents/skills/` contains the maintained project skill sources; copies can be installed under the user's Codex skills directory. Use separate worktrees/checkouts for concurrent Mac and Windows agents, and coordinate shared model/API/format edits explicitly. Neither agent should overwrite the other's platform tree or invent divergent musical semantics.
 
 Keep binaries, build caches, private sample packs and user songs out of Git. Include reproducible fixtures and licenses. Old local qualification documents may contain absolute paths: prefer repository-relative references in new documentation. Do not update upstream OpenMPT's Windows product branding just because the ScreamSeq sibling is renamed.
+
+Envelope reuse lives in `editor/EnvelopeBank.hpp/.cpp`: song-local templates,
+resolved stable target links, fitting, and bounded instrument baking. Playable
+points remain materialized in ordinary instrument/automation/graph data; the
+audio callback never reads a catalogue or resolves a template. Native metadata
+14 stores the bank. The Mac bridge adds revision-guarded bank operations and an
+atomic, separately revisioned app catalogue; `mac/AUTOMATION.md` documents the
+contract. `EnvelopeBank.swift` is shared by all native envelope editors.
+`CurveFormulaReference.hpp` supplies the public reference and autocomplete
+snippets; `FormulaWorkbench.swift` owns the expandable, guarded script draft.
