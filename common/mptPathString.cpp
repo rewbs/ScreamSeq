@@ -15,7 +15,7 @@
 #include <filesystem>
 #endif
 
-#if defined(MODPLUG_TRACKER) && MPT_OS_WINDOWS
+#if (defined(MODPLUG_TRACKER) || defined(OPENMPT_EDITOR_CORE)) && MPT_OS_WINDOWS
 #include <tchar.h>
 #endif
 
@@ -33,7 +33,7 @@ mpt::PathString RelativePathToAbsolute(const mpt::PathString &p,const mpt::PathS
 
 
 
-#if defined(MODPLUG_TRACKER) && MPT_OS_WINDOWS
+#if (defined(MODPLUG_TRACKER) || defined(OPENMPT_EDITOR_CORE)) && MPT_OS_WINDOWS
 
 
 

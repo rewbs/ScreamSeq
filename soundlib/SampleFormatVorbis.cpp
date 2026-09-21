@@ -177,6 +177,11 @@ bool CSoundFile::ReadVorbisSample(SAMPLEINDEX sample, FileReader &file)
 #if defined(MPT_WITH_VORBISFILE) || defined(MPT_WITH_STBVORBIS)
 
 	file.Rewind();
+	// A null pinned view makes stb_vorbis take its stdio path with no FILE.
+	// Reject empty/truncated probes before handing memory to either decoder.
+	if(!file.CanRead(sizeof(Ogg::PageHeader)) || !file.ReadMagic("OggS"))
+		return false;
+	file.Rewind();
 
 	long rate = 0;
 	int channels = 0;
@@ -275,31 +280,37 @@ bool CSoundFile::ReadVorbisSample(SAMPLEINDEX sample, FileReader &file)
 	std::size_t offset = 0;
 	int consumed = 0;
 	int error = 0;
-	stb_vorbis *vorb = stb_vorbis_open_pushdata(mpt::byte_cast<const unsigned char*>(data), mpt::saturate_cast<int>(dataLeft), &consumed, &error, nullptr);
+	std::unique_ptr<stb_vorbis, decltype(&stb_vorbis_close)> vorb(
+		stb_vorbis_open_pushdata(mpt::byte_cast<const unsigned char*>(data), mpt::saturate_cast<int>(dataLeft), &consumed, &error, nullptr),
+		&stb_vorbis_close);
+	// data_used is only defined on success. Validate before pointer arithmetic.
+	if(!vorb || consumed <= 0 || static_cast<std::size_t>(consumed) > dataLeft)
+		return false;
 	file.Skip(consumed);
 	data += consumed;
 	dataLeft -= consumed;
-	if(!vorb)
+	rate = stb_vorbis_get_info(vorb.get()).sample_rate;
+	channels = stb_vorbis_get_info(vorb.get()).channels;
+	if(rate <= 0 || channels <= 0 || channels > 2)
 	{
 		return false;
 	}
-	rate = stb_vorbis_get_info(vorb).sample_rate;
-	channels = stb_vorbis_get_info(vorb).channels;
-	if(rate <= 0 || channels <= 0)
-	{
-		return false;
-	}
-	while((error == VORBIS__no_error || (error == VORBIS_need_more_data && dataLeft > 0)))
+	while(dataLeft > 0 && (error == VORBIS__no_error || error == VORBIS_need_more_data))
 	{
 		int frame_channels = 0;
 		int decodedSamples = 0;
 		float **output = nullptr;
-		consumed = stb_vorbis_decode_frame_pushdata(vorb, mpt::byte_cast<const unsigned char*>(data), mpt::saturate_cast<int>(dataLeft), &frame_channels, &output, &decodedSamples);
+		consumed = stb_vorbis_decode_frame_pushdata(vorb.get(), mpt::byte_cast<const unsigned char*>(data), mpt::saturate_cast<int>(dataLeft), &frame_channels, &output, &decodedSamples);
+		// The entire file is pinned: need_more_data without progress is truncated,
+		// not an invitation to retry the same bytes forever.
+		if(consumed <= 0 || static_cast<std::size_t>(consumed) > dataLeft)
+			return false;
 		file.Skip(consumed);
 		data += consumed;
 		dataLeft -= consumed;
-		LimitMax(frame_channels, channels);
-		if(decodedSamples > 0 && (frame_channels == 1 || frame_channels == 2))
+		if(decodedSamples > 0 && (frame_channels != channels || !output))
+			return false;
+		if(decodedSamples > 0)
 		{
 			raw_sample_data.resize(raw_sample_data.size() + (channels * decodedSamples));
 			CopyAudio(mpt::audio_span_interleaved(raw_sample_data.data() + (offset * channels), channels, decodedSamples), mpt::audio_span_planar(output, channels, decodedSamples));
@@ -309,9 +320,8 @@ bool CSoundFile::ReadVorbisSample(SAMPLEINDEX sample, FileReader &file)
 				break;
 			}
 		}
-		error = stb_vorbis_get_error(vorb);
+		error = stb_vorbis_get_error(vorb.get());
 	}
-	stb_vorbis_close(vorb);
 
 #endif // VORBIS
 

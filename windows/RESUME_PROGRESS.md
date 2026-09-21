@@ -1,0 +1,58 @@
+# Windows continuation — 2026-09-21
+
+The user explicitly resumed the port and enabled Full access, which is active. Preserve all prior uncommitted/untracked work and the historical PAUSED_HANDOFF.md artifacts. Windows/Mac parity remains unfinished; this is a development checkpoint.
+
+## Implemented in this continuation
+
+- Worker-owned AssetOperations, revision guards, persistent private sample clipboard, atomic document replacement, native persistence and Undo/Redo. Imports validate actual preserved plugin aliases, adapter capacity and cache growth. Integer-valued JSON slots cannot bypass ownership checks.
+- Explicit waveform invalidation for PCM changes/imports/history. Unrelated patterns/waveforms share immutable buffers; loop-only edits retain their PCM overview. Snapshot retirement stays on the document worker.
+- Native sample editor: waveform selection, exact frame fields, Reverse, Normalize, Fade, Trim, normal/sustain loops, forward/ping-pong/reverse directions, private copy/cut/paste and import. All commands are in the palette, including loop controls when the inspector is short.
+- Selections use stable sample IDs; drafts capture target/revision. External changes cannot silently retarget Apply. Escape cancels drags/drafts. New document identities clear presentation state.
+- Dark native title/list/combo presentation, short-sample waveform drawing, initialized pattern/order choosers and keyboard-focus handling.
+- Retained DirectWrite layouts (4096 maximum) and event-driven idle rendering. Read-only operations with an unchanged view no longer trigger layout.
+- 32 MiB framed requests, matching response/Mac byte bounds. Newline detection scans chunks once. Exact-limit and one-byte-over tests use a real pipe.
+- Shared Windows/Mac graph-envelope replacement preserves unrelated ordering, history, Redo and playback for identical get/set.
+- Envelope preflight counts the complete candidate before excluding pending instrument links for materialization validation. Exact 16 MiB and one-byte-over cases are tested.
+- Shared hosted playback integrated with the app and WASAPI. The worker prepares/owns/retires it; UI/audio readers drop pointers after device join and before replacement. Callback requests above 4096 frames are split; processor faults silence output. AU/unresolved recipes reject without a dry substitute.
+- VST3 scanner and notices build beside the app. Plugin discovery/editor/state-editing frontend is still pending.
+- build.ps1 -Fresh and poisoned-empty-flag detection. Fresh Release builds use /EHsc and /O2 /Ob2 /DNDEBUG; earlier failed-configure artifacts are not used for qualification.
+
+## Build and verification
+
+Native ARM64 application: bin/windows-resume/Release/ScreamSeq.exe. Build with windows/build.ps1 -Architecture ARM64 -BuildDirectory bin/windows-resume -Target ScreamSeq,document-controller-tests -Jobs 3.
+
+Use the bundled real Python executable, not the WindowsApps alias. Set TMPDIR/TEMP/TMP to disposable scratch, SCREAMSEQ_TEST_EXE to the explicit build, and SCREAMSEQ_REFERENCE_PROJECT to the supplied Mac reference.
+
+| Suite | Fresh result |
+|---|---|
+| Portable shared core | 24 CTests passed after rebuilding current source |
+| Assets/imports/decoders | 6 CTests passed |
+| API transport/cache | 2 CTests passed, including exact request boundary |
+| Graph operations | 9 CTests passed, including unsorted envelopes and pending Redo |
+| Envelope operations/catalogue | 23 CTests passed, including complete metadata budget |
+| VST3 native provider | 17 CTests passed, including pending editor/SDK review regressions |
+| Registry review | 11 CTests passed, including capacity, identities, cleanup and concurrent writers |
+| Hosted project | PCM, automation, ownership, repeated failure, large callbacks and fault silence passed |
+| Scoped C++ allocation probe | Positive controls detected; zero new/delete in prepared renders; direct malloc/free and locks are outside coverage |
+| Actual app suites | All 51 tests passed in bin/windows-resume-application-qualified.log |
+
+Actual-app coverage includes worker publication failures, bounded/reused caches, Unicode, stale requests, native focus, save/reopen, private clipboard, large PCM requests, plugin-owned import rejection, sample/loop controls, cancelled drafts/drags, idle redraw and hosted partitioning. A loop-control regression caught disabled reverse/ping-pong flags; disabling now clears them as the shared model requires.
+
+The actual Mac project rendered through the application's worker at 44100/48000/96000 Hz with partitions 17/128/4096/8193. The original reference is preserved. Shared hosted fixtures retain the 1e-6 PCM bound; measured absolute-automation partition error was at most 3.241e-7. This is not Mac-native audio equivalence.
+
+## Measured performance and limits
+
+bin/windows-resume-wasapi-reference.json: 10.06-second silent hardware run of a disposable reference copy at 48000 Hz, 480-frame period. 1007 callbacks / 483360 frames, maximum callback 5026.9 microseconds; zero deadline overruns, starvation, processor faults, device errors and MMCSS errors. DSP ran normally; output was muted afterward. No route or system volume changed. This is bounded callback evidence, not acoustic/loopback or long-session proof.
+
+bin/windows-resume-idle-comparison.json: sequential ten-second stopped demo runs with builds finished. Preserved review build: 1.421875 CPU-seconds / 130 frames; resumed build: 0.25 CPU-seconds / one frame, including startup/shutdown. The measured resumed executable is preserved at bin/windows-resume-evidence/performance/ScreamSeq.exe, SHA-256 B3481423FAE7307F6C12751B2B6946155C2BF2B0841B74C218A7CD68BD109E0F. Later loop controls are not part of that measured artifact. Do not extrapolate this workload to total DAW capacity or sustained 60 Hz presentation.
+
+## Remaining work
+
+- Graph/curve/precise-note/instrument UI and app dispatch with real rack, parameter and conflict hooks. GraphOperations/EnvelopeOperations passing tests does not mean those endpoints are advertised.
+- VST3 discovery/editor/state-history workflow and path resolution; device selection; MIDI/recording/recovery; floating/saved layouts; accessibility and configurable keyboard parity.
+- Sample zoom, direct drawing/crossfade controls and audition. Their operation layers exist, but UI coverage is incomplete.
+- Sustained foreground presentation, long loaded audio/loopback, full malloc/free/lock audit, sanitizers, commercial plugins and cross-platform reopen.
+- Native ARM64 is tested; x64/ARM64EC bridging is not implemented/qualified.
+
+No commits, pushes, resets, stashes, user-song writes or subagent dispatches were performed. Close only task-owned QA PIDs. Earlier handoff/reference artifacts remain preserved; see the evidence manifest for hashes.
+

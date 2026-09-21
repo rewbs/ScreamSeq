@@ -12,7 +12,9 @@ std::unique_ptr<Document> decodeSamples(const std::vector<std::string> &paths) {
   auto decoded=std::make_unique<Document>();std::set<std::filesystem::path> unique;
   uint64_t encoded=0,pcm=0;
   for(size_t i=0;i<paths.size();++i) {
-    const auto path=std::filesystem::weakly_canonical(paths[i]);
+    const auto path=std::filesystem::weakly_canonical(std::filesystem::u8path(paths[i]));
+    const auto pathBytes=path.u8string();
+    const auto nativePath=::OpenMPT::mpt::PathString::FromUTF8(std::string(reinterpret_cast<const char *>(pathBytes.data()),pathBytes.size()));
     if(!unique.insert(path).second) throw std::invalid_argument("The same file appears more than once in the import");
     try {
       if(!std::filesystem::is_regular_file(path)) throw std::runtime_error("Not a regular file");
@@ -26,8 +28,8 @@ std::unique_ptr<Document> decodeSamples(const std::vector<std::string> &paths) {
       const auto &sample=s.GetSample(index);pcm+=uint64_t(sample.nLength)*sample.GetBytesPerSample();
       if(!sample.nLength || !sample.HasSampleData()) throw std::runtime_error("The file contains no sample audio");
       if(pcm>256*1024*1024) throw std::runtime_error("Decoded audio exceeds the 256 MB batch limit");
-      s.m_szNames[index]=::OpenMPT::mpt::ToCharset(s.GetCharsetInternal(),::OpenMPT::mpt::Charset::UTF8,path.stem().string());
-    } catch(const std::exception &e) {throw std::runtime_error(path.filename().string()+": "+e.what());}
+      s.m_szNames[index]=::OpenMPT::mpt::ToCharset(s.GetCharsetInternal(),::OpenMPT::mpt::Charset::UTF8,nativePath.GetFilenameBase().ToUTF8());
+    } catch(const std::exception &e) {throw std::runtime_error(nativePath.GetFilename().ToUTF8()+": "+e.what());}
   }
   return decoded;
 }
@@ -56,6 +58,9 @@ std::vector<Document::ImportedSample> Document::importSamples(const std::vector<
     for(size_t i=0;i<result.size();++i) {
       const auto slot=SAMPLEINDEX(result[i].sample);
       if(!song.ReadSampleFromSong(slot,decoded->song(),SAMPLEINDEX(i+1)))throw std::runtime_error("Cannot copy decoded sample");
+      // ReadSampleFromSong copies raw name bytes; decode uses a UTF-8 document,
+      // while an imported legacy song may retain a different internal charset.
+      song.m_szNames[slot]=::OpenMPT::mpt::ToCharset(song.GetCharsetInternal(),decoded->song().GetCharsetInternal(),decoded->song().GetSampleName(SAMPLEINDEX(i+1)));
       song.m_nSamples=std::max(song.m_nSamples,slot);
       if(instruments) {
         const auto instrument=INSTRUMENTINDEX(result[i].instrument);
@@ -101,6 +106,9 @@ Document::ImportedMultisample Document::importMultisample(std::vector<Multisampl
     for(size_t i=0;i<result.zones.size();++i) {
       const auto &zone=result.zones[i];const auto slot=SAMPLEINDEX(zone.sample);
       if(!song.ReadSampleFromSong(slot,decoded->song(),SAMPLEINDEX(i+1)))throw std::runtime_error("Cannot copy decoded sample");
+      // ReadSampleFromSong copies raw name bytes; decode uses a UTF-8 document,
+      // while an imported legacy song may retain a different internal charset.
+      song.m_szNames[slot]=::OpenMPT::mpt::ToCharset(song.GetCharsetInternal(),decoded->song().GetCharsetInternal(),decoded->song().GetSampleName(SAMPLEINDEX(i+1)));
       song.m_nSamples=std::max(song.m_nSamples,slot);
       for(int key=zone.lowNote;key<=zone.highNote;++key) {
         // Each recorded root plays at its original rate. Only gaps transpose.

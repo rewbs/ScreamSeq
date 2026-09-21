@@ -13,6 +13,7 @@ constexpr char magic[8] = {'R', 'S', 'O', 'N', 'G', 'S', '1', '\0'};
 constexpr char timingMagic[8] = {'R', 'S', 'O', 'N', 'G', 'S', '2', '\0'};
 constexpr char reverseMagic[8] = {'R', 'S', 'L', 'O', 'O', 'P', '1', '\0'};
 constexpr char envelopeMagic[8] = {'R', 'S', 'E', 'N', 'V', 'S', '1', '\0'};
+constexpr char structureMagic[8] = {'R', 'S', 'C', 'O', 'R', 'E', '1', '\0'};
 constexpr uint16_t storedFlags = 0xA3FF; // PCM/loop flags, modified, no-default-volume; always embedded.
 void require(bool value, const char *message) {
   if (!value)
@@ -56,6 +57,150 @@ struct Reader {
     return uint32_t(lo) | (uint32_t(u16()) << 16);
   }
 };
+void text(Writer &w, const std::string &value) {
+  require(value.size() <= maximumSongSnapshotBytes, "Oversized native text");
+  w.u32(uint32_t(value.size())); w.raw(value.data(), value.size());
+}
+std::string text(Reader &r) {
+  const auto value = r.raw(r.u32());
+  return {reinterpret_cast<const char *>(value.data()), value.size()};
+}
+bool samePatterns(const CSoundFile &source, const CSoundFile &base) {
+  if (source.GetNumChannels() != base.GetNumChannels()) return false;
+  for (PATTERNINDEX i = 0, end = std::max(source.Patterns.Size(), base.Patterns.Size()); i < end; ++i) {
+    if (source.Patterns.IsValidPat(i) != base.Patterns.IsValidPat(i)) return false;
+    if (!source.Patterns.IsValidPat(i)) continue;
+    const auto &a = source.Patterns[i], &b = base.Patterns[i];
+    if (a.GetNumRows() != b.GetNumRows() || a.GetNumChannels() != b.GetNumChannels() ||
+        a.GetRowsPerBeat() != b.GetRowsPerBeat() || a.GetRowsPerMeasure() != b.GetRowsPerMeasure() ||
+        a.GetTempoSwing() != b.GetTempoSwing() || a.GetColor() != b.GetColor() ||
+        a.GetName() != b.GetName()) return false;
+    // Upstream ModCommand/CPattern equality is musical, not byte-exact: it
+    // ignores dormant volume/parameter values. Document::Cell edits those too.
+    if (!std::equal(a.begin(), a.end(), b.begin(), b.end(), [](const ModCommand &x, const ModCommand &y) {
+          return x.note == y.note && x.instr == y.instr && x.volcmd == y.volcmd &&
+                 x.vol == y.vol && x.command == y.command && x.param == y.param;
+        })) return false;
+  }
+  return true;
+}
+bool sameOrders(const CSoundFile &source, const CSoundFile &base) {
+  if (source.Order.GetNumSequences() != base.Order.GetNumSequences()) return false;
+  for (SEQUENCEINDEX i = 0; i < source.Order.GetNumSequences(); ++i) {
+    const auto &a = source.Order(i), &b = base.Order(i);
+    if (a.size() != b.size() || !std::equal(a.begin(), a.end(), b.begin()) ||
+        a.GetRestartPos() != b.GetRestartPos() || a.GetName() != b.GetName()) return false;
+  }
+  return true;
+}
+// The module is an interchange base, not an exact snapshot. Correct only fields
+// it changed. This extension is parsed on a new unpublished CSoundFile, like PCM.
+void encodeStructure(Writer &w, const CSoundFile &source, const CSoundFile &base) {
+  const bool title = source.m_songName != base.m_songName;
+  const bool patterns = !samePatterns(source, base) || source.Patterns.Size() != base.Patterns.Size();
+  const bool orders = !sameOrders(source, base);
+  if (!title && !patterns && !orders) return;
+  w.raw(structureMagic, sizeof(structureMagic));
+  w.u8((title ? 1 : 0) | (patterns ? 2 : 0) | (orders ? 4 : 0));
+  if (title) text(w, source.m_songName); // Bytes in the archived core charset, not a module title field.
+  if (patterns) {
+    require(source.GetNumChannels() == base.GetNumChannels(), "Module changed the pattern channel inventory");
+    require(source.Patterns.Size() <= MAX_PATTERNS, "Invalid native pattern inventory");
+    w.u16(source.GetNumChannels()); w.u16(source.Patterns.Size());
+    uint16_t count = 0;
+    for (const auto &pattern : source.Patterns) if (pattern.IsValid()) ++count;
+    w.u16(count);
+    for (PATTERNINDEX index = 0; index < source.Patterns.Size(); ++index) {
+      if (!source.Patterns.IsValidPat(index)) continue;
+      const auto &p = source.Patterns[index];
+      require(p.GetNumRows() && p.GetNumRows() <= MAX_PATTERN_ROWS, "Invalid native pattern rows");
+      w.u16(index); w.u32(p.GetNumRows());
+      w.u32(p.GetRowsPerBeat()); w.u32(p.GetRowsPerMeasure()); w.u32(p.GetColor());
+      text(w, p.GetName());
+      require(p.GetTempoSwing().size() <= MAX_ROWS_PER_BEAT, "Oversized native pattern groove");
+      w.u32(uint32_t(p.GetTempoSwing().size()));
+      for (auto value : p.GetTempoSwing()) w.u32(value);
+      // Explicit fields: never depend on enum size, packing, padding or host endian.
+      for (const auto &cell : p) {
+        w.u8(cell.note); w.u8(cell.instr); w.u8(uint8_t(cell.volcmd));
+        w.u8(cell.vol); w.u8(uint8_t(cell.command)); w.u8(cell.param);
+      }
+    }
+  }
+  if (orders) {
+    require(source.Order.GetNumSequences() == base.Order.GetNumSequences(), "Module changed the sequence inventory");
+    w.u16(source.Order.GetNumSequences());
+    for (const auto &seq : source.Order) {
+      require(seq.size() <= MAX_ORDERS, "Invalid native order inventory");
+      w.u32(uint32_t(seq.size())); w.u16(seq.GetRestartPos());
+      text(w, ::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8, seq.GetName()));
+      for (auto pattern : seq) w.u16(pattern);
+    }
+  }
+}
+void restoreStructure(CSoundFile &base, Reader &r, uint64_t &decoded) {
+  const auto flags = r.u8();
+  require(flags && !(flags & ~7u), "Unsupported native structure flags");
+  if (flags & 1) base.m_songName = text(r);
+  if (flags & 2) {
+    const auto channels = r.u16(), slots = r.u16(), count = r.u16();
+    require(channels && channels <= MAX_BASECHANNELS && channels == base.GetNumChannels() &&
+      slots <= MAX_PATTERNS && count <= slots, "Invalid native pattern inventory");
+    base.Patterns.DestroyPatterns();
+    base.Patterns.ResizeArray(slots); // Construct destination-owned pattern back-references.
+    int previous = -1;
+    for (uint16_t entry = 0; entry < count; ++entry) {
+      const auto index = r.u16(); const auto rows = r.u32();
+      require(index < slots && int(index) > previous && rows && rows <= MAX_PATTERN_ROWS, "Invalid native pattern entry");
+      const auto beat = r.u32(), measure = r.u32(), color = r.u32();
+      require((!beat && !measure) || CPattern::IsValidSignature(beat, measure), "Invalid native pattern signature");
+      auto name = text(r);
+      const auto size = r.u32();
+      require(size <= MAX_ROWS_PER_BEAT, "Invalid native pattern groove length");
+      Reader groove{r.raw(size_t(size) * 4)};
+      TempoSwing swing;
+      uint64_t total = 0;
+      for (uint32_t i = 0; i < size; ++i) {
+        const auto value = groove.u32();
+        require(value && value <= 16u * TempoSwing::Unity, "Invalid native pattern groove duration");
+        swing.push_back(value); total += value;
+      }
+      require(!size || total == uint64_t(size) * TempoSwing::Unity, "Unnormalized native pattern groove");
+      const auto cells = uint64_t(rows) * channels;
+      decoded += cells * sizeof(ModCommand);
+      require(decoded <= maximumSongSnapshotBytes, "Decoded native song exceeds 512 MB");
+      Reader data{r.raw(size_t(cells) * 6)}; // Reject truncated payload before allocating cells.
+      require(base.Patterns.Insert(index, rows), "Cannot allocate native pattern");
+      auto &p = base.Patterns[index];
+      if (beat) require(p.SetSignature(beat, measure), "Invalid native pattern signature");
+      p.SetName(std::move(name)); p.SetColor(color);
+      // SetTempoSwing normalizes user weights, but Normalize is not idempotent:
+      // a valid normalized extreme can exceed the input weight clamp. This is a
+      // mutable, unpublished pattern; restore the validated native values exactly.
+      const_cast<TempoSwing &>(p.GetTempoSwing()) = std::move(swing);
+      for (auto &cell : p) {
+        cell.note = data.u8(); cell.instr = data.u8(); cell.volcmd = VolumeCommand(data.u8());
+        cell.vol = data.u8(); cell.command = EffectCommand(data.u8()); cell.param = data.u8();
+      }
+      previous = index;
+    }
+  }
+  if (flags & 4) {
+    const auto sequences = r.u16();
+    require(sequences && sequences == base.Order.GetNumSequences(), "Invalid native sequence inventory");
+    for (SEQUENCEINDEX i = 0; i < sequences; ++i) {
+      const auto count = r.u32(); const auto restart = r.u16();
+      require(count <= MAX_ORDERS, "Invalid native order inventory");
+      const auto name = text(r);
+      auto unicode = ::OpenMPT::mpt::ToUnicode(::OpenMPT::mpt::Charset::UTF8, name);
+      require(::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8, unicode) == name, "Invalid native sequence name encoding");
+      Reader data{r.raw(size_t(count) * 2)};
+      auto &seq = base.Order(i); seq.resize(ORDERINDEX(count));
+      seq.SetName(std::move(unicode)); seq.SetRestartPos(restart);
+      for (auto &pattern : seq) pattern = data.u16(); // Keep skip/stop and unallocated references exactly.
+    }
+  }
+}
 InstrumentEnvelope &envelope(ModInstrument &instrument, uint8_t kind) {
   return kind == 0 ? instrument.VolEnv : kind == 1 ? instrument.PanEnv : instrument.PitchEnv;
 }
@@ -256,7 +401,26 @@ std::vector<std::byte> encodeSampleArchive(const CSoundFile &source, const CSoun
       for (const auto &point : value) { w.u16(point.tick); w.u8(point.value); }
     }
   }
+  encodeStructure(w, source, base);
   return std::move(w.bytes);
+}
+void validateSongStructureExport(const CSoundFile &source, const CSoundFile &converted) {
+  require(source.m_songName == converted.m_songName &&
+    ::OpenMPT::mpt::ToUnicode(source.GetCharsetInternal(), source.m_songName) ==
+      ::OpenMPT::mpt::ToUnicode(converted.GetCharsetInternal(), converted.m_songName),
+    "Module export would change the song title. Save a .resonance project.");
+  require(samePatterns(source, converted),
+    "Module export would change pattern allocation, cells or settings. Save a .resonance project.");
+  // Native snapshots restore the archived charset; standalone modules do not.
+  // Equal name bytes must also decode to the same text in the reopened module.
+  for (PATTERNINDEX i = 0; i < source.Patterns.Size(); ++i) {
+    if (!source.Patterns.IsValidPat(i)) continue;
+    require(::OpenMPT::mpt::ToUnicode(source.GetCharsetInternal(), source.Patterns[i].GetName()) ==
+      ::OpenMPT::mpt::ToUnicode(converted.GetCharsetInternal(), converted.Patterns[i].GetName()),
+      "Module export would change pattern names. Save a .resonance project.");
+  }
+  require(sameOrders(source, converted),
+    "Module export would change order lists or sequence settings. Save a .resonance project.");
 }
 void validateSampleExport(const CSoundFile &source, const CSoundFile &converted) {
   for (SAMPLEINDEX i = 1; i <= source.GetNumSamples(); ++i) {
@@ -399,6 +563,11 @@ void restoreSampleArchive(CSoundFile &base, std::span<const std::byte> archive) 
   bool hasReverse = false, hasEnvelopes = false;
   while (r.at != archive.size()) {
     const auto extension = r.raw(sizeof(reverseMagic));
+    if (std::memcmp(extension.data(), structureMagic, sizeof(structureMagic)) == 0) {
+      restoreStructure(base, r, decoded);
+      require(r.at == archive.size(), "Trailing or duplicate native structure extension");
+      break;
+    }
     if (std::memcmp(extension.data(), envelopeMagic, sizeof(envelopeMagic)) == 0) {
       require(!hasEnvelopes, "Duplicate native envelope extension"); hasEnvelopes = true;
       const auto count = r.u16(); require(count && count <= uint32_t(instruments) * 3, "Invalid native envelope inventory");

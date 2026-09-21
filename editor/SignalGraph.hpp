@@ -5,6 +5,8 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <algorithm>
+#include <utility>
 #include "MixerGraph.hpp"
 #include "MusicalAutomation.hpp"
 
@@ -25,6 +27,14 @@ struct SignalPatternEnvelope {
   std::vector<AutomationPoint> points;
   bool operator==(const SignalPatternEnvelope &) const = default;
 };
+// Editing one pattern must preserve unrelated envelope order. Re-sorting the
+// collection can turn an identical get/set into history and discard pending Redo.
+inline void replaceSignalEnvelope(std::vector<SignalPatternEnvelope> &envelopes, SignalPatternEnvelope lane) {
+  const auto found=std::find_if(envelopes.begin(),envelopes.end(),[&](const auto &e){return e.pattern==lane.pattern;});
+  if(lane.points.empty()) {if(found!=envelopes.end()) envelopes.erase(found);}
+  else if(found!=envelopes.end()) *found=std::move(lane);
+  else envelopes.push_back(std::move(lane));
+}
 struct SignalNode {
   uint64_t id = 0;
   SignalNodeKind kind = SignalNodeKind::Plugin;

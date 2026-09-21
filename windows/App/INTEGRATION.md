@@ -1,0 +1,208 @@
+# Windows document-worker application integration
+
+This is an editing integration, not a full Mac-parity release. The preserved
+`bin/windows-checkpoints/workspace-preview/ScreamSeq.exe` still matches its
+BuildInfo executable hash. No commits, resets, stashes or pushes were performed.
+
+## Owner boundaries
+
+`Session/DocumentController` constructs, owns and disposes the shared Document on
+one serial worker. Native/module opening, complete validation, snapshot/cache
+creation, serialization, atomic saving and renderer preparation run there. It
+publishes `shared_ptr<const DocumentView>`; Main, drawing and input never read the
+live Document. The only App snapshotData call outside this worker is the separate
+non-GUI `--offline-test` harness.
+
+Public interface:
+
+- Constructor: `(inputPath, sessionIdentity, stopCallback, committedEditsCallback)`.
+- `view()` returns the immutable current cache.
+- `invoke(method, params)` returns `future<Json>`. Write params must still contain
+  expectedRevision: it is checked against the worker's actual document revision
+  and selected sequence before stripping it for the operation implementation.
+- `prepare(rate, settings, loop, offline=false)` returns a borrowed
+  `HostedProjectPlayback*` in a future. The worker owns, replaces and disposes it.
+  The UI stops/joins the device and drops its playback/telemetry pointers before
+  requesting another preparation. Worker shutdown disposes playback first.
+- `service()` runs pending playback hooks on the UI owner, never on the worker.
+
+Main's guarded `await()` services hooks and native messages/drawing while work
+runs. Reentrant document mutations reject with busy rather than queueing edits
+against stale snapshots. Stop and navigation remain usable. Stop during renderer
+preparation cancels the subsequent start. Device shutdown precedes renderer
+replacement/disposal. Committed cell batches enqueue on the prepared renderer;
+queue overflow stops playback without claiming that the document commit failed.
+
+Document identity changes only after a candidate opens successfully. Structural
+operations stop playback only after operation-layer validation. Failed opens and
+failed saves retain the previous path, baseline and document. GUI Open/close
+protect dirty work with Save/Discard/Cancel; stale modal decisions reject.
+
+## Review fixes: atomic, Unicode-safe, bounded views
+
+Open builds the complete candidate `DocumentView`, checks its aggregate cache
+budget and validates JSON text before stopping playback or replacing anything.
+The entire `ProjectState` moves with its Document and generation (checked
+no-throw swap); conversion/allocation failure keeps the old dirty model, path,
+cursor and revision usable. Opaque AU class IDs retain their JSON type.
+Title/instrument names are transcoded from `GetCharsetInternal()` only at the
+view boundary; sequence names use Unicode-to-UTF-8, not JSON's wide-string array
+conversion. No song bytes/charset are normalized for display.
+
+Ordinary no-op/dry-run writes retain the exact view object. Patterns contain one
+six-byte wire cell each; immutable unchanged pattern and 256-bin waveform
+buffers are shared across edits. A one-cell edit checks/rebuilds its affected
+pattern, not every project cell. Structural/history changes compare cells
+explicitly, including otherwise-unused volume/parameter bytes. Display strings
+are formatted only for the visible grid; there is no per-project string array.
+Asset PCM mutations invalidate the edited sample's waveform. Imports, replacement
+and history refresh all waveforms; unrelated pattern edits retain them.
+
+The default cache budget is **64 MiB per complete view**, conservatively charging
+all patterns, waveforms, maps, JSON catalog copies, instrument keyboards and text.
+It is not a process working-set/OOM guarantee: shared engine/snapshot/history,
+temporary serializers, a candidate plus the previous view, API response copies
+and externally retained snapshots are separate. Growth operations reserve
+conservative metadata/path headroom before mutation. Over-budget opens fail
+without touching the current session. The worker retains retired views until
+UI references are released, so final large-cache disposal runs off the UI thread.
+Consumers must release views before destroying their controller.
+
+A transient postcommit publication failure is retried before successful return.
+Persistent failures explicitly say the operation **committed** and mark publication
+pending; the next app snapshot read retries on the worker before offering a
+revision guard. Completion-hook exceptions after a commit follow the same
+recovery path. This prevents a permanently stale cache/guard after recoverable
+failure; genuine sustained allocation exhaustion can still make reads fail.
+Never infer an unchanged document from a failed completion or replay it blindly.
+
+Native chooser/list selection notifications keep HWND focus. Only explicit
+commands return to the pattern. Sample focus-gained/lost notifications are not
+selection commands (otherwise Escape would immediately re-select the inspector).
+The regression runs on a never-switched private desktop, sends only targeted
+HWND messages, and checks `GetGUIThreadInfo`, foreground and clipboard sequence.
+
+## Registered operation layers
+
+DocumentOperations: `pattern.commands`, `sample.get`, `sample.waveform.get`,
+`pattern.apply`, `history.undo`, `history.redo`, `document.patch`, `pattern.create`,
+`order.edit`, `sequence.select`.
+
+TimelineOperations: `pattern.notes.get/set`, `document.timing.get/set`,
+`automation.formula.reference/preview`.
+
+Controller file operations: `document.save`, plus explicit Windows extension
+`document.open`. Save requires absolute UTF-8 paths and `.screamseq`/`.resonance`,
+explicit overwrite for existing files, and validates dry runs without publication
+or baseline changes. Open requires expectedRevision and explicit discard when
+unsaved. Successful-write request-ID deduplication and private PID pipe transport
+remain in the existing adapter/dispatch layers.
+
+AssetOperations is registered and retained on the worker, including imports,
+PCM, processing, loop settings, drawing, private clipboard and instrument edits.
+Import validation checks actual preserved plugin assignments, adapter capacity
+and cache growth. Instrument replacement rejects plugin-owned slots, including
+integer-valued JSON numbers such as 1.0. Failed validation precedes playback stop.
+GraphOperations and EnvelopeOperations are still separate tested operation
+layers, not app endpoints. Their future hooks must describe the real rack and
+parameter catalog, not empty fixture defaults.
+
+## Native UI
+
+Open/Save/Save As and Undo/Redo buttons and palette actions use the same worker
+operations as the pipe. Ordinary tracker note typing, instrument/effect parameter
+hex fields, volume/effect catalog entry, Delete, rectangular copy/paste, Ctrl-Z/Y,
+octave/step and pattern/order chooser controls are implemented. The sample
+sidebar is a bounded native scrolling list, not one button per sample. Drawing
+remains a virtual grid. Catalog cache revisions avoid resetting native selection
+on every musical edit. Inspector pins/Return, keyboard focus and cursor/playback
+state remain separate. Removed Return targets reject safely after Undo.
+
+The Samples inspector opens a waveform editor in the lower dock. Dragging or
+keyboard/range fields select audio; Reverse, Normalize, Fade, Trim and normal or
+sustain loop controls use guarded worker operations. Both loops support enable,
+disable and forward/ping-pong/reverse direction. In short inspectors these
+controls remain available through the command palette. Copy/cut/paste use the song's sample clipboard.
+Selections follow stable sample IDs. Drafts capture target and document revision;
+an external edit or changed sample cannot silently retarget Apply. Escape cancels
+a drag or field draft. New document identities clear selections and drafts.
+Native controls remain keyboard focusable, with dark list/combo drawing and a
+dark title bar. Drawing connects short samples as well as min/max bins.
+
+DirectWrite layouts are retained in a 4096-entry cache. Stopped, unchanged views
+exclude the ready swapchain from their wait set, avoiding an idle render loop.
+Document reads with the same view do not invalidate the layout. Playback and
+input still schedule frames, and worker waits respect swapchain readiness.
+
+## Hosted playback integration
+
+WASAPI now uses the worker-prepared shared renderer and PluginChain for ordinary
+and hosted songs. The common render method splits requests above 4096 frames,
+applies pending controls, publishes transport, renders, then processes the chain.
+Processor failure silences the complete callback and stops playback on the UI
+thread. No preparation, plugin state I/O or destruction occurs in that callback.
+Unavailable AU or unresolved VST3 recipes fail preparation; there is no dry
+substitution. The VST3 scanner and SDK notices are built beside the application.
+Plugin discovery/editor/state-editing UI remains pending.
+
+`--offline-hosted-test --project <copy> --report <json>` exercises the same
+preparation/render path at three rates and four partitions without a device.
+`--audio-test-silent --seconds <duration> --project <copy> --report <json>` runs
+the actual device callback and mutes only after DSP; it changes no system volume
+or route. Normal playback retains the explicitly labeled -20 dB monitor gain.
+
+See `../RESUME_PROGRESS.md` for current source/build evidence and open gates.
+
+Inspection disables audio, not editing. Its pattern clipboard is process-private
+and explicitly labeled; final tests assert the desktop clipboard sequence is
+unchanged. An earlier exploratory OLE clipboard-backup approach failed on
+restoration and was removed; it is not evidence of reliable arbitrary-format
+clipboard restoration. File dialogs suppress recent-document additions.
+
+## Historical editor-review-fix verification
+
+Built current shared source with:
+
+```
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/build.ps1 -Architecture ARM64 -BuildDirectory bin/windows-editor-review-fix -Target ScreamSeq
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/build.ps1 -Architecture ARM64 -BuildDirectory bin/windows-editor-review-fix -Target document-controller-tests
+```
+
+With SCREAMSEQ_TEST_EXE pointing to that Release/ScreamSeq.exe and
+SCREAMSEQ_REFERENCE_PROJECT pointing to the supplied reference:
+
+- `python -B windows/Tests/test_editor_app.py -v`: 20 passed, including the real
+  worker failure-injection/cache tests. Worker fixtures are generated on demand.
+- `python -B windows/Tests/test_workspace.py -v`: 16 passed.
+- `test_app_api.py`, `test_native_project_app.py`, `test_app.py`: each passed.
+- Python API client: 4 passed against the freshly built explicit test host.
+- Fresh ARM64 `windows/Tests/Api` CTest: 2 passed (including SessionCacheTests).
+- Fresh Editing and Timeline CTests: 1 passed each, linked against the current
+  review-fix engine libraries, not checkpoint/imported stale libraries.
+
+All fixture runs explicitly set TMPDIR/TEMP/TMP to the approved scratch root.
+Clipboard sequence and original reference/checkpoint executable hashes stayed
+unchanged. Review evidence is in the task scratch `editor-review-fix-evidence/`
+(logs, runner, results, executable/source hashes); it is not a release package.
+Regressions were observed red before their corresponding fixes: split worker/view
+open, independent legacy text serialization, Unicode sequence arrays, native
+focus loss (including Escape/list kill-focus), postcommit publication failure,
+and large-project dry-run/no-op/reuse/budget checks. The normal large cache
+fixture is 32 × 1024 × 64 cells; a 200-pattern fixture exercises actual-app budget
+rejection while preserving the dirty source, cursor and usable worker. These are
+functional checks, not 60-fps or whole-process memory qualification.
+
+The editor suite copies the actual Mac fixture, edits cells, Undo/Redo, saves and
+launches another app to read back changed cells and native counts. It also covers
+native dialog Save As/Open/Cancel/Discard, MOD filename/format, stale/invalid and
+no-op/dry-run guards, request-ID deduplication, failed atomic replacement with a
+locked destination, clipboard rectangles, retained inspectors/list selection,
+timeline save/reopen and 100-byte titles through structural Undo/save/reopen.
+A real outstanding structural worker job is observed while Stop and Down are
+handled in under the test's 500-ms bound. This is not a latency benchmark.
+
+At that historical checkpoint, hosted playback was blocked and no audio
+hardware was opened. Precise-note/curve/graph UI, VST3 frontend, MIDI,
+recovery, accessibility and complete keyboard customization remain separate
+work. No current Mac binary reopen or sustained presentation qualification is
+claimed. All task-owned QA processes were closed.

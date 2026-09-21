@@ -66,8 +66,7 @@
         const auto index=uint16_t(integer(p[@"pattern"],0,UINT16_MAX));require(song.Patterns.IsValidPat(index),"Pattern does not exist");const auto pattern=next.patterns.at(index).id;
         SignalPatternEnvelope lane;lane.pattern=pattern;lane.enabled=p[@"enabled"]?boolean(p[@"enabled"]):true;
         for(id point:array(p[@"points"],4096))lane.points.push_back(decodeAutomationPoint(point,uint32_t(song.Patterns[index].GetNumRows())*256-1));
-        std::erase_if(node->envelopes,[&](const auto &v){return v.pattern==pattern;});if(!lane.points.empty())node->envelopes.push_back(std::move(lane));
-        std::sort(node->envelopes.begin(),node->envelopes.end(),[](const auto &a,const auto &b){return a.pattern<b.pattern;});
+        replaceSignalEnvelope(node->envelopes,std::move(lane));
       } else if([method isEqual:@"graph.assign"]) {
         allowed(@[@"target",@"graph",@"amount",@"wet",@"dryRun"]);const auto target=bus(p[@"target"]);std::erase_if(graph.assignments,[&](const auto &a){return a.target==target;});
         if(p[@"graph"]!=NSNull.null){affected=definition(p[@"graph"]).id;graph.assignments.push_back({target,affected,number(p[@"amount"]?:@1,0,1),number(p[@"wet"]?:@1,0,1)});}

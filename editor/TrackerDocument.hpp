@@ -143,8 +143,8 @@ public:
 	const NativeSong &native() const { return native_; }
 	void restoreNative(NativeSong metadata); // validated project load, no history
 	void annotate(const std::function<void(NativeSong &)> &change);
-	std::vector<std::byte> serialize(); // External module conversion.
-	std::vector<std::byte> snapshotData(); // Exact native sample data for history/project/playback.
+	std::vector<std::byte> serialize(); // Unchecked module base; use save/validateModuleSampleExport for export.
+	std::vector<std::byte> snapshotData(); // Module + exact sample/timing/title/pattern/order corrections.
 	bool editable() const;
 	std::vector<std::byte> playbackData();
 	const std::string &sourcePath() const { return sourcePath_; }

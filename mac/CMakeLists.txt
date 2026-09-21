@@ -29,7 +29,7 @@ target_sources(TrackerEditor PRIVATE "${ROOT}/editor/SampleImport.cpp")
 target_sources(TrackerEditor PRIVATE "${ROOT}/editor/SongTiming.cpp" "${ROOT}/editor/PreciseNoteRuntime.cpp" "${ROOT}/editor/NoteRecording.cpp")
 target_sources(TrackerEditor PRIVATE "${ROOT}/editor/InstrumentEnvelopeTools.cpp" "${ROOT}/editor/EnvelopeBank.cpp")
 target_sources(TrackerEditor PRIVATE "${ROOT}/editor/StateVariableFilter.cpp" "${ROOT}/editor/FractionalDelay.cpp" "${ROOT}/editor/Distortion.cpp" "${ROOT}/editor/LofiMat.cpp" "${ROOT}/editor/CabinetVoicing.cpp" "${ROOT}/editor/CabinetSimulator.cpp" "${ROOT}/editor/Dynamics.cpp" "${ROOT}/editor/Maximizer.cpp" "${ROOT}/editor/SampleProcessing.cpp" "${ROOT}/editor/SampleWaveform.cpp" "${ROOT}/editor/SampleDocument.cpp" "${ROOT}/editor/SampleArchive.cpp" "${ROOT}/editor/SampleClipboard.cpp" "${ROOT}/editor/SampleSplice.cpp" "${ROOT}/editor/SampleCopy.cpp" "${ROOT}/editor/SampleDrawing.cpp" "${ROOT}/editor/SampleSnap.cpp" "${ROOT}/editor/SampleLoopCrossfade.cpp")
-add_library(TrackerMac STATIC Plugins/PluginPreset.mm Plugins/PluginLibrary.mm Plugins/PluginInventory.mm Bridge/TrackerSession.mm Audio/AudioDevice.mm Audio/MidiInput.mm Audio/AudioExport.mm Audio/NativeInstrument.cpp Audio/PatternCommandRuntime.cpp Audio/PatternPitchRuntime.cpp)
+add_library(TrackerMac STATIC Plugins/PluginPreset.mm Plugins/PluginLibrary.mm Plugins/PluginInventory.mm Bridge/TrackerSession.mm Audio/AudioDevice.mm Audio/MidiInput.mm Audio/AudioExport.mm)
 target_compile_options(TrackerMac PRIVATE -fobjc-arc)
 target_link_libraries(TrackerMac PUBLIC TrackerEditor "-framework AppKit" "-framework AudioToolbox" "-framework CoreAudio" "-framework CoreMIDI")
 add_executable(tracker-core-tests Tests/CoreTests.cpp)
@@ -185,12 +185,19 @@ add_library(RealtimeAudit SHARED Tests/RealtimeAudit.cpp)
 add_executable(render-audit Tests/RenderAudit.cpp)
 target_link_libraries(render-audit PRIVATE TrackerEditor RealtimeAudit)
 
-add_library(TrackerPlugins STATIC Audio/PluginAssignments.cpp Audio/AudioUnitHost.mm Audio/VST3Host.mm
-  ThirdParty/vst3/pluginterfaces/base/funknown.cpp ThirdParty/vst3/pluginterfaces/base/coreiids.cpp
-  ThirdParty/vst3/vstinitiids.cpp)
-target_include_directories(TrackerPlugins PRIVATE ThirdParty/vst3)
-target_compile_options(TrackerPlugins PRIVATE -fobjc-arc)
-target_link_libraries(TrackerPlugins PUBLIC TrackerEditor "-framework AppKit" "-framework Foundation" "-framework AudioToolbox")
+set(TRACKER_HOSTED_BACKEND_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/Audio/AudioUnitHost.mm"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Audio/VST3Host.mm"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/vst3/pluginterfaces/base/funknown.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/vst3/pluginterfaces/base/coreiids.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/vst3/vstinitiids.cpp")
+add_subdirectory("${ROOT}/editor/hosted" "${CMAKE_CURRENT_BINARY_DIR}/hosted")
+target_include_directories(TrackerHosted PRIVATE ThirdParty/vst3)
+target_compile_options(TrackerHosted PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+target_link_libraries(TrackerHosted PUBLIC "-framework AppKit" "-framework Foundation" "-framework AudioToolbox")
+# Preserve the existing Mac target name without compiling another scheduler.
+add_library(TrackerPlugins INTERFACE)
+target_link_libraries(TrackerPlugins INTERFACE TrackerHosted)
 target_link_libraries(TrackerMac PUBLIC TrackerPlugins)
 add_executable(plugin-scanner Plugins/Scanner.mm)
 target_compile_options(plugin-scanner PRIVATE -fobjc-arc)
@@ -456,7 +463,7 @@ add_executable(signal-graph-tests Tests/SignalGraphTests.cpp)
 target_link_libraries(signal-graph-tests PRIVATE TrackerEditor)
 add_test(NAME signal-graph COMMAND signal-graph-tests)
 
-target_sources(TrackerPlugins PRIVATE Audio/NativeSignalGraph.cpp)
+# NativeSignalGraph.cpp is compiled once by TrackerHosted.
 add_executable(native-signal-graph-tests Tests/NativeSignalGraphTests.mm)
 target_compile_options(native-signal-graph-tests PRIVATE -fobjc-arc)
 target_link_libraries(native-signal-graph-tests PRIVATE TrackerMac)

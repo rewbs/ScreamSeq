@@ -12,15 +12,21 @@ ScreamSeq is the renamed Resonance application and an independent derivative of 
 | macOS host | `mac/Audio/` | Core Audio, CoreMIDI, AU/VST3 hosting, plugin adapters, graph instances and export |
 | macOS session/API | `mac/Bridge/` | Objective-C++ bridge, validation, API dispatch, plugin state and native serialization |
 | macOS UI | `mac/App/` | AppKit controls, retained docks, Metal pattern grid, inspectors and local API server |
-| Windows sibling | `windows/` (to be developed) | Native Windows UI, device/plugin adapters and local API transport; shared musical semantics |
+| Windows sibling | `windows/` | Win32/Direct2D editor, document worker, WASAPI, VST3 provider and PID-scoped named-pipe API; see `windows/App/INTEGRATION.md` for supported features and limits |
 
 The renderer and document are separate. Edits occur on the document worker; playback owns its prepared copy. AppKit controls belong to the main thread. Plugins and graph recipes must be prepared outside audio processing, and unsafe structural mutations must not race a live renderer. Do not move Foundation/AppKit into portable `editor/` code.
 
 Sample-instrument graphs are prepared independently per instrument/raw channel and feed the ordinary mixer through sample-only OpenMPT adapters. Their NNA voices keep their original routing. `NativeSignalGraph` handles both that stage and channel/group graphs with a shared 256-processor/256-MiB host-storage budget. Graph automation sources store per-pattern curves using stable IDs, compiled formulas and the shared evaluator. Both additions require native metadata 13. See `mac/GRAPH_WORKFLOW.md` for the current signal order, activity commands, editing semantics and limits.
 
-The current native project wrapper is a versioned binary property list containing an exact song snapshot, metadata and plugin state. Metadata and container versions are separate. Windows needs a compatible portable codec (or a carefully extracted shared persistence layer), rather than treating `.screamseq` as a renamed module or silently dropping native fields. Plugin recipes use stable class identity; local paths are resolution hints. AU remains macOS-only. Missing platform plugins should preserve opaque state and be reported, not replaced silently.
+The current native project wrapper is a versioned binary property list containing an exact song snapshot, metadata and plugin state. Metadata and container versions are separate. `windows/Project/` implements the compatible portable codec and preservation-aware atomic saves. Plugin recipes use stable class identity; local paths are resolution hints. AU remains macOS-only. Missing platform plugins preserve opaque state and reject playback preparation rather than being replaced silently.
 
 ## Build and qualification
+
+Windows: `./windows/build.ps1 -Architecture ARM64 -BuildDirectory bin/windows-dev -Test`.
+Use `-Fresh` after a failed initial compiler configuration. The app and VST3 scanner
+are in the selected build's `Release/` directory. Native sample editing, offline
+hosted renders and private-PID integration tests live in `windows/Tests/`; current
+evidence and remaining parity work are recorded in `windows/RESUME_PROGRESS.md`.
 
 Build on macOS with `SCREAMSEQ_BUILD_DIR=bin/mac-screamseq SCREAMSEQ_BUILD_JOBS=4 bash mac/build.sh`. Output is `ScreamSeq.app`; `RESONANCE_BUILD_DIR` and `RESONANCE_BUILD_JOBS` remain accepted aliases. Set `RESONANCE_DEVELOPMENT_BUILD=1` for a separate development bundle identity. AppKit/Metal and Core Audio are the current native foundation; keep high-frequency drawing out of layout-heavy per-cell view trees.
 

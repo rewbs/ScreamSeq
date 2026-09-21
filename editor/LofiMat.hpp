@@ -20,7 +20,7 @@ class LofiMat {
   bool first_ = true;
   std::array<Ramp, 8> controls_;
   std::array<double, 2> held_{}, filtered_{};
-  mpt::lcg_musl random_{1};
+  ::mpt::lcg_musl random_{1};
 public:
   using Frame = std::array<double, 2>;
   explicit LofiMat(double rate) : rate_(rate) {}

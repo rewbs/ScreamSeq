@@ -19,14 +19,57 @@
 }
 @end
 namespace Tracker {
-void validatePluginCapacity(const std::vector<PluginState> &states, size_t mixerBuses) {
-  validatePluginAssignments(states);
-  static_assert(maximumNativeAdapters == OpenMPT::MAX_MIXPLUGINS);
-  if (states.size() > maximumNativePlugins) throw std::invalid_argument("Use at most 64 native devices.");
-  const auto assigned = std::count_if(states.begin(), states.end(), [](const auto &state) { return state.instrument != 0; });
-  if (mixerBuses > maximumNativeAdapters || size_t(assigned) > maximumNativeAdapters - mixerBuses)
-    throw std::invalid_argument("Mixer buses and assigned plugin instruments together exceed 250. Remove a bus or unassign an instrument.");
-}
+static_assert(audioUnitMusicDeviceType == kAudioUnitType_MusicDevice);
+static_assert(kAudioUnitParameterUnit_Generic == 0 && kAudioUnitParameterUnit_Indexed == 1 &&
+  kAudioUnitParameterUnit_Boolean == 2 && kAudioUnitParameterUnit_Percent == 3 &&
+  kAudioUnitParameterUnit_Hertz == 8 && kAudioUnitParameterUnit_MIDINoteNumber == 11 &&
+  kAudioUnitParameterUnit_Decibels == 13 && kAudioUnitParameterUnit_Milliseconds == 24);
+// Platform storage stays private to Objective-C++; the facade and scheduler
+// are compiled once in TrackerHosted on both Mac and Windows.
+class MacPluginBackend final : public PluginBackend {
+  static constexpr uint32_t maximumFrames = 4096;
+  AudioUnit unit_ = nullptr;
+  std::array<float, maximumFrames> inputLeft_{}, inputRight_{}, outputLeft_{}, outputRight_{};
+  struct StereoBuffers { UInt32 count; AudioBuffer buffers[2]; };
+  static OSStatus input(void *, AudioUnitRenderActionFlags *, const AudioTimeStamp *, UInt32, UInt32, AudioBufferList *);
+  double latency_ = 0, tail_ = 0;
+  PluginDescriptor descriptor_;
+  std::string instanceID_;
+  uint32_t assignedInstrument_ = 0, midiChannel_ = 1;
+  std::vector<PluginInstrumentAlias> aliases_;
+  PluginTransport transport_;
+  double rate_ = 48000;
+  uint64_t renderPosition_ = 0;
+  std::unique_ptr<VST3Plugin> vst_;
+  std::vector<PluginAudioBus> buses_;
+  std::vector<uint32_t> auxiliaryInputs_, auxiliaryOutputs_;
+  std::array<std::unique_ptr<PluginAudioStorage>, 64> auInputs_, auxiliaryOutputBuffers_;
+  std::array<const float *, 64> inputSources_{};
+  void *editorWindow_ = nullptr, *editorDelegate_ = nullptr, *parameterListener_ = nullptr;
+public:
+  MacPluginBackend(const PluginState &, double rate, bool offline);
+  ~MacPluginBackend() override;
+  bool process(float *, uint32_t, uint64_t, const float *const *, uint32_t, const PluginTransport &) noexcept override;
+  bool parameter(uint32_t, double, uint32_t) noexcept override;
+  bool supportsSampleOffsetParameters() const noexcept override { return bool(vst_); }
+  void transport(const PluginTransport &t) noexcept override { transport_ = t; }
+  bool midi(uint8_t, uint8_t, uint8_t) noexcept override;
+  const std::vector<PluginAudioBus> &buses() const override { return buses_; }
+  const float *auxiliaryOutput(uint32_t bus) const noexcept override {
+    return bus < auxiliaryOutputBuffers_.size() && auxiliaryOutputBuffers_[bus] ? auxiliaryOutputBuffers_[bus]->interleaved.data() : nullptr;
+  }
+  std::vector<PluginParameter> parameters() const override;
+  std::vector<PluginProgram> programs() const override;
+  void loadProgram(const std::string &) override;
+  PluginState state() const override;
+  double latency() const override { return latency_; }
+  double tail() const override { return tail_; }
+  void showEditor() override;
+  void closeEditor() override;
+  bool editorOpen() const override;
+  bool popEdit(uint32_t &, float &) noexcept override;
+  static std::vector<PluginDescriptor> discover();
+};
 namespace {
 struct AUEditObserver {
   AUEventListenerRef listener = nullptr;
@@ -56,7 +99,7 @@ std::string string(CFStringRef value) {
   return [(__bridge NSString *)value UTF8String];
 }
 } // namespace
-std::vector<PluginDescriptor> NativePlugin::discover() {
+std::vector<PluginDescriptor> MacPluginBackend::discover() {
   std::vector<PluginDescriptor> result;
   for (auto type : {kAudioUnitType_Effect, kAudioUnitType_MusicDevice}) {
     AudioComponentDescription filter{type, 0, 0, 0, 0};
@@ -75,16 +118,7 @@ std::vector<PluginDescriptor> NativePlugin::discover() {
   }
   return result;
 }
-std::vector<PluginDescriptor> NativePlugin::builtins() {
-  std::vector<PluginDescriptor> result;
-  for (const auto &effect : nativeEffects()) {
-    PluginDescriptor descriptor;
-    descriptor.format = "Built-in"; descriptor.name = effect.name; descriptor.classID = effect.identifier;
-    result.push_back(std::move(descriptor));
-  }
-  return result;
-}
-NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
+MacPluginBackend::MacPluginBackend(const PluginState &state, double rate, bool offline)
     : descriptor_(state.descriptor), instanceID_(state.instanceID), assignedInstrument_(state.instrument),
       midiChannel_(state.midiChannel), aliases_(state.aliases), rate_(rate) {
   validatePluginAssignments({&state, 1});
@@ -97,21 +131,6 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
   };
   validateBuses(state.auxiliaryInputs); validateBuses(state.auxiliaryOutputs);
   auxiliaryInputs_ = state.auxiliaryInputs; auxiliaryOutputs_ = state.auxiliaryOutputs;
-  if (descriptor_.format == "Built-in") {
-    if (descriptor_.type || descriptor_.subtype || descriptor_.manufacturer || descriptor_.instrument ||
-        state.instrument || !descriptor_.path.empty() || !auxiliaryOutputs_.empty())
-      throw std::invalid_argument("Invalid built-in effect configuration");
-    builtin_ = std::make_unique<NativeEffect>(descriptor_.classID, rate, state.state);
-    const bool sidechain = builtin_->definition().sidechain;
-    if (!auxiliaryInputs_.empty() && (!sidechain || auxiliaryInputs_ != std::vector<uint32_t>{1}))
-      throw std::invalid_argument("Built-in auxiliary input is unavailable");
-    descriptor_.name = builtin_->definition().name;
-    latency_ = builtin_->latency();
-    tail_ = builtin_->tail();
-    buses_ = {{0, 2, "Stereo input", true, true, true}, {0, 2, "Stereo output", false, true, true}};
-    if (sidechain) buses_.push_back({1,2,"Detector sidechain",true,!auxiliaryInputs_.empty(),true});
-    return;
-  }
   if (descriptor_.format == "VST3") {
     vst_ = std::make_unique<VST3Plugin>(state, rate, offline);
     latency_ = vst_->latency();
@@ -193,7 +212,7 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
       HostCallbackInfo callbacks{};
       callbacks.hostUserData = this;
       callbacks.beatAndTempoProc = [](void *ref, Float64 *beat, Float64 *tempo) -> OSStatus {
-        auto &s = *static_cast<NativePlugin *>(ref);
+        auto &s = *static_cast<MacPluginBackend *>(ref);
         if (beat)
           *beat = s.transport_.beat;
         if (tempo)
@@ -202,7 +221,7 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
       };
       callbacks.musicalTimeLocationProc = [](void *ref, UInt32 *delta, Float32 *numerator, UInt32 *denominator,
                                              Float64 *bar) -> OSStatus {
-        auto &s = *static_cast<NativePlugin *>(ref);
+        auto &s = *static_cast<MacPluginBackend *>(ref);
         if (delta)
           *delta =
               UInt32(std::ceil((std::ceil(s.transport_.beat) - s.transport_.beat) * 60 * s.rate_ / s.transport_.tempo));
@@ -216,7 +235,7 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
       };
       callbacks.transportStateProc = [](void *ref, Boolean *playing, Boolean *changed, Float64 *frame, Boolean *cycle,
                                         Float64 *start, Float64 *end) -> OSStatus {
-        auto &s = *static_cast<NativePlugin *>(ref);
+        auto &s = *static_cast<MacPluginBackend *>(ref);
         if (playing)
           *playing = s.transport_.playing;
         if (changed)
@@ -250,7 +269,7 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
     }
   });
 }
-NativePlugin::~NativePlugin() {
+MacPluginBackend::~MacPluginBackend() {
   closeEditor();
   if (unit_)
     pluginMainCall([&] {
@@ -258,9 +277,9 @@ NativePlugin::~NativePlugin() {
       AudioComponentInstanceDispose(unit_);
     });
 }
-OSStatus NativePlugin::input(void *reference, AudioUnitRenderActionFlags *, const AudioTimeStamp *, UInt32 bus,
+OSStatus MacPluginBackend::input(void *reference, AudioUnitRenderActionFlags *, const AudioTimeStamp *, UInt32 bus,
                              UInt32 frames, AudioBufferList *buffers) {
-  auto &self = *static_cast<NativePlugin *>(reference);
+  auto &self = *static_cast<MacPluginBackend *>(reference);
   if (frames > maximumFrames || bus >= 64 || (bus && !self.auInputs_[bus]) || buffers->mNumberBuffers < 1 || buffers->mNumberBuffers > 2)
     return kAudioUnitErr_FormatNotSupported;
   for (UInt32 channel = 0; channel < buffers->mNumberBuffers; ++channel) {
@@ -278,14 +297,15 @@ OSStatus NativePlugin::input(void *reference, AudioUnitRenderActionFlags *, cons
   }
   return noErr;
 }
-bool NativePlugin::processBlock(float *buffer, uint32_t frames, uint64_t position, uint32_t offset) noexcept {
+bool MacPluginBackend::process(float *buffer, uint32_t frames, uint64_t position, const float *const *inputs, uint32_t offset, const PluginTransport &transport) noexcept {
+  transport_ = transport;
+  std::copy_n(inputs, inputSources_.size(), inputSources_.begin());
   renderPosition_ = position;
-  if (builtin_) return builtin_->process(buffer, frames, inputSources_[1] ? inputSources_[1] + offset*2 : nullptr);
   if (vst_) {
     vst_->transport(transport_);
     if (!vst_->process(buffer, frames, position, inputSources_.data(), offset)) return false;
     for (auto bus : auxiliaryOutputs_)
-      std::copy_n(vst_->auxiliaryOutput(bus), frames * 2, auxiliaryOutputBuffers_[bus]->interleaved.data() + offset * 2);
+      std::copy_n(vst_->auxiliaryOutput(bus), frames * 2, auxiliaryOutputBuffers_[bus]->interleaved.data());
     return true;
   }
   if (frames > maximumFrames)
@@ -316,7 +336,7 @@ bool NativePlugin::processBlock(float *buffer, uint32_t frames, uint64_t positio
       if (!output.buffers[ch].mData || output.buffers[ch].mDataByteSize < frames * sizeof(float)) return false;
     left = static_cast<float *>(output.buffers[0].mData);
     right = static_cast<float *>(output.buffers[bus.channels == 1 ? 0 : 1].mData);
-    auto *destination = bus.index ? auxiliaryOutputBuffers_[bus.index]->interleaved.data() + offset * 2 : buffer;
+    auto *destination = bus.index ? auxiliaryOutputBuffers_[bus.index]->interleaved.data() : buffer;
     for (uint32_t i = 0; i < frames; ++i) {
       const float l = flags & kAudioUnitRenderAction_OutputIsSilence ? 0 : left[i];
       const float r = flags & kAudioUnitRenderAction_OutputIsSilence ? 0 : right[i];
@@ -326,14 +346,12 @@ bool NativePlugin::processBlock(float *buffer, uint32_t frames, uint64_t positio
   }
   return true;
 }
-bool NativePlugin::parameter(uint32_t id, float value, uint32_t offset) noexcept {
-  if (builtin_) return !offset && builtin_->parameter(id, value);
+bool MacPluginBackend::parameter(uint32_t id, double value, uint32_t offset) noexcept {
   if (vst_)
     return vst_->parameter(id, value, offset);
   return AudioUnitSetParameter(unit_, id, kAudioUnitScope_Global, 0, value, offset) == noErr;
 }
-std::vector<PluginProgram> NativePlugin::programs() const {
-  if (builtin_) return {};
+std::vector<PluginProgram> MacPluginBackend::programs() const {
   if (vst_) return vst_->programs();
   std::vector<PluginProgram> result;
   pluginMainCall([&] {
@@ -355,36 +373,14 @@ std::vector<PluginProgram> NativePlugin::programs() const {
     }
   });return result;
 }
-void NativePlugin::loadProgram(const std::string &id) {
+void MacPluginBackend::loadProgram(const std::string &id) {
   if(vst_){vst_->loadProgram(id);return;}
   const auto available=programs();const auto found=std::find_if(available.begin(),available.end(),[&](const auto &p){return p.id==id;});
   if(found==available.end()||!found->loadable)throw std::invalid_argument("Factory preset no longer exists or cannot be loaded");
   pluginMainCall([&]{AUPreset preset{int32_t(std::stol(id.substr(3))),(__bridge CFStringRef)@(found->name.c_str())};
     checkAU(AudioUnitSetProperty(unit_,kAudioUnitProperty_PresentPreset,kAudioUnitScope_Global,0,&preset,sizeof(preset)),"Audio Unit rejected factory preset");});
 }
-std::vector<PluginParameter> NativePlugin::parameters() const {
-  if (builtin_) {
-    std::vector<PluginParameter> result;
-    for (const auto &p : builtin_->definition().parameters) {
-      PluginParameter value{p.id, std::string(p.name), p.minimum, p.maximum, builtin_->value(p.id), kAudioUnitParameterUnit_Generic};
-      value.step = p.step;
-      value.continuous = p.step == 0 && p.choices.empty();
-      if (p.unit == EffectUnit::Bits) value.unitLabel = "bits";
-      else if (p.unit == EffectUnit::Decibels) { value.unit = kAudioUnitParameterUnit_Decibels; value.unitLabel = "dB"; }
-      else if (p.unit == EffectUnit::Percent) { value.unit = kAudioUnitParameterUnit_Percent; value.unitLabel = "%"; }
-      else if (p.unit == EffectUnit::Hertz) { value.unit = kAudioUnitParameterUnit_Hertz; value.unitLabel = "Hz"; value.logarithmic = true; }
-      else if (p.unit == EffectUnit::Q) { value.unitLabel = "Q"; value.logarithmic = true; }
-      else if (p.unit == EffectUnit::MidiNote) { value.unit = kAudioUnitParameterUnit_MIDINoteNumber; value.unitLabel = "MIDI"; value.step = 1; }
-      else if (p.unit == EffectUnit::Semitones) value.unitLabel = "st";
-      else if (p.unit == EffectUnit::Milliseconds) { value.unit = kAudioUnitParameterUnit_Milliseconds; value.unitLabel = "ms"; value.logarithmic = p.minimum > 0; }
-      else if (p.unit == EffectUnit::Boolean) value.unit = kAudioUnitParameterUnit_Boolean;
-      else if (p.unit == EffectUnit::Choice) value.unit = kAudioUnitParameterUnit_Indexed;
-      for (auto choice : p.choices) value.choices.emplace_back(choice);
-      value.continuous = value.step == 0 && value.choices.empty() && value.unit != kAudioUnitParameterUnit_Boolean && value.unit != kAudioUnitParameterUnit_Indexed;
-      result.push_back(std::move(value));
-    }
-    return result;
-  }
+std::vector<PluginParameter> MacPluginBackend::parameters() const {
   if (vst_)
     return vst_->parameters();
   std::vector<PluginParameter> result;
@@ -420,7 +416,7 @@ std::vector<PluginParameter> NativePlugin::parameters() const {
   });
   return result;
 }
-PluginState NativePlugin::state() const {
+PluginState MacPluginBackend::state() const {
   if (vst_) {
     auto state = vst_->state();
     state.instanceID = instanceID_;
@@ -432,7 +428,6 @@ PluginState NativePlugin::state() const {
   state.instanceID = instanceID_;
   state.instrument = assignedInstrument_; state.midiChannel = midiChannel_; state.aliases = aliases_;
   state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;
-  if (builtin_) { state.state = builtin_->state(); return state; }
   pluginMainCall([&] {
     CFPropertyListRef value = nullptr;
     UInt32 size = sizeof(value);
@@ -455,271 +450,10 @@ PluginState NativePlugin::state() const {
   });
   return state;
 }
-std::vector<PluginInstrumentAlias> NativePlugin::assignments() const {
-  std::vector<PluginInstrumentAlias> result;
-  if (assignedInstrument_) result.push_back({assignedInstrument_, midiChannel_});
-  result.insert(result.end(), aliases_.begin(), aliases_.end());
-  return result;
-}
-PluginChain::PluginChain(const std::vector<PluginState> &states, double rate, bool offline,
-                         const std::vector<ParameterChange> &automation, uint64_t startFrame)
-    : sampleRate_(rate), offline_(offline), automation_(automation) {
-  validatePluginCapacity(states);
-  for (auto &state : states) {
-    auto plugin = std::make_shared<NativePlugin>(state, rate, offline);
-    plugin->automate(automation, plugins_.size(), rate, uint64_t(double(startFrame) * rate / 48000));
-    if (!state.bypass && !plugin->isInstrument()) {
-      latency_ += plugin->latency();
-      tail_ += plugin->tail();
-    }
-
-    plugins_.push_back(std::move(plugin));
-    instances_.push_back(state.instanceID);
-    instruments_.push_back(state.instrument);
-    bypass_.push_back(state.bypass);
-  }
-  double instrumentLatency = 0, instrumentTail = 0;
-  for (size_t i = 0; i < plugins_.size(); ++i)
-    if (plugins_[i]->isInstrument() && !bypass_[i] && instruments_[i]) {
-      instrumentLatency = std::max(instrumentLatency, plugins_[i]->latency());
-      instrumentTail = std::max(instrumentTail, std::max(2.0, plugins_[i]->tail()));
-    }
-  latency_ += instrumentLatency;
-  tail_ += instrumentTail;
-  dryDelay_.assign(size_t(std::llround(instrumentLatency * rate)) * 2, 0);
-  for (auto &plugin : plugins_)
-    if (plugin->isInstrument())
-      plugin->compensateLatency(uint32_t(std::max(0.0, std::round((instrumentLatency - plugin->latency()) * rate))));
-  for (auto &point : automation_) {
-    if (point.slot >= states.size() || !std::isfinite(point.value) || point.frame > uint64_t(48000) * 604800)
-      throw std::runtime_error("Invalid Audio Unit automation point");
-    point.frame = uint64_t(double(point.frame) * rate / 48000);
-  }
-  position_ = uint64_t(double(startFrame) * rate / 48000);
-  dryThrough_ = position_;
-  captureTails();
-}
-bool PluginChain::parameter(uint32_t slot, uint32_t id, float value) noexcept {
-  auto w = write_.load(std::memory_order_relaxed), r = read_.load(std::memory_order_acquire);
-  if (w - r >= queue_.size() || slot >= plugins_.size() || !std::isfinite(value))
-    return false;
-  queue_[w % queue_.size()] = {slot, id, value, 0};
-  write_.store(w + 1, std::memory_order_release);
-  return true;
-}
-bool PluginChain::process(float *buffer, uint32_t frames) noexcept {
-  applyPending();
-  if (frames > 4096) {
-    failed_ = true;
-    std::fill(buffer, buffer + frames * 2, 0);
-    return false;
-  }
-  if (mixer_) return finishMixer(buffer, frames);
-  if (!dryDelay_.empty() && dryThrough_ < position_ + frames) {
-    uint32_t offset = uint32_t(std::min<uint64_t>(frames, dryThrough_ > position_ ? dryThrough_ - position_ : 0));
-    for (uint32_t n = offset * 2; n < frames * 2; ++n) {
-      buffer[n] += dryDelay_[dryDelayPosition_];
-      dryDelay_[dryDelayPosition_] = 0;
-      dryDelayPosition_ = (dryDelayPosition_ + 1) % dryDelay_.size();
-    }
-    dryThrough_ = position_ + frames;
-  }
-  for (size_t i = 0; i < plugins_.size(); ++i) {
-    auto &plugin = *plugins_[i];
-    if (plugin.isInstrument()) {
-      // The engine renders instrument blocks. Complete the final partial block
-      // and release tails after the song ends, without rendering a block twice.
-      auto rendered = plugin.renderedThrough();
-      if (rendered < position_ + frames) {
-        uint32_t offset = uint32_t(std::min<uint64_t>(frames, rendered > position_ ? rendered - position_ : 0));
-        auto count = frames - offset;
-        tailBuffer_.fill(0);
-        if (!plugin.process(tailBuffer_.data(), count, position_ + offset))
-          failed_ = true;
-        if (!bypass_[i] && instruments_[i])
-          for (uint32_t n = 0; n < count * 2; ++n)
-            buffer[offset * 2 + n] += tailBuffer_[n];
-      }
-    }
-  }
-  for (size_t i = 0; i < plugins_.size(); ++i)
-    if (!bypass_[i] && !plugins_[i]->isInstrument() && !plugins_[i]->process(buffer, frames, position_))
-      failed_ = true;
-  position_ += frames;
-  if (failed_) {
-    std::fill(buffer, buffer + frames * 2, 0);
-    return false;
-  }
-  return true;
-}
-void PluginChain::applyPending() noexcept {
-  auto r = read_.load(std::memory_order_relaxed), w = write_.load(std::memory_order_acquire);
-  for (int n = 0; r != w && n < 128; ++n, ++r) {
-    auto change = queue_[r % queue_.size()];
-    if (!plugins_[change.slot]->parameter(change.id, change.value))
-      failed_ = true;
-  }
-  read_.store(r, std::memory_order_release);
-}
-std::vector<PluginState> PluginChain::states() {
-  while (read_.load() != write_.load())
-    applyPending();
-  std::vector<PluginState> out;
-  for (size_t i = 0; i < plugins_.size(); ++i) {
-    auto state = plugins_[i]->state();
-    state.bypass = bypass_[i];
-    state.instrument = instruments_[i];
-    out.push_back(std::move(state));
-  }
-  return out;
-}
-std::vector<PluginParameter> PluginChain::parameters(size_t slot) const {
-  return slot < plugins_.size() ? plugins_[slot]->parameters() : std::vector<PluginParameter>{};
-}
-
-std::vector<PluginDescriptor> NativePlugin::discoverVST3(const std::string &path) {
-  return VST3Plugin::discover(path);
-}
-double NativePlugin::tail() const { return builtin_ ? builtin_->tail() : tail_; }
-uint64_t NativePlugin::tailRevision() const noexcept { return builtin_ ? builtin_->tailRevision() : 0; }
-void NativePlugin::includeParameterRange(uint32_t id, float minimum, float maximum) noexcept {
-  if (builtin_) builtin_->includeParameterRange(id, minimum, maximum);
-}
-void PluginChain::captureTails() {
-  compiledTails_.resize(plugins_.size());
-  for (size_t i = 0; i < plugins_.size(); ++i) compiledTails_[i] = plugins_[i]->tail();
-}
-uint64_t PluginChain::tailRevision() const noexcept {
-  uint64_t revision = 0;
-  for (size_t i = 0; i < plugins_.size(); ++i)
-    if (!bypass_[i] && (!plugins_[i]->isInstrument() || instruments_[i])) revision += plugins_[i]->tailRevision();
-  return revision;
-}
-double PluginChain::tail() const {
-  double result = tail_;
-  for (size_t i = 0; i < plugins_.size(); ++i)
-    if (!bypass_[i] && (!plugins_[i]->isInstrument() || instruments_[i]))
-      result += std::max(0., plugins_[i]->tail() - compiledTails_[i]);
-  return result;
-}
-void NativePlugin::automate(const std::vector<ParameterChange> &points, size_t slot, double rate, uint64_t start) {
-  automation_.clear();
-  automationPosition_ = 0;
-  renderedThrough_ = start;
-  for (auto p : points)
-    if (p.slot == slot) {
-      p.frame = uint64_t(double(p.frame) * rate / 48000);
-      automation_.push_back(p);
-      includeParameterRange(p.id, p.value, p.value);
-    }
-  std::stable_sort(automation_.begin(), automation_.end(), [](auto &a, auto &b) { return a.frame < b.frame; });
-  while (automationPosition_ < automation_.size() && automation_[automationPosition_].frame < start) {
-    auto p = automation_[automationPosition_++];
-    if (!parameter(p.id, p.value))
-      throw std::runtime_error("Plugin rejected automation");
-  }
-}
-bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, std::span<const PluginAudioInput> inputs) noexcept {
-  if (frames > maximumFrames || position > UINT64_MAX - frames) return false;
-  inputSources_.fill(nullptr);
-  for (const auto &input : inputs) {
-    if (!input.bus || input.bus >= 64 || !input.samples || inputSources_[input.bus] ||
-        std::find(auxiliaryInputs_.begin(), auxiliaryInputs_.end(), input.bus) == auxiliaryInputs_.end()) return false;
-    inputSources_[input.bus] = input.samples;
-  }
-  if (musicalCount_) std::sort(musicalEvents_->begin(), musicalEvents_->begin() + musicalCount_, [](const auto &a, const auto &b) {
-    return a.frame != b.frame ? a.frame < b.frame : a.id != b.id ? a.id < b.id : a.sequence < b.sequence;
-  });
-  size_t musicalRead = 0;
-  if(musicalMIDICount_)std::sort(musicalMIDI_->begin(),musicalMIDI_->begin()+musicalMIDICount_,[](const auto &a,const auto &b){
-    return std::tie(a.frame,a.sequence)<std::tie(b.frame,b.sequence);
-  });
-  size_t midiRead=0;
-  uint32_t consumed = 0;
-  size_t events = 0;
-  while (consumed < frames) {
-    while(midiRead<musicalMIDICount_&&(*musicalMIDI_)[midiRead].frame<=position+consumed) {
-      const auto &event=(*musicalMIDI_)[midiRead++];
-      if(!midi(event.status,event.a,event.b))return false;
-    }
-    while (automationPosition_ < automation_.size() && automation_[automationPosition_].frame <= position + consumed) {
-      auto p = automation_[automationPosition_++];
-      if (++events > 256 || !parameter(p.id, p.value))
-        return false;
-    }
-    while (musicalRead < musicalCount_ && (*musicalEvents_)[musicalRead].frame <= position + consumed) {
-      const auto &point = (*musicalEvents_)[musicalRead++];
-      auto ramp = std::find_if(parameterRamps_.begin(), parameterRamps_.end(), [&](const auto &r) { return r.active && r.id == point.id; });
-      if (point.duration) {
-        if (ramp == parameterRamps_.end()) ramp = std::find_if(parameterRamps_.begin(), parameterRamps_.end(), [](const auto &r) { return !r.active; });
-        if (ramp == parameterRamps_.end()) return false;
-        *ramp = {point.id, true, {point.frame, point.duration, point.value, point.target}};
-      } else {
-        if (ramp != parameterRamps_.end()) ramp->active = false;
-        if (!parameter(point.id, float(point.value))) return false;
-      }
-    }
-    uint32_t count = frames - consumed;
-    for (auto &ramp : parameterRamps_) if (ramp.active) {
-      const auto at = position + consumed;
-      const double value=ramp.ramp.value(at);
-      if (!(vst_ ? vst_->parameter(ramp.id,value,0) : parameter(ramp.id,float(value)))) return false;
-      if (ramp.ramp.finished(at)) ramp.active = false;
-      else if(vst_){const auto remaining=ramp.ramp.duration-(at-ramp.ramp.start);if(remaining<count)count=uint32_t(remaining+1);}
-      else count = 1;
-    }
-    if (automationPosition_ < automation_.size())
-      count = uint32_t(std::min<uint64_t>(count, automation_[automationPosition_].frame - position - consumed));
-    if (musicalRead < musicalCount_)
-      count = uint32_t(std::min<uint64_t>(count, (*musicalEvents_)[musicalRead].frame - position - consumed));
-    if(midiRead<musicalMIDICount_)count=uint32_t(std::min<uint64_t>(count,(*musicalMIDI_)[midiRead].frame-position-consumed));
-    // VST3 queues carry both endpoints of a linear segment inside the audio
-    // buffer. Split only at musical events or ramp endings, not every sample.
-    if(vst_&&count>1)for(const auto &ramp:parameterRamps_)if(ramp.active)
-      if(!vst_->parameter(ramp.id,ramp.ramp.value(position+consumed+count-1),count-1))return false;
-    if (!count || !processBlock(buffer + consumed * 2, count, position + consumed, consumed))
-      return false;
-    consumed += count;
-    if (transport_.playing)
-      transport_.beat += count * transport_.tempo / (60 * rate_);
-  }
-  if (musicalRead) {
-    std::move(musicalEvents_->begin() + musicalRead, musicalEvents_->begin() + musicalCount_, musicalEvents_->begin());
-    musicalCount_ -= musicalRead;
-  }
-  if(midiRead) {
-    std::move(musicalMIDI_->begin()+midiRead,musicalMIDI_->begin()+musicalMIDICount_,musicalMIDI_->begin());
-    musicalMIDICount_-=midiRead;
-  }
-  if (!outputDelay_.empty())
-    for (uint32_t n = 0; n < frames * 2; ++n) {
-      std::swap(buffer[n], outputDelay_[outputDelayPosition_]);
-      outputDelayPosition_ = (outputDelayPosition_ + 1) % outputDelay_.size();
-    }
-  renderedThrough_ = position + frames;
-  return true;
-}
-bool NativePlugin::schedule(uint32_t id, float value, uint64_t frame) noexcept {
-  if (!musicalEvents_ || musicalCount_ == musicalEvents_->size() || !std::isfinite(value)) return false;
-  (*musicalEvents_)[musicalCount_++] = {id, value, frame, musicalSequence_++};
-  return true;
-}
-bool NativePlugin::scheduleRamp(uint32_t id, double from, double to, uint64_t frame, uint64_t duration) noexcept {
-  if (!musicalEvents_ || musicalCount_ == musicalEvents_->size() || !SampleRamp{frame,duration,from,to}.valid()) return false;
-  if (!duration || from == to) return schedule(id, float(to), frame);
-  (*musicalEvents_)[musicalCount_++] = {id, duration ? from : to, frame, musicalSequence_++, duration, to};
-  return true;
-}
-bool NativePlugin::scheduleMIDI(uint8_t status,uint8_t a,uint8_t b,uint64_t frame) noexcept {
-  if(!musicalMIDI_||musicalMIDICount_==musicalMIDI_->size()||status<0x80||status>=0xf0||a>127||b>127)return false;
-  (*musicalMIDI_)[musicalMIDICount_++]={frame,musicalSequence_++,status,a,b};return true;
-}
-bool NativePlugin::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
-  if (builtin_) return false;
+bool MacPluginBackend::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
   return vst_ ? vst_->midi(status, a, b) : MusicDeviceMIDIEvent(unit_, status, a, b, 0) == noErr;
 }
-void NativePlugin::showEditor() {
-  if (builtin_) throw std::runtime_error("This built-in effect uses the parameter controls in the Plugins panel.");
+void MacPluginBackend::showEditor() {
   if (![NSThread isMainThread]) {
     __block std::exception_ptr error;
     dispatch_sync(dispatch_get_main_queue(), ^{
@@ -794,8 +528,7 @@ void NativePlugin::showEditor() {
   [window center];
   [window makeKeyAndOrderFront:nil];
 }
-bool NativePlugin::editorOpen() const {
-  if (builtin_) return false;
+bool MacPluginBackend::editorOpen() const {
   if (vst_)
     return vst_->editorOpen();
   __block bool result = false;
@@ -808,15 +541,7 @@ bool NativePlugin::editorOpen() const {
     dispatch_sync(dispatch_get_main_queue(), check);
   return result;
 }
-std::vector<size_t> PluginChain::openEditors() const {
-  std::vector<size_t> slots;
-  for (size_t i = 0; i < plugins_.size(); ++i)
-    if (plugins_[i]->editorOpen())
-      slots.push_back(i);
-  return slots;
-}
-void NativePlugin::closeEditor() {
-  if (builtin_) return;
+void MacPluginBackend::closeEditor() {
   if (vst_) {
     vst_->closeEditor();
     return;
@@ -844,17 +569,7 @@ void NativePlugin::closeEditor() {
   else
     dispatch_sync(dispatch_get_main_queue(), close);
 }
-void PluginChain::delayDry(float *left, float *right, uint32_t frames, uint64_t position) noexcept {
-  if (!dryDelay_.empty())
-    for (uint32_t n = 0; n < frames; ++n) {
-      std::swap(left[n], dryDelay_[dryDelayPosition_]);
-      std::swap(right[n], dryDelay_[dryDelayPosition_ + 1]);
-      dryDelayPosition_ = (dryDelayPosition_ + 2) % dryDelay_.size();
-    }
-  dryThrough_ = position + frames;
-}
-bool NativePlugin::popEdit(uint32_t &id, float &value) noexcept {
-  if (builtin_) return false;
+bool MacPluginBackend::popEdit(uint32_t &id, float &value) noexcept {
   if (vst_)
     return vst_->popEdit(id, value);
   auto *observer = static_cast<AUEditObserver *>(parameterListener_);
@@ -865,85 +580,15 @@ bool NativePlugin::popEdit(uint32_t &id, float &value) noexcept {
   value = event.value;
   return true;
 }
-void PluginChain::endNotes() noexcept {
-  for (auto &plugin : plugins_)
-    if (plugin->isInstrument())
-      for (uint8_t ch = 0; ch < 16; ++ch)
-        plugin->midi(0xb0 | ch, 123, 0);
-}
-void PluginChain::showEditor(size_t slot) {
-  if (slot >= plugins_.size())
-    throw std::runtime_error("Select a plugin");
-  plugins_[slot]->showEditor();
-}
-bool PluginChain::popEdit(size_t slot, uint32_t &id, float &value) noexcept {
-  return slot < plugins_.size() && plugins_[slot]->popEdit(id, value);
-}
-
-bool PluginChain::graphController(uint8_t cc,uint8_t value) noexcept {if(signalGraph_)signalGraph_->controller(cc,value);if(sampleSignalGraph_)sampleSignalGraph_->controller(cc,value);return bool(signalGraph_)||bool(sampleSignalGraph_);}
-std::vector<SignalActivity> PluginChain::graphActivity() const {
-  auto result=signalGraph_?signalGraph_->activity():std::vector<SignalActivity>{};
-  if(sampleSignalGraph_)for(auto value:sampleSignalGraph_->activity()){const auto index=value.target-NativeSong::maximumID-1;if(index<sampleRoutes_.size()){value.target=sampleRoutes_[index].target;value.instrument=sampleRoutes_[index].instrumentID;value.role=3;result.push_back(value);}}
-  return result;
-}
-void PluginChain::beginMixer(uint32_t frames) noexcept {
-  if (!mixer_) return;
-  applyPending(); mixer_->begin(frames, mixer_->through());
-}
-void PluginChain::routeInstrument(size_t processor, const float *buffer) noexcept {
-  if (mixer_) {
-    mixer_->instrument(processor, 0, buffer);
-    for (const auto &bus : plugins_[processor]->buses()) if (!bus.input && bus.index && bus.active)
-      mixer_->instrument(processor, bus.index, plugins_[processor]->auxiliaryOutput(bus.index));
+namespace {
+class MacBackendFactory final : public PluginBackendFactory {
+public:
+  std::unique_ptr<PluginBackend> create(const PluginState &state, double rate, bool offline) override {
+    return std::make_unique<MacPluginBackend>(state, rate, offline);
   }
+  std::vector<PluginDescriptor> discover() override { return MacPluginBackend::discover(); }
+  std::vector<PluginDescriptor> discoverVST3(const std::string &path) override { return VST3Plugin::discover(path); }
+};
 }
-void PluginChain::processSampleGraph(size_t index,const float *left,const float *right,uint32_t frames) noexcept {
-  if(!sampleSignalGraph_||!mixer_||index>=sampleRoutes_.size()||frames>4096){failed_=true;return;}
-  for(uint32_t f=0;f<frames;++f){sampleGraphBuffer_[f*2]=left?left[f]:0;sampleGraphBuffer_[f*2+1]=right?right[f]:0;}
-  if(!sampleSignalGraph_->process(index,sampleGraphBuffer_.data(),frames,mixer_->through(),{})){failed_=true;return;}
-  mixer_->instrument(sampleRoutes_[index].processor,0,sampleGraphBuffer_.data());
-}
-const float *PluginChain::processMixerBus(size_t bus, const float *left, const float *right) noexcept {
-  if (!mixer_) return nullptr;
-  auto process = [](void *context, size_t processor, float *buffer, uint32_t frames, uint64_t position) noexcept {
-    auto &chain = *static_cast<PluginChain *>(context);
-    if(processor >= chain.plugins_.size()) {
-      const auto index=processor-chain.plugins_.size();
-      if(!chain.signalGraph_||!chain.signalGraph_->process(index,buffer,frames,position,chain.mixer_->inputs(processor)))return false;
-      for(auto port:chain.signalGraph_->outputs(index))chain.mixer_->instrument(processor,port,chain.signalGraph_->output(index,port));
-      return true;
-    }
-    const bool okay=chain.plugins_[processor]->process(buffer, frames, position, chain.mixer_->inputs(processor));
-    if(okay)for(const auto &bus:chain.plugins_[processor]->buses())if(!bus.input&&bus.index&&bus.active)chain.mixer_->instrument(processor,bus.index,chain.plugins_[processor]->auxiliaryOutput(bus.index));
-    return okay;
-  };
-  const auto *result = mixer_->process(bus, left, right, process, this);
-  if (bus == mixer_->plan().master) mixer_->complete();
-  if (mixer_->failed()) failed_ = true;
-  return result;
-}
-bool PluginChain::finishMixer(float *buffer, uint32_t frames) noexcept {
-  const uint64_t end = position_ + frames;
-  if (mixer_->through() < end) {
-    const uint32_t offset = uint32_t(mixer_->through() > position_ ? mixer_->through() - position_ : 0);
-    const auto count = frames - offset;
-    mixer_->begin(count, position_ + offset);
-    if(signalGraph_)signalGraph_->tail();
-    if(sampleSignalGraph_){sampleSignalGraph_->tail();for(size_t i=0;i<sampleRoutes_.size();++i)processSampleGraph(i,nullptr,nullptr,count);}
-    for (size_t i = 0; i < plugins_.size(); ++i) if (plugins_[i]->isInstrument() && !bypass_[i] && instruments_[i]) {
-      tailBuffer_.fill(0);
-      if (!plugins_[i]->process(tailBuffer_.data(), count, position_ + offset)) failed_ = true;
-      routeInstrument(i, tailBuffer_.data());
-    }
-    for (auto bus : mixer_->plan().order) {
-      auto result = processMixerBus(bus, nullptr, nullptr);
-      if (bus == mixer_->plan().master && result)
-        std::copy_n(result, count * 2, buffer + offset * 2);
-    }
-    if (mixerRenderer_) mixerRenderer_->processNativeTail(buffer + offset * 2, count);
-  }
-  position_ = end;
-  if (failed_) { std::fill_n(buffer, frames * 2, 0); return false; }
-  return true;
-}
+PluginBackendFactory &platformPluginBackendFactory() { static MacBackendFactory factory; return factory; }
 } // namespace Tracker

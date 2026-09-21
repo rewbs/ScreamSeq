@@ -14,7 +14,11 @@
 #include <filesystem>
 #include <cmath>
 #include <cstring>
+#if defined(_WIN32)
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 #include <cerrno>
 #include <system_error>
 
@@ -116,7 +120,7 @@ Document::Document(const std::vector<std::byte> &bytes)
 }
 std::unique_ptr<Document> Document::open(const std::string &path)
 {
-	std::ifstream f(path, std::ios::binary | std::ios::ate);
+	std::ifstream f(std::filesystem::u8path(path), std::ios::binary | std::ios::ate);
 	if(!f || f.tellg() <= 0 || f.tellg() > 512 * 1024 * 1024) throw std::runtime_error("Cannot open this file (maximum 512 MB).");
 	std::vector<std::byte> bytes(size_t(f.tellg()));
 	f.seekg(0);
@@ -259,6 +263,7 @@ void Document::validateModuleSampleExport()
 {
 	validateSamples();
 	auto converted = load(serialize());
+	validateSongStructureExport(*song_, *converted);
 	validateSampleExport(*song_, *converted);
 	validateTimingExport(*song_, *converted);
 }
@@ -266,11 +271,55 @@ void Document::save(const std::string &path, bool preserveSamples)
 {
 	validateSamples();
 	auto bytes = serialize();
+	auto converted = load(bytes);
+	validateSongStructureExport(*song_, *converted);
 	if(preserveSamples) {
-		auto converted = load(bytes);
 		validateSampleExport(*song_, *converted);
 		validateTimingExport(*song_, *converted);
 	}
+#if defined(_WIN32)
+	// Same-directory exclusive creation and replacement preserve the original on
+	// failure. UTF-8 document paths must not pass through the Windows ANSI codepage.
+	const auto destination = std::filesystem::u8path(path).wstring();
+	static std::atomic<uint64_t> saveSerial{0};
+	std::wstring temporary;
+	HANDLE file = INVALID_HANDLE_VALUE;
+	for(unsigned attempt = 0; attempt < 64; ++attempt)
+	{
+		temporary = destination + L".writing." + std::to_wstring(GetCurrentProcessId()) + L"."
+			+ std::to_wstring(GetTickCount64()) + L"." + std::to_wstring(saveSerial.fetch_add(1));
+		file = CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+		if(file != INVALID_HANDLE_VALUE) break;
+		const auto error = GetLastError();
+		if(error != ERROR_FILE_EXISTS && error != ERROR_ALREADY_EXISTS)
+			throw std::system_error(error, std::system_category(), "Cannot create save file");
+	}
+	if(file == INVALID_HANDLE_VALUE)
+		throw std::system_error(ERROR_FILE_EXISTS, std::system_category(), "Cannot create unique save file");
+	try
+	{
+		size_t written = 0;
+		while(written < bytes.size())
+		{
+			DWORD count = 0;
+			const auto chunk = static_cast<DWORD>(std::min<size_t>(bytes.size() - written, MAXDWORD));
+			if(!WriteFile(file, bytes.data() + written, chunk, &count, nullptr))
+				throw std::system_error(GetLastError(), std::system_category(), "Saving failed; original retained");
+			if(!count) throw std::runtime_error("Saving made no progress; original retained");
+			written += count;
+		}
+		if(!FlushFileBuffers(file)) throw std::system_error(GetLastError(), std::system_category(), "Cannot flush save file");
+		if(!CloseHandle(file)) throw std::system_error(GetLastError(), std::system_category(), "Cannot close save file");
+		file = INVALID_HANDLE_VALUE;
+		if(!MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+			throw std::system_error(GetLastError(), std::system_category(), "Cannot replace save file; original retained");
+	} catch(...)
+	{
+		if(file != INVALID_HANDLE_VALUE) CloseHandle(file);
+		DeleteFileW(temporary.c_str());
+		throw;
+	}
+#else
 	std::string temporary = path + ".writing.XXXXXX";
 	int fd = mkstemp(temporary.data());
 	if(fd < 0) throw std::system_error(errno, std::generic_category(), "Cannot create save file");
@@ -298,6 +347,7 @@ void Document::save(const std::string &path, bool preserveSamples)
 		unlink(temporary.c_str());
 		throw;
 	}
+#endif
 }
 bool Document::valid(int p, int r, int c) const
 {
@@ -535,7 +585,7 @@ void Document::resizeChannels(CSoundFile &song, int channels)
 }
 int Document::importSample(const std::string &path, int slot)
 {
-	std::ifstream file(path, std::ios::binary | std::ios::ate);
+	std::ifstream file(std::filesystem::u8path(path), std::ios::binary | std::ios::ate);
 	if(!file || file.tellg() <= 0 || file.tellg() > 256 * 1024 * 1024) throw std::runtime_error("Cannot import sample (maximum 256 MB).");
 	std::vector<std::byte> bytes(size_t(file.tellg()));
 	file.seekg(0);
@@ -544,12 +594,12 @@ int Document::importSample(const std::string &path, int slot)
 	if(!slot) slot = song_->GetNumSamples() + 1;
 	if(slot <= 0 || slot > song_->GetModSpecifications().samplesMax || slot >= MAX_SAMPLES) throw std::runtime_error("Sample slots are full.");
 	transaction([&](CSoundFile &s)
-	{s.m_nSamples=std::max(s.m_nSamples,SAMPLEINDEX(slot));FileReader reader(::mpt::as_span(bytes));if(!s.ReadSampleFromFile(slot,reader,false))throw std::runtime_error("Unsupported sample file. Try WAV or AIFF.");s.m_szNames[slot]=::OpenMPT::mpt::ToCharset(s.GetCharsetInternal(), ::OpenMPT::mpt::Charset::UTF8, std::filesystem::path(path).stem().string());s.GetSample(slot).PrecomputeLoops(s,false); });
+	{s.m_nSamples=std::max(s.m_nSamples,SAMPLEINDEX(slot));FileReader reader(::mpt::as_span(bytes));if(!s.ReadSampleFromFile(slot,reader,false))throw std::runtime_error("Unsupported sample file. Try WAV or AIFF.");s.m_szNames[slot]=::OpenMPT::mpt::ToCharset(s.GetCharsetInternal(), ::OpenMPT::mpt::Charset::UTF8, ::OpenMPT::mpt::PathString::FromUTF8(path).GetFilenameBase().ToUTF8());s.GetSample(slot).PrecomputeLoops(s,false); });
 	return slot;
 }
 int Document::importInstrument(const std::string &path, int slot)
 {
-	std::ifstream file(path, std::ios::binary | std::ios::ate);
+	std::ifstream file(std::filesystem::u8path(path), std::ios::binary | std::ios::ate);
 	if(!file || file.tellg() <= 0 || file.tellg() > 256 * 1024 * 1024) throw std::runtime_error("Cannot import instrument (maximum 256 MB).");
 	std::vector<std::byte> bytes(size_t(file.tellg()));
 	file.seekg(0);

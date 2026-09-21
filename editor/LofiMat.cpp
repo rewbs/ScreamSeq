@@ -18,7 +18,7 @@ void LofiMat::parameter(uint32_t id, double value, bool rendered) noexcept {
   if (id == 8) {
     // Reset the noise stream only. A seed edit does not reset the capture clock,
     // held audio or filter. Repeated unchanged targets are skipped by the owner.
-    random_ = mpt::lcg_musl(uint64_t(value)); return;
+    random_ = ::mpt::lcg_musl(uint64_t(value)); return;
   }
   if (id == 2) value = std::min(value, rate_);
   else if (id == 3 || id == 5 || id == 6) value /= 100;
