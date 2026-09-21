@@ -83,6 +83,7 @@ class DocumentController {
   std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters_;
   PlaybackHooks playbackHooks_;
   std::optional<std::filesystem::path> cataloguePath_;
+  std::optional<std::filesystem::path> libraryPath_;
   std::thread thread_; // Start only after every worker dependency is initialized.
   void loop();
   void onMain(std::function<void()> task);
@@ -100,7 +101,7 @@ public:
     std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,
     std::function<void()> beforeView={},size_t maxCacheBytes=64u*1024u*1024u,
     std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={},PlaybackHooks playbackHooks={},
-    std::optional<std::filesystem::path> cataloguePath={});
+    std::optional<std::filesystem::path> cataloguePath={},std::optional<std::filesystem::path> libraryPath={});
   ~DocumentController();
   bool publicationPending() const {return publicationPending_.load();}
   std::shared_ptr<const DocumentView> view();

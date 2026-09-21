@@ -35,6 +35,11 @@
     uint32_t selectedParameter=0,pluginDraftParameter=0;
     bool settingPluginFields=false,pluginDraft=false,refreshingPlugins=false,pluginLibraryLoaded=false;
     std::unique_ptr<ScreamSeq::PluginInstrumentsWindow> pluginInstruments;
+    std::unique_ptr<ScreamSeq::PluginLibraryWindow> pluginLibraryWindow;
+    void openPluginLibrary(){
+        if(!pluginLibraryWindow)pluginLibraryWindow=std::make_unique<ScreamSeq::PluginLibraryWindow>(window,[this](const auto &method,const auto &params){auto result=documentOperation(method,params);if(method=="plugin.library.set"){pluginLibraryLoaded=false;armPluginTimer();}return result;},[this]{return std::pair(documentId,view->session.revision);});
+        pluginLibraryWindow->show();
+    }
     void openPluginInstruments(){
         if(pluginInstruments&&(pluginInstruments->visible()||pluginInstruments->retainedDraft())){pluginInstruments->show();return;}
         const auto slot=selectedPluginSlot();if(slot<0||!view->session.document.at("nativePlugins")[slot].value("isInstrument",false))throw std::runtime_error("Select an instrument plugin");
@@ -52,7 +57,7 @@
             {pluginAdd,L"Add"},{pluginRescan,L"Rescan"},{pluginEditor,L"Editor"},{pluginBypass,L"Bypass"},
             {pluginRemove,L"Remove"},{pluginUp,L"Up"},{pluginDown,L"Down"},{pluginUndo,L"Undo FX"},{pluginRedo,L"Redo FX"},
             {pluginApply,L"Apply"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"},{pluginNewInstrument,L"New trigger"},
-            {pluginLoadProgram,L"Load program"},{pluginTogglePort,L"Enable port"},{pluginAliases,L"Assigned instruments…"},{pluginSavePreset,L"Save preset…"},{pluginLoadPreset,L"Load preset…"}})
+            {pluginLoadProgram,L"Load program"},{pluginTogglePort,L"Enable port"},{pluginAliases,L"Assigned instruments…"},{pluginSavePreset,L"Save preset…"},{pluginLoadPreset,L"Load preset…"},{pluginBrowse,L"Browse…"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(int id:{pluginLibrary,pluginParameter,pluginInstrument,pluginPage,pluginProgram,pluginPort})
             controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
@@ -61,7 +66,7 @@
         SendMessageW(controls.at(pluginValue),EM_SETLIMITTEXT,64,0);
         for(auto label:{L"Parameters",L"Factory programs",L"Audio ports",L"Instrument assignments",L"Presets"})SendMessageW(controls.at(pluginPage),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         SendMessageW(controls.at(pluginPage),CB_SETCURSEL,0,0);
-        for(int id=pluginList;id<=pluginLoadPreset;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
+        for(int id=pluginList;id<=pluginBrowse;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
     }
     void syncPluginRack() {
         if(!controls.contains(pluginList)) return;
@@ -93,7 +98,8 @@
         SetWindowTextW(controls.at(pluginValue),value.c_str());settingPluginFields=false;
     }
     void refreshPluginLibrary(bool rescan=false) {
-        auto catalog=documentOperation("plugin.discover",{{"rescan",rescan}});
+        const auto library=documentOperation("plugin.library.get",{{"rescan",rescan}});Json catalog=Json::array();
+        for(const auto &entry:library.at("plugins"))catalog.push_back(entry.at("descriptor"));
         auto old=SendMessageW(controls.at(pluginLibrary),CB_GETCURSEL,0,0);
         Json selected=old>=0 && size_t(old)<pluginCatalog.size()?pluginCatalog[size_t(old)]:Json();
         pluginCatalog=std::move(catalog);SendMessageW(controls.at(pluginLibrary),CB_RESETCONTENT,0,0);int selection=0;
@@ -166,7 +172,7 @@
         syncPluginRack();const auto r=sampleEditorRect();const bool show=pluginEditorVisible();const auto x=r.x+230,y=r.y;
         place(pluginsCommand,480,52,80,26);place(pluginUndo,r.x+r.w-160,y+4,74,24,show);place(pluginRedo,r.x+r.w-82,y+4,74,24,show);
         place(pluginPage,x,y+4,std::min(180.0f,r.w-406),230,show);
-        place(pluginLibrary,r.x+8,y+35,r.w-168,250,show);place(pluginAdd,r.x+r.w-154,y+35,64,24,show);place(pluginRescan,r.x+r.w-86,y+35,78,24,show);
+        place(pluginLibrary,r.x+8,y+35,r.w-254,250,show);place(pluginBrowse,r.x+r.w-240,y+35,78,24,show);place(pluginAdd,r.x+r.w-154,y+35,64,24,show);place(pluginRescan,r.x+r.w-86,y+35,78,24,show);
         place(pluginList,r.x+8,y+67,210,std::max(24.0f,r.h-75),show);
         float bx=x;for(auto [id,w]:std::initializer_list<std::pair<int,float>>{{pluginEditor,66.0f},{pluginBypass,72.0f},{pluginRemove,68.0f},{pluginUp,44.0f},{pluginDown,52.0f}}) {place(id,bx,y+67,w,24,show);bx+=w+4;}
         const float parameterWidth=std::max(80.0f,r.w-406);
@@ -197,9 +203,10 @@
         SetWindowTextW(controls.at(pluginTogglePort),!port.is_null()&&port.at("active").get<bool>()?L"Disable port":L"Enable port");
     }
     bool pluginCommand(int id) {
-        if(id<pluginList || id>pluginLoadPreset)return false;
+        if(id<pluginList || id>pluginBrowse)return false;
         if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         workspaceState.focus="plugins";
+        if(id==pluginBrowse){openPluginLibrary();return true;}
         if(id==pluginSavePreset||id==pluginLoadPreset){pluginPresetFile(id==pluginSavePreset);return true;}
         if(id==pluginAliases){openPluginInstruments();return true;}
         if(id==pluginsCommand) {noteEditorOpen=false;effectEditorOpen=false;workspaceState.layout="Compose";workspaceState.active="notes";SetFocus(controls.at(pluginList));return true;}

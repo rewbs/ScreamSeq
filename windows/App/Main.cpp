@@ -14,6 +14,7 @@
 #include "AutomationCanvas.hpp"
 #include "EnvelopeBankWindow.hpp"
 #include "PluginInstrumentsWindow.hpp"
+#include "PluginLibraryWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -51,7 +52,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginList=300,pluginLibrary=301,pluginAdd=302,pluginRescan=303,pluginEditor=304,
     pluginBypass=305,pluginRemove=306,pluginUp=307,pluginDown=308,pluginUndo=309,pluginRedo=310,
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
-    pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,pluginAliases=323,pluginSavePreset=324,pluginLoadPreset=325,
+    pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,pluginAliases=323,pluginSavePreset=324,pluginLoadPreset=325,pluginBrowse=326,
     effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
     effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,
     noteList=360,notePitch=361,noteInstrument=362,noteVelocity=363,noteOffset=364,noteUnitControl=365,
@@ -240,6 +241,7 @@ public:
             {"formulaReference",formulaReference?formulaReference->snapshot():Json{{"visible",false}}},
             {"envelopeBank",envelopeBank?envelopeBank->snapshot():Json{{"visible",false}}},
             {"pluginInstruments",pluginInstruments?pluginInstruments->snapshot():Json{{"visible",false}}},
+            {"pluginLibrary",pluginLibraryWindow?pluginLibraryWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
             {"noteEditor",{{"visible",noteEditorVisible()},{"pattern",notePattern},{"row",noteRow},{"channel",noteChannel},
@@ -347,7 +349,7 @@ public:
         try {auto result=await(controller->invoke(method,params));refreshDocument();return result;}
         catch(...) {refreshDocument();throw;}
     }
-    explicit Application(const std::filesystem::path &input={},bool inspectionMode=false,std::optional<std::filesystem::path> catalogue={}) : inspection(inspectionMode) {
+    explicit Application(const std::filesystem::path &input={},bool inspectionMode=false,std::optional<std::filesystem::path> catalogue={},std::optional<std::filesystem::path> library={}) : inspection(inspectionMode) {
         GUID id{};ScreamSeq::check(CoCreateGuid(&id),"Create session identity");
         wchar_t buffer[40]{};StringFromGUID2(id,buffer,40);for(auto ch:std::wstring_view(buffer)) documentId+=char(ch);
         ScreamSeq::PlaybackHooks playback;
@@ -363,7 +365,7 @@ public:
             if(device.running() && preparedPlayback && !preparedPlayback->chain().enqueueParameters(changes)) {
                 stop();status=L"Plugin edit committed; playback stopped because live queue was full or unavailable";
             }
-        },std::move(playback),std::move(catalogue));
+        },std::move(playback),std::move(catalogue),std::move(library));
         view=controller->view();documentId=view->session.documentId;patternIndex=view->patterns.begin()->first;
         cpuDraw.reserve(120000);submitIntervals.reserve(120000);updateInspector();
         status=input.empty() ? L"Ready / select a pattern cell or a sample" : L"Project opened";
@@ -543,7 +545,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		if(!argv) throw std::runtime_error("Cannot parse command line");
 		std::vector<std::wstring> args(argv, argv + argc); LocalFree(argv);
 		bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false;
-		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride;
+		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride,libraryOverride;
 		for(size_t i = 1; i < args.size(); ++i) {
 			if(args[i] == L"--offline-test") offline = true;
             else if(args[i]==L"--offline-hosted-test") hostedOffline=true;
@@ -556,6 +558,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			else if(args[i] == L"--project" && i + 1 < args.size()) projectPath = args[++i];
             else if(args[i]==L"--vst3-test-cache" && i+1<args.size()) pluginCache=args[++i];
             else if(args[i]==L"--envelope-test-catalogue" && i+1<args.size()) catalogueOverride=args[++i];
+            else if(args[i]==L"--plugin-test-library" && i+1<args.size()) libraryOverride=args[++i];
 			else throw std::runtime_error("Unknown/incomplete command-line argument");
 		}
 		if(seconds < 0 || seconds > 1800 || !std::isfinite(seconds)) throw std::runtime_error("Invalid test duration");
@@ -576,7 +579,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             try{catalogue=std::filesystem::path(local)/L"org.resonance.tracker"/L"envelope-catalogue-v1.json";}catch(...){CoTaskMemFree(local);throw;}
             CoTaskMemFree(local);
         }
-		Application app(projectPath,inspection,std::move(catalogue));app.silentOutput=silentOutput;
+        std::optional<std::filesystem::path> library;
+        if(!libraryOverride.empty()){
+            if(!(inspection||audioTest)||!libraryOverride.is_absolute())throw std::runtime_error("An absolute private plugin library requires inspection or audio qualification mode");
+            library=libraryOverride;
+        }else if(!inspection&&!audioTest){
+            PWSTR local{};ScreamSeq::check(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local),"Find plugin library directory");
+            try{library=std::filesystem::path(local)/L"org.resonance.tracker"/L"plugin-library-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
+        }
+		Application app(projectPath,inspection,std::move(catalogue),std::move(library));app.silentOutput=silentOutput;
 		WNDCLASSW klass{}; klass.style=CS_DBLCLKS;klass.lpfnWndProc = windowProc; klass.hInstance = instance;
 		klass.lpszClassName = L"ScreamSeqWindowsDevelopment"; klass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
 		klass.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(101));

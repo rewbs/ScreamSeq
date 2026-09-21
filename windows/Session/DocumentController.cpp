@@ -62,8 +62,8 @@ std::span<const PatternNoteView> DocumentView::notesAt(unsigned p,unsigned r,uns
 }
 DocumentController::DocumentController(const std::filesystem::path &input,std::string identity,
   std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,std::function<void()> beforeView,size_t maxCacheBytes,
-  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters,PlaybackHooks playbackHooks,std::optional<std::filesystem::path> cataloguePath)
-  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),playbackHooks_(std::move(playbackHooks)),cataloguePath_(std::move(cataloguePath)),thread_([this]{loop();}) {
+  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters,PlaybackHooks playbackHooks,std::optional<std::filesystem::path> cataloguePath,std::optional<std::filesystem::path> libraryPath)
+  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),playbackHooks_(std::move(playbackHooks)),cataloguePath_(std::move(cataloguePath)),libraryPath_(std::move(libraryPath)),thread_([this]{loop();}) {
   auto task=std::make_shared<std::packaged_task<void()>>([this,input]{open(input);});
   auto done=task->get_future();
   {std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();
@@ -114,7 +114,7 @@ void DocumentController::open(const std::filesystem::path &path) {
   if(liveParameters_)liveParameters=[this](std::span<const Tracker::ParameterChange> changes){
     onMain([this,batch=std::vector<Tracker::ParameterChange>(changes.begin(),changes.end())]{liveParameters_(batch);});
   };
-  auto plugins=std::make_unique<PluginOperations>(*candidate.document,project_,[this]{onMain(stop_);},std::move(liveParameters));
+  auto plugins=std::make_unique<PluginOperations>(*candidate.document,project_,[this]{onMain(stop_);},std::move(liveParameters),libraryPath_);
   if(view_) retired_.push_back(view_);
   try {if(document_) onMain(stop_);} catch(...) {if(view_) retired_.pop_back();throw;}
   static_assert(std::is_nothrow_swappable_v<Project::ProjectState>);
@@ -299,6 +299,9 @@ PlaybackFeedback DocumentController::playbackFeedback() {
 }
 Json DocumentController::operation(const std::string &method,Json params) {
   if(publicationPending_) publish();
+  // Browser preferences are independent of the song. Do not flush vendor
+  // editors, require a document revision, or allocate musical history here.
+  if(method=="plugin.library.get"||method=="plugin.library.set")return plugins_->invokeLibrary(method,params);
   if(method=="synchronizeView") return Json::object();
   if(method=="flushPluginEditors") {keys(params,{"force"});const auto count=plugins_->openEditorCount();if(plugins_->flushEditors(flag(params,"force")) || count!=plugins_->openEditorCount())publish();return Json::object();}
   if(method=="document.save" || method=="document.open" || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("envelope.")) {

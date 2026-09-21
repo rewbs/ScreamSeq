@@ -76,7 +76,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Audio/WasapiDevice.cpp")
   target_link_libraries(ScreamSeqAudio PUBLIC ScreamSeqBuildOptions PRIVATE ole32 avrt uuid)
 endif()
 add_library(ScreamSeqProject STATIC Project/BinaryPlist.cpp Project/NativeMetadata.cpp Project/NativeProject.cpp
-  Plugins/PluginPreset.cpp "${ROOT}/include/pugixml/src/pugixml.cpp")
+  Plugins/PluginPreset.cpp Plugins/PluginLibrary.cpp "${ROOT}/include/pugixml/src/pugixml.cpp")
 target_include_directories(ScreamSeqProject PRIVATE "${ROOT}/include/pugixml/src")
 target_include_directories(ScreamSeqProject PUBLIC "${ROOT}/include/nlohmann-json/include")
 target_link_libraries(ScreamSeqProject PUBLIC TrackerEditor PRIVATE crypt32 bcrypt)

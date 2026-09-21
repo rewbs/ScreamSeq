@@ -40,8 +40,8 @@ size_t stateBytes(const Json &plugins,const Json &automation){size_t n=automatio
 std::string hashText(const std::string &s){std::array<UCHAR,32> digest{};if(BCryptHash(BCRYPT_SHA256_ALG_HANDLE,nullptr,0,reinterpret_cast<PUCHAR>(const_cast<char*>(s.data())),ULONG(s.size()),digest.data(),ULONG(digest.size()))<0)throw std::runtime_error("Cannot hash plugin program catalog");std::string out;for(auto b:digest){out+="0123456789abcdef"[b>>4];out+="0123456789abcdef"[b&15];}return out;}
 }
 PluginOperations::PluginOperations(Tracker::Document &d,Project::ProjectState &p,std::function<void()> stop,
-  std::function<void(std::span<const ParameterChange>)> liveParameters)
-  :document_(d),project_(p),stop_(std::move(stop)),liveParameters_(std::move(liveParameters)){}
+  std::function<void(std::span<const ParameterChange>)> liveParameters,std::optional<std::filesystem::path> libraryPath)
+  :document_(d),project_(p),stop_(std::move(stop)),liveParameters_(std::move(liveParameters)),library_(std::move(libraryPath)){}
 PluginOperations::~PluginOperations()=default;
 std::vector<GraphRackRecord> PluginOperations::graphRack() const {
   std::vector<GraphRackRecord> result;const auto states=projectPluginStates(project_);
@@ -58,8 +58,8 @@ GraphRackClone PluginOperations::cloneRackSlot(uint32_t index) {
 std::vector<PluginAudioBus> PluginOperations::audioBuses(size_t index,bool required) {
   try{return editor(index).buses();}catch(const std::exception &){if(required)throw;return {};}
 }
-std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","graph.plugin.get"};}
-std::vector<std::string> PluginOperations::writes(){return {"plugin.add","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
+std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.library.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","graph.plugin.get"};}
+std::vector<std::string> PluginOperations::writes(){return {"plugin.add","plugin.library.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
 #include "GraphPluginOperations.inc"
 size_t PluginOperations::slot(const Json &p) const {
   const auto &rack=project_.preserved.at("plugins");
@@ -126,10 +126,8 @@ bool PluginOperations::flushEditors(bool force) {
   for(const auto &key:closed)openEditors_.erase(key);
   pendingParameters_.clear();return changed||graphClosed;
 }
+#include "PluginLibraryOperations.inc"
 Json PluginOperations::invoke(const std::string &method,const Json &p) {
-  auto rack=project_.preserved.at("plugins"),automation=project_.preserved.at("automation");
-  Json touch=nullptr;std::vector<ParameterChange> liveChanges;
-  const bool dry=flag(p,"dryRun");
   if(method=="plugin.preset.inspect") {keys(p,{"path"});return Plugins::PluginPreset::summary(Plugins::PluginPreset::read(text(field(p,"path"))));}
   if(method=="plugin.discover") {
     keys(p,{"format","rescan"});const auto format=text(p.value("format",Json("")),16);need(format.empty()||format=="AU"||format=="VST3"||format=="Built-in","Unknown plugin format");
@@ -141,6 +139,10 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     auto all=NativePlugin::builtins();if(format!="Built-in"&&format!="AU"){auto native=NativePlugin::discover();all.insert(all.end(),native.begin(),native.end());}
     Json result=Json::array();for(const auto &d:all)if(format.empty()||format==d.format)result.push_back(descriptor(d));return result;
   }
+  // Catalog/inspection reads do not need copies of every vendor's opaque state.
+  auto rack=project_.preserved.at("plugins"),automation=project_.preserved.at("automation");
+  Json touch=nullptr;std::vector<ParameterChange> liveChanges;
+  const bool dry=flag(p,"dryRun");
   if(method=="automation.target.get") {keys(p,{});auto target=lastTouched_;if(!target.is_null()){auto found=std::find_if(rack.begin(),rack.end(),[&](const auto &x){return x.at("instanceID")==target.at("plugin");});target["available"]=found!=rack.end();target["slot"]=found==rack.end()?Json(nullptr):Json(found-rack.begin());if(found==rack.end())target["reason"]="Plugin was removed";else target["pluginName"]=found->at("name");}return {{"token","touch:"+std::to_string(touchSequence_)},{"target",target}};}
   if(method=="history.undo"||method=="history.redo") {
     keys(p,{"domain"});need(field(p,"domain")=="plugins","Wrong plugin history domain");auto &from=method=="history.undo"?undo_:redo_;auto &to=method=="history.undo"?redo_:undo_;

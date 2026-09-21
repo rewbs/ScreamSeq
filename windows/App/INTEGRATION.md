@@ -236,6 +236,15 @@ and plugin metadata and uses plugin Undo. Saving writes atomically without
 changing the song. Both paths use the guarded API; see
 `../PLUGIN_PRESETS_PROGRESS.md`. The bundled pugixml MIT notice is copied beside
 the app under `THIRD-PARTY-NOTICES/` and must be included in packaged builds.
+**Browse…** opens a retained native plugin library with search, kind/format/
+category filters, favorites, hidden entries and custom categories. Rows use
+separate name, format/kind and category columns. Typing filters cached rows;
+Reload/Rescan explicitly refresh discovery and preferences. A disappearing
+selected row is deselected, never silently retargeted. Hidden entries also leave
+the rack's quick picker. Enter adds the selected row, F6 switches search/list,
+Ctrl+F focuses search and Ctrl+R reloads. Category drafts survive Close; Escape
+discards a draft. Unavailable preferences leave insertion usable. See
+`../PLUGIN_LIBRARY_PROGRESS.md` for native/API and isolated live-audio evidence.
 
 The Samples inspector opens a waveform editor in the lower dock. Dragging or
 keyboard/range fields select audio; Reverse, Normalize, Fade, Trim and normal or

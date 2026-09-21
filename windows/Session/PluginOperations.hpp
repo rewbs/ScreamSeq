@@ -1,6 +1,7 @@
 #pragma once
 #include "HostedProject.hpp"
 #include "GraphOperations.hpp"
+#include "windows/Plugins/PluginLibrary.hpp"
 #include <deque>
 #include <functional>
 #include <map>
@@ -28,6 +29,7 @@ class PluginOperations {
   std::chrono::steady_clock::time_point lastStateCapture_{};
   Json lastTouched_ = nullptr;
   uint64_t touchSequence_=0;
+  Plugins::PluginLibrary library_;
   History snapshot() const;
   void commit(Json plugins,Json automation,bool keepEditors=false,bool parameterOnly=false,
     std::span<const Tracker::ParameterChange> changes={});
@@ -35,11 +37,13 @@ class PluginOperations {
   Tracker::NativePlugin &editor(size_t);
 public:
   PluginOperations(Tracker::Document &,Project::ProjectState &,std::function<void()> stop,
-    std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={});
+    std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={},
+    std::optional<std::filesystem::path> libraryPath={});
   ~PluginOperations();
   static std::vector<std::string> reads();
   static std::vector<std::string> writes();
   Json invoke(const std::string &,const Json &);
+  Json invokeLibrary(const std::string &,const Json &);
   Json invokeGraph(const std::string &,const Json &,unsigned sampleRate);
   bool flushEditors(bool force=false); // Debounce gestures; save/close forces capture.
   std::vector<GraphRackRecord> graphRack() const;

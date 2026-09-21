@@ -379,10 +379,10 @@ Clipboard source and destination are captured before asynchronous work.
 
 The application also registers `PluginOperations`. Shared Mac method payloads
 are used for discovery, add/remove/move/bypass, parameters, saved state, buses,
-programs, sound presets and instrument aliases. Plugin writes require `expectedRevision`;
+programs, sound presets and instrument aliases. Musical plugin writes require `expectedRevision`;
 `history.undo`/`history.redo` with `domain:"plugins"` use an independent history.
 The native rack uses these same transactions. The complete current inventory is
-in `api.describe`; library organization remains pending.
+in `api.describe`. Browser preferences use their separate library revision.
 
 Windows adds `plugin.editor.open` and `plugin.editor.close`, each accepting
 `slot` and `expectedRevision`. Open/close alone retain the musical revision.
@@ -467,6 +467,38 @@ song unchanged; an identical canonical state creates no history. Aliases, ports,
 bypass, automation, routing and unknown plugin metadata are retained. State
 loads use the existing stop-before-publication path. Native file dialogs capture
 the document, revision and target before opening and reject stale results.
+
+`plugin.library.get` accepts optional `format` (`AU`, `VST3`, `Built-in`), `kind`
+(`effect`, `instrument`), `rescan`, `search`, `category`, `favoritesOnly` and
+`includeHidden`. It returns decorated `plugins`, all discovered `categories`,
+`libraryRevision`, `preferencesAvailable`, `warning`, `preferenceError` and
+`totalPlugins`. Each row retains its descriptor and adds `catalogID`, `favorite`,
+`hidden`, `customCategory` and effective `category`. Search ignores case and
+diacritics. Default categories are Effects/Instruments.
+
+`plugin.library.set` requires `expectedLibraryRevision`, `catalogID` and at least
+one of `favorite`, `hidden` or `category`; `dryRun` is optional. It accepts no
+`expectedRevision` and does not flush editors, stop playback, change document
+revision or create Undo history. The response contains `libraryRevision`,
+`wouldChange`, `written`, `catalogID` and complete normalized `preferences`.
+Successful writes retain the usual exact-request replay behavior. Stale writers
+fail with `-32001`; a held process lock fails with `-32002`. No-ops/dry runs
+retain the file/revision; returning to defaults removes that customization.
+
+Preferences are a bounded 2 MiB JSON file with up to 4096 customized entries.
+VST3 library identity includes its normalized installation path and uppercase
+class ID; built-ins use the effect ID and AU uses component codes. Display names
+are excluded. This differs deliberately from portable preset matching.
+Missing plugins do not cause stored preferences to be deleted. Corrupt, locked
+or inaccessible preferences yield an empty revision and warning while catalog
+rows remain available for insertion; the original file is retained.
+
+Normal sessions use `%LOCALAPPDATA%/org.resonance.tracker/plugin-library-v1.json`.
+Inspection/audio qualification sessions never use that file automatically;
+`--plugin-test-library <absolute path>` explicitly selects a private test file.
+The native Browse window caches catalog rows for local filtering, retains
+category drafts across Close, and exposes its state in `workspace.get.pluginLibrary`.
+See `../PLUGIN_LIBRARY_PROGRESS.md` for evidence and limitations.
 
 Discovery reads the cache. Explicit `rescan:true` scans installed VST3 roots
 through the isolated scanner; failures are reported with module paths while

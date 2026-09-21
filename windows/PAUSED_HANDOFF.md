@@ -30,6 +30,8 @@
 > assignment semantics: `PLUGIN_ALIASES_PROGRESS.md`. Full parity remains active.
 > Native Mac-compatible plugin preset files, guarded Save/Load dialogs and
 > installed-plugin round trips: `PLUGIN_PRESETS_PROGRESS.md`. Full parity remains active.
+> Native plugin browser, independent guarded preferences, search/favorites/
+> categories/hidden entries: `PLUGIN_LIBRARY_PROGRESS.md`. Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

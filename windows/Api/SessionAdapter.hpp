@@ -131,7 +131,7 @@ class SessionAdapter {
       result["musicalEditing"]=true;
       for(const auto &m:host_->additionalDocumentReads()) if(std::find(result["reads"].begin(),result["reads"].end(),m)==result["reads"].end())result["reads"].push_back(m);
       for(const auto &m:host_->additionalDocumentWrites()) {
-        if(std::find(result["writes"].begin(),result["writes"].end(),m)==result["writes"].end())result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
+        if(std::find(result["writes"].begin(),result["writes"].end(),m)==result["writes"].end())result["writes"].push_back(m);result["revisionGuards"][m]={m=="plugin.library.set"?"expectedLibraryRevision":"expectedRevision"};
       }
       result["windowsExtensions"]={{"document.open","absolute path, expectedRevision, discard:true required for unsaved work"},
         {"plugin.editor.open","slot and expectedRevision; native VST3 editor on the private STA; no musical change unless the vendor emits edits"},
@@ -238,7 +238,7 @@ public:
       if(host_) before=host_->snapshot();
       else before.revision="unbound";
       revision=before.revision;
-      if(write && !workspace) {
+      if(write && !workspace && method!="plugin.library.set") {
         require(p.contains("expectedRevision") && p["expectedRevision"].is_string(),"expectedRevision is required");
         const auto expected=p["expectedRevision"].get<std::string>();
         require(!expected.empty() && expected.size()<=200 && expected.find('\0')==std::string::npos,"Invalid expectedRevision");
