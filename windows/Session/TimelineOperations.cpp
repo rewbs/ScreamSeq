@@ -4,6 +4,7 @@
 #include "editor/PatternCommands.hpp"
 #include "editor/SongTiming.hpp"
 #include "editor/AutomationTools.hpp"
+#include "editor/EnvelopeBank.hpp"
 #include "editor/CurveFormulaReference.hpp"
 #include "soundlib/NativeNoteEffects.h"
 #include <algorithm>
@@ -79,10 +80,12 @@ Json TimelineOperations::invoke(const std::string &method,const Json &p){
   }
   if(method=="automation.formula.preview"){
     keys(p,{"points","rows","rowsPerBeat","span","start","end","samples"});
-    auto rows=uint32_t(integer(field(p,"rows"),1,65536));auto beat=number(p.value("rowsPerBeat",Json(4)),1,65535);
+    auto rows=uint32_t(integer(field(p,"rows"),1,65536));auto beat=number(p.value("rowsPerBeat",Json(4)),1,65536);
     auto span=uint32_t(integer(p.value("span",Json(rows*256)),1,rows*256));auto start=number(p.value("start",Json(0)),0,span);
     auto end=number(p.value("end",Json(span)),start,span);auto count=uint32_t(integer(p.value("samples",Json(1024)),2,4096));
-    std::vector<AutomationPoint> points;try{for(const auto &point:array(field(p,"points"),4096))points.push_back(decodePoint(point,span-1));validateAutomationPoints(points,span);}
+    // Previews also serve reusable bank shapes, whose span can exceed a pattern.
+    EnvelopeShape preview;preview.span=span;auto &points=preview.points;
+    try{for(const auto &point:array(field(p,"points"),4096))points.push_back(decodePoint(point,span-1));validateEnvelopeShape(preview);}
     catch(const std::invalid_argument&e){throw Api::ApiError(-32602,e.what());}
     Json values=Json::array();for(uint32_t i=0;i<count;++i){double position=start+(end-start)*i/(count-1);values.push_back(Json::array({position,automationValue(points,position,span,beat)}));}
     return {{"values",values},{"fallback","Domain errors use linear interpolation; output is clamped to 0..1"}};

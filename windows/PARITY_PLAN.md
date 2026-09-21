@@ -61,8 +61,12 @@ in force. A fresh fetch during this continuation found no newer upstream commits
    `GRAPH_CURVES_PROGRESS.md`. Both envelope bank levels now have modeless native
    controls, launched from graph curves, with guarded drafts, linked updates,
    explicit catalogue copies and native app coverage (`ENVELOPE_BANK_PROGRESS.md`).
+   The modeless formula workbench now supplies multiline editing, completion,
+   searchable reference and guarded preview/Use from graph curves and song bank
+   masters (`FORMULA_WORKBENCH_PROGRESS.md`). Preview validation covers the full
+   bank range on both platforms without expanding pattern-edit limits.
    Complete song routing overview, pattern-parameter automation, native instrument
-   envelopes, the expanded formula workbench and bank entry points from those
+   envelopes, inline formula completion and bank/workbench entry points from those
    editors, with retained drawing, meaningful context menus and keyboard use.
 4. **Recording and workspace.** Device selection, MIDI input and mapping,
    precise recording/recovery, sample zoom/drawing/crossfade/audition, floating

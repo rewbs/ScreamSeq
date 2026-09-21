@@ -11,6 +11,11 @@ int main(){@autoreleasepool{try{
   auto preview=call(@"automation.formula.preview",@{@"points":points,@"rows":@2,@"samples":@5});
   check(std::abs([preview[@"data"][@"values"][1][1] doubleValue]-.35)<1e-12,"UI/API preview uses exact script evaluator");
   auto revision=session.automationRevision;check([preview[@"changed"] boolValue]==NO,"Preview has no history side effects");
+  auto maximum=call(@"automation.formula.preview",@{@"rows":@65536,@"rowsPerBeat":@65536,@"samples":@3,@"points":@[@{@"position":@0,@"value":@0,@"curve":@"scripted",@"formula":@"beat"}]});
+  check([maximum[@"data"][@"values"] isEqual:@[@[@0,@0],@[@8388608,@0.5],@[@16777216,@1]]],"Preview covers the full envelope-bank beat division range");
+  NSError *boundaryError=nil;
+  check(![session automationMethod:@"automation.formula.preview" params:@{@"rows":@65536,@"rowsPerBeat":@65537,@"samples":@3,@"points":@[@{@"position":@0,@"value":@0}]} error:&boundaryError],"Out-of-range preview division rejects");
+  check([revision isEqual:session.automationRevision],"Boundary previews retain document history");
   auto set=call(@"automation.pattern.set",@{@"pattern":@0,@"plugin":plugin,@"parameter":@1,@"points":points},true);
   check([set[@"changed"] boolValue],"Store scripted lane");
   auto saved=[session serializedData];auto metadata=[NSPropertyListSerialization propertyListWithData:saved options:0 format:nil error:nil];

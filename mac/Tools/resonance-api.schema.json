@@ -13841,7 +13841,7 @@
             "rowsPerBeat": {
               "type": "number",
               "minimum": 1,
-              "maximum": 65535
+              "maximum": 65536
             },
             "start": {
               "type": "number",

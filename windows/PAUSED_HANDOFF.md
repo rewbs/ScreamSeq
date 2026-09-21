@@ -24,6 +24,8 @@
 > `GRAPH_CURVES_PROGRESS.md`. Full parity remains active.
 > Modeless native song envelope bank and independent app catalogue copies:
 > `ENVELOPE_BANK_PROGRESS.md`. Full parity remains active.
+> Expanded native formula workbench, completion/reference and full bank-range
+> previews: `FORMULA_WORKBENCH_PROGRESS.md`. Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

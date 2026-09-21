@@ -1327,7 +1327,8 @@ typing / Control-Space, a searchable reference and a live preview. **Use formula
 returns to the captured point; **Apply** in its envelope saves the musical edit.
 A changed target or newer draft cannot be overwritten by an older workbench.
 `automation.formula.preview` also accepts `span` for a precise terminal segment
-boundary (1–rows×256); `rows` can be 1–65536 for bank shapes.
+boundary (1–rows×256); `rows` and `rowsPerBeat` can be 1–65536, covering every
+bank template.
 
 Every envelope editor has an **Envelope bank…** / **Bank…** control. The bank has
 **This song** and **App catalogue** tiers. Links exist only within the song. A

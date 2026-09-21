@@ -1,12 +1,12 @@
 #pragma once
-#include "NativeToolWindow.hpp"
+#include "FormulaWorkbenchWindow.hpp"
 
 namespace ScreamSeq {
 class EnvelopeBankWindow final : public NativeToolWindow {
   using Json=Api::Json;
   using Request=std::function<Json(const std::string &,const Json &)>;
   using Context=std::function<std::pair<std::string,std::string>()>;
-  enum : int {scope=1001,list,name,captureName,saveCurrent,saveMaster,useCopy,useLinked,unlink,publish,replace,remove,importEntry,reload,catalogueDestination,pointRow,pointValue,pointKind,pointFormula,setPoint,deletePoint,span,beat,preview,setTiming,
+  enum : int {scope=1001,list,name,captureName,saveCurrent,saveMaster,useCopy,useLinked,unlink,publish,replace,remove,importEntry,reload,catalogueDestination,pointRow,pointValue,pointKind,pointFormula,setPoint,deletePoint,span,beat,preview,setTiming,expandFormula,referenceFormula,
     linkLabel=1100,statusLabel,rowLabel,valueLabel,spanLabel,beatLabel};
   static constexpr const char *curves[]{"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse","scripted"};
   Request request_;Context context_;std::function<bool()> sourceCurrent_;
@@ -15,6 +15,18 @@ class EnvelopeBankWindow final : public NativeToolWindow {
   bool catalogueScope_=false,dirty_=false,pointFields_=false,timingFields_=false,pending_=false,setting_=false,previewNeeded_=false,dragging_=false;
   uint64_t generation_=0;int selectedPoint_=-1,kind_=1;Json dragBefore_;bool dragDirty_=false;int dragSelection_=-1;
   AutomationCanvas canvas_;
+  std::unique_ptr<FormulaWorkbenchWindow> workbench_,referenceWindow_;
+  void openReference(){if(!referenceWindow_)referenceWindow_=std::make_unique<FormulaWorkbenchWindow>(window_,L"Envelope formula reference","",Json::object(),-1,request_);referenceWindow_->show();}
+  void openFormula(){
+    if(workbench_&&(workbench_->visible()||workbench_->retainedDraft())){workbench_->show();return;}
+    require(!catalogueScope_&&!pending_,"Choose a song template before expanding its formula");
+    if(pointFields_)setPointFields();require(!timingFields_,"Set timing before expanding the formula");
+    require(selectedPoint_>=0&&size_t(selectedPoint_)<points().size()&&points()[size_t(selectedPoint_)].at("curve")=="scripted","Select a scripted point to expand its formula");
+    const auto document=document_,revision=revision_,entry=selected_;const auto generation=generation_;const auto index=selectedPoint_;const auto original=points()[size_t(index)];
+    auto current=[this,document,revision,entry,generation,index,original]{return context_().first==document&&document_==document&&revision_==revision&&selected_==entry&&generation_==generation&&selectedPoint_==index&&!pointFields_&&!timingFields_&&!pending_&&!catalogueScope_&&size_t(index)<points().size()&&points()[size_t(index)]==original;};
+    auto use=[this,current](const std::string &text){if(!current())return false;auto point=points()[size_t(selectedPoint_)];point["formula"]=text;replacePoint(std::move(point));return true;};
+    const auto length=shape_.at("span").get<unsigned>();workbench_=std::make_unique<FormulaWorkbenchWindow>(window_,L"Song template · "+field(name)+L" · Formula",original.at("formula").get<std::string>(),Json{{"points",points()},{"rows",(length+255)/256},{"span",length},{"rowsPerBeat",shape_.value("rowsPerBeat",4)}},index,request_,std::move(current),std::move(use));workbench_->show();
+  }
   const Json &points()const{static const Json empty=Json::array();return shape_.contains("points")?shape_.at("points"):empty;}
   bool draft()const{return dirty_||pointFields_||timingFields_;}
   void require(bool ok,const char *why)const{if(!ok)throw std::runtime_error(why);}
@@ -47,6 +59,7 @@ class EnvelopeBankWindow final : public NativeToolWindow {
     if(id>=linkLabel)return;
     if(id==scope||id==catalogueDestination||id==pointKind){if(notification!=CBN_SELCHANGE)return;}else if(id==list){if(notification!=LBN_SELCHANGE)return;}else if(notification!=BN_CLICKED)return;
     require(!pending_&&!dragging_,"Envelope bank is busy");
+    if(id==referenceFormula){openReference();return;}if(id==expandFormula){openFormula();return;}
     if(id==scope){const bool next=SendMessageW(controls_.at(scope),CB_GETCURSEL,0,0)==1;if(draft()){SendMessageW(controls_.at(scope),CB_SETCURSEL,catalogueScope_?1:0,0);throw std::runtime_error("Save or reload the master draft before changing banks");}const bool old=catalogueScope_;catalogueScope_=next;try{refresh();}catch(...){catalogueScope_=old;SendMessageW(controls_.at(scope),CB_SETCURSEL,old?1:0,0);throw;}return;}
     if(id==list){if(draft()){restoreSelection();throw std::runtime_error("Save or reload the template draft before changing selection");}const auto index=SendMessageW(controls_.at(list),LB_GETCURSEL,0,0);if(index>=0)select(size_t(index));return;}
     if(id==catalogueDestination)return;
@@ -88,12 +101,13 @@ class EnvelopeBankWindow final : public NativeToolWindow {
     place(list,16,82,220,std::max(70.0f,h-230));place(name,right,82,editorWidth,26);place(spanLabel,right,116,106,25);place(span,right+108,116,84,26);place(beatLabel,right+204,116,86,25);place(beat,right+294,116,60,26);place(setTiming,right+362,116,editorWidth-362,26);
     canvas_.viewport={right+38,160,std::max(1.0f,editorWidth-48),std::max(1.0f,h-396)};canvas_.rebuild(points(),values_);
     const float y=h-216;place(rowLabel,right,y,36,25);place(pointRow,right+38,y,76,26);place(valueLabel,right+122,y,20,25);place(pointValue,right+144,y,65,26);place(pointKind,right+217,y,std::max(90.0f,editorWidth-409),210);place(setPoint,w-198,y,86,26);place(deletePoint,w-104,y,88,26);
-    place(pointFormula,right,h-182,editorWidth-148,26,kind_==8);place(preview,w-152,h-182,136,26);
+    place(pointFormula,right,h-182,editorWidth-324,26,kind_==8);place(expandFormula,w-324,h-182,78,26,kind_==8);place(referenceFormula,w-240,h-182,80,26);place(preview,w-152,h-182,136,26);
     place(useCopy,16,h-132,105,26,!catalogueScope_);place(useLinked,129,h-132,107,26,!catalogueScope_);place(saveMaster,right,h-132,166,26,!catalogueScope_);place(reload,right+174,h-132,112,26);place(remove,right+294,h-132,editorWidth-294,26,!catalogueScope_);place(importEntry,right,h-132,166,26,catalogueScope_);
     place(unlink,16,h-98,220,26);place(publish,right,h-98,166,26,!catalogueScope_);place(catalogueDestination,right+174,h-98,editorWidth-324,210,!catalogueScope_);place(replace,w-158,h-98,142,26,!catalogueScope_);place(statusLabel,16,h-57,w-32,46);
     const bool editable=!catalogueScope_&&!selected_.empty();for(int id:{name,pointRow,pointValue,pointKind,pointFormula,span,beat})EnableWindow(controls_.at(id),editable);
     for(int id:{saveCurrent,saveMaster,useCopy,useLinked,unlink,publish,replace,remove,importEntry,reload,setPoint,deletePoint,setTiming,preview,scope,list,catalogueDestination})EnableWindow(controls_.at(id),!pending_&&(id==reload||id==scope||id==list||id==saveCurrent||!selected_.empty()));
     EnableWindow(controls_.at(unlink),!pending_&&!linked_.empty());
+    EnableWindow(controls_.at(expandFormula),editable&&!pending_);EnableWindow(controls_.at(referenceFormula),!pending_);
   }
   void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);const auto &r=canvas_.viewport;surface.fill(r.x,r.y,r.w,r.h,0x10171f);surface.clip(r.x,r.y,r.w,r.h);for(int i=0;i<=4;++i)surface.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,0x2a3948);for(size_t i=1;i<canvas_.curve.size();++i)surface.line(canvas_.curve[i-1].x,canvas_.curve[i-1].y,canvas_.curve[i].x,canvas_.curve[i].y,0x68d3bc,2);for(size_t i=0;i<canvas_.handles.size();++i){auto p=canvas_.handles[i];surface.fill(p.x-4,p.y-4,8,8,int(i)==selectedPoint_?0xf3dfb0:0x7ce5cd);}surface.unclip();surface.uiText(L"100%",r.x-37,r.y-4,35,0x94a4b4);surface.uiText(L"0%",r.x-37,r.y+r.h-13,35,0x94a4b4);surface.uiText(L"0 rows",r.x,r.y+r.h+4,90,0x94a4b4);}
 public:
@@ -104,12 +118,13 @@ public:
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{name,L""},{captureName,L"New envelope"},{pointRow,L"0"},{pointValue,L"50"},{pointFormula,L"mix(start,end,t)"},{span,L"64"},{beat,L"4"}})edit(id,text,id==pointFormula?2048:id==name||id==captureName?256:32);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{saveCurrent,L"Save captured curve"},{saveMaster,L"Save song master"},{useCopy,L"Use copy"},{useLinked,L"Use linked"},{unlink,L"Make source independent"},{publish,L"Publish catalogue copy"},{replace,L"Replace selected copy"},{remove,L"Remove song template"},{importEntry,L"Copy into song bank"},{reload,L"Reload / discard"},{setPoint,L"Set point"},{deletePoint,L"Delete"},{preview,L"Check / preview"},{setTiming,L"Set timing"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{linkLabel,L"Captured source"},{statusLabel,L""},{rowLabel,L"Row"},{valueLabel,L"%"},{spanLabel,L"Duration / rows"},{beatLabel,L"Rows / beat"}})label(id,text);
+    button(expandFormula,L"Expand…");button(referenceFormula,L"Reference");
     for(auto text:{L"This song · linked templates",L"App catalogue · independent copies"})SendMessageW(controls_.at(scope),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));SendMessageW(controls_.at(scope),CB_SETCURSEL,0,0);
     for(auto text:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})SendMessageW(controls_.at(pointKind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));SendMessageW(controls_.at(pointKind),CB_SETCURSEL,1,0);
     finish();refresh();
   }
   void show(){NativeToolWindow::show();if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
-  bool retainedDraft()const{return draft()||pending_;}
-  Json snapshot()const{Json handles=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});return {{"visible",visible()},{"target",target_},{"document",document_},{"expectedRevision",revision_},{"catalogueRevision",catalogueRevision_},{"scope",catalogueScope_?"catalogue":"song"},{"selected",selected_},{"linkedTemplate",linked_},{"dirty",dirty_},{"fieldDraft",pointFields_||timingFields_},{"pending",pending_},{"sourceCurrent",sourceCurrent_()},{"shape",shape_},{"selectedPoint",selectedPoint_},{"previewSamples",canvas_.curve.size()},{"handles",handles},{"status",utf8(status_)}};}
+  bool retainedDraft()const{return draft()||pending_||(workbench_&&(workbench_->visible()||workbench_->retainedDraft()));}
+  Json snapshot()const{Json handles=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});return {{"visible",visible()},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}},{"formulaReference",referenceWindow_?referenceWindow_->snapshot():Json{{"visible",false}}},{"target",target_},{"document",document_},{"expectedRevision",revision_},{"catalogueRevision",catalogueRevision_},{"scope",catalogueScope_?"catalogue":"song"},{"selected",selected_},{"linkedTemplate",linked_},{"dirty",dirty_},{"fieldDraft",pointFields_||timingFields_},{"pending",pending_},{"sourceCurrent",sourceCurrent_()},{"shape",shape_},{"selectedPoint",selectedPoint_},{"previewSamples",canvas_.curve.size()},{"handles",handles},{"status",utf8(status_)}};}
 };
 }

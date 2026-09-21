@@ -146,6 +146,7 @@
             {patternTransposeUp,L"Pattern / Transpose selected notes up a semitone",L""},
             {patternTransposeDown,L"Pattern / Transpose selected notes down a semitone",L""},
             {pluginsCommand,L"Inspect / Plugin rack",L""},{pluginUndo,L"Plugins / Undo",L""},{pluginRedo,L"Plugins / Redo",L""},
+            {curveReference,L"Automation / Formula reference",L""},{curveExpand,L"Automation / Expand selected graph formula",L""},
             {pluginRescan,L"Plugins / Rescan installed VST3 modules",L""},{pluginEditor,L"Plugins / Open selected native editor",L""},
             {pluginNewInstrument,L"Plugins / Create trigger for selected instrument",L""},
             {pluginPage,L"Plugins / Choose parameters, factory programs or audio ports",L""},
@@ -217,7 +218,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=curvePattern&&id<=curveBank) && !(id>=graphCommand&&id<=graphDeleteNode) && !(id>=mixerCommand&&id<=mixerTiming) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
+            if(!(id>=curvePattern&&id<=curveReference) && !(id>=graphCommand&&id<=graphDeleteNode) && !(id>=mixerCommand&&id<=mixerTiming) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
     bool handleKey(WPARAM code) {

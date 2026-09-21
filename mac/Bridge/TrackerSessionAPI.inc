@@ -1226,14 +1226,15 @@
     } else if ([method isEqual:@"automation.formula.preview"]) {
       allowed(@[@"points", @"rows", @"rowsPerBeat", @"span", @"start", @"end", @"samples"]);
       const auto rows = uint32_t(integer(p[@"rows"],1,65536));
-      const auto rowsPerBeat = number(p[@"rowsPerBeat"] ?: @4,1,65535);
+      const auto rowsPerBeat = number(p[@"rowsPerBeat"] ?: @4,1,65536);
       const auto span=uint32_t(integer(p[@"span"]?:@(rows*256),1,rows*256));
       const auto start = number(p[@"start"] ?: @0,0,span);
       const auto end = number(p[@"end"] ?: @(span),start,span);
       const auto count = uint32_t(integer(p[@"samples"] ?: @1024,2,4096));
-      std::vector<AutomationPoint> points;
+      // Previews also serve reusable bank shapes, whose span can exceed a pattern.
+      EnvelopeShape preview;preview.span=span;auto &points=preview.points;
       for(id raw:array(p[@"points"],4096)) points.push_back(decodeAutomationPoint(raw,span-1));
-      validateAutomationPoints(points,span);
+      validateEnvelopeShape(preview);
       NSMutableArray *values=[NSMutableArray arrayWithCapacity:count];
       for(uint32_t i=0;i<count;++i) { const double position=start+(end-start)*i/(count-1); [values addObject:@[@(position),@(automationValue(points,position,span,rowsPerBeat))]]; }
       result=@{@"values":values, @"fallback":@"Domain errors use linear interpolation; output is clamped to 0..1"};

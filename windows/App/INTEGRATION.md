@@ -12,6 +12,8 @@ API/rendering and native editing controls. The reusable graph canvas is covered
 in `../GRAPH_EDITOR_PROGRESS.md`; graph pattern curves and the shared modulation
 sampling fix are covered in `../GRAPH_CURVES_PROGRESS.md`. The modeless envelope
 bank and its two reuse levels are covered in `../ENVELOPE_BANK_PROGRESS.md`.
+The modeless formula workbench and reference are covered in
+`../FORMULA_WORKBENCH_PROGRESS.md`.
 Song overview remains pending.
 
 ## Owner boundaries
@@ -54,6 +56,19 @@ catalogue I/O, history and project ownership. The bank captures source identity
 and draft generation independently of its own template draft, so navigation,
 new text and stale external edits cannot redirect a completion. F6 switches
 between the bank canvas and its native controls; Ctrl+S saves its song master.
+
+`FormulaWorkbenchWindow` uses the system Rich Edit control with local multilevel
+Undo, bounded text/snippet insertion and multiline selection-aware completion.
+Ctrl+Space is local completion; Ctrl+Enter uses a validated draft; F6 moves between
+code and reference. Preview requests capture complete parameters and the text
+generation, run on the document worker and publish only to that generation.
+Use rechecks the parent document, point, selection and draft generation, and
+returns only a local point edit. Parent Apply/Save creates the document transaction.
+Closing retains text; reopening raises the same draft, including a maximized
+window. The independent reference window can open without an envelope target.
+Rich Edit paint/focus/scroll notifications do not trigger layout or font resets;
+font updates occur on window size/DPI layout, avoiding a timer-starving repaint
+loop. Drawing uses retained preview samples, with no parser or worker call.
 
 Document identity changes only after a candidate opens successfully. Structural
 operations stop playback only after operation-layer validation. Failed opens and

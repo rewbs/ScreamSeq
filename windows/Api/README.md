@@ -31,8 +31,22 @@ graph/source/pattern/revision, retained point fields, selection, viewport and
 preview status. Values use the shared 256 units per row and normalized 0..1
 model; native fields display rows and percent. All nine curve types and scripted
 expressions use the shared evaluator. Formula previews run on the worker and
-painting consumes cached samples. Song overview and the expanded formula
-workbench remain outstanding.
+painting consumes cached samples. Song overview remains outstanding.
+
+The native **Expand** action opens a retained multiline formula draft with local
+completion/Undo and searchable reference. `workspace.get.formulaWorkbench` and
+`formulaReference` expose source, selection target, pending/valid status,
+completion/reference matches and preview samples. The envelope bank exposes
+the same snapshots inside `envelopeBank`. Use changes only the captured local
+point; the parent Apply/Save performs the existing guarded musical transaction.
+There is no separate formula mutation API or history domain. A stale point or
+newer parent draft retains the text and rejects Use.
+
+`automation.formula.preview` accepts rows and rowsPerBeat through 65536 and a
+span through rows×256, matching reusable bank templates. The shared envelope
+validator checks geometry while the existing parser/evaluator validates and
+previews expressions. Ordinary pattern-edit limits remain unchanged. Equivalent
+Mac validation and the shared API schema use the same bounds.
 
 The curve's **Bank…** button opens a modeless native envelope bank. It uses the
 same guarded bank/catalogue operations for captured-curve templates, linked or

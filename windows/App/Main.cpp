@@ -68,7 +68,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     graphAmount=468,graphWet=469,graphDeleteNode=470,
     curvePattern=480,curveKind=481,curveSnap=482,curveRow=483,curveValue=484,curveFormula=485,
     curveApply=486,curveReload=487,curveSetPoint=488,curveDelete=489,curveRamp=490,curveClear=491,
-    curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497;
+    curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497,curveExpand=498,curveReference=499;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -235,6 +235,8 @@ public:
             {"sampleEditor",sampleEditorSnapshot()},
             {"graphEditor",graphEditorSnapshot()},
             {"graphCurve",graphCurveSnapshot()},
+            {"formulaWorkbench",formulaWorkbench?formulaWorkbench->snapshot():Json{{"visible",false}}},
+            {"formulaReference",formulaReference?formulaReference->snapshot():Json{{"visible",false}}},
             {"envelopeBank",envelopeBank?envelopeBank->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
@@ -246,7 +248,7 @@ public:
             {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
                 {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
                 {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
-            {"unavailable",{"songGraph","formulaWorkbench","parameterAutomationUI","instrumentEnvelopeUI","floatingPanels","savedLayouts"}}};
+            {"unavailable",{"songGraph","parameterAutomationUI","instrumentEnvelopeUI","floatingPanels","savedLayouts"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};

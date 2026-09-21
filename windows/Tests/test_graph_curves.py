@@ -203,7 +203,7 @@ class GraphCurveTests(unittest.TestCase):
         frame = wintypes.RECT()
         user.GetWindowRect(hwnd, ctypes.byref(frame))
         self.select(481, 8)
-        for identifier in range(480, 498):
+        for identifier in range(480, 500):
             control = self.control(identifier)
             if user.IsWindowVisible(control):
                 with self.subTest(control=identifier):

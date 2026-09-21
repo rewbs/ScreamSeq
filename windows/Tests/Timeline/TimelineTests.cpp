@@ -76,6 +76,14 @@ int main(){try{
   check(previewCurve["values"].size()==5&&std::abs(previewCurve["values"][2][1].get<double>()-0.25)<1e-12,"formula preview uses shared evaluator");
   check(doc->revision==formulaRevision&&stops==formulaStops,"formula reads never mutate or stop");
   formula["points"][0]["formula"]="mi";expectInvalid("automation.formula.preview",formula);
+  Json maximumBeat={{"rows",65536},{"rowsPerBeat",65536},{"samples",3},{"points",Json::array({{{"position",0},{"value",0},{"curve","scripted"},{"formula","beat"}}})}};
+  auto maximumPreview=api.invoke("automation.formula.preview",maximumBeat);
+  check(maximumPreview.at("values")==Json::array({Json::array({0,0}),Json::array({8388608,.5}),Json::array({16777216,1})}),"preview accepts the full envelope-bank beat division range");
+  maximumBeat["rowsPerBeat"]=65537;expectInvalid("automation.formula.preview",maximumBeat);
+  maximumBeat["rowsPerBeat"]=65536;maximumBeat["points"][0]["position"]=16777216;expectInvalid("automation.formula.preview",maximumBeat);
+  maximumBeat["points"][0]["position"]=0;maximumBeat["span"]=16777217;expectInvalid("automation.formula.preview",maximumBeat);
+  maximumBeat.erase("span");maximumBeat["rows"]=65537;expectInvalid("automation.formula.preview",maximumBeat);
+  check(doc->revision==formulaRevision&&stops==formulaStops,"boundary formula reads never mutate or stop");
   std::cout<<"PASS bounded formula preview/reference through shared evaluator\n";
   return 0;
 }catch(const std::exception&e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

@@ -312,7 +312,7 @@ class EnvelopeBankUITests(unittest.TestCase):
         frame = wintypes.RECT()
         user.GetWindowRect(hwnd, ctypes.byref(frame))
         row = []
-        for identifier in range(1001, 1026):
+        for identifier in range(1001, 1028):
             control = self.bcontrol(identifier)
             if user.IsWindowVisible(control):
                 with self.subTest(control=identifier):
