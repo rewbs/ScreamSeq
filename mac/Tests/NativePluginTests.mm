@@ -317,7 +317,7 @@ int main(int argc, char **argv) {
                                                                             options:0
                                                                              format:nil
                                                                               error:nil];
-          check([project[@"version"] intValue] == 2 && [project[@"automation"] count] == 1,
+          check([project[@"version"] intValue] == 6 && [project[@"automation"] count] == 1,
                 "versioned automation project persisted");
           check(std::abs([project[@"automation"][0][2] doubleValue] - .61) < 1e-5,
                 "custom-interface automation value retained");

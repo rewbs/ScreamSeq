@@ -60,12 +60,12 @@ final class SignalGraphEditor: NSView, NSTextFieldDelegate {
     scroll.documentView=canvas;scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true;scroll.allowsMagnification=true;scroll.minMagnification=0.3;scroll.maxMagnification=2;scroll.drawsBackground=false
     canvas.onSelect = {[weak self] id in self?.selectedID=id;self?.inspect()}
     canvas.onSelectEdge = {[weak self] i in self?.selectConnection(i)}
-    canvas.onDelete = {[weak self] in guard let self else{return};if self.canvas.selectedEdge != nil{self.disconnect()}else{self.removeNode()}}
+    canvas.onDelete = {[weak self] in guard let self else{return};if self.canvas.selectedEdge != nil{self.disconnect()}else if let id=self.canvas.selected{self.selectedID=id;self.removeNode()}}
     canvas.onZoom = {[weak self] factor in self?.zoom(factor)}
     canvas.onConnectPorts = {[weak self] a,b,out,input,mod in guard let self else{return};if self.graphID != nil {self.connectionKind.selectItem(withTitle:mod ? "Modulation" : "Audio");self.outputPort.stringValue=String(out);self.inputPort.stringValue=String(input);if mod{self.parameter.stringValue=String(input)};self.connectionModeChanged()};self.connect(a,b)}
     canvas.onMove = {[weak self] id,x,y in self?.move(id,x:x,y:y)}
     canvas.onConnect = {[weak self] a,b in self?.connect(a,b)}
-    canvas.onOpen = {[weak self] id in guard let self else{return};if self.graphID==nil{self.openSongNode(id)}else{self.selectedID=id;self.inspect();if self.selectedNode?["kind"] as? String=="plugin"{self.pluginControls.load()};self.name.scrollToVisible(self.name.bounds);self.window?.makeFirstResponder(self.name)}}
+    canvas.onOpen = {[weak self] id in self?.openNode(id)}
     pluginControls.onRequest = {[weak self] method,p,reply in self?.onRequest?(method,p,reply)}
     pluginControls.currentRevision = {[weak self] in self?.revision ?? ""}
     pluginControls.onChanged = {[weak self] in self?.load()}
@@ -86,10 +86,10 @@ final class SignalGraphEditor: NSView, NSTextFieldDelegate {
     modulationSection=stack(.vertical,[stack(.horizontal,[Theme.label("Parameter ID",size:11),parameter]),stack(.horizontal,[Theme.label("Range",size:11),minimum,maximum]),stack(.horizontal,[Theme.label("Base",size:11),base,connectionEnabled])],spacing:5)
     connectionKind.target=self;connectionKind.action = #selector(connectionModeChanged)
     let controls=stack(.vertical,[librarySection,detail,nodeList,name,
-      stack(.horizontal,[ActionButton("Apply name"){[weak self] in self?.rename()},ActionButton("Remove node"){[weak self] in self?.removeNode()},ActionButton("Open"){[weak self] in guard let self,let id=self.selectedID else{return};if self.graphID==nil{self.openSongNode(id)}}]),
+      stack(.horizontal,[ActionButton("Apply name"){[weak self] in self?.rename()},ActionButton("Remove node"){[weak self] in self?.removeNode()},ActionButton("Open"){[weak self] in guard let self,let id=self.selectedID else{return};self.openNode(id)}]),
       busSection,sourceSection,pluginControls,
       Theme.label("CONNECTIONS",size:10,color:Theme.muted),connectionKind,source,destination,audioPorts,modulationSection,
-      stack(.horizontal,[ActionButton("Connect"){[weak self] in self?.connectSelected()},ActionButton("Update wire"){[weak self] in self?.updateConnection()}]),connection,ActionButton("Remove connection"){[weak self] in self?.disconnect()},
+      stack(.horizontal,[ActionButton("Connect", prominent: true){[weak self] in self?.connectSelected()},ActionButton("Update wire"){[weak self] in self?.updateConnection()}]),connection,ActionButton("Remove connection"){[weak self] in self?.disconnect()},
       Theme.label("Green: audio · Gold: modulation. Drag ports to connect. Open a subgraph copy to edit its shared definition.",size:11,color:Theme.muted)
     ],spacing:7)
     controls.stretchAcrossAxis();controls.fill(inspector,inset:8)
@@ -100,11 +100,21 @@ final class SignalGraphEditor: NSView, NSTextFieldDelegate {
     let body=stack(.horizontal,[drawing,inspectorScroll],spacing:2);body.stretchAcrossAxis()
     let toolbar=stack(.horizontal,[enableRouting,library,ActionButton("New"){[weak self] in self?.mutate("graph.create",["name":"New subgraph"])},ActionButton("Clone"){[weak self] in if let id=self?.graphID{self?.mutate("graph.clone",["graph":id])}},filter,ActionButton("−"){[weak self] in self?.zoom(1/1.2)},ActionButton("+"){[weak self] in self?.zoom(1.2)},ActionButton("Fit"){[weak self] in self?.fit()},ActionButton("Arrange"){[weak self] in self?.arrange()},ActionButton("Reload"){[weak self] in self?.load()}],spacing:4)
     instrumentPicker.setAccessibilityLabel("Sample instrument graph target");instrumentPicker.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-    let add=stack(.horizontal,[ActionButton("Add effect…"){[weak self] in self?.choosePlugin()},nodeKind,ActionButton("Add source"){[weak self] in self?.addSource()},instrumentPicker,ActionButton("Instrument graph"){[weak self] in self?.inspectSampleInstrument()},NSView(),Theme.label("Row → persistent → ordinary → output",size:10,color:Theme.muted)],spacing:5)
+    let add=stack(.horizontal,[ActionButton("Add effect…", prominent: true){[weak self] in self?.choosePlugin()},nodeKind,ActionButton("Add source"){[weak self] in self?.addSource()},instrumentPicker,ActionButton("Instrument graph"){[weak self] in self?.inspectSampleInstrument()},NSView(),Theme.label("Row → persistent → ordinary → output",size:10,color:Theme.muted)],spacing:5)
     let content=stack(.vertical,[toolbar,add,body,status],spacing:5);content.stretchAcrossAxis();content.fill(self,inset:6)
     for popup in [library,filter,source,destination,nodeList,assignment,connection]{popup.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
   }
   required init?(coder:NSCoder){fatalError()}
+  func openNode(_ id:String) {
+    if graphID == nil { openSongNode(id); return }
+    selectedID=id; inspect()
+    if selectedNode?["kind"] as? String == "plugin" {
+      if (selectedNode?["plugin"] as? [String:Any])?["format"] as? String == "Built-in" {
+        pluginControls.load();pluginControls.scrollToVisible(pluginControls.bounds);window?.makeFirstResponder(pluginControls.parameter)
+      } else {pluginControls.openEditor()}
+    }
+    else { name.scrollToVisible(name.bounds); window?.makeFirstResponder(name) }
+  }
   func load(){guard !loading,let onRequest else{return};loading=true;onRequest("graph.get",["includeState":false]){[weak self] response in guard let self else{return};self.loading=false;if let result=response["result"] as? [String:Any],let data=result["data"] as? [String:Any]{self.revision=result["revision"] as? String ?? "";self.update(data)}else{self.error(response)}}}
   func update(_ value:[String:Any]){data=value;hasDraft=false
     if graphID != nil && definition==nil{graphID=nil}
@@ -194,5 +204,5 @@ final class SignalGraphEditor: NSView, NSTextFieldDelegate {
     if connectionKind.indexOfSelectedItem==0{guard let input=Int(inputPort.stringValue),let output=Int(outputPort.stringValue),let gain=Double(connectionGain.stringValue),gain.isFinite else{status.stringValue="Enter valid port numbers and gain";return};updateDefinition{d in var edges=d["audio"] as? [[String:Any]] ?? [];edges.append(["source":a,"target":b,"input":input,"output":output,"gain":gain]);d["audio"]=edges}}
     else{guard let parameter=UInt32(parameter.stringValue),let lo=Double(minimum.stringValue),let hi=Double(maximum.stringValue),let base=Double(base.stringValue)else{return};updateDefinition{d in var edges=d["modulation"] as? [[String:Any]] ?? [];edges.append(["source":a,"target":b,"parameter":parameter,"minimum":lo,"maximum":hi,"base":base,"enabled":connectionEnabled.state == .on]);d["modulation"]=edges}}
   }
-  func disconnect(){guard let value=chosen(connection),let index=Int(value)else{return};guard graphID != nil else{disconnectSong(index);return};updateDefinition{d in var audio=d["audio"] as? [[String:Any]] ?? [],mod=d["modulation"] as? [[String:Any]] ?? [];if index<audio.count{audio.remove(at:index)}else if mod.indices.contains(index-audio.count){mod.remove(at:index-audio.count)};d["audio"]=audio;d["modulation"]=mod}}
+  func disconnect(){guard let index=canvas.selectedEdge ?? chosen(connection).flatMap(Int.init),canvas.edges.indices.contains(index)else{return};guard graphID != nil else{disconnectSong(index);return};updateDefinition{d in var audio=d["audio"] as? [[String:Any]] ?? [],mod=d["modulation"] as? [[String:Any]] ?? [];if index<audio.count{audio.remove(at:index)}else if mod.indices.contains(index-audio.count){mod.remove(at:index-audio.count)};d["audio"]=audio;d["modulation"]=mod}}
 }

@@ -116,7 +116,8 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
       "Use the Mixer to place effects on tracks, groups and returns.", size: 11, color: Theme.muted)
   let record = NSButton(checkboxWithTitle: "Record automation", target: nil, action: nil)
   let assignment = NSPopUpButton()
-  var instrumentsButton: ActionButton!
+  var instrumentsButton: ActionButton!, createInstrumentButton:ActionButton!
+  var onNewInstrument:((Int)->Void)?
   var onInstruments: ((Int) -> Void)?
   var onOpen: ((Int) -> Void)?, onAssign: ((Int, Int) -> Void)?
   var undoButton: ActionButton!, redoButton: ActionButton!
@@ -143,8 +144,8 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
       .horizontal,
       [
         Theme.label("Plugins", size: 20, weight: .semibold), NSView(),
-        ActionButton("Add built-in…") { [weak self] in self?.onAddBuiltIn?() },
-        ActionButton("Add plugin…", symbol: "plus") { [weak self] in self?.onAdd?() },
+        ActionButton("Add built-in…", prominent: true) { [weak self] in self?.onAddBuiltIn?() },
+        ActionButton("Add plugin…", symbol: "plus", prominent: true) { [weak self] in self?.onAdd?() },
       ], spacing: 14)
     let controls = stack(
       .horizontal,
@@ -174,14 +175,16 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     openButton = ActionButton("Open interface…") { [weak self] in
       guard let self else { return }; self.onOpen?(self.selected)
     }
-    instrumentsButton = ActionButton("Instruments…") { [weak self] in guard let self else { return }; self.onInstruments?(self.selected) }
+    instrumentsButton = ActionButton("Assign tracker instruments…") { [weak self] in guard let self else { return }; self.onInstruments?(self.selected) }
     instrumentsButton.isEnabled = false
+    createInstrumentButton=ActionButton("New trigger instrument…",prominent:true){[weak self] in guard let self else{return};self.onNewInstrument?(self.selected)}
+    createInstrumentButton.isEnabled=false
     let routing = stack(
       .horizontal,
       [
         openButton!,
         ActionButton("Audio buses…") { [weak self] in guard let self else { return }; self.onPorts?(self.selected) },
-        instrumentsButton!, NSView(),
+        NSView(),
         ActionButton("Pattern automation…") { [weak self] in self?.onPatternAutomation?() },
       ], spacing: 12)
     let automation = stack(
@@ -215,7 +218,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     let content = stack(
       .vertical,
       [
-        title, note, controls, routing, automation, dynamicsMeter,
+        title, note, controls, routing, stack(.horizontal,[createInstrumentButton!,instrumentsButton!,NSView()],spacing:12), automation, dynamicsMeter,
         stack(.horizontal, [search, programsButton!, savePresetButton!, loadPresetButton!]), scroll,
         Theme.label(
           "Plugins, instrument assignments, and automation are saved in .screamseq projects.\nPlugins run inside this app; a faulty plug-in can interrupt playback or crash it.",
@@ -269,8 +272,9 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     assignment.selectItem(withTag: chosen["instrument"] as? Int ?? 0)
     assignment.isEnabled = chosen["isInstrument"] as? Bool ?? false
     instrumentsButton.isEnabled = assignment.isEnabled
+    createInstrumentButton.isEnabled=assignment.isEnabled
     let count = (chosen["instrumentAssignments"] as? [[String: Any]])?.count ?? ((chosen["instrument"] as? Int ?? 0) > 0 ? 1 : 0)
-    instrumentsButton.title = count > 0 ? "Instruments (\(count))…" : "Instruments…"
+    instrumentsButton.title = count > 0 ? "Assigned instruments (\(count))…" : "Assign tracker instruments…"
     if !assignment.isEnabled {
       assignment.removeAllItems()
       assignment.addItem(withTitle: "Effect · route in Mixer")

@@ -74,7 +74,7 @@ MixerBusKind decodeMixerKind(id value) {
   NSUInteger kind = [@[@"track", @"group", @"return", @"master"] indexOfObject:Automation::string(value, 16)];
   Automation::require(kind != NSNotFound, "Unknown mixer bus kind"); return MixerBusKind(kind);
 }
-NSDictionary *encodeMixer(const MixerGraph &graph, bool includePrePan = true) {
+NSDictionary *encodeMixer(const MixerGraph &graph) {
   NSMutableArray *buses = [NSMutableArray array], *instruments = [NSMutableArray array], *sidechains = [NSMutableArray array];
   for (const auto &bus : graph.buses) {
     NSMutableArray *inserts = [NSMutableArray array], *sends = [NSMutableArray array];
@@ -85,16 +85,16 @@ NSDictionary *encodeMixer(const MixerGraph &graph, bool includePrePan = true) {
       @"color": @(bus.color), @"output": bus.output ? nativeID(bus.output) : @"",
       @"preGainDB": @(bus.preGainDB), @"gainDB": @(bus.gainDB), @"pan": @(bus.pan), @"width": @(bus.width),
       @"timingMS": @(bus.timingMS), @"mute": @(bus.mute), @"solo": @(bus.solo), @"inserts": inserts, @"sends": sends} mutableCopy];
-    if (includePrePan) encoded[@"prePan"] = @(bus.prePan);
+    encoded[@"prePan"] = @(bus.prePan);
     [buses addObject:encoded];
   }
   for (const auto &source : graph.instruments) [instruments addObject:@{@"plugin": @(source.plugin.c_str()),
-    @"target": nativeID(source.target), @"output": @(source.output)}];
+    @"target": source.target ? nativeID(source.target) : @"", @"output": @(source.output)}];
   for (const auto &side : graph.sidechains) [sidechains addObject:@{@"source": nativeID(side.source), @"plugin": @(side.plugin.c_str()),
     @"input": @(side.input), @"gainDB": @(side.gainDB), @"preFader": @(side.preFader), @"enabled": @(side.enabled)}];
   return @{@"buses": buses, @"instruments": instruments, @"sidechains": sidechains};
 }
-MixerGraph decodeMixer(id raw, bool hasSidechains, bool hasPrePan) {
+MixerGraph decodeMixer(id raw) {
   using namespace Automation;
   auto value = object(raw); keys(value, @[@"buses", @"instruments", @"sidechains"]);
   MixerGraph graph;
@@ -105,8 +105,7 @@ MixerGraph decodeMixer(id raw, bool hasSidechains, bool hasPrePan) {
     bus.name = string(v[@"name"], 256).UTF8String; bus.color = uint32_t(integer(v[@"color"], 0, 0xffffff));
     bus.output = [v[@"output"] isEqual:@""] ? 0 : decodeNativeID(v[@"output"]);
     bus.preGainDB = number(v[@"preGainDB"], -96, 24); bus.gainDB = number(v[@"gainDB"], -96, 24);
-    if (hasPrePan) bus.prePan = number(v[@"prePan"], -1, 1);
-    else require(v[@"prePan"] == nil, "Legacy mixer metadata cannot contain input balance");
+    bus.prePan = number(v[@"prePan"], -1, 1);
     bus.pan = number(v[@"pan"], -1, 1); bus.width = number(v[@"width"], 0, 2); bus.timingMS = number(v[@"timingMS"], -500, 500);
     bus.mute = boolean(v[@"mute"]); bus.solo = boolean(v[@"solo"]);
     for (id insert in array(v[@"inserts"], 32)) bus.inserts.push_back(string(insert, 128).UTF8String);
@@ -118,13 +117,13 @@ MixerGraph decodeMixer(id raw, bool hasSidechains, bool hasPrePan) {
   }
   for (id rawSource in array(value[@"instruments"], 128)) {
     auto source = object(rawSource); keys(source, @[@"plugin", @"target", @"output"]);
-    graph.instruments.push_back({string(source[@"plugin"], 128).UTF8String, decodeNativeID(source[@"target"]), uint32_t(integer(source[@"output"], 0, 63))});
+    graph.instruments.push_back({string(source[@"plugin"], 128).UTF8String, [source[@"target"] isEqual:@""] ? 0 : decodeNativeID(source[@"target"]), uint32_t(integer(source[@"output"], 0, 63))});
   }
-  if (hasSidechains) for (id rawSide in array(value[@"sidechains"], 128)) {
+  for (id rawSide in array(value[@"sidechains"], 128)) {
     auto side = object(rawSide); keys(side, @[@"source", @"plugin", @"input", @"gainDB", @"preFader", @"enabled"]);
     graph.sidechains.push_back({decodeNativeID(side[@"source"]), string(side[@"plugin"], 128).UTF8String,
       uint32_t(integer(side[@"input"], 1, 63)), number(side[@"gainDB"], -96, 12), boolean(side[@"preFader"]), boolean(side[@"enabled"])});
-  } else require(value[@"sidechains"] == nil, "Legacy mixer metadata cannot contain sidechain routes");
+  }
   return graph;
 }
 #include "EnvelopeBankMetadata.inc"
@@ -156,38 +155,27 @@ NSDictionary *encodeNativeSong(const NativeSong &native) {
     [noteTracks addObject:@{@"bus": nativeID(track.bus), @"columns": columns}];
   }
   for (const auto &[id, muted] : native.columnMutes) [mutes addObject:@[nativeID(id), @(muted)]];
-  const bool hasEffectOutput=std::any_of(native.mixer.instruments.begin(),native.mixer.instruments.end(),[&](const auto &route){return std::any_of(native.mixer.buses.begin(),native.mixer.buses.end(),[&](const auto &bus){return std::find(bus.inserts.begin(),bus.inserts.end(),route.plugin)!=bus.inserts.end();});});
-  const bool hasScripts = std::any_of(native.automation.begin(), native.automation.end(), [](const auto &lane) { return std::any_of(lane.points.begin(),lane.points.end(),[](const auto &p){return !p.formula.source().empty();}); });
-  const bool hasNoteEffects=std::any_of(native.preciseNotes.begin(),native.preciseNotes.end(),[](const auto &n){return n.effect!=0;});
-  const bool hasGraphCurves=!native.signal.instrumentAssignments.empty()||std::any_of(native.signal.library.begin(),native.signal.library.end(),[](const auto &d){return std::any_of(d.nodes.begin(),d.nodes.end(),[](const auto &n){return n.kind==SignalNodeKind::Automation;});});
-  const bool hasBank=!native.envelopeBank.empty() || !native.envelopeLinks.empty();
-  const bool hasGraph = hasBank || hasNoteEffects || hasScripts || !native.signal.empty() || hasEffectOutput;
-  const bool hasNotes = !native.preciseNotes.empty() || hasGraph;
-  const bool hasPerformance = !native.performance.empty() || hasNotes;
-  const bool hasPitch = std::any_of(native.performance.commands.begin(),native.performance.commands.end(),[](const auto &c){return c.kind==PatternCommandKind::PitchSet||c.kind==PatternCommandKind::PitchSlide;});
-  const bool hasColumns = noteTracks.count || mutes.count;
-  const bool hasPrePan = std::any_of(native.mixer.buses.begin(), native.mixer.buses.end(), [](const auto &bus) { return bus.prePan != 0; });
-  NSMutableDictionary *result = [@{@"version": @(hasBank ? 14 : hasGraphCurves ? 13 : hasNoteEffects ? 12 : hasScripts ? 11 : hasGraph ? 10 : hasNotes ? 9 : hasPitch ? 8 : hasPerformance ? 7 : hasPrePan ? 6 : hasColumns ? 5 : 4), @"nextID": @(native.nextID), @"patterns": map(native.patterns),
+  NSMutableDictionary *result = [@{@"version": @17, @"nextID": @(native.nextID), @"patterns": map(native.patterns),
            @"tracks": map(native.tracks), @"samples": map(native.samples), @"instruments": map(native.instruments),
-           @"sequences": sequences, @"automation": automation, @"mixer": encodeMixer(native.mixer, hasPrePan || hasPerformance)} mutableCopy];
-  if(hasBank) result[@"envelopeBank"]=encodeEnvelopeBank(native);
-  if(hasGraph) result[@"signalGraph"] = encodeSignalGraph(native.signal);
-  if(hasNotes) {
+           @"sequences": sequences, @"automation": automation, @"mixer": encodeMixer(native.mixer)} mutableCopy];
+  result[@"envelopeBank"]=encodeEnvelopeBank(native);
+  result[@"signalGraph"] = encodeSignalGraph(native.signal);
+  {
     NSMutableArray *notes=[NSMutableArray array];
     for(const auto &note:native.preciseNotes) {
       NSMutableDictionary *item=[encodePreciseNote(note) mutableCopy];item[@"pattern"]=nativeID(note.pattern);item[@"track"]=nativeID(note.track);[notes addObject:item];
     }
     result[@"preciseNotes"]=notes;
   }
-  if (hasPerformance) result[@"performance"] = encodePatternPerformance(native.performance);
-  if (hasColumns || hasPrePan || hasPerformance) { result[@"noteTracks"] = noteTracks; result[@"columnMutes"] = mutes; }
+  result[@"performance"] = encodePatternPerformance(native.performance);
+  { result[@"noteTracks"] = noteTracks; result[@"columnMutes"] = mutes; }
   return result;
 }
 NativeSong decodeNativeSong(id raw) {
   using namespace Automation;
   auto value = object(raw);
   keys(value, @[@"version", @"nextID", @"patterns", @"tracks", @"samples", @"instruments", @"sequences", @"automation", @"mixer", @"noteTracks", @"columnMutes", @"performance", @"preciseNotes", @"signalGraph", @"envelopeBank"]);
-  const auto version = integer(value[@"version"], 1, 14);
+  integer(value[@"version"], 17, 17);
   NativeSong result;
   result.nextID = integer(value[@"nextID"], 1, NativeSong::maximumID);
   auto map = [&](NSString *key, auto &out) {
@@ -207,12 +195,9 @@ NativeSong decodeNativeSong(id raw) {
     for (id slot in array(sequence[@"orders"], 65536)) entry.orders.push_back(decodeNativeEntity(slot));
     result.sequences.push_back(std::move(entry));
   }
-  if (version >= 2)
-    for (id lane in array(value[@"automation"], 256)) result.automation.push_back(decodeMusicalLane(lane));
-  else require(value[@"automation"] == nil, "Legacy metadata cannot contain musical automation");
-  if (version >= 3) result.mixer = decodeMixer(value[@"mixer"], version >= 4, version >= 6);
-  else require(value[@"mixer"] == nil, "Legacy metadata cannot contain a mixer graph");
-  if (version >= 5) {
+  for (id lane in array(value[@"automation"], 256)) result.automation.push_back(decodeMusicalLane(lane));
+  result.mixer = decodeMixer(value[@"mixer"]);
+  {
     for (id rawTrack in array(value[@"noteTracks"], 127)) {
       auto track = object(rawTrack); keys(track, @[@"bus", @"columns"]);
       NativeNoteTrack entry{decodeNativeID(track[@"bus"]), {}};
@@ -223,18 +208,15 @@ NativeSong decodeNativeSong(id raw) {
       auto pair = array(rawMute, 2); require(pair.count == 2, "Invalid column mute override");
       require(result.columnMutes.emplace(decodeNativeID(pair[0]), boolean(pair[1])).second, "Duplicate column mute override");
     }
-  } else require(value[@"noteTracks"] == nil && value[@"columnMutes"] == nil, "Legacy metadata cannot contain note tracks or column mutes");
-  if(version>=9)for(id rawNote:array(value[@"preciseNotes"],maximumPreciseNotes)) {
+  }
+  for(id rawNote:array(value[@"preciseNotes"],maximumPreciseNotes)) {
     auto n=object(rawNote);keys(n,@[@"pattern",@"track",@"position",@"instrument",@"note",@"velocity",@"effect",@"parameter"]);
-    require(version>=12 || (!n[@"effect"]&&!n[@"parameter"]),"Legacy metadata cannot contain per-note effects");
     result.preciseNotes.push_back({decodeNativeID(n[@"pattern"]),decodeNativeID(n[@"track"]),uint32_t(integer(n[@"position"],0,UINT32_MAX)),
       uint16_t(integer(n[@"instrument"],0,255)),uint8_t(integer(n[@"note"],1,255)),uint8_t(integer(n[@"velocity"],1,127)),
       uint8_t(integer(n[@"effect"]?:@0,0,255)),uint8_t(integer(n[@"parameter"]?:@0,0,255))});
-  } else require(value[@"preciseNotes"]==nil,"Legacy metadata cannot contain precise notes");
-  if(version>=10) {result.signal=decodeSignalGraph(value[@"signalGraph"]);if(version<13){require(result.signal.instrumentAssignments.empty(),"Legacy metadata cannot contain instrument graphs");}if(version<13)for(const auto &d:result.signal.library)for(const auto &n:d.nodes)require(n.kind!=SignalNodeKind::Automation,"Legacy metadata cannot contain graph automation sources");}
-  else require(value[@"signalGraph"]==nil,"Legacy metadata cannot contain signal graphs");
-  if(version>=14)decodeEnvelopeBank(result,value[@"envelopeBank"]);else require(value[@"envelopeBank"]==nil,"Legacy metadata cannot contain an envelope bank");
-  if(version>=7) result.performance=decodePatternPerformance(value[@"performance"]);
-  else require(value[@"performance"]==nil,"Legacy metadata cannot contain native pattern commands");
+  }
+  result.signal=decodeSignalGraph(value[@"signalGraph"]);
+  decodeEnvelopeBank(result,value[@"envelopeBank"]);
+  result.performance=decodePatternPerformance(value[@"performance"]);
   return result;
 }

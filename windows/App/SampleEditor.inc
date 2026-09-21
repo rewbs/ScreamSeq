@@ -156,6 +156,15 @@
             if(data.value("sustainLoop",false)) {const auto a=frameX(data.at("sustainStart")),b=frameX(data.at("sustainEnd"));
                 s.line(a,w.y+w.h-3,b,w.y+w.h-3,0xb5a0e8,2);s.line(a,w.y+w.h-10,a,w.y+w.h,0xb5a0e8,2);s.line(b,w.y+w.h-10,b,w.y+w.h,0xb5a0e8,2);}
         }
+        // Read the renderer's bounded atomic snapshot on the UI thread. These
+        // are actual voice positions, so loops and overlapping notes stay true
+        // to the music without rebuilding waveform geometry each frame.
+        if(device.running() && renderer && range.frames) for(const auto &voice:renderer->voicePositions())
+            if(voice.sample==selectedSample() && voice.sampleFrame<range.frames) {
+                const float x=frameX(voice.sampleFrame);
+                s.line(x,w.y+1,x,w.y+w.h-1,0xf3c778,1.5f);
+                s.fill(x-2,w.y+1,4,5,0xffe1a7);
+            }
         s.uiText(L"Start",r.x+12,r.y+r.h-29,36,0x9bacbc);s.uiText(L"End",r.x+150,r.y+r.h-29,30,0x9bacbc);
         const auto count=range.last-range.first;const auto rate=view->samples.contains(selectedSample()) ? view->samples.at(selectedSample()).value("rate",0u) : 0;
         wchar_t summary[160]{};swprintf_s(summary,L"%u frames  /  %.2f ms  /  drag or Shift+arrows to select",count,rate ? 1000.0*count/rate : 0);

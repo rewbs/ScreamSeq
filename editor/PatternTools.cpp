@@ -227,3 +227,40 @@ std::vector<Edit> preparePatternPaste(const Document &doc, uint16_t pattern, uin
 	return edits;
 }
 } // namespace Tracker
+
+namespace Tracker {
+NativeSong prepareEffectTransform(const Document &doc,const std::vector<PatternRegion> &regions,const PatternTransform &t) {
+  NativeSong next=doc.native();
+  const bool move=t.operation=="clear"||t.operation=="reverse"||t.operation=="rotate"||t.operation=="expand"||t.operation=="shrink"||t.operation=="insertRows"||t.operation=="deleteRows";
+  if(!move || !(t.fields&PatternEffect)) return next;
+  for(const auto &region:regions) {
+    const auto pattern=next.patterns.at(region.pattern).id;
+    std::set<uint64_t> tracks;
+    for(uint16_t ch=region.firstChannel;ch<region.firstChannel+region.channels;++ch)tracks.insert(next.tracks.at(ch).id);
+    std::vector<PatternCommand> commands;
+    commands.reserve(next.performance.commands.size());
+    for(auto c:next.performance.commands) {
+      const int row=int(c.position/performanceUnitsPerRow)-region.firstRow;
+      if(c.pattern!=pattern||!tracks.contains(c.track)||row<0||row>=region.rows){commands.push_back(c);continue;}
+      if(t.operation=="clear")continue;
+      int target=row;uint32_t fraction=c.position%performanceUnitsPerRow;
+      if(t.operation=="reverse") target=region.rows-1-row;
+      else if(t.operation=="rotate")target=(row+int(t.amount)%region.rows+region.rows)%region.rows;
+      else if(t.operation=="insertRows")target+=int(t.amount);
+      else if(t.operation=="deleteRows")target-=int(t.amount);
+      else if(t.operation=="expand"){target*=int(t.amount);c.duration*=uint32_t(t.amount);}
+      else if(t.operation=="shrink"){
+        if(row%int(t.amount)){if(!t.allowDataLoss)throw std::invalid_argument("Shrink would discard FX columns; allow data loss explicitly");continue;}
+        target/=int(t.amount);if(c.duration)c.duration=std::max(1u,c.duration/uint32_t(t.amount));
+      }
+      if(target<0||target>=region.rows){if(!t.allowDataLoss)throw std::invalid_argument("This row edit would discard FX columns; allow data loss explicitly");continue;}
+      c.position=uint32_t(region.firstRow+target)*performanceUnitsPerRow+fraction;
+      const auto end=uint32_t(doc.song().Patterns[region.pattern].GetNumRows())*performanceUnitsPerRow;
+      if(c.duration>end-c.position){if(!t.allowDataLoss)throw std::invalid_argument("This row edit would move an FX slide beyond the pattern");c.duration=end-c.position;}
+      commands.push_back(c);
+    }
+    next.performance.commands=std::move(commands);
+  }
+  next.validate(doc.song());return next;
+}
+}

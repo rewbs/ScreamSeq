@@ -5,7 +5,7 @@ PatternCommandRuntime::PatternCommandRuntime(const NativeSong &native,const std:
  const std::vector<std::string> &instances,const std::vector<bool> &bypass,const std::vector<ParameterChange> &absolute) {
   std::map<std::pair<std::string,uint32_t>,size_t> targetIndices;
   for(const auto &command:native.performance.commands) {
-    if(command.kind==PatternCommandKind::PitchSet||command.kind==PatternCommandKind::PitchSlide)
+    if(command.kind!=PatternCommandKind::ParameterSet&&command.kind!=PatternCommandKind::ParameterSlide)
       continue; // The pitch runtime shares the musical clock but owns pitch state.
     const auto &binding=native.performance.bindings.at(command.binding);
     const auto instance=std::find(instances.begin(),instances.end(),binding.plugin);

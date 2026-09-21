@@ -71,7 +71,7 @@ int main(int argc,char **argv){@autoreleasepool{try{
       // the separate scanner intentionally cannot see process-local registrations.
       auto root=[[NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil] mutableCopy];
       auto item=[dictionary(descriptor) mutableCopy];const auto captured=probe.state();item[@"state"]=[NSData dataWithBytes:captured.state.data() length:captured.state.size()];
-      item[@"instrument"]=@0;item[@"bypass"]=@NO;item[@"instanceID"]=@"fixture-au";root[@"plugins"]=@[item];
+      item[@"instrumentAssignments"]=@[];item[@"instrument"]=@0;item[@"bypass"]=@NO;item[@"instanceID"]=@"fixture-au";root[@"plugins"]=@[item];
       NSString *initial=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".resonance"]];
       [[NSPropertyListSerialization dataWithPropertyList:root format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:initial atomically:YES];
       check([session openPath:initial error:&error],"Recall process-local AU fixture");[NSFileManager.defaultManager removeItemAtPath:initial error:nil];
@@ -89,6 +89,21 @@ int main(int argc,char **argv){@autoreleasepool{try{
     check(![call(@"plugin.instruments.set",@{@"plugin":identity,@"assignments":assignments},true)[@"changed"] boolValue],"Identical routing is a no-op");
     call(@"history.undo",@{@"domain":@"plugins"},true);check([call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"][@"assignments"] count]==0,"Plugin Undo removes aliases in one step");
     call(@"history.redo",@{@"domain":@"plugins"},true);check([call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"] isEqual:routing],"Redo restores MIDI channels and stable owner");
+    check(![call(@"instrument.plugin.set",@{@"instrument":@1,@"plugin":identity,@"channel":@2},true)[@"changed"] boolValue],"Setting an existing primary assignment preserves ordering and revision");
+    revision=session.automationRevision;
+    auto singlePreview=call(@"instrument.plugin.set",@{@"instrument":@2,@"plugin":@"",@"dryRun":@YES},true);
+    check([singlePreview[@"data"][@"wouldChange"] boolValue]&&[revision isEqual:session.automationRevision],"Single-instrument detachment supports dry run");
+    call(@"instrument.plugin.set",@{@"instrument":@2,@"plugin":@""},true);
+    NSArray *remaining=call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"][@"assignments"];
+    check(remaining.count==2 && [remaining[0][@"instrument"] intValue]==1 && [remaining[0][@"channel"] intValue]==2 && [remaining[1][@"instrument"] intValue]==3 && [remaining[1][@"channel"] intValue]==16,"Detaching one instrument preserves other MIDI parts");
+    call(@"history.undo",@{@"domain":@"plugins"},true);
+    check([call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"] isEqual:routing],"Single-instrument assignment Undo restores all routing");
+    call(@"instrument.plugin.set",@{@"instrument":@2,@"plugin":identity,@"channel":@4},true);
+    remaining=call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"][@"assignments"];
+    check([remaining[0][@"instrument"] intValue]==1 && [remaining[0][@"channel"] intValue]==2 && [remaining[2][@"instrument"] intValue]==3 && [remaining[2][@"channel"] intValue]==16&&[remaining[1][@"channel"] intValue]==4,"Changing a part's MIDI channel keeps its neighbors and primary ordering");
+    call(@"history.undo",@{@"domain":@"plugins"},true);
+    revision=session.automationRevision;
+    check(![session automationMethod:@"instrument.plugin.set" params:@{@"instrument":@2,@"plugin":@"missing",@"expectedRevision":revision} error:&error]&&[revision isEqual:session.automationRevision],"Missing plugin rejects without altering routing");
     call(@"pattern.transform",@{@"operation":@"clear",@"scope":@"pattern",@"pattern":@0},true);
     NSMutableArray *cells=[NSMutableArray array];
     for(int i=1;i<=3;++i){
@@ -99,7 +114,7 @@ int main(int argc,char **argv){@autoreleasepool{try{
     call(@"document.timing.set",@{@"mode":@"classic",@"tempo":@125,@"speed":@6},true);
     check([session pluginParameter:0 identifier:7 value:.3 record:NO error:&error],"Native parameter edit with aliases");
     NSData *saved=[session serializedData];NSDictionary *root=[NSPropertyListSerialization propertyListWithData:saved options:0 format:nil error:nil];
-    check([root[@"version"] intValue]==5&&[root[@"plugins"][0][@"instrumentAssignments"] isEqual:assignments],"Project v5 retains aliases through manual state capture");
+    check([root[@"version"] intValue]==6&&[root[@"plugins"][0][@"instrumentAssignments"] isEqual:assignments],"Current project retains aliases through manual state capture");
     NSString *file=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".resonance"]];
     [saved writeToFile:file atomically:YES];check([session openPath:file error:&error],"Alias project reopens");
     check([call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"] isEqual:routing],"Alias names and owner persist");
@@ -124,7 +139,7 @@ int main(int argc,char **argv){@autoreleasepool{try{
     }
     [NSFileManager.defaultManager removeItemAtPath:file error:nil];
     call(@"plugin.instruments.set",@{@"plugin":identity,@"assignments":@[@{@"instrument":@1,@"channel":@1}]},true);
-    root=[NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil];check([root[@"version"] intValue]==4,"Ordinary single-channel assignment keeps older project compatibility");
+    root=[NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil];check([root[@"version"] intValue]==6,"Ordinary single-channel assignment uses the same current project format");
   }
   weighted(false);setFixtureAUChannelWeights(false);dlclose(handle);
   std::cout<<"PASS shared instrument aliases: AU/VST3 channel-weighted audio, one processor/adapter, note-off and mute ownership, same-channel overlap, buffer/rate invariance, realtime audit, state persistence, previews/history and project version guards\n";return 0;

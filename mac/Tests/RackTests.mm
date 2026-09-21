@@ -78,15 +78,17 @@ static void capacityAPI(Document &doc, std::vector<PluginState> states) {
     [plugins addObject:@{@"type": @(d.type), @"subtype": @(d.subtype), @"manufacturer": @(d.manufacturer),
       @"name": @(d.name.c_str()), @"format": @(d.format.c_str()), @"path": @(d.path.c_str()), @"classID": @(d.classID.c_str()),
       @"isInstrument": @(d.instrument), @"instrument": @(s.instrument), @"instanceID": @(s.instanceID.c_str()),
-      @"state": [NSData dataWithBytes:s.state.data() length:s.state.size()]}];
+      @"instrumentAssignments":s.instrument ? @[@{@"instrument":@(s.instrument),@"channel":@1}] : @[], @"state": [NSData dataWithBytes:s.state.data() length:s.state.size()]}];
   }
-  auto module = doc.serialize();
-  NSData *project = [NSPropertyListSerialization dataWithPropertyList:@{@"version": @2,
-    @"module": [NSData dataWithBytes:module.data() length:module.size()], @"plugins": plugins}
-    format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
-  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".resonance"]];
-  TrackerSession *session = [TrackerSession new]; NSError *error = nil;
-  check([project writeToFile:path atomically:YES] && [session openPath:path error:&error], "Legacy project loads expanded instrument rack");
+  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
+  NSString *modulePath=[path stringByAppendingString:@".mptm"];
+  auto bytes=doc.serialize();[[NSData dataWithBytes:bytes.data() length:bytes.size()] writeToFile:modulePath atomically:YES];
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;
+  check([session openPath:modulePath error:&error],"Import rack fixture module");
+  [[NSFileManager defaultManager] removeItemAtPath:modulePath error:nil];
+  NSMutableDictionary *root=[[NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil] mutableCopy];root[@"plugins"]=plugins;
+  NSData *project=[NSPropertyListSerialization dataWithPropertyList:root format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
+  check([project writeToFile:path atomically:YES]&&[session openPath:path error:&error],"Current project loads expanded instrument rack");
   auto call = [&](NSString *method, NSDictionary *params, bool reject = false) -> NSDictionary * {
     NSMutableDictionary *p = [params mutableCopy]; NSString *before = session.automationRevision; p[@"expectedRevision"] = before;
     auto reply = [session automationMethod:method params:p error:&error];

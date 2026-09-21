@@ -1,5 +1,29 @@
 # Windows continuation — 2026-09-21
 
+## Latest: upstream integration and installed plugins
+
+The default upstream branch is `codex/screamseq` (there is no `main`). Changes
+through `bcfe0f8a7` are integrated after preserving prior Windows work in local
+checkpoint `40d0f074c`. The updated execution order and completion gates are in
+[PARITY_PLAN.md](PARITY_PLAN.md); current phase-specific qualification, plugin
+versions/hashes and the retained OrbitCab offline failure are in
+[UPSTREAM_PLUGIN_QUALIFICATION.md](UPSTREAM_PLUGIN_QUALIFICATION.md).
+
+New behavior includes project 6 / metadata 17, shared unified FX playback before
+cursor seeking, dynamic VST3 latency maintenance and actual sample voice markers.
+Contourtonist and OrbitCab ARM64 bundles are installed in a dedicated per-user
+QA folder. Both pass lifecycle/editor and short silent WASAPI checks; only
+Contourtonist passes the application's offline partition gate. Full native
+plugin workflow, other editor families and final cross-platform/performance
+qualification remain open.
+
+The original Mac reference is now a historical format and is rejected by the
+current reader. Do not use the instructions/results below as current-format
+proof; the new qualification report explicitly documents its synthetic fixture.
+The remainder of this file records the earlier continuation checkpoint.
+
+## Historical continuation before this upstream merge
+
 The user explicitly resumed the port and enabled Full access, which is active. Preserve all prior uncommitted/untracked work and the historical PAUSED_HANDOFF.md artifacts. Windows/Mac parity remains unfinished; this is a development checkpoint.
 
 ## Implemented in this continuation

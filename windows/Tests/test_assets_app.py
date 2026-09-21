@@ -93,7 +93,7 @@ class AssetAppTests(unittest.TestCase):
         path = self.directory / 'plugin.screamseq'
         self.write(client, 'document.save', path=str(path))
         tree = plistlib.loads(path.read_bytes())
-        tree['version'] = 5
+        tree['version'] = 6
         tree['plugins'] = [dict(format='AU', type=int.from_bytes(b'aumu', 'big'), subtype=0, manufacturer=0,
                                 name='Preserved Mac instrument', state=b'opaque state', instanceID='fixture-plugin',
                                 instrument=1, instrumentAssignments=[dict(instrument=1, channel=1)])]

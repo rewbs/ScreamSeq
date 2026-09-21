@@ -361,6 +361,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   std::atomic<uint32_t> audioWrite{0}, audioRead{0};
   std::atomic<uint32_t> editWrite{0}, editRead{0};
   std::atomic<bool> failed{false};
+  std::atomic<bool> latencyChanged{false};
   BORROWED_REF
   tresult PLUGIN_API queryInterface(const TUID id, void **out) override {
     *out = nullptr;
@@ -394,10 +395,14 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   tresult PLUGIN_API restartComponent(int32 flags) override {
     // Changes to buses/latency require a stopped graph rebuild; never continue
     // with buffers that no longer match the processor's contract.
-    if (flags & (kIoChanged | kLatencyChanged | kReloadComponent)) {
+    if (flags & (kIoChanged | kReloadComponent)) {
       failed = true;
       return kResultFalse;
     }
+    // A latency notification is a request to update delay compensation, not
+    // invalid audio. The device pauses at a block boundary; the control thread
+    // reactivates the processor and rebuilds delays before rendering resumes.
+    if (flags & kLatencyChanged) latencyChanged.store(true, std::memory_order_release);
     if (controller && (flags & kParamValuesChanged))
       for (size_t i = 0; i < metadata.size(); ++i) {
         auto value = controller->getParamNormalized(metadata[i].id);
@@ -856,6 +861,25 @@ PluginState VST3Plugin::state() const {
 }
 double VST3Plugin::latency() const {
   return impl_->processor->getLatencySamples() / impl_->rate;
+}
+bool VST3Plugin::latencyChangePending() const noexcept {
+  return impl_->latencyChanged.load(std::memory_order_acquire);
+}
+void VST3Plugin::refreshLatency() {
+  pluginMainCall([&] {
+    auto &s = *impl_;
+    if (!s.latencyChanged.exchange(false, std::memory_order_acq_rel)) return;
+    require(s.processor->setProcessing(false), "Cannot pause VST3 for latency update");
+    s.processing = false;
+    require(s.component->setActive(false), "Cannot deactivate VST3 for latency update");
+    s.active = false;
+    require(s.component->setActive(true), "Cannot reactivate VST3 after latency update");
+    s.active = true;
+    if (s.processor->getLatencySamples() > s.rate * 2)
+      throw std::runtime_error("VST3 latency exceeds two seconds");
+    require(s.processor->setProcessing(true), "Cannot resume VST3 after latency update");
+    s.processing = true;
+  });
 }
 double VST3Plugin::tail() const {
   return std::min(30.0, impl_->processor->getTailSamples() / impl_->rate);

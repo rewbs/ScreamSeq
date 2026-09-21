@@ -49,6 +49,12 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
   for (auto bus : auxiliaryOutputs_) auxiliaryOutputBuffers_[bus] = std::make_unique<PluginAudioStorage>();
 }
 NativePlugin::~NativePlugin() = default;
+bool NativePlugin::latencyChangePending() const noexcept { return backend_ && backend_->latencyChangePending(); }
+void NativePlugin::refreshLatency() {
+  if (backend_ && backend_->latencyChangePending()) {
+    backend_->refreshLatency(); latency_ = backend_->latency(); tail_ = backend_->tail();
+  }
+}
 bool NativePlugin::processBlock(float *buffer, uint32_t frames, uint64_t position, uint32_t offset) noexcept {
   if (builtin_) return builtin_->process(buffer, frames, inputSources_[1] ? inputSources_[1] + offset * 2 : nullptr);
   if (!backend_->process(buffer, frames, position, inputSources_.data(), offset, transport_)) return false;

@@ -325,6 +325,7 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
       MixerGraph unused;std::vector<MixerProcessorInfo> sampleInfo;sampleSignalGraph_->compile(unused,sampleInfo);
       for(size_t i=0;i<sampleInfo.size();++i){sampleRoutes_[i].processor=processors.size();sampleInfo[i].instrument=true;processors.push_back(sampleInfo[i]);}
     }
+    mixerTracks_ = tracks; mixerProcessors_ = processors;
     auto plan = compileMixer(graph, tracks, processors, uint32_t(sampleRate_));
     auto mixer = std::make_unique<MixerRuntime>(std::move(graph), std::move(plan), sampleRate_, position_);
     latency_ = mixer->plan().latency / sampleRate_; tail_ = mixer->plan().tail;

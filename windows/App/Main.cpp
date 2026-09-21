@@ -4,6 +4,7 @@
 #include "soundlib/mod_specifications.h"
 #include "soundlib/ModInstrument.h"
 #include "../Session/DocumentController.hpp"
+#include "../Plugins/WindowsVST3.hpp"
 #include "RenderSurface.hpp"
 #include "ApiDispatch.hpp"
 #include "WorkspaceState.hpp"
@@ -142,6 +143,11 @@ public:
 			{"order",t.order},{"pattern",t.pattern},{"row",t.row},{"voices",t.voices},{"left",t.left},{"right",t.right},
 			{"frames",t.frames},{"callbacks",audio.callbackCount},{"overruns",audio.deadlineOverruns},
 			{"maxMicros",audio.maxCallbackNanoseconds / 1000.0},{"fault",preparedPlayback && preparedPlayback->failed()}};
+        result.transport["audioActive"]=device.running();
+        auto &positions=result.transport["voicePositions"]=Json::array();
+        if(device.running() && renderer) for(const auto &v:renderer->voicePositions())
+            positions.push_back({{"channel",v.channel},{"sample",v.sample},{"instrument",v.instrument},
+                {"sampleFrame",v.sampleFrame},{"generation",v.generation},{"envelopeTicks",v.envelopeTicks}});
 		return result;
 	}
 	ScreamSeq::Api::PatternSnapshot pattern(unsigned index) override {
@@ -338,6 +344,16 @@ public:
 	#include "WorkspaceDraw.inc"
 	void draw() {
         frameRequested=false;
+        if(!busy && device.running() && preparedPlayback && preparedPlayback->chain().latencyChangePending()) {
+            const auto generation=stopGeneration;
+            device.stop();
+            try {
+                await(controller->refreshPlaybackLatencies());
+                // await pumps Stop and close messages. A stopped transport must
+                // never restart just because its latency refresh completed.
+                if(generation==stopGeneration && !device.start()) throw std::runtime_error("Cannot resume WASAPI after latency maintenance");
+            } catch(const std::exception &e) {stop();status=wide(e.what());}
+        }
         if(device.running() && preparedPlayback && preparedPlayback->failed()) {stop();status=L"Playback stopped: audio processor reported a fault";}
 		auto begin = ScreamSeq::ticks();
 		auto playback = renderer ? renderer->telemetry() : Tracker::Telemetry{};
@@ -434,7 +450,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		if(!argv) throw std::runtime_error("Cannot parse command line");
 		std::vector<std::wstring> args(argv, argv + argc); LocalFree(argv);
 		bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false;
-		double seconds = 0; std::filesystem::path report,projectPath;
+		double seconds = 0; std::filesystem::path report,projectPath,pluginCache;
 		for(size_t i = 1; i < args.size(); ++i) {
 			if(args[i] == L"--offline-test") offline = true;
             else if(args[i]==L"--offline-hosted-test") hostedOffline=true;
@@ -445,9 +461,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			else if(args[i] == L"--seconds" && i + 1 < args.size()) seconds = std::stod(args[++i]);
 			else if(args[i] == L"--report" && i + 1 < args.size()) report = args[++i];
 			else if(args[i] == L"--project" && i + 1 < args.size()) projectPath = args[++i];
+            else if(args[i]==L"--vst3-test-cache" && i+1<args.size()) pluginCache=args[++i];
 			else throw std::runtime_error("Unknown/incomplete command-line argument");
 		}
 		if(seconds < 0 || seconds > 1800 || !std::isfinite(seconds)) throw std::runtime_error("Invalid test duration");
+        if(!pluginCache.empty()) {
+            if(!(inspection || audioTest || hostedOffline) || !pluginCache.is_absolute()) throw std::runtime_error("An absolute private VST3 test cache requires inspection or audio qualification mode");
+            Tracker::WindowsVST3::configure(utf8Path(std::filesystem::absolute(args[0]).parent_path()/L"ScreamSeqVST3Scanner.exe"),utf8Path(pluginCache));
+        }
 		if(offline) { if(!projectPath.empty()) throw std::runtime_error("The demo offline test does not accept a native project"); if(report.empty()) throw std::runtime_error("Offline test requires --report"); offlineTest(report); return 0; }
         if(hostedOffline) {if(report.empty()) throw std::runtime_error("Hosted offline test requires --report");offlineHostedTest(projectPath,report);return 0;}
 		if(audioTest && (inspection || !seconds)) throw std::runtime_error("Audio test requires --seconds and cannot use inspection mode");

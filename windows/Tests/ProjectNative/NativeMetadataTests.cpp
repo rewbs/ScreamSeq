@@ -54,6 +54,10 @@ std::unique_ptr<Document> richDocument() {
   n.envelopeBank.push_back({templ,"All curves",shape}); n.envelopeLinks.push_back({{EnvelopeTargetKind::Parameter,lane,0},templ,span});
   n.performance.columns[track] = 8; n.performance.bindings[255] = {"persistent-plugin-uuid",UINT32_MAX,"A parameter"};
   for (uint8_t kind = 0; kind < 4; ++kind) n.performance.commands.push_back({pattern,track,uint32_t(kind)*65536+17,kind%2 ? 1234u : 0u,kind,PatternCommandKind(kind),uint16_t(kind < 2 ? 255 : 0),kind < 2 ? .75 : -12,uint8_t(kind < 2 ? 2 : 48)});
+  n.performance.commands.push_back({pattern,track,8*performanceUnitsPerRow+123,0,0,PatternCommandKind::NoteCut});
+  n.performance.commands.push_back({pattern,track,8*performanceUnitsPerRow,0,7,PatternCommandKind::TrackerEffect,0,0,2,OpenMPT::CMD_VIBRATO,0x34});
+  n.mixer.buses[2].output=0; // A disconnected track still retains its other routes.
+  n.mixer.instruments[1].target=0;
   n.preciseNotes = {{pattern,track,77,1,60,91,uint8_t(OpenMPT::CMD_VIBRATO),0x34},{pattern,track,999,0,254,127},{pattern,track,2000,0,255,127}};
   SignalDefinition d; d.id = id(); d.number = 999; d.name = "All graph kinds";
   for (uint8_t kind = 0; kind <= 9; ++kind) { SignalNode node; node.id = id(); node.kind = SignalNodeKind(kind); node.name = "Node "+std::to_string(kind); node.x = -123.5+kind; node.y = 987.25; node.rate = .25; node.phase = .7; node.attack = .125; node.release = .75; node.controller = 127; d.nodes.push_back(node); }
@@ -84,60 +88,12 @@ void rejectNulls(const Json &whole, const Json &subtree, const std::string &path
   if (subtree.is_array()) for (size_t i = 0; i < subtree.size(); ++i) rejectNulls(whole,subtree[i],path+"/"+std::to_string(i));
 }
 void addUnknowns(Json &j) { if (j.is_object()) { for (auto &v : j) addUnknowns(v); j["future-extension"] = {{"arbitrary",Json::array({nullptr,true,1,"opaque"})}}; } else if (j.is_array()) for (auto &v : j) addUnknowns(v); }
-void versionTests(const Json &baseline, const Json &rich) {
-  const auto native = decodeNativeMetadata(baseline);
-  for (unsigned version = 1; version <= 14; ++version) { auto old = legacy(baseline,version); check(decodeNativeMetadata(old) == native,"legacy version "+std::to_string(version)); auto upgraded = encodeNativeMetadata(decodeNativeMetadata(old)); check(upgraded["version"] == 14,"legacy canonical upgrade"); }
-  for (auto [first,key] : {std::pair{2,"automation"},{3,"mixer"},{5,"noteTracks"},{5,"columnMutes"},{7,"performance"},{9,"preciseNotes"},{10,"signalGraph"},{14,"envelopeBank"}}) { auto old = legacy(baseline,first-1); old[key] = baseline.at(key); rejects([&] { (void)decodeNativeMetadata(old); },std::string("legacy known field: ")+key); }
-  auto old = legacy(rich,5); rejects([&] { (void)decodeNativeMetadata(old); },"scripts cannot appear in v5");
-  for (Json badVersion : {Json(0),Json(15),Json(true),Json(1.0),Json("14"),Json(-1),Json(UINT64_MAX)}) rejectAt(baseline,"/version",badVersion);
-  auto minimal = baseline;
-  // Standalone nested version gates, with unrelated features stripped first.
-  auto mixed = rich; mixed["automation"] = Json::array(); mixed["envelopeBank"] = {{"entries",Json::array()},{"links",Json::array()}};
-  auto prepan = legacy(mixed,5); prepan["mixer"]["buses"][0]["prePan"] = 0.0;
-  rejects([&] { (void)decodeNativeMetadata(prepan); },"prePan before v6");
-  auto sidechain = legacy(baseline,3); sidechain["mixer"]["sidechains"] = Json::array(); rejects([&] { (void)decodeNativeMetadata(sidechain); },"sidechains before v4");
-  auto pitch = legacy(mixed,7); rejects([&] { (void)decodeNativeMetadata(pitch); },"pitch before v8");
-  auto effects = legacy(baseline,11); effects["preciseNotes"] = rich["preciseNotes"]; rejects([&] { (void)decodeNativeMetadata(effects); },"per-note effects before v12");
-  auto scripts = legacy(baseline,10); scripts["automation"] = rich["automation"]; rejects([&] { (void)decodeNativeMetadata(scripts); },"scripts before v11");
-  auto curves = legacy(mixed,12); rejects([&] { (void)decodeNativeMetadata(curves); },"graph curves before v13");
+void versionTests(const Json &baseline,const Json &rich) {
+  for(unsigned version=1;version<17;++version) rejects([&]{decodeNativeMetadata(legacy(baseline,version));},"historical metadata is rejected");
+  for(Json version:{Json(0),Json(18),Json(true),Json(17.0),Json("17"),Json(-1),Json(UINT64_MAX)})rejectAt(baseline,"/version",version);
 }
 void historicalModels(Document &doc) {
-  const auto original = doc.native();
-  for (unsigned version = 1; version <= 14; ++version) {
-    auto n = original;
-    if (version < 14) { n.envelopeBank.clear(); n.envelopeLinks.clear(); }
-    if (version < 13) {
-      n.signal.instrumentAssignments.clear();
-      for (auto &d : n.signal.library) {
-        std::set<uint64_t> removed; for (const auto &node : d.nodes) if (node.kind == SignalNodeKind::Automation) removed.insert(node.id);
-        std::erase_if(d.nodes,[&](const auto &node) { return removed.contains(node.id); });
-        std::erase_if(d.modulation,[&](const auto &m) { return removed.contains(m.source); });
-      }
-    }
-    if (version < 12) for (auto &note : n.preciseNotes) { note.effect = 0; note.parameter = 0; }
-    if (version < 11) for (auto &lane : n.automation) for (auto &point : lane.points) { if (point.curve == AutomationCurve::Scripted) point.curve = AutomationCurve::Linear; point.formula = {}; }
-    if (version < 10) { n.signal = {}; std::erase_if(n.mixer.instruments,[](const auto &r) { return r.plugin == "fx-identity"; }); }
-    if (version < 9) n.preciseNotes.clear();
-    if (version < 8) std::erase_if(n.performance.commands,[](const auto &c) { return c.kind == PatternCommandKind::PitchSet || c.kind == PatternCommandKind::PitchSlide; });
-    if (version < 7) n.performance = {};
-    if (version < 6) for (auto &bus : n.mixer.buses) bus.prePan = 0;
-    if (version < 5) { n.noteTracks.clear(); n.columnMutes.clear(); }
-    if (version < 4) n.mixer.sidechains.clear();
-    if (version < 3) n.mixer = {};
-    if (version < 2) n.automation.clear();
-    auto wire = legacy(encodeNativeMetadata(n),version);
-    const auto decoded = decodeNativeMetadata(wire);
-    check(decoded == n,"nonempty historical version "+std::to_string(version));
-    doc.restoreNative(decoded);
-    check(doc.native() == n,"shared historical restoration "+std::to_string(version));
-    // Check each newly introduced nested feature against the immediately prior
-    // version on an otherwise-valid tree, rather than an unrelated bad feature.
-    if (version == 7) { auto bad = wire; bad["performance"]["commands"][0]["kind"] = 2; rejects([&]{ (void)decodeNativeMetadata(bad); },"v7 rejects pitch kind"); bad = wire; bad["performance"]["commands"][0]["pitchRange"] = 2; rejects([&]{ (void)decodeNativeMetadata(bad); },"v7 rejects pitchRange even at default"); }
-    if (version == 10) { auto bad = wire; bad["automation"][0]["points"][0].push_back("t"); rejects([&]{ (void)decodeNativeMetadata(bad); },"v10 rejects formula field"); bad = wire; bad["automation"][0]["points"][0][2] = 8; rejects([&]{ (void)decodeNativeMetadata(bad); },"v10 rejects scripted enum"); }
-    if (version == 11) { auto bad = wire; bad["preciseNotes"][0]["parameter"] = 0; rejects([&]{ (void)decodeNativeMetadata(bad); },"v11 rejects default note parameter field"); }
-    if (version == 12) { auto bad = wire; bad["signalGraph"]["instrumentAssignments"] = encodeNativeMetadata(original)["signalGraph"]["instrumentAssignments"]; rejects([&]{ (void)decodeNativeMetadata(bad); },"v12 rejects instrument graph assignment"); }
-  }
-  doc.restoreNative(original);
+  for(unsigned version=1;version<17;++version) rejects([&]{decodeNativeMetadata(legacy(encodeNativeMetadata(doc.native()),version));},"old rich metadata must reject");
 }
 void optionalDefaults(const Json &encoded) {
   auto compare = [&](const char *objectPath, const char *key, Json fallback) {
@@ -198,6 +154,9 @@ void negativeTests(const Json &j) {
   rejectAt(j,"/mixer/buses/0/output","n999999"); rejectAt(j,"/mixer/buses/0/preGainDB",25); rejectAt(j,"/mixer/buses/0/prePan",1.01); rejectAt(j,"/mixer/buses/0/timingMS",501); rejectAt(j,"/mixer/sidechains/0/input",0); rejectAt(j,"/mixer/instruments/0/output",64);
   rejectAt(j,"/noteTracks/0/columns/0","n999999"); rejectAt(j,"/columnMutes/0/0","n999999");
   rejectAt(j,"/performance/columns/0/1",0); rejectAt(j,"/performance/bindings/0/id",256); rejectAt(j,"/performance/commands/0/binding",2); rejectAt(j,"/performance/commands/0/value",2); rejectAt(j,"/performance/commands/1/duration",0); rejectAt(j,"/performance/commands/2/pitchRange",97); rejectAt(j,"/performance/commands/0/track","n999999");
+  rejectAt(j,"/performance/commands/4/value",1); rejectAt(j,"/performance/commands/4/duration",1); rejectAt(j,"/performance/commands/4/binding",255);
+  rejectAt(j,"/performance/commands/5/column",0); rejectAt(j,"/performance/commands/5/position",8*performanceUnitsPerRow+1); rejectAt(j,"/performance/commands/5/effect",255);
+  rejectAt(j,"/performance/commands/0/effect",OpenMPT::CMD_VIBRATO); rejectAt(j,"/performance/commands/4/parameter",1);
   rejectAt(j,"/preciseNotes/0/position",4294967296ULL); rejectAt(j,"/preciseNotes/0/note",121); rejectAt(j,"/preciseNotes/0/velocity",0); rejectAt(j,"/preciseNotes/0/effect",255); rejectAt(j,"/preciseNotes/1/instrument",1); rejectAt(j,"/preciseNotes/0/pattern","n999999");
   rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","A==="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA=A"); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AB=="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA==AA=="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA\n=");
   rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/inputs/0",0); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/outputs/0",64); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/format","CLAP"); rejectAt(j,"/signalGraph/library/0/nodes/0/plugin",Json::object()); rejectAt(j,"/signalGraph/library/0/nodes/0/envelopes",Json::array());
@@ -212,7 +171,7 @@ int main(int argc, char **argv) {
   try {
     auto doc = std::make_unique<Document>();
     const auto baseline = encodeNativeMetadata(doc->native());
-    check(baseline.at("version") == 14,"canonical metadata version must be 14");
+    check(baseline.at("version") == 17,"canonical metadata version must be 17");
     check(decodeNativeMetadata(baseline) == doc->native(),"baseline model roundtrip");
     doc->restoreNative(decodeNativeMetadata(baseline));
     auto rich = richDocument(); const auto model = rich->native(); const auto encoded = encodeNativeMetadata(model);
@@ -233,9 +192,9 @@ int main(int argc, char **argv) {
       const auto mac = decodeNativeMetadata(fixture); const auto canonical = encodeNativeMetadata(mac);
       check(canonical == fixture,"actual Mac fixture must preserve every known field"); check(decodeNativeMetadata(canonical) == mac,"actual Mac model roundtrip");
       check(mac.envelopeBank.at(0).shape.markers[4] == UINT32_MAX,"bank sentinel lost"); check(mac.automation.at(0).points.at(0).formula.source() == "mix(start,end,t^2)","Mac script source changed");
-      std::cout << "PASS actual Mac v14 metadata: complete field equality and model roundtrip (snapshot restore not exercised here)\n";
+      std::cout << "PASS current Mac metadata: complete field equality and model roundtrip (snapshot restore not exercised here)\n";
     }
-    std::cout << "PASS " << checks << " checks: versions 1-14, rich model, shared restore, known-field nulls, unknown keys, malformed fields and references\n";
+    std::cout << "PASS " << checks << " checks: metadata 17 and historical rejection, rich model, shared restore, known-field nulls, unknown keys, malformed fields and references\n";
     return 0;
   } catch (const std::exception &e) { std::cerr << "FAIL after " << checks << " checks: " << e.what() << '\n'; return 1; }
 }

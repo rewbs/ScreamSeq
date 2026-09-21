@@ -38,10 +38,13 @@ void validateMetadataReferences(const NativeSong &n) {
   for (const auto &c : n.performance.commands) {
     const bool parameter = c.kind == PatternCommandKind::ParameterSet || c.kind == PatternCommandKind::ParameterSlide;
     const bool slide = c.kind == PatternCommandKind::ParameterSlide || c.kind == PatternCommandKind::PitchSlide;
-    need(patterns.contains(c.pattern) && tracks.contains(c.track) && n.performance.columns.contains(c.track) && c.column < n.performance.columns.at(c.track),"Unknown performance pattern, track or column");
+    need(patterns.contains(c.pattern) && tracks.contains(c.track) && c.column < (n.performance.columns.contains(c.track) ? n.performance.columns.at(c.track) : 1),"Unknown performance pattern, track or column");
     need(commandCells.emplace(c.pattern,c.track,c.position/performanceUnitsPerRow,c.column).second,"Duplicate performance cell");
     need(parameter ? (n.performance.bindings.contains(c.binding) && c.value >= 0 && c.value <= 1 && c.pitchRange == 2) : c.binding == 0,"Invalid performance binding or parameter value");
-    need(slide ? c.duration > 0 : c.duration == 0,"Invalid command duration"); if (!parameter) pitchTracks.insert(c.track);
+    need(slide ? c.duration > 0 : c.duration == 0,"Invalid command duration"); if (c.kind==PatternCommandKind::PitchSet || c.kind==PatternCommandKind::PitchSlide) pitchTracks.insert(c.track);
+    const bool tracker=c.kind==PatternCommandKind::TrackerEffect,cut=c.kind==PatternCommandKind::NoteCut;
+    need((!tracker || (c.column && !(c.position%performanceUnitsPerRow) && c.effect<OpenMPT::MAX_EFFECTS)) &&
+      (!cut || c.pitchRange==2) && (!(tracker||cut) || (!c.value && !c.binding)) && (tracker || (!c.effect && !c.parameter)),"Invalid unified FX metadata");
   }
   need(pitchTracks.size() <= 16,"Too many native pitch tracks");
   std::set<std::tuple<uint64_t,uint64_t,uint32_t,bool>> notePositions;

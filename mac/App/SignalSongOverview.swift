@@ -49,8 +49,9 @@ extension SignalGraphEditor {
       for (i,send) in (b["sends"] as? [[String:Any]] ?? []).enumerated(){if let to=send["target"] as? String,visible.contains(to){edge(end,to,"Send",["kind":"send","source":id,"index":i])}}
     }
     for p in rackPlugins where p["isInstrument"] as? Bool==true {guard let id=p["id"] as? String else{continue};let key="plugin:\(id)";let routes=(mixer["instruments"] as? [[String:Any]] ?? []).filter{$0["plugin"] as? String==id};let master=buses.first{$0["kind"] as? String=="master"}?["id"] as? String ?? ""
-      let targets=routes.isEmpty ? [["target":master,"output":0] as [String:Any]] : routes
-      guard targets.contains(where:{visible.contains($0["target"] as? String ?? "")})else{continue};add(key,p["name"] as? String ?? "Instrument","Instrument \((p["instruments"] as? [Int] ?? []).map(String.init).joined(separator:", "))",30,Double(30+row*125));row+=1;songNodePlugin[key]=id
+      var targets=routes
+      if !routes.contains(where:{$0["output"] as? Int==0}){targets.append(["target":master,"output":0])}
+      guard filterID==nil || targets.contains(where:{visible.contains($0["target"] as? String ?? "")})else{continue};add(key,p["name"] as? String ?? "Instrument","Instrument \((p["instruments"] as? [Int] ?? []).map(String.init).joined(separator:", "))",30,Double(30+row*125));row+=1;songNodePlugin[key]=id
       for r in targets{if let target=r["target"] as? String,visible.contains(target){edge(key,target,"Out \(r["output"] as? Int ?? 0)",["kind":"plugin-output","plugin":id,"output":r["output"] ?? 0],output:(r["output"] as? NSNumber)?.uint32Value ?? 0)}}
     }
     for (i,r) in (data["inputs"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let b=r["target"] as? String,let from=lastStage[a],visible.contains(b){edge(from,b,"Graph in \(r["input"] ?? 1)",["kind":"graph-input","index":i],input:(r["input"] as? NSNumber)?.uint32Value ?? 1)}}
@@ -82,10 +83,11 @@ extension SignalGraphEditor {
   }
   func disconnectSong(_ index:Int){guard songConnections.indices.contains(index)else{return};let item=songConnections[index]
     switch item["kind"] as? String {
+    case "output":mutate("mixer.bus.set",["bus":item["source"] ?? "","output":NSNull()])
     case "send":guard let source=item["source"] as? String,let i=item["index"] as? Int,let bus=buses.first(where:{$0["id"] as? String==source})else{return};var sends=bus["sends"] as? [[String:Any]] ?? [];sends.remove(at:i);mutate("mixer.sends.set",["bus":source,"sends":sends])
     case "graph-input","graph-output":let key=item["kind"] as? String=="graph-input" ? "inputs" : "outputs";var routes=data[key] as? [[String:Any]] ?? [];guard let i=item["index"] as? Int,routes.indices.contains(i)else{return};routes.remove(at:i);mutate("graph.routes.set",[key:routes])
     case "plugin-input":var routes=mixer["sidechains"] as? [[String:Any]] ?? [];guard let i=item["index"] as? Int,routes.indices.contains(i)else{return};let removed=routes.remove(at:i);let plugin=removed["plugin"] as? String ?? "",port=removed["input"] as? Int ?? 1;let sources=routes.filter{$0["plugin"] as? String==plugin && $0["input"] as? Int==port}.map{r->[String:Any] in var v=r;v.removeValue(forKey:"plugin");v.removeValue(forKey:"input");return v};mutate("mixer.sidechains.set",["plugin":plugin,"input":port,"sources":sources])
-    case "plugin-output":mutate("mixer.plugin.route",["plugin":item["plugin"] ?? "","output":item["output"] ?? 0,"target":NSNull()])
+    case "plugin-output":mutate("mixer.plugin.route",["plugin":item["plugin"] ?? "","output":item["output"] ?? 0,"target":NSNull(),"disconnected":true])
     default:status.stringValue="Reconnect the channel output to another bus; internal chains are edited in their subgraph."
     }
   }

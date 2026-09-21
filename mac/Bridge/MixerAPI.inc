@@ -93,10 +93,10 @@
           if (item.output == affected) item.output = bus.output;
           std::erase_if(item.sends, [&](const auto &send) { return send.target == affected; });
         }
-        for (auto &source : graph.instruments) if (source.target == affected) source.target = bus.output;
+        for (auto &source : graph.instruments) if (source.target == affected) source.target = bus.output ? bus.output : masterID();
         std::erase_if(graph.sidechains, [&](const auto &side) { return side.source == affected; });
         // Keep owned effects in processing order on the removed bus's output.
-        auto &destination = findBus(nativeID(bus.output));
+        auto &destination = findBus(nativeID(bus.output ? bus.output : masterID()));
         destination.inserts.insert(destination.inserts.begin(), bus.inserts.begin(), bus.inserts.end());
       } else if ([method isEqual:@"mixer.sends.set"]) {
         allowed(@[@"bus", @"sends", @"dryRun"]);
@@ -125,11 +125,13 @@
             side[@"preFader"] ? boolean(side[@"preFader"]) : false, side[@"enabled"] ? boolean(side[@"enabled"]) : true});
         }
       } else if ([method isEqual:@"mixer.instrument.route"] || [method isEqual:@"mixer.plugin.route"]) {
-        allowed(@[@"plugin", @"output", @"target", @"dryRun"]);
+        allowed(@[@"plugin", @"output", @"target", @"disconnected", @"dryRun"]);
         std::string id = string(p[@"plugin"], 128).UTF8String;
         const auto output = uint32_t(integer(p[@"output"] ?: @0, 0, 63));
-        const bool remove = p[@"target"] == NSNull.null;
-        const auto target = remove ? 0 : findBus(p[@"target"]).id; affected = target;
+        const bool disconnected = p[@"disconnected"] ? boolean(p[@"disconnected"]) : false;
+        require(!disconnected || p[@"target"] == NSNull.null,"A disconnected output requires a null target");
+        const bool remove = p[@"target"] == NSNull.null && !disconnected;
+        const auto target = remove || disconnected ? 0 : findBus(p[@"target"]).id; affected = target;
         if (!remove) {
           auto descriptor=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==id;});require(descriptor!=_plugins.end(),"Plugin instance does not exist");
           const bool instrument=descriptor->descriptor.instrument||descriptor->descriptor.type==kAudioUnitType_MusicDevice;

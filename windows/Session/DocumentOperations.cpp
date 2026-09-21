@@ -142,7 +142,8 @@ Json DocumentOperations::invoke(const std::string &method, const Json &p) {
     try { document_.validateEdits(edits); }
     catch(const std::invalid_argument &e) { throw Api::ApiError(-32602,e.what()); }
     if(!dry && !changes.empty()) {
-      const auto applied=document_.edit(edits);
+        const auto applied=document_.edit(edits);
+        if(document_.undoChangesAutomation() && stopPlayback_) stopPlayback_();
       if(publishEdits_) publishEdits_(applied);
     }
     return {{"dryRun",dry},{"changedCells",changes.size()},{"changes",std::move(changes)}};

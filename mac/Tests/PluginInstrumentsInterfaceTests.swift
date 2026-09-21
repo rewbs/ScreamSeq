@@ -43,6 +43,32 @@ extension InterfaceTests {
     let editor=PluginEditor(frame:.zero);try require(!editor.instrumentsButton.isEnabled,"Empty plugin panel disables instrument routing")
     editor.update(model:PatternModel(["nativePlugins":[["name":"Synth","isInstrument":true,"instrumentAssignments":[["instrument":1,"channel":2],["instrument":2,"channel":7]]]]]),values:[])
     var selected = -1;editor.onInstruments={selected=$0};editor.instrumentsButton.invoke()
-    try require(selected==0 && editor.instrumentsButton.title=="Instruments (2)…","Native action selects the visible instrument plugin and reports alias count")
+    try require(selected==0 && editor.instrumentsButton.title=="Assigned instruments (2)…","Native action selects the visible instrument plugin and reports alias count")
+    let source=InstrumentPluginEditor(instrument:1,model:PatternModel(["revisionToken":"source:1","nativePlugins":[["instanceID":"synth","name":"Fixture synth","isInstrument":true,"instrumentAssignments":[["instrument":1,"channel":7]]]]]))
+    let host=NSWindow(contentRect:NSRect(x:0,y:0,width:570,height:260),styleMask:[.titled],backing:.buffered,defer:false);host.contentView=source;source.layoutSubtreeIfNeeded()
+    try require(source.bounds.width>=560 && source.channel.selectedTag()==7,"Assignment editor keeps its usable window width and recalls the alias MIDI channel")
+    var assignment:[String:Any]=[:]
+    source.onRequest={method,params,reply in assignment=params;reply(["result":["revision":"source:2","data":[:]]])}
+    source.apply()
+    try require(assignment["plugin"] as? String=="synth" && assignment["instrument"] as? Int==1 && assignment["channel"] as? Int==7 && assignment["expectedRevision"] as? String=="source:1","Instrument inspector dispatches the atomic stable-target assignment API")
+    let create=InstrumentPluginEditor(instrument:0,model:PatternModel(["revisionToken":"create:1","nativePlugins":[["instanceID":"synth","name":"Fixture synth","isInstrument":true]]]))
+    var creation=[(String,[String:Any])](),creationReplies=[([String:Any])->Void]()
+    create.onRequest={method,params,reply in creation.append((method,params));creationReplies.append(reply)}
+    let createHost=NSWindow(contentRect:create.frame,styleMask:[.titled],backing:.buffered,defer:false);createHost.contentView=create
+    createHost.makeFirstResponder(create.name);(create.name.currentEditor() as? NSTextView)?.string="Edited trigger name"
+    create.apply();create.apply()
+    try require(creation.count==1 && creation[0].0=="instrument.create" && creation[0].1["empty"] as? Bool==true && creation[0].1["name"] as? String=="Edited trigger name","New plugin trigger creates one empty instrument, without sample mapping")
+    creationReplies.removeFirst()(["result":["revision":"create:2","data":["instrument":5]]])
+    try require(creation.count==2 && creation[1].0=="instrument.plugin.set" && creation[1].1["instrument"] as? Int==5 && creation[1].1["expectedRevision"] as? String=="create:2","Creation continues with the exact new instrument and fresh revision")
+    creationReplies.removeFirst()(["error":["message":"Plugin unavailable"]]);create.apply()
+    try require(creation.count==3 && creation[2].0=="instrument.plugin.set" && create.instrument==5,"Failed assignment retries the same instrument without creating duplicates")
+    creationReplies.removeFirst()(["result":["revision":"create:3","data":[:]]])
+    try require(create.applyButton.title=="Apply assignment","After creation the action describes assignment edits")
+    let instrument=InstrumentEditor(frame:.zero);var enabled:[String:Any]=[:]
+    instrument.onApply={enabled=$0};instrument.enabled.state = .on;instrument.toggleEnvelopeEnabled()
+    try require(enabled["enabled"] as? Bool==true && enabled["envelope"] as? Int==0 && enabled.count==2,"Enable envelope commits only this switch immediately without saving unrelated drafts")
+    let actions=ContextActions.controls(in:source)
+    try require(actions.items.contains(where:{$0.title=="Apply assignment"}),"Context actions expose the same editor commands")
+
   }
 }

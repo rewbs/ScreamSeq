@@ -47,6 +47,7 @@ int main(int argc,char **argv){try{
   for(int optional:{23,24,25}){set(optional);auto p=f.create(recipe,48000,true);pcm(*p,.5f);if(optional==23)check(p->parameters().size()==1,"optional IoMode lost controller");p.reset();set(0);}
  }
  else if(scenario=="catalog"){
+  set(50);{auto p=f.create(recipe,48000,true);pcm(*p,.5f);auto saved=p->state();auto q=f.create(saved,48000,true);pcm(*q,.5f);}set(0);
   set(30);rejects([&]{f.create(recipe,48000,true);},"advertised parameter metadata failure accepted as partial catalog");set(0);
   set(31);{auto p=f.create(recipe,48000,true);check(p->parameters().empty(),"legitimate zero-parameter controller rejected");pcm(*p,.5f);}set(0);
   if(!separate()){

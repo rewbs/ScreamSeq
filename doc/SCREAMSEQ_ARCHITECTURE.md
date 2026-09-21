@@ -16,6 +16,10 @@ ScreamSeq is the renamed Resonance application and an independent derivative of 
 
 The renderer and document are separate. Edits occur on the document worker; playback owns its prepared copy. AppKit controls belong to the main thread. Plugins and graph recipes must be prepared outside audio processing, and unsafe structural mutations must not race a live renderer. Do not move Foundation/AppKit into portable `editor/` code.
 
+Native voice positions are published by `Renderer` through bounded atomic snapshots. UI/API readers consume sample frames and volume/pan/pitch envelope ticks without reading live engine channels or blocking audio. `pattern.timeline.get` uses the editor-only `GetLengthTarget.onRow` observer on the document worker to collect first-visit times in one engine walk; never calculate row timing in drawing or from a fixed BPM assumption. The ruler's order occurrence matters when a pattern repeats.
+
+A non-master mixer bus may have output zero to disconnect its main route while retaining sends and processors. Such projects require native metadata 15; ordinary connected projects retain their existing metadata requirements. Deleting a disconnected group moves its retained inserts/plugin outputs to master and leaves formerly connected child main outputs disconnected.
+
 Sample-instrument graphs are prepared independently per instrument/raw channel and feed the ordinary mixer through sample-only OpenMPT adapters. Their NNA voices keep their original routing. `NativeSignalGraph` handles both that stage and channel/group graphs with a shared 256-processor/256-MiB host-storage budget. Graph automation sources store per-pattern curves using stable IDs, compiled formulas and the shared evaluator. Both additions require native metadata 13. See `mac/GRAPH_WORKFLOW.md` for the current signal order, activity commands, editing semantics and limits.
 
 The current native project wrapper is a versioned binary property list containing an exact song snapshot, metadata and plugin state. Metadata and container versions are separate. `windows/Project/` implements the compatible portable codec and preservation-aware atomic saves. Plugin recipes use stable class identity; local paths are resolution hints. AU remains macOS-only. Missing platform plugins preserve opaque state and reject playback preparation rather than being replaced silently.
@@ -31,6 +35,8 @@ evidence and remaining parity work are recorded in `windows/RESUME_PROGRESS.md`.
 Build on macOS with `SCREAMSEQ_BUILD_DIR=bin/mac-screamseq SCREAMSEQ_BUILD_JOBS=4 bash mac/build.sh`. Output is `ScreamSeq.app`; `RESONANCE_BUILD_DIR` and `RESONANCE_BUILD_JOBS` remain accepted aliases. Set `RESONANCE_DEVELOPMENT_BUILD=1` for a separate development bundle identity. AppKit/Metal and Core Audio are the current native foundation; keep high-frequency drawing out of layout-heavy per-cell view trees.
 
 `ctest --test-dir <build> --output-on-failure` runs native regressions. `mac/test-interface.sh` builds/tests the AppKit editors and can save snapshots. `mac/Tests/test_automation.py` exercises the socket protocol and actual application; inspect its flags before invocation. Workspace, startup, recovery, sample-library, plugin and Core Audio loopback checks have dedicated entry points in `mac/Tests/`. The qualification skill describes safe instance handling and evidence limits.
+
+Quit must drain document/recovery work asynchronously, then call `TrackerSession.shutdown()` on the main thread before AppKit exits. Stopping transport retains plugins; ARC teardown of the app controller is not guaranteed before vendor static destructors. `plugin-shutdown-tests` checks retained-session teardown (`--ui` also covers rack and graph recipe editors). `SCREAMSEQ_BUILD_DIR=<build> bash mac/test-shutdown.sh` checks the actual NSApplication Quit path, including pending worker calls that need the main thread and recovery writes, without audio or visible windows.
 
 `BuildInfo.json` records source hashes in the app bundle. `mac/Tools/build_manifest.py` includes currently untracked native additions. `mac/Tools/bundle_notices.py` packages attribution and user/API guides. Required VST3 interface sources are in `mac/ThirdParty/vst3/`; do not replace them with an unpinned machine-local SDK dependency.
 
@@ -59,3 +65,41 @@ atomic, separately revisioned app catalogue; `mac/AUTOMATION.md` documents the
 contract. `EnvelopeBank.swift` is shared by all native envelope editors.
 `CurveFormulaReference.hpp` supplies the public reference and autocomplete
 snippets; `FormulaWorkbench.swift` owns the expandable, guarded script draft.
+
+Explicitly disconnected plugin outputs use `MixerInstrumentOutput.target == 0`
+and the same metadata version 15 as disconnected bus main outputs. Compilation
+records the output as explicitly routed before omitting its destination, so the
+instrument main-output default cannot silently reconnect it. The API adds
+`disconnected:true` with `target:null`, preserving the old null-target reset
+semantics for existing clients.
+
+NC (`PatternCommandKind::NoteCut`) is native metadata 16 and schedules a release
+through `PreciseNoteRuntime`. Native samples use normal cut/ramp handling; plugin
+MIDI uses per-track key-off rather than the legacy cut's broad CC120/123 messages.
+Cut commands at a precise-note timestamp run after the note-on. Parameter/pitch
+runtimes ignore this command kind. Empty plugin trigger creation is exposed by
+`instrument.create(empty:true)`, with sample-only conversion preserving mappings;
+UI creation then assigns the new slot through the existing plugin history domain.
+
+## Unified pattern FX (current native format)
+
+The sole native project format is outer plist version 6 / native metadata 17.
+Historical native wrapper, metadata and RSONGS1 migrations are removed. Original
+OpenMPT module loading remains. Earlier version references in this document are
+feature history, not accepted alternative encodings.
+
+Every channel exposes 1–8 equal FX columns. `PatternCommandKind::TrackerEffect`
+is kind 5, with source-format `effect` / `parameter` bytes. Columns are zero-based;
+`performance.columns` counts total FX columns, default 1. For module interchange,
+tracker FX 1 stays in `ModCommand`; other tracker FX and all precise commands live
+in shared metadata. This storage distinction is not a UI capability distinction.
+The API merges both into `pattern.effects.get/set`; `pattern.effect.set` mutates
+one cell. Both precise and tracker commands occupy one `(pattern,track,row,column)`.
+
+`NativeSong::prepareEffects` builds an immutable sparse row/channel map on the
+control thread. The guarded engine executes source commands left to right with
+one note trigger and shared channel effect memory. Prepare this map before
+rendering or timeline walks. The Windows frontend must use these same semantics.
+The Mac grid has separate code/value fields at `3+2*column` / `4+2*column`.
+Clipboard payload `ScreamSeq Pattern 2` carries extra/precise FX plus bindings;
+structural pattern transforms move all columns in one Undo transaction.

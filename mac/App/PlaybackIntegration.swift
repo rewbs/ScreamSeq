@@ -40,6 +40,10 @@ extension AppController {
     let sample = focus === sampleEditor || focus.isDescendant(of:sampleEditor)
     let instrument = focus === instrumentEditor || focus.isDescendant(of:instrumentEditor)
     guard sample || instrument else { return false }
+    if instrument && !model.instruments.contains(where:{$0["index"] as? Int==instrumentEditor.index}) {
+      statusLabel.stringValue="No tracker instrument yet. Choose New in the instrument inspector to create one from the selected sample."
+      return true
+    }
     if !event.isARepeat && inspectorHeldKeys[event.keyCode] == nil {
       let held = (note: min(120, patternView.octave * 12 + offset + 1), sample: sample ? sampleEditor.index : 0, instrument: instrument ? instrumentEditor.index : 0)
       inspectorHeldKeys[event.keyCode] = held

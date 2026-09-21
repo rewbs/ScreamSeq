@@ -52,7 +52,7 @@ NativeEntity decodeEntity(const Json &v) { return {decodeID(field(v,"id")), text
 #include "NativeMetadataIntegrity.inc"
 }
 Tracker::NativeSong decodeNativeMetadata(const Json &v) {
-  const auto version = unsigned(integer(field(v,"version"),1,14));
+  const auto version = unsigned(integer(field(v,"version"),17,17));
   NativeSong n; n.nextID = integer(field(v,"nextID"),1,NativeSong::maximumID);
   auto map = [&](const char *key, auto &out) { for (const auto &item : array(field(v,key),65536)) { const auto &p = array(item,2); need(p.size() == 2,"Invalid indexed metadata"); need(out.emplace(uint16_t(integer(p[0],0,65535)),decodeEntity(p[1])).second,"Duplicate metadata index"); } };
   map("patterns",n.patterns); map("tracks",n.tracks); map("samples",n.samples); map("instruments",n.instruments);
@@ -62,7 +62,7 @@ Tracker::NativeSong decodeNativeMetadata(const Json &v) {
   if (gate(3,"mixer")) n.mixer = decodeMixer(field(v,"mixer"),version);
   if (gate(5,"noteTracks")) for (const auto &t : items(v,"noteTracks",127)) { NativeNoteTrack track{decodeID(field(t,"bus")),{}}; for (const auto &c : items(t,"columns",127)) track.columns.push_back(decodeID(c)); n.noteTracks.push_back(std::move(track)); }
   if (gate(5,"columnMutes")) for (const auto &m : items(v,"columnMutes",127)) { array(m,2); need(m.size() == 2,"Invalid column mute override"); need(n.columnMutes.emplace(decodeID(m[0]),boolean(m[1])).second,"Duplicate column mute override"); }
-  if (gate(7,"performance")) n.performance = decodePerformance(field(v,"performance"),version);
+  if (gate(7,"performance")) n.performance = decodePerformance(field(v,"performance"));
   if (gate(9,"preciseNotes")) for (const auto &p : items(v,"preciseNotes",maximumPreciseNotes)) {
     need(version >= 12 || (!p.contains("effect") && !p.contains("parameter")),"Legacy metadata cannot contain per-note effects");
     n.preciseNotes.push_back({decodeID(field(p,"pattern")),decodeID(field(p,"track")),u32(p,"position"),uint16_t(u32(p,"instrument",0,255)),uint8_t(u32(p,"note",1,255)),uint8_t(u32(p,"velocity",1,127)),uint8_t(integer(optional(p,"effect",0),0,255)),uint8_t(integer(optional(p,"parameter",0),0,255))});
@@ -81,12 +81,12 @@ Json encodeNativeMetadata(const Tracker::NativeSong &n) {
   for (const auto &t : n.noteTracks) { Json columns = Json::array(); for (auto id : t.columns) columns.push_back(nativeID(id)); tracks.push_back({{"bus",nativeID(t.bus)},{"columns",columns}}); }
   for (auto [id,muted] : n.columnMutes) mutes.push_back(Json::array({nativeID(id),muted}));
   for (const auto &p : n.preciseNotes) { Json j{{"pattern",nativeID(p.pattern)},{"track",nativeID(p.track)},{"position",p.position},{"instrument",p.instrument},{"note",p.note},{"velocity",p.velocity}}; if (p.effect || p.parameter) { j["effect"] = p.effect; j["parameter"] = p.parameter; } notes.push_back(std::move(j)); }
-  Json encoded{{"version",14},{"nextID",n.nextID},{"patterns",map(n.patterns)},{"tracks",map(n.tracks)},{"samples",map(n.samples)},{"instruments",map(n.instruments)},{"sequences",sequences},
+  Json encoded{{"version",17},{"nextID",n.nextID},{"patterns",map(n.patterns)},{"tracks",map(n.tracks)},{"samples",map(n.samples)},{"instruments",map(n.instruments)},{"sequences",sequences},
     {"automation",automation},{"mixer",mixer(n.mixer)},{"noteTracks",tracks},{"columnMutes",mutes},{"preciseNotes",notes},{"performance",performance(n.performance)},{"signalGraph",signal(n.signal)},{"envelopeBank",bank(n)}};
   // Never silently discard non-default data in conditionally encoded members,
   // or serialize a model the reader cannot accept. Snapshot validation remains
   // the owner's Document::restoreNative responsibility, not a synthetic song.
-  need(decodeNativeMetadata(encoded) == n,"Native model cannot roundtrip through metadata 14");
+  need(decodeNativeMetadata(encoded) == n,"Native model cannot roundtrip through metadata 17");
   return encoded;
 }
 } // namespace ScreamSeq::Project

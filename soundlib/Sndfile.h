@@ -10,6 +10,11 @@
 
 
 #pragma once
+#ifdef OPENMPT_EDITOR_CORE
+#include <functional>
+#include <map>
+#include <tuple>
+#endif
 
 #include "openmpt/all/BuildSettings.hpp"
 
@@ -119,6 +124,10 @@ struct SubSong
 // Target seek mode for GetLength()
 struct GetLengthTarget
 {
+#ifdef OPENMPT_EDITOR_CORE
+ // Optional control-thread timeline observer. Never used by audio rendering.
+ std::function<void(ORDERINDEX, ROWINDEX, double)> onRow;
+#endif
 	ROWINDEX startRow;
 	ORDERINDEX startOrder;
 	SEQUENCEINDEX sequence;
@@ -1019,8 +1028,33 @@ public:
 	bool (*nativeTransportRow)(void *) noexcept = nullptr;
 	void *nativePrepareContext = nullptr;
 	uint32 (*nativePrepareMix)(void *, uint32) noexcept = nullptr;
-	void TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect = 0, uint8 parameter = 0);
+	void TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect = 0, uint8 parameter = 0, bool releasePlugin = false);
 	void ApplyNativeNoteEffect(CHANNELINDEX channel, uint8 effect, uint8 parameter);
+	// Sparse, immutable during playback; assembled on the control thread.
+	using NativeEffectKey = std::tuple<PATTERNINDEX, ROWINDEX, CHANNELINDEX>;
+	std::map<NativeEffectKey, std::array<ModCommand, 7>> nativePatternEffects;
+	mutable uint8 nativeEffectColumn = 0;
+	struct NativeEffectScope {
+		const CSoundFile &song; ModChannel &channel; ModCommand saved; uint8 previous; bool enabled;
+		NativeEffectScope(const CSoundFile &s, ModChannel &c, uint8 column, const ModCommand &effect, bool active = true)
+			: song(s), channel(c), saved(c.rowCommand), previous(s.nativeEffectColumn), enabled(active)
+		{ if(enabled) { song.nativeEffectColumn = column; c.rowCommand.command = effect.command; c.rowCommand.param = effect.param; } }
+		~NativeEffectScope() { if(enabled) { channel.rowCommand.command = saved.command; channel.rowCommand.param = saved.param; song.nativeEffectColumn = previous; } }
+	};
+	ModCommand NativeEffectAt(PATTERNINDEX pattern, ROWINDEX row, CHANNELINDEX channel, uint8 column) const;
+	void PrepareNativeRow(PlayState &state, CHANNELINDEX channel) const;
+#endif
+	// Samples and plugins share one note onset even when several effects accompany it.
+	bool RowTonePortamento(const ModChannel &chn) const noexcept
+	{
+		if(chn.rowCommand.IsTonePortamento()) return true;
+#ifdef OPENMPT_EDITOR_CORE
+		for(const auto &effect : chn.nativeExtraEffects) if(effect.IsTonePortamento()) return true;
+#endif
+		return false;
+	}
+#if defined(OPENMPT_EDITOR_CORE)
+
 	// Sample-only routing preserves channel ownership and instrument NNA voices.
 	void *nativeSampleContext = nullptr;
 	PLUGINDEX (*nativeSamplePlugin)(void *, const ModChannel &, CHANNELINDEX) noexcept = nullptr;

@@ -24,9 +24,21 @@ static const FUID effectID(0x5245534f, 0x4e414e43, 0x45464645, 0x43540001),
     instrumentID(0x5245534f, 0x4e414e43, 0x494e5354, 0x52550001);
 static const FUID delayedID(0x5245534f, 0x4e414e43, 0x44454c41, 0x59000001);
 static const FUID programID(0x5245534f, 0x4e414e43, 0x50524f47, 0x52410001);
+// Main-thread lifecycle diagnostics, including resources retained at app exit.
+static int liveInstances = 0, liveViews = 0, bundleReferences = 0, lifecycleErrors = 0;
+extern "C" __attribute__((visibility("default"))) int ResonanceFixtureLifecycle(int field) {
+  return field == 0 ? liveInstances : field == 1 ? liveViews : field == 2 ? bundleReferences : lifecycleErrors;
+}
 // Test-only entry point drives the real VST3 edit callback without a window.
 // Controllers register/unregister on the main thread; never used from process().
 static std::array<IComponentHandler *, 256> fixtureHandlers{};
+static std::atomic<uint32_t> fixtureLatency{0};
+extern "C" __attribute__((visibility("default"))) int ResonanceFixtureLatency(uint32_t frames) {
+  fixtureLatency = frames;
+  int accepted = 0;
+  for (auto *handler : fixtureHandlers) if (handler && handler->restartComponent(kLatencyChanged) == kResultOk) ++accepted;
+  return accepted;
+}
 static std::atomic<bool> fixtureChannelWeights{false};
 static bool fixturePitchMode=false;
 static bool fixtureEffectDelay=false;
@@ -74,7 +86,8 @@ class View final : public IPlugView {
   double initial;
 
 public:
-  explicit View(IComponentHandler *h, double value) : handler(h), initial(value) {}
+  explicit View(IComponentHandler *h, double value) : handler(h), initial(value) { ++liveViews; }
+  ~View() { if (view || ![NSThread isMainThread]) ++lifecycleErrors; --liveViews; }
   tresult PLUGIN_API queryInterface(const TUID id, void **out) override {
     *out = nullptr;
     if (same(id, IPlugView::iid) || same(id, FUnknown::iid)) {
@@ -145,20 +158,26 @@ public:
 class Fixture final : public IComponent, public IAudioProcessor, public IEditController, public IUnitInfo, public IMidiMapping {
   std::atomic<uint32> refs{1};
   bool instrument, delayed, programs;
+  bool initialized = false, active = false, processing = false;
   std::array<float,2> programValues{}, unitGains{.25f,.25f};
   std::array<bool, 32> outputsActive{};
   std::array<bool, 2> inputsActive{};
   std::array<float, 32> delay{};
   std::array<float,64> effectDelay{};size_t effectDelayPosition=0;double rate=48000;
   size_t delayPosition = 0;
+  std::array<float, 256> dynamicDelay{};
+  uint32_t appliedLatency = 0, dynamicPosition = 0;
   std::atomic<float> gain{0.5};
   IComponentHandler *handler = nullptr;
   std::array<uint16_t, 16 * 128> notes{};
   std::array<float,16> pitchWheels{};
 
 public:
-  explicit Fixture(bool i, bool d = false, bool p = false) : instrument(i), delayed(d||(!i&&fixtureEffectDelay)), programs(p) {pitchWheels.fill(8192.f/16383);}
-  ~Fixture() { setComponentHandler(nullptr); }
+  explicit Fixture(bool i, bool d = false, bool p = false) : instrument(i), delayed(d||(!i&&fixtureEffectDelay)), programs(p) {pitchWheels.fill(8192.f/16383); ++liveInstances;}
+  ~Fixture() {
+    if (initialized || active || processing || ![NSThread isMainThread]) ++lifecycleErrors;
+    setComponentHandler(nullptr); --liveInstances;
+  }
   tresult PLUGIN_API queryInterface(const TUID id, void **out) override {
     *out = nullptr;
     if (same(id, FUnknown::iid) || same(id, IPluginBase::iid) || same(id, IComponent::iid))
@@ -182,8 +201,12 @@ public:
       delete this;
     return n;
   }
-  tresult PLUGIN_API initialize(FUnknown *) override { return [NSThread isMainThread] ? kResultOk : kResultFalse; }
-  tresult PLUGIN_API terminate() override { return [NSThread isMainThread] ? kResultOk : kResultFalse; }
+  tresult PLUGIN_API initialize(FUnknown *) override { initialized = true; return [NSThread isMainThread] ? kResultOk : kResultFalse; }
+  tresult PLUGIN_API terminate() override {
+    if (!initialized || active || processing) ++lifecycleErrors;
+    initialized = false;
+    return [NSThread isMainThread] ? kResultOk : kResultFalse;
+  }
   tresult PLUGIN_API getControllerClassId(TUID) override { return kResultFalse; }
   tresult PLUGIN_API setIoMode(IoMode) override { return kResultOk; }
   int32 PLUGIN_API getBusCount(MediaType type, BusDirection dir) override {
@@ -210,7 +233,12 @@ public:
     if (type == kAudio && dir == kInput) inputsActive[index] = active;
     return kResultOk;
   }
-  tresult PLUGIN_API setActive(TBool) override { return kResultOk; }
+  tresult PLUGIN_API setActive(TBool value) override {
+    if (value && appliedLatency != fixtureLatency.load()) {
+      appliedLatency = fixtureLatency.load(); dynamicDelay.fill(0); dynamicPosition = 0;
+    }
+    active = value; return kResultOk;
+  }
   tresult PLUGIN_API setState(IBStream *s) override {
     float value;
     int32 n = 0;
@@ -243,9 +271,9 @@ public:
     return kResultOk;
   }
   tresult PLUGIN_API canProcessSampleSize(int32 size) override { return size == kSample32 ? kResultOk : kResultFalse; }
-  uint32 PLUGIN_API getLatencySamples() override { return delayed ? 32 : 0; }
+  uint32 PLUGIN_API getLatencySamples() override { return (delayed ? 32 : 0) + fixtureLatency.load(); }
   tresult PLUGIN_API setupProcessing(ProcessSetup &setup) override {rate=setup.sampleRate; return kResultOk; }
-  tresult PLUGIN_API setProcessing(TBool) override { return kResultOk; }
+  tresult PLUGIN_API setProcessing(TBool value) override { processing = value; return kResultOk; }
   uint32 PLUGIN_API getTailSamples() override { return delayed&&!instrument?32:0; }
   tresult PLUGIN_API process(ProcessData &d) override {
     if (d.numOutputs != getBusCount(kAudio, kOutput) || d.numInputs != getBusCount(kAudio, kInput) || !outputsActive[0])
@@ -314,6 +342,10 @@ public:
         d.outputs[0].channelBuffers32[ch][i] = instrument ? value : d.inputs[0].channelBuffers32[ch][i] * g *
           (inputsActive[1] ? 1 + d.inputs[1].channelBuffers32[0][i] : 1);
       if(delayed&&!instrument)for(int ch=0;ch<2;++ch){std::swap(d.outputs[0].channelBuffers32[ch][i],effectDelay[effectDelayPosition]);effectDelayPosition=(effectDelayPosition+1)%effectDelay.size();}
+      if (appliedLatency && appliedLatency <= 128) for (int ch = 0; ch < 2; ++ch) {
+        std::swap(d.outputs[0].channelBuffers32[ch][i], dynamicDelay[dynamicPosition]);
+        dynamicPosition = (dynamicPosition + 1) % (appliedLatency * 2);
+      }
       for (int bus = 1; bus < d.numOutputs; ++bus) if (outputsActive[bus])
         for (int ch = 0; ch < d.outputs[bus].numChannels; ++ch)
           d.outputs[bus].channelBuffers32[ch][i] = value * float(bus + 1) * float(ch ? -.5 : 1);
@@ -429,9 +461,11 @@ public:
   }
 };
 extern "C" __attribute__((visibility("default"))) bool bundleEntry(CFBundleRef) {
+  ++bundleReferences;
   return true;
 }
 extern "C" __attribute__((visibility("default"))) bool bundleExit() {
+  if (--bundleReferences < 0 || (!bundleReferences && (liveInstances || liveViews))) ++lifecycleErrors;
   return true;
 }
 extern "C" __attribute__((visibility("default"))) IPluginFactory *GetPluginFactory() {

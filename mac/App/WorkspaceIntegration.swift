@@ -24,7 +24,7 @@ extension AppController {
     patternGraphHost.lanes.onEdit = {[weak self] target,column,row in self?.openGraphCommand(target:target,column:column,row:row)}
     patternGraphHost.lanes.onClear = {[weak self] target,column,row in self?.clearGraphCommand(target:target,column:column,row:row)}
     signalGraphEditor.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
-    signalGraphEditor.onPlugin = {[weak self] id in self?.inspectWorkspacePlugin(id)}
+    signalGraphEditor.onPlugin = {[weak self] id in self?.openWorkspacePlugin(id)}
     signalGraphEditor.onBus = {[weak self] id in guard let self else{return};self.showMixer();self.mixerEditor.selectBus(id)}
     signalGraphEditor.onChoosePlugin = {[weak self] choose in guard let self else{return};self.graphPluginBrowser.kind.selectItem(at:1);self.graphPluginBrowser.onChoose = {[weak self] descriptor in guard descriptor["isInstrument"] as? Bool != true else{return};choose(descriptor);self?.workspace?.show("graph")};self.workspace?.show("graphPlugins");self.graphPluginBrowser.load()}
     graphPluginBrowser.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
@@ -43,6 +43,7 @@ extension AppController {
     workspaceAutomation.onContext = {[weak self] in self?.workspaceAutomationModel ?? self?.model ?? PatternModel([:])}
     workspaceAutomation.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
     configureWorkspaceMixer()
+    installContextMenus()
     dock.onSelection = {[weak self] id in
       guard let self else{return}
       if self.workspaceReturnPoints[id] == nil {self.workspaceReturnPoints[id]=self.patternView.navigation}
@@ -55,6 +56,8 @@ extension AppController {
       if self.handlePlaybackKey(event) || self.handleInspectorNote(event) { return nil }
       guard self.liveKeyboard,NSApp.isActive,self.commandPalette.window?.isVisible != true,
         NSApp.modalWindow == nil,self.window.attachedSheet == nil else{return event}
+      if let text=self.focusedView(event) as? NSTextView,text.isEditable,event.type == .keyDown{return event}
+      if self.focusedView(event) is NSTextField,event.type == .keyDown{return event}
       if event.type == .keyUp,let note=self.workspaceHeldKeys.removeValue(forKey:event.keyCode){self.audition(note:note,on:false);return nil}
       guard event.modifierFlags.intersection([.command,.control,.option]).isEmpty,
         let key=event.charactersIgnoringModifiers?.lowercased(),let offset=KeyboardSettings.note(for:key) else{return event}
@@ -64,6 +67,16 @@ extension AppController {
     NotificationCenter.default.addObserver(forName:NSApplication.didResignActiveNotification,object:nil,queue:.main){[weak self] _ in self?.releaseWorkspaceKeys();self?.releaseInspectorKeys();self?.commandPalette.sequences.cancel()}
     commandPalette.sequences.onHint = {[weak self] hint in self?.window.subtitle=hint}
     commandPalette.collect()
+    for tabs in [dock.right,dock.bottom,dock.secondary] {
+      tabs.shortcutLabel = {[weak self] id in
+        guard let self,let entry=self.commandPalette.entries.first(where:{$0.item.representedObject as? String==id}) else{return ""}
+        if let sequence=self.commandPalette.sequences.bindings[entry.id]{return sequence.map(\.encoded).joined(separator:" → ")}
+        let item=entry.item,mask=item.keyEquivalentModifierMask
+        guard !item.keyEquivalent.isEmpty else{return ""}
+        return (mask.contains(.control) ? "⌃" : "")+(mask.contains(.option) ? "⌥" : "")+(mask.contains(.shift) ? "⇧" : "")+(mask.contains(.command) ? "⌘" : "")+item.keyEquivalent.uppercased()
+      };tabs.reload()
+    }
+    commandPalette.onShortcutsChanged = {[weak dock] in guard let dock else{return};for tabs in [dock.right,dock.bottom,dock.secondary]{tabs.reload()}}
     DispatchQueue.main.async {[weak self] in
       guard let self else{return}; self.workspace?.preset("Compose")
       if !self.automationTest && !self.inspectionTest,let saved=UserDefaults.standard.dictionary(forKey:"workspaceLastLayout"){self.workspace?.restore(saved)}
@@ -74,11 +87,12 @@ extension AppController {
     mixerEditor.onSidechains = {[weak self] in self?.showSidechains()}
     mixerEditor.onConfigurePlugin = {[weak self] slot in self?.showPluginPorts(slot)}
     mixerEditor.onPluginControls = {[weak self] id in self?.inspectWorkspacePlugin(id)}
-    mixerEditor.onOpenPlugin = {[weak self] id in
-      guard let self,let slot=self.model.nativePlugins.firstIndex(where:{$0["instanceID"] as? String==id}) else{return}
-      if self.model.nativePlugins[slot]["format"] as? String=="Built-in" {self.inspectWorkspacePlugin(id)}
-      else {do {try self.session.showPluginEditor(slot)} catch {self.show(error)}}
-    }
+    mixerEditor.onOpenPlugin = {[weak self] id in self?.openWorkspacePlugin(id)}
+  }
+  func openWorkspacePlugin(_ id:String) {
+    guard !busy,let slot=model.nativePlugins.firstIndex(where:{$0["instanceID"] as? String==id}) else{return}
+    if model.nativePlugins[slot]["format"] as? String=="Built-in" { inspectWorkspacePlugin(id) }
+    else { do { try session.showPluginEditor(slot) } catch { show(error) } }
   }
   func inspectWorkspacePlugin(_ id:String){
     guard let slot=model.nativePlugins.firstIndex(where:{$0["instanceID"] as? String==id}) else{return}
@@ -157,7 +171,8 @@ extension AppController {
   @objc func showGraphCommands(){openGraphCommand()}
   @objc func showSignalGraph(){workspace?.show("graph");followWorkspacePanel("graph",force:true)}
   @objc func showCommandPalette(){commandPalette.show()}
-  @objc func focusPattern(){window.makeKeyAndOrderFront(nil);window.makeFirstResponder(patternView);editorMode=0;modePicker.selectedSegment=0}
+  @objc func focusInspector(_ sender:NSMenuItem) { if let id=sender.representedObject as? String { workspace?.show(id,focus:true) } }
+  @objc func focusPattern(){window.makeKeyAndOrderFront(nil);window.makeFirstResponder(patternView);editorMode=0}
   @objc func focusNextPanel(){
     guard let workspace else{return};let ids=workspace.visibleIDs
     let index=workspace.focusedPanel().flatMap{ids.firstIndex(of:$0.id)} ?? -1
@@ -179,8 +194,13 @@ extension AppController {
   func handleWorkspaceAutomation(_ method:String,params:[String:Any],reply:@escaping AutomationServer.Reply)->Bool{
     guard method.hasPrefix("workspace.") else{return false}
     func fail(_ message:String){reply(AutomationServer.error(-32602,message))}
+    if method=="workspace.ruler" {
+      guard Set(params.keys)==["mode"],let name=params["mode"] as? String,let mode=PatternPositionMode(rawValue:name) else{reply(AutomationServer.error(-32602,"Choose rows, beats, patternTime or songTime"));return true}
+      patternView.positionMode=mode
+      reply(["result":["revision":session.automationRevision,"data":["mode":mode.rawValue],"changed":false,"playbackStopped":false]]);return true
+    }
     if method=="workspace.commands.get" || method=="workspace.shortcut.set" {
-      if method=="workspace.commands.get"{guard params.isEmpty else{fail("workspace.commands.get has no parameters");return true}}
+    if method=="workspace.commands.get"{guard params.isEmpty else{fail("workspace.commands.get has no parameters");return true}}
       else {guard Set(params.keys)==["command","keys"],let id=params["command"] as? String,let keys=params["keys"] as? [String] else{fail("Supply a command ID and key sequence");return true};if let error=commandPalette.setShortcut(id,keys:keys){fail(error);return true}}
       reply(["result":["revision":session.automationRevision,"data":["commands":commandPalette.shortcutCommands()],"changed":false,"playbackStopped":false]]);return true
     }
@@ -195,7 +215,7 @@ extension AppController {
       guard Set(params.keys)==["name"],let name=params["name"] as? String,["Compose","Sound design","Pattern focus","Save custom","Restore custom"].contains(name) else{fail("Choose a workspace layout");return true}
       if name=="Save custom"{saveWorkspaceLayout()}else if name=="Restore custom"{restoreWorkspaceLayout()}else{workspace?.preset(name)}
     } else {reply(AutomationServer.error(-32601,"Unknown workspace method"));return true}
-    var state=workspace?.state ?? [:];state["panels"]=workspace?.panels.keys.sorted() ?? [];state["visible"]=workspace?.visibleIDs ?? [];state["focus"]=workspace?.focusedPanel()?.id ?? "pattern";state["liveKeyboard"]=liveKeyboard
+    var state=workspace?.state ?? [:];state["panels"]=workspace?.panels.keys.sorted() ?? [];state["visible"]=workspace?.visibleIDs ?? [];state["focus"]=workspace?.focusedPanel()?.id ?? "pattern";state["liveKeyboard"]=liveKeyboard;state["positionMode"]=patternView.positionMode.rawValue
     state["targets"]=workspace?.panels.mapValues{$0.target.stringValue};state["screens"]=NSScreen.screens.map{["name":$0.localizedName,"width":$0.visibleFrame.width,"height":$0.visibleFrame.height,"scale":$0.backingScaleFactor]}
     reply(["result":["revision":session.automationRevision,"data":state,"changed":false,"playbackStopped":false]]);return true
   }

@@ -1190,6 +1190,19 @@
             "expectedRevision": {
               "type": "string",
               "description": "Opaque revision from the last read. Mandatory for every mutation."
+            },
+            "empty": {
+              "type": "boolean",
+              "description": "Create a new empty sample keymap for a plugin trigger. Preserves existing sample-only playback by creating matching instruments first."
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Name for empty:true only."
+            },
+            "dryRun": {
+              "type": "boolean",
+              "description": "Validate and return the prospective slot; supported with empty:true."
             }
           },
           "required": [
@@ -6240,6 +6253,223 @@
                 ],
                 "items": false
               }
+            },
+            "effects": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 126
+                  },
+                  "position": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "duration": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "column": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  },
+                  "kind": {
+                    "enum": [
+                      "parameter-set",
+                      "parameter-slide",
+                      "pitch-set",
+                      "pitch-slide",
+                      "note-cut",
+                      "tracker"
+                    ]
+                  },
+                  "binding": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "value": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96
+                  },
+                  "pitchRange": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 96,
+                    "default": 2,
+                    "description": "Match the plugin instrument MIDI wheel range in semitones; native sample bends use full precision."
+                  },
+                  "effect": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "parameter": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  }
+                },
+                "required": [
+                  "channel",
+                  "position",
+                  "column",
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "parameter-set",
+                            "parameter-slide"
+                          ]
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "binding",
+                        "value"
+                      ],
+                      "properties": {
+                        "binding": {
+                          "minimum": 1
+                        },
+                        "value": {
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "pitchRange": {
+                          "const": 2
+                        }
+                      }
+                    },
+                    "else": {
+                      "properties": {
+                        "binding": {
+                          "const": 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "pitch-set",
+                            "pitch-slide"
+                          ]
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "value"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "note-cut"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "value": {
+                          "const": 0
+                        },
+                        "duration": {
+                          "const": 0
+                        },
+                        "binding": {
+                          "const": 0
+                        },
+                        "pitchRange": {
+                          "const": 2
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "tracker"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "effect",
+                        "parameter"
+                      ],
+                      "properties": {
+                        "value": {
+                          "const": 0
+                        },
+                        "binding": {
+                          "const": 0
+                        },
+                        "duration": {
+                          "const": 0
+                        },
+                        "pitchRange": {
+                          "const": 2
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "maxItems": 65536
+            },
+            "bindings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 255
+                  },
+                  "plugin": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "parameter": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "id",
+                  "plugin",
+                  "parameter"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 255
             }
           },
           "required": [
@@ -6918,7 +7148,8 @@
                 {
                   "type": "null"
                 }
-              ]
+              ],
+              "description": "Null disconnects the main output while retaining sends and processors; requires native metadata 15."
             },
             "preGainDB": {
               "type": "number",
@@ -7160,6 +7391,11 @@
             },
             "dryRun": {
               "type": "boolean"
+            },
+            "disconnected": {
+              "type": "boolean",
+              "default": false,
+              "description": "With target:null, explicitly disconnect this output instead of restoring its default route."
             }
           },
           "required": [
@@ -9038,7 +9274,7 @@
             "column": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 12
+              "maximum": 18
             },
             "following": {
               "type": "boolean"
@@ -10217,7 +10453,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Read native effect columns, stable plugin parameter bindings, and sample-resolution commands for one pattern.",
+      "description": "Read all FX columns and kinds, total column counts and stable parameter bindings. Tracker values use their source musical ranges; precise commands retain double values and 65536 units per row.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -10255,7 +10491,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Atomically upsert song-wide extra-column counts and bindings and replace the selected pattern command list. Missing collections stay unchanged. Uses 65536 units per row, one document Undo, guarded revision and optional dryRun.",
+      "description": "All FX columns have the same capabilities. Atomically upsert total FX-column counts (1..8) and bindings; commands replaces all effects in the selected pattern. Omitted collections stay unchanged. One document Undo, revision guard and dryRun.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -10297,7 +10533,7 @@
                   },
                   "count": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 8
                   }
                 },
@@ -10382,7 +10618,9 @@
                       "parameter-set",
                       "parameter-slide",
                       "pitch-set",
-                      "pitch-slide"
+                      "pitch-slide",
+                      "note-cut",
+                      "tracker"
                     ]
                   },
                   "binding": {
@@ -10401,14 +10639,23 @@
                     "maximum": 96,
                     "default": 2,
                     "description": "Match the plugin instrument MIDI wheel range in semitones; native sample bends use full precision."
+                  },
+                  "effect": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "parameter": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
                   }
                 },
                 "required": [
                   "channel",
                   "position",
                   "column",
-                  "kind",
-                  "value"
+                  "kind"
                 ],
                 "additionalProperties": false,
                 "allOf": [
@@ -10425,7 +10672,8 @@
                     },
                     "then": {
                       "required": [
-                        "binding"
+                        "binding",
+                        "value"
                       ],
                       "properties": {
                         "binding": {
@@ -10444,6 +10692,77 @@
                       "properties": {
                         "binding": {
                           "const": 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "pitch-set",
+                            "pitch-slide"
+                          ]
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "value"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "note-cut"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "value": {
+                          "const": 0
+                        },
+                        "duration": {
+                          "const": 0
+                        },
+                        "binding": {
+                          "const": 0
+                        },
+                        "pitchRange": {
+                          "const": 2
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "tracker"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "effect",
+                        "parameter"
+                      ],
+                      "properties": {
+                        "value": {
+                          "const": 0
+                        },
+                        "binding": {
+                          "const": 0
+                        },
+                        "duration": {
+                          "const": 0
+                        },
+                        "pitchRange": {
+                          "const": 2
                         }
                       }
                     }
@@ -13332,6 +13651,11 @@
             },
             "dryRun": {
               "type": "boolean"
+            },
+            "disconnected": {
+              "type": "boolean",
+              "default": false,
+              "description": "With target:null, explicitly disconnect this output instead of restoring its default route."
             }
           },
           "required": [
@@ -13556,7 +13880,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Read playback state, loop setting, region and audio telemetry.",
+      "description": "Read playback state, loop setting, region and audio telemetry. Includes audioActive and voicePositions for native sample and instrument voices (sample frames and three envelope ticks); preview voices are included while transport is stopped.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -14848,6 +15172,720 @@
       ],
       "additionalProperties": false,
       "description": "Copy catalogue entry into the song bank under a fresh local identity. Later catalogue updates do not change it."
+    },
+    {
+      "description": "Assign, move or detach one tracker instrument by stable plugin identity, preserving every other instrument assignment. Empty plugin detaches. One effect-history Undo; supports dryRun.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "instrument.plugin.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "instrument": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "plugin": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "channel": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16,
+              "default": 1
+            }
+          },
+          "required": [
+            "instrument",
+            "plugin",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "First-visit row positions in beats and seconds, accounting for tempo, groove and flow commands. Unreachable rows have null times.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "pattern.timeline.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "order": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "pattern"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Set the pattern position ruler without changing the song.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "workspace.ruler"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "rows",
+                "beats",
+                "patternTime",
+                "songTime"
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "x-application-only": true
+    },
+    {
+      "description": "Read all FX columns and kinds, total column counts and stable parameter bindings. Tracker values use their source musical ranges; precise commands retain double values and 65536 units per row.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "pattern.effects.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          },
+          "required": [
+            "pattern"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "All FX columns have the same capabilities. Atomically upsert total FX-column counts (1..8) and bindings; commands replaces all effects in the selected pattern. Omitted collections stay unchanged. One document Undo, revision guard and dryRun.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "pattern.effects.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 126
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8
+                  }
+                },
+                "required": [
+                  "channel",
+                  "count"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 127
+            },
+            "bindings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 255
+                  },
+                  "plugin": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "parameter": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "id",
+                  "plugin",
+                  "parameter"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 255
+            },
+            "removeBindings": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              },
+              "maxItems": 255
+            },
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 126
+                  },
+                  "position": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "duration": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "column": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  },
+                  "kind": {
+                    "enum": [
+                      "parameter-set",
+                      "parameter-slide",
+                      "pitch-set",
+                      "pitch-slide",
+                      "note-cut",
+                      "tracker"
+                    ]
+                  },
+                  "binding": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "value": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96
+                  },
+                  "pitchRange": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 96,
+                    "default": 2,
+                    "description": "Match the plugin instrument MIDI wheel range in semitones; native sample bends use full precision."
+                  },
+                  "effect": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "parameter": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  }
+                },
+                "required": [
+                  "channel",
+                  "position",
+                  "column",
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "parameter-set",
+                            "parameter-slide"
+                          ]
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "binding",
+                        "value"
+                      ],
+                      "properties": {
+                        "binding": {
+                          "minimum": 1
+                        },
+                        "value": {
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "pitchRange": {
+                          "const": 2
+                        }
+                      }
+                    },
+                    "else": {
+                      "properties": {
+                        "binding": {
+                          "const": 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "pitch-set",
+                            "pitch-slide"
+                          ]
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "value"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "note-cut"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "value": {
+                          "const": 0
+                        },
+                        "duration": {
+                          "const": 0
+                        },
+                        "binding": {
+                          "const": 0
+                        },
+                        "pitchRange": {
+                          "const": 2
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "tracker"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "effect",
+                        "parameter"
+                      ],
+                      "properties": {
+                        "value": {
+                          "const": 0
+                        },
+                        "binding": {
+                          "const": 0
+                        },
+                        "duration": {
+                          "const": 0
+                        },
+                        "pitchRange": {
+                          "const": 2
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "maxItems": 65536
+            }
+          },
+          "required": [
+            "pattern",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Set or clear one zero-based FX cell atomically, preserving every other cell and binding. null command clears. Tracker effects begin at offset zero; precise effects use offsets 0..65535.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "pattern.effect.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "row": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "channel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 126
+            },
+            "column": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "command": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "duration": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 4294967295
+                    },
+                    "kind": {
+                      "enum": [
+                        "parameter-set",
+                        "parameter-slide",
+                        "pitch-set",
+                        "pitch-slide",
+                        "note-cut",
+                        "tracker"
+                      ]
+                    },
+                    "binding": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    },
+                    "value": {
+                      "type": "number",
+                      "minimum": -96,
+                      "maximum": 96
+                    },
+                    "pitchRange": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 96,
+                      "default": 2,
+                      "description": "Match the plugin instrument MIDI wheel range in semitones; native sample bends use full precision."
+                    },
+                    "effect": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    },
+                    "parameter": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    },
+                    "offset": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "allOf": [
+                    {
+                      "if": {
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "parameter-set",
+                              "parameter-slide"
+                            ]
+                          }
+                        }
+                      },
+                      "then": {
+                        "required": [
+                          "binding",
+                          "value"
+                        ],
+                        "properties": {
+                          "binding": {
+                            "minimum": 1
+                          },
+                          "value": {
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "pitchRange": {
+                            "const": 2
+                          }
+                        }
+                      },
+                      "else": {
+                        "properties": {
+                          "binding": {
+                            "const": 0
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "pitch-set",
+                              "pitch-slide"
+                            ]
+                          }
+                        }
+                      },
+                      "then": {
+                        "required": [
+                          "value"
+                        ]
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "kind": {
+                            "const": "note-cut"
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "value": {
+                            "const": 0
+                          },
+                          "duration": {
+                            "const": 0
+                          },
+                          "binding": {
+                            "const": 0
+                          },
+                          "pitchRange": {
+                            "const": 2
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "kind": {
+                            "const": "tracker"
+                          }
+                        }
+                      },
+                      "then": {
+                        "required": [
+                          "effect",
+                          "parameter"
+                        ],
+                        "properties": {
+                          "value": {
+                            "const": 0
+                          },
+                          "binding": {
+                            "const": 0
+                          },
+                          "duration": {
+                            "const": 0
+                          },
+                          "pitchRange": {
+                            "const": 2
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "required": [
+            "pattern",
+            "row",
+            "channel",
+            "column",
+            "command",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
     }
   ]
 }

@@ -30,5 +30,7 @@ public:
   const float *output(size_t index,uint32_t port) const noexcept;
   void controller(uint8_t cc,uint8_t value) noexcept {if(cc<128)controllers_[cc].store(value,std::memory_order_relaxed); }
   bool process(size_t index,float *,uint32_t,uint64_t,std::span<const MixerAudioInput>) noexcept;
+  bool latencyChangePending() const noexcept;
+  void refreshLatencies(std::vector<MixerProcessorInfo> &); // Audio is stopped.
 };
 }

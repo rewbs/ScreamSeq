@@ -1100,28 +1100,52 @@ that extension; ordinary projects without such losses retain prior bytes. Module
 export rejects envelope losses. This does not introduce additional interpolation
 curves or expand the source format's editable point limit.
 
-## Native effect subcolumns and stable parameter commands
+## Unified FX columns and stable parameter commands
 
-`pattern.performance.get {pattern}` returns this pattern's native commands, all
-numbered parameter bindings, and each raw channel's extra effect-column count.
+`pattern.effects.get {pattern}` returns all FX commands, numbered parameter
+bindings, and each raw channel's total FX-column count (1–8, default 1).
+`pattern.performance.get/set` are aliases with the same unified semantics.
 Bindings target persistent plugin instance IDs and native parameter IDs. Moving a
 plugin in the rack does not change the target. Unavailable bindings remain saved
 with `resolved:false`; they never select a replacement plugin by slot.
 
-`pattern.performance.set` requires `pattern` and `expectedRevision`. Optional
+`pattern.effects.set` requires `pattern` and `expectedRevision`. Optional
 `columns:[{channel,count}]` and `bindings:[{id,plugin,parameter,name?}]` upsert
 song-wide configuration; `removeBindings:[id]` explicitly removes unused bindings.
-`commands` replaces only the selected pattern's complete native command list.
+`commands` replaces only the selected pattern's complete FX command list.
 Omitted collections are preserved. Preview with `dryRun:true`; a changed real edit
 stops playback and creates one document Undo step.
 
-Commands contain `channel`, `column` (zero-based extra subcolumn), `position`,
-`kind`, `binding`, `value`, and optional `duration`. Up to eight extra subcolumns
+Commands contain `channel`, `column` (zero-based FX column), `position`,
+`kind`, `binding`, `value`, and optional `duration`. Up to eight total FX columns
 per raw channel and 255 numbered bindings are supported. Positions and durations
 are integers in **1/65536-row units**; values are normalized from 0 to 1.
 `parameter-set` uses duration zero. `parameter-slide` requires a continuous
 parameter and positive duration, ending within the pattern. Parameter reads expose
 `writable` and `canSlide`.
+
+`kind:"tracker"` carries numeric `effect` and `parameter` bytes from the current
+`pattern.commands` catalog. It uses a row-boundary position and zero duration,
+binding and value. Tracker values retain their source-format resolution; precise
+commands retain double precision. Tracker effects execute left to right with
+shared channel effect memory and one note onset. Existing format-specific flow
+and delay rules apply. Counts cannot shrink past populated FX cells.
+
+`pattern.effect.set {pattern,row,channel,column,command,expectedRevision,dryRun?}`
+edits one FX cell atomically, preserving every other command. `command:null`
+clears it. A command object uses `kind` and its relevant fields (`effect`,
+`parameter`, `binding`, `value`, `pitchRange`, `duration`); optional `offset`
+is 0–65535 row units. For example SC3 uses
+`command:{"kind":"tracker","effect":20,"parameter":195}` in MPTM.
+
+`pattern.paste` accepts relative `effects` and stable `bindings` alongside the
+six-field source `cells`. FX 1 tracker data belongs in `cells`; every other FX
+uses the command objects above with relative `channel` and `position`. Bindings
+have `id,plugin,parameter,name?` and are remapped by stable plugin/parameter target.
+Overwrite clears the destination region, merge replaces populated source cells,
+and mix fills empty cells. Column expansion is included in the same Undo.
+Structural `pattern.transform` operations with `fields:["effect"]` include all
+FX columns; numeric source-byte transforms still address the source effect byte.
 
 Events start on the next audio sample. Slides interpolate at every audio sample,
 including across ticks; a new command interrupts the previous slide continuously.
@@ -1364,3 +1388,108 @@ budget is rejected. This is an explicit conversion, not realtime formula
 execution inside legacy instrument envelopes. Original instrument templates
 retain their duration; non-instrument templates fit the current instrument's
 duration (49 ticks for an empty envelope), unless `span` is supplied in ticks.
+
+## Discoverable pattern effects and instrument sound sources
+
+The grid and effect finder use two-character display codes: ordinary source-format
+commands use `0` plus their original letter, and extended commands use the letter
+plus the subcommand digit (`SD`, for example). `pattern.commands` exposes this as
+`displayCode`; the existing `label`, numeric command and byte parameter remain
+unchanged. These are ScreamSeq display aliases, not Renoise command-number mappings.
+
+Every FX column supports **PS** (parameter set), **PL** (parameter slide),
+**BS** (pitch set) and **BL** (pitch slide). `api.describe.patternPerformance`
+exposes these aliases and precision. Commands still use the existing string `kind`
+and double-precision `value` in `pattern.effects.set`. The grid's four hex
+value digits are a rounded overview, not storage precision. The editor accepts
+percentages with decimal precision; API parameter targets remain normalized 0…1.
+All FX columns also accept every tracker command exposed by `pattern.commands`.
+This unifies placement; it does not add the remaining Renoise command behaviors.
+
+`instrument.plugin.set {instrument, plugin, channel?, dryRun?, expectedRevision}`
+assigns one tracker instrument to a persistent plugin instance ID and MIDI channel
+1…16 (default 1). Empty string `plugin:""` detaches that instrument. Moving an
+instrument removes its old assignment and adds it to the new plugin in **one
+plugin-history transaction**, preserving every other part on both plugins.
+Existing primary/alias order is retained for edits to the same plugin. Stale
+revisions, missing instruments, effect-only plugins and invalid channels reject
+before changes; dry runs do not stop playback or change history. The result
+contains `instrument`, `plugin`, `channel`, `wouldChange`, and `dryRun`.
+
+### Playback displays and disconnected outputs
+
+`pattern.timeline.get({pattern, order?})` reads row positions in one bounded
+engine length walk. `order` selects an occurrence of a repeated pattern; omitted,
+it uses the first occurrence in the current sequence. Each entry in `positions`
+contains zero-based `row` and `beat`, plus `patternSeconds` and `songSeconds`.
+Seconds account for the format's tempo/speed, groove and flow commands. They are
+the first visit to that row in the selected occurrence; skipped/unreachable rows
+(and unarranged patterns) have null times. Pattern time begins at the first
+reached row of that occurrence. This read does not change playback or revision.
+
+`transport.get` additionally includes `audioActive` (including audition while the
+song transport is stopped) and `voicePositions`. Each native sample voice reports
+zero-based engine `channel`, one-based `sample` and `instrument` (zero for a raw
+sample), `sampleFrame`, `generation`, and `envelopeTicks` in volume/pan/pitch order.
+These are bounded, coherent snapshots of the engine, not estimates based on note
+age. They include looping, overlapping preview notes and NNA voices. No voices
+are reported after audio stops; plugin-internal sample/envelope positions are not
+visible to the host. Readers never block the audio callback.
+
+Application-only `workspace.ruler({mode})` selects `rows`, `beats`, `patternTime`
+or `songTime`; `workspace.get.positionMode` reports the choice. Clicking the
+pattern ruler header cycles these modes. The setting is view state, outside song
+history. Inspector tabs expose Control-Option 1 through 9; they retain each
+panel's existing draft, pin and placement.
+
+`mixer.bus.set({bus, output:null, expectedRevision})` now disconnects a bus's main
+output. Sends, effects and auxiliary routes remain intact and can still process.
+Undo/Redo and project persistence include the disconnection. Projects containing
+a disconnected non-master bus require native metadata 15; old builds reject them
+rather than routing them somewhere else. Connecting `output` to a valid group,
+return or master restores the main route. Zero remains forbidden as a send target.
+
+`mixer.plugin.route` (and `mixer.instrument.route`) additionally accepts
+`disconnected:true` with `target:null`. This stores an explicit disconnected
+output, suppressing the plugin instrument's automatic main-to-Master fallback.
+The graph's Delete action uses this form. Omitting `disconnected` retains the
+older `target:null` meaning: remove the routing override and restore defaults.
+`mixer.get` encodes a disconnected plugin target as an empty string. These routes
+also require metadata 15; Undo/Redo and native saves preserve them.
+
+### Precise cut commands and plugin trigger instruments
+
+`pattern.performance.set` accepts `kind:"note-cut"` (display code **NC**).
+`position` is the absolute position within the pattern in 65,536 units per row.
+Use `column` and `channel` as with other performance commands. `binding`, `value`
+and `duration` are zero (and may be omitted); `pitchRange` must retain its default 2.
+NC cuts the current native sample voice with the normal anticlick ramp. For a
+plugin instrument it sends note-offs for that tracker channel at the precise
+sample boundary, preserving the plugin's release envelope and other tracks
+sharing that instance/MIDI channel. It does not broadcast All Sounds Off.
+NC at the same position as a precise retrigger executes after that retrigger.
+Muted channels ignore it. Playback jumps do not replay historical cuts.
+NC requires native metadata 16; older metadata may not contain it.
+
+Example: at row 8 plus one eighth of a row, use `position:532480`. The UI also
+accepts beats within the row: multiply beats by the pattern's rows per beat
+and 65,536 to obtain the offset units. Timing follows actual tempo, speed and groove.
+
+`instrument.create {empty:true, name:"Lead trigger", expectedRevision:...}` creates
+an empty instrument with no sample mapping. Optional `dryRun:true` validates and
+returns the prospective slot. It preserves a sample-only song's existing playback
+by creating matching sample instruments before appending the empty trigger.
+Use the returned `instrument` and revision with `instrument.plugin.set` to assign
+a stable plugin instance ID and MIDI channel. Creation and assignment are two
+explicit edits: document Undo removes creation; plugin Undo reverses assignment.
+The UI's **New plugin instrument…** action performs these steps in sequence and
+retains the new instrument if assignment fails, so retry cannot create duplicates.
+Omitting `empty` retains the existing sample-instrument creation behavior.
+
+## Current native persistence
+
+Project container version **6** and native metadata version **17** are the only
+accepted native format. Older `.screamseq` / `.resonance` projects are rejected
+without replacing the open document. Original module import/playback is retained.
+Earlier version numbers elsewhere in this guide record when a feature appeared;
+they are not supported alternative encodings.

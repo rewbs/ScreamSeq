@@ -46,7 +46,8 @@ int main(int argc,char **argv) {
 		reject([](auto &r){r["native"]["automation"][0]["plugin"]="missing-instance";},"dangling rack identity rejects");
 		reject([](auto &r){r["plugins"][0]["state"]=nlohmann::json::binary(std::vector<uint8_t>(8),uint64_t(ScreamSeq::Project::OpaqueType::Date));},"opaque date cannot become plugin data");
 		reject([](auto &r){r["sequence"]=255;},"missing selected sequence rejects");
-		reject([](auto &r){r["version"]=6;},"future container rejected");
+		reject([](auto &r){r["version"]=7;},"future container rejected");
+        for(unsigned version=1;version<6;++version) reject([&](auto &r){r["version"]=version;},"historical native container rejected");
 		reject([](auto &r){r["plugins"].push_back(r["plugins"][0]);},"duplicate stable plugin identity rejected");
 		bool caught=false;auto savedState=loaded.state.preserved;auto savedPath=loaded.state.path;
 		try {ScreamSeq::Project::saveNativeProject(doc,loaded.state,copy,false);} catch(const std::exception &) {caught=true;}

@@ -74,7 +74,7 @@ int main() {
                                                                        options:0
                                                                         format:nil
                                                                          error:nil];
-        check([root[@"version"] isEqual:@4],
+        check([root[@"version"] isEqual:@6],
               "Export/recovery data uses native project without requiring annotations/plugins");
         Document native(bytes(root[@"module"]));
         check(native.song().GetSample(1).nLength == 11 && native.song().GetSample(1).nLoopStart == 1 &&
@@ -214,7 +214,7 @@ int main() {
         // Bad version/container combinations and truncated sample archives never replace a live document.
         auto revision = session.automationRevision;
         NSMutableDictionary *bad = [root mutableCopy];
-        for (id version : @[ @YES, @0, @1.5, @6, @3 ]) {
+        for (id version : @[ @YES, @0, @1.5, @7, @3 ]) {
           bad[@"version"] = version;
           NSData *invalid = [NSPropertyListSerialization dataWithPropertyList:bad
                                                                        format:NSPropertyListBinaryFormat_v1_0
@@ -224,7 +224,7 @@ int main() {
           check(![session openPath:path error:&error] && [revision isEqual:session.automationRevision],
                 "Reject malformed project version without replacement");
         }
-        bad[@"version"] = @4;
+        bad[@"version"] = @6;
         auto broken = packSongSnapshot(parts.module, parts.samples.first(parts.samples.size() - 1));
         bad[@"module"] = [NSData dataWithBytes:broken.data() length:broken.size()];
         NSData *invalid = [NSPropertyListSerialization dataWithPropertyList:bad

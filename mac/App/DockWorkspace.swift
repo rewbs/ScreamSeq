@@ -42,27 +42,55 @@ final class WorkspacePanel: NSView {
   @objc private func place() { let action = ["", "right", "bottom", "float", "hide"][placement.indexOfSelectedItem]; placement.selectItem(at: 0); if !action.isEmpty { onPlace?(action) } }
 }
 
+enum InspectorTabs {
+  static let items: [(id:String, label:String, key:String)] = [
+    ("notes","Notes","1"), ("samples","Samples","2"), ("instruments","Instruments","3"),
+    ("plugins","Plugins","4"), ("mixer","Mixer","5"), ("graph","Graph","6"),
+    ("graphPlugins","FX library","7"), ("graphCommands","Graph lanes","8"), ("automation","Automation","9")]
+}
 final class WorkspaceTabs: NSView {
-  let picker = NSPopUpButton(), host = NSView()
+  let tabScroll = NSScrollView(), tabRow = NSView(), host = NSView()
+  private(set) var buttons = [ActionButton]()
+  var shortcutLabel:((String)->String)?
   var panels = [WorkspacePanel](), selected: String?, onSelect: ((String) -> Void)?
   override init(frame: NSRect) {
-    super.init(frame: frame); addSubview(picker); addSubview(host)
-    picker.target = self; picker.action = #selector(changed); picker.setAccessibilityLabel("Choose docked panel")
+    super.init(frame: frame); addSubview(tabScroll); addSubview(host)
+    tabScroll.documentView=tabRow; tabScroll.drawsBackground=false
+    tabScroll.hasHorizontalScroller=true; tabScroll.autohidesScrollers=true
+    tabScroll.scrollerStyle = .overlay
+    tabScroll.setAccessibilityLabel("Inspector tabs")
   }
   required init?(coder: NSCoder) { fatalError() }
   override var isFlipped: Bool { true }
-  override func layout() { super.layout(); picker.frame = NSRect(x: 4,y: 2,width: max(100,bounds.width-8),height: 25); host.frame = NSRect(x: 0,y: 30,width: bounds.width,height: max(0,bounds.height-30)) }
+  override func layout() {
+    super.layout(); tabScroll.frame=NSRect(x:0,y:0,width:bounds.width,height:33)
+    host.frame=NSRect(x:0,y:34,width:bounds.width,height:max(0,bounds.height-34))
+    var x:CGFloat=4
+    for button in buttons { let width=max(76,button.intrinsicContentSize.width+8); button.frame=NSRect(x:x,y:3,width:width,height:27);x+=width+3 }
+    tabRow.frame=NSRect(x:0,y:0,width:max(bounds.width,x),height:33)
+  }
   func reload() {
-    picker.removeAllItems(); for panel in panels { picker.addItem(withTitle: panel.title); picker.lastItem?.representedObject = panel.id }
-    if !panels.contains(where: { $0.id == selected }) { selected = panels.first?.id }
-    showSelected()
+    for b in buttons { b.removeFromSuperview() }; buttons=[]
+    for panel in panels {
+      let info=InspectorTabs.items.first{$0.id==panel.id}
+      let shortcut=shortcutLabel?(panel.id) ?? (info.map{"⌃⌥"+$0.key} ?? "")
+      let label=(info?.label ?? panel.title)+(shortcut.isEmpty ? "" : "  "+shortcut)
+      let button=ActionButton(label){[weak self] in self?.choose(panel.id)}
+      button.setButtonType(.toggle);button.bezelStyle = .rounded
+      button.setAccessibilityLabel(panel.title + (shortcut.isEmpty ? "" : " · "+shortcut))
+      button.toolTip=panel.title + " · Scroll the tab strip to see more inspectors"
+      tabRow.addSubview(button);buttons.append(button)
+    }
+    if !panels.contains(where:{$0.id==selected}){selected=panels.first?.id}
+    needsLayout=true;showSelected()
   }
+  func choose(_ id:String) { selected=id;showSelected();onSelect?(id) }
   func showSelected() {
-    if let current = host.subviews.first as? WorkspacePanel, current.id == selected { return }
-    for child in host.subviews { child.removeFromSuperview() }
-    if let index = panels.firstIndex(where: { $0.id == selected }) { picker.selectItem(at: index); panels[index].fill(host) }
+    for (i,button) in buttons.enumerated(){let active=panels[i].id==selected;button.state=active ? .on : .off;button.bezelColor=active ? Theme.accent : nil;button.contentTintColor=active ? Theme.bg : Theme.muted}
+    if let current=host.subviews.first as? WorkspacePanel,current.id==selected{return}
+    for child in host.subviews{child.removeFromSuperview()}
+    if let index=panels.firstIndex(where:{$0.id==selected}){panels[index].fill(host);layoutSubtreeIfNeeded();buttons[index].scrollToVisible(buttons[index].bounds)}
   }
-  @objc func changed() { selected = picker.selectedItem?.representedObject as? String; showSelected(); if let selected { onSelect?(selected) } }
 }
 
 final class DockWorkspace: NSView, NSWindowDelegate {

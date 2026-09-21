@@ -10,7 +10,7 @@ NSDictionary *patternCommandCatalog(MODTYPE type) {
         NSMutableArray *items = [NSMutableArray array];
         for (const auto &c : patternCommands(format, volume))
           [items addObject:@{@"command": @(c.command), @"parameterMask": @(c.mask), @"parameterValue": @(c.value),
-            @"suggestedParameter": @(c.suggested), @"label": @(c.label.c_str()), @"name": @(c.name.c_str()),
+            @"displayCode": @(c.command == 0 ? ".." : (c.mask ? c.label.substr(0, 2) : "0" + c.label.substr(0, 1)).c_str()), @"suggestedParameter": @(c.suggested), @"label": @(c.label.c_str()), @"name": @(c.name.c_str()),
             @"family": @(c.family.c_str()), @"description": @(c.description.c_str()), @"minimum": @(c.minimum), @"maximum": @(c.maximum)}];
         catalog[volume ? @"volume" : @"effect"] = [items copy];
       }

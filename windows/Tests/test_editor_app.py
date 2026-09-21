@@ -576,15 +576,18 @@ class EditorAppTests(unittest.TestCase):
         self.assertEqual(reopened.call('document.get')['data']['title'], title)
         self.assertEqual(reopened.call('document.get')['data']['patterns'], before['patterns'])
 
-    def test_legacy_native_dry_run_reports_actual_output_version(self):
+    def test_old_native_rejection_and_current_dry_run_version(self):
         import plistlib
         legacy = self.directory / 'legacy.resonance'
         legacy.write_bytes(plistlib.dumps({'version': 1, 'module': (ROOT / 'test/test.mod').read_bytes(), 'plugins': [], 'automation': []}, fmt=plistlib.FMT_BINARY))
-        client, _ = self.launch(legacy)
+        client, _ = self.launch()
         before = client.call('context.get')
+        with self.assertRaises(ApiError):
+            self.write(client, 'document.open', path=str(legacy), discard=True)
+        self.assertEqual(client.call('context.get'), before)
         target = self.directory / 'upgraded.screamseq'
         result = self.write(client, 'document.save', path=str(target), dryRun=True)
-        self.assertEqual(result['data']['projectVersion'], 4)
+        self.assertEqual(result['data']['projectVersion'], 6)
         self.assertFalse(target.exists())
         self.assertEqual(client.call('context.get'), before)
 

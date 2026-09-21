@@ -707,7 +707,7 @@ bool CSoundFile::ProcessRow()
 		{
 			// First, handle some quirks that happen after the last tick of the previous row...
 			if(m_playBehaviour[KST3PortaAfterArpeggio]
-				&& chn.nCommand == CMD_ARPEGGIO	// Previous row state!
+				&& chn.HasActiveEffect(CMD_ARPEGGIO)	// Previous row state!
 				&& (m->command == CMD_PORTAMENTOUP || m->command == CMD_PORTAMENTODOWN))
 			{
 				// In ST3, a portamento immediately following an arpeggio continues where the arpeggio left off.
@@ -731,7 +731,7 @@ bool CSoundFile::ProcessRow()
 				&& chn.dwFlags[CHN_ADLIB]
 				&& chn.nPortamentoDest
 				&& chn.rowCommand.IsNote()
-				&& chn.rowCommand.IsTonePortamento())
+				&& RowTonePortamento(chn))
 			{
 				// ST3: Adlib Note + Tone Portamento does not execute the slide, but changes to the target note instantly on the next row (unless there is another note with tone portamento)
 				// Test case: TonePortamentoWithAdlibNote.s3m
@@ -752,6 +752,9 @@ bool CSoundFile::ProcessRow()
 			chn.nCommand = CMD_NONE;
 			chn.m_plugParamValueStep = 0;
 			chn.rowCommand = *m++;
+#ifdef OPENMPT_EDITOR_CORE
+			PrepareNativeRow(m_PlayState, static_cast<CHANNELINDEX>(&chn - m_PlayState.Chn.data()));
+#endif
 		}
 
 		// Now that we know which pattern we're on, we can update time signatures (global or pattern-specific)
@@ -1004,7 +1007,7 @@ void CSoundFile::ProcessTremor(CHANNELINDEX nChn, int &vol)
 		// Test case: Tremor.xm
 		if(chn.nTremorCount & 0x80)
 		{
-			if(!m_PlayState.m_flags[SONG_FIRSTTICK] && chn.nCommand == CMD_TREMOR)
+			if(!m_PlayState.m_flags[SONG_FIRSTTICK] && chn.HasActiveEffect(CMD_TREMOR))
 			{
 				chn.nTremorCount &= ~0x20;
 				if(chn.nTremorCount == 0x80)
@@ -1028,7 +1031,7 @@ void CSoundFile::ProcessTremor(CHANNELINDEX nChn, int &vol)
 				vol = 0;
 			}
 		}
-	} else if(chn.nCommand == CMD_TREMOR)
+	} else if(chn.HasActiveEffect(CMD_TREMOR))
 	{
 		// IT compatibility 12. / 13.: Tremor
 		if(m_playBehaviour[kITTremor])
@@ -1080,7 +1083,7 @@ void CSoundFile::ProcessTremor(CHANNELINDEX nChn, int &vol)
 	}
 
 	// Plugin tremor
-	if(chn.nCommand == CMD_TREMOR && chn.pModInstrument && chn.pModInstrument->nMixPlug
+	if(chn.HasActiveEffect(CMD_TREMOR) && chn.pModInstrument && chn.pModInstrument->nMixPlug
 		&& !chn.pModInstrument->dwFlags[INS_MUTE]
 		&& !chn.dwFlags[CHN_MUTE | CHN_SYNCMUTE]
 		&& ModCommand::IsNote(chn.nLastNote))
@@ -1436,7 +1439,7 @@ void CSoundFile::ProcessPitchPanSeparation(int32 &pan, int note, const ModInstru
 void CSoundFile::ProcessPanbrello(ModChannel &chn) const
 {
 	int pdelta = chn.nPanbrelloOffset;
-	if(chn.rowCommand.command == CMD_PANBRELLO)
+	if(chn.HasRowEffect(CMD_PANBRELLO))
 	{
 		uint32 panpos;
 		// IT compatibility: IT has its own, more precise tables
@@ -1491,7 +1494,7 @@ void CSoundFile::ProcessArpeggio(CHANNELINDEX nChn, int32 &period, Tuning::NOTEI
 		IMixPlugin *pPlugin =  m_MixPlugins[pIns->nMixPlug - 1].pMixPlugin;
 		if(pPlugin)
 		{
-			const bool arpOnRow = (chn.rowCommand.command == CMD_ARPEGGIO);
+			const bool arpOnRow = (chn.HasRowEffect(CMD_ARPEGGIO));
 			const ModCommand::NOTE lastNote = chn.lastMidiNoteWithoutArp;
 			ModCommand::NOTE arpNote = chn.lastMidiNoteWithoutArp;
 			if(arpOnRow)
@@ -1511,8 +1514,8 @@ void CSoundFile::ProcessArpeggio(CHANNELINDEX nChn, int32 &period, Tuning::NOTEI
 			// - If there's no arpeggio
 			//   - but an arpeggio note is still active and
 			//   - there's no note stop or new note that would stop it anyway
-			if((arpOnRow && chn.nArpeggioLastNote != arpNote && (!chn.isFirstTick || !chn.rowCommand.IsNote() || chn.rowCommand.IsTonePortamento()))
-				|| (!arpOnRow && (chn.rowCommand.note == NOTE_NONE || chn.rowCommand.IsTonePortamento()) && chn.nArpeggioLastNote != NOTE_NONE))
+			if((arpOnRow && chn.nArpeggioLastNote != arpNote && (!chn.isFirstTick || !chn.rowCommand.IsNote() || RowTonePortamento(chn)))
+				|| (!arpOnRow && (chn.rowCommand.note == NOTE_NONE || RowTonePortamento(chn)) && chn.nArpeggioLastNote != NOTE_NONE))
 				SendMIDINote(nChn, arpNote | IMixPlugin::MIDI_NOTE_ARPEGGIO, static_cast<uint16>(chn.nVolume));
 			// Stop note:
 			// - If some arpeggio note is still registered or
@@ -1526,14 +1529,14 @@ void CSoundFile::ProcessArpeggio(CHANNELINDEX nChn, int32 &period, Tuning::NOTEI
 				SendMIDINote(nChn, lastNote | IMixPlugin::MIDI_NOTE_OFF, 0);
 			}
 
-			if(chn.rowCommand.command == CMD_ARPEGGIO)
+			if(chn.HasRowEffect(CMD_ARPEGGIO))
 				chn.nArpeggioLastNote = arpNote;
 			else
 				chn.nArpeggioLastNote = NOTE_NONE;
 		}
 	}
 
-	if(chn.nCommand == CMD_ARPEGGIO)
+	if(chn.HasActiveEffect(CMD_ARPEGGIO))
 	{
 		if(chn.HasCustomTuning())
 		{
@@ -1756,7 +1759,7 @@ void CSoundFile::ProcessVibrato(CHANNELINDEX nChn, int32 &period, Tuning::RATIOT
 
 				// ST3 compatibility: Do not distinguish between vibrato types in effect memory
 				// Test case: VibratoTypeChange.s3m
-				if(m_playBehaviour[kST3VibratoMemory] && chn.rowCommand.command == CMD_FINEVIBRATO)
+				if(m_playBehaviour[kST3VibratoMemory] && chn.HasRowEffect(CMD_FINEVIBRATO))
 					vdepth += 2;
 			}
 
@@ -2339,7 +2342,7 @@ bool CSoundFile::ReadNote(
 
 			// When glissando mode is set to semitones, clamp to the next halftone.
 			if((chn.dwFlags & (CHN_GLISSANDO | CHN_PORTAMENTO)) == (CHN_GLISSANDO | CHN_PORTAMENTO)
-				&& (!m_SongFlags[SONG_PT_MODE] || (chn.rowCommand.IsTonePortamento() && !m_PlayState.m_flags[SONG_FIRSTTICK])))
+				&& (!m_SongFlags[SONG_PT_MODE] || (RowTonePortamento(chn) && !m_PlayState.m_flags[SONG_FIRSTTICK])))
 			{
 				if(period != chn.cachedPeriod)
 				{
@@ -2399,7 +2402,7 @@ bool CSoundFile::ReadNote(
 		}
 
 		if(chn.rowCommand.volcmd == VOLCMD_VIBRATODEPTH &&
-			(chn.rowCommand.command == CMD_VIBRATO || chn.rowCommand.command == CMD_VIBRATOVOL || chn.rowCommand.command == CMD_FINEVIBRATO))
+			(chn.HasRowEffect(CMD_VIBRATO) || chn.HasRowEffect(CMD_VIBRATOVOL) || chn.HasRowEffect(CMD_FINEVIBRATO)))
 		{
 			if(GetType() == MOD_TYPE_XM)
 			{
@@ -2677,7 +2680,7 @@ bool CSoundFile::ReadNote(
 
 
 #ifdef OPENMPT_EDITOR_CORE
-void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect, uint8 parameter)
+void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect, uint8 parameter, bool releasePlugin)
 {
 	if(channel >= GetNumChannels()) return;
 	auto &chn = m_PlayState.Chn[channel];
@@ -2725,7 +2728,14 @@ void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 inst
 		chn.isFirstTick = channelFirst;
 	} else {
 		const bool sustain = chn.InSustainLoop();
+		const auto increment = chn.increment;
 		NoteChange(chn, note, false, false, false, channel);
+		if(releasePlugin && note == NOTE_NOTECUT) {
+			// Native cuts ramp the moving sample to silence. Legacy IT cut can
+			// freeze its increment, leaving a much longer DC-removal tail.
+			chn.increment = increment;
+			chn.nVolume = 0;
+		}
 		if(note == NOTE_KEYOFF && !chn.pModInstrument && !sustain) chn.nVolume = 0;
 		if(!chn.nVolume || !chn.nFadeOutVol || note == NOTE_NOTECUT) {
 			chn.newLeftVol = chn.newRightVol = 0;
@@ -2735,7 +2745,9 @@ void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 inst
 	}
 	if(chn.HasMIDIOutput()) {
 		const auto realNote = ModCommand::IsNote(note) ? chn.pModInstrument->NoteMap[note - NOTE_MIN] : note;
-		SendMIDINote(channel, realNote, effect == CMD_VOLUME ? static_cast<uint16>(std::min<uint8>(parameter, 64) * 4) : static_cast<uint16>(velocity * 2));
+		// NC sends per-track note-offs; it must not broadcast All Sounds Off
+		// to other parts sharing the same plugin and MIDI channel.
+		SendMIDINote(channel, releasePlugin ? NOTE_KEYOFF : realNote, effect == CMD_VOLUME ? static_cast<uint16>(std::min<uint8>(parameter, 64) * 4) : static_cast<uint16>(velocity * 2));
 	}
 	chn.rowCommand = row;
 	if(effect && ModCommand::IsNote(note)) {
@@ -2754,6 +2766,12 @@ void CSoundFile::ProcessMacroOnChannel(CHANNELINDEX nChn)
 		//ProcessMIDIMacro(m_PlayState, nChn, false, m_MidiCfg.Global[MIDIOUT_PAN]);
 		//ProcessMIDIMacro(m_PlayState, nChn, false, m_MidiCfg.Global[MIDIOUT_VOLUME]);
 
+
+#ifdef OPENMPT_EDITOR_CORE
+		const auto primary = chn.rowCommand;
+		for(uint8 column = 0; column < 8; ++column) {
+			NativeEffectScope scope(*this, chn, column, column ? chn.nativeExtraEffects[column - 1] : primary);
+#endif
 		if((chn.rowCommand.command == CMD_MIDI && m_PlayState.m_flags[SONG_FIRSTTICK]) || chn.rowCommand.command == CMD_SMOOTHMIDI)
 		{
 			if(chn.rowCommand.param < 0x80)
@@ -2761,6 +2779,10 @@ void CSoundFile::ProcessMacroOnChannel(CHANNELINDEX nChn)
 			else
 				ProcessMIDIMacro(m_PlayState, nChn, (chn.rowCommand.command == CMD_SMOOTHMIDI), m_MidiCfg.Zxx[chn.rowCommand.param & 0x7F], chn.rowCommand.param);
 		}
+#ifdef OPENMPT_EDITOR_CORE
+		}
+#endif
+
 	}
 }
 
@@ -2845,7 +2867,7 @@ void CSoundFile::ProcessMidiOut(CHANNELINDEX nChn)
 			realNote = pIns->NoteMap[note - NOTE_MIN];
 		// Experimental VST panning
 		//ProcessMIDIMacro(nChn, false, m_MidiCfg.Global[MIDIOUT_PAN], 0, nPlugin);
-		if(m_playBehaviour[kPluginIgnoreTonePortamento] || !chn.rowCommand.IsTonePortamento())
+		if(m_playBehaviour[kPluginIgnoreTonePortamento] || !RowTonePortamento(chn))
 			SendMIDINote(nChn, realNote, static_cast<uint16>(velocity), m_playBehaviour[kMIDINotesFromChannelPlugin] ? pPlugin : nullptr);
 	}
 

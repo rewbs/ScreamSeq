@@ -1,8 +1,14 @@
 # Windows document-worker application integration
 
 This is an editing integration, not a full Mac-parity release. The preserved
-`bin/windows-checkpoints/workspace-preview/ScreamSeq.exe` still matches its
-BuildInfo executable hash. No commits, resets, stashes or pushes were performed.
+`bin/windows-checkpoints/workspace-preview/ScreamSeq.exe` remains a historical
+artifact. Current upstream scope and qualification are documented in
+`../PARITY_PLAN.md` and `../UPSTREAM_PLUGIN_QUALIFICATION.md`.
+
+The current native format is container 6 / metadata 17. Historical native
+wrappers reject before document replacement, matching upstream; module import
+remains supported. Unified FX, note cuts and disconnected routes are retained
+and rendered even though their complete editors/API are not yet exposed.
 
 ## Owner boundaries
 
@@ -25,6 +31,9 @@ Public interface:
   The UI stops/joins the device and drops its playback/telemetry pointers before
   requesting another preparation. Worker shutdown disposes playback first.
 - `service()` runs pending playback hooks on the UI owner, never on the worker.
+- `refreshPlaybackLatencies()` rebuilds plugin/mixer/graph compensation on the
+  worker, after the caller joins WASAPI. Plugin reactivation runs on its private
+  STA. Main retains the renderer/position and honours Stop during the wait.
 
 Main's guarded `await()` services hooks and native messages/drawing while work
 runs. Reentrant document mutations reject with busy rather than queueing edits
@@ -117,6 +126,15 @@ sidebar is a bounded native scrolling list, not one button per sample. Drawing
 remains a virtual grid. Catalog cache revisions avoid resetting native selection
 on every musical edit. Inspector pins/Return, keyboard focus and cursor/playback
 state remain separate. Removed Return targets reject safely after Undo.
+
+The sample editor draws bounded live voice cursors from shared atomic telemetry;
+overlapping voices and sample loops use actual positions. Stopped transport
+publishes `audioActive:false` and no `voicePositions`. Envelope cursors and
+audition UI remain open work.
+
+`--vst3-test-cache <absolute path>` selects an isolated registry for inspection,
+offline-hosted or audio qualification mode. It does not scan automatically and
+is not a substitute for the pending user-facing plugin browser/rack workflow.
 
 The Samples inspector opens a waveform editor in the lower dock. Dragging or
 keyboard/range fields select audio; Reverse, Normalize, Fade, Trim and normal or

@@ -28,7 +28,7 @@ std::vector<uint32_t> buses(const Json &j){
 }
 std::vector<Tracker::PluginState> projectPluginStates(const Project::ProjectState &project){
   const auto &root=project.preserved;require(root.is_object(),"Invalid project state");
-  auto version=integer(root.at("version"),5);require(version>=1,"Unsupported project version");
+  auto version=integer(root.at("version"),6);require(version>=1,"Unsupported project version");
   const auto &records=root.at("plugins");require(records.is_array()&&records.size()<=Tracker::maximumNativePlugins,"Invalid project plugin inventory");
   std::vector<Tracker::PluginState> states;std::set<std::string> ids;
   for(const auto &record:records){
@@ -70,10 +70,11 @@ std::vector<Tracker::ParameterChange> projectAbsoluteAutomation(const Project::P
 HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const Project::ProjectState &project,uint32_t rate,HostedPlaybackSettings settings,bool offline)
 {
   // Match the shared built-in processor range, including an empty rack.
+  offline_=offline;
   require(rate>=8000 && rate<=384000,"Unsupported hosted playback sample rate");
   native_=document.native();native_.validate(document.song());auto states=projectPluginStates(project);
   Tracker::validatePluginCapacity(states,native_.mixer.buses.size());auto automation=projectAbsoluteAutomation(project);
-  renderer_=std::make_unique<Tracker::Renderer>(document.snapshotData(),rate,settings.order,false,document.sourcePath(),document.song().Order.GetCurrentSequenceIndex(),settings.region);
+  renderer_=std::make_unique<Tracker::Renderer>(document.snapshotData(),rate,settings.order,false,document.sourcePath(),document.song().Order.GetCurrentSequenceIndex(),settings.region,&native_);
   const auto start=uint64_t(double(renderer_->telemetry().frames)*48000/rate);
   chain_=std::make_unique<Tracker::PluginChain>(states,rate,offline,automation,start);
   renderer_->applyColumnMutes(native_,renderer_->song());renderer_->loop(settings.region.loop);
@@ -86,10 +87,13 @@ bool HostedProjectPlayback::failed() const noexcept {return renderer_->faulted()
 bool HostedProjectPlayback::render(float *stereo,uint32_t frames) noexcept {
   if(failed()) {std::fill_n(stereo,size_t(frames)*2,0.0f);return false;}
   for(uint32_t at=0;at<frames;) {
+    if(chain_->latencyChangePending()) {std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return !offline_;}
     const auto count=std::min(4096u,frames-at);auto *buffer=stereo+size_t(at)*2;
     chain_->applyPending();chain_->syncTransport(*renderer_);
     renderer_->render(buffer,count);
-    if(!chain_->process(buffer,count) || failed()) {std::fill_n(stereo,size_t(frames)*2,0.0f);return false;}
+    // A notification inside the last slice must also fail an offline render;
+    // there may be no next callback in which to detect its stale compensation.
+    if(!chain_->process(buffer,count) || failed() || (offline_ && chain_->latencyChangePending())) {std::fill_n(stereo,size_t(frames)*2,0.0f);return false;}
     at+=count;
   }
   return true;

@@ -3,6 +3,9 @@
 > Resumed explicitly on 2026-09-21. See `RESUME_PROGRESS.md` for the newer
 > continuation checkpoint, current test evidence and remaining work; the historical record below
 > is preserved.
+> Latest upstream integration: `PARITY_PLAN.md` and
+> `UPSTREAM_PLUGIN_QUALIFICATION.md`. Prior source is preserved in a local Git
+> checkpoint; the statements about uncommitted work below are historical.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

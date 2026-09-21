@@ -34,6 +34,14 @@ SignalRuntime::SignalRuntime(SignalDefinition d,SignalPlan p,double rate):defini
     target->sources.emplace_back(from,i);
   }
 }
+void SignalRuntime::updateLatencyPlan(SignalPlan plan) {
+  if (plan.order != plan_.order || plan.edges.size() != edges_.size())
+    throw std::invalid_argument("Latency update changed signal topology");
+  for (size_t i = 0; i < edges_.size(); ++i) if (plan.edges[i].delay != plan_.edges[i].delay) {
+    edges_[i].delay.assign(size_t(plan.edges[i].delay) * 2, 0); edges_[i].cursor = 0;
+  }
+  plan_ = std::move(plan);
+}
 void SignalRuntime::note(bool gate,bool retrigger) noexcept {
   gate_=gate;
   if(retrigger)for(size_t i=0;i<nodes_.size();++i)if(definition_.nodes[i].kind==SignalNodeKind::NoteEnvelope)nodes_[i].envelope=0;

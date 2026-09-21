@@ -3,7 +3,7 @@ import AppKit
 final class RecoveryBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate {
   let table = NSTableView()
   let message = Theme.label("", size: 12, color: Theme.muted)
-  let restore = ActionButton("Restore selected copy") {}
+  let restore = ActionButton("Restore selected copy", prominent: true) {}
   var onRestore: ((String) -> Void)?
   private(set) var entries = [RecoveryEntry]()
   override init(frame: NSRect) {
@@ -13,6 +13,7 @@ final class RecoveryBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate 
       column.title = title; column.width = width; table.addTableColumn(column)
     }
     table.dataSource = self; table.delegate = self; table.rowHeight = 28
+    table.target = self; table.doubleAction = #selector(restoreClickedCopy)
     table.setAccessibilityLabel("Recovery copies, newest first")
     let scroll = NSScrollView(); scroll.documentView = table; scroll.hasVerticalScroller = true
     scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
@@ -34,6 +35,11 @@ final class RecoveryBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate 
     if !entries.isEmpty { table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false) }
     message.stringValue = entries.isEmpty ? "No recovery copies are available yet. Unsaved edits are protected automatically every 10 seconds." : "Select a copy by time. Older copies remain available if the newest cannot be opened."
     restore.isEnabled = !entries.isEmpty
+  }
+  @objc func restoreClickedCopy() {
+    guard entries.indices.contains(table.clickedRow) else { return }
+    table.selectRowIndexes(IndexSet(integer: table.clickedRow), byExtendingSelection: false)
+    restore.invoke()
   }
   func numberOfRows(in tableView: NSTableView) -> Int { entries.count }
   func tableView(_ tableView: NSTableView, viewFor column: NSTableColumn?, row: Int) -> NSView? {

@@ -40,7 +40,10 @@ class AppApiTests(unittest.TestCase):
                 client.call('transport.play', {'expectedRevision': revision})
             self.assertEqual(unavailable.exception.code, -32003)
             client.call('transport.stop', {'expectedRevision': revision})
-            self.assertFalse(client.call('transport.get')['data']['playing'])
+            transport = client.call('transport.get')['data']
+            self.assertFalse(transport['playing'])
+            self.assertFalse(transport['audioActive'])
+            self.assertEqual(transport['voicePositions'], [])
             self.assertEqual(client.call('document.get')['revision'], revision)
             with self.assertRaises(ApiError) as unsupported:
                 client.call('pattern.apply', {'expectedRevision': revision})

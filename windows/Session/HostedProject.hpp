@@ -14,6 +14,7 @@ struct HostedPlaybackSettings {
 // the prepared renderer/chain only; no Document or project tree is retained.
 class HostedProjectPlayback final {
   Tracker::NativeSong native_;
+  bool offline_=false;
   std::unique_ptr<Tracker::PluginChain> chain_;
   std::unique_ptr<Tracker::Renderer> renderer_; // Dies before its borrowed chain.
 public:

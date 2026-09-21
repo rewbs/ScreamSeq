@@ -18,6 +18,8 @@ public:
  void loadProgram(const std::string &)override;
  PluginState state()const override;
  double latency()const override;
+ bool latencyChangePending()const noexcept override;
+ void refreshLatency()override;
  double tail()const override;
  void showEditor()override;
  void closeEditor()override;

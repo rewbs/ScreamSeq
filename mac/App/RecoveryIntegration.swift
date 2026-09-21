@@ -2,7 +2,7 @@ import AppKit
 
 extension AppController {
   var recoveryDirectory: URL {
-    if automationTest, let root = ProcessInfo.processInfo.environment["RESONANCE_AUTOMATION_TEST_DIRECTORY"] {
+    if automationTest || inspectionTest, let root = ProcessInfo.processInfo.environment["RESONANCE_AUTOMATION_TEST_DIRECTORY"] {
       return URL(fileURLWithPath: root, isDirectory: true).appendingPathComponent("Recovery", isDirectory: true)
     }
     return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

@@ -291,7 +291,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
       if(!overwrite && std::filesystem::exists(path)) throw Api::ApiError(-32602,"File exists; use overwrite:true");
       if(!std::filesystem::is_directory(path.parent_path()) || std::filesystem::is_directory(path)) throw Api::ApiError(-32602,"Save destination must be a file in an existing directory");
       if(dry) (void)Project::serializeNativeProject(*document_,project_);else Project::saveNativeProject(*document_,project_,path,overwrite);
-      result={{"path",utf8(path)},{"format",ext==L".screamseq" ? "screamseq" : "resonance"},{"written",!dry},{"projectVersion",project_.preserved.value("version",4)==5 ? 5 : 4}};
+      result={{"path",utf8(path)},{"format",ext==L".screamseq" ? "screamseq" : "resonance"},{"written",!dry},{"projectVersion",6}};
     }
   } else {
     auto assetMethods=AssetOperations::reads();assetMethods.insert(assetMethods.end(),assetWrites.begin(),assetWrites.end());
@@ -348,6 +348,13 @@ std::future<HostedProjectPlayback *> DocumentController::prepare(unsigned rate,J
     region.cursorRow=settings.value("cursorRow",0u);region.loop=settings.value("loop",loop);
     auto result=std::make_unique<HostedProjectPlayback>(*document_,project_,rate,HostedPlaybackSettings{settings.value("order",0u),region},offline);
     playback_=std::move(result);return playback_.get();
+  });
+  auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
+}
+std::future<bool> DocumentController::refreshPlaybackLatencies() {
+  auto task=std::make_shared<std::packaged_task<bool()>>([this]{
+    if(!playback_) return false;
+    playback_->chain().refreshLatencies();return true;
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
 }

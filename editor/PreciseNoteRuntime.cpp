@@ -7,9 +7,15 @@ PreciseNoteRuntime::PreciseNoteRuntime(const NativeSong &native) {
     if(pattern==native.patterns.end()||track==native.tracks.end())throw std::invalid_argument("Precise note has an unresolved pattern or track");
     patterns_[pattern->first].push_back({note.position,track->first,note.instrument,note.note,note.velocity,note.effect,note.parameter});
   }
+  for(const auto &command:native.performance.commands) if(command.kind==PatternCommandKind::NoteCut) {
+    const auto pattern=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &v){return v.second.id==command.pattern;});
+    const auto track=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &v){return v.second.id==command.track;});
+    if(pattern==native.patterns.end()||track==native.tracks.end())throw std::invalid_argument("Note cut has an unresolved pattern or track");
+    patterns_[pattern->first].push_back({command.position,track->first,0,254,127,0,0,true});
+  }
   for(auto &[pattern,events]:patterns_)std::sort(events.begin(),events.end(),[](const auto &a,const auto &b){
     // Release before retrigger when two events share the same sample position.
-    return std::tuple(a.position,a.channel,a.note<128)<std::tuple(b.position,b.channel,b.note<128);
+    return std::tuple(a.position,a.channel,a.cutCommand?2:int(a.note<128))<std::tuple(b.position,b.channel,b.cutCommand?2:int(b.note<128));
   });
 }
 uint32_t PreciseNoteRuntime::prepare(OpenMPT::CSoundFile &song,uint32_t count) noexcept {
@@ -39,7 +45,7 @@ uint32_t PreciseNoteRuntime::prepare(OpenMPT::CSoundFile &song,uint32_t count) n
       channel.dwFlags.reset(CHN_VIBRATO|CHN_TREMOLO);channel.nPanbrelloOffset=0;channel.nCommand=CMD_NONE;
       effectOverrides_[event.channel]=true;
     }
-    song.TriggerNativeNote(event.channel,event.note,event.instrument,event.velocity,event.effect,event.parameter);
+    song.TriggerNativeNote(event.channel,event.note,event.instrument,event.velocity,event.effect,event.parameter,event.cutCommand);
   }
   if(next_<events_->size()) {
     const double distance=std::ceil(((*events_)[next_].position-tick)/unitsPerSample-1e-9)-state.SamplesIntoTick();

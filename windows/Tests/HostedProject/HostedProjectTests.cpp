@@ -37,7 +37,7 @@ int main(){try{
   auto data=effect.state();std::vector<uint8_t> bytes(data.size());if(!data.empty())std::memcpy(bytes.data(),data.data(),data.size());
   Json plugin={{"type",d.type},{"subtype",d.subtype},{"manufacturer",d.manufacturer},{"format",d.format},{"classID",d.classID},
     {"name",d.name},{"path",d.path},{"isInstrument",false},{"instanceID","native-project-rack"},{"state",Json::binary(bytes)},
-    {"bypass",false},{"instrument",0},{"auxiliaryInputs",Json::array()},{"auxiliaryOutputs",Json::array()}};
+    {"bypass",false},{"instrument",0},{"instrumentAssignments",Json::array()},{"auxiliaryInputs",Json::array()},{"auxiliaryOutputs",Json::array()}};
   state.preserved["plugins"].push_back(plugin);auto plugins=projectPluginStates(state);
   check(plugins.size()==1&&plugins[0].instanceID=="native-project-rack"&&plugins[0].state==data,"exact identity and opaque baseline");
   state.preserved["automation"]=Json::array({Json::array({0,1,-12,48000})});
@@ -96,7 +96,7 @@ int main(){try{
     check(energy(render(*local,conflicting,48000,128))>0,"successful preparation after repeated late failures");
     std::cout<<"PASS detached owner lifetime and repeated late preparation failure\n";
   }
-  auto foreign=state;foreign.preserved["version"]=5;auto &au=foreign.preserved["plugins"][0];au["format"]="AU";au["type"]=Tracker::audioUnitMusicDeviceType;au["isInstrument"]=true;
+  auto foreign=state;auto &au=foreign.preserved["plugins"][0];au["format"]="AU";au["type"]=Tracker::audioUnitMusicDeviceType;au["isInstrument"]=true;
   au["instrument"]=1;au["instrumentAssignments"]=Json::array({{{"instrument",1},{"channel",3}},{{"instrument",2},{"channel",9}}});
   auto aliases=projectPluginStates(foreign);check(aliases[0].midiChannel==3&&aliases[0].aliases.size()==1&&aliases[0].aliases[0].channel==9,"real shared assignment mapping");
   bool rejected=false;try{HostedProjectPlayback unsupported(*doc,foreign,48000,{},true);}catch(const std::exception&){rejected=true;}

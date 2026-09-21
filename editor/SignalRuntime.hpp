@@ -55,5 +55,7 @@ public:
   void controller(uint32_t cc,double value) noexcept { if(cc<128)midi_[cc]=value; }
   size_t storageBytes() const noexcept;
   uint32_t latency() const {return plan_.totalLatency;}
+  const SignalDefinition &definition() const { return definition_; }
+  void updateLatencyPlan(SignalPlan); // Control thread; retains modulation/gate state.
 };
 } // namespace Tracker

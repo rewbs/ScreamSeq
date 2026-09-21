@@ -274,7 +274,8 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     for control in controls { control.set((bus[control.key] as? NSNumber)?.doubleValue ?? (control.key == "width" ? 1 : 0)) }
     destinations = buses.filter { $0["kind"] as? String != "track" && $0["id"] as? String != selectedID }
     for picker in [output, sendTarget] { picker.removeAllItems(); picker.addItems(withTitles: destinations.map { $0["name"] as? String ?? "Bus" }) }
-    if let index = destinations.firstIndex(where: { $0["id"] as? String == bus["output"] as? String }) { output.selectItem(at: index) }
+    output.insertItem(withTitle:"Disconnected",at:0);output.selectItem(at:0)
+    if let index = destinations.firstIndex(where: { $0["id"] as? String == bus["output"] as? String }) { output.selectItem(at: index+1) }
     output.isEnabled = bus["kind"] as? String != "master"
     let inserts = bus["inserts"] as? [String] ?? []
     insert.removeAllItems(); insert.addItems(withTitles: inserts.map { id in plugins.first { $0["id"] as? String == id }?["name"] as? String ?? "Unavailable plugin" })
@@ -327,8 +328,10 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     mutate("mixer.bus.set", ["bus": selectedID, "name": name.stringValue, "color": color])
   }
   private func route() {
-    guard let selectedID, destinations.indices.contains(output.indexOfSelectedItem), selected?["kind"] as? String != "master" else { return }
-    mutate("mixer.bus.set", ["bus": selectedID, "output": destinations[output.indexOfSelectedItem]["id"]!])
+    guard let selectedID, selected?["kind"] as? String != "master" else { return }
+    let index=output.indexOfSelectedItem-1
+    guard index == -1 || destinations.indices.contains(index) else{return}
+    mutate("mixer.bus.set", ["bus": selectedID, "output": index == -1 ? NSNull() : destinations[index]["id"]!])
   }
   private func setTiming() {
     guard let selectedID, let value = Double(timing.stringValue), value.isFinite else { return }

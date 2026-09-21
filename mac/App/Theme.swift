@@ -57,13 +57,14 @@ extension NSStackView {
 }
 final class ActionButton: NSButton {
   var handler: (() -> Void)?
-  init(_ title: String, symbol: String? = nil, action: @escaping () -> Void) {
+  init(_ title: String, symbol: String? = nil, prominent: Bool = false, action: @escaping () -> Void) {
     super.init(frame: .zero)
     self.title = title
     handler = action
     target = self
     self.action = #selector(invoke)
     bezelStyle = .rounded
+    if prominent { bezelColor = Theme.accent; contentTintColor = Theme.bg }
     font = .systemFont(ofSize: 12, weight: .medium)
     if let symbol {
       image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
@@ -158,12 +159,14 @@ struct PatternModel {
   var preciseNotes = [Int:[PreciseNote]]()
   var preciseNoteEffects = [[String:Any]]()
   func notes(_ row:Int,_ channel:Int)->[PreciseNote] {preciseNotes[row*channels+channel] ?? []}
-  var extraEffectColumns = [Int](), performanceCommands = [Int: NativePatternCommand]()
+  var effectColumns = [Int](), performanceCommands = [Int: NativePatternCommand]()
   var channelOffsets: [Float] = []
-  func extraColumns(_ channel: Int) -> Int { extraEffectColumns.indices.contains(channel) ? extraEffectColumns[channel] : 0 }
-  func nativeCommand(_ row: Int, _ channel: Int, _ column: Int) -> NativePatternCommand? { performanceCommands[(row * channels + channel) * 8 + column] }
-  func channelOffset(_ channel: Int) -> Float { channelOffsets.indices.contains(channel) ? channelOffsets[channel] : Float(channel) * 162 }
-  func channelWidth(_ channel: Int) -> Float { 162 + Float(extraColumns(channel)) * 96 }
+  func effectCount(_ channel: Int) -> Int { effectColumns.indices.contains(channel) ? effectColumns[channel] : 1 }
+  func lastField(_ channel:Int) -> Int { 2 + effectCount(channel)*2 }
+  var effectBindings=[[String:Any]]()
+  func nativeCommand(_ row:Int,_ channel:Int,_ column:Int)->NativePatternCommand? {performanceCommands[(row*channels+channel)*8+column]}
+  func channelOffset(_ channel: Int) -> Float { channelOffsets.indices.contains(channel) ? channelOffsets[channel] : Float(channel) * 210 }
+  func channelWidth(_ channel: Int) -> Float { 104 + Float(effectCount(channel)) * 106 }
   var revisionToken = ""
   var sequence = 0, sequences = [[String: Any]]()
   var cells = [UInt8](repeating: 0, count: 64 * 8 * 6)
@@ -205,13 +208,14 @@ struct PatternModel {
     noteMax = dictionary["noteMax"] as? Int ?? 120
     channels = dictionary["channels"] as? Int ?? channels
     rows = dictionary["rows"] as? Int ?? rows
-    extraEffectColumns = (dictionary["extraEffectColumns"] as? [Int] ?? []).map { max(0,min(8,$0)) }
+    effectBindings=dictionary["effectBindings"] as? [[String:Any]] ?? []
+    effectColumns = (dictionary["effectColumns"] as? [Int] ?? []).map { max(1,min(8,$0)) }
     var x: Float = 0
     for channel in 0..<channels { channelOffsets.append(x); x += channelWidth(channel) }
     channelOffsets.append(x)
     for raw in dictionary["performanceCommands"] as? [[String: Any]] ?? [] {
       let command = NativePatternCommand(raw)
-      guard command.row >= 0, command.row < rows, command.channel >= 0, command.channel < channels, command.column >= 0, command.column < extraColumns(command.channel) else { continue }
+      guard command.row >= 0, command.row < rows, command.channel >= 0, command.channel < channels, command.column >= 0, command.column < effectCount(command.channel) else { continue }
       performanceCommands[(command.row * channels + command.channel) * 8 + command.column] = command
     }
     for raw in dictionary["preciseNotes"] as? [[String:Any]] ?? [] {
@@ -227,6 +231,9 @@ struct PatternModel {
     rowsPerMeasure = max(rowsPerBeat, measure > 0 ? measure : 16)
     speed = dictionary["speed"] as? Int ?? speed
     if let data = dictionary["cells"] as? Data { cells = Array(data) }
+    for row in 0..<rows {for channel in 0..<channels {let key=(row*channels+channel)*8,c=drawCell(row,channel)
+      if performanceCommands[key]==nil && (c.effect != 0 || c.parameter != 0) {performanceCommands[key]=NativePatternCommand(["channel":channel,"position":row*65536,"column":0,"kind":"tracker","effect":Int(c.effect),"parameter":Int(c.parameter)])}
+    }}
     orders = dictionary["orders"] as? [Int] ?? [0]
     patterns = dictionary["patterns"] as? [[String: Any]] ?? []
     samples = dictionary["samples"] as? [[String: Any]] ?? []
@@ -249,6 +256,10 @@ struct PatternModel {
     guard row >= 0, row < rows, channel >= 0, channel < channels, values.count == 6 else { return }
     let index = (row * channels + channel) * 6
     guard index + 6 <= cells.count else { return }
+    if cells[index+4] != values[4] || cells[index+5] != values[5] {
+      let key=(row*channels+channel)*8
+      performanceCommands[key]=(values[4]==0 && values[5]==0) ? nil : NativePatternCommand(["channel":channel,"position":row*65536,"column":0,"kind":"tracker","effect":Int(values[4]),"parameter":Int(values[5])])
+    }
     cells.replaceSubrange(index..<index + 6, with: values)
   }
 }

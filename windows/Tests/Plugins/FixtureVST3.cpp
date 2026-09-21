@@ -63,6 +63,12 @@ static std::atomic<double> lastQueueStart{0},lastQueueEnd{0};
 extern "C" __declspec(dllexport) void FixtureRequireOutput(bool v){requireOutput=v;}
 extern "C" __declspec(dllexport) double FixtureQueueValue(int i){return i?lastQueueEnd.load():lastQueueStart.load();}
 extern "C" __declspec(dllexport) int FixtureRestart(int flags){int n=0;for(auto *h:fixtureHandlers)if(h){h->restartComponent(flags);++n;}return n;}
+static std::atomic<uint32_t> fixtureLatency{0};
+extern "C" __declspec(dllexport) int ResonanceFixtureLatency(uint32_t frames) {
+  fixtureLatency=frames;int accepted=0;
+  for(auto *h:fixtureHandlers)if(h&&h->restartComponent(kLatencyChanged)==kResultOk)++accepted;
+  return accepted;
+}
 
 extern "C" __declspec(dllexport) void ResonanceFixtureEffectDelay(bool enabled){fixtureEffectDelay=enabled;}
 extern "C" __declspec(dllexport) void ResonanceFixtureObserve(bool enabled){fixtureObserve=enabled;fixtureObservedFrames=0;fixtureClockErrors=0;}
@@ -147,6 +153,8 @@ class Fixture final : public IComponent, public IAudioProcessor, public IEditCon
   std::array<float, 32> delay{};
   std::array<float,64> effectDelay{};size_t effectDelayPosition=0;double rate=48000;
   size_t delayPosition = 0;
+  std::array<float,256> dynamicDelay{};
+  uint32_t appliedLatency=0,dynamicPosition=0;
   std::atomic<float> gain{0.5};
   bool isActive=false,isProcessing=false,initFailed=false;
   IComponentHandler *handler = nullptr;
@@ -227,7 +235,7 @@ public:
     if (type == kAudio && dir == kInput) inputsActive[index] = active;
     return kResultOk;
   }
-  tresult PLUGIN_API setActive(TBool v) override {if(v&&failureMode==4)return kResultFalse;if(isProcessing&&!v)++lifecycleErrors;if(bool(v)!=isActive){activeObjects+=v?1:-1;isActive=v;}return kResultOk; }
+  tresult PLUGIN_API setActive(TBool v) override {if(v&&failureMode==4)return kResultFalse;if(isProcessing&&!v)++lifecycleErrors;if(bool(v)!=isActive){activeObjects+=v?1:-1;isActive=v;}if(v&&appliedLatency!=fixtureLatency.load()){appliedLatency=fixtureLatency.load();dynamicDelay.fill(0);dynamicPosition=0;}return kResultOk; }
   tresult PLUGIN_API setState(IBStream *s) override {
     if(controllerOnly&&reviewMode==5)return kNotImplemented;
     if(controllerOnly&&reviewMode==6)return kInternalError;
@@ -274,7 +282,7 @@ public:
     return kResultOk;
   }
   tresult PLUGIN_API canProcessSampleSize(int32 size) override { return size == kSample32 ? kResultOk : kResultFalse; }
-  uint32 PLUGIN_API getLatencySamples() override { return delayed ? 32 : 0; }
+  uint32 PLUGIN_API getLatencySamples() override { return (delayed ? 32 : 0)+fixtureLatency.load(); }
   tresult PLUGIN_API setupProcessing(ProcessSetup &setup) override {rate=setup.sampleRate; return failureMode==2?kResultFalse:kResultOk; }
   tresult PLUGIN_API setProcessing(TBool v) override {if(v&&failureMode==3)return kResultFalse;if(v&&!isActive)++lifecycleErrors;if(bool(v)!=isProcessing){processingObjects+=v?1:-1;isProcessing=v;}return kResultOk; }
   uint32 PLUGIN_API getTailSamples() override { return delayed&&!instrument?32:0; }
@@ -361,13 +369,14 @@ public:
         d.outputs[0].channelBuffers32[ch][i] = instrument ? value : d.inputs[0].channelBuffers32[ch][i] * g *
           (inputsActive[1] ? 1 + d.inputs[1].channelBuffers32[0][i] : 1);
       if(delayed&&!instrument)for(int ch=0;ch<2;++ch){std::swap(d.outputs[0].channelBuffers32[ch][i],effectDelay[effectDelayPosition]);effectDelayPosition=(effectDelayPosition+1)%effectDelay.size();}
+      if(appliedLatency && appliedLatency<=128)for(int ch=0;ch<2;++ch){std::swap(d.outputs[0].channelBuffers32[ch][i],dynamicDelay[dynamicPosition]);dynamicPosition=(dynamicPosition+1)%(appliedLatency*2);}
       for (int bus = 1; bus < d.numOutputs; ++bus) if (outputsActive[bus])
         for (int ch = 0; ch < d.outputs[bus].numChannels; ++ch)
           d.outputs[bus].channelBuffers32[ch][i] = value * float(bus + 1) * float(ch ? -.5 : 1);
     }
     return kResultOk;
   }
-  tresult PLUGIN_API setComponentState(IBStream *s) override {if(reviewMode==2)return kNotImplemented;if(reviewMode==8)return kInternalError;if(!controllerOnly)return setState(s);float value=0;int32 n=0;if(s->read(&value,4,&n)!=kResultOk||n!=4)return kResultFalse;gain=value;return kResultOk;}
+  tresult PLUGIN_API setComponentState(IBStream *s) override {if(reviewMode==2)return kNotImplemented;if(reviewMode==8)return kInternalError;if(reviewMode==50&&handler)handler->restartComponent(kParamValuesChanged|kParamIDMappingChanged);if(!controllerOnly)return setState(s);float value=0;int32 n=0;if(s->read(&value,4,&n)!=kResultOk||n!=4)return kResultFalse;gain=value;return kResultOk;}
   int32 PLUGIN_API getParameterCount() override { if(reviewMode==31)return 0;return programs ? 3 : instrument && fixturePitchMode ? 17 : 1; }
   tresult PLUGIN_API getParameterInfo(int32 i, ParameterInfo &p) override {
     if(reviewMode==30)return kInternalError;

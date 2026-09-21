@@ -1,5 +1,10 @@
 # Native ARM64 Windows VST3 provider
 
+See [current installed-plugin qualification](../UPSTREAM_PLUGIN_QUALIFICATION.md)
+for Contourtonist/OrbitCab evidence, dynamic latency support, initial JUCE mapping
+notification handling and the retained OrbitCab offline failure. Provider checks
+do not establish the pending application rack/editor history workflow.
+
 This is a platform provider for the existing `editor/hosted/PluginBackend.hpp`.
 It does not replace the shared scheduler, tracker DSP, graphs, project records,
 or the Windows application's document/state bridge. No app integration files

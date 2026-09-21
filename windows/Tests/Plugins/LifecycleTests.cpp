@@ -34,8 +34,12 @@ int main(int argc,char **argv){try{
  for(int i=0;i<4;++i)check(count(i)==baseline[i],"rack/graph teardown leaked refs");
  std::cout<<"PASS real rack plus two graph target constructors and independent DSP state\n";
  auto restart=reinterpret_cast<int(*)(int)>(GetProcAddress(dll,"FixtureRestart"));WindowsVST3::pluginMainCall([&]{check(restart(1<<3)==1,"latency restart dispatch");});
- std::array<float,128> pcm;pcm.fill(1);check(!keep->process(pcm.data(),64,0,nullptr,0,{}),"latency change continued with stale buffers");for(auto v:pcm)check(v==0,"restart fault did not silence");
- std::cout<<"PASS restartComponent explicit fault/silence; stopped recreation required\n";
+ check(keep->latencyChangePending(),"latency maintenance was not requested");
+ keep->refreshLatency();check(!keep->latencyChangePending(),"latency maintenance not cleared");
+ std::array<float,128> pcm;pcm.fill(1);check(keep->process(pcm.data(),64,0,nullptr,0,{}),"latency notification poisoned processing");
+ WindowsVST3::pluginMainCall([&]{restart(1<<1);});pcm.fill(1);
+ check(!keep->process(pcm.data(),64,64,nullptr,0,{}),"I/O change continued with stale buffers");for(auto v:pcm)check(v==0,"I/O restart fault did not silence");
+ std::cout<<"PASS latency maintenance and unsupported I/O restart fault/silence\n";
  auto pin=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);check(pin!=nullptr,"test DLL pin");auto entries=reinterpret_cast<int(*)()>(GetProcAddress(dll,"FixtureModuleEntries"));keep.reset();for(int i=0;i<4;++i)check(count(i)==0,"last instance teardown leak");check(entries()==0&&count(5)==0,"ExitDll/lifecycle imbalance");FreeLibrary(pin);
  std::cout<<"PASS last-instance ExitDll and full object teardown\n";
  return 0;

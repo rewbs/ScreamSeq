@@ -180,7 +180,7 @@ int main(int argc, char **argv) { @autoreleasepool { try {
     check([[session snapshot:0][@"cells"] isEqual:before[@"cells"]], "Grouping preserves pattern data");
     check(![session savePath:module error:&error], "Reject metadata-losing module export");
     NSMutableDictionary *root = [[NSPropertyListSerialization propertyListWithData:[NSData dataWithContentsOfFile:path] options:NSPropertyListMutableContainers format:nil error:nil] mutableCopy];
-    check([root[@"native"][@"version"] intValue] == 5, "Column features use native metadata v5");
+    check([root[@"native"][@"version"] intValue] == 17, "Column features use native metadata v5");
     root[@"native"][@"version"] = @4;
     [[NSPropertyListSerialization dataWithPropertyList:root format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:path atomically:YES];
     auto revision = session.automationRevision;

@@ -38,7 +38,7 @@ std::string identity() {
 	wchar_t buffer[40]{};StringFromGUID2(id,buffer,40);std::string result;for(auto c:std::wstring_view(buffer)) result+=static_cast<char>(c);return result;
 }
 void validateRecords(Json &root,const Tracker::NativeSong &native) {
-	const auto version=integer(root.at("version"),5);
+	const auto version=integer(root.at("version"),6);
 	std::set<std::string> ids;std::set<uint32_t> instruments;size_t assignedPlugins=0;
 	array(root.at("plugins"),64);
 	for(auto &plugin:root.at("plugins")) {
@@ -98,7 +98,8 @@ void validateRecords(Json &root,const Tracker::NativeSong &native) {
 OpenedProject openNativeProject(const std::filesystem::path &path) {
 	auto bytes=readProjectBytes(path);auto root=decodePlist(bytes);
 	need(root.is_object(),"Native project root must be a dictionary");
-	const auto version=integer(root.at("version"),5);need(version>=1,"Unsupported native container version");
+	const auto version=integer(root.at("version"),6);need(version==6,"Unsupported native container version; this build requires project 6 / metadata 17");
+	need(root.at("native").at("version")==17,"Unsupported native metadata version; this build requires metadata 17");
 	auto snapshot=data(root.at("module"),512u*1024u*1024u);need(!snapshot.empty(),"Empty project snapshot");
 	need(Tracker::isSongSnapshot(snapshot)==(version>=4),"Snapshot framing differs from container version");
 	OpenedProject result;result.document=std::make_unique<Tracker::Document>(snapshot);
@@ -139,7 +140,7 @@ OpenedProject openNativeProject(const std::filesystem::path &path) {
 }
 ProjectState newProjectState(const Tracker::Document &document) {
 	ProjectState result;
-	result.preserved={{"version",4},{"plugins",Json::array()},{"automation",Json::array()}};
+	result.preserved={{"version",6},{"plugins",Json::array()},{"automation",Json::array()}};
 	result.metadataBaseline=encodeNativeMetadata(document.native());result.savedRevision=document.revision;
 	return result;
 }
@@ -149,19 +150,15 @@ void invalidateRecoveryTake(ProjectState &state) {
 Json nativeProjectTree(Tracker::Document &document,const ProjectState &state) {
 	document.validateSamples();document.native().validate(document.song());
 	Json result=state.preserved.is_object() ? state.preserved : Json::object();
-	const uint64_t originalVersion=result.contains("version") ? integer(result.at("version"),5) : 4;
-	result["version"]=originalVersion==5 ? 5 : 4;
+	if(result.contains("version")) need(integer(result.at("version"),6)==6,"Cannot save a historical native project in this build");
+	result["version"]=6;
 	if(!result.contains("plugins")) result["plugins"]=Json::array();
 	if(!result.contains("automation")) result["automation"]=Json::array();
 	auto current=encodeNativeMetadata(document.native());
 	if(result.contains("native") && !state.metadataBaseline.empty()) {
-		const bool changed=!sameStoredValue(state.metadataBaseline,current);
-		// Promotion must visit unchanged branches too: the baseline is already
-		// v14, but its preserved source can still omit any historical default.
-		auto source=changed && integer(result.at("native").at("version"),14)<14
-			? canonicalizePreservedMetadata(result.at("native"),state.metadataBaseline) : result.at("native");
-		result["native"]=mergePreserved(source,state.metadataBaseline,current);
-		if(changed) result["native"]["version"]=14;
+		// Retain opaque extensions while applying known musical changes.
+		result["native"]=mergePreserved(result.at("native"),state.metadataBaseline,current);
+		result["native"]["version"]=17;
 	} else result["native"]=current;
 	result["sequence"]=unsigned(document.song().Order.GetCurrentSequenceIndex());
 	if(result.contains("recoveryTake")) {
@@ -169,7 +166,7 @@ Json nativeProjectTree(Tracker::Document &document,const ProjectState &state) {
 		if(!state.recoveryOrigin || *state.recoveryOrigin!=currentOrigin)
 			result["recoveryTake"]["compatible"]=false;
 	}
-	if(originalVersion<4 || !result.contains("module") || state.savedRevision!=document.revision)
+	if(!result.contains("module") || state.savedRevision!=document.revision)
 		result["module"]=binary(document.snapshotData());
 	// Validate the actual merged wire tree, not only the encoder's model. It
 	// must both express the intended edit and restore against the exact snapshot

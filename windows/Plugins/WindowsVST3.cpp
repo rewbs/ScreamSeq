@@ -319,6 +319,7 @@ struct NativeBackend::Impl {
   std::string hash;
   double preparedLatency=0,preparedTail=0;
   bool controllerStateOpaque=false,handlerInstalled=false;
+  bool preparing=true;
   bool separateController = false, initialized = false, controllerInitialized = false, active = false,
        processing = false, offline = false;
   double rate = 48000;
@@ -346,6 +347,8 @@ struct NativeBackend::Impl {
   std::atomic<uint32_t> audioWrite{0}, audioRead{0};
   std::atomic<uint32_t> editWrite{0}, editRead{0};
   std::atomic<bool> failed{false};
+  std::atomic<bool> latencyChanged{false};
+  std::atomic<int32> rejectedRestart{0};
   const DWORD ownerThread=GetCurrentThreadId();
   struct Callbacks final:IComponentHandler,IPlugFrame {
     std::atomic<uint32> refs{1}; Impl *target;
@@ -387,12 +390,19 @@ struct NativeBackend::Impl {
     return kResultOk;
   }
   tresult restartComponent(int32 flags) {
+    // JUCE announces compatible-class parameter mappings during component-state
+    // synchronization. No host catalog/automation has been prepared yet; the
+    // complete catalog below is read after synchronization. We do not substitute
+    // another class or remap an already prepared automation target.
+    if(preparing) flags &= ~kParamIDMappingChanged;
     // Changes to buses/latency require a stopped graph rebuild; never continue
     // with buffers that no longer match the processor's contract.
-    if (flags & ~kParamValuesChanged) {
+    if (flags & ~(kParamValuesChanged | kLatencyChanged)) {
+      rejectedRestart.store(flags);
       failed = true;
       return kResultFalse;
     }
+    if (flags & kLatencyChanged) latencyChanged.store(true, std::memory_order_release);
     if (controller && (flags & kParamValuesChanged))
       for (size_t i = 0; i < metadata.size(); ++i) {
         auto value = controller->getParamNormalized(metadata[i].id);
@@ -683,6 +693,8 @@ struct NativeBackend::Impl {
     active = true;
     require(processor->setProcessing(true), "Cannot start VST3 processing");
     processing = true;
+    if(failed) throw std::runtime_error("VST3 failed during preparation; unsupported restart flags="+std::to_string(rejectedRestart.load()));
+    preparing=false;
   }
   bool setParameter(uint32_t id, double value, uint32_t offset) noexcept {
     if (failed || offset >= 4096 || !std::isfinite(value) || value < 0 || value > 1)
@@ -935,6 +947,25 @@ PluginState NativeBackend::state() const {
 }
 double NativeBackend::latency() const {
   return impl_->preparedLatency;
+}
+bool NativeBackend::latencyChangePending() const noexcept {
+  return impl_->latencyChanged.load(std::memory_order_acquire);
+}
+void NativeBackend::refreshLatency() {
+  pluginMainCall([&] {
+    auto &s=*impl_;
+    if (!s.latencyChanged.exchange(false, std::memory_order_acq_rel)) return;
+    try {
+      require(s.processor->setProcessing(false), "Cannot pause VST3 for latency update"); s.processing=false;
+      require(s.component->setActive(false), "Cannot deactivate VST3 for latency update"); s.active=false;
+      require(s.component->setActive(true), "Cannot reactivate VST3 after latency update"); s.active=true;
+      const auto frames=s.processor->getLatencySamples();
+      if (frames>s.rate*2) throw std::runtime_error("VST3 latency exceeds two seconds");
+      s.preparedLatency=frames/s.rate;
+      s.preparedTail=std::min(30.0,s.processor->getTailSamples()/s.rate);
+      require(s.processor->setProcessing(true), "Cannot resume VST3 after latency update"); s.processing=true;
+    } catch (...) { s.failed=true; throw; }
+  });
 }
 double NativeBackend::tail() const {
   return impl_->preparedTail;

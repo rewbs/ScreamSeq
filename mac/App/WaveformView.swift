@@ -6,6 +6,7 @@ struct SampleStrokePoint: Equatable {
 }
 
 final class WaveformView: NSView {
+  var playbackFrames: [Double] = [] { didSet { if playbackFrames != oldValue {needsDisplay=true} } }
   var peaks: [Float] = [] { didSet { needsDisplay = true } }
   var peaksRange: Range<Int>?
   var frames = 0 { didSet {
@@ -141,6 +142,11 @@ final class WaveformView: NSView {
       for frame in [loopStart,loopEnd] where frame>=visibleRange.lowerBound && frame<=visibleRange.upperBound {
         let path=NSBezierPath(),position=x(Double(frame));path.move(to:.init(x:position,y:0));path.line(to:.init(x:position,y:bounds.height));path.stroke()
       }
+    }
+    Theme.text.withAlphaComponent(0.9).setFill()
+    for frame in playbackFrames where frame>=Double(visibleRange.lowerBound) && frame<=Double(visibleRange.upperBound) {
+      let position=x(frame); NSRect(x:position,y:0,width:1.5,height:bounds.height).fill()
+      NSBezierPath(ovalIn:NSRect(x:position-3,y:bounds.height-7,width:6,height:6)).fill()
     }
     if frames==0 { ("Import a sample to begin" as NSString).draw(at:.init(x:24,y:mid),withAttributes:[.foregroundColor:Theme.muted,.font:NSFont.systemFont(ofSize:14)]) }
   }

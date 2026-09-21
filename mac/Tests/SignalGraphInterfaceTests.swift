@@ -58,6 +58,25 @@ extension InterfaceTests {
     editor.minimum.stringValue="0.2";editor.maximum.stringValue="0.8";editor.updateConnection()
     let updatedDefinition=updated["definition"] as? [String:Any] ?? [:]
     try require((updatedDefinition["audio"] as? [[String:Any]])?.count==2 && (updatedDefinition["modulation"] as? [[String:Any]])?.first?["minimum"] as? Double==0.2,"Wire editing preserves audio topology")
+    editor.selectConnection(2)
+    editor.canvas.keyDown(with:NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[],timestamp:0,windowNumber:0,context:nil,characters:"\u{7f}",charactersIgnoringModifiers:"\u{7f}",isARepeat:false,keyCode:51)!)
+    let disconnected=updated["definition"] as? [String:Any] ?? [:]
+    try require((disconnected["audio"] as? [[String:Any]])?.count==2 && (disconnected["modulation"] as? [[String:Any]])?.isEmpty==true,"Delete removes precisely the selected modulation wire")
+    var opened="";editor.onRequest={method,p,reply in opened=method;updated=p;reply(["error":["message":"captured"]])}
+    editor.openNode("n102")
+    try require(opened=="graph.plugin.editor.open" && updated["node"] as? String=="n102","Opening a library plugin opens its custom editor directly")
+    editor.graphID=nil;editor.filterID=nil;editor.update(data)
+    let output=editor.songConnections.firstIndex{$0["kind"] as? String=="output"}!
+    editor.selectConnection(output);editor.disconnect()
+    try require(opened=="mixer.bus.set" && updated["output"] is NSNull,"Deleting a song main-output wire disconnects that bus")
+    var pluginSong=data;pluginSong["plugins"]=[["id":"synth","name":"Synth","isInstrument":true]]
+    editor.update(pluginSong)
+    let synthOutput=editor.songConnections.firstIndex{$0["kind"] as? String=="plugin-output"}!
+    editor.selectConnection(synthOutput);editor.disconnect()
+    try require(updated["disconnected"] as? Bool==true,"Deleting a default instrument wire explicitly suppresses the master fallback")
+    var pluginMixer=pluginSong["mixer"] as! [String:Any];pluginMixer["instruments"]=[["plugin":"synth","output":0,"target":""]];pluginSong["mixer"]=pluginMixer
+    editor.update(pluginSong)
+    try require(editor.canvas.nodes.contains{$0.id=="plugin:synth"} && !editor.songConnections.contains{$0["kind"] as? String=="plugin-output"},"Disconnected instruments stay visible without a phantom master wire")
     editor.onRequest=nil
     var instrumentSong=data;instrumentSong["instruments"]=[["index":1,"id":"n80","name":"Piano","plugin":false]];instrumentSong["instrumentAssignments"]=[["target":"n80","graph":"n100","amount":0.4,"wet":0.7]]
     editor.graphID=nil;editor.selectedID="instrument:n80";editor.update(instrumentSong)

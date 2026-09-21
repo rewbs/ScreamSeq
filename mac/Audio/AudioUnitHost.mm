@@ -64,6 +64,12 @@ public:
   PluginState state() const override;
   double latency() const override { return latency_; }
   double tail() const override { return tail_; }
+  bool latencyChangePending() const noexcept override { return vst_ && vst_->latencyChangePending(); }
+  void refreshLatency() override {
+    if (vst_ && vst_->latencyChangePending()) {
+      vst_->refreshLatency(); latency_ = vst_->latency(); tail_ = vst_->tail();
+    }
+  }
   void showEditor() override;
   void closeEditor() override;
   bool editorOpen() const override;

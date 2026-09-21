@@ -27,6 +27,8 @@ public:
   virtual PluginState state() const = 0;
   virtual double latency() const = 0;
   virtual double tail() const = 0;
+  virtual bool latencyChangePending() const noexcept { return false; }
+  virtual void refreshLatency() {} // Rendering must be joined by the control owner.
   virtual void showEditor() = 0;
   virtual void closeEditor() = 0;
   virtual bool editorOpen() const = 0;

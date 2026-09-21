@@ -2,19 +2,31 @@ import AppKit
 extension AppController {
   @objc func showPatternCommands() {
     guard !busy, model.editable else { return }
-    if let commandPickerWindow, let picker = commandPickerWindow.contentView as? PatternCommandPicker {
-      picker.capture(); commandPickerWindow.makeKeyAndOrderFront(nil); return
+    commandPickerWindow?.close()
+    let picker=PatternCommandPicker(frame:NSRect(x:0,y:0,width:620,height:460))
+    let context=(model,patternView.cursorRow,patternView.cursorChannel,patternView.column)
+    picker.onContext={context}
+    picker.onRequest = {[weak self] params,reply in self?.handleAutomation(params["cells"] == nil ? "pattern.effect.set" : "pattern.apply",params:params,reply:reply)}
+    picker.onDismiss = {[weak self] in
+      guard let self else{return};self.commandPickerWindow?.close();self.window.makeKeyAndOrderFront(nil);self.window.makeFirstResponder(self.patternView)
     }
-    let picker = PatternCommandPicker(frame: .zero)
-    picker.onContext = { [weak self] in
-      guard let self else { return (PatternModel([:]), 0, 0, 3) }
-      return (self.model, self.patternView.cursorRow, self.patternView.cursorChannel, self.patternView.column)
+    picker.onNativeCommand = {[weak self,weak picker] kind,model,row,channel,column in
+      guard let self else{return}
+      guard self.session.automationRevision==model.revisionToken else{picker?.status.stringValue="The song changed. Close and reopen this list to choose a new target.";return}
+      self.commandPickerWindow?.close();self.openPatternPerformance(context:(model,row,channel,column),kind:kind)
     }
-    picker.onRequest = { [weak self] params, reply in self?.handleAutomation("pattern.apply", params: params, reply: reply) }
-    let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 560), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-    win.title = "Pattern commands"; win.minSize = NSSize(width: 680, height: 500)
-    win.isReleasedWhenClosed = false; win.delegate = self; win.contentView = picker
-    commandPickerWindow = win; picker.capture(); win.center(); win.makeKeyAndOrderFront(nil)
+    let panel=EffectFinderPanel(picker:picker);commandPickerWindow=panel;picker.capture()
+    window.makeKeyAndOrderFront(nil);patternView.revealCursor()
+    // Complete the originating menu/key event before handing focus to the list.
+    DispatchQueue.main.async {[weak self,weak panel,weak picker] in
+      guard let self,let panel,let picker,self.commandPickerWindow === panel else{return}
+      let anchor=self.window.convertToScreen(self.patternView.convert(self.patternView.cursorRect,to:nil))
+      let screen=self.window.screen?.visibleFrame ?? self.window.frame
+      let size=panel.frame.size
+      let y=anchor.minY-size.height>=screen.minY ? anchor.minY-size.height : min(screen.maxY-size.height,anchor.maxY)
+      panel.setFrameOrigin(NSPoint(x:max(screen.minX,min(anchor.minX,screen.maxX-size.width)),y:max(screen.minY,y)))
+      panel.makeKeyAndOrderFront(nil);picker.focusSearch()
+    }
   }
   func updateCommandHelp() {
     cursorLabel.stringValue = String(format: "EDIT P%02d · R%03d · CH%02d", model.pattern, patternView.cursorRow, patternView.cursorChannel + 1)

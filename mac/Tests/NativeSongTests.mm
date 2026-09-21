@@ -117,25 +117,17 @@ int main() {
         native[@"patterns"] = @[]; bad[@"native"] = native; write(bad);
         revision = session.automationRevision;
         check(![session openPath:path error:&error] && [revision isEqual:session.automationRevision], "Reject malformed metadata without replacing current song");
-        check([root[@"version"] isEqual:@4], "Current native project is version 4");
-        NSData *wrapped = root[@"module"];
-        const auto parts = splitSongSnapshot({static_cast<const std::byte *>(wrapped.bytes), wrapped.length});
-        NSData *legacyModule = [NSData dataWithBytes:parts.module.data() length:parts.module.size()];
-        NSMutableDictionary *nativeV3 = [root[@"native"] mutableCopy]; nativeV3[@"version"] = @3;
-        NSMutableDictionary *mixerV3 = [nativeV3[@"mixer"] mutableCopy]; [mixerV3 removeObjectForKey:@"sidechains"]; nativeV3[@"mixer"] = mixerV3;
-        NSMutableDictionary *projectV3 = [root mutableCopy]; projectV3[@"native"] = nativeV3; projectV3[@"module"] = legacyModule; projectV3[@"version"] = @3; write(projectV3);
-        check([session openPath:path error:&error], "Migrate native metadata v3 without sidechains");
-        check([[[session automationMethod:@"mixer.get" params:@{} error:&error][@"data"] objectForKey:@"sidechains"] count] == 0, "Migration does not invent sidechain routes");
-        NSMutableDictionary *legacyNative = [root[@"native"] mutableCopy];
-        legacyNative[@"version"] = @1; [legacyNative removeObjectForKey:@"automation"]; [legacyNative removeObjectForKey:@"mixer"];
-        NSMutableDictionary *legacyProject = [root mutableCopy]; legacyProject[@"native"] = legacyNative; legacyProject[@"module"] = legacyModule; legacyProject[@"version"] = @3; write(legacyProject);
-        check([session openPath:path error:&error], "Migrate version 1 native metadata within version 3 project");
-        check([[session snapshot:0][@"patterns"] isEqual:after[@"patterns"]], "Metadata migration preserves existing stable identities");
-        [root removeObjectForKey:@"native"]; root[@"module"] = legacyModule; root[@"version"] = @2; write(root);
-        check([session openPath:path error:&error], "Migrate version 2 project with generated stable IDs");
-        check(![[session snapshot:0][@"hasNativeMetadata"] boolValue], "Version 2 loads without fabricated labels");
-        root[@"version"] = @1; write(root);
-        check([session openPath:path error:&error], "Migrate version 1 project");
+        check([root[@"version"] isEqual:@6], "Current native project is version 6");
+        for(int old=1;old<6;++old) {
+          auto oldRoot=[root mutableCopy];oldRoot[@"version"]=@(old);write(oldRoot);
+          revision=session.automationRevision;
+          check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Old native project versions are rejected without changing the current song");
+        }
+        for(int old=1;old<17;++old) {
+          auto oldRoot=[root mutableCopy];auto metadata=[root[@"native"] mutableCopy];metadata[@"version"]=@(old);oldRoot[@"native"]=metadata;write(oldRoot);
+          revision=session.automationRevision;
+          check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Historical native metadata is rejected atomically");
+        }
         call(@"mixer.enable", @{}, true);
         NSString *busID = call(@"mixer.get", @{})[@"buses"][0][@"id"];
         call(@"mixer.bus.set", @{@"bus": busID, @"prePan": @0.375}, true);
@@ -146,10 +138,10 @@ int main() {
         check([call(@"mixer.get", @{})[@"buses"][0][@"prePan"] doubleValue] == .375, "Structural Undo preserves input balance alongside source-format snapshots");
         call(@"mixer.bus.set", @{@"bus": busID, @"prePan": @0}, true);
         auto compatible = [NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil];
-        check([compatible[@"native"][@"version"] intValue] == 4, "Clearing the last input balance restores older metadata compatibility");
+        check([compatible[@"native"][@"version"] intValue] == 17, "Clearing input balance retains the same current metadata format");
       }
       [[NSFileManager defaultManager] removeItemAtPath:folder error:nil];
-      std::cout << "PASS native song identities, metadata, order/section history, no-op/invalid atomicity, all five module formats, project v4 roundtrip, v1/v2/v3 migration and loss prevention\n";
+      std::cout << "PASS native song identities, metadata, order/section history, no-op/invalid atomicity, all five module formats, current project roundtrip, historical version rejection and loss prevention\n";
       return 0;
     } catch (const std::exception &error) {
       std::cerr << "FAIL " << error.what() << '\n'; return 1;

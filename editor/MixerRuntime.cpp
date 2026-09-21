@@ -61,6 +61,21 @@ MixerRuntime::MixerRuntime(MixerGraph graph, MixerPlan plan, double rate, uint64
   meters_ = std::make_unique<std::atomic<float>[]>(nodes_.size() * 2);
   for (size_t i = 0; i < nodes_.size() * 2; ++i) meters_[i].store(0, std::memory_order_relaxed);
 }
+void MixerRuntime::updateLatencyPlan(MixerPlan plan) {
+  if (plan.order != plan_.order || plan.nodes.size() != nodes_.size() ||
+      plan.connections.size() != edges_.size() || plan.instruments.size() != instruments_.size() ||
+      plan.sidechains.size() != sideDelays_.size())
+    throw std::invalid_argument("Latency update changed mixer topology");
+  for (size_t i = 0; i < nodes_.size(); ++i)
+    if (plan.nodes[i].directDelay != plan_.nodes[i].directDelay) nodes_[i]->direct = Delay(plan.nodes[i].directDelay);
+  for (size_t i = 0; i < edges_.size(); ++i)
+    if (plan.connections[i].delay != plan_.connections[i].delay) edges_[i] = Delay(plan.connections[i].delay);
+  for (size_t i = 0; i < instruments_.size(); ++i)
+    if (plan.instruments[i].delay != plan_.instruments[i].delay) instruments_[i] = Delay(plan.instruments[i].delay);
+  for (size_t i = 0; i < sideDelays_.size(); ++i)
+    if (plan.sidechains[i].delay != plan_.sidechains[i].delay) sideDelays_[i] = Delay(plan.sidechains[i].delay);
+  plan_ = std::move(plan);
+}
 bool MixerRuntime::controls(const std::vector<MixerControls> &controls) noexcept {
   if (controls.size() != nodes_.size()) return false;
   auto valid = [](double value, double low, double high) { return std::isfinite(value) && value >= low && value <= high; };

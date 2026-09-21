@@ -13,6 +13,11 @@ extension InterfaceTests {
     let a=WorkspacePanel(id:"notes",title:"Notes",view:notes),b=WorkspacePanel(id:"automation",title:"Automation",view:automation)
     workspace.register(a,location:"right");workspace.register(b,location:"secondary")
     workspace.layoutSubtreeIfNeeded()
+    try require(workspace.right.buttons.first?.title.contains("⌃⌥1")==true,"Inspector tabs expose a direct keyboard shortcut")
+    let plugin=WorkspacePanel(id:"plugins",title:"Plugin controls",view:NSView())
+    workspace.register(plugin,location:"right");workspace.right.choose("plugins")
+    try require(workspace.right.selected=="plugins" && workspace.right.host.subviews.first===plugin,"Tabs select retained inspectors directly")
+    workspace.show("notes")
     a.pinned=true
     workspace.preset("Pattern focus")
     try require(workspace.focusLayout && workspace.visibleIDs.isEmpty && workspace.pattern.superview != nil,"Pattern focus removes docked views without destroying their editor instances")

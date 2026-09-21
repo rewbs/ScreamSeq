@@ -859,13 +859,14 @@ struct InterfaceFailure: Error { let message: String }
         transpose.count == 1 && transpose[0].2[0] == 61,
         "Deferred transpose preserves musical interval")
       grid.selectRegion(from: (2, 1), to: (5, 3))
-      key(grid, 51, "")
-      let clear = pending!(grid.model)
-      try require(
-        clear.count == 12 && clear.allSatisfy { $0.2 == [0, 0, 0, 0, 0, 0] },
-        "Rectangular deletion is a complete deferred batch")
-      grid.model = PatternModel(["rows": 4, "channels": 2, "cells": Data(repeating: 0, count: 48)])
       var rowCommands = [[String: Any]]()
+      grid.onRowShift = { rowCommands.append($0) }
+      key(grid, 51, "")
+      let clear = rowCommands.removeLast()
+      try require(
+        clear["operation"] as? String == "clear" && clear["rowCount"] as? Int == 4 && clear["channelCount"] as? Int == 3 && (clear["fields"] as? [String])?.contains("effect") == true,
+        "Rectangular deletion clears source cells and every FX column in one shared operation")
+      grid.model = PatternModel(["rows": 4, "channels": 2, "cells": Data(repeating: 0, count: 48)])
       grid.commandRevision = { "displayed-revision" }
       grid.onRowShift = { rowCommands.append($0) }
       grid.cursorRow = 2; grid.shiftRows(true); grid.shiftRows(false)
@@ -879,9 +880,9 @@ struct InterfaceFailure: Error { let message: String }
       grid.canEdit = { true }
       grid.selectRegion(from: (0, 0), to: (1000, 1000))
       key(grid, 51, "")
-      let clipped = pending!(grid.model)
+      let clipped = rowCommands.last!
       try require(
-        clipped.count == 8 && clipped.allSatisfy { $0.0 < 4 && $0.1 < 2 },
+        clipped["rowCount"] as? Int == 4 && clipped["channelCount"] as? Int == 2,
         "Selections are bounded by the current pattern")
       let envelope = EnvelopeView(frame: NSRect(x: 0, y: 0, width: 600, height: 180))
       envelope.points = [[0, 64], [8, 32], [16, 0]]

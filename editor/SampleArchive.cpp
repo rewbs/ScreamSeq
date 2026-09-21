@@ -9,7 +9,6 @@
 namespace Tracker {
 using namespace OpenMPT;
 namespace {
-constexpr char magic[8] = {'R', 'S', 'O', 'N', 'G', 'S', '1', '\0'};
 constexpr char timingMagic[8] = {'R', 'S', 'O', 'N', 'G', 'S', '2', '\0'};
 constexpr char reverseMagic[8] = {'R', 'S', 'L', 'O', 'O', 'P', '1', '\0'};
 constexpr char envelopeMagic[8] = {'R', 'S', 'E', 'N', 'V', 'S', '1', '\0'};
@@ -598,29 +597,27 @@ void restoreSampleArchive(CSoundFile &base, std::span<const std::byte> archive) 
   require(r.at == archive.size(), "Trailing native sample snapshot data");
 }
 bool isSongSnapshot(std::span<const std::byte> bytes) {
-  return bytes.size() >= sizeof(magic) && (std::memcmp(bytes.data(), magic, sizeof(magic)) == 0 ||
-    std::memcmp(bytes.data(), timingMagic, sizeof(timingMagic)) == 0);
+  return bytes.size() >= sizeof(timingMagic) && std::memcmp(bytes.data(), timingMagic, sizeof(timingMagic)) == 0;
 }
 SongSnapshotParts splitSongSnapshot(std::span<const std::byte> bytes) {
   require(isSongSnapshot(bytes) && bytes.size() <= maximumSongSnapshotBytes, "Invalid native song snapshot");
   Reader r{bytes};
-  r.raw(sizeof(magic));
+  r.raw(sizeof(timingMagic));
   const auto module = r.u32(), samples = r.u32();
-  const bool hasTiming = std::memcmp(bytes.data(), timingMagic, sizeof(timingMagic)) == 0;
-  const auto timing = hasTiming ? r.u32() : 0;
-  require(module && samples && (!hasTiming || timing) && uint64_t(module) + samples + timing + (hasTiming ? 20 : 16) == bytes.size(), "Invalid native song snapshot lengths");
+  const auto timing = r.u32();
+  require(module && samples && uint64_t(module) + samples + timing + 20 == bytes.size(), "Invalid native song snapshot lengths");
   return {r.raw(module), r.raw(samples), r.raw(timing)};
 }
 std::vector<std::byte> packSongSnapshot(std::span<const std::byte> module, std::span<const std::byte> samples, std::span<const std::byte> timing) {
   require(!module.empty() && !samples.empty() && module.size() <= maximumSongSnapshotBytes &&
               samples.size() <= maximumSongSnapshotBytes &&
-              timing.size() <= maximumSongSnapshotBytes && module.size() + samples.size() + timing.size() + (timing.empty() ? 16 : 20) <= maximumSongSnapshotBytes,
+              timing.size() <= maximumSongSnapshotBytes && module.size() + samples.size() + timing.size() + 20 <= maximumSongSnapshotBytes,
           "Native song snapshot exceeds 512 MB");
   Writer w;
-  w.raw(timing.empty() ? magic : timingMagic, 8);
+  w.raw(timingMagic, 8);
   w.u32(uint32_t(module.size()));
   w.u32(uint32_t(samples.size()));
-  if (!timing.empty()) w.u32(uint32_t(timing.size()));
+  w.u32(uint32_t(timing.size()));
   w.raw(module.data(), module.size());
   w.raw(samples.data(), samples.size());
   w.raw(timing.data(), timing.size());
