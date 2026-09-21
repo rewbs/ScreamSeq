@@ -30,6 +30,17 @@ void save(const std::vector<Scan> &next){
 }
 void configure(std::string exe,std::string file){if(!nativePath(exe).is_absolute()||!nativePath(file).is_absolute())throw std::runtime_error("VST3 scanner/cache paths must be absolute");scanner=std::move(exe);cache=std::move(file);loaded=false;records.clear();}
 std::vector<PluginDescriptor> rescan(const std::string &p,uint32_t timeout){load();auto s=scanChild(scanner,p,timeout);auto next=records;std::erase_if(next,[&](auto &x){return x.file.path==s.file.path;});next.push_back(s);save(next);records=std::move(next);return s.classes;}
+std::vector<ScannedPlugin> scannedPlugins(const std::string &classID,bool instrument){
+ if(!validClassID(classID))throw std::runtime_error("VST3 class ID must be exactly 32 hexadecimal characters");
+ load();Steinberg::FUID uid;uid.fromString(classID.c_str());char canonical[33]{};uid.toString(canonical);
+ std::vector<ScannedPlugin> out;for(const auto &record:records)for(const auto &d:record.classes)if(d.classID==canonical&&d.instrument==instrument)out.push_back({d,record.file.sha256});return out;
+}
+std::string verifyScannedPlugin(const std::string &path,const std::string &classID,bool instrument,const std::string &sha256){
+ const auto candidates=scannedPlugins(classID,instrument);const auto f=fingerprint(path);
+ if(!sha256.empty()&&f.sha256!=sha256)throw std::runtime_error("VST3 binary changed; rescan and choose the module again");
+ const auto count=std::count_if(candidates.begin(),candidates.end(),[&](const auto &candidate){return candidate.descriptor.path==f.path&&candidate.sha256==f.sha256;});
+ if(count!=1)throw std::runtime_error("Exact VST3 class/path/ARM64/hash not present in cache; rescan and choose a matching module");return f.path;
+}
 std::vector<std::string> defaultSearchRoots(){std::vector<std::string> r;for(auto key:{L"CommonProgramW6432",L"CommonProgramFiles",L"LOCALAPPDATA"}){wchar_t s[32768]{};auto n=GetEnvironmentVariableW(key,s,32768);if(n&&n<32768){auto p=std::filesystem::path(s)/(key==std::wstring(L"LOCALAPPDATA")?L"Programs/Common/VST3":L"VST3");auto u=narrow(p.native());if(std::find(r.begin(),r.end(),u)==r.end())r.push_back(u);}}return r;}
 std::vector<std::string> candidates(const std::vector<std::string> &roots){std::set<std::string> out;size_t count=0;for(auto &root:roots){auto p=nativePath(root);if(!p.is_absolute())throw std::runtime_error("Absolute VST3 search root required");std::error_code ec;if(!std::filesystem::is_directory(p,ec))continue;for(auto it=std::filesystem::recursive_directory_iterator(p,std::filesystem::directory_options::skip_permission_denied);it!=std::filesystem::recursive_directory_iterator();++it){if(++count>100000||it.depth()>16)throw std::runtime_error("VST3 enumeration exceeds bound");if(it->is_symlink()){it.disable_recursion_pending();continue;}if(it->path().extension()==L".vst3"){out.insert(narrow(std::filesystem::canonical(it->path()).native()));if(it->is_directory())it.disable_recursion_pending();if(out.size()>2048)throw std::runtime_error("Too many VST3 candidates");}}}return {out.begin(),out.end()};}
 class Factory final:public PluginBackendFactory{

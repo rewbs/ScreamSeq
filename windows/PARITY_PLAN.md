@@ -20,7 +20,7 @@ device and plugin hosting belong to each platform. See
 | Explicit disconnected mixer/plugin destinations | Actual-app mixer/graph API, native bus controls, reusable graph canvas, pattern curves and a modeless envelope bank integrated. Socket dragging, wire properties, graph plugin drafts, assignments, disconnection, history and reopen are tested. See `MIXER_GRAPH_PROGRESS.md`, `GRAPH_EDITOR_PROGRESS.md`, `GRAPH_CURVES_PROGRESS.md` and `ENVELOPE_BANK_PROGRESS.md`. | Song routing overview, native sends/inserts/sidechains, other automation/envelope editors and broader routing/long-session qualification. |
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields and sample waveform markers integrated. | Envelope editor markers and audition UI, including overlapping voices and release tails. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
-| Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, program/port controls, modeless instrument aliases/MIDI channels, sound presets and library organization integrated; live parameters reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. See `PLUGIN_ALIASES_PROGRESS.md`, `PLUGIN_PRESETS_PROGRESS.md` and `PLUGIN_LIBRARY_PROGRESS.md` for shared contracts, native workflows and evidence. | Live opaque-state replacement (including Surge's first-open zoom state), explicit path resolution, graph/mixer connections and missing-plugin recovery. |
+| Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, program/port controls, modeless instrument aliases/MIDI channels, sound presets, library organization and explicit VST3 location repair integrated; live parameters reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. See `PLUGIN_ALIASES_PROGRESS.md`, `PLUGIN_PRESETS_PROGRESS.md`, `PLUGIN_LIBRARY_PROGRESS.md` and `PLUGIN_PATH_PROGRESS.md` for shared contracts, native workflows and evidence. | Live opaque-state replacement (including Surge's first-open zoom state), graph/mixer connections and broader missing-plugin recovery. |
 | Mac context menus, docking, focus, recovery and visual refinements | Reviewed; Windows retains its native implementation. | Implement the equivalent interactions and visual hierarchy in Windows, then compare actual windows at multiple scales. |
 
 ## Execution order and completion gates
@@ -35,7 +35,7 @@ baseline/history, and installed-plugin WASAPI coverage; see
 `LIVE_PLUGIN_PARAMETERS.md`. Empty trigger creation and installed instrument
 evidence are in `TRIGGER_INSTRUMENT_PROGRESS.md`. Immediate remaining plugin work
 is live opaque-state replacement,
-missing-plugin resolution and the OrbitCab partition discrepancy. The following gates remain
+broader missing-plugin recovery and the OrbitCab partition discrepancy. The following gates remain
 in force. A fresh fetch during this continuation found no newer upstream commits.
 
 Mac-compatible preset inspect/save/load and native guarded file dialogs are
@@ -46,7 +46,12 @@ without invoking a vendor state decoder. Both branded and legacy file extensions
 are accepted; new native saves use `.screamseq-preset` with compatible wire magic.
 Native library search, categories, favorites and hidden entries are now
 implemented in a retained browser and independent API; see
-`PLUGIN_LIBRARY_PROGRESS.md`. Explicit missing-plugin resolution is next.
+`PLUGIN_LIBRARY_PROGRESS.md`. Explicit VST3 location repair for rack instances
+and graph recipes is implemented in `PLUGIN_PATH_PROGRESS.md`. It accepts only
+the same plugin class and role from a freshly verified native Windows module,
+changes only the saved path and retains exact opaque state, aliases and routing.
+AU recipes remain preserved and unavailable on Windows. Structural and opaque
+changes still use the stop-before-publication path.
 Library preferences use their own `expectedLibraryRevision`, outside document
 Undo, and damaged preferences must not disable discovery or plugin insertion.
 Library IDs must follow the reviewed Mac contract: format plus normalized path

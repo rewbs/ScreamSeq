@@ -246,6 +246,21 @@ Ctrl+F focuses search and Ctrl+R reloads. Category drafts survive Close; Escape
 discards a draft. Unavailable preferences leave insertion usable. See
 `../PLUGIN_LIBRARY_PROGRESS.md` for native/API and isolated live-audio evidence.
 
+The rack's **Plugin location** page and the graph's plugin inspector expose
+**Reconnect plugin…**. The retained native window lists scanned Windows modules
+with the same class and role, verifies the selected binary, and reconnects it
+in one Undo step while retaining the saved sound, identity and routing. An
+absolute bundle/module path can be scanned explicitly; Browse selects a module
+file. Rescan installed refreshes normal discovery. AU recipes remain unavailable.
+
+The window captures a stable rack or graph target and document revision.
+Close/reopen preserves that target and selection; Reload explicitly refreshes
+them. File-dialog cancellation is a no-op and stale results are rejected.
+F6 switches candidate/manual-path fields, Ctrl+R reloads, Ctrl+Enter reconnects
+and Enter in the path field scans. `workspace.get.pluginPath` reports the
+captured context, candidates, draft path and status. No continuous polling or
+vendor-state decoding occurs while painting. See `../PLUGIN_PATH_PROGRESS.md`.
+
 The Samples inspector opens a waveform editor in the lower dock. Dragging or
 keyboard/range fields select audio; Reverse, Normalize, Fade, Trim and normal or
 sustain loop controls use guarded worker operations. Both loops support enable,

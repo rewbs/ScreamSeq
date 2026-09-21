@@ -32,6 +32,8 @@
 > installed-plugin round trips: `PLUGIN_PRESETS_PROGRESS.md`. Full parity remains active.
 > Native plugin browser, independent guarded preferences, search/favorites/
 > categories/hidden entries: `PLUGIN_LIBRARY_PROGRESS.md`. Full parity remains active.
+> Explicit Windows VST3 location repair for rack and graph recipes, preserving
+> sound state, identity and routing: `PLUGIN_PATH_PROGRESS.md`. Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

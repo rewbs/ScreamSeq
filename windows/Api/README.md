@@ -500,6 +500,41 @@ The native Browse window caches catalog rows for local filtering, retains
 category drafts across Close, and exposes its state in `workspace.get.pluginLibrary`.
 See `../PLUGIN_LIBRARY_PROGRESS.md` for evidence and limitations.
 
+Windows extensions `plugin.path.get/scan/set` repair a VST3 instance's saved
+installation path using stable `plugin` identity. `graph.plugin.path.get/scan/set`
+use `graph` and `node` instead. They do not change the portable project schema.
+
+`get` returns the target, `descriptor`, `moduleVerified`, `reason` and matching
+scanned `candidates`, each containing `descriptor` and `moduleSHA256`. It checks
+the current binary against the scan cache; verification is not a vendor-state
+load. Candidates match the exact VST3 class and instrument/effect role. Library
+visibility preferences do not hide repair candidates. Location inspection does
+not instantiate a vendor; the normal session boundary can first capture pending
+edits from an already open vendor editor.
+
+`scan` requires `expectedRevision` and an absolute VST3 bundle or module `path`.
+It explicitly scans that path in the isolated scanner, verifies the matching
+class and returns fresh location information. It can update the scan cache but
+does not change the song or its history. A stale document is rejected before
+scanning. A module containing a different class may be cached but cannot repair
+this target.
+
+`set` requires `expectedRevision`, `path`, `expectedModuleSHA256` from `get` or
+`scan`, and optional `dryRun`. It rechecks canonical path, class, role, native
+architecture and actual binary hash. A dry call performs no vendor-state decode.
+A changed actual location must successfully load the saved state and ports into
+a disposable processor before modifying the song. Only the path changes: exact
+opaque bytes, identity, bypass, aliases, automation and unknown metadata survive.
+Rack repairs use plugin Undo; graph repairs use document Undo, preserving the
+entire graph recipe and connections. A matching graph editor draft is closed
+after a successful change. Structural publication currently stops playback.
+
+The response includes the target, canonical `path`, `moduleSHA256`,
+`wouldChange`, `dryRun` and `reconnected`. A no-op creates no history. Stale song
+guards use `-32001`; invalid/mismatched modules and unsupported formats use
+`-32602`. Removed targets are rejected. AU state is preserved without conversion
+or substitution. See `../PLUGIN_PATH_PROGRESS.md` for native controls and tests.
+
 Discovery reads the cache. Explicit `rescan:true` scans installed VST3 roots
 through the isolated scanner; failures are reported with module paths while
 successful scans remain available. The exact class/path/architecture/hash guard

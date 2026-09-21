@@ -44,6 +44,7 @@ public:
   static std::vector<std::string> writes();
   Json invoke(const std::string &,const Json &);
   Json invokeLibrary(const std::string &,const Json &);
+  Json invokePath(const std::string &,const Json &);
   Json invokeGraph(const std::string &,const Json &,unsigned sampleRate);
   bool flushEditors(bool force=false); // Debounce gestures; save/close forces capture.
   std::vector<GraphRackRecord> graphRack() const;

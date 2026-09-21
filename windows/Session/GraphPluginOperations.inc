@@ -1,6 +1,7 @@
 // Graph recipes have document history and isolated native editor drafts. Rack
 // baselines and prepared playback copies never share these plugin instances.
 Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsigned rate) {
+  if(method.starts_with("graph.plugin.path."))return invokePath(method,p);
   using namespace Tracker;
   try {
     if(method=="graph.plugin.editor.close") {

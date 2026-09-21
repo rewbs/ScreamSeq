@@ -135,7 +135,9 @@ class SessionAdapter {
       }
       result["windowsExtensions"]={{"document.open","absolute path, expectedRevision, discard:true required for unsaved work"},
         {"plugin.editor.open","slot and expectedRevision; native VST3 editor on the private STA; no musical change unless the vendor emits edits"},
-        {"plugin.editor.close","slot and expectedRevision; flush pending baseline edits before closing"}};
+        {"plugin.editor.close","slot and expectedRevision; flush pending baseline edits before closing"},
+        {"plugin.path.get/scan/set","Explicit VST3 location repair by stable plugin ID. Scan/set require expectedRevision; set also requires path and expectedModuleSHA256 from get. Dry set verifies the scanned binary without vendor-state decoding. Actual set changes only path and uses plugin Undo."},
+        {"graph.plugin.path.get/scan/set","The same Windows VST3 location workflow for a graph/node target, using document Undo and preserving the graph recipe's state, ports and routing."}};
       result["patternEffects"]={{"columns","1–8 FX columns per channel. Code/value cursor fields are 3+2*column and 4+2*column."},
         {"methods","pattern.effects.get/set and pattern.performance.get/set merge ordinary FX 1 with all native commands. pattern.effect.set edits one cell; null clears it."},
         {"commands","tracker, parameter-set, parameter-slide, pitch-set, pitch-slide, note-cut. Use pattern.commands for source-format IDs and two-character displayCode."},
