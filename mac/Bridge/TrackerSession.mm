@@ -577,6 +577,17 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   [self stopRecordingCapture];
   _audio->stop();
 }
+- (void)shutdown {
+  // NSApplication terminates via exit(), so the app controller's retained
+  // session need not deallocate before vendor static destructors run. Retire
+  // every live processor/editor while AppKit and the main thread still exist.
+  // AudioDevice's destructor joins output callbacks before releasing its graph.
+  _midi.reset();
+  _audio.reset();
+  _graphEditorPlugin.reset();
+  _graphEditorID = nil;
+  _graphEditorDocument = nil;
+}
 - (BOOL)configureDevice:(NSUInteger)device buffer:(NSUInteger)buffer error:(NSError **)error {
   try {
     _audio->configure(uint32_t(device), uint32_t(buffer));
@@ -1516,6 +1527,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)deviceChanged {
   return _audio->deviceChanged();
+}
+- (BOOL)pluginLatencyChanged { return _audio->pluginLatencyChanged(); }
+- (BOOL)refreshPluginLatencies:(NSError **)error {
+  try { _audio->refreshPluginLatencies(); return YES; }
+  catch (const std::exception &e) { failure(error, e); return NO; }
 }
 - (BOOL)refreshDevice:(NSError **)error {
   try {

@@ -93,6 +93,16 @@ def plugin_aliases(client):
     assert all(a["available"] for a in route["assignments"])
     assert all(i["owner"]==identity for i in route["instruments"] if i["instrument"] in instruments)
     assert not write("plugin.instruments.set",plugin=identity,assignments=assignments)["changed"]
+    assert not write("instrument.plugin.set",instrument=instruments[0],plugin=identity,channel=2)["changed"]
+    current=read()
+    trial=write("instrument.plugin.set",instrument=instruments[1],plugin="",dryRun=True)
+    assert trial["data"]["wouldChange"] and not trial["changed"] and read()==current
+    write("instrument.plugin.set",instrument=instruments[1],plugin="")
+    assert [a["instrument"] for a in read()["data"]["assignments"]]==[instruments[0],instruments[2]]
+    write("history.undo",domain="plugins")
+    assert read()["data"]==current["data"]
+    expect_error(-32602,lambda:write("instrument.plugin.set",instrument=instruments[1],plugin="missing"))
+
     for bad in [[assignments[0],assignments[0]],[{"instrument":0,"channel":1}],[{"instrument":instruments[0],"channel":0}],
                 [{"instrument":instruments[0],"channel":17}],[{"instrument":True,"channel":1}],
                 [{"instrument":255,"channel":1}],[{"instrument":instruments[0],"channel":1,"unknown":0}]]:
@@ -105,6 +115,15 @@ def plugin_aliases(client):
     # Another instance cannot claim an already-owned tracker instrument.
     write("plugin.add",descriptor=descriptor);neighbor=client.call("document.get")["data"]["nativePlugins"][1]["instanceID"]
     expect_error(-32602,lambda:write("plugin.instruments.set",plugin=neighbor,assignments=[assignments[0]]))
+    before_move=read()["data"]
+    stale_revision=client.call("document.get")["revision"]
+    write("instrument.plugin.set",instrument=instruments[1],plugin=neighbor,channel=12)
+    assert [a["instrument"] for a in read()["data"]["assignments"]]==[instruments[0],instruments[2]]
+    assert read(neighbor)["data"]["assignments"][0]["channel"]==12
+    expect_error(-32001,lambda:client.call("instrument.plugin.set",{"instrument":instruments[1],"plugin":identity,"expectedRevision":stale_revision}))
+    write("history.undo",domain="plugins")
+    assert read()["data"]==before_move and not read(neighbor)["data"]["assignments"]
+
     write("plugin.move",slot=0,direction=1);assert read()["data"]["assignments"]==route["assignments"]
     write("plugin.parameters.set",slot=1,values=[{"id":7,"value":0.3}]);assert read()["data"]["assignments"]==route["assignments"]
     # Native presets transfer sound settings, preserving every instrument/channel route.

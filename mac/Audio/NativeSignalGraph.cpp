@@ -190,6 +190,49 @@ std::vector<SignalActivity> NativeSignalGraph::activity() const {
   for(const auto &bus:buses_)for(const auto &instance:bus->instances){const auto state=instance->published.load(std::memory_order_relaxed);if(state)result.push_back({bus->id,instance->graph,instance->role,uint16_t(state&0xffff),bool(state&0x10000)});}
   return result;
 }
+bool NativeSignalGraph::latencyChangePending() const noexcept {
+  for (const auto &b : buses_) for (const auto &i : b->instances)
+    for (const auto &p : i->processors) if (p.plugin->latencyChangePending()) return true;
+  return false;
+}
+void NativeSignalGraph::refreshLatencies(std::vector<MixerProcessorInfo> &mixerProcessors) {
+  for (auto &b : buses_) {
+    const auto previousReserved = b->reserved;
+    b->reserved = 0; b->tailSeconds = 0;
+    for (auto &i : b->instances) {
+      std::vector<SignalProcessorInfo> info;
+      double tail = 0;
+      for (auto &p : i->processors) {
+        p.plugin->refreshLatency();
+        uint64_t inputs = 1, outputs = 1;
+        for (const auto &bus : p.plugin->buses()) if (bus.active && bus.supported && bus.index < 64)
+          (bus.input ? inputs : outputs) |= uint64_t(1) << bus.index;
+        info.push_back({p.id, uint32_t(std::llround(p.plugin->latency() * rate_)), inputs, outputs});
+        tail = std::min(120., tail + std::max(0., p.plugin->tail()));
+      }
+      auto plan = compileSignal(i->runtime->definition(), info);
+      const auto oldStorage = i->runtime->storageBytes() + i->dryDelay.size() * sizeof(float);
+      if (plan.totalLatency != i->runtime->latency()) {
+        i->dryDelay.assign(size_t(plan.totalLatency) * 2, 0); i->dryPosition = 0;
+      }
+      i->runtime->updateLatencyPlan(std::move(plan));
+      storageBytes_ = storageBytes_ - oldStorage + i->runtime->storageBytes() + i->dryDelay.size() * sizeof(float);
+      i->tailFrames = uint64_t(std::ceil(tail * rate_)) + i->runtime->latency();
+      b->reserved += i->runtime->latency();
+      b->tailSeconds = std::min(120., b->tailSeconds + i->tailFrames / rate_);
+    }
+    if (b->reserved > 1048576) throw std::invalid_argument("Channel graph compensation exceeds supported delay");
+    if (b->reserved != previousReserved) for (auto &i : b->instances) for (auto &port : i->auxiliary) {
+      const auto oldBytes = port.delay.size() * sizeof(float);
+      port.delay.assign(size_t(b->reserved) * 2 + 2, 0); port.cursor = 0;
+      storageBytes_ = storageBytes_ - oldBytes + port.delay.size() * sizeof(float);
+    }
+    if (storageBytes_ > 256 * 1024 * 1024) throw std::invalid_argument("Song graph audio storage exceeds 256 MB");
+    for (auto &p : mixerProcessors) if (p.instance == signalBusIdentity(b->id)) {
+      p.latency = b->reserved; p.tail = b->tailSeconds;
+    }
+  }
+}
 void NativeSignalGraph::compile(MixerGraph &mixer,std::vector<MixerProcessorInfo> &processors){
   mixer=routedMixer_;
   for(const auto &bus:buses_){const auto &b=*bus;uint32_t count=1;uint64_t mask=1;

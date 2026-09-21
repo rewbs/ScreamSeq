@@ -48,6 +48,8 @@ void exportProjectAudio(const std::vector<std::byte> &module, const std::vector<
     uint64_t position = 0, written = 0, end = UINT64_MAX, tailLimit = UINT64_MAX, tailRevision = effects.tailRevision();
     bool ended = false;
     while (position < end) {
+      if (effects.latencyChangePending())
+        throw std::runtime_error("A plugin changed latency during export; the incomplete export was not saved.");
       if (position >= uint64_t(rate) * 3600)
         throw std::runtime_error("Audio export exceeded the one-hour limit; output was not replaced.");
       uint32_t frames = 512;
@@ -71,6 +73,8 @@ void exportProjectAudio(const std::vector<std::byte> &module, const std::vector<
         break;
       if (!effects.process(buffer.data(), frames))
         throw std::runtime_error("An Audio Unit failed during export.");
+      if (effects.latencyChangePending())
+        throw std::runtime_error("A plugin changed latency during export; the incomplete export was not saved.");
       const auto revision = effects.tailRevision();
       if (ended && revision != tailRevision)
         end = std::max(end, std::min(tailLimit, position + frames + latency + tail));

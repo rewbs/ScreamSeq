@@ -1364,3 +1364,31 @@ budget is rejected. This is an explicit conversion, not realtime formula
 execution inside legacy instrument envelopes. Original instrument templates
 retain their duration; non-instrument templates fit the current instrument's
 duration (49 ticks for an empty envelope), unless `span` is supplied in ticks.
+
+## Discoverable pattern effects and instrument sound sources
+
+The grid and effect finder use two-character display codes: ordinary source-format
+commands use `0` plus their original letter, and extended commands use the letter
+plus the subcommand digit (`SD`, for example). `pattern.commands` exposes this as
+`displayCode`; the existing `label`, numeric command and byte parameter remain
+unchanged. These are ScreamSeq display aliases, not Renoise command-number mappings.
+
+Native effect subcolumns use **PS** (parameter set), **PL** (parameter slide),
+**BS** (pitch set) and **BL** (pitch slide). `api.describe.patternPerformance`
+exposes these aliases and precision. Commands still use the existing string `kind`
+and double-precision `value` in `pattern.performance.set`. The grid's four hex
+value digits are a rounded overview, not storage precision. The editor accepts
+percentages with decimal precision; API parameter targets remain normalized 0…1.
+Native FX columns currently carry parameter/pitch commands; original tracker
+commands remain in the source-format effect column. Adding a column does not
+change that engine contract or claim playback support for all Renoise commands.
+
+`instrument.plugin.set {instrument, plugin, channel?, dryRun?, expectedRevision}`
+assigns one tracker instrument to a persistent plugin instance ID and MIDI channel
+1…16 (default 1). Empty string `plugin:""` detaches that instrument. Moving an
+instrument removes its old assignment and adds it to the new plugin in **one
+plugin-history transaction**, preserving every other part on both plugins.
+Existing primary/alias order is retained for edits to the same plugin. Stale
+revisions, missing instruments, effect-only plugins and invalid channels reject
+before changes; dry runs do not stop playback or change history. The result
+contains `instrument`, `plugin`, `channel`, `wouldChange`, and `dryRun`.

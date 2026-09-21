@@ -64,6 +64,8 @@ public:
   bool graphController(uint8_t cc,uint8_t value) {return plugins_ && plugins_->graphController(cc,value);}
   std::vector<SignalActivity> graphActivity() const {return active()&&plugins_?plugins_->graphActivity():std::vector<SignalActivity>{};}
   bool pluginFailed() const { return plugins_ && plugins_->failed(); }
+  bool pluginLatencyChanged() const noexcept { return plugins_ && plugins_->latencyChangePending(); }
+  void refreshPluginLatencies();
   bool mixerControls(const std::vector<MixerControls> &controls) { return !active() || (plugins_ && plugins_->mixerControls(controls)); }
   std::vector<MixerMeter> mixerMeters() const { return active() && plugins_ ? plugins_->mixerMeters() : std::vector<MixerMeter>{}; }
   bool deviceChanged() const { return deviceChanged_.load(); }

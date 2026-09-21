@@ -63,6 +63,7 @@ public:
   MixerRuntime(MixerGraph, MixerPlan, double sampleRate, uint64_t start = 0);
   const MixerPlan &plan() const { return plan_; }
   const MixerGraph &graph() const { return graph_; }
+  void updateLatencyPlan(MixerPlan); // Control thread; topology is unchanged.
   bool controls(const std::vector<MixerControls> &) noexcept; // Single control-thread producer.
   void begin(uint32_t frames, uint64_t position) noexcept;
   void instrument(size_t processor, uint32_t output, const float *buffer) noexcept;

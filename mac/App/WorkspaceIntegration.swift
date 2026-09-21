@@ -43,6 +43,7 @@ extension AppController {
     workspaceAutomation.onContext = {[weak self] in self?.workspaceAutomationModel ?? self?.model ?? PatternModel([:])}
     workspaceAutomation.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
     configureWorkspaceMixer()
+    installContextMenus()
     dock.onSelection = {[weak self] id in
       guard let self else{return}
       if self.workspaceReturnPoints[id] == nil {self.workspaceReturnPoints[id]=self.patternView.navigation}
@@ -55,6 +56,8 @@ extension AppController {
       if self.handlePlaybackKey(event) || self.handleInspectorNote(event) { return nil }
       guard self.liveKeyboard,NSApp.isActive,self.commandPalette.window?.isVisible != true,
         NSApp.modalWindow == nil,self.window.attachedSheet == nil else{return event}
+      if let text=self.focusedView(event) as? NSTextView,text.isEditable,event.type == .keyDown{return event}
+      if self.focusedView(event) is NSTextField,event.type == .keyDown{return event}
       if event.type == .keyUp,let note=self.workspaceHeldKeys.removeValue(forKey:event.keyCode){self.audition(note:note,on:false);return nil}
       guard event.modifierFlags.intersection([.command,.control,.option]).isEmpty,
         let key=event.charactersIgnoringModifiers?.lowercased(),let offset=KeyboardSettings.note(for:key) else{return event}

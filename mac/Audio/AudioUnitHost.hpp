@@ -145,6 +145,8 @@ public:
   PluginState state() const;
   std::vector<PluginInstrumentAlias> assignments() const;
   double latency() const { return latency_; }
+  bool latencyChangePending() const noexcept;
+  void refreshLatency(); // Audio must be quiescent.
   double tail() const;
   uint64_t tailRevision() const noexcept;
   void includeParameterRange(uint32_t id, float minimum, float maximum) noexcept;
@@ -167,6 +169,7 @@ public:
   bool editorOpen() const;
   void transport(const PluginTransport &t) noexcept { transport_ = t; }
   void compensateLatency(uint32_t frames) {
+    if (outputDelay_.size() == size_t(frames) * 2) return;
     outputDelay_.assign(size_t(frames) * 2, 0);
     outputDelayPosition_ = 0;
   }
@@ -213,6 +216,8 @@ class PluginChain {
   std::vector<double> compiledTails_;
   void captureTails();
   std::unique_ptr<MixerRuntime> mixer_;
+  std::vector<uint64_t> mixerTracks_;
+  std::vector<MixerProcessorInfo> mixerProcessors_;
   Renderer *mixerRenderer_ = nullptr; // Playback renderer outlives its processing calls.
   bool finishMixer(float *, uint32_t) noexcept;
 
@@ -247,6 +252,8 @@ public:
   std::optional<EffectMeters> meters(size_t slot) const { return slot < plugins_.size() ? plugins_[slot]->meters() : std::nullopt; }
   std::vector<PluginAudioBus> buses(size_t slot) const { return slot < plugins_.size() ? plugins_[slot]->buses() : std::vector<PluginAudioBus>{}; }
   bool failed() const { return failed_.load(); }
+  bool latencyChangePending() const noexcept;
+  void refreshLatencies(); // Control thread, retaining processors and transport.
   bool hasAutomatedState() const { return hasMusicalControls_ || !automation_.empty(); }
   double latency() const { return latency_; }
   double tail() const;

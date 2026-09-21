@@ -546,6 +546,8 @@ final class InstrumentEditor: NSView {
   var index = 1, keymap = [Int](repeating: 0, count: 128)
   var onEnvelopeTools: ((Int) -> Void)?
   var onEnvelopeBank: ((Int) -> Void)?
+  var onPluginAssignment: (() -> Void)?
+  let pluginSummary = Theme.label("Sample instrument", size: 12, color: Theme.muted)
   var envelopeToolsButton: ActionButton!
   var onSelect: ((Int) -> Void)?, onApply: (([String: Any]) -> Void)?, onCreate: (() -> Void)?,
     onImport: (() -> Void)?
@@ -554,6 +556,7 @@ final class InstrumentEditor: NSView {
     picker.target = self
     picker.action = #selector(selectInstrument)
     picker.fixed(width: 230)
+    enabled.target = self; enabled.action = #selector(toggleEnvelopeEnabled)
     nna.addItems(withTitles: ["Cut", "Continue", "Note off", "Fade"])
     dct.addItems(withTitles: ["Off", "Note", "Sample", "Instrument", "Plugin"])
     dna.addItems(withTitles: ["Cut", "Note off", "Fade"])
@@ -626,7 +629,10 @@ final class InstrumentEditor: NSView {
     let content = stack(
       .vertical,
       [
-        top, stack(.horizontal, [envelopeType, envelopeToolsButton!, ActionButton("Envelope bank…"){[weak self] in guard let self,self.envelope.canEdit() else{return};self.onEnvelopeBank?(self.envelopeType.indexOfSelectedItem)}, NSView(), filter], spacing: 8),
+        top,
+        stack(.horizontal, [ActionButton("Play instrument with keys") { [weak self] in guard let self else{return};self.window?.makeFirstResponder(self) }, pluginSummary, NSView(), ActionButton("Assign instrument plugin…") { [weak self] in self?.onPluginAssignment?() }], spacing: 8),
+        Theme.label("Z–M / Q–U preview this instrument with its keymap and enabled envelopes. Sample inspector previews raw samples.", size: 11, color: Theme.muted),
+        stack(.horizontal, [envelopeType, envelopeToolsButton!, ActionButton("Envelope bank…"){[weak self] in guard let self,self.envelope.canEdit() else{return};self.onEnvelopeBank?(self.envelopeType.indexOfSelectedItem)}, NSView(), filter], spacing: 8),
         envelope,
         stack(
           .horizontal,
@@ -682,6 +688,10 @@ final class InstrumentEditor: NSView {
     index = picker.selectedTag()
     onSelect?(index)
   }
+  @objc func toggleEnvelopeEnabled() {
+    guard envelope.canEdit() else { return }
+    onApply?(["envelope": envelopeType.indexOfSelectedItem, "enabled": enabled.state == .on])
+  }
   func update(_ info: [AnyHashable: Any], model: PatternModel) {
     let restoreDraft = settingsDraft.begin(index: index); defer { restoreDraft() }
     picker.removeAllItems()
@@ -691,6 +701,10 @@ final class InstrumentEditor: NSView {
       picker.lastItem?.tag = n
     }
     picker.selectItem(withTag: index)
+    let owner = model.nativePlugins.first { plugin in
+      (plugin["instrument"] as? Int == index) || (plugin["instrumentAssignments"] as? [[String:Any]] ?? []).contains { $0["instrument"] as? Int == index }
+    }
+    pluginSummary.stringValue = owner.map { "Plugin: \($0["name"] as? String ?? "Instrument")" } ?? (model.instruments.isEmpty ? "No instrument yet · choose New" : "Sample instrument")
     mapSample.removeAllItems()
     mapSample.addItem(withTitle: "None")
     mapSample.lastItem?.tag = 0

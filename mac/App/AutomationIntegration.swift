@@ -27,6 +27,10 @@ extension AppController {
   func handleAutomation(
     _ method: String, params: [String: Any], reply: @escaping AutomationServer.Reply
   ) {
+    guard !shuttingDown else {
+      reply(AutomationServer.error(-32002, "The application is shutting down"))
+      return
+    }
     if handleWorkspaceAutomation(method, params: params, reply: reply) { return }
     if handleSampleLibraryAutomation(method, params: params, reply: reply) { return }
     let ownMultisampleReview = method == "instrument.importMultisample" && NSApp.modalWindow?.contentView is MultisampleImportView

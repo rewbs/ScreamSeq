@@ -131,6 +131,36 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 256; ++i)
       silence += x[i] * x[i];
     require(silence < 1e-8, "panic silences audition voices");
+    // Inspector audition must use the instrument's envelope, while explicit
+    // sample audition deliberately bypasses it. A looping tone avoids sample
+    // decay masking a missing envelope.
+    auto audition = Document::demo();
+    audition->transaction([](CSoundFile &song) {
+      song.m_nInstruments = 1;
+      song.Instruments[1] = new ModInstrument(SAMPLEINDEX(1));
+      auto &env = song.Instruments[1]->VolEnv;
+      env.push_back(0, 64); env.push_back(5, 64); env.push_back(10, 0);
+      env.dwFlags.set(ENV_ENABLED);
+    });
+    for (int rate : {44100, 48000, 96000}) {
+      Renderer instrumentPreview(audition->playbackData(), rate, 0, true);
+      Renderer samplePreview(audition->playbackData(), rate, 0, true);
+      require(instrumentPreview.preview({61, 1, 127, true}), "instrument preview queued");
+      PreviewNote sampleEvent{61, 0, 127, true}; sampleEvent.sample = 1;
+      require(samplePreview.preview(sampleEvent), "raw sample preview queued");
+      std::array<float, 256> instrumentAudio{}, sampleAudio{};
+      double attack = 0, tail = 0, rawTail = 0;
+      for (int frame = 0; frame < rate / 2; frame += 128) {
+        instrumentPreview.render(instrumentAudio.data(), 128);
+        samplePreview.render(sampleAudio.data(), 128);
+        for (int i = 0; i < 256; ++i) {
+          if (frame < rate / 10) attack += instrumentAudio[i] * instrumentAudio[i];
+          if (frame > rate / 3) { tail += instrumentAudio[i] * instrumentAudio[i]; rawTail += sampleAudio[i] * sampleAudio[i]; }
+        }
+      }
+      require(attack > 0.1 && tail < 1e-8 && rawTail > 0.1,
+              "instrument audition follows its enabled envelope; sample audition stays raw");
+    }
     Renderer queue(bytes, 48000);
     std::vector<Edit> batch(512, valid);
     for (int i = 0; i < 16; ++i)

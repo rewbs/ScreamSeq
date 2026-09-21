@@ -89,6 +89,21 @@ int main(int argc,char **argv){@autoreleasepool{try{
     check(![call(@"plugin.instruments.set",@{@"plugin":identity,@"assignments":assignments},true)[@"changed"] boolValue],"Identical routing is a no-op");
     call(@"history.undo",@{@"domain":@"plugins"},true);check([call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"][@"assignments"] count]==0,"Plugin Undo removes aliases in one step");
     call(@"history.redo",@{@"domain":@"plugins"},true);check([call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"] isEqual:routing],"Redo restores MIDI channels and stable owner");
+    check(![call(@"instrument.plugin.set",@{@"instrument":@1,@"plugin":identity,@"channel":@2},true)[@"changed"] boolValue],"Setting an existing primary assignment preserves ordering and revision");
+    revision=session.automationRevision;
+    auto singlePreview=call(@"instrument.plugin.set",@{@"instrument":@2,@"plugin":@"",@"dryRun":@YES},true);
+    check([singlePreview[@"data"][@"wouldChange"] boolValue]&&[revision isEqual:session.automationRevision],"Single-instrument detachment supports dry run");
+    call(@"instrument.plugin.set",@{@"instrument":@2,@"plugin":@""},true);
+    NSArray *remaining=call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"][@"assignments"];
+    check(remaining.count==2 && [remaining[0][@"instrument"] intValue]==1 && [remaining[0][@"channel"] intValue]==2 && [remaining[1][@"instrument"] intValue]==3 && [remaining[1][@"channel"] intValue]==16,"Detaching one instrument preserves other MIDI parts");
+    call(@"history.undo",@{@"domain":@"plugins"},true);
+    check([call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"] isEqual:routing],"Single-instrument assignment Undo restores all routing");
+    call(@"instrument.plugin.set",@{@"instrument":@2,@"plugin":identity,@"channel":@4},true);
+    remaining=call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"][@"assignments"];
+    check([remaining[0][@"instrument"] intValue]==1 && [remaining[0][@"channel"] intValue]==2 && [remaining[2][@"instrument"] intValue]==3 && [remaining[2][@"channel"] intValue]==16&&[remaining[1][@"channel"] intValue]==4,"Changing a part's MIDI channel keeps its neighbors and primary ordering");
+    call(@"history.undo",@{@"domain":@"plugins"},true);
+    revision=session.automationRevision;
+    check(![session automationMethod:@"instrument.plugin.set" params:@{@"instrument":@2,@"plugin":@"missing",@"expectedRevision":revision} error:&error]&&[revision isEqual:session.automationRevision],"Missing plugin rejects without altering routing");
     call(@"pattern.transform",@{@"operation":@"clear",@"scope":@"pattern",@"pattern":@0},true);
     NSMutableArray *cells=[NSMutableArray array];
     for(int i=1;i<=3;++i){

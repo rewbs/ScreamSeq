@@ -60,6 +60,14 @@ extension InterfaceTests {
       guard let image=snapshot.offscreenImage(),let bytes=NSBitmapImageRep(cgImage:image).representation(using:.png,properties:[:]) else{throw NSError(domain:"Offscreen effect grid",code:1)}
       try bytes.write(to:directory.appendingPathComponent("PatternEffectsGrid.png"))
     }
+    let fresh=PatternPerformanceEditor(frame:.zero)
+    fresh.onContext={(performanceModel(),1,1,3)}
+    fresh.onRequest={method,_,reply in reply(["result":["revision":"song:1","data":method=="pattern.performance.get" ? performanceData as Any : [["id":7,"name":"Gain","canSlide":true]] as Any]])}
+    fresh.capture()
+    try require(fresh.columns.selectedTag()==1,"First native effect automatically provisions a column on an unconfigured channel")
+    let precise=0.12345678912345678
+    let raw=NativePatternCommand(["kind":"parameter-slide","binding":1,"value":precise])
+    try require(raw.text.hasPrefix("PL01") && raw.value==precise,"Two-character effect display never quantizes the stored target")
     let navigation=EditorNavigation()
     let moved=try navigation.prepared(["expectedRevision":"r","expectedContext":navigation.token,"channel":2,"column":12],
       revision:"r",contextToken:navigation.token,patterns:[["index":0,"rows":64]],channels:3,extraColumns:[2,0,8])

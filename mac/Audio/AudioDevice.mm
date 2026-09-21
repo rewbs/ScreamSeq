@@ -197,6 +197,15 @@ void AudioDevice::stop() {
   if (unit_)
     AudioOutputUnitStop(unit_);
 }
+void AudioDevice::refreshPluginLatencies() {
+  const bool resume = active();
+  stop(); // Quiesces the callback before touching processor state or delay storage.
+  if (plugins_) plugins_->refreshLatencies();
+  if (resume && unit_) {
+    check(AudioOutputUnitStart(unit_), "Cannot resume playback after plugin latency update");
+    playing_ = true;
+  }
+}
 OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const AudioTimeStamp *timestamp, UInt32, UInt32 frames,
                                AudioBufferList *buffers) {
   auto &self = *static_cast<AudioDevice *>(ref);
@@ -204,7 +213,7 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
   for (UInt32 i = 0; i < buffers->mNumberBuffers; ++i)
     if (buffers->mBuffers[i].mData)
       std::memset(buffers->mBuffers[i].mData, 0, buffers->mBuffers[i].mDataByteSize);
-  if (self.playing_.load(std::memory_order_relaxed) && self.renderer_ && buffers->mNumberBuffers == 1 &&
+  if (self.playing_.load(std::memory_order_relaxed) && !self.pluginLatencyChanged() && self.renderer_ && buffers->mNumberBuffers == 1 &&
       buffers->mBuffers[0].mData && buffers->mBuffers[0].mDataByteSize >= frames * 8) {
     auto *output = static_cast<float *>(buffers->mBuffers[0].mData);
     if (self.plugins_) {

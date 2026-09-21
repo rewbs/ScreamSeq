@@ -25,7 +25,7 @@
     NSArray *writes = @[
       @"envelope.bank.save", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.loop", @"graph.plugin.set", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.routes.set", @"graph.controller", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
       @"recording.start", @"recording.capture", @"recording.stop", @"recording.commit", @"recording.discard", @"pattern.notes.set", @"pattern.performance.set", @"instrument.envelope.transform",
-      @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule",
+      @"instrument.plugin.set", @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule",
       @"sequence.select", @"sample.patch",          @"sample.process",    @"sample.import", @"sample.importMany", @"sample.clipboard.copy", @"sample.clipboard.set", @"sample.cut", @"sample.delete", @"sample.paste",
       @"sample.pcm.set", @"sample.copyToNew", @"sample.draw", @"sample.crossfade", @"sample.loops.set", @"instrument.create",     @"instrument.import", @"instrument.importMultisample", @"instrument.patch",
       @"plugin.preset.save", @"plugin.preset.load", @"plugin.library.set", @"plugin.add",      @"plugin.remove",         @"plugin.move",       @"plugin.bypass",
@@ -95,6 +95,8 @@
         @"maxPatternCells" : @4096,
         @"patternPerformance": @{@"unitsPerRow":@(performanceUnitsPerRow), @"maximumColumns":@(maximumEffectColumns),
           @"maximumCommands":@(maximumPatternCommands), @"maximumBindings":@255,
+          @"displayCodes":@{@"parameter-set":@"PS",@"parameter-slide":@"PL",@"pitch-set":@"BS",@"pitch-slide":@"BL"},
+          @"valuePrecision":@"IEEE-754 double. Parameter values are normalized 0..1; native FX grid shows a rounded 16-bit overview only. Legacy tracker values remain source-format bytes.",
           @"kinds":@[@"parameter-set",@"parameter-slide",@"pitch-set",@"pitch-slide"],
           @"pitch":@"Absolute semitone offsets -96..96. Native samples interpolate pitch every sample. Plugins use 14-bit MIDI pitch wheel and must have a matching pitchRange (default 2 semitones); MIDI-channel notes share that bend.",
           @"maximumPitchTracks":@16,
@@ -897,6 +899,36 @@
         [self applyPluginGraph:states automation:_automation];
       }
       result = @{@"wouldChange": @(different), @"buses": pluginBusDictionaries(_audio->pluginBuses(slot))};
+    } else if ([method isEqual:@"instrument.plugin.set"]) {
+      allowed(@[@"instrument", @"plugin", @"channel", @"dryRun"]);
+      const auto instrument = uint32_t(instrumentIndex());
+      NSString *identity = string(p[@"plugin"], 128);
+      const auto channel = uint32_t(integer(p[@"channel"] ?: @1, 1, 16));
+      const bool dry = p[@"dryRun"] ? boolean(p[@"dryRun"]) : false;
+      const auto selected = std::find_if(_plugins.begin(), _plugins.end(), [&](const auto &state) { return state.instanceID == identity.UTF8String; });
+      require(!identity.length || selected != _plugins.end(), "The instrument plugin is no longer available");
+      const auto slot = size_t(selected - _plugins.begin());
+      if (identity.length) require(selected->descriptor.instrument || selected->descriptor.type == kAudioUnitType_MusicDevice, "Choose an instrument plugin, not an audio effect");
+      auto prepare = [&](auto &states) {
+        for (size_t i=0; i<states.size(); ++i) if (!identity.length || i!=slot) removePluginAssignment(states[i], instrument);
+        if (identity.length) {
+          auto assignments = pluginAssignments(states[slot]);
+          const auto found = std::find_if(assignments.begin(),assignments.end(),[&](const auto &a){return a.instrument==instrument;});
+          if (found==assignments.end()) assignments.push_back({instrument,channel});
+          else found->channel=channel;
+          setPluginAssignments(states[slot], assignments);
+        }
+        validatePluginCapacity(states, _document->native().mixer.buses.size());
+      };
+      auto states = _plugins;
+      prepare(states);
+      bool changed = false;
+      for (size_t i = 0; i < states.size(); ++i) changed |= pluginAssignments(states[i]) != pluginAssignments(_plugins[i]);
+      if (changed && !dry) {
+        [self commitManualParameters]; states = _plugins; prepare(states);
+        [self applyPluginGraph:states automation:_automation];
+      }
+      result = @{@"instrument": @(instrument), @"plugin": identity, @"channel": @(channel), @"wouldChange": @(changed), @"dryRun": @(dry)};
     } else if ([method isEqual:@"plugin.instruments.get"]) {
       allowed(@[@"plugin"]); result = pluginAssignmentInfo(_plugins, instanceSlot(), song);
     } else if ([method isEqual:@"plugin.instruments.set"]) {

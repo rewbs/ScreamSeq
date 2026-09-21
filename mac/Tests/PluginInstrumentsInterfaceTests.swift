@@ -43,6 +43,19 @@ extension InterfaceTests {
     let editor=PluginEditor(frame:.zero);try require(!editor.instrumentsButton.isEnabled,"Empty plugin panel disables instrument routing")
     editor.update(model:PatternModel(["nativePlugins":[["name":"Synth","isInstrument":true,"instrumentAssignments":[["instrument":1,"channel":2],["instrument":2,"channel":7]]]]]),values:[])
     var selected = -1;editor.onInstruments={selected=$0};editor.instrumentsButton.invoke()
-    try require(selected==0 && editor.instrumentsButton.title=="Instruments (2)…","Native action selects the visible instrument plugin and reports alias count")
+    try require(selected==0 && editor.instrumentsButton.title=="Assigned instruments (2)…","Native action selects the visible instrument plugin and reports alias count")
+    let source=InstrumentPluginEditor(instrument:1,model:PatternModel(["revisionToken":"source:1","nativePlugins":[["instanceID":"synth","name":"Fixture synth","isInstrument":true,"instrumentAssignments":[["instrument":1,"channel":7]]]]]))
+    let host=NSWindow(contentRect:NSRect(x:0,y:0,width:570,height:260),styleMask:[.titled],backing:.buffered,defer:false);host.contentView=source;source.layoutSubtreeIfNeeded()
+    try require(source.bounds.width>=560 && source.channel.selectedTag()==7,"Assignment editor keeps its usable window width and recalls the alias MIDI channel")
+    var assignment:[String:Any]=[:]
+    source.onRequest={method,params,reply in assignment=params;reply(["result":["revision":"source:2","data":[:]]])}
+    source.apply()
+    try require(assignment["plugin"] as? String=="synth" && assignment["instrument"] as? Int==1 && assignment["channel"] as? Int==7 && assignment["expectedRevision"] as? String=="source:1","Instrument inspector dispatches the atomic stable-target assignment API")
+    let instrument=InstrumentEditor(frame:.zero);var enabled:[String:Any]=[:]
+    instrument.onApply={enabled=$0};instrument.enabled.state = .on;instrument.toggleEnvelopeEnabled()
+    try require(enabled["enabled"] as? Bool==true && enabled["envelope"] as? Int==0 && enabled.count==2,"Enable envelope commits only this switch immediately without saving unrelated drafts")
+    let actions=ContextActions.controls(in:source)
+    try require(actions.items.contains(where:{$0.title=="Apply assignment"}),"Context actions expose the same editor commands")
+
   }
 }

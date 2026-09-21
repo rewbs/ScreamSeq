@@ -507,6 +507,47 @@ bool PluginChain::parameter(uint32_t slot, uint32_t id, float value) noexcept {
   write_.store(w + 1, std::memory_order_release);
   return true;
 }
+bool PluginChain::latencyChangePending() const noexcept {
+  for (const auto &p : plugins_) if (p->latencyChangePending()) return true;
+  return (signalGraph_ && signalGraph_->latencyChangePending()) ||
+         (sampleSignalGraph_ && sampleSignalGraph_->latencyChangePending());
+}
+void PluginChain::refreshLatencies() {
+  try {
+    for (auto &p : plugins_) p->refreshLatency();
+    if (signalGraph_) signalGraph_->refreshLatencies(mixerProcessors_);
+    if (sampleSignalGraph_) sampleSignalGraph_->refreshLatencies(mixerProcessors_);
+    if ((signalGraph_ ? signalGraph_->storageBytes() : 0) +
+        (sampleSignalGraph_ ? sampleSignalGraph_->storageBytes() : 0) > 256 * 1024 * 1024)
+      throw std::invalid_argument("Song graph audio storage exceeds 256 MB");
+    if (mixer_) {
+      for (size_t i = 0; i < plugins_.size(); ++i) {
+        mixerProcessors_[i].latency = uint32_t(std::llround(plugins_[i]->latency() * sampleRate_));
+        mixerProcessors_[i].tail = plugins_[i]->isInstrument() ? std::max(2., plugins_[i]->tail()) : plugins_[i]->tail();
+      }
+      auto plan = compileMixer(mixer_->graph(), mixerTracks_, mixerProcessors_, uint32_t(sampleRate_));
+      mixer_->updateLatencyPlan(std::move(plan));
+      latency_ = mixer_->plan().latency / sampleRate_; tail_ = mixer_->plan().tail;
+    } else {
+      latency_ = 0; tail_ = 0;
+      double instrumentLatency = 0, instrumentTail = 0;
+      for (size_t i = 0; i < plugins_.size(); ++i) if (!bypass_[i]) {
+        const auto &p = *plugins_[i];
+        if (!p.isInstrument()) { latency_ += p.latency(); tail_ += p.tail(); }
+        else if (instruments_[i]) {
+          instrumentLatency = std::max(instrumentLatency, p.latency());
+          instrumentTail = std::max(instrumentTail, std::max(2., p.tail()));
+        }
+      }
+      latency_ += instrumentLatency; tail_ += instrumentTail;
+      const auto delay = size_t(std::llround(instrumentLatency * sampleRate_)) * 2;
+      if (dryDelay_.size() != delay) { dryDelay_.assign(delay, 0); dryDelayPosition_ = 0; dryThrough_ = position_; }
+      for (auto &p : plugins_) if (p->isInstrument())
+        p->compensateLatency(uint32_t(std::max(0., std::round((instrumentLatency - p->latency()) * sampleRate_))));
+    }
+    captureTails();
+  } catch (...) { failed_ = true; throw; }
+}
 bool PluginChain::process(float *buffer, uint32_t frames) noexcept {
   applyPending();
   if (frames > 4096) {
@@ -581,6 +622,12 @@ std::vector<PluginDescriptor> NativePlugin::discoverVST3(const std::string &path
   return VST3Plugin::discover(path);
 }
 double NativePlugin::tail() const { return builtin_ ? builtin_->tail() : tail_; }
+bool NativePlugin::latencyChangePending() const noexcept { return vst_ && vst_->latencyChangePending(); }
+void NativePlugin::refreshLatency() {
+  if (vst_ && vst_->latencyChangePending()) {
+    vst_->refreshLatency(); latency_ = vst_->latency(); tail_ = vst_->tail();
+  }
+}
 uint64_t NativePlugin::tailRevision() const noexcept { return builtin_ ? builtin_->tailRevision() : 0; }
 void NativePlugin::includeParameterRange(uint32_t id, float minimum, float maximum) noexcept {
   if (builtin_) builtin_->includeParameterRange(id, minimum, maximum);

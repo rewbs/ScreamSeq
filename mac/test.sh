@@ -55,6 +55,8 @@ bin/mac-native/session-tests
 bin/mac-native/automation-tests
 bin/mac-native/plugin-inventory-tests
 bin/mac-native/plugin-lifecycle-tests
+bin/mac-native/plugin-shutdown-tests "$PWD/bin/mac-native/test-plugins/ResonanceFixture.vst3"
+bash mac/test-shutdown.sh
 bin/mac-native/plugin-picker-tests
 python3 mac/Tests/test_automation.py
 python3 mac/Tests/test_automation.py --app

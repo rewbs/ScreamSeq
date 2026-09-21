@@ -174,7 +174,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     openButton = ActionButton("Open interface…") { [weak self] in
       guard let self else { return }; self.onOpen?(self.selected)
     }
-    instrumentsButton = ActionButton("Instruments…") { [weak self] in guard let self else { return }; self.onInstruments?(self.selected) }
+    instrumentsButton = ActionButton("Assign tracker instruments…") { [weak self] in guard let self else { return }; self.onInstruments?(self.selected) }
     instrumentsButton.isEnabled = false
     let routing = stack(
       .horizontal,
@@ -270,7 +270,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     assignment.isEnabled = chosen["isInstrument"] as? Bool ?? false
     instrumentsButton.isEnabled = assignment.isEnabled
     let count = (chosen["instrumentAssignments"] as? [[String: Any]])?.count ?? ((chosen["instrument"] as? Int ?? 0) > 0 ? 1 : 0)
-    instrumentsButton.title = count > 0 ? "Instruments (\(count))…" : "Instruments…"
+    instrumentsButton.title = count > 0 ? "Assigned instruments (\(count))…" : "Assign tracker instruments…"
     if !assignment.isEnabled {
       assignment.removeAllItems()
       assignment.addItem(withTitle: "Effect · route in Mixer")

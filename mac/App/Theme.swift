@@ -163,7 +163,7 @@ struct PatternModel {
   func extraColumns(_ channel: Int) -> Int { extraEffectColumns.indices.contains(channel) ? extraEffectColumns[channel] : 0 }
   func nativeCommand(_ row: Int, _ channel: Int, _ column: Int) -> NativePatternCommand? { performanceCommands[(row * channels + channel) * 8 + column] }
   func channelOffset(_ channel: Int) -> Float { channelOffsets.indices.contains(channel) ? channelOffsets[channel] : Float(channel) * 162 }
-  func channelWidth(_ channel: Int) -> Float { 162 + Float(extraColumns(channel)) * 96 }
+  func channelWidth(_ channel: Int) -> Float { 162 + Float(extraColumns(channel)) * 106 }
   var revisionToken = ""
   var sequence = 0, sequences = [[String: Any]]()
   var cells = [UInt8](repeating: 0, count: 64 * 8 * 6)

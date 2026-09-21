@@ -52,6 +52,17 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
   var onPreciseNotes: (() -> Void)?
   var onClearPreciseNotes: ((Int,Int)->Void)?
   var onNativeEffect: (() -> Void)?
+  var onEffectPicker: (() -> Void)?
+  var onEffectColumns: ((Int,Int) -> Void)?
+  var onContextMenu: ((NSEvent) -> Void)?
+  var cursorRect: NSRect { NSRect(x:CGFloat(channelX(cursorChannel)+fieldOffset(column)), y:CGFloat(headerHeight+Float(cursorRow-firstRow)*rowHeight),width:CGFloat(fieldWidth(column)),height:CGFloat(rowHeight)) }
+  override func rightMouseDown(with event: NSEvent) {
+    let p=convert(event.locationInWindow,from:nil), (r,c)=position(event)
+    if !selected(r,c) {selectionStart=nil;selectionEnd=nil;cursorRow=r;cursorChannel=c
+      let x=Float(p.x)-channelX(c)
+      column=x>=162 ? min(4+model.extraColumns(c),5+Int((x-162)/106)) : x<43 ? 0 : x<70 ? 1 : x<104 ? 2 : x<123 ? 3 : 4
+    };onCursor?();onContextMenu?(event)
+  }
   var onClearNativeEffect: ((Int,Int,Int) -> Void)?
   var onTransport: (() -> Void)?
   var onCursor: (() -> Void)?
@@ -138,8 +149,8 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     while horizontalInset < 0,firstChannel > 0 { firstChannel -= 1;horizontalInset += model.channelWidth(firstChannel) }
     horizontalInset=max(0,min(horizontalInset,model.channelWidth(firstChannel)-1))
   }
-  func fieldOffset(_ column:Int) -> Float { column < 5 ? [7,44,72,105,124][max(0,column)] : 162 + Float(column-5)*96 + 5 }
-  func fieldWidth(_ column:Int) -> Float { column < 5 ? [32,24,28,20,28][max(0,column)] : 86 }
+  func fieldOffset(_ column:Int) -> Float { column < 5 ? [7,44,72,105,124][max(0,column)] : 162 + Float(column-5)*106 + 5 }
+  func fieldWidth(_ column:Int) -> Float { column < 5 ? [32,24,28,20,28][max(0,column)] : 98 }
   private let notes = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
   private let normal = SIMD4<Float>(0.66, 0.72, 0.79, 1), faint = SIMD4<Float>(0.22, 0.28, 0.34, 1)
   override var acceptsFirstResponder: Bool { true }
@@ -301,11 +312,12 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
       let ch = firstChannel + v
       let x = channelX(ch)
       text(
-        Self.decimal[ch + 1] + "  " + (ch < model.tracks.count && !(model.tracks[ch]["name"] as? String ?? "").isEmpty ? String((model.tracks[ch]["name"] as? String ?? "").prefix(12)).uppercased() : (model.noteTrackByChannel[ch] == nil ? "CHANNEL" : "NOTE")), x + 9, headerHeight - 28,
+        Self.decimal[ch + 1] + "  " + (ch < model.tracks.count && !(model.tracks[ch]["name"] as? String ?? "").isEmpty ? String((model.tracks[ch]["name"] as? String ?? "").prefix(8)).uppercased() : (model.noteTrackByChannel[ch] == nil ? "CHANNEL" : "NOTE")), x + 9, headerHeight - 28,
         muted.contains(ch) ? SIMD4(0.38, 0.41, 0.45, 1) : SIMD4(0.66, 0.73, 0.79, 1))
+      text("+FX",x+134,headerHeight-28,SIMD4(0.43,0.88,0.76,1))
       quad(x, 0, 1, height, SIMD4(0.16, 0.19, 0.23, 1))
       for effect in 0..<model.extraColumns(ch) {
-        let fx=x+162+Float(effect)*96
+        let fx=x+162+Float(effect)*106
         text("FX \(effect+1)",fx+7,headerHeight-28,SIMD4(0.59,0.63,0.78,1))
         quad(fx,headerHeight,1,height-headerHeight,SIMD4(0.13,0.16,0.21,1))
       }
@@ -363,9 +375,8 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
           cell.volumeCommand == 0 ? faint : model.commands.entry(command: Int(cell.volumeCommand), parameter: Int(cell.volume), volume: true)?.rgba ?? SIMD4(0.88, 0.71, 0.43, 1))
         let effect =
           cell.effect == 0
-          ? "."
-          : (Int(cell.effect) < model.effectLetters.count
-            ? model.effectLetters[Int(cell.effect)] : "?")
+          ? ".."
+          : (model.commands.entry(command:Int(cell.effect),parameter:Int(cell.parameter))?.displayCode ?? "??")
         let effectColor = model.commands.entry(command: Int(cell.effect), parameter: Int(cell.parameter))?.rgba ?? SIMD4<Float>(0.77, 0.57, 0.86, 1)
         text(effect, x + 105, y + 1, cell.effect == 0 ? faint : effectColor)
         text(
@@ -374,7 +385,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
           cell.effect == 0 ? faint : effectColor)
         for effect in 0..<model.extraColumns(ch) {
           let command=model.nativeCommand(r,ch,effect)
-          text(command?.text ?? "... ....",x+fieldOffset(effect+5),y+1,command == nil ? faint : SIMD4(0.69,0.66,0.98,1))
+          text(command?.text ?? ".... ....",x+fieldOffset(effect+5),y+1,command == nil ? faint : SIMD4(0.69,0.66,0.98,1))
         }
       }
     }
@@ -513,6 +524,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     let p = convert(event.locationInWindow, from: nil)
     let (r, c) = position(event)
     if p.y < CGFloat(headerHeight) {
+      if p.x>=52 && Float(p.x)-channelX(c)>=134 && Float(p.x)-channelX(c)<162 {cursorChannel=c;onEffectColumns?(c,min(8,model.extraColumns(c)+1));return}
       guard p.x >= 52, p.y >= CGFloat(headerHeight - 36) else { return }
       onMute?(c)
       return
@@ -520,8 +532,8 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     cursorRow = r
     cursorChannel = c
     let x = Float(p.x)-channelX(c)
-    column = x >= 162 ? min(4+model.extraColumns(c),5+Int((x-162)/96)) : x < 43 ? 0 : x < 70 ? 1 : x < 104 ? 2 : x < 123 ? 3 : 4
-    if event.clickCount >= 2 {if column>=5 {onNativeEffect?()} else if column<=2 {onPreciseNotes?()}}
+    column = x >= 162 ? min(4+model.extraColumns(c),5+Int((x-162)/106)) : x < 43 ? 0 : x < 70 ? 1 : x < 104 ? 2 : x < 123 ? 3 : 4
+    if event.clickCount >= 2 {if column>=5 {onNativeEffect?()} else if column<=2 {onPreciseNotes?()} else {onEffectPicker?()}}
     selectionStart = (r, c)
     selectionEnd = nil
     onCursor?()
@@ -569,6 +581,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
   }
   override func keyDown(with event: NSEvent) {
     let ch = event.charactersIgnoringModifiers?.lowercased() ?? ""
+    if event.characters == "?" || (ch=="/" && event.modifierFlags.contains(.shift)),column>=2,!event.modifierFlags.contains(.command) {onEffectPicker?();return}
     if event.keyCode == KeyboardSettings.transportKey && !event.modifierFlags.contains(.command) {
       if !event.isARepeat { onTransport?() }
       return

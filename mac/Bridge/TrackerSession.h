@@ -27,6 +27,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setPlaybackLoop:(BOOL)enabled;
 - (BOOL)sampleNote:(NSInteger)note sample:(NSInteger)sample velocity:(NSInteger)velocity on:(BOOL)on;
 - (void)stop;
+// Terminal operation: call on the main thread after draining document work.
+// Idempotent; no further session operations are allowed after shutdown.
+- (void)shutdown;
 - (BOOL)editPattern:(NSInteger)pattern
                 row:(NSInteger)row
             channel:(NSInteger)channel
@@ -87,6 +90,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)undoEffectChange:(NSError **)error;
 - (BOOL)redoEffectChange:(NSError **)error;
 - (BOOL)deviceChanged;
+- (BOOL)pluginLatencyChanged;
+- (BOOL)refreshPluginLatencies:(NSError **)error;
 - (BOOL)refreshDevice:(NSError **)error;
 - (NSArray<NSDictionary *> *)midiSources;
 - (BOOL)connectMIDI:(NSUInteger)source error:(NSError **)error;

@@ -20,6 +20,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var workspaceReturnPoints = [String:EditorNavigation](), workspaceContextTokens = [String:String]()
   let signalGraphEditor=SignalGraphEditor(frame:.zero), graphPluginBrowser=PluginBrowser(), graphCommandsEditor=GraphCommandsEditor(frame:.zero)
   let commandPalette = WorkspaceCommandPalette()
+  var workspaceContextMonitor: Any?
   var workspaceInputMonitor: Any?, workspaceHeldKeys = [UInt16:Int]()
   var liveKeyboard = false, liveKeyboardItem: NSMenuItem?, liveKeyboardButton: ActionButton?
   var lastWorkspaceRefresh = 0.0
@@ -41,6 +42,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var songTimingWindow: NSWindow?
   var pluginProgramsWindow: NSWindow?
   var pluginInstrumentsWindow: NSWindow?
+  var instrumentPluginWindow: NSWindow?
   var instrumentEnvelopeToolsWindow: NSWindow?
   var instrumentEnvelopeBank:EnvelopeBankWindow?
   let instrumentEnvelopeClipboard=InstrumentEnvelopeClipboard()
@@ -71,6 +73,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let worker = DispatchQueue(label: "org.resonance.document", qos: .userInitiated)
   let recoveryWriter = DispatchQueue(label: "org.resonance.recovery", qos: .utility)
   var busy = false
+  var shuttingDown = false
   var currentPlaying = false
   let presetWorkflow = PluginPresetWorkflow()
   var uiReady = false
@@ -156,6 +159,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     patternView.onPreciseNotes = {[weak self] in self?.showPreciseNotes()}
     patternView.onClearPreciseNotes = {[weak self] row,channel in self?.clearPreciseNotes(row:row,channel:channel)}
+    patternView.onEffectPicker = {[weak self] in self?.showPatternCommands()}
+    patternView.onEffectColumns = {[weak self] channel,count in self?.setEffectColumns(channel:channel,count:count)}
+    patternView.onContextMenu = {[weak self] event in self?.showPatternContextMenu(event)}
     patternView.onNativeEffect = {[weak self] in self?.showPatternPerformance()}
     patternView.onClearNativeEffect = {[weak self] row,channel,column in self?.clearNativeEffect(row:row,channel:channel,column:column)}
     patternView.onTransport = { [weak self] in self?.togglePlayback() }
@@ -632,6 +638,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func tick() {
     guard !busy else { return }
+    if session.pluginLatencyChanged() {
+      perform("Updating plugin delay compensation…", refresh: false, {
+        try self.session.refreshPluginLatencies()
+      })
+      return
+    }
     if session.deviceChanged() {
       perform(
         "Reconfiguring audio device…", refresh: false, { try self.session.refreshDevice() },
@@ -950,6 +962,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         })
     }
     sampleEditor.onInstrument = { [weak self] in self?.addInstrument() }
+    instrumentEditor.onPluginAssignment = {[weak self] in self?.showInstrumentPluginAssignment()}
     instrumentEditor.onCreate = { [weak self] in self?.addInstrument() }
     instrumentEditor.onImport = { [weak self] in self?.importInstrument() }
     instrumentEditor.onEnvelopeBank = { [weak self] kind in self?.showInstrumentEnvelopeBank(kind) }
@@ -1233,6 +1246,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     win.center(); win.makeKeyAndOrderFront(nil); browser.load(rescan: rescan)
   }
   @objc func systemSleep() {
+    guard !shuttingDown else { return }
     pendingNotes.removeAll()
     if busy { worker.async { self.session.stop() } } else { session.stop() }
   }
@@ -1439,18 +1453,33 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    if shuttingDown { return .terminateLater }
     if busy { return .terminateCancel }
-    return discardChanges() ? .terminateNow : .terminateCancel
-  }
-  func applicationWillTerminate(_ notification: Notification) {
-    releaseWorkspaceKeys()
-    if let workspaceInputMonitor { NSEvent.removeMonitor(workspaceInputMonitor) }
-    if !automationTest && !inspectionTest,let state=workspace?.state { UserDefaults.standard.set(state,forKey:"workspaceLastLayout") }
-    sampleAudition.stop()
-    automationServer?.stop()
-    session.stop()
+    guard discardChanges() else { return .terminateCancel }
+    shuttingDown = true
+    busy = true
+    workspaceHeldKeys.removeAll()
+    inspectorHeldKeys.removeAll()
+    pendingNotes.removeAll()
+    inspectorPendingNotes.removeAll()
     tickTimer?.invalidate()
     recoveryTimer?.invalidate()
+    if let workspaceInputMonitor { NSEvent.removeMonitor(workspaceInputMonitor) }
+    if let workspaceContextMonitor { NSEvent.removeMonitor(workspaceContextMonitor) }
+    sampleAudition.stop()
+    automationServer?.stop()
+    // Reads can still be queued after busy clears. Drain them and any recovery
+    // write without blocking the main thread: plugin calls may need that thread.
+    worker.async {
+      self.recoveryWriter.async {
+        DispatchQueue.main.async { sender.reply(toApplicationShouldTerminate: true) }
+      }
+    }
+    return .terminateLater
+  }
+  func applicationWillTerminate(_ notification: Notification) {
+    if !automationTest && !inspectionTest,let state=workspace?.state { UserDefaults.standard.set(state,forKey:"workspaceLastLayout") }
+    session.shutdown()
   }
   func application(_ sender: NSApplication, openFile filename: String) -> Bool {
     // AppKit may deliver positional option values as open-file events as well.
@@ -1524,7 +1553,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let menu = NSMenu()
     NSApp.mainMenu = menu
     func submenu(_ title: String) -> NSMenu {
-      let item = NSMenuItem()
+      let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
       menu.addItem(item)
       let sub = NSMenu(title: title)
       item.submenu = sub
@@ -1667,4 +1696,7 @@ final class LevelMeter: NSView {
 let app = NSApplication.shared
 let controller = AppController()
 app.delegate = controller
+#if SCREAMSEQ_SHUTDOWN_TEST
+AppShutdownTest.start(controller)
+#endif
 app.run()

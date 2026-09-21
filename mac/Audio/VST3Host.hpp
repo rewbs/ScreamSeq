@@ -21,6 +21,8 @@ public:
   void loadProgram(const std::string &id);
   PluginState state() const;
   double latency() const;
+  bool latencyChangePending() const noexcept;
+  void refreshLatency(); // Control thread, with audio processing stopped.
   double tail() const;
   void showEditor();
   void closeEditor();

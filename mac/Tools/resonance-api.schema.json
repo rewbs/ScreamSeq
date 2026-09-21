@@ -14848,6 +14848,62 @@
       ],
       "additionalProperties": false,
       "description": "Copy catalogue entry into the song bank under a fresh local identity. Later catalogue updates do not change it."
+    },
+    {
+      "description": "Assign, move or detach one tracker instrument by stable plugin identity, preserving every other instrument assignment. Empty plugin detaches. One effect-history Undo; supports dryRun.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "instrument.plugin.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "instrument": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "plugin": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "channel": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16,
+              "default": 1
+            }
+          },
+          "required": [
+            "instrument",
+            "plugin",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
     }
   ]
 }
