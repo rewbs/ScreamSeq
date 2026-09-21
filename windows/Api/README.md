@@ -324,6 +324,13 @@ and rack slot/identity/bypass/instrument aliases. Removing a rack entry retains
 unresolved native automation, routing and binding identities; absolute slot
 automation is removed/remapped as on Mac. No target silently retargets.
 
+`instrument.create` also accepts the shared `empty:true`, optional `name` and
+`dryRun` fields. The new instrument has an empty sample keymap; sample-only
+conversion preserves existing sample numbers and playback. Creation belongs to
+document history. The native **New trigger** action then calls
+`instrument.plugin.set` to assign it on channel 1 in plugin history, retaining
+the created stable identity for retry if assignment fails.
+
 Discovery reads the cache. Explicit `rescan:true` scans installed VST3 roots
 through the isolated scanner; failures are reported with module paths while
 successful scans remain available. The exact class/path/architecture/hash guard

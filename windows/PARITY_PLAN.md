@@ -15,12 +15,12 @@ device and plugin hosting belong to each platform. See
 | Landed capability | Windows status after integration | Remaining work |
 |---|---|---|
 | Unified 1–8 FX columns, ordinary tracker commands plus PS/PL/BS/BL/NC | Shared engine integrated; moved-effect PCM/timeline/cursor-start tests pass across MPTM/IT/XM/S3M/MOD. Metadata reads/writes every new command field. | Integrate the complete pattern-performance API and grid/editor, two-character entry, FX discovery, clipboard binding remap, and row transformations. Ordinary FX 1 editing is not full parity. |
-| Precise note cut and plugin trigger instruments | Shared semantics and persistence integrated. | Trigger creation/assignment, precise-note editor and Windows API transactions, history and saved-project tests. |
+| Precise note cut and plugin trigger instruments | Shared semantics/persistence plus empty trigger API, native creation/assignment and independent history integrated. Installed Surge XT trigger PCM/WASAPI checks pass with documented fixture constraints. | Complete precise-note editor and Windows API transactions, unified FX controls and broader instrument/routing qualification. |
 | Project container 6 / metadata 17; RSONGS2 snapshots | Current-only native open/save, strict rejection of historical native wrappers, opaque-state retention, sample-exact save/reopen tests. MOD/XM/IT/S3M import remains available. | Obtain a newly exported Mac format-17 fixture and perform Windows→Mac→Windows reopen. The supplied format-14 reference is historical and is not silently migrated. |
 | Explicit disconnected mixer/plugin destinations | Shared mixer behavior and Windows metadata roundtrip accept output/target 0. | Connect live mixer/graph API and controls; exercise disconnect with sends, history and reopen through the UI. |
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields and sample waveform markers integrated. | Envelope editor markers and audition UI, including overlapping voices and release tails. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
-| Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, guarded program/state APIs, independent history and editor ownership integrated; live parameter batches and editor gestures reach the prepared renderer. Installed ARM64 effects tested through the app. | Live opaque-state replacement, program/bus controls, presets/library, explicit path resolution, missing-plugin recovery and a real instrument. |
+| Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, guarded program/state APIs, independent history and editor ownership integrated; live parameter batches and editor gestures reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. | Live opaque-state replacement (including Surge's first-open zoom state), program/bus/alias controls, presets/library, explicit path resolution and missing-plugin recovery. |
 | Mac context menus, docking, focus, recovery and visual refinements | Reviewed; Windows retains its native implementation. | Implement the equivalent interactions and visual hierarchy in Windows, then compare actual windows at multiple scales. |
 
 ## Execution order and completion gates
@@ -31,9 +31,10 @@ and independent plugin history have application coverage. Program and bus APIs
 are connected but still need native controls and broader provider fixtures.
 Live parameter propagation now has bounded atomic publication, worker-owned
 baseline/history, and installed-plugin WASAPI coverage; see
-`LIVE_PLUGIN_PARAMETERS.md`. Immediate remaining plugin work is live opaque-state
-replacement, presets/library organization, missing-plugin resolution, a real
-instrument and the OrbitCab partition discrepancy. The following gates remain
+`LIVE_PLUGIN_PARAMETERS.md`. Empty trigger creation and installed instrument
+evidence are in `TRIGGER_INSTRUMENT_PROGRESS.md`. Immediate remaining plugin work
+is live opaque-state replacement, program/bus/alias controls, presets/library
+organization, missing-plugin resolution and the OrbitCab partition discrepancy. The following gates remain
 in force. A fresh fetch during this continuation found no newer upstream commits.
 
 1. **Plugin workflow in the application.** Connect the existing scanner/provider

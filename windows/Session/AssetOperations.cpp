@@ -403,8 +403,26 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p) {
     return report;
   }
   if(method=="instrument.create") {
-    keys(p,{"sample"});const auto sample=int(integer(p.value("sample",Json(0)),0,song.GetNumSamples()));
+    keys(p,{"sample","empty","name","dryRun"});const auto sample=int(integer(p.value("sample",Json(0)),0,song.GetNumSamples()));
+    const bool empty=p.contains("empty")?boolean(p.at("empty")):false,dry=dryRun(p);
+    const auto name=text(p.value("name",Json("Plugin instrument")),200);
+    require(!empty||sample==0,"An empty plugin trigger instrument cannot map a sample");
+    require(empty||(!p.contains("name")&&!dry),"Name and dryRun require empty:true");
     require(song.GetType()==MOD_TYPE_IT||song.GetType()==MOD_TYPE_XM||song.GetType()==MOD_TYPE_MPT,"This format does not support instruments");
+    if(empty){
+      const auto previous=std::max(1,int(song.GetNumSamples()));
+      const auto index=(song.GetNumInstruments()?int(song.GetNumInstruments()):previous)+1;
+      require(index<MAX_INSTRUMENTS&&index<=song.GetModSpecifications().instrumentsMax&&index<=255,"Instrument slots are full");
+      PreparedAssetImport prepared(document_);
+      prepared.candidate().transaction([&](CSoundFile &s){
+        if(!s.GetNumInstruments())for(int i=1;i<=previous;++i){s.Instruments[i]=new ModInstrument(SAMPLEINDEX(i));s.Instruments[i]->name=s.GetSampleName(SAMPLEINDEX(std::min(i,int(s.GetNumSamples()))));}
+        s.Instruments[index]=new ModInstrument(SAMPLEINDEX(0));
+        s.Instruments[index]->name=::OpenMPT::mpt::ToCharset(s.GetCharsetInternal(),::OpenMPT::mpt::Charset::UTF8,name);s.m_nInstruments=INSTRUMENTINDEX(index);
+      });
+      if(validateImport_)validateImport_(prepared.candidate());
+      if(!dry){stop();prepared.commit();}
+      return {{"instrument",index},{"empty",true},{"dryRun",dry}};
+    }
     const int count=song.GetNumInstruments()?song.GetNumInstruments()+1:std::max(1,int(song.GetNumSamples()));
     require(count<MAX_INSTRUMENTS&&count<=song.GetModSpecifications().instrumentsMax,"Instrument slots are full");int index=0;
     const auto op=[&](Document &d){d.transaction([&](CSoundFile &s){

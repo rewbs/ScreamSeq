@@ -152,6 +152,25 @@ void liveParameterTests(const std::filesystem::path &directory) {
   std::cout<<"PASS live worker/UI publication, invalid/dry/no-op/failed batches, overflow fallback, independent history and save/reopen\n";
 }
 
+void triggerInstrumentTests(const std::filesystem::path &directory) {
+  DocumentController c({},"triggers",[]{},[](const auto &){});
+  const auto before=c.view();const auto pattern=before->pattern(0).cells;
+  auto render=[&](unsigned rate){auto *prepared=c.prepare(rate,Json::object(),false,true).get();std::vector<float> pcm(size_t(rate)*2);
+    for(unsigned at=0;at<rate;){auto frames=std::min(128u,rate-at);need(prepared->render(pcm.data()+size_t(at)*2,frames),"Trigger conversion PCM failed");at+=frames;}return pcm;};
+  std::map<unsigned,std::vector<float>> reference;for(unsigned rate:{44100u,48000u,96000u})reference[rate]=render(rate);
+  invoke(c,"instrument.create",{{"empty",true},{"dryRun",true}});need(c.view()==before,"Trigger dry run changed the document");
+  const auto created=invoke(c,"instrument.create",{{"empty",true},{"name","Empty trigger"}}).at("instrument").get<unsigned>();
+  need(created==before->samples.size()+1&&c.view()->pattern(0).cells==pattern,"Trigger conversion must retain sample numbers and pattern bytes");
+  need(std::all_of(c.view()->keyboards.at(created).begin(),c.view()->keyboards.at(created).end(),[](auto s){return s==0;}),"New trigger is not empty");
+  for(unsigned rate:{44100u,48000u,96000u}){auto converted=render(rate);double delta=0,energy=0;for(size_t i=0;i<converted.size();++i){delta=std::max(delta,std::abs(double(converted[i])-reference[rate][i]));energy+=std::abs(converted[i]);}
+    need(delta<1e-6&&energy>1,"Sample-only playback changed when appending a plugin trigger");std::cout<<"PASS trigger conversion rate="<<rate<<" max-PCM-delta="<<delta<<'\n';}
+  const auto instruments=c.view()->session.document.at("instruments");const auto path=directory/"triggers.screamseq";
+  invoke(c,"document.save",{{"path",path.generic_string()}});invoke(c,"history.undo",{{"domain","document"}});
+  need(c.view()->instruments==0,"One Undo must restore sample-only mode");invoke(c,"history.redo",{{"domain","document"}});
+  need(c.view()->session.document.at("instruments")==instruments,"Redo changed trigger identity");
+  invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});need(c.view()->session.document.at("instruments")==instruments,"Reopen changed trigger identities");
+}
+
 int main(int argc,char **argv) {
   try {
     if(argc==3 && std::string(argv[1])=="--fixtures") {
@@ -178,6 +197,7 @@ int main(int argc,char **argv) {
     if(argc==3 && std::string(argv[1])=="--publication") {publicationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--assets") {assetTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--live-parameters") {liveParameterTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--trigger-instruments") {triggerInstrumentTests(std::filesystem::u8path(argv[2]));return 0;}
     throw std::runtime_error("Use --fixtures or --publication <existing directory>");
   } catch(const std::exception &e) {std::cerr<<e.what()<<'\n';return 1;}
 }

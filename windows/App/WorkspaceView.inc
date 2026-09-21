@@ -112,6 +112,7 @@
 		std::vector<ScreamSeq::WorkspaceCommand> commands={
             {pluginsCommand,L"Inspect / Plugin rack",L""},{pluginUndo,L"Plugins / Undo",L""},{pluginRedo,L"Plugins / Redo",L""},
             {pluginRescan,L"Plugins / Rescan installed VST3 modules",L""},{pluginEditor,L"Plugins / Open selected native editor",L""},
+            {pluginNewInstrument,L"Plugins / Create trigger for selected instrument",L""},
             {openCommand,L"File / Open project or module",L"Ctrl+O"},{saveCommand,L"File / Save native project",L"Ctrl+S"},
             {saveAsCommand,L"File / Save As",L"Ctrl+Shift+S"},{undoCommand,L"Edit / Undo",L"Ctrl+Z"},{redoCommand,L"Edit / Redo",L"Ctrl+Y"},
             {copyCommand,L"Pattern / Copy rectangular cells",L"Ctrl+C"},{pasteCommand,L"Pattern / Paste rectangular cells",L"Ctrl+V"},{clearCommand,L"Pattern / Clear selection",L"Delete"},
@@ -172,7 +173,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(id!=octaveChooser && id!=stepChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginsCommand)) SetFocus(window);
+            if(id!=octaveChooser && id!=stepChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginNewInstrument)) SetFocus(window);
 		} catch(const std::exception &e) { status=wide(e.what()); }
 	}
     bool handleKey(WPARAM code) {

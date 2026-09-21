@@ -8,6 +8,9 @@
 > checkpoint; the statements about uncommitted work below are historical.
 > Current live plugin editing: `LIVE_PLUGIN_PARAMETERS.md`; native rack and
 > visible UI evidence: `PLUGIN_RACK_PROGRESS.md`. Full parity is still active.
+> Empty trigger creation and the installed Surge XT instrument checkpoint:
+> `TRIGGER_INSTRUMENT_PROGRESS.md`, including the first-editor-open playback
+> stop and the qualified deterministic instrument fixture.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

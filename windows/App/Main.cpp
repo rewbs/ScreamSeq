@@ -42,7 +42,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     sampleStartField=230,sampleEndField=231,
     pluginList=300,pluginLibrary=301,pluginAdd=302,pluginRescan=303,pluginEditor=304,
     pluginBypass=305,pluginRemove=306,pluginUp=307,pluginDown=308,pluginUndo=309,pluginRedo=310,
-    pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316;
+    pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -82,6 +82,7 @@ void offlineTest(const std::filesystem::path &report) {
 void offlineHostedTest(const std::filesystem::path &project,const std::filesystem::path &report) {
     ScreamSeq::DocumentController controller(project,"offline-hosted",[]{},[](const auto &){});
     const auto before=controller.view();double energy=0,maxDelta=0;bool finite=true;
+    ScreamSeq::Json renders=ScreamSeq::Json::array();
     for(unsigned rate:{44100u,48000u,96000u}) {
         std::vector<float> reference;
         for(unsigned block:{17u,128u,4096u,8193u}) {
@@ -95,13 +96,19 @@ void offlineHostedTest(const std::filesystem::path &project,const std::filesyste
             }
             if(reference.empty()) reference=audio;
             else for(size_t i=0;i<audio.size();++i) maxDelta=std::max(maxDelta,std::abs(double(reference[i])-audio[i]));
-            for(float sample:audio) {finite &= std::isfinite(sample);energy+=std::abs(double(sample));}
+            std::array<double,4> quarters{};unsigned firstAudible=rate;
+            for(unsigned frame=0;frame<rate;++frame)for(unsigned channel=0;channel<2;++channel) {
+                const double sample=audio[size_t(frame)*2+channel];finite &= std::isfinite(sample);energy+=std::abs(sample);
+                quarters[std::min(3u,unsigned(uint64_t(frame)*4/rate))]+=sample*sample;
+                if(std::abs(sample)>1e-6)firstAudible=std::min(firstAudible,frame);
+            }
+            renders.push_back({{"rate",rate},{"block",block},{"firstAudibleFrame",firstAudible==rate?ScreamSeq::Json(nullptr):ScreamSeq::Json(firstAudible)},{"quarterSecondEnergy",quarters}});
         }
     }
     const bool unchanged=controller.view()==before;
     std::ofstream out(report,std::ios::binary);
     out<<std::boolalpha<<std::setprecision(12)<<"{\"finite\":"<<finite<<",\"energy\":"<<energy<<",\"maxPartitionDelta\":"<<maxDelta
-       <<",\"documentUnchanged\":"<<unchanged<<",\"rates\":[44100,48000,96000],\"partitions\":[17,128,4096,8193],\"secondsPerRender\":1}";
+       <<",\"documentUnchanged\":"<<unchanged<<",\"rates\":[44100,48000,96000],\"partitions\":[17,128,4096,8193],\"secondsPerRender\":1,\"renders\":"<<renders.dump()<<"}";
     out.close();if(!out||!finite||maxDelta>=1e-6||!unchanged) throw std::runtime_error("Hosted application offline qualification failed");
 }
 class Application : public ScreamSeq::Api::SessionHost {

@@ -3,6 +3,7 @@
     Json listedPlugins=Json::array(),pluginCatalog=Json::array(),pluginParameters=Json::array();
     std::string selectedPlugin,pluginDocument,pluginDetailsRevision,pluginDetailsTarget;
     std::string pluginDraftRevision,pluginDraftTarget;
+    std::map<std::string,std::string> pendingPluginTriggers; // Plugin ID -> created instrument ID awaiting assignment.
     uint32_t selectedParameter=0,pluginDraftParameter=0;
     bool settingPluginFields=false,pluginDraft=false,refreshingPlugins=false,pluginLibraryLoaded=false;
     std::wstring pluginDetailStatus=L"Select a plugin to edit its parameters";
@@ -16,18 +17,18 @@
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
             {pluginAdd,L"Add"},{pluginRescan,L"Rescan"},{pluginEditor,L"Editor"},{pluginBypass,L"Bypass"},
             {pluginRemove,L"Remove"},{pluginUp,L"Up"},{pluginDown,L"Down"},{pluginUndo,L"Undo FX"},{pluginRedo,L"Redo FX"},
-            {pluginApply,L"Apply"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"}})
+            {pluginApply,L"Apply"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"},{pluginNewInstrument,L"New trigger"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(int id:{pluginLibrary,pluginParameter,pluginInstrument})
             controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         controls[pluginList]=CreateWindowExW(0,L"LISTBOX",L"Plugin rack",WS_CHILD|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(pluginList)),GetModuleHandleW(nullptr),nullptr);
         controls[pluginValue]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(pluginValue)),GetModuleHandleW(nullptr),nullptr);
         SendMessageW(controls.at(pluginValue),EM_SETLIMITTEXT,64,0);
-        for(int id=pluginList;id<=pluginsCommand;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
+        for(int id=pluginList;id<=pluginNewInstrument;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
     }
     void syncPluginRack() {
         if(!controls.contains(pluginList)) return;
-        if(pluginDocument!=documentId) {pluginDocument=documentId;selectedPlugin.clear();pluginDraft=false;pluginDetailsRevision.clear();pluginDetailsTarget.clear();listedPlugins=nullptr;}
+        if(pluginDocument!=documentId) {pluginDocument=documentId;selectedPlugin.clear();pluginDraft=false;pluginDetailsRevision.clear();pluginDetailsTarget.clear();listedPlugins=nullptr;pendingPluginTriggers.clear();}
         const auto &rack=view->session.document.at("nativePlugins");
         if(listedPlugins!=rack) {
             const auto top=SendMessageW(controls.at(pluginList),LB_GETTOPINDEX,0,0);
@@ -110,7 +111,8 @@
         place(pluginParameter,x,y+99,parameterWidth,240,show && r.h>=132);place(pluginValue,x+parameterWidth+6,y+99,86,24,show && r.h>=132);place(pluginApply,x+parameterWidth+98,y+99,68,24,show && r.h>=132);
         const auto slot=selectedPluginSlot();const bool selected=slot>=0;const auto plugin=selected?view->session.document.at("nativePlugins")[slot]:Json::object();
         const bool instrument=selected && plugin.value("isInstrument",false);
-        place(pluginInstrument,x,y+131,r.w-312,220,show && instrument && r.h>=164);place(pluginAssign,r.x+r.w-76,y+131,68,24,show && instrument && r.h>=164);
+        place(pluginInstrument,x,y+131,r.w-424,220,show && instrument && r.h>=164);place(pluginNewInstrument,r.x+r.w-188,y+131,108,24,show && instrument && r.h>=164);place(pluginAssign,r.x+r.w-76,y+131,68,24,show && instrument && r.h>=164);
+        EnableWindow(controls.at(pluginNewInstrument),instrument);SetWindowTextW(controls.at(pluginNewInstrument),pendingPluginTriggers.contains(selectedPlugin)?L"Retry assign":L"New trigger");
         for(int id:{pluginEditor,pluginBypass,pluginRemove,pluginUp,pluginDown,pluginAssign}) EnableWindow(controls.at(id),selected);
         EnableWindow(controls.at(pluginEditor),selected && plugin.value("format","")=="VST3");
         EnableWindow(controls.at(pluginUp),selected && slot>0);EnableWindow(controls.at(pluginDown),selected && size_t(slot+1)<listedPlugins.size());
@@ -121,7 +123,7 @@
         EnableWindow(controls.at(pluginAdd),!pluginCatalog.empty());
     }
     bool pluginCommand(int id) {
-        if(id<pluginList || id>pluginsCommand)return false;
+        if(id<pluginList || id>pluginNewInstrument)return false;
         if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         workspaceState.focus="plugins";
         if(id==pluginsCommand) {workspaceState.layout="Compose";workspaceState.active="notes";SetFocus(controls.at(pluginList));return true;}
@@ -139,7 +141,23 @@
         if(id==pluginUndo || id==pluginRedo) {edit(id==pluginUndo?"history.undo":"history.redo",{{"domain","plugins"}});return true;}
         if(id==pluginAdd) {auto chosen=SendMessageW(controls.at(pluginLibrary),CB_GETCURSEL,0,0);if(chosen==CB_ERR)throw std::runtime_error("Select a plugin from the library");auto result=edit("plugin.add",{{"descriptor",pluginCatalog.at(size_t(chosen))}});selectedPlugin=view->session.document.at("nativePlugins").at(result.at("slot").get<size_t>()).at("instanceID").get<std::string>();return true;}
         const auto slot=selectedPluginSlot();if(slot<0)throw std::runtime_error("Select a plugin in the rack");
-        if(id==pluginApply) {
+        if(id==pluginNewInstrument) {
+            const auto plugin=view->session.document.at("nativePlugins")[slot];
+            if(!plugin.value("isInstrument",false))throw std::runtime_error("Select an instrument plugin");
+            unsigned instrument=0;
+            if(auto pending=pendingPluginTriggers.find(selectedPlugin);pending!=pendingPluginTriggers.end())
+                for(const auto &i:view->session.document.at("instruments"))if(i.at("id")==pending->second)instrument=i.at("index").get<unsigned>();
+            if(!instrument){
+                const auto pluginName=plugin.at("name").get<std::string>();
+                const auto created=edit("instrument.create",{{"empty",true},{"name",pluginName.size()<=192?pluginName+" trigger":"Plugin trigger"}});
+                instrument=created.at("instrument").get<unsigned>();
+                for(const auto &i:view->session.document.at("instruments"))if(i.at("index")==instrument)pendingPluginTriggers[selectedPlugin]=i.at("id").get<std::string>();
+            }
+            // Retain the created stable identity if assignment fails. Retrying
+            // this action then assigns that trigger instead of appending another.
+            edit("instrument.plugin.set",{{"instrument",instrument},{"plugin",selectedPlugin},{"channel",1}});
+            pendingPluginTriggers.erase(selectedPlugin);pluginDetailsRevision.clear();
+        } else if(id==pluginApply) {
             if(pluginDraft && (pluginDraftRevision!=view->session.revision || pluginDraftTarget!=selectedPlugin || pluginDraftParameter!=selectedParameter))throw ScreamSeq::Api::ApiError(-32001,"The song or target changed. Escape discards the parameter draft; re-enter it against the current state.");
             wchar_t text[66]{};GetWindowTextW(controls.at(pluginValue),text,66);wchar_t *end=nullptr;auto value=wcstod(text,&end);
             if(end==text || *end || !std::isfinite(value))throw std::runtime_error("Enter a finite parameter value");

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import shutil
 import sys
 import tempfile
 import time
@@ -24,8 +25,9 @@ class PluginAppTests(unittest.TestCase):
         self.desktop = self.enterContext(PrivateDesktop())
         self.report = self.folder / 'wasapi.json'
         args = [os.environ['SCREAMSEQ_TEST_EXE'], '--inspection', '--automation', '--seconds', '120', '--report', str(self.report)]
-        if os.environ.get('SCREAMSEQ_TEST_PLUGIN_CACHE'):
-            args += ['--vst3-test-cache', os.environ['SCREAMSEQ_TEST_PLUGIN_CACHE']]
+        cache = os.environ.get('SCREAMSEQ_TEST_INSTRUMENT_CACHE') if self._testMethodName == 'test_installed_instrument_trigger_native_controls_and_reopen' else os.environ.get('SCREAMSEQ_TEST_PLUGIN_CACHE')
+        if cache:
+            args += ['--vst3-test-cache', cache]
         self.pid = self.desktop.launch(args)
         self.client = Client(r'\\.\pipe\ScreamSeq.Api.' + str(self.pid), timeout=20)
         for _ in range(100):
@@ -63,6 +65,82 @@ class PluginAppTests(unittest.TestCase):
 
     def tick(self):
         self.desktop.send(self.hwnd, 0x113, 1)
+
+    def test_empty_trigger_conversion_guards_history_and_persistence(self):
+        before = self.doc()
+        self.assertEqual(before['data']['instruments'], [])
+        sample_count = len(before['data']['samples'])
+        predicted = self.write('instrument.create', empty=True, name='Lead trigger', dryRun=True)['data']['instrument']
+        self.assertEqual(predicted, sample_count + 1)
+        self.assertEqual(self.doc(), before)
+        for params in [dict(empty=True, sample=1), dict(empty='yes'), dict(name='Wrong mode'), dict(dryRun=True), dict(empty=True, name='x' * 201)]:
+            with self.subTest(params=params), self.assertRaises(ApiError):
+                self.write('instrument.create', **params)
+            self.assertEqual(self.doc(), before)
+        created = self.write('instrument.create', empty=True, name='Lead trigger')['data']['instrument']
+        self.assertEqual(created, predicted)
+        def info(slot):
+            return self.client.call('instrument.get', {'instrument': slot})['data']
+        for slot in range(1, sample_count + 1):
+            self.assertEqual(set(info(slot)['mapping']), {slot})
+        self.assertEqual(set(info(created)['mapping']), {0})
+        self.assertEqual(info(created)['name'], 'Lead trigger')
+        instruments = self.doc()['data']['instruments']
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.doc()['data']['instruments'], [])
+        self.write('history.redo', domain='document')
+        self.assertEqual(self.doc()['data']['instruments'], instruments)
+        path = self.folder / 'empty-trigger.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.doc()['data']['instruments'], instruments)
+        self.assertEqual(set(info(created)['mapping']), {0})
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_INSTRUMENT_CACHE'), 'opt-in installed instrument cache')
+    def test_installed_instrument_trigger_native_controls_and_reopen(self):
+        descriptor = next(d for d in self.client.call('plugin.discover', {'format': 'VST3'})['data'] if d['isInstrument'])
+        self.write('plugin.add', descriptor=descriptor)
+        plugin_id = self.rack()[0]['instanceID']
+        self.tick()
+        self.command(317)  # Native New trigger action: create, then assign.
+        self.tick()
+        assigned = self.rack()[0]['instrument']
+        self.assertGreater(assigned, 0)
+        self.assertEqual(set(self.client.call('instrument.get', {'instrument': assigned})['data']['mapping']), {0})
+        instruments = self.doc()['data']['instruments']
+        self.write('history.undo', domain='plugins')
+        self.assertEqual(self.rack()[0]['instrument'], 0)
+        self.assertEqual(self.doc()['data']['instruments'], instruments)
+        self.write('history.redo', domain='plugins')
+        self.assertEqual(self.rack()[0]['instrument'], assigned)
+        document = self.doc()['data']
+        rows = next(p['rows'] for p in document['patterns'] if p['index'] == 0)
+        cells = [dict(pattern=0, row=row, channel=channel, note=0, instrument=0,
+                      volumeCommand=0, volume=0, effect=0, parameter=0)
+                 for row in range(rows) for channel in range(document['channels'])]
+        cells[0].update(note=61, instrument=assigned)
+        cells[4 * document['channels']].update(note=255)  # Tracker key-off.
+        self.write('pattern.apply', cells=cells)
+        self.write('plugin.editor.open', slot=0)
+        self.tick()
+        self.write('plugin.editor.close', slot=0)
+        self.assertEqual(self.doc()['data']['openPluginEditors'], 0)
+        path = self.folder / 'instrument-trigger.screamseq'
+        self.write('document.save', path=str(path))
+        saved = self.state()
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.rack()[0]['instanceID'], plugin_id)
+        self.assertEqual(self.rack()[0]['instrument'], assigned)
+        self.assertEqual(self.doc()['data']['instruments'], instruments)
+        self.assertEqual(self.state(), saved)
+        if os.environ.get('SCREAMSEQ_PLUGIN_EVIDENCE_DIR'):
+            folder = Path(os.environ['SCREAMSEQ_PLUGIN_EVIDENCE_DIR'])
+            folder.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, folder / 'instrument-trigger.screamseq')
+            (folder / 'instrument-app.json').write_text(json.dumps(dict(
+                executableSHA256=hashlib.sha256(Path(os.environ['SCREAMSEQ_TEST_EXE']).read_bytes()).hexdigest(),
+                descriptor=descriptor, instrument=assigned, pluginID=plugin_id,
+                emptyKeymap=True, nativeButton=True, independentHistory=True, exactBaselineReopened=True), indent=2))
 
     def test_discovery_guards_atomic_parameters_and_independent_histories(self):
         methods = self.client.call('api.describe')['data']

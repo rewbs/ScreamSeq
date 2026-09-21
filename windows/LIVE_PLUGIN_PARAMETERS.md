@@ -90,9 +90,11 @@ app-tests}.log`. The rendered queue test also has a detailed PCM log at
 - Opaque state/program/IR changes, structural rack edits and plugin Undo/Redo
   still stop playback. API parameter commits close baseline editor windows;
   preserving those windows across API edits needs further work.
-- The installed plugins exercised here are effects. Real Windows instrument
-  discovery, trigger creation, MIDI notes, bus routing and full lifecycle
-  qualification remain required, alongside presets/library and missing-plugin UI.
+- The installed plugins exercised at this checkpoint are effects. The later
+  `TRIGGER_INSTRUMENT_PROGRESS.md` records real instrument discovery, trigger
+  creation, note/key-off audio and lifecycle checks, including the remaining
+  first-open opaque editor-state stop. Broader routing, presets/library and
+  missing-plugin UI remain required.
 - OrbitCab's previously measured offline partition discrepancy remains open.
   Passing live continuity/state tests does not resolve or waive that finding.
 - These runs do not establish speaker sound, physical latency, long-session

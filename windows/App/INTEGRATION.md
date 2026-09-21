@@ -133,8 +133,15 @@ publishes `audioActive:false` and no `voicePositions`. Envelope cursors and
 audition UI remain open work.
 
 `--vst3-test-cache <absolute path>` selects an isolated registry for inspection,
-offline-hosted or audio qualification mode. It does not scan automatically and
-is not a substitute for the pending user-facing plugin browser/rack workflow.
+offline-hosted or audio qualification mode. It does not scan automatically.
+The native plugin rack provides discovery/rescan, add/remove/reorder/bypass,
+editor windows, parameter drafts, instrument assignment and independent plugin
+Undo/Redo. **New trigger** creates an empty tracker instrument and assigns it
+through the shared guarded API, retaining a stable retry target if assignment
+fails. Parameter batches and proven parameter-only native editor gestures reach
+the playing chain atomically. Opaque state changes still stop playback, including
+Surge's first editor open when it serializes its initial zoom. See
+`../TRIGGER_INSTRUMENT_PROGRESS.md` for installed-instrument evidence and limits.
 
 The Samples inspector opens a waveform editor in the lower dock. Dragging or
 keyboard/range fields select audio; Reverse, Normalize, Fade, Trim and normal or
