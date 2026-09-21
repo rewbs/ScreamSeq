@@ -555,3 +555,11 @@ audio-test mode and `--automation`. It keeps the owned QA process available afte
 an intentional stop, so tests can observe post-edit state. Default audio-test
 runs still fail when playback stops. The flag does not change normal sessions,
 audio fault detection, routing validation or callback behavior.
+
+The native pattern graph command editor uses the existing `graph.commands.set`
+and `mixer.enable` operations; timing stays at 65536 units per row.
+`workspace.get.graphCommands` reports its captured document/revision,
+stable pattern/bus targets, row/lane, draft/pending/stale flags and status.
+`workspace.get.graphLanes` reports the row-aligned strip bounds, lane identities,
+selected/first lane and visible formatted commands. These are Windows UI
+observations, not a new musical command schema. See `../GRAPH_COMMANDS_PROGRESS.md`.

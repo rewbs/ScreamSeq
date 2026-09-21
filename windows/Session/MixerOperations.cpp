@@ -73,7 +73,7 @@ Json MixerOperations::invoke(const std::string &method,const Json &p) {
     }
     std::vector<uint64_t> tracks;for(const auto &[channel,t]:native.tracks)tracks.push_back(t.id);std::vector<MixerProcessorInfo> processors;
     for(size_t i=0;i<host_.plugins.size();++i){const auto &s=host_.plugins[i];uint32_t count=1;uint64_t outputs=1,inputs=0;for(const auto &b:buses(i)){if(!b.input){count=std::max(count,b.index+1);if(b.active)outputs|=uint64_t(1)<<b.index;}else if(b.index&&b.active)inputs|=uint64_t(1)<<b.index;}processors.push_back({s.instanceID,0,0,isInstrument(i),s.bypass,count,outputs,inputs});}
-    validatePluginCapacity(host_.plugins,graph.buses.size());if(!preview)next.validate(document_.song());const auto plan=compileMixer(graph,tracks,processors,feedback.sampleRate);
+    validatePluginCapacity(host_.plugins,graph.buses.size());if(!preview)next.validate(document_.song());if(host_.validateCandidate)host_.validateCandidate(next);const auto plan=compileMixer(graph,tracks,processors,feedback.sampleRate);
     auto structural=graph;if(structural.buses.size()==original.buses.size())for(size_t i=0;i<structural.buses.size();++i){auto &b=structural.buses[i];const auto &old=original.buses[i];b.preGainDB=old.preGainDB;b.prePan=old.prePan;b.gainDB=old.gainDB;b.pan=old.pan;b.width=old.width;b.mute=old.mute;b.solo=old.solo;b.name=old.name;b.color=old.color;}
     const bool controlsOnly=structural==original,different=graph!=original;need(!preview||(controlsOnly&&graph.active()),"Only mixer gain, balance, width, mute and solo can be previewed live");
     Json result={{"mixer",Project::encodeMixerMetadata(graph)},{"wouldChange",different},{"preview",preview},{"bus",affected?Json(id(affected)):Json()},{"controlsOnly",controlsOnly}};

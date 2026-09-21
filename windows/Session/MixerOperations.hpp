@@ -19,6 +19,7 @@ struct MixerHostHooks {
   std::function<std::vector<Tracker::PluginAudioBus>(size_t,bool)> buses;
   std::function<PlaybackFeedback()> feedback;
   std::function<bool(const std::vector<Tracker::MixerControls> &)> controls;
+  std::function<void(const Tracker::NativeSong &)> validateCandidate;
 };
 class MixerOperations {
   Tracker::Document &document_;

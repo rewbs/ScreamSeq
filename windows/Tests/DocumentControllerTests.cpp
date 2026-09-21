@@ -295,8 +295,31 @@ void graphRecipeRenderTests(const std::filesystem::path &directory) {
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});const auto restored=render(48000,128);double delta=0;for(size_t i=0;i<restored.size();++i)delta=std::max(delta,std::abs(double(restored[i])-baseline[48000][i]*std::pow(10.0,-12.0/20)));need(delta<1e-6,"Reopened graph plugin PCM changed");
   std::cout<<"PASS graph recipe gain, independent rack, Undo/reopen, 44.1/48/96 kHz blocks 17/128/4096/8193; max delta "<<maximumDelta<<'\n';
 }
+void graphPatternViewTests() {
+  unsigned stops=0;DocumentController c({},"graph-lanes",[&]{++stops;},[](const auto &){});
+  const auto baseBytes=c.view()->cacheBytes;
+  invoke(c,"mixer.enable");const auto graph=invoke(c,"graph.create").at("graph");const auto info=call(c,"graph.get",{{"includeState",false}});
+  const auto bus=info.at("mixer").at("buses")[0].at("id");const auto patternID=std::stoull(info.at("patterns")[0].at("id").get<std::string>().substr(1));const auto target=std::stoull(bus.get<std::string>().substr(1));
+  auto events=Json::array({{{"target",bus},{"graph",graph},{"column",2},{"position",65536*7+8192},{"kind","wet"},{"wet",.3}},{{"target",bus},{"graph",graph},{"column",0},{"position",0},{"kind","start"}}});
+  invoke(c,"graph.commands.set",{{"pattern",0},{"lanes",Json::array({{{"target",bus},{"count",3}}})},{"commands",events}});
+  auto snapshot=c.view()->graphPattern;need(snapshot->lanes.size()==3,"graph lane projection count");
+  const auto command=snapshot->at(patternID,7,target,2);need(command&&command->position==65536*7+8192&&command->wet==.3,"graph lane row index lost precise command");
+  need(!snapshot->at(patternID,6,target,2)&&!snapshot->at(patternID,7,target,1),"graph lane lookup aliased another cell");
+  invoke(c,"pattern.apply",{{"cells",Json::array({{{"pattern",0},{"row",4},{"channel",0},{"note",64}}})}});need(c.view()->graphPattern==snapshot,"ordinary note edit rebuilt graph lane projection");
+  invoke(c,"mixer.bus.set",{{"bus",bus},{"name","Drums"}});need(c.view()->graphPattern!=snapshot&&c.view()->graphPattern->lanes[0].name=="Drums"&&snapshot->lanes[0].name!="Drums","bus rename changed a retained snapshot");
+  invoke(c,"history.undo",{{"domain","document"}});need(c.view()->graphPattern->lanes==snapshot->lanes,"graph lane rename Undo failed");
+  unsigned limitedStops=0;DocumentController limited({},"limited-lanes",[&]{++limitedStops;},[](const auto &){},{},baseBytes+8192);
+  invoke(limited,"mixer.enable");const auto g=invoke(limited,"graph.create").at("graph");const auto b=call(limited,"mixer.get",Json::object()).at("buses")[0].at("id");
+  auto oversized=Json::array();for(unsigned r=0;r<32;++r)for(unsigned lane=0;lane<8;++lane)oversized.push_back({{"target",b},{"graph",g},{"position",r*65536},{"column",lane},{"kind","row"}});
+  const auto before=limited.view();const auto beforeStops=limitedStops;bool rejected=false;
+  try{invoke(limited,"graph.commands.set",{{"pattern",0},{"lanes",Json::array({{{"target",b},{"count",8}}})},{"commands",oversized}});}catch(const Api::ApiError &e){rejected=std::string(e.what()).find("headroom")!=std::string::npos;}
+  need(rejected&&limited.view()==before&&limitedStops==beforeStops,"graph view budget must reject before mutation or playback stop");
+  need(call(limited,"graph.get",{{"includeState",false}}).at("commands").empty(),"rejected graph command left partial data");
+  std::cout<<"PASS graph lane projection, exact offsets, immutable reuse, rename Undo and precommit cache budget\n";
+}
 int main(int argc,char **argv) {
   try {
+    if(argc==2 && std::string(argv[1])=="--graph-pattern-view") {graphPatternViewTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--graph-recipes") {graphRecipeRenderTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--mixer-integration") {mixerIntegrationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--pattern-clipboard") {patternClipboardTests(std::filesystem::u8path(argv[2]));return 0;}

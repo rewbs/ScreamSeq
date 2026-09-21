@@ -1,9 +1,11 @@
 # Windows continuation — 2026-09-21
 
-Latest editor continuation: `PATTERN_NOTES_PROGRESS.md` records Mac Pattern 2
-clipboard/binding remap, the native precise-note row draft and timing canvas,
-the corrected note-local catalogue lifetime, and current qualification. The
-broader work and installed-plugin limitations remain in `PARITY_PLAN.md`.
+Latest editor continuation: `GRAPH_COMMANDS_PROGRESS.md` records native
+row-aligned graph lanes, captured command editing, immutable display caching
+and installed-plugin command rendering. The preceding native song routing,
+plugin library/presets/location repair, graph curves and precise-note milestones
+are linked from `PAUSED_HANDOFF.md`. The broader work and installed-plugin
+limitations remain in `PARITY_PLAN.md`.
 
 ## Latest: upstream integration and installed plugins
 

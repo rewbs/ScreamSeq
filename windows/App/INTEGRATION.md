@@ -270,6 +270,23 @@ window. The three inspector pages fit the 1040×680 logical minimum.
 `workspace.get.songRouting` exposes the captured context and canvas projection;
 `songGraph` is removed from the unavailable list. See `../SONG_ROUTING_PROGRESS.md`.
 
+The pattern header's **Graphs…** button opens the modeless graph command editor.
+It captures stable pattern/bus identity and revision, retains closed drafts,
+merges the chosen cell through `graph.commands.set`, and exposes Row, Start,
+Stop, Clear, Amount, Wet, precise offsets and tails. Verify is a dry run;
+Reload cell and From cursor explicitly refresh their respective targets.
+Open graph preserves the pattern cursor and existing graph editor drafts.
+
+Enabled graph lanes appear beside the pattern grid, including group buses.
+They share its row viewport and show distinct cursor/playhead positions.
+Enter/double-click edits, Delete removes with Undo, arrows move, and F6 switches
+pattern/lane focus. The strip uses at most 40% of the pattern area and scrolls
+across additional lanes. Its immutable worker projection is budgeted, indexed
+and reused across ordinary note edits; drawing performs no worker/plugin calls.
+`workspace.get.graphCommands` and `.graphLanes` expose these native views.
+See `../GRAPH_COMMANDS_PROGRESS.md`; other automation and instrument editors
+remain unfinished.
+
 The rack's **Plugin location** page and the graph's plugin inspector expose
 **Reconnect plugin…**. The retained native window lists scanned Windows modules
 with the same class and role, verifies the selected binary, and reconnects it

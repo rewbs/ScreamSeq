@@ -19,11 +19,11 @@
 	}
 	unsigned visibleRows() const { return std::max(1u,unsigned(std::max(0.0f,geometry().pattern.h-gridHeader)/rowHeight)); }
     unsigned firstChannel() const {float x=0;for(unsigned c=0;c<view->channels;++c){x+=channelWidth(c);if(x>horizontalScroll)return c;}return view->channels-1;}
-    unsigned visibleChannels() const {const auto first=firstChannel();const float end=horizontalScroll+std::max(1.0f,geometry().pattern.w-gutter);unsigned last=first;while(last<view->channels&&channelStart(last)<end)++last;return std::max(1u,last-first);}
+    unsigned visibleChannels() const {const auto first=firstChannel();const float end=horizontalScroll+std::max(1.0f,patternGridRect().w-gutter);unsigned last=first;while(last<view->channels&&channelStart(last)<end)++last;return std::max(1u,last-first);}
 	void ensureCursorVisible() {
 		if(row<firstRow) firstRow=row;
 		if(row>=firstRow+visibleRows()) firstRow=row-visibleRows()+1;
-        const float available=std::max(1.0f,geometry().pattern.w-gutter),left=channelStart(channel)+fieldStart(column),right=left+fieldWidth(column)+4;
+        const float available=std::max(1.0f,patternGridRect().w-gutter),left=channelStart(channel)+fieldStart(column),right=left+fieldWidth(column)+4;
         if(left<horizontalScroll)horizontalScroll=left;
         if(right>horizontalScroll+available)horizontalScroll=right-available;
         horizontalScroll=std::clamp(horizontalScroll,0.0f,std::max(0.0f,channelStart(view->channels)-available));
@@ -53,7 +53,8 @@
         place(patternChooser,10,389,146,250);place(orderChooser,10,420,146,250);
         place(octaveChooser,10,452,70,230);place(stepChooser,84,452,72,230);
 		auto g=geometry(); bool show=workspaceState.visible();
-        place(effectColumnChooser,g.pattern.x+g.pattern.w-82,g.pattern.y+3,76,230);
+        const auto grid=patternGridRect();place(effectColumnChooser,grid.x+grid.w-82,grid.y+3,76,230);
+        place(graphCommandsCommand,grid.x+grid.w-172,grid.y+3,84,23);
 		place(notesCommand,g.inspector.x+6,g.inspector.y+4,80,24,show);
 		place(samplesCommand,g.inspector.x+90,g.inspector.y+4,128,24,show);
 		place(pinCommand,g.inspector.x+6,g.inspector.y+34,100,24,show);
@@ -106,7 +107,7 @@
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
 			{notesCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
-            {openCommand,L"Open"},{saveCommand,L"Save"},{saveAsCommand,L"Save As"},{undoCommand,L"Undo"},{redoCommand,L"Redo"},
+            {openCommand,L"Open"},{saveCommand,L"Save"},{saveAsCommand,L"Save As"},{undoCommand,L"Undo"},{redoCommand,L"Redo"},{graphCommandsCommand,L"Graphs…"},
             {sampleImportCommand,L"Import…"},{sampleAllCommand,L"All"},{sampleReverseCommand,L"Reverse"},{sampleNormalizeCommand,L"Normalize"},
             {sampleFadeInCommand,L"Fade in"},{sampleFadeOutCommand,L"Fade out"},{sampleTrimCommand,L"Trim"},{sampleLoopCommand,L"Set loop"},{sampleRangeCommand,L"Set range"},
             {sampleLoopToggleCommand,L"Loop off"},{sampleLoopModeCommand,L"Forward"},{sampleLoopSelectCommand,L"Use selection"},
@@ -135,6 +136,8 @@
             {graphCommand,L"Graph / Open reusable routing and modulation canvas",L""},
             {mixerCommand,L"Mix / Open mixer controls and routing",L""},
             {mixerRouting,L"Mix / Song routing overview, inserts, sends and sidechains",L""},
+            {graphCommandsCommand,L"Pattern / Graph command editor",L"Enter on a graph lane"},
+            {graphLanesFocus,L"Pattern / Focus graph command lanes",L"F6 from pattern"},
             {effectsCommand,L"Pattern / Inspect FX and parameter bindings",L"Enter on an FX cell"},
             {patternPasteMix,L"Pattern / Mix paste into empty fields",L"Ctrl+Shift+V"},
             {patternPasteMerge,L"Pattern / Merge nonempty clipboard fields",L""},
@@ -181,6 +184,8 @@
 		try {
             if(id==notesCommand||id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==soundCommand){mixerEditorOpen=false;graphEditorOpen=false;}
             if(graphCurveCommand(id) || graphControlCommand(id) || mixerControlCommand(id) || noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
+            else if(id==graphCommandsCommand){openGraphCommands(workspaceState.focus=="graphLanes");return;}
+            else if(id==graphLanesFocus){if(!view->graphPattern->lanes.empty()){workspaceState.focus="graphLanes";revealGraphLane();}else{openGraphCommands();return;}}
             else if(id==openCommand) openFile();
             else if(id==saveCommand || id==saveAsCommand) saveFile(id==saveAsCommand);
             else if(id==undoCommand || id==redoCommand) edit(id==undoCommand ? "history.undo" : "history.redo",{{"domain","document"}});
@@ -251,7 +256,7 @@
             if(key==VK_RETURN){command(effectApply);return true;}
         }
         if(noteKey(key,ctrl,alt,shift))return true;
-        if(curveKey(key,ctrl,alt,shift)||graphKey(key,ctrl,alt,shift))return true;
+        if(curveKey(key,ctrl,alt,shift)||graphKey(key,ctrl,alt,shift)||graphLaneKey(key,ctrl,alt,shift))return true;
         if(mixerKey(key))return true;
         if(textOwnsKeyboard() && key!=VK_ESCAPE) return false;
         if(ctrl && key=='I') {command(sampleImportCommand);return true;}
@@ -265,7 +270,7 @@
 		if(ctrl && key=='P') { command(pinCommand);return true; }
 		if(ctrl && key==VK_HOME) { command(cursorCommand);return true; }
 		if(alt && key==VK_LEFT) { command(returnCommand);return true; }
-		if(key==VK_F6) { command(nextPanelCommand);return true; }
+		if(key==VK_F6) { command(workspaceState.focus=="pattern"&&!view->graphPattern->lanes.empty()?graphLanesFocus:nextPanelCommand);return true; }
 		if(key==VK_ESCAPE && dragging==4) {sampleRange()=sampleDragBefore;dragging=0;ReleaseCapture();refreshSampleFields();return true;}
 		if(key==VK_ESCAPE && dragging) { workspaceState.rightWidth=dragRight;workspaceState.lowerHeight=dragLower;dragging=0;ReleaseCapture();layoutControls();return true; }
 		if(key==VK_ESCAPE) {if(!effectPrefix.empty()){effectPrefix.clear();status=L"Effect prefix cancelled";return true;}if(pluginDraft){pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;} stop();command(focusPatternCommand);return true; }
@@ -305,7 +310,7 @@
 		selecting=shift && key!=VK_TAB;anchorRow=ar;anchorChannel=ac;ensureCursorVisible();return true;
 	}
 	bool gridClick(float x,float y,bool extend) {
-		auto g=geometry().pattern;
+		auto g=patternGridRect();
 		if(!g.contains(x,y) || y<g.y+gridHeader || x<g.x+gutter) return false;
         const unsigned line=unsigned((y-g.y-gridHeader)/rowHeight);if(line>=visibleRows())return false;
         const float content=x-g.x-gutter+horizontalScroll;unsigned c=firstChannel();while(c<view->channels&&channelStart(c+1)<=content)++c;
@@ -320,7 +325,7 @@
 	}
 	void mouseDown(float x,float y,WPARAM buttons) {
 		auto g=geometry();dragRight=workspaceState.rightWidth;dragLower=workspaceState.lowerHeight;
-		if(graphMouseDown(x,y)||noteMouseDown(x,y,false)||sampleMouseDown(x,y,(buttons&MK_SHIFT)!=0)) return;
+		if(graphLaneClick(x,y)||graphMouseDown(x,y)||noteMouseDown(x,y,false)||sampleMouseDown(x,y,(buttons&MK_SHIFT)!=0)) return;
 		if(g.verticalDivider.contains(x,y)) dragging=1;
 		else if(g.horizontalDivider.contains(x,y)) dragging=2;
 		else if(g.pattern.contains(x,y)) {if(gridClick(x,y,(buttons&MK_SHIFT)!=0)) dragging=3;}
@@ -345,7 +350,8 @@
 	}
     void scrollHorizontal(int delta) {
         frameRequested=true;
-        const float available=std::max(1.0f,geometry().pattern.w-gutter);
+        if(workspaceState.focus=="graphLanes"&&!view->graphPattern->lanes.empty()){graphLaneSelected=unsigned(std::clamp(int(graphLaneSelected)+delta/WHEEL_DELTA,0,int(view->graphPattern->lanes.size()-1)));revealGraphLane();return;}
+        const float available=std::max(1.0f,patternGridRect().w-gutter);
         horizontalScroll=std::clamp(horizontalScroll+float(delta)*fxWidth/WHEEL_DELTA,0.0f,std::max(0.0f,channelStart(view->channels)-available));
     }
 	void drawButton(const DRAWITEMSTRUCT &d) {

@@ -31,6 +31,11 @@ bool flag(const Json &p,const char *key) {
   return p.at(key).get<bool>();
 }
 size_t patternViewBytes(const Tracker::NativeSong &native){return sizeof(NativePatternView)+native.performance.bytes()+native.performance.commands.size()*sizeof(PatternEffectView)+native.preciseNotes.size()*(sizeof(Tracker::PreciseNote)+sizeof(PatternNoteView))+(native.patterns.size()+native.tracks.size())*128;}
+size_t graphViewBytes(const Tracker::NativeSong &native){
+  size_t bytes=sizeof(PatternGraphView)+native.signal.commands.size()*(sizeof(Tracker::SignalCommand)+sizeof(size_t))+native.signal.library.size()*128;
+  for(const auto &bus:native.mixer.buses)if(auto lane=native.signal.lanes.find(bus.id);lane!=native.signal.lanes.end())bytes+=lane->second*(sizeof(PatternGraphLane)+bus.name.size()+32);
+  return bytes;
+}
 }
 Tracker::Cell DocumentView::cell(unsigned p,unsigned r,unsigned c) const {
   auto it=patterns.find(p);
@@ -123,6 +128,15 @@ void DocumentController::open(const std::filesystem::path &path) {
   plugins_.swap(plugins);
   install(std::move(next));
 }
+const Tracker::SignalCommand *PatternGraphView::at(uint64_t pattern,unsigned row,uint64_t target,unsigned column) const {
+  const auto key=std::tuple(pattern,row,target,column);
+  auto position=std::lower_bound(sorted.begin(),sorted.end(),key,[&](size_t i,const auto &key){const auto &c=commands[i];return std::tuple(c.pattern,c.position/65536,c.target,unsigned(c.column))<key;});
+  if(position==sorted.end())return nullptr;const auto &c=commands[*position];return std::tuple(c.pattern,c.position/65536,c.target,unsigned(c.column))==key?&c:nullptr;
+}
+void DocumentController::validateGraphViewGrowth(const Tracker::NativeSong &candidate) const {
+  const auto before=graphViewBytes(document_->native()),after=graphViewBytes(candidate);
+  if(after>before&&(after-before>maxCacheBytes_||view_->cacheBytes>maxCacheBytes_-(after-before)))throw Api::ApiError(-32602,"Graph lanes need more document view cache headroom");
+}
 std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &document,const Project::ProjectState &project,uint64_t generation) {
   auto next=std::make_shared<DocumentView>();auto &song=document.song();const auto &native=document.native();
   auto previous=view();const bool same=previous && generation==generation_;
@@ -134,6 +148,15 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   charge(size_t(song.GetNumSamples())*(128+512*sizeof(float)));
   charge(size_t(song.GetNumInstruments())*(128+sizeof(std::array<unsigned,120>)));
   next->nativePatternBytes=patternViewBytes(native);charge(next->nativePatternBytes);charge(song.GetNumChannels());
+  charge(graphViewBytes(native));
+  std::vector<PatternGraphLane> lanes;std::map<uint64_t,uint16_t> numbers;
+  size_t laneCount=0;for(const auto &[target,count]:native.signal.lanes)laneCount+=count;lanes.reserve(laneCount);
+  for(const auto &bus:native.mixer.buses)if(auto found=native.signal.lanes.find(bus.id);found!=native.signal.lanes.end())for(unsigned i=0;i<found->second;++i)lanes.push_back({bus.id,i,bus.name});
+  for(const auto &graph:native.signal.library)numbers.emplace(graph.id,graph.number);
+  if(same&&previous->graphPattern&&previous->graphPattern->commands==native.signal.commands&&previous->graphPattern->lanes==lanes&&previous->graphPattern->numbers==numbers)next->graphPattern=previous->graphPattern;
+  else {auto cache=std::make_shared<PatternGraphView>();cache->commands=native.signal.commands;cache->lanes=std::move(lanes);cache->numbers=std::move(numbers);cache->sorted.resize(cache->commands.size());
+    for(size_t i=0;i<cache->sorted.size();++i)cache->sorted[i]=i;
+    std::sort(cache->sorted.begin(),cache->sorted.end(),[&](size_t a,size_t b){const auto &x=cache->commands[a],&y=cache->commands[b];return std::tuple(x.pattern,x.position/65536,x.target,x.column)<std::tuple(y.pattern,y.position/65536,y.target,y.column);});next->graphPattern=std::move(cache);}
   std::map<uint64_t,unsigned> patternIndexes,channels;for(const auto &[i,p]:native.patterns)patternIndexes[p.id]=i;for(const auto &[i,t]:native.tracks)channels[t.id]=i;
   const bool reuseNative=same&&previous->nativePattern&&previous->nativePattern->performance==native.performance&&previous->nativePattern->preciseNotes==native.preciseNotes&&previous->nativePattern->patternIndexes==patternIndexes&&previous->nativePattern->trackChannels==channels;
   if(reuseNative)next->nativePattern=previous->nativePattern;
@@ -251,6 +274,10 @@ void DocumentController::preflightGrowth(const std::string &method,const Json &p
     added=bounded("rows")*current->channels*6+8192;
     if(params.contains("source")) for(const auto &p:current->session.document.at("patterns"))
       if(p.at("index")==params.at("source")) added+=p.dump().size();
+    if(params.contains("source")&&document_->native().patterns.contains(uint16_t(bounded("source")))){
+      const auto id=document_->native().patterns.at(uint16_t(bounded("source"))).id;
+      for(const auto &c:document_->native().signal.commands)if(c.pattern==id)added+=sizeof(Tracker::SignalCommand)+sizeof(size_t);
+    }
   }
   if(method=="sequence.select") {
     const auto sequence=bounded("sequence");
@@ -355,10 +382,11 @@ Json DocumentController::operation(const std::string &method,Json params) {
     result=method.starts_with("graph.plugin.")?plugins_->invokeGraph(method,params,playbackFeedback().sampleRate):plugins_->invoke(method,params);
   } else if(std::find(graphMethods.begin(),graphMethods.end(),method)!=graphMethods.end()) {
     GraphHostHooks hooks;hooks.rack=[&]{return plugins_->graphRack();};hooks.cloneRackSlot=[&](uint32_t slot){return plugins_->cloneRackSlot(slot);};
-    hooks.activity=[&]{return playbackFeedback().activity;};hooks.validateCandidate=[&](const Tracker::NativeSong &next){Tracker::validatePluginCapacity(projectPluginStates(project_,false),next.mixer.buses.size());};
+    hooks.activity=[&]{return playbackFeedback().activity;};hooks.validateCandidate=[&](const Tracker::NativeSong &next){validateGraphViewGrowth(next);Tracker::validatePluginCapacity(projectPluginStates(project_,false),next.mixer.buses.size());};
     GraphOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
   } else if(std::find(mixerMethods.begin(),mixerMethods.end(),method)!=mixerMethods.end()) {
     MixerHostHooks hooks;hooks.plugins=projectPluginStates(project_);hooks.buses=[&](size_t slot,bool required){return plugins_->audioBuses(slot,required);};hooks.feedback=[&]{return playbackFeedback();};
+    hooks.validateCandidate=[&](const Tracker::NativeSong &next){validateGraphViewGrowth(next);};
     if(playbackHooks_.controls)hooks.controls=[&](const auto &controls){bool accepted=false;onMain([&]{accepted=playbackHooks_.controls(controls);});return accepted;};
     MixerOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
   } else if(std::find(envelopeMethods.begin(),envelopeMethods.end(),method)!=envelopeMethods.end()) {
@@ -370,7 +398,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     PatternHostHooks hooks;for(const auto &p:project_.preserved.at("plugins"))hooks.plugins.push_back(p.at("instanceID").get<std::string>());
     hooks.parameters=[&](size_t slot){try{return plugins_->invoke("plugin.parameters.get",{{"slot",slot}});}catch(const std::exception &){return Json::array();}};
     hooks.absoluteAutomation=[&](size_t slot,uint32_t id){for(const auto &event:project_.preserved.at("automation"))if(event.at(0)==slot&&event.at(1)==id)return true;return false;};
-    hooks.validateCandidate=[&](const Tracker::NativeSong &next){const auto before=patternViewBytes(document_->native()),after=patternViewBytes(next);if(after>before&&(after-before>maxCacheBytes_||view_->cacheBytes>maxCacheBytes_-(after-before)))throw Api::ApiError(-32602,"Pattern edit needs more document view cache headroom");};
+    hooks.validateCandidate=[&](const Tracker::NativeSong &next){const auto before=patternViewBytes(document_->native())+graphViewBytes(document_->native()),after=patternViewBytes(next)+graphViewBytes(next);if(after>before&&(after-before>maxCacheBytes_||view_->cacheBytes>maxCacheBytes_-(after-before)))throw Api::ApiError(-32602,"Pattern edit needs more document view cache headroom");};
     PatternOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
     if(write){if(method=="pattern.transform")scanPatterns_=true;else changedPatterns_.insert(params.at("pattern").get<unsigned>());}
   } else {
@@ -390,8 +418,9 @@ Json DocumentController::operation(const std::string &method,Json params) {
     } else if(std::find(timeline.begin(),timeline.end(),method)!=timeline.end()) {
       TimelineOperations operations(*document_,[this]{onMain(stop_);});result=operations.invoke(method,params);
     } else {
-      if((method=="history.undo" && document_->canUndo()) || (method=="history.redo" && document_->canRedo()))
-        Tracker::validatePluginCapacity(projectPluginStates(project_),document_->historyNative(method=="history.redo").mixer.buses.size());
+      if((method=="history.undo" && document_->canUndo()) || (method=="history.redo" && document_->canRedo())){
+        const auto &candidate=document_->historyNative(method=="history.redo");validateGraphViewGrowth(candidate);
+        Tracker::validatePluginCapacity(projectPluginStates(project_),candidate.mixer.buses.size());}
       DocumentOperations operations(*document_,[this]{onMain(stop_);},[this](const auto &edits){for(const auto &e:edits) changedPatterns_.insert(e.pattern);onMain([this,edits]{edits_(edits);});});
       result=operations.invoke(method,params);
     }

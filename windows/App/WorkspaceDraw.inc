@@ -15,7 +15,7 @@
 		s.uiText(L"OpenMPT audio engine",12,height-68,142,muted);
 		s.uiText(std::to_wstring(int(view->session.document.at("tempo").get<double>()))+L" BPM   /   "+std::to_wstring(view->session.document.at("speed").get<unsigned>())+L" ticks   /   "+wide(view->session.document.at("format").get<std::string>()),650,58,std::max(1.0f,width-658),muted);
 		// Virtualized grid: field colors and geometry are shared by hit-testing.
-		const auto r=g.pattern; s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x10161e);
+		const auto r=patternGridRect(); s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x10161e);
 		s.fill(r.x,r.y,r.w,gridHeader,0x202834);
 		s.uiText(L"PATTERN "+std::to_wstring(patternIndex)+L" / "+std::to_wstring(patternRows())+L" rows",r.x+8,r.y+5,r.w-184,accent);
 		const unsigned count=view->channels,first=firstChannel(),rows=patternRows();
@@ -58,6 +58,7 @@
 			s.unclip();
 		}
 		s.unclip();s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="pattern" ? 0x56858b : 0x303b49);
+        drawGraphLanes(playback);
 		if(workspaceState.visible()) {
 			auto p=g.inspector;const auto &state=workspaceState.panel(workspaceState.active);
 			s.clip(p.x,p.y,p.w,p.h);s.fill(p.x,p.y,p.w,p.h,panelBg);float x=p.x+10,y=p.y+67,w=p.w-20;

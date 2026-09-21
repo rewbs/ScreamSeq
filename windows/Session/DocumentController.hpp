@@ -21,6 +21,17 @@
 namespace ScreamSeq {
 struct PatternEffectView {unsigned pattern,channel;Tracker::PatternCommand command;};
 struct PatternNoteView {unsigned pattern,channel;Tracker::PreciseNote note;};
+struct PatternGraphLane {
+  uint64_t target=0;unsigned column=0;std::string name;
+  bool operator==(const PatternGraphLane &) const = default;
+};
+struct PatternGraphView {
+  std::vector<Tracker::SignalCommand> commands; // Original order for cheap reuse comparisons.
+  std::vector<size_t> sorted;
+  std::vector<PatternGraphLane> lanes;
+  std::map<uint64_t,uint16_t> numbers;
+  const Tracker::SignalCommand *at(uint64_t pattern,unsigned row,uint64_t target,unsigned column) const;
+};
 struct NativePatternView {
   Tracker::PatternPerformance performance;
   std::vector<Tracker::PreciseNote> preciseNotes;
@@ -42,6 +53,7 @@ struct DocumentView {
   std::array<uint8_t,256> effectMasks{};
   Json commands;
   std::shared_ptr<const NativePatternView> nativePattern;
+  std::shared_ptr<const PatternGraphView> graphPattern;
   std::vector<uint8_t> effectColumns;
   size_t nativePatternBytes=0;
   std::filesystem::path path;
@@ -92,6 +104,7 @@ class DocumentController {
   void publish();
   void preflightGrowth(const std::string &method,const Json &params);
   void validateAssetCandidate(const Tracker::Document &candidate) const;
+  void validateGraphViewGrowth(const Tracker::NativeSong &candidate) const;
   PlaybackFeedback playbackFeedback();
   void open(const std::filesystem::path &path);
   std::string revision() const;

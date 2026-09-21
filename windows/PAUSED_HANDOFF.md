@@ -36,6 +36,8 @@
 > sound state, identity and routing: `PLUGIN_PATH_PROGRESS.md`. Full parity remains active.
 > Native song routing overview, inserts, sends, sidechains, graph ports and
 > instrument/bus graph assignments: `SONG_ROUTING_PROGRESS.md`. Full parity remains active.
+> Native row-aligned graph command lanes, captured editor drafts and installed
+> plugin command rendering: `GRAPH_COMMANDS_PROGRESS.md`. Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late
