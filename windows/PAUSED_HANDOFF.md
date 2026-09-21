@@ -13,6 +13,8 @@
 > stop and the qualified deterministic instrument fixture.
 > Native factory-program and audio-port controls, including corrected program
 > dry-run semantics: `PLUGIN_PROGRAM_PORTS_PROGRESS.md`.
+> Unified pattern FX, precise-note API, shared row tools and native FX inspector:
+> `PATTERN_FX_PROGRESS.md`. Clipboard and precise-note UI parity remain active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

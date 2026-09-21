@@ -3,6 +3,7 @@
 #include "AssetOperations.hpp"
 #include "HostedProject.hpp"
 #include "PluginOperations.hpp"
+#include "PatternOperations.hpp"
 #include "../Api/SessionAdapter.hpp"
 #include "../Project/NativeProject.hpp"
 #include <atomic>
@@ -10,11 +11,21 @@
 #include <deque>
 #include <future>
 #include <map>
+#include <optional>
 #include <mutex>
 #include <set>
 #include <thread>
 
 namespace ScreamSeq {
+struct PatternEffectView {unsigned pattern,channel;Tracker::PatternCommand command;};
+struct PatternNoteView {unsigned pattern,channel;Tracker::PreciseNote note;};
+struct NativePatternView {
+  Tracker::PatternPerformance performance;
+  std::vector<Tracker::PreciseNote> preciseNotes;
+  std::vector<PatternEffectView> effects;
+  std::vector<PatternNoteView> notes;
+  std::map<uint64_t,unsigned> patternIndexes,trackChannels;
+};
 // Immutable values only. Neither the HWND owner nor the pipe sees a Document.
 // One compact wire cell per musical cell; no duplicate cells or project-sized
 // array of heap-allocated display strings. Format only visible cells.
@@ -26,7 +37,11 @@ struct DocumentView {
   std::map<unsigned,std::array<unsigned,120>> keyboards;
   std::array<std::wstring,256> noteNames;
   std::array<wchar_t,256> volumeLetters{},effectLetters{};
+  std::array<uint8_t,256> effectMasks{};
   Json commands;
+  std::shared_ptr<const NativePatternView> nativePattern;
+  std::vector<uint8_t> effectColumns;
+  size_t nativePatternBytes=0;
   std::filesystem::path path;
   bool dirty=false, hosted=false;
   uint64_t catalogRevision=0;
@@ -35,6 +50,7 @@ struct DocumentView {
   const Api::PatternSnapshot &pattern(unsigned p) const {return *patterns.at(p);}
   Tracker::Cell cell(unsigned p,unsigned r,unsigned c) const;
   std::wstring displayCell(unsigned p,unsigned r,unsigned c) const;
+  std::optional<Tracker::PatternCommand> effect(unsigned p,unsigned r,unsigned c,unsigned column) const;
 };
 // One serial document owner. Work, cache construction and retired cache disposal
 // run here. service() is called ONLY by the UI thread for playback hooks.

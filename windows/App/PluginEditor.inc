@@ -11,7 +11,7 @@
     uint32_t selectedParameter=0,pluginDraftParameter=0;
     bool settingPluginFields=false,pluginDraft=false,refreshingPlugins=false,pluginLibraryLoaded=false;
     std::wstring pluginDetailStatus=L"Select a plugin to edit its parameters";
-    bool pluginEditorVisible() const {return workspaceState.layout!="Pattern focus" && !sampleEditorVisible();}
+    bool pluginEditorVisible() const {return workspaceState.layout!="Pattern focus" && !sampleEditorVisible() && !effectEditorVisible();}
     int selectedPluginSlot() const {
         const auto &rack=view->session.document.at("nativePlugins");
         for(size_t i=0;i<rack.size();++i) if(rack[i].at("instanceID")==selectedPlugin) return int(i);
@@ -165,7 +165,7 @@
         if(id<pluginList || id>pluginTogglePort)return false;
         if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         workspaceState.focus="plugins";
-        if(id==pluginsCommand) {workspaceState.layout="Compose";workspaceState.active="notes";SetFocus(controls.at(pluginList));return true;}
+        if(id==pluginsCommand) {effectEditorOpen=false;workspaceState.layout="Compose";workspaceState.active="notes";SetFocus(controls.at(pluginList));return true;}
         if(id==pluginPage){if(pluginDraft){SendMessageW(controls.at(pluginPage),CB_SETCURSEL,pluginDetailPage,0);throw std::runtime_error("Apply the draft or press Escape before changing the detail page");}
             const auto page=SendMessageW(controls.at(pluginPage),CB_GETCURSEL,0,0);if(page>=0&&page<3){pluginDetailPage=int(page);pluginDetailsTarget.clear();}SetFocus(controls.at(pluginPage));return true;}
         if(id==pluginList) {

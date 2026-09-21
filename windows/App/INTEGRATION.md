@@ -97,8 +97,14 @@ DocumentOperations: `pattern.commands`, `sample.get`, `sample.waveform.get`,
 `pattern.apply`, `history.undo`, `history.redo`, `document.patch`, `pattern.create`,
 `order.edit`, `sequence.select`.
 
-TimelineOperations: `pattern.notes.get/set`, `document.timing.get/set`,
+TimelineOperations: `document.timing.get/set`,
 `automation.formula.reference/preview`.
+
+PatternOperations: `pattern.effects.get/set`, `pattern.performance.get/set`,
+`pattern.effect.set`, current `pattern.notes.get/set`, and `pattern.transform`.
+The grid and FX inspector use these guarded transactions. Sparse immutable FX/
+note caches are charged before commit and reused across unrelated edits. See
+`../PATTERN_FX_PROGRESS.md` for evidence and outstanding clipboard/precise-note UI.
 
 Controller file operations: `document.save`, plus explicit Windows extension
 `document.open`. Save requires absolute UTF-8 paths and `.screamseq`/`.resonance`,

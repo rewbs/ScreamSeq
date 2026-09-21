@@ -17,32 +17,43 @@
 		// Virtualized grid: field colors and geometry are shared by hit-testing.
 		const auto r=g.pattern; s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x10161e);
 		s.fill(r.x,r.y,r.w,gridHeader,0x202834);
-		s.uiText(L"PATTERN "+std::to_wstring(patternIndex)+L" / "+std::to_wstring(patternRows())+L" rows",r.x+8,r.y+5,r.w-16,accent);
+		s.uiText(L"PATTERN "+std::to_wstring(patternIndex)+L" / "+std::to_wstring(patternRows())+L" rows",r.x+8,r.y+5,r.w-184,accent);
 		const unsigned count=view->channels,first=firstChannel(),rows=patternRows();
+		s.clip(r.x+gutter,r.y+gridHeader-23,r.w-gutter,r.h-gridHeader+23);
 		for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
-			float x=r.x+gutter+(c-first)*channelWidth;
-			s.text(L"CHANNEL "+std::to_wstring(c+1),x,r.y+29,channelWidth-4,muted);
+			float x=r.x+gutter+channelStart(c)-horizontalScroll;
+			s.text(L"CH "+std::to_wstring(c+1),x,r.y+29,fxStart-4,muted);
+            for(unsigned fx=0;fx<view->effectColumns.at(c);++fx)
+                s.text(L"FX "+std::to_wstring(fx+1),x+fxStart+fx*fxWidth,r.y+29,fxWidth-4,muted);
 			s.line(x-3,r.y+gridHeader,x-3,r.y+r.h,0x263140);
 		}
+		s.unclip();
 		for(unsigned line=0;line<visibleRows() && firstRow+line<rows;++line) {
 			unsigned rr=firstRow+line;float y=r.y+gridHeader+line*rowHeight;
 			if(rr%4==0) s.fill(r.x,y,r.w,rowHeight,rr%16==0 ? 0x202d3c : 0x192431);
 			if(device.running() && playback.pattern==patternIndex && playback.row==rr) {s.fill(r.x,y,r.w,rowHeight,0x174238);s.fill(r.x,y,3,rowHeight,accent);}
 			wchar_t number[8]{};swprintf_s(number,L"%03u",rr);s.text(number,r.x+7,y,gutter-9,muted);
+			s.clip(r.x+gutter,y,r.w-gutter,rowHeight);
 			for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
-				float x=r.x+gutter+(c-first)*channelWidth;
-				if(selecting && rr>=std::min(row,anchorRow) && rr<=std::max(row,anchorRow) && c>=std::min(channel,anchorChannel) && c<=std::max(channel,anchorChannel)) s.fill(x-2,y,channelWidth-1,rowHeight,0x304359);
+				float x=r.x+gutter+channelStart(c)-horizontalScroll;
+				if(selecting && rr>=std::min(row,anchorRow) && rr<=std::max(row,anchorRow) && c>=std::min(channel,anchorChannel) && c<=std::max(channel,anchorChannel)) s.fill(x-2,y,channelWidth(c)-1,rowHeight,0x304359);
 				if(rr==row && c==channel) {
-					constexpr float offsets[]={0,28.8f,50.4f,79.2f,86.4f}, widths[]={22,15,22,8,15};
-					s.fill(x+offsets[column]-1,y,widths[column]+2,rowHeight,0x56416f);
-					s.outline(x-2,y,channelWidth-1,rowHeight,workspaceState.focus=="pattern" ? 0x9f85c8 : 0x6b627d);
+					s.fill(x+fieldStart(column)-1,y,fieldWidth(column)+2,rowHeight,0x56416f);
+					s.outline(x-2,y,channelWidth(c)-1,rowHeight,workspaceState.focus=="pattern" ? 0x9f85c8 : 0x6b627d);
 				}
 				const auto v=view->displayCell(patternIndex,rr,c);
 				s.text(v.substr(0,3),x,y,24,v.substr(0,3)==L"..." ? 0x49596a : 0x76d5d8);
 				s.text(v.substr(4,2),x+28.8f,y,18,v.substr(4,2)==L".." ? 0x49596a : 0xc1cbd6);
 				s.text(v.substr(7,3),x+50.4f,y,24,v.substr(7,3)==L"..." ? 0x49596a : gold);
-				s.text(v.substr(11,3),x+79.2f,y,24,v.substr(11,3)==L"..." ? 0x49596a : 0xb7a5e8);
+                for(unsigned fx=0;fx<view->effectColumns.at(c);++fx) {
+                    const auto command=view->effect(patternIndex,rr,c,fx);
+                    const auto [code,value]=effectText(command);
+                    const auto color=command?0xb7a5e8:0x49596a;
+                    s.text(rr==row&&c==channel&&column==3+2*fx&&!effectPrefix.empty()?wide(effectPrefix)+L"_":code,x+fieldStart(3+2*fx),y,17,color);
+                    s.text(value,x+fieldStart(4+2*fx),y,58,color);
+                }
 			}
+			s.unclip();
 		}
 		s.unclip();s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="pattern" ? 0x56858b : 0x303b49);
 		if(workspaceState.visible()) {
@@ -79,6 +90,7 @@
 		}
 		if(workspaceState.layout!="Pattern focus") {
             if(sampleEditorVisible()) drawSampleEditor();
+            else if(effectEditorVisible()) drawEffectEditor();
             else drawPluginEditor();
 			s.fill(g.horizontalDivider.x,g.horizontalDivider.y,g.horizontalDivider.w,g.horizontalDivider.h,0x344151);
 			if(workspaceState.visible()) s.fill(g.verticalDivider.x,g.verticalDivider.y,g.verticalDivider.w,g.verticalDivider.h,0x344151);

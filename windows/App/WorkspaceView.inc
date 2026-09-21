@@ -7,17 +7,26 @@
 	float dragRight=0, dragLower=0;
 	bool selecting=false;
 	unsigned anchorRow=0,anchorChannel=0;
-	static constexpr float channelWidth=112, rowHeight=18, gridHeader=50, gutter=38;
+    static constexpr float fxWidth=86.4f, fxStart=79.2f, rowHeight=18, gridHeader=50, gutter=38;
+    float horizontalScroll=0;
+    float channelWidth(unsigned c) const {return fxStart+fxWidth*view->effectColumns.at(c)+4;}
+    float channelStart(unsigned c) const {float x=0;for(unsigned i=0;i<c;++i)x+=channelWidth(i);return x;}
+    float fieldStart(unsigned column) const {return column<3?std::array<float,3>{0,28.8f,50.4f}[column]:fxStart+float((column-3)/2)*fxWidth+((column-3)%2?21.6f:0.0f);}
+    float fieldWidth(unsigned column) const {return column<3?std::array<float,3>{22,15,22}[column]:(column%2?15.0f:58.0f);}
 	ScreamSeq::WorkspaceGeometry geometry() const {
 		RECT r{};GetClientRect(window,&r);float s=GetDpiForWindow(window)/96.0f;
 		return workspaceState.geometry(r.right/s,r.bottom/s);
 	}
 	unsigned visibleRows() const { return std::max(1u,unsigned(std::max(0.0f,geometry().pattern.h-gridHeader)/rowHeight)); }
-	unsigned visibleChannels() const { return std::max(1u,unsigned(std::max(0.0f,geometry().pattern.w-gutter)/channelWidth)); }
-	unsigned firstChannel() const { return channel>=visibleChannels() ? channel-visibleChannels()+1 : 0; }
+    unsigned firstChannel() const {float x=0;for(unsigned c=0;c<view->channels;++c){x+=channelWidth(c);if(x>horizontalScroll)return c;}return view->channels-1;}
+    unsigned visibleChannels() const {const auto first=firstChannel();const float end=horizontalScroll+std::max(1.0f,geometry().pattern.w-gutter);unsigned last=first;while(last<view->channels&&channelStart(last)<end)++last;return std::max(1u,last-first);}
 	void ensureCursorVisible() {
 		if(row<firstRow) firstRow=row;
 		if(row>=firstRow+visibleRows()) firstRow=row-visibleRows()+1;
+        const float available=std::max(1.0f,geometry().pattern.w-gutter),left=channelStart(channel)+fieldStart(column),right=left+fieldWidth(column)+4;
+        if(left<horizontalScroll)horizontalScroll=left;
+        if(right>horizontalScroll+available)horizontalScroll=right-available;
+        horizontalScroll=std::clamp(horizontalScroll,0.0f,std::max(0.0f,channelStart(view->channels)-available));
 	}
 	void layoutControls() {
 		frameRequested=true;
@@ -43,6 +52,7 @@
         place(patternChooser,10,389,146,250);place(orderChooser,10,420,146,250);
         place(octaveChooser,10,452,70,230);place(stepChooser,84,452,72,230);
 		auto g=geometry(); bool show=workspaceState.visible();
+        place(effectColumnChooser,g.pattern.x+g.pattern.w-82,g.pattern.y+3,76,230);
 		place(notesCommand,g.inspector.x+6,g.inspector.y+4,80,24,show);
 		place(samplesCommand,g.inspector.x+90,g.inspector.y+4,128,24,show);
 		place(pinCommand,g.inspector.x+6,g.inspector.y+34,100,24,show);
@@ -76,6 +86,7 @@
         }
         refreshSampleFields();
         layoutPluginControls(place);
+        layoutEffectControls(place);
 		SetWindowTextW(controls.at(followCommand),follow ? L"Follow on [F]" : L"Detached [F]");
 		SetWindowTextW(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
 		for(auto [id,h]:controls) InvalidateRect(h,nullptr,FALSE);
@@ -99,7 +110,8 @@
             controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"0",WS_CHILD|WS_TABSTOP|ES_NUMBER|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
             SendMessageW(controls.at(id),EM_SETLIMITTEXT,10,0);
         }
-        for(int id:{patternChooser,orderChooser,octaveChooser,stepChooser}) controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
+        for(int id:{patternChooser,orderChooser,octaveChooser,stepChooser,effectColumnChooser}) controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
+        for(unsigned i=1;i<=8;++i) {auto label=std::to_wstring(i)+L" FX";SendMessageW(controls.at(effectColumnChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
         for(unsigned i=0;i<=9;++i) {auto label=L"Oct "+std::to_wstring(i);SendMessageW(controls.at(octaveChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
         for(unsigned i=0;i<=16;++i) {auto label=L"Step "+std::to_wstring(i);SendMessageW(controls.at(stepChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
         controls[sampleCommandBase]=CreateWindowExW(0,L"LISTBOX",L"Samples",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(sampleCommandBase)),GetModuleHandleW(nullptr),nullptr);
@@ -109,7 +121,17 @@
             SendMessageW(controls.at(sampleCommandBase),LB_SETITEMDATA,index,i);
         }
         installPluginControls();
+        installEffectControls();
 		std::vector<ScreamSeq::WorkspaceCommand> commands={
+            {effectsCommand,L"Pattern / Inspect FX and parameter bindings",L"Enter on an FX cell"},
+            {patternReverse,L"Pattern / Reverse selected rows and all FX columns",L""},
+            {patternRotate,L"Pattern / Rotate selected rows down",L""},
+            {patternExpand,L"Pattern / Expand selection 2x (preserve data)",L""},
+            {patternShrink,L"Pattern / Shrink selection 2x (preserve data)",L""},
+            {patternInsertRows,L"Pattern / Insert row at cursor",L"Insert"},
+            {patternDeleteRows,L"Pattern / Delete row at cursor (Undo available)",L""},
+            {patternTransposeUp,L"Pattern / Transpose selected notes up a semitone",L""},
+            {patternTransposeDown,L"Pattern / Transpose selected notes down a semitone",L""},
             {pluginsCommand,L"Inspect / Plugin rack",L""},{pluginUndo,L"Plugins / Undo",L""},{pluginRedo,L"Plugins / Redo",L""},
             {pluginRescan,L"Plugins / Rescan installed VST3 modules",L""},{pluginEditor,L"Plugins / Open selected native editor",L""},
             {pluginNewInstrument,L"Plugins / Create trigger for selected instrument",L""},
@@ -138,13 +160,19 @@
 	}
 	void command(int id) {
 		try {
-            if(pluginCommand(id) || sampleCommand(id)) {}
+            if(effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
             else if(id==openCommand) openFile();
             else if(id==saveCommand || id==saveAsCommand) saveFile(id==saveAsCommand);
             else if(id==undoCommand || id==redoCommand) edit(id==undoCommand ? "history.undo" : "history.redo",{{"domain","document"}});
             else if(id==copyCommand) copyCells();
             else if(id==pasteCommand) pasteCells();
-            else if(id==clearCommand) edit("pattern.apply",{{"cells",rectangle(true)}});
+            else if(id==clearCommand) clearPatternSelection();
+            else if(id>=patternReverse&&id<=patternTransposeDown) transformPatternSelection(id);
+            else if(id==effectColumnChooser) {
+                const auto value=SendMessageW(controls.at(id),CB_GETCURSEL,0,0);
+                if(value!=CB_ERR) edit("pattern.effects.set",{{"pattern",patternIndex},{"columns",Json::array({{{"channel",channel},{"count",value+1}}})}});
+                ensureCursorVisible();
+            }
             else if(id==octaveChooser || id==stepChooser) {
                 auto value=SendMessageW(controls.at(id),CB_GETCURSEL,0,0);
                 if(value!=CB_ERR) {if(id==octaveChooser) octave=unsigned(value);else editStep=unsigned(value);}
@@ -174,8 +202,8 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(id!=octaveChooser && id!=stepChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort)) SetFocus(window);
-		} catch(const std::exception &e) { status=wide(e.what()); }
+            if(id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
+		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
     bool handleKey(WPARAM code) {
         try {return key(code);} catch(const std::exception &e) {status=wide(e.what());return true;}
@@ -197,6 +225,10 @@
             if(key==VK_RETURN) {command(pluginApply);return true;}
             if(key==VK_ESCAPE) {pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;}
         }
+        if(GetFocus()!=window&&GetDlgCtrlID(GetFocus())>=effectKind&&GetDlgCtrlID(GetFocus())<=effectSearch) {
+            if(key==VK_ESCAPE){workspaceState.focus="pattern";SetFocus(window);return true;}
+            if(key==VK_RETURN){command(effectApply);return true;}
+        }
         if(textOwnsKeyboard() && key!=VK_ESCAPE) return false;
         if(ctrl && key=='I') {command(sampleImportCommand);return true;}
         if(ctrl && key=='O') {command(openCommand);return true;}
@@ -212,7 +244,7 @@
 		if(key==VK_F6) { command(nextPanelCommand);return true; }
 		if(key==VK_ESCAPE && dragging==4) {sampleRange()=sampleDragBefore;dragging=0;ReleaseCapture();refreshSampleFields();return true;}
 		if(key==VK_ESCAPE && dragging) { workspaceState.rightWidth=dragRight;workspaceState.lowerHeight=dragLower;dragging=0;ReleaseCapture();layoutControls();return true; }
-		if(key==VK_ESCAPE) {if(pluginDraft){pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;} stop();command(focusPatternCommand);return true; }
+		if(key==VK_ESCAPE) {if(!effectPrefix.empty()){effectPrefix.clear();status=L"Effect prefix cancelled";return true;}if(pluginDraft){pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;} stop();command(focusPatternCommand);return true; }
 		if(!ctrl && !alt && key==VK_SPACE) { if(device.running()) stop();else command(playCommand);return true; }
 		if(!ctrl && !alt && key=='F' && (column==0 || workspaceState.focus!="pattern")) { command(followCommand);return true; }
         if(workspaceState.focus=="samples") {
@@ -228,9 +260,10 @@
             }
         }
 		if(ctrl || alt) return false;
-		if(key==VK_RETURN) { command(notesCommand);return true; }
+		if(key==VK_RETURN) { command(workspaceState.focus=="pattern"&&column>=3?effectsCommand:notesCommand);return true; }
 		if(workspaceState.focus!="pattern") return false;
         if(key==VK_DELETE) {command(clearCommand);return true;}
+        if(key==VK_INSERT) {command(patternInsertRows);return true;}
 		auto n=position();unsigned r=row,c=channel,col=column;
 		const unsigned rows=patternRows(),channels=view->channels;
 		if(key==VK_UP) r=row ? row-1 : 0;
@@ -240,8 +273,8 @@
 		else if(key==VK_HOME) r=0;
 		else if(key==VK_END) r=rows-1;
 		else if(key==VK_TAB) { c=shift ? (channel+channels-1)%channels : (channel+1)%channels;col=0; }
-		else if(key==VK_LEFT) { if(col) --col;else if(c) {--c;col=4;} }
-		else if(key==VK_RIGHT) { if(col<4) ++col;else if(c+1<channels) {++c;col=0;} }
+		else if(key==VK_LEFT) { if(col) --col;else if(c) {--c;col=2+2*view->effectColumns.at(c);} }
+		else if(key==VK_RIGHT) { if(col<2+2*view->effectColumns.at(c)) ++col;else if(c+1<channels) {++c;col=0;} }
 		else return enterCell(key);
 		const unsigned ar=selecting ? anchorRow : row,ac=selecting ? anchorChannel : channel;
 		n["row"]=r;n["channel"]=c;n["column"]=col;n["following"]=false;navigate(n);
@@ -250,12 +283,12 @@
 	bool gridClick(float x,float y,bool extend) {
 		auto g=geometry().pattern;
 		if(!g.contains(x,y) || y<g.y+gridHeader || x<g.x+gutter) return false;
-		const unsigned line=unsigned((y-g.y-gridHeader)/rowHeight),cell=unsigned((x-g.x-gutter)/channelWidth);
-		if(line>=visibleRows() || cell>=visibleChannels()) return false;
-		unsigned r=firstRow+line,c=firstChannel()+cell;
+        const unsigned line=unsigned((y-g.y-gridHeader)/rowHeight);if(line>=visibleRows())return false;
+        const float content=x-g.x-gutter+horizontalScroll;unsigned c=firstChannel();while(c<view->channels&&channelStart(c+1)<=content)++c;
+        unsigned r=firstRow+line;
 		if(r>=patternRows() || c>=view->channels) return false;
-		float field=std::fmod(x-g.x-gutter,channelWidth);
-		unsigned col=field<28.8f ? 0 : field<50.4f ? 1 : field<79.2f ? 2 : field<86.4f ? 3 : 4;
+        const float field=content-channelStart(c);if(field>=channelWidth(c)-4)return false;
+        unsigned col=field<28.8f?0:field<50.4f?1:field<fxStart?2:3+2*unsigned((field-fxStart)/fxWidth)+(std::fmod(field-fxStart,fxWidth)>=21.6f?1:0);
 		unsigned ar=extend ? (selecting ? anchorRow : row) : r,ac=extend ? (selecting ? anchorChannel : channel) : c;
 		auto n=position();n["row"]=r;n["channel"]=c;n["column"]=col;n["following"]=false;
 		workspaceState.focus="pattern";navigate(n);anchorRow=ar;anchorChannel=ac;selecting=extend;SetFocus(window);
@@ -284,6 +317,11 @@
 		const int last=std::max(0,int(patternRows())-int(visibleRows()));
 		firstRow=unsigned(std::clamp(int(old)-ticks*3,0,last));
 	}
+    void scrollHorizontal(int delta) {
+        frameRequested=true;
+        const float available=std::max(1.0f,geometry().pattern.w-gutter);
+        horizontalScroll=std::clamp(horizontalScroll+float(delta)*fxWidth/WHEEL_DELTA,0.0f,std::max(0.0f,channelStart(view->channels)-available));
+    }
 	void drawButton(const DRAWITEMSTRUCT &d) {
 		if(d.CtlType==ODT_LISTBOX || d.CtlType==ODT_COMBOBOX) {
             const bool list=d.CtlType==ODT_LISTBOX;std::wstring label;

@@ -115,11 +115,11 @@ class WorkspaceTests(unittest.TestCase):
         # Two ordinary cells, not platform-specific musical data.
         x, y = grid['x'] + 44, grid['y'] + 56
         mouse(0x201, x, y, 1)
-        mouse(0x200, x + 112, y + 54, 1)
+        mouse(0x200, x + 169.6, y + 54, 1)
         # Capture can queue hover messages at the physical cursor location;
         # no-button motion must not redirect an active selection.
-        mouse(0x200, x + 224, y + 90, 0)
-        mouse(0x202, x + 112, y + 54)
+        mouse(0x200, x + 339.2, y + 90, 0)
+        mouse(0x202, x + 169.6, y + 54)
         context = self.client.call('context.get')['data']
         self.assertEqual(context['selection'], {'startRow': 0, 'endRow': 3, 'startChannel': 0, 'endChannel': 1})
         self.assertFalse(context['following'])
@@ -144,7 +144,8 @@ class WorkspaceTests(unittest.TestCase):
     def click_cell(self, row, channel, shift=False):
         state = self.client.call('workspace.get')['data']
         grid, viewport = state['geometry']['pattern'], state['viewport']
-        x = grid['x'] + 44 + (channel - viewport['firstChannel']) * 112
+        columns = self.client.call('document.get')['data']['effectColumns']
+        x = grid['x'] + 44 + sum(79.2 + 86.4 * count + 4 for count in columns[:channel]) - viewport['horizontalScroll']
         y = grid['y'] + 56 + (row - viewport['firstRow']) * 18
         self.assertLess(x, grid['x'] + grid['width'])
         self.assertLess(y, grid['y'] + grid['height'])
@@ -351,9 +352,9 @@ class WorkspaceTests(unittest.TestCase):
         self.navigate(row=4, channel=0, following=False)
         state = self.client.call('workspace.get')['data']
         grid = state['geometry']['pattern']
-        rows, channels = int((grid['height'] - 50) // 18), int((grid['width'] - 38) // 112)
+        rows, channels = int((grid['height'] - 50) // 18), int((grid['width'] - 38) // 169.6)
         self.assertGreater(grid['height'] - 50 - rows * 18, 2)
-        self.assertGreater(grid['width'] - 38 - channels * 112, 2)
+        self.assertGreater(grid['width'] - 38 - channels * 169.6, 2)
         # The last wholly rendered cell remains a valid hit.
         self.click_cell(state['viewport']['firstRow'] + rows - 1,
                         state['viewport']['firstChannel'] + channels - 1)
@@ -365,7 +366,9 @@ class WorkspaceTests(unittest.TestCase):
         if axis == 'row':
             y = grid['y'] + 50 + rows * 18 + 1
         else:
-            x = grid['x'] + 38 + channels * 112 + 1
+            # Partial channels now render and accept input. The four-DIP
+            # separator after a channel is the actual horizontal blank area.
+            x = grid['x'] + 38 + 169.6 - 2
         self.mouse(0x201, x, y, 1)
         self.mouse(0x202, x, y)
         self.assertEqual(self.client.call('context.get'), before)
@@ -379,7 +382,7 @@ class WorkspaceTests(unittest.TestCase):
     def test_blank_row_remainder_is_not_a_grid_cell(self):
         self.assert_grid_remainder_ignored('row')
 
-    def test_blank_channel_remainder_is_not_a_grid_cell(self):
+    def test_blank_channel_separator_is_not_a_grid_cell(self):
         self.assert_grid_remainder_ignored('channel')
 
     def test_guarded_navigation_preserves_document_and_transport(self):

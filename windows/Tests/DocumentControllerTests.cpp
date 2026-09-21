@@ -173,6 +173,48 @@ void triggerInstrumentTests(const std::filesystem::path &directory) {
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});need(c.view()->session.document.at("instruments")==instruments,"Reopen changed trigger identities");
 }
 
+void patternPerformanceTests(const std::filesystem::path &directory) {
+  unsigned stops=0;DocumentController c({},"pattern-performance",[&]{++stops;},[](const auto &){});
+  auto old=c.view();const auto oldNative=old->nativePattern;
+  invoke(c,"pattern.apply",{{"cells",Json::array({{{"pattern",0},{"row",3},{"channel",1},{"note",61}}})}});
+  need(c.view()->nativePattern==oldNative,"Ordinary cell edit rebuilt immutable native pattern cache");
+  unsigned speed=0;for(const auto &p:c.view()->commands.at("effect"))if(p.at("name")=="Set Speed")speed=p.at("command");
+  need(speed!=0,"Fixture has no speed command");
+  Json commands=Json::array({{{"channel",0},{"position",0},{"column",0},{"kind","tracker"},{"effect",speed},{"parameter",6}},
+    {{"channel",0},{"position",65536},{"column",0},{"kind","tracker"},{"effect",speed},{"parameter",3}}});
+  invoke(c,"pattern.effects.set",{{"pattern",0},{"commands",commands}});
+  auto render=[&](unsigned rate,unsigned block){auto *prepared=c.prepare(rate,Json::object(),false,true).get();std::vector<float> pcm(size_t(rate)*2);
+    for(unsigned at=0;at<rate;){const auto count=std::min(block,rate-at);need(prepared->render(pcm.data()+size_t(at)*2,count),"FX PCM render ended early");at+=count;}return pcm;};
+  std::map<unsigned,std::vector<float>> reference;for(unsigned rate:{44100u,48000u,96000u})reference[rate]=render(rate,128);
+  commands[0]["column"]=7;commands[1]["column"]=3;
+  invoke(c,"pattern.effects.set",{{"pattern",0},{"columns",Json::array({{{"channel",0},{"count",8}}})},{"commands",commands}});
+  auto fx=c.view();need(fx->effectColumns[0]==8&&fx->cell(0,0,0).effect==0&&fx->effect(0,0,0,7)->effect==speed,"Published grid cache lost moved FX");
+  need(old->effectColumns[0]==1&&old->nativePattern==oldNative,"Native FX publication modified an old view");
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,4096u,8193u}) {
+    const auto pcm=render(rate,block);double delta=0,energy=0;
+    for(size_t i=0;i<pcm.size();++i){need(std::isfinite(pcm[i]),"FX PCM is not finite");delta=std::max(delta,std::abs(double(pcm[i])-reference[rate][i]));energy+=std::abs(pcm[i]);}
+    need(delta<=1e-6&&energy>1,"Moving source-format effects across columns changed PCM");
+    std::cout<<"PASS API FX 1 -> FX 8/4 rate="<<rate<<" block="<<block<<" max-PCM-delta="<<delta<<'\n';
+  }
+  const auto stopped=stops;invoke(c,"pattern.effects.set",{{"pattern",0},{"commands",commands},{"dryRun",true}});
+  need(c.view()==fx&&stops==stopped,"FX dry run rebuilt view or stopped playback");
+  invoke(c,"pattern.notes.set",{{"pattern",0},{"events",Json::array({{{"channel",1},{"position",16384},{"note",61}}})}});
+  need(c.view()->nativePattern->notes.size()==1&&fx->nativePattern->notes.empty(),"Precise notes mutated a prior immutable cache");
+  invoke(c,"history.undo",{{"domain","document"}});need(c.view()->nativePattern->notes.empty(),"Precise note Undo left stale cache");
+  const auto path=directory/"pattern-performance.screamseq";
+  invoke(c,"document.save",{{"path",path.generic_string()}});invoke(c,"document.open",{{"path",path.generic_string()}});
+  need(c.view()->effect(0,0,0,7)->effect==speed&&c.view()->effectColumns[0]==8,"Reopen lost grid performance cache");
+  // A valid but large note list must be rejected before music or transport is
+  // changed if its immutable view cannot fit the configured aggregate budget.
+  DocumentController limited({},"pattern-budget",[&]{++stops;},[](const auto &){},{},2u*1024u*1024u);
+  Json events=Json::array();for(unsigned i=0;i<50000;++i)events.push_back({{"channel",0},{"position",i},{"note",61}});
+  old=limited.view();const auto beforeStops=stops;bool rejected=false;
+  try{invoke(limited,"pattern.notes.set",{{"pattern",0},{"events",events}});}catch(const Api::ApiError &error){rejected=std::string(error.what()).find("cache headroom")!=std::string::npos;}
+  need(rejected&&limited.view()==old&&stops==beforeStops&&!limited.publicationPending(),"Over-budget native pattern committed before publication validation");
+  need(call(limited,"pattern.notes.get",{{"pattern",0}}).at("events").empty(),"Rejected native pattern changed the worker document");
+  std::cout<<"PASS immutable FX/note cache, no-op/dry-run reuse, history/reopen and precommit budget guard\n";
+}
+
 void programDryRunTests(const std::filesystem::path &scanner,const std::filesystem::path &cache) {
   Tracker::WindowsVST3::configure(scanner.generic_string(),cache.generic_string());
   unsigned stops=0;DocumentController c({},"program-dry-run",[&]{++stops;},[](const auto &){});
@@ -202,6 +244,7 @@ void programDryRunTests(const std::filesystem::path &scanner,const std::filesyst
 
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--pattern-performance") {patternPerformanceTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==4 && std::string(argv[1])=="--program-dry-run") {programDryRunTests(std::filesystem::u8path(argv[2]),std::filesystem::u8path(argv[3]));return 0;}
     if(argc==3 && std::string(argv[1])=="--fixtures") {
       const std::filesystem::path directory=std::filesystem::u8path(argv[2]);

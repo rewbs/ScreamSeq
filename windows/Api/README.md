@@ -288,6 +288,21 @@ additionalDocumentReads/additionalDocumentWrites catalogs. The worker retains
 its private sample clipboard across requests and replaces it on document open.
 Standalone test hosts still advertise only their implemented method sets.
 
+## Pattern FX and precise notes
+
+`pattern.effects.get/set`, their `pattern.performance.get/set` aliases,
+`pattern.effect.set`, current `pattern.notes.get/set`, and `pattern.transform`
+are integrated. Use the shared Mac schema for payloads and `pattern.commands`
+for source-format IDs, masks and two-character display codes. FX columns are
+0–7; cursor code/value fields are `3+2*column` and `4+2*column`. Commands and
+precise notes use 65536 units per row. Replacement APIs preserve omitted
+collections; single-cell clear uses `command:null`. Reads expose unresolved
+bindings without silently retargeting them. Writes require `expectedRevision`.
+
+The native FX inspector uses these same transactions. The old cell clipboard
+rejects selections containing native FX until Pattern 2 support is complete.
+Precise-note event controls remain pending despite the complete API path.
+
 ## Plugin rack integration
 
 The application also registers `PluginOperations`. Shared Mac method payloads

@@ -33,7 +33,8 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
 	focusPatternCommand=113, nextPanelCommand=114, widerCommand=115, narrowerCommand=116,
 	tallerCommand=117, shorterCommand=118, openCommand=119, saveCommand=120, saveAsCommand=121,
     undoCommand=122, redoCommand=123, copyCommand=124, pasteCommand=125, clearCommand=126,
-    patternChooser=130, orderChooser=131, octaveChooser=132, stepChooser=133, sampleCommandBase=200,
+    patternChooser=130, orderChooser=131, octaveChooser=132, stepChooser=133, effectColumnChooser=134, sampleCommandBase=200,
+    patternReverse=140,patternRotate=141,patternExpand=142,patternShrink=143,patternInsertRows=144,patternDeleteRows=145,patternTransposeUp=146,patternTransposeDown=147,
     sampleImportCommand=201,sampleAllCommand=202,sampleReverseCommand=203,sampleNormalizeCommand=204,
     sampleFadeInCommand=205,sampleFadeOutCommand=206,sampleTrimCommand=207,sampleLoopCommand=208,
     sampleRangeCommand=209,sampleCopyCommand=210,samplePasteCommand=211,sampleCutCommand=212,sampleClearCommand=213,
@@ -43,7 +44,9 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginList=300,pluginLibrary=301,pluginAdd=302,pluginRescan=303,pluginEditor=304,
     pluginBypass=305,pluginRemove=306,pluginUp=307,pluginDown=308,pluginUndo=309,pluginRedo=310,
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
-    pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322;
+    pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,
+    effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
+    effectBinding=346,effectApply=347,effectReload=348,effectSearch=349;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -173,7 +176,7 @@ public:
 	Json position() const { return {{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",column},{"following",follow}}; }
     void validatePosition(const Json &value) const {
         auto p=view->patterns.find(value.at("pattern").get<unsigned>());
-        if(p==view->patterns.end() || value.at("row").get<unsigned>()>=p->second->rows || value.at("channel").get<unsigned>()>=view->channels || value.at("column").get<unsigned>()>4)
+        if(p==view->patterns.end() || value.at("row").get<unsigned>()>=p->second->rows || value.at("channel").get<unsigned>()>=view->channels || value.at("column").get<unsigned>()>2+2*view->effectColumns.at(value.at("channel").get<unsigned>()))
             throw ScreamSeq::Api::ApiError(-32602,"The navigation target no longer exists");
     }
 	unsigned cursorSample() const {
@@ -200,7 +203,7 @@ public:
 		auto rect=[](const ScreamSeq::WorkspaceRect &r)->Json {return {{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}};};
 		return {{"geometry",{{"pattern",rect(g.pattern)},{"inspector",rect(g.inspector)},
 			{"verticalDivider",rect(g.verticalDivider)},{"horizontalDivider",rect(g.horizontalDivider)}}},
-			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()}}},
+			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},
 			{"panels",{"notes","samples"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
 			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",workspaceState.focus},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
@@ -208,6 +211,9 @@ public:
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
 			{"octave",octave},{"editStep",editStep},{"documentBusy",busy},
             {"sampleEditor",sampleEditorSnapshot()},
+            {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
+                {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
+                {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
             {"unavailable",{"graph","automation","floating","savedLayouts"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
@@ -252,6 +258,7 @@ public:
 		if(std::tie(patternIndex,row,channel,column,follow)==std::tie(p,r,c,col,f)) return;
 
 		bool moved=std::tie(patternIndex,row,channel,column)!=std::tie(p,r,c,col);
+		if(moved) effectPrefix.clear();
 		patternIndex=p; row=r; channel=c; column=col; follow=f; ++contextRevision;
 
 		updateInspector();
@@ -290,14 +297,15 @@ public:
         auto previous=view->session.documentId;view=std::move(next);documentId=view->session.documentId;
         if(!view->patterns.contains(patternIndex)) patternIndex=view->patterns.begin()->first;
         row=std::min(row,patternRows()-1);channel=std::min(channel,view->channels-1);
+        column=std::min(column,2u+2u*view->effectColumns.at(channel));
         anchorRow=std::min(anchorRow,patternRows()-1);anchorChannel=std::min(anchorChannel,view->channels-1);
-        if(previous!=documentId) {row=channel=column=firstRow=0;selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;}
+        if(previous!=documentId) {row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;}
         else if(oldPosition!=position()) ++contextRevision;
-        waveSample=UINT_MAX;updateInspector();layoutControls();updateTitle();
+        waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();
     }
     bool supportsDocumentOperations() const override {return true;}
-    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();auto p=ScreamSeq::PluginOperations::reads();r.insert(r.end(),p.begin(),p.end());return r;}
-    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();auto p=ScreamSeq::PluginOperations::writes();r.insert(r.end(),p.begin(),p.end());return r;}
+    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();auto p=ScreamSeq::PluginOperations::reads();r.insert(r.end(),p.begin(),p.end());auto fx=ScreamSeq::PatternOperations::reads();r.insert(r.end(),fx.begin(),fx.end());return r;}
+    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();auto p=ScreamSeq::PluginOperations::writes();r.insert(r.end(),p.begin(),p.end());auto fx=ScreamSeq::PatternOperations::writes();r.insert(r.end(),fx.begin(),fx.end());return r;}
     Json documentOperation(const std::string &method,const Json &params) override {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
         try {auto result=await(controller->invoke(method,params));refreshDocument();return result;}
@@ -358,6 +366,7 @@ public:
     #include "EditingView.inc"
     #include "SampleEditor.inc"
     #include "PluginEditor.inc"
+    #include "PatternEditor.inc"
 	#include "WorkspaceDraw.inc"
 	void draw() {
         frameRequested=false;
@@ -427,7 +436,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 			auto rect = reinterpret_cast<RECT *>(lp);
 			SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE); return 0;
 		}
-		case WM_SIZE: app->layoutControls();return 0;
+		case WM_SIZE: if(app->window)app->ensureCursorVisible();app->layoutControls();return 0;
 		case WM_GETMINMAXINFO: {
 			auto limits=reinterpret_cast<MINMAXINFO *>(lp);float scale=GetDpiForWindow(window)/96.0f;
 			limits->ptMinTrackSize={LONG(900*scale),LONG(620*scale)};return 0;
@@ -438,13 +447,16 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             SetTextColor(reinterpret_cast<HDC>(wp),RGB(212,224,235));SetBkColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));
             SetDCBrushColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
         case WM_COMMAND:
+            if(LOWORD(wp)==effectSearch){if(HIWORD(wp)==EN_CHANGE)app->filterEffects();return 0;}
+            if(LOWORD(wp)>=effectValue&&LOWORD(wp)<=effectRange)return 0;
+            if((LOWORD(wp)==effectKind||LOWORD(wp)==effectBinding)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==pluginValue) {if(HIWORD(wp)==EN_CHANGE)app->pluginFieldChanged();return 0;}
             if((LOWORD(wp)==pluginLibrary || LOWORD(wp)==pluginParameter || LOWORD(wp)==pluginInstrument || LOWORD(wp)==pluginPage || LOWORD(wp)==pluginProgram || LOWORD(wp)==pluginPort) && HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==pluginList && HIWORD(wp)!=LBN_SELCHANGE && HIWORD(wp)!=LBN_DBLCLK)return 0;
             if(LOWORD(wp)==sampleStartField || LOWORD(wp)==sampleEndField) {
                 if(HIWORD(wp)==EN_CHANGE) app->sampleFieldChanged();return 0;
             }
-            if(LOWORD(wp)>=patternChooser && LOWORD(wp)<=stepChooser && HIWORD(wp)!=CBN_SELCHANGE) return 0;
+            if(LOWORD(wp)>=patternChooser && LOWORD(wp)<=effectColumnChooser && HIWORD(wp)!=CBN_SELCHANGE) return 0;
             if(LOWORD(wp)==sampleCommandBase && HIWORD(wp)!=LBN_SELCHANGE && HIWORD(wp)!=LBN_DBLCLK) return 0;
             app->command(LOWORD(wp));return 0;
 		case WM_KEYDOWN:case WM_SYSKEYDOWN: if(app->key(wp)) return 0;break;
@@ -452,7 +464,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
 		case WM_LBUTTONUP: app->dragging=0;ReleaseCapture();return 0;
 		case WM_CAPTURECHANGED:app->dragging=0;return 0;
-		case WM_MOUSEWHEEL:app->scroll(GET_WHEEL_DELTA_WPARAM(wp));return 0;
+		case WM_MOUSEWHEEL:if(GET_KEYSTATE_WPARAM(wp)&MK_SHIFT)app->scrollHorizontal(-GET_WHEEL_DELTA_WPARAM(wp));else app->scroll(GET_WHEEL_DELTA_WPARAM(wp));return 0;
+        case WM_MOUSEHWHEEL:app->scrollHorizontal(GET_WHEEL_DELTA_WPARAM(wp));return 0;
 		case WM_SETCURSOR: {
 			POINT pt{};GetCursorPos(&pt);ScreenToClient(window,&pt);float scale=96.0f/GetDpiForWindow(window);auto g=app->geometry();
 			if(g.verticalDivider.contains(pt.x*scale,pt.y*scale)) {SetCursor(LoadCursorW(nullptr,IDC_SIZEWE));return TRUE;}

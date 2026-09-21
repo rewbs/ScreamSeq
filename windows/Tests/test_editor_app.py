@@ -311,9 +311,11 @@ class EditorAppTests(unittest.TestCase):
         cell = client.call('pattern.get', {'pattern': 0, 'startRow': 1, 'rowCount': 1, 'channelCount': 1})['data']['cells'][0]
         self.assertEqual(cell['parameter'], 6)
         self.assertNotEqual(cell['effect'], 0)
+        note_fields = {k: cell[k] for k in ('note', 'instrument', 'volumeCommand', 'volume')}
         self.send(process, 0x100, 0x2E)
         cell = client.call('pattern.get', {'pattern': 0, 'startRow': 1, 'rowCount': 1, 'channelCount': 1})['data']['cells'][0]
-        self.assertTrue(all(cell[k] == 0 for k in ('note', 'instrument', 'volumeCommand', 'volume', 'effect', 'parameter')))
+        self.assertEqual((cell['effect'], cell['parameter']), (0, 0))
+        self.assertEqual({k: cell[k] for k in note_fields}, note_fields)
         user = ctypes.WinDLL('user32')
         user.GetDlgItem.argtypes = [wintypes.HWND, ctypes.c_int]
         user.GetDlgItem.restype = wintypes.HWND
@@ -460,8 +462,8 @@ class EditorAppTests(unittest.TestCase):
             self.send(process, msg, flags, round(x*scale) | (round(y*scale) << 16))
         x, y = grid['x']+44, grid['y']+56
         mouse(0x201, x, y, 1)
-        mouse(0x200, x+112, y+18, 1)
-        mouse(0x202, x+112, y+18)
+        mouse(0x200, x+169.6, y+18, 1)
+        mouse(0x202, x+169.6, y+18)
         self.assertEqual(client.call('context.get')['data']['selection'],
             {'startRow': 0, 'endRow': 1, 'startChannel': 0, 'endChannel': 1})
         source = client.call('pattern.get', {'pattern': 0, 'rowCount': 2, 'channelCount': 2})['data']['cells']

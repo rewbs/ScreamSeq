@@ -129,13 +129,18 @@ class SessionAdapter {
         result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
       }
       result["musicalEditing"]=true;
-      for(const auto &m:host_->additionalDocumentReads()) result["reads"].push_back(m);
+      for(const auto &m:host_->additionalDocumentReads()) if(std::find(result["reads"].begin(),result["reads"].end(),m)==result["reads"].end())result["reads"].push_back(m);
       for(const auto &m:host_->additionalDocumentWrites()) {
-        result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
+        if(std::find(result["writes"].begin(),result["writes"].end(),m)==result["writes"].end())result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
       }
       result["windowsExtensions"]={{"document.open","absolute path, expectedRevision, discard:true required for unsaved work"},
         {"plugin.editor.open","slot and expectedRevision; native VST3 editor on the private STA; no musical change unless the vendor emits edits"},
         {"plugin.editor.close","slot and expectedRevision; flush pending baseline edits before closing"}};
+      result["patternEffects"]={{"columns","1–8 FX columns per channel. Code/value cursor fields are 3+2*column and 4+2*column."},
+        {"methods","pattern.effects.get/set and pattern.performance.get/set merge ordinary FX 1 with all native commands. pattern.effect.set edits one cell; null clears it."},
+        {"commands","tracker, parameter-set, parameter-slide, pitch-set, pitch-slide, note-cut. Use pattern.commands for source-format IDs and two-character displayCode."},
+        {"timing","65536 units per row; tracker commands require row boundaries. Bindings use stable plugin instance and parameter IDs."},
+        {"transforms","pattern.transform uses shared selection/channel/note-track/pattern/song transforms; field effect includes all FX columns. Precise notes remain independent."}};
     }
     return result;
   }
@@ -177,7 +182,9 @@ class SessionAdapter {
     n["pattern"]=index;
     n["row"]=integer(p,"row",std::min(n.value("row",0u),rows-1),0,rows-1);
     n["channel"]=integer(p,"channel",std::min(n.value("channel",0u),channels-1),0,channels-1);
-    n["column"]=integer(p,"column",n.value("column",0u),0,4);
+    unsigned fields=4;
+    if(s.document.contains("effectColumns")){const auto count=s.document.at("effectColumns").at(n.at("channel").get<unsigned>()).get<unsigned>();require(count>=1&&count<=8,"Invalid effect-column count");fields=2+2*count;}
+    n["column"]=integer(p,"column",std::min(n.value("column",0u),fields),0,fields);
     if(p.contains("following")) require(p["following"].is_boolean(),"following must be boolean");
     n["following"]=p.value("following",index==oldPattern ? n.value("following",true) : false);
     return n;

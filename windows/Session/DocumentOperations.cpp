@@ -77,7 +77,7 @@ Json DocumentOperations::invoke(const std::string &method, const Json &p) {
     Json catalog={{"effect",Json::array()},{"volume",Json::array()}};
     if(!document_.editable()) return catalog;
     for(bool volume:{false,true}) for(const auto &c:patternCommands(document_.song().GetType(),volume))
-      catalog[volume ? "volume" : "effect"].push_back({{"command",c.command},{"parameterMask",c.mask},
+      catalog[volume ? "volume" : "effect"].push_back({{"command",c.command},{"parameterMask",c.mask},{"displayCode",c.command==0?"..":c.mask?c.label.substr(0,2):"0"+c.label.substr(0,1)},
         {"parameterValue",c.value},{"suggestedParameter",c.suggested},{"label",c.label},{"name",c.name},
         {"family",c.family},{"description",c.description},{"minimum",c.minimum},{"maximum",c.maximum}});
     return catalog;

@@ -30,6 +30,7 @@ bool flag(const Json &p,const char *key) {
   if(!p.at(key).is_boolean()) throw Api::ApiError(-32602,"Expected boolean");
   return p.at(key).get<bool>();
 }
+size_t patternViewBytes(const Tracker::NativeSong &native){return sizeof(NativePatternView)+native.performance.bytes()+native.performance.commands.size()*sizeof(PatternEffectView)+native.preciseNotes.size()*(sizeof(Tracker::PreciseNote)+sizeof(PatternNoteView))+(native.patterns.size()+native.tracks.size())*128;}
 }
 Tracker::Cell DocumentView::cell(unsigned p,unsigned r,unsigned c) const {
   auto it=patterns.find(p);
@@ -44,6 +45,13 @@ std::wstring DocumentView::displayCell(unsigned p,unsigned r,unsigned c) const {
   if(v.volumeCommand) swprintf_s(vol,L"%c%02u",volumeLetters[v.volumeCommand],unsigned(v.volume));
   if(v.effect) swprintf_s(fx,L"%c%02X",effectLetters[v.effect],unsigned(v.parameter));
   swprintf_s(text,L"%s %s %s %s",noteNames[v.note].c_str(),ins,vol,fx);return text;
+}
+std::optional<Tracker::PatternCommand> DocumentView::effect(unsigned p,unsigned r,unsigned c,unsigned column) const {
+  const auto key=std::tuple(p,c,r,column);const auto &effects=nativePattern->effects;
+  const auto found=std::lower_bound(effects.begin(),effects.end(),key,[](const auto &e,const auto &key){return std::tuple(e.pattern,e.channel,e.command.position/Tracker::performanceUnitsPerRow,unsigned(e.command.column))<key;});
+  if(found!=effects.end()&&std::tuple(found->pattern,found->channel,found->command.position/Tracker::performanceUnitsPerRow,unsigned(found->command.column))==key)return found->command;
+  if(column==0){const auto v=cell(p,r,c);if(!OpenMPT::ModCommand::IsPcNote(v.note)&&(v.effect||v.parameter)){Tracker::PatternCommand result;result.position=r*Tracker::performanceUnitsPerRow;result.kind=Tracker::PatternCommandKind::TrackerEffect;result.effect=v.effect;result.parameter=v.parameter;return result;}}
+  return {};
 }
 DocumentController::DocumentController(const std::filesystem::path &input,std::string identity,
   std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,std::function<void()> beforeView,size_t maxCacheBytes,
@@ -118,12 +126,26 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     charge(128+sizeof(Api::PatternSnapshot)+size_t(song.Patterns[p].GetNumRows())*song.GetNumChannels()*6);
   charge(size_t(song.GetNumSamples())*(128+512*sizeof(float)));
   charge(size_t(song.GetNumInstruments())*(128+sizeof(std::array<unsigned,120>)));
+  next->nativePatternBytes=patternViewBytes(native);charge(next->nativePatternBytes);charge(song.GetNumChannels());
+  std::map<uint64_t,unsigned> patternIndexes,channels;for(const auto &[i,p]:native.patterns)patternIndexes[p.id]=i;for(const auto &[i,t]:native.tracks)channels[t.id]=i;
+  const bool reuseNative=same&&previous->nativePattern&&previous->nativePattern->performance==native.performance&&previous->nativePattern->preciseNotes==native.preciseNotes&&previous->nativePattern->patternIndexes==patternIndexes&&previous->nativePattern->trackChannels==channels;
+  if(reuseNative)next->nativePattern=previous->nativePattern;
+  else{
+    auto cache=std::make_shared<NativePatternView>();cache->performance=native.performance;cache->preciseNotes=native.preciseNotes;
+    cache->patternIndexes=patternIndexes;cache->trackChannels=channels;
+    cache->effects.reserve(native.performance.commands.size());for(const auto &c:native.performance.commands)cache->effects.push_back({patternIndexes.at(c.pattern),channels.at(c.track),c});
+    std::sort(cache->effects.begin(),cache->effects.end(),[](const auto &a,const auto &b){return std::tuple(a.pattern,a.channel,a.command.position/Tracker::performanceUnitsPerRow,a.command.column)<std::tuple(b.pattern,b.channel,b.command.position/Tracker::performanceUnitsPerRow,b.command.column);});
+    cache->notes.reserve(native.preciseNotes.size());for(const auto &n:native.preciseNotes)cache->notes.push_back({patternIndexes.at(n.pattern),channels.at(n.track),n});
+    std::sort(cache->notes.begin(),cache->notes.end(),[](const auto &a,const auto &b){return std::tie(a.pattern,a.channel,a.note.position)<std::tie(b.pattern,b.channel,b.note.position);});next->nativePattern=std::move(cache);
+  }
+  for(unsigned c=0;c<song.GetNumChannels();++c){const auto track=native.tracks.at(c).id;next->effectColumns.push_back(native.performance.columns.contains(track)?native.performance.columns.at(track):1);}
   next->channels=song.GetNumChannels();next->instruments=song.GetNumInstruments();next->path=project.path;
   next->dirty=document.revision!=project.savedRevision || project.pluginRevision!=project.savedPluginRevision;next->hosted=Project::requiresHostedPlayback(document,project);
   auto &result=next->session;result.documentId=identity_+":"+std::to_string(generation);result.revision=result.documentId+":"+std::to_string(document.revision)+":"+std::to_string(song.Order.GetCurrentSequenceIndex())+":"+std::to_string(project.pluginRevision);
   Json patterns=Json::array(),orders=Json::array(),samples=Json::array(),instruments=Json::array(),plugins=Json::array(),sequences=Json::array();
   for(unsigned n=0;n<256;++n) next->noteNames[n]=::OpenMPT::mpt::ToWide(song.GetNoteName(uint8_t(n)));
   DocumentOperations operations(document);next->commands=operations.invoke("pattern.commands",Json::object());
+  for(const auto &effect:next->commands.at("effect"))if(effect.at("parameterMask")!=0)next->effectMasks.at(effect.at("command").get<unsigned>())=effect.at("parameterMask").get<uint8_t>();
   const auto &spec=song.GetModSpecifications();
   for(unsigned n=0;n<256;++n) {
     next->volumeLetters[n]=n<OpenMPT::MAX_VOLCMDS ? wchar_t(spec.GetVolEffectLetter(static_cast<OpenMPT::VolumeCommand>(n))) : L'?';
@@ -174,7 +196,7 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   }
   std::string format=spec.fileExtension;std::transform(format.begin(),format.end(),format.begin(),[](unsigned char c){return char(std::toupper(c));});
   result.document={{"title",::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.GetCharsetInternal(),song.GetTitle())},{"format",format},
-    {"channels",next->channels},{"orders",orders},{"patterns",patterns},{"samples",samples},{"instruments",instruments},{"nativePlugins",plugins},{"editable",document.editable()},
+    {"channels",next->channels},{"effectColumns",next->effectColumns},{"orders",orders},{"patterns",patterns},{"samples",samples},{"instruments",instruments},{"nativePlugins",plugins},{"editable",document.editable()},
     {"sequence",song.Order.GetCurrentSequenceIndex()},{"sequences",sequences},{"tempo",song.Order().GetDefaultTempo().ToDouble()},{"speed",song.Order().GetDefaultSpeed()},
     {"nativeSummary",{{"preciseNotes",native.preciseNotes.size()},{"signalDefinitions",native.signal.library.size()},{"envelopeTemplates",native.envelopeBank.size()}}},
     {"canUndo",document.canUndo()},{"canRedo",document.canRedo()},{"canUndoPlugins",same&&plugins_&&plugins_->canUndo()},{"canRedoPlugins",same&&plugins_&&plugins_->canRedo()},{"openPluginEditors",same&&plugins_?plugins_->openEditorCount():0},{"issues",project.issues}};
@@ -275,6 +297,9 @@ Json DocumentController::operation(const std::string &method,Json params) {
   }
   auto writes=DocumentOperations::writes();auto timelineWrites=TimelineOperations::writes();writes.insert(writes.end(),timelineWrites.begin(),timelineWrites.end());
   const auto assetWrites=AssetOperations::writes();writes.insert(writes.end(),assetWrites.begin(),assetWrites.end());
+  const auto patternWrites=PatternOperations::writes();writes.insert(writes.end(),patternWrites.begin(),patternWrites.end());
+  auto patternMethods=PatternOperations::reads();patternMethods.insert(patternMethods.end(),patternWrites.begin(),patternWrites.end());
+  const bool patternMethod=std::find(patternMethods.begin(),patternMethods.end(),method)!=patternMethods.end();
   auto pluginMethods=PluginOperations::reads();auto pluginWrites=PluginOperations::writes();writes.insert(writes.end(),pluginWrites.begin(),pluginWrites.end());pluginMethods.insert(pluginMethods.end(),pluginWrites.begin(),pluginWrites.end());
   const bool pluginMethod=std::find(pluginMethods.begin(),pluginMethods.end(),method)!=pluginMethods.end() || ((method=="history.undo"||method=="history.redo")&&params.value("domain",Json())=="plugins");
   const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="document.save" || method=="document.open";
@@ -312,6 +337,13 @@ Json DocumentController::operation(const std::string &method,Json params) {
     }
   } else if(pluginMethod) {
     result=plugins_->invoke(method,params);
+  } else if(patternMethod) {
+    PatternHostHooks hooks;for(const auto &p:project_.preserved.at("plugins"))hooks.plugins.push_back(p.at("instanceID").get<std::string>());
+    hooks.parameters=[&](size_t slot){try{return plugins_->invoke("plugin.parameters.get",{{"slot",slot}});}catch(const std::exception &){return Json::array();}};
+    hooks.absoluteAutomation=[&](size_t slot,uint32_t id){for(const auto &event:project_.preserved.at("automation"))if(event.at(0)==slot&&event.at(1)==id)return true;return false;};
+    hooks.validateCandidate=[&](const Tracker::NativeSong &next){const auto before=patternViewBytes(document_->native()),after=patternViewBytes(next);if(after>before&&(after-before>maxCacheBytes_||view_->cacheBytes>maxCacheBytes_-(after-before)))throw Api::ApiError(-32602,"Pattern edit needs more document view cache headroom");};
+    PatternOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
+    if(write){if(method=="pattern.transform")scanPatterns_=true;else changedPatterns_.insert(params.at("pattern").get<unsigned>());}
   } else {
     auto assetMethods=AssetOperations::reads();assetMethods.insert(assetMethods.end(),assetWrites.begin(),assetWrites.end());
     auto timeline=TimelineOperations::reads();timeline.insert(timeline.end(),timelineWrites.begin(),timelineWrites.end());
