@@ -287,3 +287,32 @@ The application now registers AssetOperations through the host's explicit
 additionalDocumentReads/additionalDocumentWrites catalogs. The worker retains
 its private sample clipboard across requests and replaces it on document open.
 Standalone test hosts still advertise only their implemented method sets.
+
+## Plugin rack integration
+
+The application also registers `PluginOperations`. Shared Mac method payloads
+are used for discovery, add/remove/move/bypass, parameters, saved state, buses,
+programs and instrument aliases. Plugin writes require `expectedRevision`;
+`history.undo`/`history.redo` with `domain:"plugins"` use an independent history.
+The native rack uses these same transactions. The complete current inventory is
+in `api.describe`; presets and library organization remain pending.
+
+Windows adds `plugin.editor.open` and `plugin.editor.close`, each accepting
+`slot` and `expectedRevision`. Open/close alone retain the musical revision.
+The controller owns separate saved-baseline instances on its worker; vendor UI
+lives on the provider's private STA. It polls only open editors, debounces their
+state changes, and forces capture before save/close/history. A vendor edit may
+therefore make a captured expected revision stale; read and rebase. State reads
+return the resulting revision. Musical state changes currently stop playback.
+Live parameter propagation is a remaining parity task.
+
+`document.get` exposes `canUndoPlugins`, `canRedoPlugins`, `openPluginEditors`,
+and rack slot/identity/bypass/instrument aliases. Removing a rack entry retains
+unresolved native automation, routing and binding identities; absolute slot
+automation is removed/remapped as on Mac. No target silently retargets.
+
+Discovery reads the cache. Explicit `rescan:true` scans installed VST3 roots
+through the isolated scanner; failures are reported with module paths while
+successful scans remain available. The exact class/path/architecture/hash guard
+still applies when loading. No automatic substitution or rescanning occurs on
+project open. Unknown plugin/project fields survive save and plugin history.

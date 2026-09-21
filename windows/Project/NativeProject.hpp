@@ -18,6 +18,7 @@ struct ProjectState {
 	nlohmann::json preserved=nlohmann::json::object();
 	nlohmann::json metadataBaseline=nlohmann::json::object();
 	uint64_t savedRevision=0;
+    uint64_t pluginRevision=0,savedPluginRevision=0; // Session history, not persisted musical data.
 	std::filesystem::path path;
 	std::vector<std::string> issues;
 };

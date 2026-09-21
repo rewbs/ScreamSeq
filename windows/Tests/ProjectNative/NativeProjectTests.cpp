@@ -43,7 +43,13 @@ int main(int argc,char **argv) {
 			bool caught=false;try {(void)ScreamSeq::Project::openNativeProject(bad);} catch(const std::exception &) {caught=true;}check(caught,message);
 		};
 		reject([](auto &r){r["native"]["preciseNotes"][0]["position"]=4294967295u;},"snapshot-relative native bounds reject before publish");
-		reject([](auto &r){r["native"]["automation"][0]["plugin"]="missing-instance";},"dangling rack identity rejects");
+        // Mac retains missing plugin targets for explicit recovery. Removing a
+        // rack entry must never redirect its lane to another plugin or lose it.
+        auto unresolved=good;unresolved["native"]["automation"][0]["plugin"]="missing-instance";
+        auto unresolvedPath=dir/L"unresolved.screamseq";
+        ScreamSeq::Project::writeProjectFile(unresolvedPath,ScreamSeq::Project::encodePlist(unresolved),true);
+        auto missing=ScreamSeq::Project::openNativeProject(unresolvedPath);
+        check(missing.document->native().automation[0].plugin=="missing-instance","missing rack target remains unresolved");
 		reject([](auto &r){r["plugins"][0]["state"]=nlohmann::json::binary(std::vector<uint8_t>(8),uint64_t(ScreamSeq::Project::OpaqueType::Date));},"opaque date cannot become plugin data");
 		reject([](auto &r){r["sequence"]=255;},"missing selected sequence rejects");
 		reject([](auto &r){r["version"]=7;},"future container rejected");

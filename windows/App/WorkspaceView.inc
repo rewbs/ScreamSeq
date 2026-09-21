@@ -75,6 +75,7 @@
             EnableWindow(controls.at(sampleSustainModeCommand),info.value("sustainLoop",false));
         }
         refreshSampleFields();
+        layoutPluginControls(place);
 		SetWindowTextW(controls.at(followCommand),follow ? L"Follow on [F]" : L"Detached [F]");
 		SetWindowTextW(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
 		for(auto [id,h]:controls) InvalidateRect(h,nullptr,FALSE);
@@ -107,7 +108,10 @@
             auto index=SendMessageW(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
             SendMessageW(controls.at(sampleCommandBase),LB_SETITEMDATA,index,i);
         }
+        installPluginControls();
 		std::vector<ScreamSeq::WorkspaceCommand> commands={
+            {pluginsCommand,L"Inspect / Plugin rack",L""},{pluginUndo,L"Plugins / Undo",L""},{pluginRedo,L"Plugins / Redo",L""},
+            {pluginRescan,L"Plugins / Rescan installed VST3 modules",L""},{pluginEditor,L"Plugins / Open selected native editor",L""},
             {openCommand,L"File / Open project or module",L"Ctrl+O"},{saveCommand,L"File / Save native project",L"Ctrl+S"},
             {saveAsCommand,L"File / Save As",L"Ctrl+Shift+S"},{undoCommand,L"Edit / Undo",L"Ctrl+Z"},{redoCommand,L"Edit / Redo",L"Ctrl+Y"},
             {copyCommand,L"Pattern / Copy rectangular cells",L"Ctrl+C"},{pasteCommand,L"Pattern / Paste rectangular cells",L"Ctrl+V"},{clearCommand,L"Pattern / Clear selection",L"Delete"},
@@ -132,7 +136,7 @@
 	}
 	void command(int id) {
 		try {
-            if(sampleCommand(id)) {}
+            if(pluginCommand(id) || sampleCommand(id)) {}
             else if(id==openCommand) openFile();
             else if(id==saveCommand || id==saveAsCommand) saveFile(id==saveAsCommand);
             else if(id==undoCommand || id==redoCommand) edit(id==undoCommand ? "history.undo" : "history.redo",{{"domain","document"}});
@@ -168,7 +172,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(id!=octaveChooser && id!=stepChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase) SetFocus(window);
+            if(id!=octaveChooser && id!=stepChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginsCommand)) SetFocus(window);
 		} catch(const std::exception &e) { status=wide(e.what()); }
 	}
     bool handleKey(WPARAM code) {
@@ -187,6 +191,10 @@
             if(key==VK_ESCAPE) {sampleDraft=false;refreshSampleFields();SetFocus(window);return true;}
             if(key==VK_TAB) {SetFocus(GetFocus()==controls.at(sampleStartField) ? controls.at(sampleEndField) : controls.at(sampleRangeCommand));return true;}
         }
+        if(GetFocus()==controls.at(pluginValue)) {
+            if(key==VK_RETURN) {command(pluginApply);return true;}
+            if(key==VK_ESCAPE) {pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;}
+        }
         if(textOwnsKeyboard() && key!=VK_ESCAPE) return false;
         if(ctrl && key=='I') {command(sampleImportCommand);return true;}
         if(ctrl && key=='O') {command(openCommand);return true;}
@@ -202,7 +210,7 @@
 		if(key==VK_F6) { command(nextPanelCommand);return true; }
 		if(key==VK_ESCAPE && dragging==4) {sampleRange()=sampleDragBefore;dragging=0;ReleaseCapture();refreshSampleFields();return true;}
 		if(key==VK_ESCAPE && dragging) { workspaceState.rightWidth=dragRight;workspaceState.lowerHeight=dragLower;dragging=0;ReleaseCapture();layoutControls();return true; }
-		if(key==VK_ESCAPE) { stop();command(focusPatternCommand);return true; }
+		if(key==VK_ESCAPE) {if(pluginDraft){pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;} stop();command(focusPatternCommand);return true; }
 		if(!ctrl && !alt && key==VK_SPACE) { if(device.running()) stop();else command(playCommand);return true; }
 		if(!ctrl && !alt && key=='F' && (column==0 || workspaceState.focus!="pattern")) { command(followCommand);return true; }
         if(workspaceState.focus=="samples") {

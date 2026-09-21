@@ -2,6 +2,7 @@
 #include "DocumentOperations.hpp"
 #include "AssetOperations.hpp"
 #include "HostedProject.hpp"
+#include "PluginOperations.hpp"
 #include "../Api/SessionAdapter.hpp"
 #include "../Project/NativeProject.hpp"
 #include <atomic>
@@ -40,6 +41,7 @@ struct DocumentView {
 class DocumentController {
   std::unique_ptr<Tracker::Document> document_;
   std::unique_ptr<AssetOperations> assets_;
+  std::unique_ptr<PluginOperations> plugins_;
   std::unique_ptr<HostedProjectPlayback> playback_;
   Project::ProjectState project_;
   std::string identity_;

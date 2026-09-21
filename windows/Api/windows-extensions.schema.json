@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScreamSeq Windows native plugin editor requests",
+  "description": "Use the running api.describe catalog for availability. Shared musical requests use the Mac API schema. These Windows editor operations run on the private plugin STA.",
+  "type": "object",
+  "properties": {
+    "jsonrpc": { "const": "2.0" },
+    "id": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "method": { "enum": ["plugin.editor.open", "plugin.editor.close"] },
+    "params": {
+      "type": "object",
+      "properties": {
+        "slot": { "type": "integer", "minimum": 0, "maximum": 63 },
+        "expectedRevision": { "type": "string", "minLength": 1, "maxLength": 200 }
+      },
+      "required": ["slot", "expectedRevision"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["jsonrpc", "id", "method", "params"],
+  "additionalProperties": false
+}

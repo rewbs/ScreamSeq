@@ -13,7 +13,7 @@
         s.uiText(busy ? L"Document worker busy" : L"Z-M / Q-U: note entry",12,513,142,muted);
         if(inspection) s.uiText(L"QA clipboard is private",12,535,142,muted);
 		s.uiText(L"OpenMPT audio engine",12,height-68,142,muted);
-		s.uiText(std::to_wstring(int(view->session.document.at("tempo").get<double>()))+L" BPM   /   "+std::to_wstring(view->session.document.at("speed").get<unsigned>())+L" ticks   /   "+wide(view->session.document.at("format").get<std::string>()),488,58,std::max(1.0f,width-496),muted);
+		s.uiText(std::to_wstring(int(view->session.document.at("tempo").get<double>()))+L" BPM   /   "+std::to_wstring(view->session.document.at("speed").get<unsigned>())+L" ticks   /   "+wide(view->session.document.at("format").get<std::string>()),570,58,std::max(1.0f,width-578),muted);
 		// Virtualized grid: field colors and geometry are shared by hit-testing.
 		const auto r=g.pattern; s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x10161e);
 		s.fill(r.x,r.y,r.w,gridHeader,0x202834);
@@ -78,16 +78,8 @@
 			s.unclip();s.outline(p.x,p.y,p.w,p.h,workspaceState.focus==workspaceState.active ? 0x6edac5 : 0x303b49);
 		}
 		if(workspaceState.layout!="Pattern focus") {
-			auto placeholder=[&](const ScreamSeq::WorkspaceRect &p,const wchar_t *title,const wchar_t *line1,const wchar_t *line2) {
-				s.clip(p.x,p.y,p.w,p.h);s.fill(p.x,p.y,p.w,p.h,panelBg);s.fill(p.x,p.y,p.w,29,0x232c38);
-				s.uiText(title,p.x+10,p.y+6,p.w-20,gold);s.uiText(L"Unavailable in this Windows build",p.x+10,p.y+45,p.w-20);
-				s.uiText(line1,p.x+10,p.y+71,p.w-20,muted);s.uiText(line2,p.x+10,p.y+93,p.w-20,muted);s.unclip();s.outline(p.x,p.y,p.w,p.h,0x303b49);
-			};
             if(sampleEditorVisible()) drawSampleEditor();
-            else {
-			    placeholder(g.graph,L"AUDIO + MODULATION GRAPH",L"Graph editing is not available yet.",L"Open Sample & loops to edit audio in this dock.");
-			    placeholder(g.automation,L"PATTERN AUTOMATION",L"Curve editing / plugin targets pending.",L"Native automation is preserved in saved projects.");
-            }
+            else drawPluginEditor();
 			s.fill(g.horizontalDivider.x,g.horizontalDivider.y,g.horizontalDivider.w,g.horizontalDivider.h,0x344151);
 			if(workspaceState.visible()) s.fill(g.verticalDivider.x,g.verticalDivider.y,g.verticalDivider.w,g.verticalDivider.h,0x344151);
 		}

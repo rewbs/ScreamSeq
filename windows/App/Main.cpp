@@ -39,7 +39,10 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     sampleRangeCommand=209,sampleCopyCommand=210,samplePasteCommand=211,sampleCutCommand=212,sampleClearCommand=213,
     sampleLoopToggleCommand=214,sampleLoopModeCommand=215,sampleSustainSetCommand=216,
     sampleSustainToggleCommand=217,sampleSustainModeCommand=218,sampleLoopSelectCommand=219,
-    sampleStartField=230,sampleEndField=231;
+    sampleStartField=230,sampleEndField=231,
+    pluginList=300,pluginLibrary=301,pluginAdd=302,pluginRescan=303,pluginEditor=304,
+    pluginBypass=305,pluginRemove=306,pluginUp=307,pluginDown=308,pluginUndo=309,pluginRedo=310,
+    pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -285,8 +288,8 @@ public:
         waveSample=UINT_MAX;updateInspector();layoutControls();updateTitle();
     }
     bool supportsDocumentOperations() const override {return true;}
-    std::vector<std::string> additionalDocumentReads() const override {return ScreamSeq::AssetOperations::reads();}
-    std::vector<std::string> additionalDocumentWrites() const override {return ScreamSeq::AssetOperations::writes();}
+    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();auto p=ScreamSeq::PluginOperations::reads();r.insert(r.end(),p.begin(),p.end());return r;}
+    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();auto p=ScreamSeq::PluginOperations::writes();r.insert(r.end(),p.begin(),p.end());return r;}
     Json documentOperation(const std::string &method,const Json &params) override {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
         try {auto result=await(controller->invoke(method,params));refreshDocument();return result;}
@@ -311,9 +314,10 @@ public:
 		for(size_t i = 0; i < size_t(frames) * 2; ++i) samples[i] *= 0.1f;
 	}
 	void play() { play(Json::object()); }
-	void play(const Json &settings) override {
+    void play(const Json &settings) override {
         frameRequested=true;
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        documentOperation("flushPluginEditors",{{"force",true}});
 		if(inspection) throw ScreamSeq::Api::ApiError(-32003,"Inspection mode: hardware output disabled");
 		device.close();
         // The old prepared chain is disposed on the worker. Drop UI readers
@@ -341,6 +345,7 @@ public:
 	#include "WorkspaceView.inc"
     #include "EditingView.inc"
     #include "SampleEditor.inc"
+    #include "PluginEditor.inc"
 	#include "WorkspaceDraw.inc"
 	void draw() {
         frameRequested=false;
@@ -402,9 +407,10 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
        message==WM_MOUSEWHEEL || (message==WM_MOUSEMOVE && (wp&MK_LBUTTON))) app->frameRequested=true;
 	try {
 		switch(message) {
-		case ScreamSeq::ApiDispatch::message: if(app->api) app->api->drain(); return 0;
+		case ScreamSeq::ApiDispatch::message: if(app->api && !app->refreshingPlugins) app->api->drain(); return 0;
 		case WM_CLOSE: if(app->busy) {app->stop();return 0;} if(!app->protectUnsaved()) return 0;break;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
+        case WM_TIMER: if(wp==1)app->pluginTimer();return 0;
 		case WM_DPICHANGED: {
 			auto rect = reinterpret_cast<RECT *>(lp);
 			SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE); return 0;
@@ -420,6 +426,9 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             SetTextColor(reinterpret_cast<HDC>(wp),RGB(212,224,235));SetBkColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));
             SetDCBrushColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
         case WM_COMMAND:
+            if(LOWORD(wp)==pluginValue) {if(HIWORD(wp)==EN_CHANGE)app->pluginFieldChanged();return 0;}
+            if((LOWORD(wp)==pluginLibrary || LOWORD(wp)==pluginParameter || LOWORD(wp)==pluginInstrument) && HIWORD(wp)!=CBN_SELCHANGE)return 0;
+            if(LOWORD(wp)==pluginList && HIWORD(wp)!=LBN_SELCHANGE && HIWORD(wp)!=LBN_DBLCLK)return 0;
             if(LOWORD(wp)==sampleStartField || LOWORD(wp)==sampleEndField) {
                 if(HIWORD(wp)==EN_CHANGE) app->sampleFieldChanged();return 0;
             }

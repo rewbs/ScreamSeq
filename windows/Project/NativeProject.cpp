@@ -81,12 +81,9 @@ void validateRecords(Json &root,const Tracker::NativeSong &native) {
 		}
 	}
 	need(native.mixer.buses.size()+assignedPlugins<=250,"Mixer buses and assigned instruments exceed the shared adapter budget");
-	auto known=[&](const std::string &id){need(ids.contains(id),"Native data refers to a missing plugin instance");};
-	for(const auto &lane:native.automation) known(lane.plugin);
-	for(const auto &bus:native.mixer.buses) for(const auto &plugin:bus.inserts) known(plugin);
-	for(const auto &route:native.mixer.instruments) known(route.plugin);
-	for(const auto &route:native.mixer.sidechains) known(route.plugin);
-	for(const auto &[id,binding]:native.performance.bindings) known(binding.plugin);
+    // Native references are stable identities. Removing a rack entry retains
+    // unresolved lanes/routes/bindings for plugin Undo, exactly as on Mac.
+    // Never retarget them to the entry that inherited a removed numeric slot.
 	if(root.contains("automation")) for(const auto &point:array(root.at("automation"),100000)) {
 		need(point.is_array() && point.size()==4,"Invalid absolute automation record");
 		need(integer(point[0],63)<root.at("plugins").size(),"Automation plugin slot does not exist");
@@ -190,7 +187,7 @@ void saveNativeProject(Tracker::Document &document,ProjectState &state,const std
 	auto tree=nativeProjectTree(document,state);auto bytes=encodePlist(tree);
 	// Compute every allocating state update before publishing the destination.
 	ProjectState saved=state;saved.preserved=std::move(tree);saved.metadataBaseline=encodeNativeMetadata(document.native());
-	saved.savedRevision=document.revision;saved.path=path;
+	saved.savedRevision=document.revision;saved.savedPluginRevision=state.pluginRevision;saved.path=path;
 	writeProjectFile(path,bytes,overwrite);
 	state=std::move(saved);
 }

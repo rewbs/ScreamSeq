@@ -64,7 +64,7 @@ void DocumentController::loop() {
     // only the worker owns it, so large vector/map deletion never lands there.
     std::erase_if(retired_,[](const auto &old){return old.use_count()==1;});
     {std::unique_lock lock(mutex_);wake_.wait_for(lock,std::chrono::milliseconds(50),[&]{return closing_ || !jobs_.empty();});
-      if(jobs_.empty() && closing_) {lock.unlock();playback_.reset();assets_.reset();document_.reset();project_=Project::ProjectState{};retired_.clear();view_.reset();return;}
+      if(jobs_.empty() && closing_) {lock.unlock();playback_.reset();plugins_.reset();assets_.reset();document_.reset();project_=Project::ProjectState{};retired_.clear();view_.reset();return;}
       if(jobs_.empty()) continue;
       job=std::move(jobs_.front());jobs_.pop_front();}
     job();
@@ -81,7 +81,7 @@ void DocumentController::service() {
 }
 std::shared_ptr<const DocumentView> DocumentController::view() {std::lock_guard lock(mutex_);return view_;}
 std::string DocumentController::revision() const {
-  return identity_+":"+std::to_string(generation_)+":"+std::to_string(document_->revision)+":"+std::to_string(document_->song().Order.GetCurrentSequenceIndex());
+  return identity_+":"+std::to_string(generation_)+":"+std::to_string(document_->revision)+":"+std::to_string(document_->song().Order.GetCurrentSequenceIndex())+":"+std::to_string(project_.pluginRevision);
 }
 void DocumentController::open(const std::filesystem::path &path) {
   Project::OpenedProject candidate;
@@ -94,11 +94,13 @@ void DocumentController::open(const std::filesystem::path &path) {
   auto next=buildView(*candidate.document,candidate.state,generation_+1);
   auto assets=std::make_unique<AssetOperations>(*candidate.document,[this]{onMain(stop_);},
     [this](const Tracker::Document &imported){validateAssetCandidate(imported);});
+  auto plugins=std::make_unique<PluginOperations>(*candidate.document,project_,[this]{onMain(stop_);});
   if(view_) retired_.push_back(view_);
   try {if(document_) onMain(stop_);} catch(...) {if(view_) retired_.pop_back();throw;}
   static_assert(std::is_nothrow_swappable_v<Project::ProjectState>);
   document_.swap(candidate.document);std::swap(project_,candidate.state);++generation_;
   assets_.swap(assets);
+  plugins_.swap(plugins);
   install(std::move(next));
 }
 std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &document,const Project::ProjectState &project,uint64_t generation) {
@@ -112,8 +114,8 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   charge(size_t(song.GetNumSamples())*(128+512*sizeof(float)));
   charge(size_t(song.GetNumInstruments())*(128+sizeof(std::array<unsigned,120>)));
   next->channels=song.GetNumChannels();next->instruments=song.GetNumInstruments();next->path=project.path;
-  next->dirty=document.revision!=project.savedRevision;next->hosted=Project::requiresHostedPlayback(document,project);
-  auto &result=next->session;result.documentId=identity_+":"+std::to_string(generation);result.revision=result.documentId+":"+std::to_string(document.revision)+":"+std::to_string(song.Order.GetCurrentSequenceIndex());
+  next->dirty=document.revision!=project.savedRevision || project.pluginRevision!=project.savedPluginRevision;next->hosted=Project::requiresHostedPlayback(document,project);
+  auto &result=next->session;result.documentId=identity_+":"+std::to_string(generation);result.revision=result.documentId+":"+std::to_string(document.revision)+":"+std::to_string(song.Order.GetCurrentSequenceIndex())+":"+std::to_string(project.pluginRevision);
   Json patterns=Json::array(),orders=Json::array(),samples=Json::array(),instruments=Json::array(),plugins=Json::array(),sequences=Json::array();
   for(unsigned n=0;n<256;++n) next->noteNames[n]=::OpenMPT::mpt::ToWide(song.GetNoteName(uint8_t(n)));
   DocumentOperations operations(document);next->commands=operations.invoke("pattern.commands",Json::object());
@@ -159,19 +161,21 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   for(const auto &plugin:project.preserved.at("plugins")) {
     const auto format=plugin.value("format","AU");const auto classID=plugin.value("classID",Json(""));
     const bool available=format=="Built-in" && std::any_of(builtins.begin(),builtins.end(),[&](const auto &d){return classID==d.classID;});
-    plugins.push_back({{"instanceID",plugin.at("instanceID")},{"format",format},{"name",plugin.value("name","Plugin")},
-      {"classID",classID},{"available",available},{"availability",available ? "built-in" : format=="AU" ? "unsupported" : "unchecked"}});
+    plugins.push_back({{"slot",plugins.size()},{"instanceID",plugin.at("instanceID")},{"format",format},{"name",plugin.value("name","Plugin")},
+      {"classID",classID},{"available",available},{"availability",available ? "built-in" : format=="AU" ? "unsupported" : "unchecked"},
+      {"bypass",plugin.value("bypass",false)},{"isInstrument",plugin.value("isInstrument",false)},{"instrument",plugin.value("instrument",0)},
+      {"instrumentAssignments",plugin.value("instrumentAssignments",Json::array())}});
   }
   std::string format=spec.fileExtension;std::transform(format.begin(),format.end(),format.begin(),[](unsigned char c){return char(std::toupper(c));});
   result.document={{"title",::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.GetCharsetInternal(),song.GetTitle())},{"format",format},
     {"channels",next->channels},{"orders",orders},{"patterns",patterns},{"samples",samples},{"instruments",instruments},{"nativePlugins",plugins},{"editable",document.editable()},
     {"sequence",song.Order.GetCurrentSequenceIndex()},{"sequences",sequences},{"tempo",song.Order().GetDefaultTempo().ToDouble()},{"speed",song.Order().GetDefaultSpeed()},
     {"nativeSummary",{{"preciseNotes",native.preciseNotes.size()},{"signalDefinitions",native.signal.library.size()},{"envelopeTemplates",native.envelopeBank.size()}}},
-    {"canUndo",document.canUndo()},{"canRedo",document.canRedo()},{"issues",project.issues}};
+    {"canUndo",document.canUndo()},{"canRedo",document.canRedo()},{"canUndoPlugins",same&&plugins_&&plugins_->canUndo()},{"canRedoPlugins",same&&plugins_&&plugins_->canRedo()},{"openPluginEditors",same&&plugins_?plugins_->openEditorCount():0},{"issues",project.issues}};
   {
     std::lock_guard lock(mutex_);
     bool changed=!view_ || view_->session.documentId!=result.documentId;
-    if(view_) for(const auto *key:{"patterns","samples","instruments","orders"}) changed|=view_->session.document.at(key)!=result.document.at(key);
+    if(view_) for(const auto *key:{"patterns","samples","instruments","orders","nativePlugins"}) changed|=view_->session.document.at(key)!=result.document.at(key);
     next->catalogRevision=(view_ ? view_->catalogRevision : 0)+(changed ? 1 : 0);
 
   }
@@ -258,15 +262,22 @@ void DocumentController::validateAssetCandidate(const Tracker::Document &candida
 Json DocumentController::operation(const std::string &method,Json params) {
   if(publicationPending_) publish();
   if(method=="synchronizeView") return Json::object();
+  if(method=="flushPluginEditors") {keys(params,{"force"});const auto count=plugins_->openEditorCount();if(plugins_->flushEditors(flag(params,"force")) || count!=plugins_->openEditorCount())publish();return Json::object();}
+  if(method=="document.save" || method=="document.open" || method.starts_with("plugin.") || method.starts_with("history.")) {
+    const auto count=plugins_->openEditorCount();
+    if(plugins_->flushEditors(true) || count!=plugins_->openEditorCount())publish();
+  }
   auto writes=DocumentOperations::writes();auto timelineWrites=TimelineOperations::writes();writes.insert(writes.end(),timelineWrites.begin(),timelineWrites.end());
   const auto assetWrites=AssetOperations::writes();writes.insert(writes.end(),assetWrites.begin(),assetWrites.end());
+  auto pluginMethods=PluginOperations::reads();auto pluginWrites=PluginOperations::writes();writes.insert(writes.end(),pluginWrites.begin(),pluginWrites.end());pluginMethods.insert(pluginMethods.end(),pluginWrites.begin(),pluginWrites.end());
+  const bool pluginMethod=std::find(pluginMethods.begin(),pluginMethods.end(),method)!=pluginMethods.end() || ((method=="history.undo"||method=="history.redo")&&params.value("domain",Json())=="plugins");
   const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="document.save" || method=="document.open";
   if(write) {
     if(!params.contains("expectedRevision") || !params["expectedRevision"].is_string()) throw Api::ApiError(-32602,"expectedRevision is required");
     if(params["expectedRevision"]!=revision()) throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
     params.erase("expectedRevision");
   }
-  const auto beforeRevision=revision();const auto beforePath=project_.path;const auto beforeSaved=project_.savedRevision;
+  const auto beforeRevision=revision();const auto beforePath=project_.path;const auto beforeSaved=project_.savedRevision;const auto beforeSavedPlugins=project_.savedPluginRevision;const auto beforeEditors=plugins_->openEditorCount();
   changedPatterns_.clear();
   changedSamples_.clear();
   const bool pcmWrite=method=="sample.process" || method=="sample.draw" || method=="sample.crossfade" || method=="sample.cut" || method=="sample.delete" || method=="sample.paste";
@@ -283,7 +294,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(!params.contains("path")) throw Api::ApiError(-32602,"path is required");auto path=pathValue(params["path"]);
     if(method=="document.open") {
       bool discard=flag(params,"discard");
-      if(document_->revision!=project_.savedRevision && !discard) throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before opening");
+      if((document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision) && !discard) throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before opening");
       result={{"path",utf8(path)}};open(path);return result;
     } else {
       auto ext=extension(path);if(ext!=L".screamseq" && ext!=L".resonance") throw Api::ApiError(-32602,"Use .screamseq or .resonance for a native project");
@@ -293,6 +304,8 @@ Json DocumentController::operation(const std::string &method,Json params) {
       if(dry) (void)Project::serializeNativeProject(*document_,project_);else Project::saveNativeProject(*document_,project_,path,overwrite);
       result={{"path",utf8(path)},{"format",ext==L".screamseq" ? "screamseq" : "resonance"},{"written",!dry},{"projectVersion",6}};
     }
+  } else if(pluginMethod) {
+    result=plugins_->invoke(method,params);
   } else {
     auto assetMethods=AssetOperations::reads();assetMethods.insert(assetMethods.end(),assetWrites.begin(),assetWrites.end());
     auto timeline=TimelineOperations::reads();timeline.insert(timeline.end(),timelineWrites.begin(),timelineWrites.end());
@@ -310,11 +323,13 @@ Json DocumentController::operation(const std::string &method,Json params) {
     } else if(std::find(timeline.begin(),timeline.end(),method)!=timeline.end()) {
       TimelineOperations operations(*document_,[this]{onMain(stop_);});result=operations.invoke(method,params);
     } else {
+      if((method=="history.undo" && document_->canUndo()) || (method=="history.redo" && document_->canRedo()))
+        Tracker::validatePluginCapacity(projectPluginStates(project_),document_->historyNative(method=="history.redo").mixer.buses.size());
       DocumentOperations operations(*document_,[this]{onMain(stop_);},[this](const auto &edits){for(const auto &e:edits) changedPatterns_.insert(e.pattern);onMain([this,edits]{edits_(edits);});});
       result=operations.invoke(method,params);
     }
   }
-  if(write && (beforeRevision!=revision() || beforePath!=project_.path || beforeSaved!=project_.savedRevision)) {
+  if(write && (beforeRevision!=revision() || beforePath!=project_.path || beforeSaved!=project_.savedRevision || beforeSavedPlugins!=project_.savedPluginRevision || beforeEditors!=plugins_->openEditorCount())) {
     publicationPending_=true;
     try {publish();} catch(...) {
       // Music may already be committed. Repair a transient cache failure before

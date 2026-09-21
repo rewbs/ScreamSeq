@@ -133,7 +133,9 @@ class SessionAdapter {
       for(const auto &m:host_->additionalDocumentWrites()) {
         result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
       }
-      result["windowsExtensions"]={{"document.open","absolute path, expectedRevision, discard:true required for unsaved work"}};
+      result["windowsExtensions"]={{"document.open","absolute path, expectedRevision, discard:true required for unsaved work"},
+        {"plugin.editor.open","slot and expectedRevision; native VST3 editor on the private STA; no musical change unless the vendor emits edits"},
+        {"plugin.editor.close","slot and expectedRevision; flush pending baseline edits before closing"}};
     }
     return result;
   }
@@ -252,7 +254,7 @@ public:
       } else {
         keys(p,{"expectedRevision"}); host_->stop(); data={{"playing",false}};
       }
-      const auto after=write ? host_->snapshot() : before;
+      const auto after=(write || docRead) ? host_->snapshot() : before;
       Json result={{"revision",after.revision},{"changed",before.revision!=after.revision},
         {"playbackStopped",before.transport.value("playing",false) && !after.transport.value("playing",false)}, {"data",std::move(data)}};
       if(method=="context.get" || method=="context.set")

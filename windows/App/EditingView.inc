@@ -104,6 +104,7 @@
     }
     bool saveFile(bool saveAs=false) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        documentOperation("flushPluginEditors",{{"force",true}});
         auto revision=view->session.revision;auto path=view->path;
         auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),towlower);
         if(saveAs || path.empty() || (ext!=L".screamseq" && ext!=L".resonance")) path=chooseFile(true);
@@ -112,6 +113,7 @@
         status=L"Native project saved atomically";return true;
     }
     bool protectUnsaved() {
+        documentOperation("flushPluginEditors",{{"force",true}});
         if(!view->dirty) return true;
         auto revision=view->session.revision;
         int choice=MessageBoxW(window,L"Save changes before leaving this document?\nYes: Save    No: Discard    Cancel: Keep editing",L"Unsaved ScreamSeq project",MB_YESNOCANCEL|MB_ICONWARNING|MB_DEFBUTTON3);
