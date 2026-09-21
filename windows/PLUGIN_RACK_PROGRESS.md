@@ -2,6 +2,9 @@
 
 Full Mac parity remains the active goal. This checkpoint connects the plugin
 provider to the application; it does not complete the parity plan.
+The subsequent [live parameter checkpoint](LIVE_PLUGIN_PARAMETERS.md) supersedes
+the stopped-parameter limitation recorded below; this file retains its original
+rack build and visual evidence.
 
 ## Implemented
 
@@ -72,10 +75,10 @@ names do not establish a fresh Mac export or reciprocal Mac build/reopen.
 
 ## Remaining work
 
-- Parameter/state commits currently stop playback. Add safe live parameter
-  propagation and gesture history without baking automation or allowing a
-  partial batch to reach the callback. Opaque preset/IR changes need prepared
-  replacement behavior. Long playback and allocation/free/lock audits remain.
+- Parameter propagation and gesture history were completed in the subsequent
+  `LIVE_PLUGIN_PARAMETERS.md` checkpoint. Opaque preset/IR changes still need
+  prepared replacement behavior. Long playback and full allocation/free/lock
+  audits remain.
 - Native program/bus/alias controls, plugin presets, favorites/categories,
   missing-plugin resolution, a real instrument and its trigger workflow.
 - OrbitCab's previously measured offline partition difference remains open;

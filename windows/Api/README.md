@@ -303,8 +303,21 @@ The controller owns separate saved-baseline instances on its worker; vendor UI
 lives on the provider's private STA. It polls only open editors, debounces their
 state changes, and forces capture before save/close/history. A vendor edit may
 therefore make a captured expected revision stale; read and rebase. State reads
-return the resulting revision. Musical state changes currently stop playback.
-Live parameter propagation is a remaining parity task.
+return the resulting revision. Validated `plugin.parameters.set` batches reach
+the playing chain together at a render boundary and update the saved baseline
+and plugin history independently from song automation. Dry runs, rejected writes
+and successful no-ops publish nothing. A full/unavailable queue stops playback
+before committing the complete baseline, rather than applying a batch prefix.
+
+Native editor gestures use the same live path. Parameter polling runs on a 16 ms
+timer while editors are open; full saved-state capture waits for a 400 ms gesture
+boundary, with immediate capture for reads/save/close/history. Replaying the
+gesture on a disposable saved-baseline instance must reproduce the complete
+editor state before the edit is classified as parameter-only. Opaque preset/IR
+changes, structural rack changes and plugin Undo/Redo still stop playback. API
+parameter commits currently close baseline editor windows before refreshing
+their saved state. State capture, validation, history and plugin construction
+remain outside the audio callback.
 
 `document.get` exposes `canUndoPlugins`, `canRedoPlugins`, `openPluginEditors`,
 and rack slot/identity/bypass/instrument aliases. Removing a rack entry retains

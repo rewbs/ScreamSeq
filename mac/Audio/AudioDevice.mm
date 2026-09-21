@@ -217,7 +217,7 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
       buffers->mBuffers[0].mData && buffers->mBuffers[0].mDataByteSize >= frames * 8) {
     auto *output = static_cast<float *>(buffers->mBuffers[0].mData);
     if (self.plugins_) {
-      self.plugins_->applyPending();
+      self.plugins_->beginRenderBlock();
       self.plugins_->syncTransport(*self.renderer_);
     }
     if (!self.renderEnded_) {

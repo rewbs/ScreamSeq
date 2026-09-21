@@ -38,7 +38,9 @@ Json buses(const NativePlugin &plugin){Json j=Json::array();for(const auto &b:pl
 size_t stateBytes(const Json &plugins,const Json &automation){size_t n=automation.size()*128;for(const auto &p:plugins)n+=4096+p.at("state").get_binary().size();return n;}
 std::string hashText(const std::string &s){std::array<UCHAR,32> digest{};if(BCryptHash(BCRYPT_SHA256_ALG_HANDLE,nullptr,0,reinterpret_cast<PUCHAR>(const_cast<char*>(s.data())),ULONG(s.size()),digest.data(),ULONG(digest.size()))<0)throw std::runtime_error("Cannot hash plugin program catalog");std::string out;for(auto b:digest){out+="0123456789abcdef"[b>>4];out+="0123456789abcdef"[b&15];}return out;}
 }
-PluginOperations::PluginOperations(Tracker::Document &d,Project::ProjectState &p,std::function<void()> stop):document_(d),project_(p),stop_(std::move(stop)){}
+PluginOperations::PluginOperations(Tracker::Document &d,Project::ProjectState &p,std::function<void()> stop,
+  std::function<void(std::span<const ParameterChange>)> liveParameters)
+  :document_(d),project_(p),stop_(std::move(stop)),liveParameters_(std::move(liveParameters)){}
 PluginOperations::~PluginOperations()=default;
 std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","automation.target.get"};}
 std::vector<std::string> PluginOperations::writes(){return {"plugin.add","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.editor.open","plugin.editor.close"};}
@@ -48,14 +50,14 @@ size_t PluginOperations::slot(const Json &p) const {
   need(!rack.empty(),"Plugin rack is empty");return size_t(integer(field(p,"slot"),0,rack.size()-1));
 }
 PluginOperations::History PluginOperations::snapshot() const {auto &p=project_.preserved;return {p.at("plugins"),p.at("automation"),stateBytes(p.at("plugins"),p.at("automation"))};}
-void PluginOperations::commit(Json plugins,Json automation,bool keepEditors) {
+void PluginOperations::commit(Json plugins,Json automation,bool keepEditors,bool parameterOnly,std::span<const ParameterChange> changes) {
   if(plugins==project_.preserved.at("plugins")&&automation==project_.preserved.at("automation"))return;
   auto candidate=project_;candidate.preserved["plugins"]=plugins;candidate.preserved["automation"]=automation;
   validatePluginCapacity(projectPluginStates(candidate),document_.native().mixer.buses.size());(void)projectAbsoluteAutomation(candidate);
   auto before=snapshot();need(before.bytes<=128u*1024u*1024u,"Plugin Undo state exceeds 128 MiB");
   undo_.push_back(std::move(before)); // Allocate history before stopping or publishing.
-  try {if(stop_)stop_();}catch(...){undo_.pop_back();throw;}
-  if(!keepEditors){editors_.clear();openEditors_.clear();pendingStates_.clear();}
+  try {if(parameterOnly && liveParameters_) {if(!changes.empty())liveParameters_(changes);}else if(stop_)stop_();}catch(...){undo_.pop_back();throw;}
+  if(!keepEditors){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
   project_.preserved["plugins"].swap(plugins);project_.preserved["automation"].swap(automation);
   ++project_.pluginRevision;Project::invalidateRecoveryTake(project_);redo_.clear();
   size_t bytes=0;for(const auto &h:undo_)bytes+=h.bytes;
@@ -66,24 +68,48 @@ Tracker::NativePlugin &PluginOperations::editor(size_t index) {
   if(!p)p=std::make_unique<NativePlugin>(state,48000);return *p;
 }
 bool PluginOperations::flushEditors(bool force) {
-  auto next=project_.preserved.at("plugins");bool changed=false;
-  for(auto &p:next){const auto key=p.at("instanceID").get<std::string>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key))continue;
-    uint32_t id=0;float value=0;bool edited=false;while(found->second->popEdit(id,value)){edited=true;lastTouched_={{"plugin",p.at("instanceID")},{"parameter",id},{"source","editor"}};++touchSequence_;}
-    // State capture is on a separate baseline instance, never an automated DSP
-    // copy. Also catches vendor-internal preset/IR changes without a parameter.
-    const auto state=blob(found->second->state().state);
-    const auto &previous=pendingStates_.contains(key)?pendingStates_.at(key):p.at("state");
-    if(state!=previous){pendingStates_[key]=state;lastEditorChange_=std::chrono::steady_clock::now();}
-    if(!found->second->editorOpen()){openEditors_.erase(key);force=true;}
-    (void)edited;
+  if(openEditors_.empty())return false;
+  const auto &rack=project_.preserved.at("plugins");
+  const auto now=std::chrono::steady_clock::now();
+  std::vector<ParameterChange> liveChanges;
+  for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key))continue;
+    std::map<uint32_t,float> edits;
+    uint32_t id=0;float value=0;while(found->second->popEdit(id,value)){edits[id]=value;pendingParameters_[key][id]=value;lastTouched_={{"plugin",p.at("instanceID")},{"parameter",id},{"source","editor"}};++touchSequence_;}
+    for(auto [parameter,v]:edits)liveChanges.push_back({uint32_t(slot),parameter,v,0});
+    if(!edits.empty())lastEditorChange_=now;
+    if(!found->second->editorOpen())force=true;
   }
-  if(!force && std::chrono::steady_clock::now()-lastEditorChange_<std::chrono::milliseconds(400))return false;
-  for(auto &p:next){auto found=pendingStates_.find(p.at("instanceID").get<std::string>());if(found!=pendingStates_.end()&&found->second!=p.at("state")){p["state"]=found->second;changed=true;}}
-  if(changed)commit(std::move(next),project_.preserved.at("automation"),true);pendingStates_.clear();return changed;
+  if(!liveChanges.empty() && liveParameters_)liveParameters_(liveChanges);
+  // Fast gesture delivery does not serialize vendor state or copy the rack.
+  // Capture after the gesture settles, or immediately for save/close/read.
+  // Periodic idle captures also retain opaque preset/IR changes without edits.
+  if(!force && (now-lastEditorChange_<std::chrono::milliseconds(400) || now-lastStateCapture_<std::chrono::milliseconds(400)))return false;
+  lastStateCapture_=now;Json next;bool changed=false;std::vector<std::string> closed;
+  for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key))continue;
+    const auto state=blob(found->second->state().state);
+    if(state!=p.at("state")){if(!changed)next=rack;next[slot]["state"]=state;changed=true;}
+    if(!found->second->editorOpen())closed.push_back(key);
+  }
+  if(changed){
+    // Presets and IR loads can emit parameter edits AND change opaque state.
+    // Only keep playback running when replaying the gesture on the saved
+    // baseline reproduces the complete editor state. This work is never DSP.
+    bool parameterOnly=bool(liveParameters_);const auto baseline=projectPluginStates(project_);
+    for(size_t i=0;parameterOnly && i<next.size();++i)if(next[i].at("state")!=project_.preserved.at("plugins")[i].at("state")){
+      auto edits=pendingParameters_.find(baseline[i].instanceID);
+      if(edits==pendingParameters_.end()){parameterOnly=false;break;}
+      try {NativePlugin probe(baseline[i],48000);for(auto [id,value]:edits->second)if(!probe.parameter(id,value)){parameterOnly=false;break;}
+        if(parameterOnly)parameterOnly=blob(probe.state().state)==next[i].at("state");
+      }catch(const std::exception &){parameterOnly=false;}
+    }
+    commit(std::move(next),project_.preserved.at("automation"),true,parameterOnly);
+  }
+  for(const auto &key:closed)openEditors_.erase(key);
+  pendingParameters_.clear();return changed;
 }
 Json PluginOperations::invoke(const std::string &method,const Json &p) {
   auto rack=project_.preserved.at("plugins"),automation=project_.preserved.at("automation");
-  Json touch=nullptr;
+  Json touch=nullptr;std::vector<ParameterChange> liveChanges;
   const bool dry=flag(p,"dryRun");
   if(method=="plugin.discover") {
     keys(p,{"format","rescan"});const auto format=text(p.value("format",Json("")),16);need(format.empty()||format=="AU"||format=="VST3"||format=="Built-in","Unknown plugin format");
@@ -100,7 +126,7 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     keys(p,{"domain"});need(field(p,"domain")=="plugins","Wrong plugin history domain");auto &from=method=="history.undo"?undo_:redo_;auto &to=method=="history.undo"?redo_:undo_;
     if(from.empty())return Json::object();auto candidate=project_;candidate.preserved["plugins"]=from.back().plugins;candidate.preserved["automation"]=from.back().automation;
     validatePluginCapacity(projectPluginStates(candidate),document_.native().mixer.buses.size());auto before=snapshot();to.push_back(std::move(before));
-    try{if(stop_)stop_();}catch(...){to.pop_back();throw;}editors_.clear();openEditors_.clear();pendingStates_.clear();project_.preserved["plugins"].swap(from.back().plugins);project_.preserved["automation"].swap(from.back().automation);from.pop_back();++project_.pluginRevision;Project::invalidateRecoveryTake(project_);return Json::object();
+    try{if(stop_)stop_();}catch(...){to.pop_back();throw;}editors_.clear();openEditors_.clear();pendingParameters_.clear();project_.preserved["plugins"].swap(from.back().plugins);project_.preserved["automation"].swap(from.back().automation);from.pop_back();++project_.pluginRevision;Project::invalidateRecoveryTake(project_);return Json::object();
   }
   if(method=="plugin.add") {
     keys(p,{"descriptor","dryRun"});need(rack.size()<maximumNativePlugins,"Plugin rack is full");PluginState state{descriptor(field(p,"descriptor"))};state.instanceID=identity();
@@ -144,7 +170,7 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     NativePlugin probe(next,48000);
     if(method=="plugin.parameters.set") {auto available=probe.parameters();const auto &values=field(p,"values");need(values.is_array()&&!values.empty()&&values.size()<=4096,"Invalid parameter batch");std::set<uint32_t> seen;std::vector<std::pair<uint32_t,float>> prepared;
       for(const auto &v:values){keys(v,{"id","value"});const auto id=uint32_t(integer(field(v,"id"),0,UINT32_MAX));need(seen.insert(id).second,"Duplicate plugin parameter");auto found=std::find_if(available.begin(),available.end(),[&](const auto &x){return x.id==id;});need(found!=available.end()&&found->writable,"Plugin parameter is not writable");prepared.emplace_back(id,float(number(field(v,"value"),found->min,found->max)));}
-      for(auto [id,value]:prepared)need(probe.parameter(id,value),"Plugin rejected parameter");if(!dry)touch={{"plugin",state.instanceID},{"parameter",prepared.back().first},{"source","api"}};
+      for(auto [id,value]:prepared){need(probe.parameter(id,value),"Plugin rejected parameter");liveChanges.push_back({uint32_t(index),id,value,0});}if(!dry)touch={{"plugin",state.instanceID},{"parameter",prepared.back().first},{"source","api"}};
     }
     rack[index]["state"]=blob(probe.state().state);
   } else if(method=="plugin.buses.set") {
@@ -160,6 +186,6 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     NativePlugin probe(state,48000);probe.loadProgram(id);rack[index]["state"]=blob(probe.state().state);
   } else throw Api::ApiError(-32601,"Unknown plugin operation");
   const bool changed=rack!=project_.preserved.at("plugins")||automation!=project_.preserved.at("automation");
-  if(!dry){commit(std::move(rack),std::move(automation));if(!touch.is_null()){lastTouched_=std::move(touch);++touchSequence_;}}return {{"wouldChange",changed},{"dryRun",dry}};
+  if(!dry){commit(std::move(rack),std::move(automation),false,method=="plugin.parameters.set",liveChanges);if(!touch.is_null()){lastTouched_=std::move(touch);++touchSequence_;}}return {{"wouldChange",changed},{"dryRun",dry}};
 }
 }

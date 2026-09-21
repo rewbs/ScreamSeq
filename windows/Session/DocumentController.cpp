@@ -46,8 +46,9 @@ std::wstring DocumentView::displayCell(unsigned p,unsigned r,unsigned c) const {
   swprintf_s(text,L"%s %s %s %s",noteNames[v.note].c_str(),ins,vol,fx);return text;
 }
 DocumentController::DocumentController(const std::filesystem::path &input,std::string identity,
-  std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,std::function<void()> beforeView,size_t maxCacheBytes)
-  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),thread_([this]{loop();}) {
+  std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,std::function<void()> beforeView,size_t maxCacheBytes,
+  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters)
+  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),thread_([this]{loop();}) {
   auto task=std::make_shared<std::packaged_task<void()>>([this,input]{open(input);});
   auto done=task->get_future();
   {std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();
@@ -94,7 +95,11 @@ void DocumentController::open(const std::filesystem::path &path) {
   auto next=buildView(*candidate.document,candidate.state,generation_+1);
   auto assets=std::make_unique<AssetOperations>(*candidate.document,[this]{onMain(stop_);},
     [this](const Tracker::Document &imported){validateAssetCandidate(imported);});
-  auto plugins=std::make_unique<PluginOperations>(*candidate.document,project_,[this]{onMain(stop_);});
+  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters;
+  if(liveParameters_)liveParameters=[this](std::span<const Tracker::ParameterChange> changes){
+    onMain([this,batch=std::vector<Tracker::ParameterChange>(changes.begin(),changes.end())]{liveParameters_(batch);});
+  };
+  auto plugins=std::make_unique<PluginOperations>(*candidate.document,project_,[this]{onMain(stop_);},std::move(liveParameters));
   if(view_) retired_.push_back(view_);
   try {if(document_) onMain(stop_);} catch(...) {if(view_) retired_.pop_back();throw;}
   static_assert(std::is_nothrow_swappable_v<Project::ProjectState>);

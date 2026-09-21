@@ -130,8 +130,11 @@ class PluginChain {
   std::vector<SampleRoute> sampleRoutes_;
   std::array<float,8192> sampleGraphBuffer_{};
   std::vector<bool> bypass_;
-  std::array<ParameterChange, 1024> queue_{};
-  std::atomic<uint32_t> write_{0}, read_{0};
+  struct QueuedParameter {ParameterChange change;bool last=false;};
+  std::array<QueuedParameter, 4096> queue_{};
+  alignas(64) std::atomic<uint32_t> write_{0};
+  alignas(64) std::atomic<uint32_t> read_{0};
+  bool parameterBlockOpen_=false; // Audio owner only; excludes mid-block updates.
   std::atomic<bool> failed_{false};
   std::vector<ParameterChange> automation_;
   size_t automationPosition_ = 0;
@@ -169,6 +172,12 @@ public:
   std::vector<size_t> openEditors() const;
   bool popEdit(size_t slot, uint32_t &, float &) noexcept;
   bool parameter(uint32_t slot, uint32_t id, float value) noexcept;
+  // Single control producer. One release publishes the complete batch, or no
+  // values on failure. Caller validates IDs/ranges against its baseline catalog.
+  bool enqueueParameters(std::span<const ParameterChange>) noexcept;
+  // Pair with process(): instrument/mixer/effect stages see the same boundary.
+  // Standalone process() callers retain their automatic parameter consumption.
+  void beginRenderBlock() noexcept;
   std::vector<PluginState> states();
   void applyPending() noexcept;
   std::vector<PluginParameter> parameters(size_t slot) const;

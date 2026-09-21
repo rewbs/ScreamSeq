@@ -61,6 +61,7 @@ class DocumentController {
   std::atomic<bool> publicationPending_{false};
   std::function<void()> stop_;
   std::function<void(const std::vector<Tracker::Edit>&)> edits_;
+  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters_;
   std::thread thread_; // Start only after every worker dependency is initialized.
   void loop();
   void onMain(std::function<void()> task);
@@ -75,7 +76,8 @@ class DocumentController {
 public:
   DocumentController(const std::filesystem::path &input,std::string identity,
     std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,
-    std::function<void()> beforeView={},size_t maxCacheBytes=64u*1024u*1024u);
+    std::function<void()> beforeView={},size_t maxCacheBytes=64u*1024u*1024u,
+    std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={});
   ~DocumentController();
   bool publicationPending() const {return publicationPending_.load();}
   std::shared_ptr<const DocumentView> view();

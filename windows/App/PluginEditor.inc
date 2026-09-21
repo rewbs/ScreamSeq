@@ -41,8 +41,12 @@
             SendMessageW(controls.at(pluginList),WM_SETREDRAW,TRUE,0);
         }
         SendMessageW(controls.at(pluginList),LB_SETCURSEL,selectedPluginSlot(),0);
-        if(!refreshingPlugins && ((!pluginDraft && pluginEditorVisible() && (pluginDetailsRevision!=view->session.revision || pluginDetailsTarget!=selectedPlugin || !pluginLibraryLoaded)) || view->session.document.value("openPluginEditors",0u)))
-            SetTimer(window,1,100,nullptr);
+        armPluginTimer();
+    }
+    void armPluginTimer() {
+        const bool editors=view->session.document.value("openPluginEditors",0u)!=0;
+        if(!refreshingPlugins && (editors || (!pluginDraft && pluginEditorVisible() && (pluginDetailsRevision!=view->session.revision || pluginDetailsTarget!=selectedPlugin || !pluginLibraryLoaded))))
+            SetTimer(window,1,editors?16:100,nullptr);
     }
     void setPluginParameterField() {
         if(pluginDraft) return;
@@ -78,14 +82,15 @@
     void pluginTimer() {
         if(busy || refreshingPlugins) return;
         KillTimer(window,1);refreshingPlugins=true;
+        bool detailsChanged=false;
         try {
             if(view->session.document.value("openPluginEditors",0u)) documentOperation("flushPluginEditors",{{"force",false}});
             if(pluginEditorVisible()) {
-                if(!pluginLibraryLoaded) refreshPluginLibrary();
-                if(!pluginDraft && (pluginDetailsRevision!=view->session.revision || pluginDetailsTarget!=selectedPlugin)) refreshPluginDetails();
+                if(!pluginLibraryLoaded) {refreshPluginLibrary();detailsChanged=true;}
+                if(!pluginDraft && (pluginDetailsRevision!=view->session.revision || pluginDetailsTarget!=selectedPlugin)) {refreshPluginDetails();detailsChanged=true;}
             }
         } catch(const std::exception &e) {status=wide(e.what());pluginLibraryLoaded=true;pluginDetailsRevision=view->session.revision;pluginDetailsTarget=selectedPlugin;}
-        refreshingPlugins=false;layoutControls();
+        refreshingPlugins=false;if(detailsChanged)layoutControls();else armPluginTimer();
         // Background inspector reads yield to pending API work after finishing,
         // instead of causing random busy failures in otherwise idle sessions.
         if(api)PostMessageW(window,ScreamSeq::ApiDispatch::message,0,0);

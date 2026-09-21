@@ -1,6 +1,8 @@
 """Guarded rack edits and actual native controls on an owned, hidden desktop."""
 import ctypes
 import base64
+import hashlib
+import json
 import os
 from pathlib import Path
 import plistlib
@@ -20,7 +22,8 @@ class PluginAppTests(unittest.TestCase):
     def setUp(self):
         self.folder = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='plugins-ui-', dir=os.environ['TMPDIR'])))
         self.desktop = self.enterContext(PrivateDesktop())
-        args = [os.environ['SCREAMSEQ_TEST_EXE'], '--inspection', '--automation', '--seconds', '120']
+        self.report = self.folder / 'wasapi.json'
+        args = [os.environ['SCREAMSEQ_TEST_EXE'], '--inspection', '--automation', '--seconds', '120', '--report', str(self.report)]
         if os.environ.get('SCREAMSEQ_TEST_PLUGIN_CACHE'):
             args += ['--vst3-test-cache', os.environ['SCREAMSEQ_TEST_PLUGIN_CACHE']]
         self.pid = self.desktop.launch(args)
@@ -294,6 +297,118 @@ class PluginAppTests(unittest.TestCase):
         self.write('history.undo', domain='plugins')
         self.assertEqual(self.state(), expected)
         self.assertEqual(self.doc()['data']['openPluginEditors'], 0)
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO'), 'opt-in silent hardware audio')
+    def test_live_parameter_batches_preserve_playback_and_baseline(self):
+        descriptors = [self.catalog[0]]
+        if os.environ.get('SCREAMSEQ_TEST_PLUGIN_CACHE'):
+            descriptors += self.client.call('plugin.discover', {'format': 'VST3'})['data']
+        evidence = dict(executableSHA256=hashlib.sha256(Path(os.environ['SCREAMSEQ_TEST_EXE']).read_bytes()).hexdigest(),
+                        silentOutput=True, plugins=[])
+        dwell = float(os.environ.get('SCREAMSEQ_TEST_LIVE_SECONDS', '1'))
+        self.assertTrue(0 <= dwell <= 120)
+        def transport():
+            value = self.client.call('transport.get')['data']
+            self.assertTrue(value['audioActive'], value)
+            self.assertFalse(value['fault'], value)
+            return value
+        for descriptor in descriptors:
+            with self.subTest(plugin=descriptor['name']):
+                self.write('plugin.add', descriptor=descriptor)
+                available = self.parameters()
+                chosen = [p for p in available if p['writable'] and p['canSlide'] and p['max'] > p['min']][:2]
+                self.assertTrue(chosen)
+                # Exercise a real native editor notification. OrbitCab emits
+                # this EQ edit from its own editor construction callback.
+                editor_gesture = descriptor['classID'] == 'ABCDEF019182FAEB446361744F726274'
+                if editor_gesture:
+                    eq = next(p for p in available if p['name'] == 'Amp EQ')
+                    self.write('plugin.parameters.set', slot=0, values=[dict(id=eq['id'], value=1)])
+                source = self.folder / (descriptor['name'] + '-source.screamseq')
+                self.write('document.save', path=str(source))
+                report = self.folder / (descriptor['name'] + '-wasapi.json')
+                args = [os.environ['SCREAMSEQ_TEST_EXE'], '--audio-test-silent', '--automation', '--seconds', str(dwell + 30),
+                        '--project', str(source), '--report', str(report)]
+                if os.environ.get('SCREAMSEQ_TEST_PLUGIN_CACHE'):
+                    args += ['--vst3-test-cache', os.environ['SCREAMSEQ_TEST_PLUGIN_CACHE']]
+                pid = self.desktop.launch(args)
+                inspection_client, inspection_hwnd = self.client, self.hwnd
+                self.client = Client(r'\\.\pipe\ScreamSeq.Api.' + str(pid), timeout=20)
+                for _ in range(100):
+                    try:
+                        if self.client.call('transport.get')['data']['audioActive']:
+                            break
+                    except TransportError:
+                        pass
+                    time.sleep(.1)
+                else:
+                    self.fail('owned silent audio test did not start')
+                self.hwnd = self.desktop.hwnd(pid)
+                samples = [transport()]
+                if editor_gesture:
+                    self.write('plugin.editor.open', slot=0)
+                    self.tick()
+                    self.state()  # Force the saved gesture/history boundary.
+                    self.assertEqual(next(p['value'] for p in self.parameters() if p['id'] == eq['id']), 0)
+                    samples.append(transport())
+                    self.write('plugin.editor.close', slot=0)
+                for fraction in (.25, .75, .5):
+                    values = [dict(id=p['id'], value=p['min'] + fraction * (p['max'] - p['min'])) for p in chosen]
+                    before = self.doc()
+                    self.write('plugin.parameters.set', slot=0, values=values, dryRun=True)
+                    self.assertEqual(self.doc(), before)
+                    with self.assertRaises(ApiError):
+                        self.write('plugin.parameters.set', slot=0, values=values + [dict(id=4294967295, value=0)])
+                    self.assertEqual(self.doc(), before)
+                    self.write('plugin.parameters.set', slot=0, values=values)
+                    saved = self.state()
+                    after = self.doc()
+                    self.write('plugin.parameters.set', slot=0, values=values)
+                    self.assertEqual(self.doc(), after)
+                    self.assertEqual(self.state(), saved)
+                    time.sleep(.35)
+                    samples.append(transport())
+                    self.assertGreater(samples[-1]['frames'], samples[-2]['frames'])
+                    self.assertGreaterEqual(samples[-1]['callbacks'], samples[-2]['callbacks'])
+                    self.assertEqual(samples[-1]['overruns'], 0)
+                if descriptor['format'] == 'VST3':
+                    self.write('plugin.editor.open', slot=0)
+                end = time.monotonic() + dwell
+                while time.monotonic() < end:
+                    time.sleep(.2)
+                    samples.append(transport())
+                    self.assertGreater(samples[-1]['frames'], samples[-2]['frames'])
+                    self.assertEqual(samples[-1]['overruns'], 0)
+                if descriptor['format'] == 'VST3':
+                    self.assertEqual(self.state(), saved)
+                    self.write('plugin.editor.close', slot=0)
+                path = self.folder / (descriptor['name'] + '-live.screamseq')
+                self.write('document.save', path=str(path))
+                self.assertTrue(transport()['audioActive'])
+                self.desktop.send(self.hwnd, 0x10)  # Clean Quit while DSP is running.
+                for _ in range(100):
+                    if report.exists():
+                        break
+                    time.sleep(.1)
+                audio_report = json.loads(report.read_text())
+                self.assertTrue(audio_report['audio']['silentOutput'])
+                self.assertEqual(audio_report['audio']['deadlineOverruns'], 0)
+                self.client, self.hwnd = inspection_client, inspection_hwnd
+                self.write('document.open', path=str(path))
+                self.assertEqual(self.state(), saved)
+                evidence['plugins'].append(dict(name=descriptor['name'], classID=descriptor['classID'],
+                    nativeEditorGesture=editor_gesture, snapshots=samples, baselineReopened=True, report=audio_report))
+                self.write('plugin.remove', slot=0)
+        self.write('document.save', path=str(self.folder / 'closed.screamseq'))
+        self.desktop.send(self.hwnd, 0x10)  # Clean, task-owned application Quit.
+        for _ in range(100):
+            if self.report.exists():
+                break
+            time.sleep(.1)
+        if os.environ.get('SCREAMSEQ_PLUGIN_EVIDENCE_DIR'):
+            folder = Path(os.environ['SCREAMSEQ_PLUGIN_EVIDENCE_DIR'])
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / 'live-parameters.json').write_text(json.dumps(evidence, indent=2))
 
 
 if __name__ == '__main__':

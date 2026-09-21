@@ -4,11 +4,13 @@
 
 using namespace ScreamSeq;
 void need(bool value,const char *why) {if(!value) throw std::runtime_error(why);}
-Json invoke(DocumentController &controller,const char *method,Json p=Json::object()) {
-  p["expectedRevision"]=controller.view()->session.revision;
+Json call(DocumentController &controller,const char *method,Json p) {
   auto future=controller.invoke(method,std::move(p));
   while(future.wait_for(std::chrono::milliseconds(1))!=std::future_status::ready) controller.service();
   controller.service();return future.get();
+}
+Json invoke(DocumentController &controller,const char *method,Json p=Json::object()) {
+  p["expectedRevision"]=controller.view()->session.revision;return call(controller,method,std::move(p));
 }
 void publicationTests(const std::filesystem::path &directory) {
   bool fail=false,persistent=false;unsigned stops=0;
@@ -112,6 +114,44 @@ void assetTests(const std::filesystem::path &directory) {
   std::cout<<"asset worker cache, guards, clipboard, history and persistence passed\n";
 }
 
+void liveParameterTests(const std::filesystem::path &directory) {
+  unsigned stops=0,batches=0;bool active=false,reject=false;HostedProjectPlayback *playback=nullptr;
+  const auto mainThread=std::this_thread::get_id();
+  DocumentController c({},"live-parameters",[&]{++stops;active=false;},[](const auto &){},{},64u*1024u*1024u,
+    [&](std::span<const Tracker::ParameterChange> changes){
+      need(std::this_thread::get_id()==mainThread,"Live parameter publication must use the single UI producer");
+      if(reject)throw std::runtime_error("controlled prepublication failure");
+      if(active){++batches;if(!playback->chain().enqueueParameters(changes)){++stops;active=false;}}
+    });
+  auto library=call(c,"plugin.discover",{{"format","Built-in"}});
+  invoke(c,"plugin.add",{{"descriptor",library.at(0)}});
+  auto prepared=c.prepare(48000,Json::object(),true,true);playback=prepared.get();active=true;const auto beforeStops=stops;
+  auto gain=[&]{for(auto p:playback->chain().parameters(0))if(p.id==1)return p.value;throw std::runtime_error("Missing playback gain");};
+  auto edit=[&](float value,bool dry=false){return invoke(c,"plugin.parameters.set",{{"slot",0},{"values",Json::array({{{"id",1},{"value",value}},{{"id",2},{"value",25}}})},{"dryRun",dry}});};
+  auto baseline=call(c,"plugin.state.get",{{"slot",0}});auto view=c.view();
+  edit(-12,true);need(c.view()==view&&stops==beforeStops&&batches==0,"Dry run must not stop, publish or dirty");
+  bool failed=false;
+  try{invoke(c,"plugin.parameters.set",{{"slot",0},{"values",Json::array({{{"id",1},{"value",-12}},{{"id",UINT32_MAX},{"value",0}}})}});}catch(const Api::ApiError &){failed=true;}
+  need(failed&&c.view()==view&&stops==beforeStops&&batches==0,"Invalid parameter batch must not stop or publish");
+  reject=true;failed=false;try{edit(-12);}catch(const std::runtime_error &){failed=true;}reject=false;
+  need(failed&&c.view()==view&&call(c,"plugin.state.get",{{"slot",0}})==baseline,"Prepublication failure must retain baseline and revision");
+  edit(-12);need(active&&stops==beforeStops&&batches==1&&gain()==0,"Live edit queues without touching DSP from the worker or stopping");
+  std::array<float,512> pcm{};need(playback->render(pcm.data(),256)&&gain()==-12,"Prepared renderer consumes the batch");
+  auto changed=call(c,"plugin.state.get",{{"slot",0}});need(changed!=baseline,"Live API edit retains a new saved baseline");
+  view=c.view();edit(-12);need(c.view()==view&&batches==1&&stops==beforeStops,"Parameter no-op must not add history or queue traffic");
+  const auto path=directory/"live-parameters.screamseq";
+  invoke(c,"document.save",{{"path",path.generic_string()}});need(active&&stops==beforeStops,"Save of parameter baseline should retain playback");
+  // Saturation falls back to stopping BEFORE committing the complete baseline.
+  std::vector<Tracker::ParameterChange> full(4096,{0,1,-12,0});need(playback->chain().enqueueParameters(full),"Fill live queue");
+  edit(-24);need(!active&&stops==beforeStops+1,"Whole-batch queue failure stops instead of partially publishing");
+  invoke(c,"history.undo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==changed,"Undo recovers the pre-overflow saved baseline");
+  invoke(c,"history.undo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==baseline,"One live batch is one plugin Undo step");
+  invoke(c,"history.redo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==changed,"Redo restores the whole live batch");
+  invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
+  need(call(c,"plugin.state.get",{{"slot",0}})==changed&&!c.view()->dirty,"Save/reopen retains the live-edited baseline");
+  std::cout<<"PASS live worker/UI publication, invalid/dry/no-op/failed batches, overflow fallback, independent history and save/reopen\n";
+}
+
 int main(int argc,char **argv) {
   try {
     if(argc==3 && std::string(argv[1])=="--fixtures") {
@@ -137,6 +177,7 @@ int main(int argc,char **argv) {
     if(argc==3 && std::string(argv[1])=="--cache") {cacheTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--publication") {publicationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--assets") {assetTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-parameters") {liveParameterTests(std::filesystem::u8path(argv[2]));return 0;}
     throw std::runtime_error("Use --fixtures or --publication <existing directory>");
   } catch(const std::exception &e) {std::cerr<<e.what()<<'\n';return 1;}
 }

@@ -53,13 +53,18 @@ PluginChain::PluginChain(const std::vector<PluginState> &states, double rate, bo
   captureTails();
 }
 bool PluginChain::parameter(uint32_t slot, uint32_t id, float value) noexcept {
-  auto w = write_.load(std::memory_order_relaxed), r = read_.load(std::memory_order_acquire);
-  if (w - r >= queue_.size() || slot >= plugins_.size() || !std::isfinite(value))
-    return false;
-  queue_[w % queue_.size()] = {slot, id, value, 0};
-  write_.store(w + 1, std::memory_order_release);
+  const ParameterChange change{slot,id,value,0};
+  return enqueueParameters({&change,1});
+}
+bool PluginChain::enqueueParameters(std::span<const ParameterChange> changes) noexcept {
+  const auto w=write_.load(std::memory_order_relaxed),r=read_.load(std::memory_order_acquire);
+  if(changes.size()>queue_.size() || changes.size()>queue_.size()-(w-r) || failed_.load(std::memory_order_relaxed))return false;
+  for(const auto &change:changes)if(change.slot>=plugins_.size() || !std::isfinite(change.value) || change.frame)return false;
+  for(size_t i=0;i<changes.size();++i)queue_[(w+uint32_t(i))%queue_.size()]={changes[i],i+1==changes.size()};
+  write_.store(w+uint32_t(changes.size()),std::memory_order_release);
   return true;
 }
+void PluginChain::beginRenderBlock() noexcept {applyPending();parameterBlockOpen_=true;}
 bool PluginChain::latencyChangePending() const noexcept {
   for (const auto &p : plugins_) if (p->latencyChangePending()) return true;
   return (signalGraph_ && signalGraph_->latencyChangePending()) ||
@@ -102,6 +107,7 @@ void PluginChain::refreshLatencies() {
   } catch (...) { failed_ = true; throw; }
 }
 bool PluginChain::process(float *buffer, uint32_t frames) noexcept {
+  struct EndBlock {bool &open;~EndBlock(){open=false;}} endBlock{parameterBlockOpen_};
   applyPending();
   if (frames > 4096) {
     failed_ = true;
@@ -147,15 +153,20 @@ bool PluginChain::process(float *buffer, uint32_t frames) noexcept {
   return true;
 }
 void PluginChain::applyPending() noexcept {
+  if(parameterBlockOpen_)return;
   auto r = read_.load(std::memory_order_relaxed), w = write_.load(std::memory_order_acquire);
-  for (int n = 0; r != w && n < 128; ++n, ++r) {
-    auto change = queue_[r % queue_.size()];
+  // Bound ordinary UI traffic, but never split a published transaction. The
+  // maximum complete batch is the preallocated queue capacity (4096 changes).
+  for (unsigned n = 0; r != w;) {
+    const auto entry=queue_[r % queue_.size()];const auto &change=entry.change;
     if (!plugins_[change.slot]->parameter(change.id, change.value))
       failed_ = true;
+    ++r;++n;if(n>=128 && entry.last)break;
   }
   read_.store(r, std::memory_order_release);
 }
 std::vector<PluginState> PluginChain::states() {
+  if(parameterBlockOpen_)throw std::logic_error("Finish the audio block before capturing plugin state");
   while (read_.load() != write_.load())
     applyPending();
   std::vector<PluginState> out;

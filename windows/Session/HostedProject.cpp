@@ -89,7 +89,7 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames) noexcept {
   for(uint32_t at=0;at<frames;) {
     if(chain_->latencyChangePending()) {std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return !offline_;}
     const auto count=std::min(4096u,frames-at);auto *buffer=stereo+size_t(at)*2;
-    chain_->applyPending();chain_->syncTransport(*renderer_);
+    chain_->beginRenderBlock();chain_->syncTransport(*renderer_);
     renderer_->render(buffer,count);
     // A notification inside the last slice must also fail an offline render;
     // there may be no next callback in which to detect its stale compensation.
