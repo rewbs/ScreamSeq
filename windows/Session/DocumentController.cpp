@@ -349,7 +349,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
       result={{"path",utf8(path)},{"format",ext==L".screamseq" ? "screamseq" : "resonance"},{"written",!dry},{"projectVersion",6}};
     }
   } else if(pluginMethod) {
-    result=plugins_->invoke(method,params);
+    result=method.starts_with("graph.plugin.")?plugins_->invokeGraph(method,params,playbackFeedback().sampleRate):plugins_->invoke(method,params);
   } else if(std::find(graphMethods.begin(),graphMethods.end(),method)!=graphMethods.end()) {
     GraphHostHooks hooks;hooks.rack=[&]{return plugins_->graphRack();};hooks.cloneRackSlot=[&](uint32_t slot){return plugins_->cloneRackSlot(slot);};
     hooks.activity=[&]{return playbackFeedback().activity;};hooks.validateCandidate=[&](const Tracker::NativeSong &next){Tracker::validatePluginCapacity(projectPluginStates(project_),next.mixer.buses.size());};

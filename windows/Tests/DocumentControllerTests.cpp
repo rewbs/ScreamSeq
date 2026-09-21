@@ -275,8 +275,29 @@ void programDryRunTests(const std::filesystem::path &scanner,const std::filesyst
 }
 
 #include "MixerIntegrationTests.inc"
+void graphRecipeRenderTests(const std::filesystem::path &directory) {
+  DocumentController c({},"graph-recipes",[]{},[](const auto &){});
+  const auto library=call(c,"plugin.discover",{{"format","Built-in"}});const auto gain=std::find_if(library.begin(),library.end(),[](const auto &p){return p.at("classID")=="resonance.gainer.v1";});need(gain!=library.end(),"Gainer missing");
+  invoke(c,"plugin.add",{{"descriptor",*gain}});invoke(c,"mixer.enable",Json::object());
+  const auto graph=invoke(c,"graph.create",Json::object()).at("graph");const auto input=call(c,"graph.get",Json::object()).at("library")[0].at("nodes")[0].at("id");
+  const auto node=invoke(c,"graph.node.add",{{"graph",graph},{"kind","plugin"},{"slot",0},{"insertAfter",input}}).at("node");
+  const auto master=call(c,"mixer.get",Json::object()).at("buses").back().at("id");invoke(c,"graph.assign",{{"target",master},{"graph",graph}});
+  auto render=[&](unsigned rate,unsigned block){auto *prepared=c.prepare(rate,Json::object(),true,true).get();std::vector<float> pcm(rate*2);for(unsigned at=0;at<rate;){const auto n=std::min(block,rate-at);need(prepared->render(pcm.data()+size_t(at)*2,n),"Graph recipe PCM failed");at+=n;}return pcm;};
+  std::map<unsigned,std::vector<float>> baseline;for(auto rate:{44100u,48000u,96000u})baseline[rate]=render(rate,128);
+  const auto rack=call(c,"plugin.state.get",{{"slot",0}});
+  invoke(c,"graph.plugin.set",{{"graph",graph},{"node",node},{"parameters",Json::array({{{"id",1},{"value",-12}}})}});
+  need(call(c,"plugin.state.get",{{"slot",0}})==rack,"Graph parameter changed rack baseline");
+  double maximumDelta=0;
+  for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u,8193u}){const auto pcm=render(rate,block);double energy=0;for(size_t i=0;i<pcm.size();++i){maximumDelta=std::max(maximumDelta,std::abs(double(pcm[i])-baseline[rate][i]*std::pow(10.0,-12.0/20)));energy+=std::abs(pcm[i]);}need(energy>1,"Graph fixture is silent");}
+  need(maximumDelta<1e-6,"Graph recipe gain or partition comparison failed");
+  const auto path=directory/"graph-recipe-render.screamseq";invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});
+  invoke(c,"history.undo",{{"domain","document"}});need(render(48000,128)==baseline[48000],"Graph plugin Undo did not restore exact PCM");
+  invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});const auto restored=render(48000,128);double delta=0;for(size_t i=0;i<restored.size();++i)delta=std::max(delta,std::abs(double(restored[i])-baseline[48000][i]*std::pow(10.0,-12.0/20)));need(delta<1e-6,"Reopened graph plugin PCM changed");
+  std::cout<<"PASS graph recipe gain, independent rack, Undo/reopen, 44.1/48/96 kHz blocks 17/128/4096/8193; max delta "<<maximumDelta<<'\n';
+}
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--graph-recipes") {graphRecipeRenderTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--mixer-integration") {mixerIntegrationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--pattern-clipboard") {patternClipboardTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--pattern-performance") {patternPerformanceTests(std::filesystem::u8path(argv[2]));return 0;}

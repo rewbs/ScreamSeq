@@ -15,7 +15,7 @@
     float fieldWidth(unsigned column) const {return column<3?std::array<float,3>{22,15,22}[column]:(column%2?15.0f:58.0f);}
 	ScreamSeq::WorkspaceGeometry geometry() const {
 		RECT r{};GetClientRect(window,&r);float s=GetDpiForWindow(window)/96.0f;
-        return workspaceState.geometry(r.right/s,r.bottom/s,(noteEditorVisible()||mixerEditorVisible())?260.0f:128.0f);
+        return workspaceState.geometry(r.right/s,r.bottom/s,graphEditorVisible()?380.0f:(noteEditorVisible()||mixerEditorVisible())?260.0f:128.0f);
 	}
 	unsigned visibleRows() const { return std::max(1u,unsigned(std::max(0.0f,geometry().pattern.h-gridHeader)/rowHeight)); }
     unsigned firstChannel() const {float x=0;for(unsigned c=0;c<view->channels;++c){x+=channelWidth(c);if(x>horizontalScroll)return c;}return view->channels-1;}
@@ -90,6 +90,7 @@
         layoutEffectControls(place);
         layoutNoteControls(place);
         layoutMixerControls(place);
+        layoutGraphControls(place);
 		SetWindowTextW(controls.at(followCommand),follow ? L"Follow on [F]" : L"Detached [F]");
 		SetWindowTextW(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
 		for(auto [id,h]:controls) InvalidateRect(h,nullptr,FALSE);
@@ -127,7 +128,9 @@
         installEffectControls();
         installNoteControls();
         installMixerControls();
+        installGraphControls();
 		std::vector<ScreamSeq::WorkspaceCommand> commands={
+            {graphCommand,L"Graph / Open reusable routing and modulation canvas",L""},
             {mixerCommand,L"Mix / Open mixer controls and routing",L""},
             {effectsCommand,L"Pattern / Inspect FX and parameter bindings",L"Enter on an FX cell"},
             {patternPasteMix,L"Pattern / Mix paste into empty fields",L"Ctrl+Shift+V"},
@@ -168,8 +171,8 @@
 	}
 	void command(int id) {
 		try {
-            if(id==notesCommand||id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==soundCommand)mixerEditorOpen=false;
-            if(mixerControlCommand(id) || noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
+            if(id==notesCommand||id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==soundCommand){mixerEditorOpen=false;graphEditorOpen=false;}
+            if(graphControlCommand(id) || mixerControlCommand(id) || noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
             else if(id==openCommand) openFile();
             else if(id==saveCommand || id==saveAsCommand) saveFile(id==saveAsCommand);
             else if(id==undoCommand || id==redoCommand) edit(id==undoCommand ? "history.undo" : "history.redo",{{"domain","document"}});
@@ -212,7 +215,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=mixerCommand&&id<=mixerTiming) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
+            if(!(id>=graphCommand&&id<=graphDeleteNode) && !(id>=mixerCommand&&id<=mixerTiming) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
     bool handleKey(WPARAM code) {
@@ -240,6 +243,7 @@
             if(key==VK_RETURN){command(effectApply);return true;}
         }
         if(noteKey(key,ctrl,alt,shift))return true;
+        if(graphKey(key,ctrl,alt,shift))return true;
         if(mixerKey(key))return true;
         if(textOwnsKeyboard() && key!=VK_ESCAPE) return false;
         if(ctrl && key=='I') {command(sampleImportCommand);return true;}
@@ -308,7 +312,7 @@
 	}
 	void mouseDown(float x,float y,WPARAM buttons) {
 		auto g=geometry();dragRight=workspaceState.rightWidth;dragLower=workspaceState.lowerHeight;
-		if(noteMouseDown(x,y,false)||sampleMouseDown(x,y,(buttons&MK_SHIFT)!=0)) return;
+		if(graphMouseDown(x,y)||noteMouseDown(x,y,false)||sampleMouseDown(x,y,(buttons&MK_SHIFT)!=0)) return;
 		if(g.verticalDivider.contains(x,y)) dragging=1;
 		else if(g.horizontalDivider.contains(x,y)) dragging=2;
 		else if(g.pattern.contains(x,y)) {if(gridClick(x,y,(buttons&MK_SHIFT)!=0)) dragging=3;}
@@ -321,6 +325,7 @@
 		if(dragging==3) gridClick(x,y,true);
 		if(dragging==4) sampleMouseMove(x);
         if(dragging==5) noteMouseMove(x,y);
+        if(dragging>=6)graphMouseMove(x,y);
 	}
 	void scroll(int delta) {
 		wheelRemainder+=delta;

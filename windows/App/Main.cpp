@@ -10,6 +10,7 @@
 #include "WorkspaceState.hpp"
 #include "CommandPalette.hpp"
 #include "PatternClipboard.hpp"
+#include "GraphCanvas.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -55,7 +56,14 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     noteApply=372,noteReload=373,noteReplace=374,noteRepeat=375,noteRepeatCount=376,noteEndVelocity=377,
     mixerCommand=400,mixerList=401,mixerEnable=402,mixerAdd=403,mixerRemove=404,mixerReload=405,
     mixerApply=406,mixerMute=407,mixerSolo=408,mixerOutput=409,mixerName=410,
-    mixerPreGain=411,mixerPrePan=412,mixerGain=413,mixerPan=414,mixerWidth=415,mixerTiming=416;
+    mixerPreGain=411,mixerPrePan=412,mixerGain=413,mixerPan=414,mixerWidth=415,mixerTiming=416,
+    graphCommand=430,graphLibrary=431,graphNew=432,graphClone=433,graphRemove=434,graphKind=435,graphAddSource=436,
+    graphRack=437,graphAddEffect=438,graphFit=439,graphApply=440,graphReload=441,graphNodePicker=442,graphPage=443,
+    graphProperty=444,graphPropertyValue=445,graphSetProperty=446,graphSource=447,graphDestination=448,graphWire=449,
+    graphOutputPort=450,graphInputPort=451,graphMinimum=452,graphMaximum=453,graphBase=454,graphGain=455,
+    graphConnect=456,graphDeleteWire=457,graphParameter=458,graphParameterValue=459,graphLoadPlugin=460,graphSetParameter=461,
+    graphOpenPlugin=462,graphSavePlugin=463,graphClosePlugin=464,graphBus=465,graphAssign=466,graphUnassign=467,
+    graphAmount=468,graphWet=469,graphDeleteNode=470;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -220,6 +228,7 @@ public:
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
 			{"octave",octave},{"editStep",editStep},{"documentBusy",busy},
             {"sampleEditor",sampleEditorSnapshot()},
+            {"graphEditor",graphEditorSnapshot()},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
             {"noteEditor",{{"visible",noteEditorVisible()},{"pattern",notePattern},{"row",noteRow},{"channel",noteChannel},
@@ -230,7 +239,7 @@ public:
             {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
                 {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
                 {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
-            {"unavailable",{"graph","automation","floating","savedLayouts"}}};
+            {"unavailable",{"songGraph","graphCurves","automation","floating","savedLayouts"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
@@ -392,6 +401,7 @@ public:
     #include "PatternEditor.inc"
     #include "PreciseNoteEditor.inc"
     #include "MixerEditor.inc"
+    #include "GraphEditor.inc"
 	#include "WorkspaceDraw.inc"
 	void draw() {
         frameRequested=false;
@@ -456,7 +466,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		case ScreamSeq::ApiDispatch::message: if(app->api && !app->refreshingPlugins) app->api->drain(); return 0;
 		case WM_CLOSE: if(app->busy) {app->stop();return 0;} if(!app->protectUnsaved()) return 0;break;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
-        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();return 0;
+        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();return 0;
 		case WM_DPICHANGED: {
 			auto rect = reinterpret_cast<RECT *>(lp);
 			SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE); return 0;
@@ -472,6 +482,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             SetTextColor(reinterpret_cast<HDC>(wp),RGB(212,224,235));SetBkColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));
             SetDCBrushColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
         case WM_COMMAND:
+            if(LOWORD(wp)==graphPropertyValue||(LOWORD(wp)>=graphOutputPort&&LOWORD(wp)<=graphGain)||LOWORD(wp)==graphParameterValue||LOWORD(wp)==graphAmount||LOWORD(wp)==graphWet){if(HIWORD(wp)==EN_CHANGE)app->graphFieldChanged();return 0;}
+            if((LOWORD(wp)==graphLibrary||LOWORD(wp)==graphKind||LOWORD(wp)==graphRack||LOWORD(wp)==graphNodePicker||LOWORD(wp)==graphPage||LOWORD(wp)==graphProperty||LOWORD(wp)==graphSource||LOWORD(wp)==graphDestination||LOWORD(wp)==graphWire||LOWORD(wp)==graphParameter||LOWORD(wp)==graphBus)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)>=mixerName&&LOWORD(wp)<=mixerTiming){if(HIWORD(wp)==EN_CHANGE)app->mixerFieldChanged();return 0;}
             if(LOWORD(wp)==mixerOutput&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==mixerList&&HIWORD(wp)!=LBN_SELCHANGE)return 0;
@@ -496,8 +508,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
         case WM_LBUTTONDBLCLK:app->noteMouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),true);return 0;
-		case WM_LBUTTONUP: app->noteMouseUp();app->dragging=0;ReleaseCapture();return 0;
-		case WM_CAPTURECHANGED:app->noteMouseUp();app->dragging=0;return 0;
+		case WM_LBUTTONUP: app->graphMouseUp(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));app->noteMouseUp();app->dragging=0;ReleaseCapture();return 0;
+		case WM_CAPTURECHANGED:if(app->dragging>=6)app->graphCancelDrag();app->noteMouseUp();app->dragging=0;return 0;
 		case WM_MOUSEWHEEL:if(GET_KEYSTATE_WPARAM(wp)&MK_SHIFT)app->scrollHorizontal(-GET_WHEEL_DELTA_WPARAM(wp));else app->scroll(GET_WHEEL_DELTA_WPARAM(wp));return 0;
         case WM_MOUSEHWHEEL:app->scrollHorizontal(GET_WHEEL_DELTA_WPARAM(wp));return 0;
 		case WM_SETCURSOR: {

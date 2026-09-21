@@ -67,6 +67,9 @@ class PluginAppTests(unittest.TestCase):
 
     def tick(self):
         self.desktop.send(self.hwnd, 0x113, 1)
+        # SendMessage may arrive inside a timer's nested message pump. The API
+        # dispatch waits for that inspector refresh to finish before replying.
+        self.doc()
 
     def select(self, control, index):
         handle = user.GetDlgItem(self.hwnd, control)

@@ -17,6 +17,11 @@ class PluginOperations {
   struct History {Json plugins,automation;size_t bytes=0;};
   std::deque<History> undo_,redo_;
   std::map<std::string,std::unique_ptr<Tracker::NativePlugin>> editors_;
+  std::unique_ptr<Tracker::NativePlugin> graphEditor_;
+  Tracker::GraphPluginRecipe graphEditorRecipe_;
+  uint64_t graphEditorGraph_=0,graphEditorNode_=0;
+  std::string graphEditorID_;
+  bool graphEditorWindowOpen_=false;
   std::set<std::string> openEditors_;
   std::map<std::string,std::map<uint32_t,float>> pendingParameters_;
   std::chrono::steady_clock::time_point lastEditorChange_{};
@@ -35,12 +40,13 @@ public:
   static std::vector<std::string> reads();
   static std::vector<std::string> writes();
   Json invoke(const std::string &,const Json &);
+  Json invokeGraph(const std::string &,const Json &,unsigned sampleRate);
   bool flushEditors(bool force=false); // Debounce gestures; save/close forces capture.
   std::vector<GraphRackRecord> graphRack() const;
   GraphRackClone cloneRackSlot(uint32_t);
   std::vector<Tracker::PluginAudioBus> audioBuses(size_t,bool required=false);
   bool canUndo() const {return !undo_.empty();}
   bool canRedo() const {return !redo_.empty();}
-  size_t openEditorCount() const {return openEditors_.size();}
+  size_t openEditorCount() const {return openEditors_.size()+size_t(graphEditorWindowOpen_);}
 };
 }

@@ -5,7 +5,7 @@
     Json mixerData=Json::object(),mixerDraft=Json::object();
     std::vector<Tracker::MixerMeter> mixerMeters;
     std::wstring mixerStatus=L"Enable routing to create a mixer from the song tracks";
-    bool mixerEditorVisible() const {return mixerEditorOpen&&workspaceState.layout!="Pattern focus";}
+    bool mixerEditorVisible() const {return !graphEditorVisible()&&mixerEditorOpen&&workspaceState.layout!="Pattern focus";}
     void installMixerControls() {
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{mixerCommand,L"Mixer"},{mixerEnable,L"Enable mixer"},{mixerAdd,L"Add group"},
             {mixerRemove,L"Remove"},{mixerReload,L"Reload"},{mixerApply,L"Apply"},{mixerMute,L"Mute off"},{mixerSolo,L"Solo off"}})
@@ -70,7 +70,7 @@
         if(id<mixerCommand||id>mixerTiming)return false;
         if(busy||mixerPending)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         workspaceState.focus="mixer";
-        if(id==mixerCommand){mixerEditorOpen=true;workspaceState.layout="Compose";refreshMixer();layoutControls();SetFocus(controls.at(mixerList));return true;}
+        if(id==mixerCommand){graphEditorOpen=false;mixerEditorOpen=true;workspaceState.layout="Compose";refreshMixer();layoutControls();SetFocus(controls.at(mixerList));return true;}
         if(id==mixerReload){mixerDirty=false;++mixerGeneration;refreshMixer();return true;}
         if(id==mixerList){if(mixerDirty){SendMessageW(controls.at(mixerList),LB_SETCURSEL,mixerSelected(),0);throw std::runtime_error("Apply or reload the captured mixer draft before changing buses");}const auto index=SendMessageW(controls.at(mixerList),LB_GETCURSEL,0,0);if(index>=0&&size_t(index)<mixerData.at("buses").size()){mixerTarget=mixerData.at("buses")[size_t(index)].at("id").get<std::string>();loadMixerFields();}return true;}
         if(id==mixerOutput){mixerFieldChanged();return true;}

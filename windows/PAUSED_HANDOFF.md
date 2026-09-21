@@ -18,6 +18,8 @@
 > binding remap and the native precise-note dock: `PATTERN_NOTES_PROGRESS.md`.
 > Graph/mixer/envelope app integration and native mixer bus dock:
 > `MIXER_GRAPH_PROGRESS.md`. Full parity remains active.
+> Reusable graph canvas and isolated graph-plugin editor drafts:
+> `GRAPH_EDITOR_PROGRESS.md`. Song overview, curves and other parity gates remain.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

@@ -57,8 +57,9 @@ GraphRackClone PluginOperations::cloneRackSlot(uint32_t index) {
 std::vector<PluginAudioBus> PluginOperations::audioBuses(size_t index,bool required) {
   try{return editor(index).buses();}catch(const std::exception &){if(required)throw;return {};}
 }
-std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","automation.target.get"};}
-std::vector<std::string> PluginOperations::writes(){return {"plugin.add","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.editor.open","plugin.editor.close"};}
+std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","automation.target.get","graph.plugin.get"};}
+std::vector<std::string> PluginOperations::writes(){return {"plugin.add","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
+#include "GraphPluginOperations.inc"
 size_t PluginOperations::slot(const Json &p) const {
   const auto &rack=project_.preserved.at("plugins");
   if(p.contains("plugin")){auto id=text(p.at("plugin"),128);for(size_t i=0;i<rack.size();++i)if(rack[i].at("instanceID")==id)return i;throw Api::ApiError(-32602,"Plugin instance no longer exists");}
@@ -83,7 +84,9 @@ Tracker::NativePlugin &PluginOperations::editor(size_t index) {
   if(!p)p=std::make_unique<NativePlugin>(state,48000);return *p;
 }
 bool PluginOperations::flushEditors(bool force) {
-  if(openEditors_.empty())return false;
+  const bool graphClosed=graphEditorWindowOpen_&&graphEditor_&&!graphEditor_->editorOpen();
+  if(graphClosed)graphEditorWindowOpen_=false;
+  if(openEditors_.empty())return graphClosed;
   const auto &rack=project_.preserved.at("plugins");
   const auto now=std::chrono::steady_clock::now();
   std::vector<ParameterChange> liveChanges;
@@ -98,7 +101,7 @@ bool PluginOperations::flushEditors(bool force) {
   // Fast gesture delivery does not serialize vendor state or copy the rack.
   // Capture after the gesture settles, or immediately for save/close/read.
   // Periodic idle captures also retain opaque preset/IR changes without edits.
-  if(!force && (now-lastEditorChange_<std::chrono::milliseconds(400) || now-lastStateCapture_<std::chrono::milliseconds(400)))return false;
+  if(!force && (now-lastEditorChange_<std::chrono::milliseconds(400) || now-lastStateCapture_<std::chrono::milliseconds(400)))return graphClosed;
   lastStateCapture_=now;Json next;bool changed=false;std::vector<std::string> closed;
   for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key))continue;
     const auto state=blob(found->second->state().state);
@@ -120,7 +123,7 @@ bool PluginOperations::flushEditors(bool force) {
     commit(std::move(next),project_.preserved.at("automation"),true,parameterOnly);
   }
   for(const auto &key:closed)openEditors_.erase(key);
-  pendingParameters_.clear();return changed;
+  pendingParameters_.clear();return changed||graphClosed;
 }
 Json PluginOperations::invoke(const std::string &method,const Json &p) {
   auto rack=project_.preserved.at("plugins"),automation=project_.preserved.at("automation");

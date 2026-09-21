@@ -7,8 +7,9 @@ artifact. Current upstream scope and qualification are documented in
 
 The current native format is container 6 / metadata 17. Historical native
 wrappers reject before document replacement, matching upstream; module import
-remains supported. Unified FX, note cuts and disconnected routes are retained
-and rendered even though their complete editors/API are not yet exposed.
+remains supported. Unified FX, note cuts and disconnected routes have shared
+API/rendering and native editing controls. The reusable graph canvas is covered
+in `../GRAPH_EDITOR_PROGRESS.md`; song overview and curve editing remain pending.
 
 ## Owner boundaries
 
@@ -119,8 +120,12 @@ controls, main-output selection (including disconnect), mute/solo, group creatio
 and removal, reload, Apply, keyboard access and stereo meters. Unfinished fields
 survive navigation and stale revisions; async completion checks draft generation.
 It reuses the same API operations as external clients. Painting reads retained
-UI state, with meter snapshots collected by a UI timer. Full graph/curve editors,
-insert/send/sidechain controls and simultaneous independent lower docks remain.
+UI state, with meter snapshots collected by a UI timer. The reusable graph dock
+adds cached nodes, ports and wires, socket dragging, pan/zoom, definition/property
+drafts and bus assignments. Its plugin controls and native VST3 draft editors
+operate on independent graph recipes with document Undo. Painting never queries
+the worker or plugins. Song overview, graph curves, insert/send/sidechain controls
+and simultaneous independent lower docks remain.
 
 Mixer gain/balance/width/mute/solo updates publish one bounded control batch on
 the single UI producer. The shared Document prepares Undo storage before that
@@ -158,9 +163,8 @@ PCM, processing, loop settings, drawing, private clipboard and instrument edits.
 Import validation checks actual preserved plugin assignments, adapter capacity
 and cache growth. Instrument replacement rejects plugin-owned slots, including
 integer-valued JSON numbers such as 1.0. Failed validation precedes playback stop.
-GraphOperations and EnvelopeOperations are still separate tested operation
-layers, not app endpoints. Their future hooks must describe the real rack and
-parameter catalog, not empty fixture defaults.
+GraphOperations and EnvelopeOperations are registered app endpoints with real
+rack, baseline, parameter and conflict hooks, as described above.
 
 ## Native UI
 

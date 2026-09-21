@@ -12,8 +12,18 @@ envelope parameter targets resolve real plugin parameters and automation
 conflicts. Mixer control-only writes and previews use the prepared audio queue;
 queue refusal returns `-32002` without changing history or the saved mixer.
 Routing changes validate before stopping playback. `workspace.get.mixerEditor`
-reports the native dock's captured bus/revision and draft state. The full graph
-and curve editors remain outstanding.
+reports the native dock's captured bus/revision and draft state.
+
+`graph.plugin.get`, `graph.plugin.set` and `graph.plugin.editor.open/commit/close`
+now follow the Mac recipe interface. These are independent effect instances;
+changes belong to document history and never overwrite the rack baseline.
+Parameter/port writes validate the whole candidate before stopping playback.
+Editor open returns a token; commit requires that token, captured graph/node
+and unchanged recipe. Closing the native window retains its uncommitted draft
+until explicit API close or document replacement. Commit supports dry run.
+`workspace.get.graphEditor` exposes the reusable canvas's captured revision,
+draft flags, selection and retained hit-test geometry. Song overview and curve
+editing remain outstanding; the contextual workspace panel API is unchanged.
 
 The normal Windows envelope catalogue lives at
 `%LOCALAPPDATA%/org.resonance.tracker/envelope-catalogue-v1.json`. Reading an absent
