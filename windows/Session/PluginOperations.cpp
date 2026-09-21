@@ -44,7 +44,7 @@ PluginOperations::PluginOperations(Tracker::Document &d,Project::ProjectState &p
   :document_(d),project_(p),stop_(std::move(stop)),liveParameters_(std::move(liveParameters)),library_(std::move(libraryPath)){}
 PluginOperations::~PluginOperations()=default;
 std::vector<GraphRackRecord> PluginOperations::graphRack() const {
-  std::vector<GraphRackRecord> result;const auto states=projectPluginStates(project_);
+  std::vector<GraphRackRecord> result;const auto states=projectPluginStates(project_,false);
   for(size_t i=0;i<states.size();++i){const auto &s=states[i];GraphRackRecord item{descriptor(s.descriptor),s.instanceID,uint32_t(i),s.bypass};for(auto a:pluginAssignments(s))item.instruments.push_back(uint16_t(a.instrument));result.push_back(std::move(item));}
   return result;
 }

@@ -134,6 +134,7 @@
 		std::vector<ScreamSeq::WorkspaceCommand> commands={
             {graphCommand,L"Graph / Open reusable routing and modulation canvas",L""},
             {mixerCommand,L"Mix / Open mixer controls and routing",L""},
+            {mixerRouting,L"Mix / Song routing overview, inserts, sends and sidechains",L""},
             {effectsCommand,L"Pattern / Inspect FX and parameter bindings",L"Enter on an FX cell"},
             {patternPasteMix,L"Pattern / Mix paste into empty fields",L"Ctrl+Shift+V"},
             {patternPasteMerge,L"Pattern / Merge nonempty clipboard fields",L""},
@@ -222,7 +223,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=curvePattern&&id<=curveReference) && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerTiming) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginReconnect) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
+            if(!(id>=curvePattern&&id<=curveReference) && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouting) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginReconnect) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
     bool handleKey(WPARAM code) {

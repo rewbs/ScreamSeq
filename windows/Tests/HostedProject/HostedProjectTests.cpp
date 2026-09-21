@@ -40,6 +40,10 @@ int main(){try{
     {"bypass",false},{"instrument",0},{"instrumentAssignments",Json::array()},{"auxiliaryInputs",Json::array()},{"auxiliaryOutputs",Json::array()}};
   state.preserved["plugins"].push_back(plugin);auto plugins=projectPluginStates(state);
   check(plugins.size()==1&&plugins[0].instanceID=="native-project-rack"&&plugins[0].state==data,"exact identity and opaque baseline");
+  {auto large=state;large.preserved["plugins"][0]["state"]=Json::binary(std::vector<uint8_t>(16u*1024u*1024u,0x3a));
+   const auto metadata=projectPluginStates(large,false);check(metadata.size()==1&&metadata[0].state.empty()&&metadata[0].instanceID==plugins[0].instanceID&&metadata[0].descriptor.classID==plugins[0].descriptor.classID&&metadata[0].descriptor.format==plugins[0].descriptor.format&&metadata[0].descriptor.path==plugins[0].descriptor.path,"routing inventory omits large opaque copies and retains identity");
+   check(large.preserved["plugins"][0]["state"].get_binary().size()==16u*1024u*1024u,"inventory leaves source sound data intact");
+   large.preserved["plugins"][0]["state"]="invalid";bool rejected=false;try{(void)projectPluginStates(large,false);}catch(const std::exception &){rejected=true;}check(rejected,"metadata-only inventory still validates opaque data");}
   state.preserved["automation"]=Json::array({Json::array({0,1,-12,48000})});
   auto automation=projectAbsoluteAutomation(state);check(automation.size()==1&&automation[0].frame==48000,"canonical 48-kHz automation not rescaled twice");
   state.preserved["automation"]=Json::array();

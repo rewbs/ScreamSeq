@@ -355,7 +355,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     result=method.starts_with("graph.plugin.")?plugins_->invokeGraph(method,params,playbackFeedback().sampleRate):plugins_->invoke(method,params);
   } else if(std::find(graphMethods.begin(),graphMethods.end(),method)!=graphMethods.end()) {
     GraphHostHooks hooks;hooks.rack=[&]{return plugins_->graphRack();};hooks.cloneRackSlot=[&](uint32_t slot){return plugins_->cloneRackSlot(slot);};
-    hooks.activity=[&]{return playbackFeedback().activity;};hooks.validateCandidate=[&](const Tracker::NativeSong &next){Tracker::validatePluginCapacity(projectPluginStates(project_),next.mixer.buses.size());};
+    hooks.activity=[&]{return playbackFeedback().activity;};hooks.validateCandidate=[&](const Tracker::NativeSong &next){Tracker::validatePluginCapacity(projectPluginStates(project_,false),next.mixer.buses.size());};
     GraphOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
   } else if(std::find(mixerMethods.begin(),mixerMethods.end(),method)!=mixerMethods.end()) {
     MixerHostHooks hooks;hooks.plugins=projectPluginStates(project_);hooks.buses=[&](size_t slot,bool required){return plugins_->audioBuses(slot,required);};hooks.feedback=[&]{return playbackFeedback();};

@@ -246,6 +246,30 @@ Ctrl+F focuses search and Ctrl+R reloads. Category drafts survive Close; Escape
 discards a draft. Unavailable preferences leave insertion usable. See
 `../PLUGIN_LIBRARY_PROGRESS.md` for native/API and isolated live-audio evidence.
 
+The mixer toolbar's **Routing…** button and command palette open a modeless song
+routing canvas alongside the pattern editor. It shows track/group/master buses,
+row/persistent/ordinary graph stages, explicit/default-master inserts, instrument
+outputs, sends, sidechains and graph auxiliary ports. Bus filters follow signal
+paths and dependencies. Sample-instrument graph copies are grouped until their
+instrument is selected, then expand into independent channel copies.
+
+The Connections page supports native endpoint/port controls, output-handle
+dragging, dry verification, update and disconnection. Selected-wire updates
+preserve unrelated routes. Insert chains support append, remove and reorder;
+ordinary graphs can be assigned to buses or sample instruments. Open navigates
+to the selected mixer bus, rack plugin or reusable graph, preserving any existing
+draft in that editor. Missing insert references remain visible and do not open a
+different plugin. Revisions are captured; Reload refreshes the scene explicitly.
+
+Node dragging, arrows, Arrange, Fit, pan and zoom use retained geometry. Save
+layout uses `graph.layout.set` and shared document Undo/persistence. Layout and
+route drafts survive Close/reopen and reject stale application. F6 switches the
+canvas/node picker, Ctrl+Enter applies, Home fits, plus/minus zoom and Delete
+disconnects a selected editable wire. Escape reloads a draft or closes a clean
+window. The three inspector pages fit the 1040×680 logical minimum.
+`workspace.get.songRouting` exposes the captured context and canvas projection;
+`songGraph` is removed from the unavailable list. See `../SONG_ROUTING_PROGRESS.md`.
+
 The rack's **Plugin location** page and the graph's plugin inspector expose
 **Reconnect plugin…**. The retained native window lists scanned Windows modules
 with the same class and role, verifies the selected binary, and reconnects it

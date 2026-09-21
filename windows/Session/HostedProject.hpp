@@ -4,7 +4,9 @@
 namespace ScreamSeq {
 using Json=nlohmann::json;
 // Decode persisted project records without loading a vendor or changing them.
-std::vector<Tracker::PluginState> projectPluginStates(const Project::ProjectState &);
+// Metadata reads still validate opaque data, but can avoid copying each saved
+// vendor state. Playback and processor preparation use the default full state.
+std::vector<Tracker::PluginState> projectPluginStates(const Project::ProjectState &,bool includeState=true);
 std::vector<Tracker::ParameterChange> projectAbsoluteAutomation(const Project::ProjectState &);
 struct HostedPlaybackSettings {
   uint32_t order=0;

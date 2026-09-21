@@ -16,6 +16,7 @@
 #include "PluginInstrumentsWindow.hpp"
 #include "PluginLibraryWindow.hpp"
 #include "PluginPathWindow.hpp"
+#include "SongRoutingWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -61,7 +62,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     noteApply=372,noteReload=373,noteReplace=374,noteRepeat=375,noteRepeatCount=376,noteEndVelocity=377,
     mixerCommand=400,mixerList=401,mixerEnable=402,mixerAdd=403,mixerRemove=404,mixerReload=405,
     mixerApply=406,mixerMute=407,mixerSolo=408,mixerOutput=409,mixerName=410,
-    mixerPreGain=411,mixerPrePan=412,mixerGain=413,mixerPan=414,mixerWidth=415,mixerTiming=416,
+    mixerPreGain=411,mixerPrePan=412,mixerGain=413,mixerPan=414,mixerWidth=415,mixerTiming=416,mixerRouting=417,
     graphCommand=430,graphLibrary=431,graphNew=432,graphClone=433,graphRemove=434,graphKind=435,graphAddSource=436,
     graphRack=437,graphAddEffect=438,graphFit=439,graphApply=440,graphReload=441,graphNodePicker=442,graphPage=443,
     graphProperty=444,graphPropertyValue=445,graphSetProperty=446,graphSource=447,graphDestination=448,graphWire=449,
@@ -244,6 +245,7 @@ public:
             {"pluginInstruments",pluginInstruments?pluginInstruments->snapshot():Json{{"visible",false}}},
             {"pluginLibrary",pluginLibraryWindow?pluginLibraryWindow->snapshot():Json{{"visible",false}}},
             {"pluginPath",pluginPathWindow?pluginPathWindow->snapshot():Json{{"visible",false}}},
+            {"songRouting",songRoutingWindow?songRoutingWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
             {"noteEditor",{{"visible",noteEditorVisible()},{"pattern",notePattern},{"row",noteRow},{"channel",noteChannel},
@@ -254,7 +256,7 @@ public:
             {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
                 {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
                 {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
-            {"unavailable",{"songGraph","parameterAutomationUI","instrumentEnvelopeUI","floatingPanels","savedLayouts"}}};
+            {"unavailable",{"parameterAutomationUI","instrumentEnvelopeUI","floatingPanels","savedLayouts"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
@@ -546,7 +548,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		int argc = 0; auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 		if(!argv) throw std::runtime_error("Cannot parse command line");
 		std::vector<std::wstring> args(argv, argv + argc); LocalFree(argv);
-		bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false;
+        bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false, audioTestAllowStop=false;
 		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride,libraryOverride;
 		for(size_t i = 1; i < args.size(); ++i) {
 			if(args[i] == L"--offline-test") offline = true;
@@ -555,6 +557,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			else if(args[i] == L"--automation") automation = true;
 			else if(args[i] == L"--audio-test") audioTest = true;
             else if(args[i]==L"--audio-test-silent") {audioTest=true;silentOutput=true;}
+            else if(args[i]==L"--audio-test-allow-stop") audioTestAllowStop=true;
 			else if(args[i] == L"--seconds" && i + 1 < args.size()) seconds = std::stod(args[++i]);
 			else if(args[i] == L"--report" && i + 1 < args.size()) report = args[++i];
 			else if(args[i] == L"--project" && i + 1 < args.size()) projectPath = args[++i];
@@ -570,7 +573,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         }
 		if(offline) { if(!projectPath.empty()) throw std::runtime_error("The demo offline test does not accept a native project"); if(report.empty()) throw std::runtime_error("Offline test requires --report"); offlineTest(report); return 0; }
         if(hostedOffline) {if(report.empty()) throw std::runtime_error("Hosted offline test requires --report");offlineHostedTest(projectPath,report);return 0;}
-		if(audioTest && (inspection || !seconds)) throw std::runtime_error("Audio test requires --seconds and cannot use inspection mode");
+        if(audioTest && (inspection || !seconds)) throw std::runtime_error("Audio test requires --seconds and cannot use inspection mode");
+        if(audioTestAllowStop&&(!audioTest||!automation))throw std::runtime_error("--audio-test-allow-stop requires an automated audio qualification session");
 		SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         std::optional<std::filesystem::path> catalogue;
         if(!catalogueOverride.empty()) {
@@ -624,7 +628,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			if(result == WAIT_FAILED) throw std::runtime_error("Frame wait failed");
 			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) app.draw();
 			if(seconds && (ScreamSeq::ticks() - start) / app.frequency >= seconds) break;
-			if(audioTest && !app.device.running()) throw std::runtime_error("Audio device stopped during test");
+            if(audioTest && !audioTestAllowStop && !app.device.running()) throw std::runtime_error("Audio device stopped during test");
 		}
 		app.api.reset();
 		app.stop();

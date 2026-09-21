@@ -26,7 +26,7 @@ std::vector<uint32_t> buses(const Json &j){
   std::sort(result.begin(),result.end());return result;
 }
 }
-std::vector<Tracker::PluginState> projectPluginStates(const Project::ProjectState &project){
+std::vector<Tracker::PluginState> projectPluginStates(const Project::ProjectState &project,bool includeState){
   const auto &root=project.preserved;require(root.is_object(),"Invalid project state");
   auto version=integer(root.at("version"),6);require(version>=1,"Unsupported project version");
   const auto &records=root.at("plugins");require(records.is_array()&&records.size()<=Tracker::maximumNativePlugins,"Invalid project plugin inventory");
@@ -43,7 +43,7 @@ std::vector<Tracker::PluginState> projectPluginStates(const Project::ProjectStat
     state.bypass=flag(record.value("bypass",Json(false)));state.instrument=uint32_t(integer(record.value("instrument",Json(0)),255));
     state.auxiliaryInputs=buses(record.value("auxiliaryInputs",Json::array()));state.auxiliaryOutputs=buses(record.value("auxiliaryOutputs",Json::array()));
     const auto &blob=record.at("state");require(blob.is_binary()&&!blob.get_binary().has_subtype()&&blob.get_binary().size()<=16u*1024u*1024u,"Expected bounded ordinary plugin state data");
-    const auto &bytes=blob.get_binary();state.state.resize(bytes.size());if(!bytes.empty())std::memcpy(state.state.data(),bytes.data(),bytes.size());
+    if(includeState){const auto &bytes=blob.get_binary();state.state.resize(bytes.size());if(!bytes.empty())std::memcpy(state.state.data(),bytes.data(),bytes.size());}
     if(version>=5){
       const auto &raw=record.at("instrumentAssignments");require(raw.is_array()&&raw.size()<=255,"Invalid instrument assignment array");std::vector<Tracker::PluginInstrumentAlias> assignments;
       for(const auto &a:raw){require(a.is_object(),"Invalid instrument assignment");assignments.push_back({uint32_t(integer(a.at("instrument"),255)),uint32_t(integer(a.at("channel"),16))});}

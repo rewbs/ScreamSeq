@@ -540,3 +540,18 @@ through the isolated scanner; failures are reported with module paths while
 successful scans remain available. The exact class/path/architecture/hash guard
 still applies when loading. No automatic substitution or rescanning occurs on
 project open. Unknown plugin/project fields survive save and plugin history.
+
+The native song routing window uses the existing `mixer.bus.set`,
+`mixer.sends.set`, `mixer.sidechains.set`, `mixer.plugin.route`, `graph.routes.set`,
+`graph.assign`, `graph.instrument.assign` and `graph.layout.set` contracts.
+`workspace.get.songRouting` reports its document/revision, stale/pending flags,
+route/layout drafts, selected node/wire, filter/page, status and retained canvas
+geometry. Node keys match Mac layout identities; collapsed sample-instrument
+groups also retain an `instrument-graph:<instrument>:all` presentation key.
+No musical schema or routing semantics change. See `../SONG_ROUTING_PROGRESS.md`.
+
+For silent workflow qualification, `--audio-test-allow-stop` requires both an
+audio-test mode and `--automation`. It keeps the owned QA process available after
+an intentional stop, so tests can observe post-edit state. Default audio-test
+runs still fail when playback stops. The flag does not change normal sessions,
+audio fault detection, routing validation or callback behavior.

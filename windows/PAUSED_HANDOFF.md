@@ -34,6 +34,8 @@
 > categories/hidden entries: `PLUGIN_LIBRARY_PROGRESS.md`. Full parity remains active.
 > Explicit Windows VST3 location repair for rack and graph recipes, preserving
 > sound state, identity and routing: `PLUGIN_PATH_PROGRESS.md`. Full parity remains active.
+> Native song routing overview, inserts, sends, sidechains, graph ports and
+> instrument/bus graph assignments: `SONG_ROUTING_PROGRESS.md`. Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

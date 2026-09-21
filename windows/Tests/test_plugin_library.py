@@ -58,6 +58,24 @@ class PluginLibraryTests(unittest.TestCase):
         with self.assertRaises(ApiError) as error: action()
         self.assertEqual(error.exception.code, code, str(error.exception))
 
+    def write_preferences(self, data):
+        # Inject malformed fixtures under the same lock as real writers. The
+        # native quick picker can read concurrently, and its guarded read handle
+        # deliberately denies in-place mutation while validating the file.
+        kernel=private_desktop.kernel
+        kernel.CreateMutexW.argtypes=[ctypes.c_void_p,wintypes.BOOL,wintypes.LPCWSTR];kernel.CreateMutexW.restype=wintypes.HANDLE
+        kernel.ReleaseMutex.argtypes=[wintypes.HANDLE]
+        digest=hashlib.sha256(str(self.preferences.resolve()).lower().encode('utf-16-le')).hexdigest()
+        lock=kernel.CreateMutexW(None,False,'Global\\org.resonance.tracker.plugin-library-v1.'+digest)
+        self.assertTrue(lock)
+        acquired=False
+        try:
+            result=kernel.WaitForSingleObject(lock,2000);self.assertIn(result,(0,0x80));acquired=True
+            self.preferences.write_bytes(data if isinstance(data,bytes) else data.encode('utf-8'))
+        finally:
+            if acquired:kernel.ReleaseMutex(lock)
+            kernel.CloseHandle(lock)
+
     def test_mac_contract_filters_defaults_dry_noop_replay_and_independent_history(self):
         description = self.client.call('api.describe')['data']
         self.assertEqual(description['revisionGuards']['plugin.library.set'], ['expectedLibraryRevision'])
@@ -146,7 +164,7 @@ class PluginLibraryTests(unittest.TestCase):
             self.reject(-32002,lambda:self.set(entry,revision=committed['libraryRevision'],hidden=True))
         finally: kernel.ReleaseMutex(lock); kernel.CloseHandle(lock)
         self.assertEqual(self.preferences.read_bytes(),saved)
-        self.preferences.write_bytes(b'not json')
+        self.write_preferences(b'not json')
         corrupt = self.get(); self.assertFalse(corrupt['preferencesAvailable']); self.assertEqual(corrupt['libraryRevision'],''); self.assertTrue(corrupt['warning'])
         self.reject(-32602,lambda:self.set(entry,revision=committed['libraryRevision'],favorite=True))
         self.assertEqual(self.preferences.read_bytes(),b'not json')
@@ -164,10 +182,10 @@ class PluginLibraryTests(unittest.TestCase):
         item=dict(valid);item['entries']={'p'+format(i,'064x'):dict(favorite=False,hidden=True,category='') for i in range(4097)}
         invalid.append(json.dumps(item).encode())
         for data in invalid:
-            self.preferences.write_bytes(data); result=self.get()
+            self.write_preferences(data); result=self.get()
             self.assertFalse(result['preferencesAvailable']);self.assertTrue(result['plugins']);self.assertTrue(result['warning'])
             self.assertEqual(self.preferences.read_bytes(),data)
-        item['entries'].pop('p'+format(4096,'064x'));self.preferences.write_text(json.dumps(item))
+        item['entries'].pop('p'+format(4096,'064x'));self.write_preferences(json.dumps(item))
         self.assertTrue(self.get()['preferencesAvailable'])
         self.reject(-32602,lambda:self.set(entry,hidden=True))
 
@@ -229,7 +247,7 @@ class PluginLibraryTests(unittest.TestCase):
         self.field(3201,'');self.assertEqual(self.local()['plugins'][0]['category'],'Changed elsewhere')
 
     def test_native_keyboard_minimum_bounds_and_unavailable_preferences(self):
-        self.preferences.parent.mkdir();self.preferences.write_bytes(b'corrupt')
+        self.preferences.parent.mkdir();self.write_preferences(b'corrupt')
         self.command(326);self.idle();self.assertTrue(self.local()['plugins']);self.assertFalse(self.local()['libraryRevision']);self.choose()
         user=private_desktop.user;user.IsWindowEnabled.argtypes=[wintypes.HWND]
         for identifier in (3208,3209,3210,3211):self.assertFalse(user.IsWindowEnabled(self.control(identifier)))
