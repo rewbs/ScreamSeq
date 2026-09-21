@@ -65,10 +65,38 @@ double SignalRuntime::source(size_t index,double beat,double position,const Sign
   default:return nodes_[index].envelope;
   }
 }
+double SignalRuntime::sampledSource(size_t index,uint64_t frame,double beat,double position,double beatsPerFrame,const SignalClock &clock) const noexcept {
+  const auto kind=definition_.nodes[index].kind;
+  if(kind!=SignalNodeKind::Automation&&kind!=SignalNodeKind::LFO)return source(index,beat,position,clock);
+  // The approximation grid belongs to the song sample clock, not the caller's
+  // buffer. A callback ending partway through a quantum samples the same line
+  // that a larger callback would use; it must not fit a new, shorter segment.
+  double first=-double(frame%quantum),last=first+quantum-1;
+  if(kind==SignalNodeKind::Automation&&clock.playing&&clock.unitsPerFrame>0){
+    const auto *lane=envelope(index,clock.pattern);if(!lane)return 0;
+    const auto sampleAt=[&](double p){return std::ceil((p-position)/clock.unitsPerFrame-1e-9);};
+    first=std::max(first,sampleAt(0));if(clock.endPosition>position)last=std::min(last,sampleAt(clock.endPosition)-1);
+    auto right=std::upper_bound(lane->points.begin(),lane->points.end(),position,[](double p,const auto &point){return p<point.position;});
+    if(right!=lane->points.end())last=std::min(last,sampleAt(right->position)-1);
+    if(right!=lane->points.begin()){
+      const auto &left=*(right-1);double boundary=sampleAt(left.position);
+      // Step-at-start has a distinct value at its exact point and changes on
+      // the following sample. Never interpolate across either side of it.
+      if(left.curve==AutomationCurve::StepNext&&std::abs(position+boundary*clock.unitsPerFrame-left.position)<1e-8){
+        if(boundary==0)last=std::min(last,0.0);else boundary+=1;
+      }
+      first=std::max(first,boundary);
+    }
+  }
+  if(first>=last)return source(index,beat,position,clock);
+  const auto a=source(index,beat+first*beatsPerFrame,position+first*clock.unitsPerFrame,clock);
+  const auto b=source(index,beat+last*beatsPerFrame,position+last*clock.unitsPerFrame,clock);
+  return a+(b-a)*(-first)/(last-first);
+}
 bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalClock clock,const SignalCallbacks &cb,std::span<const MixerAudioInput> inputs) noexcept {
   if(!main||frames>maximumFrames||!std::isfinite(clock.beat)||!std::isfinite(clock.tempo)||clock.tempo<=0||!std::isfinite(clock.position)||!std::isfinite(clock.unitsPerFrame)||clock.unitsPerFrame<0||!std::isfinite(clock.endPosition)||!std::isfinite(clock.rowsPerBeat)||clock.rowsPerBeat<1)return false;
   const double beatsPerFrame=clock.playing?clock.tempo/(60*sampleRate_):0;
-  for(uint32_t offset=0;offset<frames;){auto count=std::min<uint32_t>(targets_.empty()?maximumFrames:quantum,frames-offset);
+  for(uint32_t offset=0;offset<frames;){auto count=std::min<uint32_t>(targets_.empty()?maximumFrames:uint32_t(quantum-(position+offset)%quantum),frames-offset);
     // Stop at point boundaries so step curves never become short ramps.
     if(clock.playing&&clock.unitsPerFrame>0)for(size_t i=0;i<nodes_.size();++i)if(definition_.nodes[i].kind==SignalNodeKind::Automation){
       if(const auto *lane=envelope(i,clock.pattern)){
@@ -99,7 +127,7 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
           const double coefficient=(target>n.envelope?n.attackCoefficient:n.releaseCoefficient);
           n.envelope=target+coefficient*(n.envelope-target);if(f==0)n.first=n.envelope;}
         n.last=n.envelope;
-      } else {n.first=source(index,clock.beat+offset*beatsPerFrame,clock.position+offset*clock.unitsPerFrame,clock);n.last=source(index,clock.beat+(offset+count-1)*beatsPerFrame,clock.position+(offset+count-1)*clock.unitsPerFrame,clock);}
+      } else {n.first=sampledSource(index,position+offset,clock.beat+offset*beatsPerFrame,clock.position+offset*clock.unitsPerFrame,beatsPerFrame,clock);n.last=sampledSource(index,position+offset+count-1,clock.beat+(offset+count-1)*beatsPerFrame,clock.position+(offset+count-1)*clock.unitsPerFrame,beatsPerFrame,clock);}
     }
     offset+=count;
   }

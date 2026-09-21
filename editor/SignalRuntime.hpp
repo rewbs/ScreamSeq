@@ -44,6 +44,7 @@ class SignalRuntime {
   static Port *port(std::vector<std::unique_ptr<Port>> &,uint32_t);
   static Port *lookup(const std::vector<std::unique_ptr<Port>> &,uint32_t) noexcept;
   double source(size_t,double,double,const SignalClock &) const noexcept;
+  double sampledSource(size_t,uint64_t,double,double,double,const SignalClock &) const noexcept;
   const SignalPatternEnvelope *envelope(size_t,uint64_t) const noexcept;
 public:
   SignalRuntime(SignalDefinition, SignalPlan, double sampleRate);

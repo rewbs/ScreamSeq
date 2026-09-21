@@ -22,8 +22,17 @@ Editor open returns a token; commit requires that token, captured graph/node
 and unchanged recipe. Closing the native window retains its uncommitted draft
 until explicit API close or document replacement. Commit supports dry run.
 `workspace.get.graphEditor` exposes the reusable canvas's captured revision,
-draft flags, selection and retained hit-test geometry. Song overview and curve
-editing remain outstanding; the contextual workspace panel API is unchanged.
+draft flags, selection and retained hit-test geometry. The contextual workspace
+panel API is unchanged.
+
+The Graph dock's Pattern curve page uses `graph.automation.get/set` and
+`automation.formula.preview`. `workspace.get.graphCurve` reports its captured
+graph/source/pattern/revision, retained point fields, selection, viewport and
+preview status. Values use the shared 256 units per row and normalized 0..1
+model; native fields display rows and percent. All nine curve types and scripted
+expressions use the shared evaluator. Formula previews run on the worker and
+painting consumes cached samples. Song overview, the expanded formula workbench
+and native envelope-bank controls remain outstanding.
 
 The normal Windows envelope catalogue lives at
 `%LOCALAPPDATA%/org.resonance.tracker/envelope-catalogue-v1.json`. Reading an absent

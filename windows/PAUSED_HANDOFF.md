@@ -20,6 +20,8 @@
 > `MIXER_GRAPH_PROGRESS.md`. Full parity remains active.
 > Reusable graph canvas and isolated graph-plugin editor drafts:
 > `GRAPH_EDITOR_PROGRESS.md`. Song overview, curves and other parity gates remain.
+> Native graph pattern curves and a tested shared modulation partition fix:
+> `GRAPH_CURVES_PROGRESS.md`. Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

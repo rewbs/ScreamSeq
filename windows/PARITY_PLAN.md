@@ -56,8 +56,10 @@ in force. A fresh fetch during this continuation found no newer upstream commits
    The native mixer bus dock and guarded operations have app, worker, PCM and
    live WASAPI coverage; see `MIXER_GRAPH_PROGRESS.md`. The reusable graph canvas
    and independent graph-plugin editing now have native UI, persistence and PCM
-   coverage (`GRAPH_EDITOR_PROGRESS.md`). Complete song routing overview,
-   curve/formula editing and both envelope
+   coverage (`GRAPH_EDITOR_PROGRESS.md`). Native graph pattern curves, scripted
+   previews and stable modulation sampling are now covered in
+   `GRAPH_CURVES_PROGRESS.md`. Complete song routing overview, pattern-parameter
+   automation, the expanded formula workbench and both envelope
    bank levels, with retained drawing, meaningful context menus and keyboard use.
 4. **Recording and workspace.** Device selection, MIDI input and mapping,
    precise recording/recovery, sample zoom/drawing/crossfade/audition, floating

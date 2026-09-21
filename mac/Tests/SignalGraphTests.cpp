@@ -61,6 +61,18 @@ int main(){try{
   rejects([&]{automated.validate({},{{92,1}});});automated.library[0].nodes.back().envelopes[0].points[0].position=256;rejects([&]{automated.validate({},{{91,1}});});
   auto cycle=d;cycle.audio.push_back({2,2});rejects([&]{compileSignal(cycle);});
   cycle=d;cycle.nodes.push_back({4,SignalNodeKind::Follower,"Follower"});cycle.audio.push_back({2,4});cycle.modulation.push_back({4,2});rejects([&]{compileSignal(cycle);});
+  // Smooth/scripted curves used to fit each truncated callback separately.
+  // Include one-sample callbacks, fractional point boundaries, final scripts,
+  // and a nonzero absolute start so the grid cannot accidentally restart.
+  for(auto curve:{AutomationCurve::Smooth,AutomationCurve::Exponential,AutomationCurve::Logarithmic,AutomationCurve::ExponentialReverse,AutomationCurve::LogarithmicReverse,AutomationCurve::StepNext,AutomationCurve::Scripted}){
+    auto nonlinear=curveGraph;nonlinear.nodes.back().envelopes={{91,true,{{0,.2,curve},{21,.9,curve},{71,.1,curve}}}};
+    if(curve==AutomationCurve::Scripted)for(auto &p:nonlinear.nodes.back().envelopes[0].points)p.formula=CurveFormula("mix(start,end,t*t)");
+    std::array<double,8192> reference{};bool haveReference=false;
+    for(uint32_t block:{1u,7u,17u,128u}){Fixture f;SignalRuntime r(nonlinear,compileSignal(nonlinear),48000);
+      for(uint32_t at=0;at<128;){auto count=std::min(block,128-at);check(r.render(samples.data(),count,at+13,{0,120,true,91,double(at)*.8,.8,128,4},f.callbacks()),"Nonlinear graph curve render failed");at+=count;}
+      if(!haveReference){reference=f.values;haveReference=true;}else for(size_t i=13;i<141;++i)check(std::abs(f.values[i]-reference[i])<1e-12,"Nonlinear graph curve depends on callback partition");
+    }
+  }
   auto dangling=d;dangling.audio[0].source=999;rejects([&]{compileSignal(dangling);});
   SignalGraph library;library.library={d};library.lanes[5]=2;library.commands.push_back({6,5,100,0,0,SignalCommandKind::Start});library.validate({5},{{6,64}});library.commands.push_back(library.commands[0]);rejects([&]{library.validate({5},{{6,64}});});
   std::cout<<"Signal graph: DAG validation, serial/parallel audio, delay alignment, multiport sidechains, smooth modulation and macro mapping passed\n";return 0;

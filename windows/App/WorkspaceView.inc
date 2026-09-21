@@ -91,6 +91,7 @@
         layoutNoteControls(place);
         layoutMixerControls(place);
         layoutGraphControls(place);
+        layoutGraphCurveControls(place);
 		SetWindowTextW(controls.at(followCommand),follow ? L"Follow on [F]" : L"Detached [F]");
 		SetWindowTextW(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
 		for(auto [id,h]:controls) InvalidateRect(h,nullptr,FALSE);
@@ -129,6 +130,7 @@
         installNoteControls();
         installMixerControls();
         installGraphControls();
+        installGraphCurveControls();
 		std::vector<ScreamSeq::WorkspaceCommand> commands={
             {graphCommand,L"Graph / Open reusable routing and modulation canvas",L""},
             {mixerCommand,L"Mix / Open mixer controls and routing",L""},
@@ -172,7 +174,7 @@
 	void command(int id) {
 		try {
             if(id==notesCommand||id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==soundCommand){mixerEditorOpen=false;graphEditorOpen=false;}
-            if(graphControlCommand(id) || mixerControlCommand(id) || noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
+            if(graphCurveCommand(id) || graphControlCommand(id) || mixerControlCommand(id) || noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
             else if(id==openCommand) openFile();
             else if(id==saveCommand || id==saveAsCommand) saveFile(id==saveAsCommand);
             else if(id==undoCommand || id==redoCommand) edit(id==undoCommand ? "history.undo" : "history.redo",{{"domain","document"}});
@@ -215,7 +217,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=graphCommand&&id<=graphDeleteNode) && !(id>=mixerCommand&&id<=mixerTiming) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
+            if(!(id>=curvePattern&&id<=curveEnable) && !(id>=graphCommand&&id<=graphDeleteNode) && !(id>=mixerCommand&&id<=mixerTiming) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
     bool handleKey(WPARAM code) {
@@ -243,7 +245,7 @@
             if(key==VK_RETURN){command(effectApply);return true;}
         }
         if(noteKey(key,ctrl,alt,shift))return true;
-        if(graphKey(key,ctrl,alt,shift))return true;
+        if(curveKey(key,ctrl,alt,shift)||graphKey(key,ctrl,alt,shift))return true;
         if(mixerKey(key))return true;
         if(textOwnsKeyboard() && key!=VK_ESCAPE) return false;
         if(ctrl && key=='I') {command(sampleImportCommand);return true;}

@@ -9,7 +9,9 @@ The current native format is container 6 / metadata 17. Historical native
 wrappers reject before document replacement, matching upstream; module import
 remains supported. Unified FX, note cuts and disconnected routes have shared
 API/rendering and native editing controls. The reusable graph canvas is covered
-in `../GRAPH_EDITOR_PROGRESS.md`; song overview and curve editing remain pending.
+in `../GRAPH_EDITOR_PROGRESS.md`; graph pattern curves and the shared modulation
+sampling fix are covered in `../GRAPH_CURVES_PROGRESS.md`. Song overview remains
+pending.
 
 ## Owner boundaries
 
@@ -124,8 +126,11 @@ UI state, with meter snapshots collected by a UI timer. The reusable graph dock
 adds cached nodes, ports and wires, socket dragging, pan/zoom, definition/property
 drafts and bus assignments. Its plugin controls and native VST3 draft editors
 operate on independent graph recipes with document Undo. Painting never queries
-the worker or plugins. Song overview, graph curves, insert/send/sidechain controls
-and simultaneous independent lower docks remain.
+the worker or plugins. The Pattern curve page retains a separate captured source
+and pattern draft, with native point fields, dragging, snap, zoom, all nine curve
+types and worker-evaluated formula previews. Generation checks preserve newer
+edits during requests. Song overview, expanded formula/bank editors,
+insert/send/sidechain controls and simultaneous independent lower docks remain.
 
 Mixer gain/balance/width/mute/solo updates publish one bounded control batch on
 the single UI producer. The shared Document prepares Undo storage before that

@@ -24,7 +24,7 @@
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(int id:{graphLibrary,graphKind,graphRack,graphNodePicker,graphPage,graphProperty,graphSource,graphDestination,graphWire,graphParameter,graphBus})controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(int id:{graphPropertyValue,graphOutputPort,graphInputPort,graphMinimum,graphMaximum,graphBase,graphGain,graphParameterValue,graphAmount,graphWet}){controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);SendMessageW(controls.at(id),EM_SETLIMITTEXT,id==graphPropertyValue?256:32,0);}
-        for(auto label:{L"Node / definition",L"Audio wire",L"Modulation wire",L"Plugin controls",L"Bus assignment"})SendMessageW(controls.at(graphPage),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
+        for(auto label:{L"Node / definition",L"Audio wire",L"Modulation wire",L"Plugin controls",L"Bus assignment",L"Pattern curve"})SendMessageW(controls.at(graphPage),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         for(auto label:{L"automation",L"lfo",L"follower",L"random",L"note-envelope",L"midi",L"amount"})SendMessageW(controls.at(graphKind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         for(auto label:{L"Node name",L"Graph name",L"Graph number",L"Rate / cycles per beat",L"Phase",L"Attack / seconds",L"Release / seconds",L"MIDI controller"})SendMessageW(controls.at(graphProperty),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         for(int id:{graphPage,graphKind,graphProperty})SendMessageW(controls.at(id),CB_SETCURSEL,0,0);
@@ -64,16 +64,16 @@
             }
         }catch(const std::exception &e){graphStatus=wide(e.what());}refreshingGraph=false;
     }
-    void graphTimer(){if(!graphEditorVisible()){KillTimer(window,4);return;}if(!busy&&!graphDirty&&!graphFieldDirty&&!graphPending&&dragging<6&&(graphRevision!=view->session.revision||graphDocument!=documentId)){refreshGraph();layoutControls();}}
+    void graphTimer(){if(!graphEditorVisible()){KillTimer(window,4);return;}if(!busy&&!graphDirty&&!graphFieldDirty&&!curveDraft()&&!graphPending&&dragging<6&&(graphRevision!=view->session.revision||graphDocument!=documentId)){refreshGraph();layoutControls();}}
     template<class Place>void layoutGraphControls(Place place){
         const auto r=sampleEditorRect();const bool show=graphEditorVisible();const float x=r.x+r.w-256;const bool chosen=!graphID.empty();
         std::set<int> placed;auto showControl=[&](int id,float a,float b,float w,float h,bool visible){placed.insert(id);place(id,a,b,w,h,visible);};
         showControl(graphCommand,560,52,76,26,true);
         showControl(graphLibrary,r.x+6,r.y+5,std::max(80.0f,r.w-524),230,show);float a=x-260;
-        showControl(graphNew,a,r.y+5,44,25,show);showControl(graphFit,a+48,r.y+5,42,25,show);showControl(graphApply,a+94,r.y+5,65,25,show);showControl(graphReload,a+163,r.y+5,85,25,show);
-        showControl(graphKind,r.x+6,r.y+36,112,210,show);showControl(graphAddSource,r.x+122,r.y+36,78,25,show);
-        showControl(graphRack,r.x+206,r.y+36,std::max(50.0f,r.w-568),230,show);showControl(graphAddEffect,x-88,r.y+36,78,25,show);
-        showControl(graphPage,x,r.y+5,248,210,show);showControl(graphNodePicker,x,r.y+37,248,230,show&&(graphPageIndex==0||graphPageIndex==3));
+        showControl(graphNew,a,r.y+5,44,25,show&&graphPageIndex!=5);showControl(graphFit,a+48,r.y+5,42,25,show&&graphPageIndex!=5);showControl(graphApply,a+94,r.y+5,65,25,show&&graphPageIndex!=5);showControl(graphReload,a+163,r.y+5,85,25,show&&graphPageIndex!=5);
+        showControl(graphKind,r.x+6,r.y+36,112,210,show&&graphPageIndex!=5);showControl(graphAddSource,r.x+122,r.y+36,78,25,show&&graphPageIndex!=5);
+        showControl(graphRack,r.x+206,r.y+36,std::max(50.0f,r.w-568),230,show&&graphPageIndex!=5);showControl(graphAddEffect,x-88,r.y+36,78,25,show&&graphPageIndex!=5);
+        showControl(graphPage,x,r.y+5,248,210,show);showControl(graphNodePicker,x,r.y+37,248,230,show&&(graphPageIndex==0||graphPageIndex==3||graphPageIndex==5));
         if(graphPageIndex==0){showControl(graphProperty,x,r.y+82,248,230,show);showControl(graphPropertyValue,x,r.y+114,248,25,show);showControl(graphSetProperty,x,r.y+146,248,25,show);showControl(graphClone,x,r.y+182,120,25,show);showControl(graphRemove,x+128,r.y+182,120,25,show);showControl(graphDeleteNode,x,r.y+214,248,25,show);}
         if(graphPageIndex==1||graphPageIndex==2){showControl(graphWire,x,r.y+37,248,230,show);showControl(graphSource,x,r.y+80,120,230,show);showControl(graphDestination,x+128,r.y+80,120,230,show);
             showControl(graphOutputPort,x,r.y+124,120,25,show&&graphPageIndex==1);showControl(graphInputPort,x+128,r.y+124,120,25,show);
@@ -114,6 +114,7 @@
         return true;
     }
     bool graphMouseDown(float x,float y){
+        if(graphCurveVisible()){if(curveMouseDown(x,y))return true;return graphCanvas.viewport.contains(x,y);}
         if(!graphEditorVisible()||!graphCanvas.viewport.contains(x,y))return false;
         if(busy||graphPending)return true;if(graphFieldDirty)throw std::runtime_error("Set or reload the field draft before selecting on the canvas");
         workspaceState.focus="graph";SetFocus(window);graphPointer={x,y};graphDragStart={x,y};graphDragDirty=graphDirty;
@@ -124,16 +125,17 @@
         else{graphDragOrigin={graphCanvas.panX,graphCanvas.panY};dragging=8;}
         if(dragging>=6)SetCapture(window);frameRequested=true;return true;
     }
-    void graphMouseMove(float x,float y){graphPointer={x,y};if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=std::clamp(double(graphDragCoordinates[0]+(x-graphDragStart.x)/graphCanvas.zoom),-100000.0,100000.0);(*n)["y"]=std::clamp(double(graphDragCoordinates[1]+(y-graphDragStart.y)/graphCanvas.zoom),-100000.0,100000.0);graphDirty=true;++graphGeneration;rebuildGraphCanvas();}}
+    void graphMouseMove(float x,float y){if(dragging==9){curveMouseMove(x,y);return;}graphPointer={x,y};if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=std::clamp(double(graphDragCoordinates[0]+(x-graphDragStart.x)/graphCanvas.zoom),-100000.0,100000.0);(*n)["y"]=std::clamp(double(graphDragCoordinates[1]+(y-graphDragStart.y)/graphCanvas.zoom),-100000.0,100000.0);graphDirty=true;++graphGeneration;rebuildGraphCanvas();}}
         if(dragging==8){graphCanvas.panX=graphDragOrigin.x+x-graphDragStart.x;graphCanvas.panY=graphDragOrigin.y+y-graphDragStart.y;rebuildGraphCanvas();}frameRequested=true;}
     void graphMouseUp(float x,float y){
+        if(dragging==9){dragging=0;curveDragBefore=Json::array();rebuildCurveCanvas();layoutControls();return;}
         if(dragging==7){const auto target=graphCanvas.socketAt(x,y);if(target>=0){const auto socket=graphCanvas.sockets[size_t(target)];if(!socket.output&&socket.modulation==graphDragSocket.modulation&&socket.node!=graphDragSocket.node){auto &edges=graphDraft[socket.modulation?"modulation":"audio"];Json e={{"source",graphDragSocket.node},{"target",socket.node}};if(socket.modulation){double base=0;for(const auto &old:edges)if(old.at("target")==socket.node&&old.at("parameter")==socket.port){base=old.value("base",0.0);break;}e["parameter"]=socket.port;e["minimum"]=0;e["maximum"]=1;e["base"]=base;e["enabled"]=true;}else{e["output"]=graphDragSocket.port;e["input"]=socket.port;e["gain"]=1;}
             const auto found=std::find_if(edges.begin(),edges.end(),[&](const auto &v){return v.at("source")==e.at("source")&&v.at("target")==e.at("target")&&(socket.modulation?v.at("parameter")==e.at("parameter"):(v.value("output",0u)==graphDragSocket.port&&v.value("input",0u)==socket.port));});
             if(found==edges.end()){edges.push_back(e);graphDirty=true;++graphGeneration;graphWireIndex=int(edges.size()-1);}else graphWireIndex=int(found-edges.begin());graphWireModulation=socket.modulation;graphPageIndex=socket.modulation?2:1;SendMessageW(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);loadGraphFields();
         }}}
         if(dragging>=6){dragging=0;rebuildGraphCanvas();layoutControls();}
     }
-    void graphCancelDrag(){if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=graphDragCoordinates[0];(*n)["y"]=graphDragCoordinates[1];graphDirty=graphDragDirty;++graphGeneration;}}if(dragging==8){graphCanvas.panX=graphDragOrigin.x;graphCanvas.panY=graphDragOrigin.y;}dragging=0;ReleaseCapture();rebuildGraphCanvas();}
+    void graphCancelDrag(){if(dragging==9){curveCancelDrag();return;}if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=graphDragCoordinates[0];(*n)["y"]=graphDragCoordinates[1];graphDirty=graphDragDirty;++graphGeneration;}}if(dragging==8){graphCanvas.panX=graphDragOrigin.x;graphCanvas.panY=graphDragOrigin.y;}dragging=0;ReleaseCapture();rebuildGraphCanvas();}
     void graphZoom(float factor){const auto &r=graphCanvas.viewport;const auto anchor=graphCanvas.world(r.x+r.w/2,r.y+r.h/2);graphCanvas.zoom=std::clamp(graphCanvas.zoom*factor,.25f,2.5f);graphCanvas.panX=r.w/2-anchor.x*graphCanvas.zoom;graphCanvas.panY=r.h/2-anchor.y*graphCanvas.zoom;rebuildGraphCanvas();}
     bool graphKey(WPARAM key,bool ctrl,bool alt,bool shift){
         if(!graphEditorVisible())return false;const auto focus=GetFocus();const auto id=focus==window?0:GetDlgCtrlID(focus);
@@ -149,6 +151,7 @@
         return false;
     }
     void drawGraphEditor(){
+        if(graphCurveVisible()){drawGraphCurve();return;}
         auto &s=*surface;const auto r=sampleEditorRect(),canvas=graphCanvas.viewport;const float x=r.x+r.w-256;s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x17202a);s.fill(canvas.x,canvas.y,canvas.w,canvas.h,0x10171f);
         s.clip(canvas.x,canvas.y,canvas.w,canvas.h);
         const float spacing=48*graphCanvas.zoom;for(float a=std::fmod(graphCanvas.panX,spacing);a<canvas.w;a+=spacing)if(a>=0)s.line(canvas.x+a,canvas.y,canvas.x+a,canvas.y+canvas.h,0x192530);
