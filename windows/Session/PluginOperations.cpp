@@ -179,11 +179,16 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     if(!dry && rack!=project_.preserved.at("plugins")){auto candidate=project_;candidate.preserved["plugins"]=rack;NativePlugin probe(projectPluginStates(candidate).at(index),48000);}
   } else if(method=="plugin.programs.get"||method=="plugin.programs.load") {
     const bool load=method=="plugin.programs.load";if(load)keys(p,{"plugin","program","expectedCatalogRevision","dryRun"});else keys(p,{"plugin"});
-    Json entries=Json::array();for(const auto &program:editor(index).programs())entries.push_back({{"id",program.id},{"name",program.name},{"group",program.group},{"loadable",program.loadable}});
+    const auto programs=[](const NativePlugin &plugin){Json entries=Json::array();for(const auto &program:plugin.programs())entries.push_back({{"id",program.id},{"name",program.name},{"group",program.group},{"loadable",program.loadable}});return entries;};
+    const auto entries=programs(editor(index));
     const auto token="programs:"+hashText(entries.dump());
     if(!load)return {{"plugin",state.instanceID},{"name",state.descriptor.name},{"catalogRevision",token},{"programs",entries}};
-    if(text(field(p,"expectedCatalogRevision"),80)!=token)throw Api::ApiError(-32001,"Program catalog changed");const auto id=text(field(p,"program"),128);need(std::any_of(entries.begin(),entries.end(),[&](const auto &x){return x.at("id")==id&&x.at("loadable")==true;}),"Program is not loadable");
-    NativePlugin probe(state,48000);probe.loadProgram(id);rack[index]["state"]=blob(probe.state().state);
+    if(text(field(p,"expectedCatalogRevision"),80)!=token)throw Api::ApiError(-32001,"Program catalog changed");const auto id=text(field(p,"program"),128);
+    const auto selected=std::find_if(entries.begin(),entries.end(),[&](const auto &x){return x.at("id")==id&&x.at("loadable")==true;});need(selected!=entries.end(),"Program is not loadable");
+    const Json result={{"plugin",state.instanceID},{"program",*selected},{"catalogRevision",token},{"validated",true},{"loaded",!dry},{"dryRun",dry}};
+    if(dry)return result; // Catalog validation never loads a vendor program.
+    NativePlugin probe(state,48000);if("programs:"+hashText(programs(probe).dump())!=token)throw Api::ApiError(-32001,"Saved plugin state exposes a different program catalog");
+    probe.loadProgram(id);rack[index]["state"]=blob(probe.state().state);commit(std::move(rack),std::move(automation));return result;
   } else throw Api::ApiError(-32601,"Unknown plugin operation");
   const bool changed=rack!=project_.preserved.at("plugins")||automation!=project_.preserved.at("automation");
   if(!dry){commit(std::move(rack),std::move(automation),false,method=="plugin.parameters.set",liveChanges);if(!touch.is_null()){lastTouched_=std::move(touch);++touchSequence_;}}return {{"wouldChange",changed},{"dryRun",dry}};

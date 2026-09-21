@@ -26,6 +26,8 @@ class PluginAppTests(unittest.TestCase):
         self.report = self.folder / 'wasapi.json'
         args = [os.environ['SCREAMSEQ_TEST_EXE'], '--inspection', '--automation', '--seconds', '120', '--report', str(self.report)]
         cache = os.environ.get('SCREAMSEQ_TEST_INSTRUMENT_CACHE') if self._testMethodName == 'test_installed_instrument_trigger_native_controls_and_reopen' else os.environ.get('SCREAMSEQ_TEST_PLUGIN_CACHE')
+        if self._testMethodName == 'test_native_program_and_port_controls_guard_history_and_reopen':
+            cache = os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE')
         if cache:
             args += ['--vst3-test-cache', cache]
         self.pid = self.desktop.launch(args)
@@ -65,6 +67,92 @@ class PluginAppTests(unittest.TestCase):
 
     def tick(self):
         self.desktop.send(self.hwnd, 0x113, 1)
+
+    def select(self, control, index):
+        handle = user.GetDlgItem(self.hwnd, control)
+        self.desktop.send(handle, 0x14E, index)  # CB_SETCURSEL
+        self.desktop.send(self.hwnd, 0x111, control | (1 << 16), handle)
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'), 'opt-in native VST3 provider fixtures')
+    def test_native_program_and_port_controls_guard_history_and_reopen(self):
+        descriptors = self.client.call('plugin.discover', {'format': 'VST3'})['data']
+        program = next(p for p in descriptors if p['classID'] == '5245534F4E414E4350524F4752410001')
+        self.write('plugin.add', descriptor=program)
+        identity = self.rack()[0]['instanceID']
+        self.tick()
+        self.select(318, 1)  # Factory programs page.
+        self.tick()
+        catalog = self.client.call('plugin.programs.get', {'plugin': identity})['data']
+        self.assertEqual(len(catalog['programs']), 6)
+        original = self.state()
+        before = self.doc()
+        validated = self.write('plugin.programs.load', plugin=identity, program=catalog['programs'][2]['id'],
+                               expectedCatalogRevision=catalog['catalogRevision'], dryRun=True)['data']
+        self.assertEqual(validated, dict(plugin=identity, program=catalog['programs'][2],
+                                        catalogRevision=catalog['catalogRevision'], validated=True, loaded=False, dryRun=True))
+        self.assertEqual(self.doc(), before)
+        with self.assertRaises(ApiError):
+            self.write('plugin.programs.load', plugin=identity, program=catalog['programs'][2]['id'],
+                       expectedCatalogRevision='programs:' + '0' * 64)
+        self.assertEqual(self.doc(), before)
+        self.select(319, 2)
+        self.write('document.patch', title='Changed while choosing a factory program')
+        self.tick()
+        self.command(320)
+        self.assertEqual(self.state(), original)
+        self.assertEqual(self.desktop.send(user.GetDlgItem(self.hwnd, 319), 0x147), 2)
+        self.desktop.send(self.hwnd, 0x100, 0x1B)
+        self.tick()
+        self.select(319, 2)
+        self.command(320)
+        changed = self.state()
+        self.assertNotEqual(changed, original)
+        self.command(309)
+        self.assertEqual(self.state(), original)
+        self.command(310)
+        self.assertEqual(self.state(), changed)
+        self.select(318, 2)  # Audio ports page.
+        self.tick()
+        ports = self.client.call('plugin.buses.get', dict(slot=0))['data']['buses']
+        sidechain = next(i for i, p in enumerate(ports) if p['direction'] == 'input' and p['index'] == 1)
+        self.select(321, sidechain)
+        self.command(322)
+        self.assertEqual(self.rack()[0]['auxiliaryInputs'], [1])
+        self.assertEqual(self.state(), changed)
+        self.command(309)
+        self.assertEqual(self.rack()[0]['auxiliaryInputs'], [])
+        self.command(310)
+        self.assertEqual(self.rack()[0]['auxiliaryInputs'], [1])
+        self.tick()
+        self.select(321, next(i for i, p in enumerate(ports) if p['index'] == 0))
+        before = self.doc()
+        self.command(322)  # Main port is not togglable.
+        self.assertEqual(self.doc(), before)
+        instrument = next(p for p in descriptors if p['classID'] == '5245534F4E414E43494E535452550001')
+        self.write('plugin.add', descriptor=instrument)
+        # The rack follows stable selection; explicitly select its second entry.
+        self.tick()
+        rack = user.GetDlgItem(self.hwnd, 300)
+        self.desktop.send(rack, 0x186, 1)
+        self.desktop.send(self.hwnd, 0x111, 300 | (1 << 16), rack)
+        self.tick()
+        ports = self.client.call('plugin.buses.get', dict(slot=1))['data']['buses']
+        for number in (1, 2, 31, 1):
+            self.select(321, next(i for i, p in enumerate(ports) if p['direction'] == 'output' and p['index'] == number))
+            self.command(322)
+            self.tick()
+        self.assertEqual(self.rack()[1]['auxiliaryOutputs'], [2, 31])
+        self.assertEqual(self.rack()[0]['auxiliaryInputs'], [1])
+        self.command(309)
+        self.assertEqual(self.rack()[1]['auxiliaryOutputs'], [1, 2, 31])
+        self.command(310)
+        self.assertEqual(self.rack()[1]['auxiliaryOutputs'], [2, 31])
+        saved_rack = self.rack()
+        path = self.folder / 'program-ports.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.rack(), saved_rack)
+        self.assertEqual(self.state(), changed)
 
     def test_empty_trigger_conversion_guards_history_and_persistence(self):
         before = self.doc()

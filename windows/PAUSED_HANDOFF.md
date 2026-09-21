@@ -11,6 +11,8 @@
 > Empty trigger creation and the installed Surge XT instrument checkpoint:
 > `TRIGGER_INSTRUMENT_PROGRESS.md`, including the first-editor-open playback
 > stop and the qualified deterministic instrument fixture.
+> Native factory-program and audio-port controls, including corrected program
+> dry-run semantics: `PLUGIN_PROGRAM_PORTS_PROGRESS.md`.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

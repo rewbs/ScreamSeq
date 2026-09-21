@@ -331,6 +331,14 @@ document history. The native **New trigger** action then calls
 `instrument.plugin.set` to assign it on channel 1 in plugin history, retaining
 the created stable identity for retry if assignment fails.
 
+Factory-program loads match the shared response fields: `plugin`, selected
+`program`, `catalogRevision`, `validated`, `loaded` and `dryRun`. A dry run only
+validates the catalog and selection; it does not load a disposable vendor
+program. Actual loads recheck the catalog on the saved-baseline instance before
+replacing opaque state. Native program selections retain their captured revision
+until Load or Escape. The rack also exposes selective auxiliary-port controls;
+`document.get.nativePlugins` includes `auxiliaryInputs` and `auxiliaryOutputs`.
+
 Discovery reads the cache. Explicit `rescan:true` scans installed VST3 roots
 through the isolated scanner; failures are reported with module paths while
 successful scans remain available. The exact class/path/architecture/hash guard

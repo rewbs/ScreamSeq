@@ -142,6 +142,10 @@ fails. Parameter batches and proven parameter-only native editor gestures reach
 the playing chain atomically. Opaque state changes still stop playback, including
 Surge's first editor open when it serializes its initial zoom. See
 `../TRIGGER_INSTRUMENT_PROGRESS.md` for installed-instrument evidence and limits.
+The rack detail selector also exposes guarded factory-program loading and
+selective auxiliary-port activation. Program selections retain captured target
+and revisions; port changes preserve unrelated ports. These are musical edits
+with plugin Undo/Redo and native save/reopen, not mixer-routing assignments.
 
 The Samples inspector opens a waveform editor in the lower dock. Dragging or
 keyboard/range fields select audio; Reverse, Normalize, Fade, Trim and normal or

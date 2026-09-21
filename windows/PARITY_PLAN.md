@@ -20,20 +20,21 @@ device and plugin hosting belong to each platform. See
 | Explicit disconnected mixer/plugin destinations | Shared mixer behavior and Windows metadata roundtrip accept output/target 0. | Connect live mixer/graph API and controls; exercise disconnect with sends, history and reopen through the UI. |
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields and sample waveform markers integrated. | Envelope editor markers and audition UI, including overlapping voices and release tails. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
-| Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, guarded program/state APIs, independent history and editor ownership integrated; live parameter batches and editor gestures reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. | Live opaque-state replacement (including Surge's first-open zoom state), program/bus/alias controls, presets/library, explicit path resolution and missing-plugin recovery. |
+| Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, native program/port controls, independent history and editor ownership integrated; live parameter batches and editor gestures reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. | Live opaque-state replacement (including Surge's first-open zoom state), native alias controls, presets/library, explicit path resolution, graph/mixer connections and missing-plugin recovery. |
 | Mac context menus, docking, focus, recovery and visual refinements | Reviewed; Windows retains its native implementation. | Implement the equivalent interactions and visual hierarchy in Windows, then compare actual windows at multiple scales. |
 
 ## Execution order and completion gates
 
 The native rack is now integrated; see `PLUGIN_RACK_PROGRESS.md`. Discovery,
 add/remove/move/bypass, parameters, aliases, native editor ownership, saved state
-and independent plugin history have application coverage. Program and bus APIs
-are connected but still need native controls and broader provider fixtures.
+and independent plugin history have application coverage. Program/port native
+controls and the provider fixture are covered in `PLUGIN_PROGRAM_PORTS_PROGRESS.md`;
+broader vendor and routing qualification remain.
 Live parameter propagation now has bounded atomic publication, worker-owned
 baseline/history, and installed-plugin WASAPI coverage; see
 `LIVE_PLUGIN_PARAMETERS.md`. Empty trigger creation and installed instrument
 evidence are in `TRIGGER_INSTRUMENT_PROGRESS.md`. Immediate remaining plugin work
-is live opaque-state replacement, program/bus/alias controls, presets/library
+is live opaque-state replacement, native alias controls, presets/library
 organization, missing-plugin resolution and the OrbitCab partition discrepancy. The following gates remain
 in force. A fresh fetch during this continuation found no newer upstream commits.
 

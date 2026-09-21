@@ -1,4 +1,6 @@
 #include "windows/Session/DocumentController.hpp"
+#include "windows/Plugins/WindowsVST3.hpp"
+#include "windows/Plugins/UiOwner.hpp"
 #include "common/mptString.h"
 #include <iostream>
 
@@ -171,8 +173,36 @@ void triggerInstrumentTests(const std::filesystem::path &directory) {
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});need(c.view()->session.document.at("instruments")==instruments,"Reopen changed trigger identities");
 }
 
+void programDryRunTests(const std::filesystem::path &scanner,const std::filesystem::path &cache) {
+  Tracker::WindowsVST3::configure(scanner.generic_string(),cache.generic_string());
+  unsigned stops=0;DocumentController c({},"program-dry-run",[&]{++stops;},[](const auto &){});
+  auto catalog=call(c,"plugin.discover",{{"format","VST3"}});Json descriptor;
+  for(const auto &p:catalog)if(p.at("classID")=="5245534F4E414E4350524F4752410001")descriptor=p;
+  need(!descriptor.is_null(),"Program provider fixture missing");invoke(c,"plugin.add",{{"descriptor",descriptor}});
+  const auto id=c.view()->session.document.at("nativePlugins")[0].at("instanceID");
+  auto list=call(c,"plugin.programs.get",{{"plugin",id}});const auto before=c.view();const auto beforeStops=stops;
+  const auto module=GetModuleHandleW(std::filesystem::u8path(descriptor.at("path").get<std::string>()).c_str());need(module!=nullptr,"Fixture module not loaded");
+  const auto mode=reinterpret_cast<void(*)(int)>(GetProcAddress(module,"ResonanceFixtureProgramMode"));
+  const auto count=reinterpret_cast<int(*)()>(GetProcAddress(module,"ResonanceFixtureProgramSelections"));need(mode&&count,"Fixture program probes missing");
+  int selections=0;Tracker::WindowsVST3::pluginMainCall([&]{selections=count();mode(3);});
+  Json request={{"plugin",id},{"program",list.at("programs")[2].at("id")},{"expectedCatalogRevision",list.at("catalogRevision")},{"dryRun",true}};
+  const auto dry=invoke(c,"plugin.programs.load",request);need(dry.at("validated")==true&&dry.at("loaded")==false,"Dry program response differs from Mac");
+  need(c.view()==before&&stops==beforeStops,"Dry program changed view or stopped transport");
+  Tracker::WindowsVST3::pluginMainCall([&]{need(count()==selections,"Dry run selected a vendor program");});
+  request["dryRun"]=false;bool rejected=false;try{invoke(c,"plugin.programs.load",request);}catch(const std::exception &){rejected=true;}
+  need(rejected&&c.view()==before&&stops==beforeStops,"Rejected vendor program changed view or stopped transport");
+  Tracker::WindowsVST3::pluginMainCall([&]{mode(4);selections=count();});
+  rejected=false;try{invoke(c,"plugin.programs.load",request);}catch(const Api::ApiError &error){rejected=error.code==-32001;}
+  need(rejected&&c.view()==before&&stops==beforeStops,"Changed vendor catalog must reject the captured program selection");
+  Tracker::WindowsVST3::pluginMainCall([&]{need(count()==selections,"Stale catalog selected a vendor program");});
+  Tracker::WindowsVST3::pluginMainCall([&]{mode(0);});
+  const auto loaded=invoke(c,"plugin.programs.load",request);need(loaded.at("loaded")==true&&stops==beforeStops+1,"Valid program did not load in one stopped transaction");
+  std::cout<<"PASS program validation-only dry run, stale catalog/vendor rejection, exact Mac response and committed load\n";
+}
+
 int main(int argc,char **argv) {
   try {
+    if(argc==4 && std::string(argv[1])=="--program-dry-run") {programDryRunTests(std::filesystem::u8path(argv[2]),std::filesystem::u8path(argv[3]));return 0;}
     if(argc==3 && std::string(argv[1])=="--fixtures") {
       const std::filesystem::path directory=std::filesystem::u8path(argv[2]);
       auto document=Tracker::Document::demo();

@@ -169,7 +169,8 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     plugins.push_back({{"slot",plugins.size()},{"instanceID",plugin.at("instanceID")},{"format",format},{"name",plugin.value("name","Plugin")},
       {"classID",classID},{"available",available},{"availability",available ? "built-in" : format=="AU" ? "unsupported" : "unchecked"},
       {"bypass",plugin.value("bypass",false)},{"isInstrument",plugin.value("isInstrument",false)},{"instrument",plugin.value("instrument",0)},
-      {"instrumentAssignments",plugin.value("instrumentAssignments",Json::array())}});
+      {"instrumentAssignments",plugin.value("instrumentAssignments",Json::array())},
+      {"auxiliaryInputs",plugin.value("auxiliaryInputs",Json::array())},{"auxiliaryOutputs",plugin.value("auxiliaryOutputs",Json::array())}});
   }
   std::string format=spec.fileExtension;std::transform(format.begin(),format.end(),format.begin(),[](unsigned char c){return char(std::toupper(c));});
   result.document={{"title",::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.GetCharsetInternal(),song.GetTitle())},{"format",format},
