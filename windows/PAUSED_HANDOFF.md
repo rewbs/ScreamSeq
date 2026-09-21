@@ -28,6 +28,8 @@
 > previews: `FORMULA_WORKBENCH_PROGRESS.md`. Full parity remains active.
 > Native plugin instrument aliases/MIDI channels and corrected alias API/primary
 > assignment semantics: `PLUGIN_ALIASES_PROGRESS.md`. Full parity remains active.
+> Native Mac-compatible plugin preset files, guarded Save/Load dialogs and
+> installed-plugin round trips: `PLUGIN_PRESETS_PROGRESS.md`. Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

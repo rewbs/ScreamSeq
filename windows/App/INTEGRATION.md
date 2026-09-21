@@ -228,6 +228,14 @@ The rack detail selector also exposes guarded factory-program loading and
 selective auxiliary-port activation. Program selections retain captured target
 and revisions; port changes preserve unrelated ports. These are musical edits
 with plugin Undo/Redo and native save/reopen, not mixer-routing assignments.
+The **Presets** page and command palette expose native Save/Load dialogs for
+Mac-compatible `.screamseq-preset` and legacy `.resonance-preset` files. Captured
+document/revision/plugin identity and file content hashes guard asynchronous
+selection. A sound load preserves aliases, ports, bypass, routing, automation
+and plugin metadata and uses plugin Undo. Saving writes atomically without
+changing the song. Both paths use the guarded API; see
+`../PLUGIN_PRESETS_PROGRESS.md`. The bundled pugixml MIT notice is copied beside
+the app under `THIRD-PARTY-NOTICES/` and must be included in packaged builds.
 
 The Samples inspector opens a waveform editor in the lower dock. Dragging or
 keyboard/range fields select audio; Reverse, Normalize, Fade, Trim and normal or

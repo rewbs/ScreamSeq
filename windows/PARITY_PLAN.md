@@ -20,7 +20,7 @@ device and plugin hosting belong to each platform. See
 | Explicit disconnected mixer/plugin destinations | Actual-app mixer/graph API, native bus controls, reusable graph canvas, pattern curves and a modeless envelope bank integrated. Socket dragging, wire properties, graph plugin drafts, assignments, disconnection, history and reopen are tested. See `MIXER_GRAPH_PROGRESS.md`, `GRAPH_EDITOR_PROGRESS.md`, `GRAPH_CURVES_PROGRESS.md` and `ENVELOPE_BANK_PROGRESS.md`. | Song routing overview, native sends/inserts/sidechains, other automation/envelope editors and broader routing/long-session qualification. |
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields and sample waveform markers integrated. | Envelope editor markers and audition UI, including overlapping voices and release tails. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
-| Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, native program/port controls, modeless instrument aliases/MIDI channels, independent history and editor ownership integrated; live parameter batches and editor gestures reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. Alias API responses and legacy primary assignment now match Mac; see `PLUGIN_ALIASES_PROGRESS.md`. | Live opaque-state replacement (including Surge's first-open zoom state), presets/library, explicit path resolution, graph/mixer connections and missing-plugin recovery. |
+| Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, program/port controls, modeless instrument aliases/MIDI channels, sound preset files, independent history and editor ownership integrated; live parameters reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. Alias semantics and preset wire/API contracts match the reviewed Mac implementation; see `PLUGIN_ALIASES_PROGRESS.md` and `PLUGIN_PRESETS_PROGRESS.md`. | Live opaque-state replacement (including Surge's first-open zoom state), library organization, explicit path resolution, graph/mixer connections and missing-plugin recovery. |
 | Mac context menus, docking, focus, recovery and visual refinements | Reviewed; Windows retains its native implementation. | Implement the equivalent interactions and visual hierarchy in Windows, then compare actual windows at multiple scales. |
 
 ## Execution order and completion gates
@@ -34,19 +34,25 @@ Live parameter propagation now has bounded atomic publication, worker-owned
 baseline/history, and installed-plugin WASAPI coverage; see
 `LIVE_PLUGIN_PARAMETERS.md`. Empty trigger creation and installed instrument
 evidence are in `TRIGGER_INSTRUMENT_PROGRESS.md`. Immediate remaining plugin work
-is live opaque-state replacement, presets/library
+is live opaque-state replacement, library
 organization, missing-plugin resolution and the OrbitCab partition discrepancy. The following gates remain
 in force. A fresh fetch during this continuation found no newer upstream commits.
 
-The next plugin increment is Mac-compatible preset inspect/save/load, followed
-by native library search, categories, favorites and hidden entries. Preset loads
-must pin plugin/document identity across file selection and inspect, recheck
-`expectedPresetRevision`, preserve aliases/ports/routing and use one plugin Undo.
-Dry-run load validates file identity without invoking a vendor state decoder.
+Mac-compatible preset inspect/save/load and native guarded file dialogs are
+implemented; see `PLUGIN_PRESETS_PROGRESS.md`. Loads pin plugin/document identity
+across selection and inspect, recheck `expectedPresetRevision`, preserve aliases,
+ports/routing and use one plugin Undo. Dry-run load validates file identity
+without invoking a vendor state decoder. Both branded and legacy file extensions
+are accepted; new native saves use `.screamseq-preset` with compatible wire magic.
+The next plugin increment is native library search, categories, favorites and
+hidden entries, followed by explicit missing-plugin resolution.
 Library preferences use their own `expectedLibraryRevision`, outside document
 Undo, and damaged preferences must not disable discovery or plugin insertion.
-The Windows bounded plist codec can serve the portable preset format; preserve
-the legacy `.resonance-preset` contract and class-identity checks.
+Library IDs must follow the reviewed Mac contract: format plus normalized path
+and uppercase class ID for VST3, format/effect ID for built-ins, and component
+codes for AU. Unlike sound-preset matching, per-installation library identity
+includes the VST3 path. Display names are excluded. Preference writes must
+preserve concurrent edit guards.
 
 1. **Plugin workflow in the application.** Connect the existing scanner/provider
    to a native browser and worker-owned rack. Every musical change needs guarded

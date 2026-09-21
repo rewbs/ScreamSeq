@@ -1,6 +1,7 @@
 #include "PluginOperations.hpp"
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Plugins/WindowsVST3.hpp"
+#include "windows/Plugins/PluginPreset.hpp"
 #include <bcrypt.h>
 #pragma comment(lib,"bcrypt.lib")
 #include "mpt/binary/base64.hpp"
@@ -57,8 +58,8 @@ GraphRackClone PluginOperations::cloneRackSlot(uint32_t index) {
 std::vector<PluginAudioBus> PluginOperations::audioBuses(size_t index,bool required) {
   try{return editor(index).buses();}catch(const std::exception &){if(required)throw;return {};}
 }
-std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","automation.target.get","graph.plugin.get"};}
-std::vector<std::string> PluginOperations::writes(){return {"plugin.add","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
+std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","graph.plugin.get"};}
+std::vector<std::string> PluginOperations::writes(){return {"plugin.add","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
 #include "GraphPluginOperations.inc"
 size_t PluginOperations::slot(const Json &p) const {
   const auto &rack=project_.preserved.at("plugins");
@@ -129,6 +130,7 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
   auto rack=project_.preserved.at("plugins"),automation=project_.preserved.at("automation");
   Json touch=nullptr;std::vector<ParameterChange> liveChanges;
   const bool dry=flag(p,"dryRun");
+  if(method=="plugin.preset.inspect") {keys(p,{"path"});return Plugins::PluginPreset::summary(Plugins::PluginPreset::read(text(field(p,"path"))));}
   if(method=="plugin.discover") {
     keys(p,{"format","rescan"});const auto format=text(p.value("format",Json("")),16);need(format.empty()||format=="AU"||format=="VST3"||format=="Built-in","Unknown plugin format");
     if(flag(p,"rescan")&&format!="Built-in"&&format!="AU") {
@@ -166,6 +168,23 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     if(changed&&!dry)commit(std::move(rack),std::move(automation));return {{"instrument",instrument},{"plugin",id},{"channel",channel},{"wouldChange",changed},{"dryRun",dry}};
   }
   const auto index=slot(p);auto states=projectPluginStates(project_);const auto &state=states.at(index);
+  if(method=="plugin.preset.save") {
+    keys(p,{"plugin","path","name","overwrite","dryRun"});
+    return Plugins::PluginPreset::write(text(field(p,"path")),descriptor(state.descriptor),state.state,
+      text(field(p,"name"),200),flag(p,"overwrite"),dry);
+  }
+  if(method=="plugin.preset.load") {
+    keys(p,{"plugin","path","expectedPresetRevision","dryRun"});
+    const auto preset=Plugins::PluginPreset::read(text(field(p,"path")));
+    if(text(field(p,"expectedPresetRevision"),80)!=preset.at("presetRevision").get<std::string>())throw Api::ApiError(-32001,"Preset file changed; inspect it again");
+    need(Plugins::PluginPreset::matches(descriptor(state.descriptor),preset.at("plugin")),"Preset belongs to a different plugin");
+    const Json result={{"preset",Plugins::PluginPreset::summary(preset)},{"plugin",state.instanceID},{"loaded",!dry},{"dryRun",dry}};
+    if(dry)return result; // Inspection validates identity, never executes vendor state.
+    auto candidate=state;const auto &data=preset.at("state").get_binary();candidate.state.resize(data.size());
+    if(!data.empty())std::memcpy(candidate.state.data(),data.data(),data.size());
+    NativePlugin probe(candidate,48000);rack[index]["state"]=blob(probe.state().state);
+    commit(std::move(rack),std::move(automation));return result;
+  }
   if(method=="plugin.parameters.get"){keys(p,{"slot"});return parameters(editor(index));}
   if(method=="plugin.state.get"){keys(p,{"slot"});return {{"descriptor",descriptor(state.descriptor)},{"data",base64(state.state)},{"kind","saved-baseline"}};}
   if(method=="plugin.buses.get"){keys(p,{"slot"});return {{"plugin",state.instanceID},{"buses",buses(editor(index))}};}

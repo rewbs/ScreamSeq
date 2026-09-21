@@ -379,10 +379,10 @@ Clipboard source and destination are captured before asynchronous work.
 
 The application also registers `PluginOperations`. Shared Mac method payloads
 are used for discovery, add/remove/move/bypass, parameters, saved state, buses,
-programs and instrument aliases. Plugin writes require `expectedRevision`;
+programs, sound presets and instrument aliases. Plugin writes require `expectedRevision`;
 `history.undo`/`history.redo` with `domain:"plugins"` use an independent history.
 The native rack uses these same transactions. The complete current inventory is
-in `api.describe`; presets and library organization remain pending.
+in `api.describe`; library organization remains pending.
 
 Windows adds `plugin.editor.open` and `plugin.editor.close`, each accepting
 `slot` and `expectedRevision`. Open/close alone retain the musical revision.
@@ -444,6 +444,29 @@ the same API; changes use plugin Undo. Close retains the draft. Reload explicitl
 refreshes it, and Discard/close releases a draft even after its source is removed.
 Reopening a visible/dirty window preserves its captured plugin when rack
 selection changes. See `../PLUGIN_ALIASES_PROGRESS.md` for evidence and limits.
+
+`plugin.preset.inspect` accepts an absolute `.screamseq-preset` or legacy
+`.resonance-preset` path. It returns `name`, `descriptor`, `stateBytes`,
+`presetVersion` and the SHA-256 content token `presetRevision`. Binary and XML
+property lists use the Mac wire schema, with a 16 MiB state limit and bounded
+file/structure validation. No vendor is instantiated during inspection.
+
+`plugin.preset.save` takes stable `plugin`, `path`, `name`, optional `overwrite`
+and `dryRun`, plus `expectedRevision`. It atomically writes the saved sound
+baseline and descriptor; routing and instrument assignments stay in the song.
+The response adds `path` and `written` to the inspection fields. Saving has no
+document-history effect. Dry save validates and encodes without writing a file.
+
+`plugin.preset.load` takes stable `plugin`, `path`, `expectedPresetRevision`,
+optional `dryRun`, and `expectedRevision`. It rechecks file content and plugin
+class identity, independent of installation path/display name. A dry load
+performs no vendor state decode. An actual load validates a disposable processor
+before replacing only opaque sound state in one plugin Undo transaction. The
+response is `{preset, plugin, loaded, dryRun}`. Invalid/stale loads leave the
+song unchanged; an identical canonical state creates no history. Aliases, ports,
+bypass, automation, routing and unknown plugin metadata are retained. State
+loads use the existing stop-before-publication path. Native file dialogs capture
+the document, revision and target before opening and reject stale results.
 
 Discovery reads the cache. Explicit `rescan:true` scans installed VST3 roots
 through the isolated scanner; failures are reported with module paths while
