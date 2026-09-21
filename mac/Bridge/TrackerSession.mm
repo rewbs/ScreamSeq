@@ -165,10 +165,10 @@ NSDictionary *decodeProject(NSData *data) {
     throw std::runtime_error("Invalid or unsupported ScreamSeq project.");
   if ([root[@"module"] length] == 0 || [root[@"module"] length] > 512 * 1024 * 1024)
     throw std::runtime_error("Invalid embedded module size");
-  const auto version = Automation::integer(root[@"version"], 1, 5);
+  Automation::integer(root[@"version"], nativeProjectVersion, nativeProjectVersion);
   NSData *module = root[@"module"];
   const bool snapshot = isSongSnapshot({static_cast<const std::byte *>(module.bytes), module.length});
-  if (snapshot != (version >= 4))
+  if (!snapshot)
     throw std::runtime_error("The embedded song does not match the project version");
   return root;
 }
@@ -189,7 +189,7 @@ std::vector<PluginState> decodePlugins(NSDictionary *root) {
     if (item[@"bypass"] && ![item[@"bypass"] isKindOfClass:NSNumber.class])
       throw std::runtime_error("Invalid Audio Unit bypass value");
     PluginState state{descriptor(item), {}, [item[@"bypass"] boolValue]};
-    state.instanceID = item[@"instanceID"] ? Automation::string(item[@"instanceID"], 128).UTF8String : NSUUID.UUID.UUIDString.UTF8String;
+    state.instanceID = Automation::string(item[@"instanceID"], 128).UTF8String;
     if (state.instanceID.empty() || !instanceIDs.insert(state.instanceID).second)
       throw std::runtime_error("Invalid or duplicate plugin instance identity");
     auto busIndices = [](id raw) {
@@ -206,12 +206,12 @@ std::vector<PluginState> decodePlugins(NSDictionary *root) {
     state.auxiliaryOutputs = busIndices(item[@"auxiliaryOutputs"]);
     if (item[@"instrument"])
       state.instrument = uint32_t(unsignedInteger(item[@"instrument"], 255, "Invalid tracker instrument assignment"));
-    if ([root[@"version"] unsignedIntegerValue] >= 5) {
+    {
       auto assignments = decodePluginAssignments(item[@"instrumentAssignments"]);
       if ((assignments.empty() ? 0 : assignments.front().instrument) != state.instrument)
         throw std::runtime_error("Primary instrument does not match plugin assignments");
       setPluginAssignments(state, assignments);
-    } else Automation::require(!item[@"instrumentAssignments"], "Legacy projects cannot contain instrument aliases");
+    }
     if (data.length) {
       auto begin = static_cast<const std::byte *>(data.bytes);
       state.state.assign(begin, begin + data.length);
@@ -366,7 +366,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
           throw std::runtime_error("The selected sequence is missing from this project.");
         next->song().Order.SetSequence(SEQUENCEINDEX(sequence));
       }
-      if ([root[@"version"] unsignedIntegerValue] >= 3) next->restoreNative(decodeNativeSong(root[@"native"]));
+      next->restoreNative(decodeNativeSong(root[@"native"]));
       plugins = decodePlugins(root);
       automation = decodeAutomation(root);
       if (root[@"recoveryTake"]) {
@@ -452,12 +452,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   if (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState())))
     _plugins = _audio->pluginStates();
   auto plugins = [NSMutableArray array];
-  const int projectVersion = nativeProjectVersion(_plugins);
+  const int projectVersion = nativeProjectVersion;
   for (auto &plugin : _plugins) {
     NSMutableDictionary *item = [descriptorDictionary(plugin.descriptor) mutableCopy];
     item[@"bypass"] = @(plugin.bypass);
     item[@"instrument"] = @(plugin.instrument);
-    if (projectVersion >= 5) item[@"instrumentAssignments"] = encodePluginAssignments(plugin);
+    item[@"instrumentAssignments"] = encodePluginAssignments(plugin);
     item[@"instanceID"] = @(plugin.instanceID.c_str());
     item[@"state"] = [NSData dataWithBytes:plugin.state.data() length:plugin.state.size()];
     NSMutableArray *inputs = [NSMutableArray array], *outputs = [NSMutableArray array];
@@ -608,7 +608,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (NSDictionary *)telemetry {
   auto t = _audio->telemetry();
+  auto positions=[NSMutableArray array];
+  if(_audio->active() && _audio->renderer()) for(const auto &v:_audio->renderer()->voicePositions())
+    [positions addObject:@{@"channel":@(v.channel),@"sample":@(v.sample),@"instrument":@(v.instrument),@"sampleFrame":@(v.sampleFrame),@"generation":@(v.generation),@"envelopeTicks":@[@(v.envelopeTicks[0]),@(v.envelopeTicks[1]),@(v.envelopeTicks[2])]}];
   return @{
+    @"voicePositions":positions, @"audioActive":@(_audio->active()),
     @"playing": @(self.playing), @"loop": @(_playbackLoop), @"region": _playbackRegion ?: @{},
     @"order" : @(t.order),
     @"pattern" : @(t.pattern),
@@ -684,13 +688,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   NSMutableArray *extraColumns=[NSMutableArray array], *performanceCommands=[NSMutableArray array];
   for(const auto &[channel,track]:native.tracks) {
     const auto count=native.performance.columns.find(track.id);
-    [extraColumns addObject:@(count==native.performance.columns.end()?0:count->second)];
+    [extraColumns addObject:@(count==native.performance.columns.end()?1:count->second)];
   }
-  if(s.Patterns.IsValidPat(PATTERNINDEX(pattern)))for(const auto &command:native.performance.commands)if(command.pattern==native.patterns.at(uint16_t(pattern)).id) {
-    const auto track=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &v){return v.second.id==command.track;});
-    [performanceCommands addObject:@{@"channel":@(track->first),@"position":@(command.position),@"duration":@(command.duration),
-      @"column":@(command.column),@"kind":patternCommandName(command.kind),@"binding":@(command.binding),@"value":@(command.value),@"pitchRange":@(command.pitchRange)}];
-  }
+  if(s.Patterns.IsValidPat(PATTERNINDEX(pattern))) [performanceCommands addObjectsFromArray:patternEffectObjects(native,s,uint16_t(pattern))];
   NSMutableArray *graphLanes=[NSMutableArray array],*graphCommands=[NSMutableArray array];
   for(const auto &[id,count]:native.signal.lanes){auto bus=std::find_if(native.mixer.buses.begin(),native.mixer.buses.end(),[&](const auto &b){return b.id==id;});[graphLanes addObject:@{@"target":nativeID(id),@"count":@(count),@"name":bus==native.mixer.buses.end()?@"Bus":@(bus->name.c_str())}];}
   if(s.Patterns.IsValidPat(PATTERNINDEX(pattern)))for(const auto &c:native.signal.commands)if(c.pattern==native.patterns.at(uint16_t(pattern)).id){NSMutableDictionary *item=[encodeSignalCommand(c) mutableCopy];auto graph=std::find_if(native.signal.library.begin(),native.signal.library.end(),[&](const auto &d){return d.id==c.graph;});item[@"number"]=@(graph==native.signal.library.end()?0:graph->number);[graphCommands addObject:item];}
@@ -747,7 +747,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     @"effectLetters" : effects,
     @"commandCatalog" : patternCommandCatalog(s.GetType()),
     @"preciseNoteEffects": preciseNoteEffects(s.GetType()),
-    @"graphLanes":graphLanes,@"graphCommands":graphCommands, @"preciseNotes":preciseNotes, @"extraEffectColumns": extraColumns, @"performanceCommands": performanceCommands,
+    @"graphLanes":graphLanes,@"graphCommands":graphCommands, @"preciseNotes":preciseNotes, @"effectColumns": extraColumns, @"performanceCommands": performanceCommands, @"effectBindings":encodePatternPerformance(native.performance)[@"bindings"],
     @"volumeLetters" : volumes,
     @"title" : songString(s, s.m_songName),
     @"format" : @(format),
@@ -786,7 +786,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       throw std::runtime_error("A pattern cell has six fields.");
     Cell after{values[0].unsignedCharValue, values[1].unsignedCharValue, values[2].unsignedCharValue,
                values[3].unsignedCharValue, values[4].unsignedCharValue, values[5].unsignedCharValue};
+    const auto beforeRevision=_document->revision;
     auto edits = _document->edit({{uint16_t(p), uint16_t(r), uint16_t(c), {}, after}});
+    if(_document->revision!=beforeRevision && _document->undoChangesAutomation()) _audio->stop();
     if (_audio->playing() && !_audio->renderer()->enqueue(edits)) {
       _audio->stop();
       throw std::runtime_error("Playback stopped because its edit queue is full. Your edit is saved in the document.");
@@ -842,7 +844,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
                              v[4].unsignedCharValue, v[5].unsignedCharValue
                        }});
     }
+    const auto beforeRevision=_document->revision;
     auto changed = _document->edit(edits);
+    if(_document->revision!=beforeRevision && _document->undoChangesAutomation()) _audio->stop();
     if (_audio->playing() && !_audio->renderer()->enqueue(changed))
       _audio->stop();
     return YES;
@@ -1619,22 +1623,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (NSData *)serializedData {
   try {
-    if (_document->editable())
-      return [self projectData];
-    auto bytes = _document->playbackData();
-    if (_document->song().Order.GetCurrentSequenceIndex() != 0) {
-      return [NSPropertyListSerialization dataWithPropertyList:@{
-        @"version" : @1,
-        @"module" : [NSData dataWithBytes:bytes.data() length:bytes.size()],
-        @"plugins" : @[],
-        @"automation" : @[],
-        @"sequence" : @(_document->song().Order.GetCurrentSequenceIndex())
-      }
-                                                        format:NSPropertyListBinaryFormat_v1_0
-                                                       options:0
-                                                         error:nil];
-    }
-    return [NSData dataWithBytes:bytes.data() length:bytes.size()];
+    return [self projectData];
   } catch (...) {
     return [NSData data];
   }
@@ -1651,7 +1640,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       module = root[@"module"];
       states = decodePlugins(root);
       automation = decodeAutomation(root);
-      if ([root[@"version"] unsignedIntegerValue] >= 3) {
+      {
         native = decodeNativeSong(root[@"native"]);
         Document validation(byteVector(module));
         native->validate(validation.song());

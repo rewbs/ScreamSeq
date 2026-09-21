@@ -8,7 +8,7 @@ struct EditorNavigation: Equatable {
   var dictionary: [String: Any] { ["pattern":pattern,"row":row,"channel":channel,"column":column,"following":following] }
   struct Failure: Error { let code: Int; let message: String }
   func prepared(_ params: [String: Any], revision: String, contextToken: String,
-                patterns: [[String: Any]], channels: Int, extraColumns: [Int] = []) throws -> EditorNavigation {
+                patterns: [[String: Any]], channels: Int, effectColumns: [Int] = []) throws -> EditorNavigation {
     func invalid(_ message: String) throws -> Never { throw Failure(code: -32602, message: message) }
     let names: Set<String> = ["expectedRevision","expectedContext","pattern","row","channel","column","following"]
     guard Set(params.keys).isSubset(of: names), params.count > 2 else { try invalid("Supply at least one navigation field and both revision tokens.") }
@@ -29,7 +29,7 @@ struct EditorNavigation: Equatable {
       let rows = chosen["rows"] as? Int, rows > 0, channels > 0 else { try invalid("Choose an allocated, nonempty pattern.") }
     result.row = try integer("row", fallback: min(row, rows - 1), maximum: rows - 1)
     result.channel = try integer("channel", fallback: min(channel, channels - 1), maximum: channels - 1)
-    let lastColumn=4 + (extraColumns.indices.contains(result.channel) ? extraColumns[result.channel] : 0)
+    let lastColumn=2 + 2*(effectColumns.indices.contains(result.channel) ? effectColumns[result.channel] : 1)
     result.column = try integer("column", fallback: min(column,lastColumn), maximum: lastColumn)
     if let raw = params["following"] {
       guard let number = raw as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { try invalid("following must be true or false.") }

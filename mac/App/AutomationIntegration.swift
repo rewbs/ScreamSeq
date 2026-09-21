@@ -54,7 +54,7 @@ extension AppController {
       do {
         let current = patternView.navigation
         let prepared = try current.prepared(params, revision: session.automationRevision,
-          contextToken: patternView.contextToken, patterns: model.patterns, channels: model.channels, extraColumns: model.extraEffectColumns)
+          contextToken: patternView.contextToken, patterns: model.patterns, channels: model.channels, effectColumns: model.effectColumns)
         navigationChanged = prepared != current
         let moved = prepared.pattern != current.pattern || prepared.row != current.row || prepared.channel != current.channel || prepared.column != current.column
         if prepared.pattern != model.pattern { model.pattern = prepared.pattern; refreshPattern() }
@@ -110,7 +110,7 @@ extension AppController {
           }
           if method == "api.describe", var described = result as? [String: Any], var data = described["data"] as? [String: Any] {
             data["reads"] = (data["reads"] as? [String] ?? []) + ["workspace.commands.get", "workspace.get", "recovery.status", "recovery.list", "sample.library.get", "sample.library.search", "sample.library.inspect", "sample.library.multisample.get"]
-            data["writes"] = (data["writes"] as? [String] ?? []) + ["workspace.shortcut.set", "workspace.panel", "workspace.layout", "recovery.save", "recovery.restore", "sample.library.roots.set", "sample.library.rescan", "sample.library.preview", "sample.library.preview.stop"]
+            data["writes"] = (data["writes"] as? [String] ?? []) + ["workspace.ruler", "workspace.shortcut.set", "workspace.panel", "workspace.layout", "recovery.save", "recovery.restore", "sample.library.roots.set", "sample.library.rescan", "sample.library.preview", "sample.library.preview.stop"]
             data["sampleLibrary"] = "Application only: cached local search of filenames and inherited folder tags. Library methods use libraryRevision, not the song revision. sample.importMany works in both hosts and is one atomic document Undo."
             data["recovery"] = "Application only: automatic recovery copies every 10 seconds; restore protects current unsaved edits and opens an unsaved song. Recordings reopen as stopped takes."
             described["data"] = data; reply(["result": described])

@@ -42,6 +42,7 @@ int main(int argc,char **argv){@autoreleasepool{
     if(!isVst){NativePlugin initial(PluginState{descriptor},48000);const auto state=initial.state();
       NSMutableDictionary *root=[[NSPropertyListSerialization propertyListWithData:session.serializedData options:0 format:nil error:nil] mutableCopy];
       NSMutableDictionary *item=[dictionary(descriptor) mutableCopy];item[@"state"]=[NSData dataWithBytes:state.state.data() length:state.state.size()];item[@"instrument"]=@0;item[@"bypass"]=@NO;item[@"instanceID"]=@"fixture-au";root[@"plugins"]=@[item];
+      item[@"instrumentAssignments"]=@[];
       [[NSPropertyListSerialization dataWithPropertyList:root format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:path atomically:YES];
       check([session openPath:path error:&error],"Open private AU fixture project");
     }else check([session addPlugin:dictionary(descriptor) error:&error],"Add local VST3 program fixture");

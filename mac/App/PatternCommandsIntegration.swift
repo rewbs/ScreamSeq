@@ -6,7 +6,7 @@ extension AppController {
     let picker=PatternCommandPicker(frame:NSRect(x:0,y:0,width:620,height:460))
     let context=(model,patternView.cursorRow,patternView.cursorChannel,patternView.column)
     picker.onContext={context}
-    picker.onRequest = {[weak self] params,reply in self?.handleAutomation("pattern.apply",params:params,reply:reply)}
+    picker.onRequest = {[weak self] params,reply in self?.handleAutomation(params["cells"] == nil ? "pattern.effect.set" : "pattern.apply",params:params,reply:reply)}
     picker.onDismiss = {[weak self] in
       guard let self else{return};self.commandPickerWindow?.close();self.window.makeKeyAndOrderFront(nil);self.window.makeFirstResponder(self.patternView)
     }

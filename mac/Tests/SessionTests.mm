@@ -98,8 +98,10 @@ int main(int argc, char **argv) {
       absent[@"subtype"] = @1;
       absent[@"manufacturer"] = @1;
       absent[@"name"] = @"Unavailable test AU";
-      [absent removeObjectForKey:@"instanceID"]; // Legacy missing-plugin fixtures acquire distinct identities.
-      missing[@"plugins"] = @[ absent, absent ];
+      absent[@"instanceID"] = NSUUID.UUID.UUIDString;
+      NSMutableDictionary *secondAbsent=[absent mutableCopy];
+      secondAbsent[@"instanceID"] = NSUUID.UUID.UUIDString;
+      missing[@"plugins"] = @[ absent, secondAbsent ];
       require([reopened openPath:writeProject(missing, @"missing.resonance") error:&error],
               "open missing-plugin project with report");
       require([[reopened snapshot:0][@"pluginError"] length] > 0, "missing plugin reported");

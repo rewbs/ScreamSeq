@@ -364,6 +364,7 @@ final class SampleEditor: NSView {
 }
 
 final class EnvelopeView: NSView {
+  var playbackTicks: [Double] = [] { didSet { if playbackTicks != oldValue { needsDisplay=true } } }
   var points: [[Int]] = [] {
     didSet {
       if let selectedNode, selectedNode >= points.count { self.selectedNode = points.indices.last }
@@ -409,6 +410,12 @@ final class EnvelopeView: NSView {
     Theme.accent.setStroke()
     path.lineWidth = 2
     path.stroke()
+    Theme.text.withAlphaComponent(0.85).setFill()
+    for tick in playbackTicks where tick>=0 && tick<=Double(maxTick) {
+      let x=16+CGFloat(tick)/CGFloat(maxTick)*(bounds.width-32)
+      NSRect(x:x,y:16,width:1.5,height:max(0,bounds.height-32)).fill()
+      NSBezierPath(ovalIn:NSRect(x:x-3,y:12,width:6,height:6)).fill()
+    }
     Theme.gold.setFill()
     for (index, p) in points.enumerated() {
       let pos = location(p)
@@ -547,6 +554,7 @@ final class InstrumentEditor: NSView {
   var onEnvelopeTools: ((Int) -> Void)?
   var onEnvelopeBank: ((Int) -> Void)?
   var onPluginAssignment: (() -> Void)?
+  var onNewPluginInstrument:(()->Void)?
   let pluginSummary = Theme.label("Sample instrument", size: 12, color: Theme.muted)
   var envelopeToolsButton: ActionButton!
   var onSelect: ((Int) -> Void)?, onApply: (([String: Any]) -> Void)?, onCreate: (() -> Void)?,
@@ -580,8 +588,7 @@ final class InstrumentEditor: NSView {
       .horizontal,
       [
         Theme.label("Instruments", size: 16, weight: .semibold), NSView(), picker,
-        ActionButton("New") { [weak self] in self?.onCreate?() },
-        ActionButton("Import…") { [weak self] in self?.onImport?() },
+
       ], spacing: 14)
     let props = stack(
       .horizontal,
@@ -630,6 +637,9 @@ final class InstrumentEditor: NSView {
       .vertical,
       [
         top,
+        stack(.horizontal,[ActionButton("New sample instrument",prominent:true){[weak self] in self?.onCreate?()},
+          ActionButton("New plugin instrument…",prominent:true){[weak self] in self?.onNewPluginInstrument?()},
+          ActionButton("Import…"){[weak self] in self?.onImport?()},NSView()],spacing:8),
         stack(.horizontal, [ActionButton("Play instrument with keys") { [weak self] in guard let self else{return};self.window?.makeFirstResponder(self) }, pluginSummary, NSView(), ActionButton("Assign instrument plugin…") { [weak self] in self?.onPluginAssignment?() }], spacing: 8),
         Theme.label("Z–M / Q–U preview this instrument with its keymap and enabled envelopes. Sample inspector previews raw samples.", size: 11, color: Theme.muted),
         stack(.horizontal, [envelopeType, envelopeToolsButton!, ActionButton("Envelope bank…"){[weak self] in guard let self,self.envelope.canEdit() else{return};self.onEnvelopeBank?(self.envelopeType.indexOfSelectedItem)}, NSView(), filter], spacing: 8),

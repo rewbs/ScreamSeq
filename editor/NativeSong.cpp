@@ -135,6 +135,17 @@ void NativeSong::clonePatternAutomation(uint64_t source, uint64_t destination) {
   for(const auto &note:preciseNotes)if(note.pattern==source){auto copy=note;copy.pattern=destination;notes.push_back(copy);}
   preciseNotes.insert(preciseNotes.end(),notes.begin(),notes.end());
 }
+void NativeSong::prepareEffects(OpenMPT::CSoundFile &song) const {
+  song.nativePatternEffects.clear();
+  std::map<uint64_t,uint16_t> patternIndices, trackIndices;
+  for(const auto &[index,entity]:patterns) patternIndices[entity.id]=index;
+  for(const auto &[index,entity]:tracks) trackIndices[entity.id]=index;
+  for(const auto &c:performance.commands) if(c.kind==PatternCommandKind::TrackerEffect && c.column>0) {
+    auto &e=song.nativePatternEffects[{patternIndices.at(c.pattern),OpenMPT::ROWINDEX(c.position/performanceUnitsPerRow),trackIndices.at(c.track)}][c.column-1];
+    e.command=OpenMPT::EffectCommand(c.effect); e.param=c.parameter;
+  }
+}
+
 void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   NativeSong shape = *this;
   shape.reconcile(s);
@@ -197,7 +208,7 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   if(performance.bindings.size()>255||performance.commands.size()>maximumPatternCommands)
     throw std::invalid_argument("Pattern performance exceeds binding or command limits");
   for(const auto &[track,count]:performance.columns)if(!count||count>maximumEffectColumns)
-    throw std::invalid_argument("Use between one and eight extra effect subcolumns");
+    throw std::invalid_argument("Use between one and eight FX columns");
   for(const auto &[id,binding]:performance.bindings)if(!id||id>255||binding.plugin.empty()||binding.plugin.size()>128||
       binding.plugin.find('\0')!=std::string::npos||binding.name.size()>1024||binding.name.find('\0')!=std::string::npos)
     throw std::invalid_argument("Invalid stable plugin parameter binding");
@@ -207,13 +218,18 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
     const auto columns=performance.columns.find(command.track);
     const bool parameter=command.kind==PatternCommandKind::ParameterSet||command.kind==PatternCommandKind::ParameterSlide;
     const bool slide=command.kind==PatternCommandKind::ParameterSlide||command.kind==PatternCommandKind::PitchSlide;
-    if(!parameter)pitchTracks.insert(command.track);
-    if(uint8_t(command.kind)>uint8_t(PatternCommandKind::PitchSlide)||columns==performance.columns.end()||command.column>=columns->second||
+    const bool cut=command.kind==PatternCommandKind::NoteCut;
+    const bool tracker=command.kind==PatternCommandKind::TrackerEffect;
+    if(!parameter&&!cut&&!tracker)pitchTracks.insert(command.track);
+    if(uint8_t(command.kind)>uint8_t(PatternCommandKind::TrackerEffect)||command.column>=(columns==performance.columns.end()?1:columns->second)||
        !cells.emplace(command.pattern,command.track,command.position/performanceUnitsPerRow,command.column).second||
        !std::isfinite(command.value)||(parameter?(command.value<0||command.value>1||!performance.bindings.contains(command.binding)):
        (command.value< -96||command.value>96||command.binding!=0))||(slide?!command.duration:command.duration!=0)||
-       command.pitchRange<1||command.pitchRange>96||(parameter&&command.pitchRange!=2))
-      throw std::invalid_argument("Invalid or duplicate extra-column pattern command");
+       command.pitchRange<1||command.pitchRange>96||((parameter||cut)&&command.pitchRange!=2)||
+       ((cut||tracker)&&(command.value!=0||command.binding!=0)) ||
+       (tracker && (!command.column || command.position%performanceUnitsPerRow || command.effect>=OpenMPT::MAX_EFFECTS || !s.GetModSpecifications().HasCommand(OpenMPT::EffectCommand(command.effect)))) ||
+       (!tracker && (command.effect||command.parameter)))
+      throw std::invalid_argument("Invalid or duplicate FX-column command");
   }
   if(pitchTracks.size()>16)throw std::invalid_argument("Use at most 16 tracks with native pitch commands");
   if(preciseNotes.size()>maximumPreciseNotes)throw std::invalid_argument("Use at most 65536 precise note events");

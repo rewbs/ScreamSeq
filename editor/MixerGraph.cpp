@@ -60,7 +60,7 @@ std::vector<size_t> MixerGraph::validate(const std::vector<uint64_t> &tracks) co
   };
   for (size_t i = 0; i < buses.size(); ++i) {
     const auto &bus = buses[i];
-    if (bus.kind != MixerBusKind::Master) edge(i, bus.output);
+    if (bus.kind != MixerBusKind::Master && bus.output) edge(i, bus.output);
     std::set<uint64_t> destinations;
     for (const auto &send : bus.sends) {
       require(range(send.gainDB, -96, 12) && destinations.insert(send.target).second, "Invalid or duplicate send");
@@ -72,10 +72,11 @@ std::vector<size_t> MixerGraph::validate(const std::vector<uint64_t> &tracks) co
   std::set<std::pair<std::string, uint32_t>> sources;
   require(instruments.size() <= 128, "Too many instrument output routes");
   for (const auto &source : instruments) {
-    require(!source.plugin.empty() && text(source.plugin, 128) && source.output < 64 && indices.count(source.target) &&
+    require(!source.plugin.empty() && text(source.plugin, 128) && source.output < 64 && (!source.target || indices.count(source.target)) &&
             sources.emplace(source.plugin, source.output).second, "Invalid plugin output route");
     if(effects.count(source.plugin)) {
       require(source.output>0,"Main effect output belongs to its insert chain; route an auxiliary output");
+      if(!source.target) continue;
       const auto owner=owners.at(source.plugin),target=indices.at(source.target);
       require(owner!=target,"An auxiliary effect output cannot return to its own bus");
       require(buses[target].kind!=MixerBusKind::Track,"Route effect auxiliary outputs to groups, returns or master");
@@ -164,7 +165,7 @@ MixerPlan compileMixer(const MixerGraph &graph, const std::vector<uint64_t> &tra
   };
   for (size_t i = 0; i < graph.buses.size(); ++i) {
     const auto &bus = graph.buses[i];
-    if (bus.kind != MixerBusKind::Master) connect(i, bus.output, 1, false);
+    if (bus.kind != MixerBusKind::Master && bus.output) connect(i, bus.output, 1, false);
     for (const auto &send : bus.sends) if (send.enabled) connect(i, send.target, std::pow(10.0, send.gainDB / 20), send.preFader);
   }
   std::set<std::pair<size_t, uint32_t>> routedInstruments;
@@ -180,7 +181,7 @@ MixerPlan compileMixer(const MixerGraph &graph, const std::vector<uint64_t> &tra
     routedInstruments.emplace(found->second, source.output);
     // Preserve saved routes when an output is disabled or a restored plugin
     // exposes fewer ports. API edits require an available, enabled output.
-    if (!p.bypass && source.output < p.outputBuses && (p.activeOutputs & (uint64_t(1) << source.output)))
+    if (source.target && !p.bypass && source.output < p.outputBuses && (p.activeOutputs & (uint64_t(1) << source.output)))
       plan.instruments.push_back({found->second, indices.at(source.target), source.output, 0, owner, prefix});
   }
   for (size_t i = 0; i < processors.size(); ++i)

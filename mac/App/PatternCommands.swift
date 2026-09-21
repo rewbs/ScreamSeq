@@ -14,8 +14,9 @@ struct PatternCommand {
     ["label":"PS","name":"Set plugin parameter","kind":"parameter-set","description":"Set a plugin parameter to a precise value at this row or a fractional row offset."],
     ["label":"PL","name":"Slide plugin parameter","kind":"parameter-slide","description":"Glide from the current parameter value to a precise target over a duration, with sample-resolution timing."],
     ["label":"BS","name":"Set pitch bend","kind":"pitch-set","description":"Set an absolute pitch offset in semitones. Native samples or a plugin MIDI pitch wheel."],
-    ["label":"BL","name":"Slide pitch bend","kind":"pitch-slide","description":"Glide to an absolute pitch offset over a duration, with fractional row timing."]
-  ].map { PatternCommand($0.merging(["family":"native"]){first,_ in first}) }
+    ["label":"BL","name":"Slide pitch bend","kind":"pitch-slide","description":"Glide to an absolute pitch offset over a duration, with fractional row timing."],
+    ["label":"NC","name":"Precise note cut / plugin note-off","kind":"note-cut","description":"Cut the current sample or send plugin note-offs at a precise row/beat offset. Plugin release envelopes remain active; other tracks are unaffected."]
+  ].map { PatternCommand($0.merging(["family":"precise"]){first,_ in first}) }
   init(_ data: [String: Any]) {
     nativeKind = data["kind"] as? String
     command = data["command"] as? Int ?? 0; mask = data["parameterMask"] as? Int ?? 0
@@ -55,7 +56,12 @@ extension PatternView {
   var currentCommandHelp: String {
     let precise=model.notes(cursorRow,cursorChannel)
     if column<=2 && !precise.isEmpty {return "\(precise.count) precise note events · Return or double-click to edit fractional timing"}
-    if column>=5 {return model.nativeCommand(cursorRow,cursorChannel,column-5)?.description ?? "PS / PL parameter · BS / BL pitch · ? find effects · Return edits this cell"}
+    if column>=3 {
+      guard let fx=model.nativeCommand(cursorRow,cursorChannel,effectColumn) else{return "FX \(effectColumn+1) · all effects supported · ? finds effects · Return edits"}
+      if fx.kind != "tracker" {return fx.description}
+      let entry=model.commands.entry(command:fx.effect,parameter:fx.parameter)
+      return entry.map {"\($0.name) · \($0.hint)"} ?? "Tracker effect · ? finds effects"
+    }
     let cell = model.drawCell(cursorRow, cursorChannel)
     if cell.note == 251 || cell.note == 252 { return "Imported parameter-control note: these columns store a plugin parameter and value." }
     guard column >= 2 else { return "Z–M notes · Arrows navigate · Space plays" }
@@ -83,7 +89,7 @@ final class PatternCommandPicker: NSView, NSTableViewDataSource, NSTableViewDele
   var isVolume: Bool { columnPicker.indexOfSelectedItem == 1 }
   override init(frame: NSRect) {
     super.init(frame: frame)
-    columnPicker.addItems(withTitles: ["All effects", "Volume column", "Native FX column"])
+    columnPicker.addItems(withTitles: ["All effects", "Volume column"])
     columnPicker.target = self; columnPicker.action = #selector(changeColumn)
     columnPicker.fixed(width: 160)
     search.placeholderString = "Find a command, family or explanation"; search.delegate = self
@@ -108,7 +114,7 @@ final class PatternCommandPicker: NSView, NSTableViewDataSource, NSTableViewDele
     guard !pending, let context = onContext?() else { return }
     (captured, row, channel, _) = context
     capturedColumn=context.3
-    columnPicker.selectItem(at: context.3 == 2 ? 1 : context.3>=5 ? 2 : 0)
+    columnPicker.selectItem(at: context.3 == 2 ? 1 : 0)
     search.stringValue = ""
     target.stringValue = "\(captured.format) · Pattern \(captured.pattern) · Row \(row) · Channel \(channel + 1)"
     status.stringValue = "Changes only this cell's selected command and value. One Undo step."
@@ -119,12 +125,13 @@ final class PatternCommandPicker: NSView, NSTableViewDataSource, NSTableViewDele
   func reload(selectCurrent: Bool) {
     valueLabel.stringValue = isVolume ? "Value (decimal)" : "Parameter (hex)"
     let query = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    let source = isVolume ? captured.commands.volumes : columnPicker.indexOfSelectedItem==2 ? PatternCommand.native : captured.commands.effects + PatternCommand.native
+    let source = isVolume ? captured.commands.volumes : captured.commands.effects + PatternCommand.native
     let words=query.split(whereSeparator:{$0.isWhitespace}).map(String.init)
     filtered = source.filter { entry in words.allSatisfy { "\(entry.displayCode) \(entry.label) \(entry.name) \(entry.family) \(entry.hint)".localizedCaseInsensitiveContains($0) } }
     suppressSelection = true; table.reloadData(); table.deselectAll(nil)
     let cell = captured.drawCell(row, channel)
-    let code = Int(isVolume ? cell.volumeCommand : cell.effect), amount = Int(isVolume ? cell.volume : cell.parameter)
+    let fx=captured.nativeCommand(row,channel,max(0,(capturedColumn-3)/2))
+    let code = isVolume ? Int(cell.volumeCommand) : fx?.effect ?? 0, amount = isVolume ? Int(cell.volume) : fx?.parameter ?? 0
     let index = selectCurrent ? filtered.firstIndex(where: { $0.nativeKind == nil && $0.command == code && amount & $0.mask == $0.value }) : nil
     if !filtered.isEmpty { table.selectRowIndexes(IndexSet(integer: index ?? 0), byExtendingSelection: false) }
     suppressSelection = false; selectedCommand()
@@ -168,7 +175,7 @@ final class PatternCommandPicker: NSView, NSTableViewDataSource, NSTableViewDele
     guard !pending, captured.editable, filtered.indices.contains(table.selectedRow), let onRequest else { return }
     if let kind=filtered[table.selectedRow].nativeKind {onNativeCommand?(kind,captured,row,channel,capturedColumn);return}
     let note = captured.drawCell(row, channel).note
-    guard note != 251 && note != 252 else { status.stringValue = "This parameter-control note uses different column data. Choose an ordinary note cell."; return }
+    guard (note != 251 && note != 252) || (!isVolume && capturedColumn>=5) else { status.stringValue = "This parameter-control note owns its volume and FX 1 data. Choose another FX column or an ordinary note cell."; return }
     let entry = filtered[table.selectedRow]
     guard let amount = Int(parameter.stringValue.trimmingCharacters(in: .whitespacesAndNewlines), radix: isVolume ? 10 : 16), (entry.minimum...entry.maximum).contains(amount), amount & entry.mask == entry.value,
       entry.command != 0 || amount == 0 else {
@@ -179,14 +186,21 @@ final class PatternCommandPicker: NSView, NSTableViewDataSource, NSTableViewDele
     let patch: [String: Any] = ["pattern": captured.pattern, "row": row, "channel": channel,
       volume ? "volumeCommand" : "effect": entry.command, volume ? "volume" : "parameter": amount]
     pending = true
-    onRequest(["expectedRevision": captured.revisionToken, "cells": [patch]]) { response in
+    let request:[String:Any]=volume ? ["expectedRevision":captured.revisionToken,"cells":[patch]] : ["expectedRevision":captured.revisionToken,"pattern":captured.pattern,"row":row,"channel":channel,"column":max(0,(capturedColumn-3)/2),"command":entry.command==0 ? NSNull() : ["kind":"tracker","effect":entry.command,"parameter":amount]]
+    onRequest(request) { response in
       self.pending = false
       if let error = response["error"] as? [String: Any] { self.status.stringValue = (error["message"] as? String ?? "Edit failed") + " Close and reopen to reload."; return }
       guard let result = response["result"] as? [String: Any], let revision = result["revision"] as? String else { return }
       self.captured.revisionToken = revision
-      var cell = self.captured.cell(self.row, self.channel)
-      cell[volume ? 2 : 4] = UInt8(entry.command); cell[volume ? 3 : 5] = UInt8(amount)
-      self.captured.replaceCell(self.row, self.channel, with: cell)
+      let fx=max(0,(self.capturedColumn-3)/2)
+      if volume || fx==0 {
+        var cell = self.captured.cell(self.row, self.channel)
+        cell[volume ? 2 : 4] = UInt8(entry.command); cell[volume ? 3 : 5] = UInt8(amount)
+        self.captured.replaceCell(self.row, self.channel, with: cell)
+      }
+      if !volume {
+        self.captured.performanceCommands[(self.row*self.captured.channels+self.channel)*8+fx]=entry.command==0 ? nil : NativePatternCommand(["channel":self.channel,"position":self.row*65536,"column":fx,"kind":"tracker","effect":entry.command,"parameter":amount])
+      }
       self.status.stringValue = "Applied \(entry.name). Undo restores the previous cell."
       self.onDismiss?()
     }

@@ -244,7 +244,7 @@ std::vector<std::byte> Document::serialize()
 std::vector<std::byte> Document::snapshotData()
 {
 	validateSamples();
-	auto module = serialize();
+	auto module = editable() ? serialize() : originalBytes_;
 	auto base = load(module);
 	auto samples = encodeSampleArchive(*song_, *base);
 	auto timing = encodeTimingArchive(*song_, *base);
@@ -334,6 +334,22 @@ void Document::validateEdits(const std::vector<Edit> &input) const
 std::vector<Edit> Document::edit(const std::vector<Edit> &input)
 {
 	validateEdits(input);
+	std::optional<NativeSong> metadata;
+	for(const auto &e:input) {
+		const auto before=cell(e.pattern,e.row,e.channel);
+		if(before.effect==e.after.effect && before.parameter==e.after.parameter) continue;
+		const auto pattern=native_.patterns.at(e.pattern).id,track=native_.tracks.at(e.channel).id;
+		auto matches=[&](const auto &c){return c.pattern==pattern&&c.track==track&&!c.column&&c.position/performanceUnitsPerRow==e.row;};
+		if(std::any_of(native_.performance.commands.begin(),native_.performance.commands.end(),matches)) {
+			if(!metadata) metadata=native_;
+			std::erase_if(metadata->performance.commands,matches);
+		}
+	}
+	if(metadata) {
+		std::vector<Edit> changes;
+		for(auto e:input){e.before=cell(e.pattern,e.row,e.channel);if(e.before!=e.after)changes.push_back(e);}
+		editNative(std::move(*metadata),changes);return changes;
+	}
 	std::vector<Edit> edits;
 	edits.reserve(input.size());
 	UndoEntry entry;
@@ -673,9 +689,12 @@ void Document::sampleSettings(int index, int rate, int volume, int pan, uint32_t
 	{auto &sample=s.GetSample(index);if(name)s.m_szNames[index]=::OpenMPT::mpt::ToCharset(s.GetCharsetInternal(), ::OpenMPT::mpt::Charset::UTF8,*name);sample.nC5Speed=std::clamp(rate,100,192000);if(s.GetType()&(MOD_TYPE_MOD|MOD_TYPE_XM))sample.FrequencyToTranspose();sample.nVolume=std::clamp(volume,0,64)*4;sample.nPan=std::clamp(pan,0,256);sample.uFlags.set(CHN_PANNING);if(loop&&(start>=end || end>sample.nLength))throw std::runtime_error("Loop end must follow its start and lie inside the sample.");sample.SetLoop(start,end,loop,pingpong,s); });
 }
 
-Renderer::Renderer(const std::vector<std::byte> &bytes, uint32_t rate, uint32_t order, bool preview, const std::string &sourcePath, uint32_t sequence, PlaybackRegion region)
+Renderer::Renderer(const std::vector<std::byte> &bytes, uint32_t rate, uint32_t order, bool preview, const std::string &sourcePath, uint32_t sequence, PlaybackRegion region, const NativeSong *native)
 	: region_(region), loop_(region.loop), song_(load(bytes, sourcePath))
 {
+	if(native) native->prepareEffects(*song_);
+	for(INSTRUMENTINDEX i=1;i<=song_->GetNumInstruments();++i) if(song_->Instruments[i]) instrumentIndices_[song_->Instruments[i]]=i;
+
 	for(SAMPLEINDEX i = 1; i <= song_->GetNumSamples(); ++i)
 		if(song_->SampleHasPath(i) && !song_->GetSample(i).HasSampleData()) throw std::runtime_error("An external sample is missing. Replace it before saving or rendering.");
 	if(sequence == UINT32_MAX) sequence = song_->Order.GetCurrentSequenceIndex();
@@ -906,6 +925,7 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 	left_.store(left, std::memory_order_relaxed);
 	right_.store(right, std::memory_order_relaxed);
 	frames_.fetch_add(count, std::memory_order_relaxed);
+ publishVoices();
 	return count;
 }
 void Renderer::processNativeTail(float *interleaved, uint32_t frames) noexcept
@@ -922,6 +942,42 @@ void Renderer::processNativeTail(float *interleaved, uint32_t frames) noexcept
 		song_->ProcessNativeTail(nativeTailLeft_.data(), nativeTailRight_.data(), count, target);
 		position += count;
 	}
+}
+void Renderer::publishVoices() noexcept {
+ voiceSequence_.fetch_add(1); // Odd while writing; all fields remain atomic.
+ uint32_t count=0;
+ const auto &channels=song_->m_PlayState.Chn;
+ for(size_t channel=0;channel<channels.size() && count<publishedVoices_.size();++channel) {
+   const auto &voice=channels[channel];
+   if(!voice.pCurrentSample || !voice.nLength || voice.dwFlags[CHN_MUTE | CHN_SYNCMUTE]) continue;
+   const auto sampleAddress=reinterpret_cast<uintptr_t>(voice.pModSample),first=reinterpret_cast<uintptr_t>(&song_->GetSample(1)),last=reinterpret_cast<uintptr_t>(&song_->GetSample(0))+(song_->GetNumSamples()+1)*sizeof(ModSample);
+   if(sampleAddress<first || sampleAddress>=last) continue;
+   const auto sample=uint32_t((sampleAddress-reinterpret_cast<uintptr_t>(&song_->GetSample(0)))/sizeof(ModSample));
+   const auto found=instrumentIndices_.find(voice.pModInstrument);
+   const auto instrument=found==instrumentIndices_.end()?0:found->second;
+   const auto offset=song_->m_playBehaviour[kITEnvelopePositionHandling]?1u:0u;
+   auto tick=[&](const ModChannel::EnvInfo &env){return env.nEnvPosition>offset?env.nEnvPosition-offset:0u;};
+   auto &entry=publishedVoices_[count++];
+   entry.words[0].store(uint64_t(channel) | (uint64_t(sample)<<16) | (uint64_t(instrument)<<32));
+   entry.words[1].store(uint64_t(voice.position.GetUInt()));
+   entry.words[2].store(voice.nativeNoteGeneration);
+   entry.words[3].store(uint64_t(tick(voice.VolEnv)) | (uint64_t(tick(voice.PanEnv))<<32));
+   entry.words[4].store(tick(voice.PitchEnv));
+ }
+ publishedVoiceCount_.store(count);voiceSequence_.fetch_add(1);
+}
+std::vector<VoicePosition> Renderer::voicePositions() const {
+ std::vector<VoicePosition> result;result.reserve(publishedVoices_.size());
+ for(int attempt=0;attempt<3;++attempt) {
+   const auto before=voiceSequence_.load();if(before&1)continue;
+   result.clear();const auto count=std::min<size_t>(publishedVoiceCount_.load(),publishedVoices_.size());
+   for(size_t i=0;i<count;++i) {
+     const auto &entry=publishedVoices_[i];const auto ids=entry.words[0].load(),env=entry.words[3].load();
+     result.push_back({uint32_t(ids&0xffff),uint32_t((ids>>16)&0xffff),uint32_t(ids>>32),uint32_t(entry.words[1].load()),entry.words[2].load(),{uint32_t(env),uint32_t(env>>32),uint32_t(entry.words[4].load())}});
+   }
+   if(before==voiceSequence_.load())return result;
+ }
+ return {}; // Never wait for the audio thread.
 }
 Telemetry Renderer::telemetry() const noexcept
 {

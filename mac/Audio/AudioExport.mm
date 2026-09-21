@@ -11,7 +11,7 @@ void exportProjectAudio(const std::vector<std::byte> &module, const std::vector<
                         const NativeSong *native) {
   constexpr uint32_t rate = 48000;
   PluginChain effects(states, rate, true, automation);
-  Renderer renderer(module, rate, 0, false, {}, sequence);
+  Renderer renderer(module, rate, 0, false, {}, sequence, {}, native);
   if (native) renderer.applyColumnMutes(*native, renderer.song());
   effects.attachInstruments(renderer, native);
   if (native) effects.attachMusicalAutomation(renderer, *native);

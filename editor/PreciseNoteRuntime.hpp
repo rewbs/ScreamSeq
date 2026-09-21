@@ -2,7 +2,7 @@
 #include "NativeSong.hpp"
 namespace Tracker {
 class PreciseNoteRuntime {
-  struct Event {uint32_t position;uint16_t channel,instrument;uint8_t note,velocity,effect,parameter;};
+  struct Event {uint32_t position;uint16_t channel,instrument;uint8_t note,velocity,effect,parameter;bool cutCommand=false;};
   std::map<uint16_t,std::vector<Event>> patterns_;
   const std::vector<Event> *events_=nullptr;
   size_t next_=0;

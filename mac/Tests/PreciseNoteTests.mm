@@ -217,6 +217,102 @@ static void beatAndEffectTest() {
   check(handoff.song().m_PlayState.Chn[0].dwFlags[CHN_VIBRATO],"A hit enables its own vibrato");handoff.render(scratch.data(),200);
   check(!handoff.song().m_PlayState.Chn[0].dwFlags[CHN_VIBRATO] && handoff.song().m_PlayState.Chn[0].rowCommand.command==CMD_NONE,"The next no-effect retrigger ends the prior hit's vibrato immediately");
 }
+static void cutCommandTest(const PluginDescriptor &descriptor) {
+  for(uint32_t rate:{44100u,48000u,96000u})for(bool neighbor:{false,true}) {
+    Document doc;configure(doc,true);
+    doc.transaction([](CSoundFile &s){auto &c=*s.Patterns[0].GetpModCommand(0,0);c.note=61;c.instr=1;});
+    doc.annotate([&](NativeSong &n){const auto p=n.patterns.at(0).id,t=n.tracks.at(0).id,u=n.tracks.at(1).id;
+      n.preciseNotes={{p,t,65536+2000,1,65,127}};
+      n.performance.columns[t]=1;
+      n.performance.commands={{p,t,12345,0,0,PatternCommandKind::NoteCut,0,0},
+        {p,t,65536+7777,0,0,PatternCommandKind::NoteCut,0,0},
+        {p,t,2*65536,0,0,PatternCommandKind::NoteCut,0,0}};
+      if(neighbor){n.preciseNotes.push_back({p,u,0,1,70,127});n.preciseNotes.push_back({p,u,200000,0,255,127});}
+    });
+    PluginState synth{descriptor};synth.instanceID="cut-synth";synth.instrument=1;
+    auto render=[&](uint32_t block){
+      Renderer renderer(doc.snapshotData(),rate);PluginChain chain({synth},rate,true);chain.attachInstruments(renderer);chain.attachMusicalAutomation(renderer,doc.native());
+      std::vector<float> audio(rate*2);
+      for(uint32_t at=0;at<rate;at+=block){const auto count=std::min(block,rate-at);uint64_t a,f,l;tracker_audit_begin();
+        renderer.render(audio.data()+at*2,count);const auto ok=chain.process(audio.data()+at*2,count);tracker_audit_end(&a,&f,&l);
+        check(ok&&!renderer.faulted()&&a+f+l==0,"NC cannot allocate, free or lock on the audio thread");
+      }return audio;
+    };
+    const auto reference=render(17);const auto rowFrames=rate*12/100;
+    auto frameAt=[&](uint32_t units){return uint32_t(std::ceil(double(units)*rowFrames/65536-1e-9));};
+    for(uint32_t frame=0;frame<rate;++frame){const auto at=frame%(4*rowFrames);
+      const bool active=at<frameAt(12345)||(at>=frameAt(65536+2000)&&at<frameAt(65536+7777))||(neighbor&&at<frameAt(200000));
+      check(std::abs(reference[frame*2]-(active?.1:0))<3e-7,"Every sample matches NC onset/cut offsets; another track sharing the plugin/MIDI channel survives");
+    }
+    for(auto block:{128u,512u,4096u})check(render(block)==reference,"NC is callback partition independent for plugin instruments");
+    doc.transaction([](CSoundFile &s){auto timing=songTiming(s);timing.mode=TempoMode::Modern;timing.sequences[0]={1271250,7};timing.rowsPerBeat=4;timing.rowsPerMeasure=12;timing.groove=normalizedGroove(std::array{1.5,.5,1.25,.75});applySongTiming(s,timing);});
+    check(render(17)==render(4096),"NC remains exact with tempo/groove changes");
+  }
+  for(uint32_t rate:{44100u,48000u,96000u}) {
+    auto doc=Document::demo();configure(*doc,false);
+    doc->annotate([](NativeSong &n){const auto p=n.patterns.at(0).id,t=n.tracks.at(0).id;
+      n.preciseNotes={{p,t,0,2,61,127}};n.performance.columns[t]=1;
+      n.performance.commands={{p,t,12345,0,0,PatternCommandKind::NoteCut,0,0}};
+    });
+    const auto cut=uint32_t(std::ceil(12345.*(rate*.12)/65536));
+    auto render=[&](uint32_t block){Renderer renderer(doc->snapshotData(),rate);renderer.preparePreciseNotes(doc->native());std::vector<float> audio(rate/4*2);
+      for(uint32_t at=0;at<audio.size()/2;at+=block){uint64_t a,f,l;tracker_audit_begin();renderer.render(audio.data()+at*2,std::min(block,uint32_t(audio.size()/2)-at));tracker_audit_end(&a,&f,&l);check(a+f+l==0,"Native NC rendering is realtime safe");}
+      return audio;};
+    const auto audio=render(17);check(audio==render(4096),"Native NC output is callback independent");
+    check(std::any_of(audio.begin(),audio.begin()+cut*2,[](float v){return std::abs(v)>.001;}),"Native sample sounds before NC");
+    // The engine's click-removal offset decays after the short volume ramp.
+    float afterPeak=0;for(size_t i=(cut+rate/100)*2;i<audio.size();++i)afterPeak=std::max(afterPeak,std::abs(audio[i]));
+    check(afterPeak<1e-4,"NC sample tail is below -80 dBFS within 10ms");
+    check(std::all_of(audio.begin()+(cut+rate/10)*2,audio.end(),[](float v){return v==0;}),"NC anticlick offset retires completely");
+    Renderer boundary(doc->snapshotData(),rate);boundary.preparePreciseNotes(doc->native());std::vector<float> scratch(cut*2+2);
+    boundary.render(scratch.data(),cut);check(boundary.song().m_PlayState.Chn[0].nFadeOutVol>0,"Sample remains active immediately before the exact NC boundary");
+    boundary.render(scratch.data(),1);check(boundary.song().m_PlayState.Chn[0].nFadeOutVol==0&&boundary.song().m_PlayState.Chn[0].nVolume==0,"NC starts sample fade exactly at its scheduled audio sample");
+  }
+}
+static void cutAndInstrumentAPITest(const PluginDescriptor &descriptor) {
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;
+  auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+    auto reply=[session automationMethod:method params:request error:&error];if(!reply)throw std::runtime_error(error.localizedDescription.UTF8String);return reply;};
+  auto patternBefore=call(@"pattern.get",@{@"pattern":@0})[@"data"];
+  NSString *revision=session.automationRevision;
+  auto creation=@{@"empty":@YES,@"name":@"Lead trigger"};auto preview=[creation mutableCopy];preview[@"dryRun"]=@YES;
+  auto index=call(@"instrument.create",preview,true)[@"data"][@"instrument"];
+  check([revision isEqual:session.automationRevision],"Empty instrument preview does not create or change history");
+  check([call(@"instrument.create",creation,true)[@"data"][@"instrument"] isEqual:index],"Create uses the previewed free slot");
+  const auto info=call(@"instrument.get",@{@"instrument":index})[@"data"];
+  check([info[@"name"] isEqual:@"Lead trigger"],"Trigger instrument uses its chosen name");
+  for(NSNumber *sample in info[@"mapping"])check(sample.intValue==0,"Trigger instrument has no sample map");
+  check([patternBefore isEqual:call(@"pattern.get",@{@"pattern":@0})[@"data"]],"Creating a plugin trigger preserves all pattern data");
+  call(@"history.undo",@{@"domain":@"document"},true);call(@"history.redo",@{@"domain":@"document"},true);
+  check([info isEqual:call(@"instrument.get",@{@"instrument":index})[@"data"]],"Empty instrument supports Undo/Redo");
+  NSDictionary *d=@{@"type":@(descriptor.type),@"subtype":@(descriptor.subtype),@"manufacturer":@(descriptor.manufacturer),@"name":@(descriptor.name.c_str()),@"format":@(descriptor.format.c_str()),@"path":@(descriptor.path.c_str()),@"classID":@(descriptor.classID.c_str()),@"isInstrument":@YES};
+  call(@"plugin.add",@{@"descriptor":d},true);NSString *identity=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+  call(@"instrument.plugin.set",@{@"instrument":index,@"plugin":identity,@"channel":@3},true);
+  auto command=@{@"channel":@0,@"position":@12345,@"column":@0,@"kind":@"note-cut"};
+  auto request=@{@"pattern":@0,@"columns":@[@{@"channel":@0,@"count":@1}],@"commands":@[command]};
+  auto dry=[request mutableCopy];dry[@"dryRun"]=@YES;revision=session.automationRevision;call(@"pattern.performance.set",dry,true);
+  check([revision isEqual:session.automationRevision],"NC dry run does not change revision");
+  call(@"pattern.performance.set",request,true);const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+  check(![call(@"pattern.performance.set",request,true)[@"changed"] boolValue],"NC no-op creates no Undo entry");
+  for(NSDictionary *bad in @[@{@"value":@1},@{@"duration":@1},@{@"binding":@1},@{@"position":@YES},@{@"pitchRange":@12}]){
+    auto c=[command mutableCopy];[c addEntriesFromDictionary:bad];auto r=[request mutableCopy];r[@"commands"]=@[c];r[@"expectedRevision"]=session.automationRevision;revision=session.automationRevision;
+    check(![session automationMethod:@"pattern.performance.set" params:r error:&error]&&[revision isEqual:session.automationRevision],"Invalid NC is rejected atomically");
+  }
+  call(@"history.undo",@{@"domain":@"document"},true);check([call(@"pattern.performance.get",@{@"pattern":@0})[@"data"][@"commands"] count]==0,"NC Undo removes the command");
+  call(@"history.redo",@{@"domain":@"document"},true);
+  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
+  check([session savePath:path error:&error]&&[session openPath:path error:&error],"NC and plugin trigger save/reopen");
+  check([expected isEqual:call(@"pattern.performance.get",@{@"pattern":@0})[@"data"]],"NC persistence preserves exact timing");
+  check([info isEqual:call(@"instrument.get",@{@"instrument":index})[@"data"]],"Plugin trigger keymap/name survive reopening");
+  bool assigned=false;for(NSDictionary *a in call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"][@"assignments"])if([a[@"instrument"] isEqual:index])assigned=[a[@"channel"] intValue]==3;
+  check(assigned,"Plugin trigger MIDI assignment survives reopening");
+  auto project=[NSPropertyListSerialization propertyListWithData:[session serializedData] options:NSPropertyListMutableContainers format:nil error:&error];
+  check([project[@"native"][@"version"] intValue]==17,"NC uses current metadata 17");
+  project[@"native"][@"version"]=@15;
+  [[NSPropertyListSerialization dataWithPropertyList:project format:NSPropertyListBinaryFormat_v1_0 options:0 error:&error] writeToFile:path atomically:YES];
+  check(![session openPath:path error:&error],"An NC command cannot masquerade as older metadata");
+  [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+}
 int main(int argc,char **argv){@autoreleasepool{try{
   check(argc==2,"Local fixture required");const auto vst=NativePlugin::discoverVST3(argv[1]),au=registerFixtureAUs();
   for(const auto &descriptor:{vst[1],au[1]})for(uint32_t rate:{44100u,48000u,96000u}) {
@@ -258,5 +354,6 @@ int main(int argc,char **argv){@autoreleasepool{try{
     check(std::any_of(reference.begin()+start*2,reference.begin()+(start+100)*2,[](float v){return std::abs(v)>.001;}),"Sample starts immediately at the precise event");
     for(auto block:{17u,128u,4096u})check(render(block)==reference,"Precise sample audio is callback independent");
   }
+  cutCommandTest(vst[1]);cutCommandTest(au[1]);cutAndInstrumentAPITest(vst[1]);
   voiceIsolationTest();recordingTest();apiTest();offsetWorkflowTest();beatAndEffectTest();std::cout<<"PASS sample/AU/VST3 precise note timing, same-row releases, repeat, tempo/groove, callback partitions, timestamp capture, realtime audit, beat offsets, per-hit effects and project recall\n";return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}}

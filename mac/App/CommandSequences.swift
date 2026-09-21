@@ -45,7 +45,7 @@ extension WorkspaceCommandPalette {
     if strokes.count==1{entry.item.keyEquivalent=strokes[0].key;entry.item.keyEquivalentModifierMask=strokes[0].modifiers}
     else if strokes.count>1{sequences.bindings[id]=strokes}
     if persist{sequences.save();var bindings=UserDefaults.standard.dictionary(forKey:"workspaceShortcuts") as? [String:[String:Any]] ?? [:];bindings[id]=["key":entry.item.keyEquivalent,"modifiers":entry.item.keyEquivalentModifierMask.rawValue];UserDefaults.standard.set(bindings,forKey:"workspaceShortcuts")}
-    table.reloadData();return nil
+    table.reloadData();onShortcutsChanged?();return nil
   }
   func recordSequence(_ event:NSEvent){
     if event.keyCode==36{guard recordedSequence.count>=2,filtered.indices.contains(table.selectedRow)else{status.stringValue="Record two to four keys, then Return";return};if let error=setShortcut(filtered[table.selectedRow].id,keys:recordedSequence){status.stringValue=error;return};recording=false;status.stringValue="Command sequence saved";return}

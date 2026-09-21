@@ -110,7 +110,7 @@ final class SignalCanvas: NSView {
     window?.makeFirstResponder(self);let point=convert(event.locationInWindow,from:nil);pointer=point
     for node in nodes.reversed(){if let port=node.outputs.first(where:{hypot(node.portPoint($0,output:true).x-point.x,node.portPoint($0,output:true).y-point.y)<12}){selected=node.id;selectedEdge=nil;onSelect?(node.id);wiring=(node.id,port);return}}
     if let node=nodes.reversed().first(where:{$0.rect.contains(point)}){selected=node.id;selectedEdge=nil;onSelect?(node.id)
-      if event.clickCount==2{onOpen?(node.id);return};dragging=node.id;origin=point;original=NSPoint(x:node.x,y:node.y);return}
+      if event.clickCount>=2{dragging=nil;onOpen?(node.id);return};dragging=node.id;origin=point;original=NSPoint(x:node.x,y:node.y);return}
     selected=nil;selectedEdge=edge(at:point);if let selectedEdge{onSelectEdge?(selectedEdge)}
   }
   override func mouseDragged(with event:NSEvent){

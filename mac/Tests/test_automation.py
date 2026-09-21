@@ -135,16 +135,16 @@ def plugin_aliases(client):
         write("plugin.preset.load",plugin=identity,path=path,expectedPresetRevision=info["presetRevision"])
         assert read()["data"]["assignments"]==route["assignments"]
         project=Path(temp)/"aliases.resonance"
-        assert write("document.save",path=str(project),dryRun=True)["data"]["projectVersion"]==5 and not project.exists()
-        assert write("document.save",path=str(project))["data"]["projectVersion"]==5
-        root=plistlib.loads(project.read_bytes());assert root["version"]==5 and root["plugins"][1]["instrumentAssignments"]==assignments
+        assert write("document.save",path=str(project),dryRun=True)["data"]["projectVersion"]==6 and not project.exists()
+        assert write("document.save",path=str(project))["data"]["projectVersion"]==6
+        root=plistlib.loads(project.read_bytes());assert root["version"]==6 and root["plugins"][1]["instrumentAssignments"]==assignments
     # Legacy single-assignment API can move an alias and promotes the previous owner's remaining primary.
     write("plugin.assign",slot=0,instrument=instruments[0]);assert read(neighbor)["data"]["assignments"][0]["instrument"]==instruments[0]
     assert [a["instrument"] for a in read()["data"]["assignments"]]==instruments[1:]
     write("plugin.remove",slot=1);expect_error(-32602,lambda:read())
     write("plugin.remove",slot=0)
     for _ in instruments:write("history.undo",domain="document")
-    print("PASS alias socket: stable owners/MIDI channels, preview/retry/stale/no-op/Undo, conflicts and strict validation, reorder, presets, v5 persistence and legacy reassignment")
+    print("PASS alias socket: stable owners/MIDI channels, preview/retry/stale/no-op/Undo, conflicts and strict validation, reorder, presets, current-format persistence and single-instrument reassignment")
 
 
 def song_timing(client):
@@ -347,7 +347,7 @@ def saving_tools(client, directory, app_test):
     result = client.call("document.save", base)
     assert result["revision"] == revision and not result["changed"] and result["data"]["written"]
     project = plistlib.loads(path.read_bytes())
-    assert project['version'] == 4 and project['module'].startswith(b'RSONGS1\0')
+    assert project['version'] == 6 and project['native']['version'] == 17 and project['module'].startswith(b'RSONGS2\0')
     saved = path.read_bytes()
     expect_error(-32602, lambda: client.call("document.save", base))
     assert path.read_bytes() == saved
@@ -1017,6 +1017,13 @@ def mixer_tools(client):
     expect_error(-32602, lambda: write("mixer.bus.set", {"bus": space, "output": group}))
     for params in [{"gainDB": True}, {"width": 3}, {"pan": -2}, {"prePan": -1.01}, {"prePan": True}, {"prePan": None}, {"typo": 2}, {"inserts": ["missing"]}]:
         expect_error(-32602, lambda: write("mixer.bus.set", {"bus": first, **params}))
+    connected=client.call("mixer.get")["data"]
+    assert not write("mixer.bus.set", {"bus": first,"output":None,"dryRun":True})["changed"]
+    assert client.call("mixer.get")["data"]==connected
+    write("mixer.bus.set", {"bus":first,"output":None})
+    assert next(b for b in client.call("mixer.get")["data"]["buses"] if b["id"]==first)["output"]==""
+    write("history.undo", {"domain":"document"})
+    assert client.call("mixer.get")["data"]==connected
     before = client.call("mixer.get")
     auditioned = write("mixer.bus.set", {"bus": first, "gainDB": -12, "prePan": -.75, "preview": True})
     assert not auditioned["changed"] and client.call("mixer.get") == before
@@ -1232,6 +1239,24 @@ def plugin_buses(client):
     expect_error(-32602, lambda: write("mixer.instrument.route", {"plugin": info["data"]["plugin"], "target": bus, "output": 2}))
     write("mixer.instrument.route", {"plugin": info["data"]["plugin"], "target": None, "output": 31})
     assert not client.call("mixer.get")["data"]["instruments"]
+    disconnected = {"plugin": info["data"]["plugin"], "target": None, "output": 0, "disconnected": True}
+    assert not write("mixer.plugin.route", {**disconnected,"dryRun": True})["changed"]
+    assert not client.call("mixer.get")["data"]["instruments"]
+    write("mixer.plugin.route", disconnected)
+    assert client.call("mixer.get")["data"]["instruments"] == [{"plugin": info["data"]["plugin"], "output":0,"target":""}]
+    assert not write("mixer.plugin.route", disconnected)["changed"]
+    for extra in [{"disconnected":1},{"target":bus},{"plugin":"missing"}]:
+        expect_error(-32602,lambda:write("mixer.plugin.route",{**disconnected,**extra}))
+    write("history.undo", {"domain":"document"})
+    assert not client.call("mixer.get")["data"]["instruments"]
+    write("history.redo", {"domain":"document"})
+    with tempfile.TemporaryDirectory() as disconnected_directory:
+        path = Path(disconnected_directory)/"disconnected.screamseq"
+        write("document.save", {"path":str(path)})
+        metadata=plistlib.loads(path.read_bytes())["native"]
+        assert metadata["version"]==17 and metadata["mixer"]["instruments"][0]["target"]==""
+    write("mixer.plugin.route", {**disconnected,"disconnected":False})
+    assert not client.call("mixer.get")["data"]["instruments"]
     effect = {**plugin, "name": "Resonance Test Gain", "classID": "5245534F4E414E434546464543540001", "isInstrument": False}
     write("plugin.add", {"descriptor": effect})
     graph = client.call("mixer.get")["data"]
@@ -1340,6 +1365,57 @@ def pattern_performance(client):
         write("history.undo", {"domain": "document"})
     finally:
         write("plugin.remove", {"slot": slot})
+
+
+def precise_cut_and_trigger(client):
+    def write(method, **params):
+        return client.call(method, {**params, "expectedRevision": client.call("document.get")["revision"]})
+    before = client.call("document.get")
+    preview = write("instrument.create", empty=True, name="API plugin trigger", dryRun=True)
+    assert client.call("document.get")["revision"] == before["revision"]
+    index = write("instrument.create", empty=True, name="API plugin trigger")["data"]["instrument"]
+    assert index == preview["data"]["instrument"]
+    info = client.call("instrument.get", {"instrument": index})["data"]
+    assert info["name"] == "API plugin trigger" and all(s == 0 for s in info["mapping"])
+    write("history.undo", domain="document")
+    params = {"pattern": 0, "columns": [{"channel": 0, "count": 1}],
+              "commands": [{"channel": 0, "column": 0, "position": 12345, "kind": "note-cut"}]}
+    initial = client.call("pattern.performance.get", {"pattern": 0})["data"]
+    assert not write("pattern.performance.set", **params, dryRun=True)["changed"]
+    write("pattern.performance.set", **params)
+    command = client.call("pattern.performance.get", {"pattern": 0})["data"]["commands"][0]
+    assert command["kind"] == "note-cut" and command["position"] == 12345 and command["binding"] == 0
+    assert not write("pattern.performance.set", **params)["changed"]
+    for bad in ({"duration": 1}, {"binding": 1}, {"value": 1}, {"position": True}):
+        expect_error(-32602, lambda: write("pattern.performance.set", **{**params, "commands": [{**params["commands"][0], **bad}]}))
+    expect_error(-32001, lambda: client.call("pattern.performance.set", {**params, "expectedRevision": "stale"}))
+    write("history.undo", domain="document")
+    assert client.call("pattern.performance.get", {"pattern": 0})["data"] == initial
+
+
+def unified_effects(client):
+    def write(method, **params):
+        return client.call(method, {**params, "expectedRevision": client.call("document.get")["revision"]})
+    initial = client.call("pattern.effects.get", {"pattern": 0})["data"]
+    write("pattern.effects.set", pattern=0, columns=[{"channel": 0, "count": 8}])
+    after_columns = client.call("pattern.effects.get", {"pattern": 0})["data"]
+    for column, command in [(0, {"kind": "note-cut", "offset": 23456}),
+                            (7, {"kind": "tracker", "effect": 20, "parameter": 195})]:
+        params = dict(pattern=0, row=3, channel=0, column=column, command=command)
+        preview = write("pattern.effect.set", **params, dryRun=True)
+        assert not preview["changed"] and preview["data"]["wouldChange"]
+        applied = write("pattern.effect.set", **params)
+        assert applied["changed"] and not write("pattern.effect.set", **params)["changed"]
+    commands = client.call("pattern.effects.get", {"pattern": 0})["data"]["commands"]
+    cells = {c["column"]: c for c in commands if c["channel"] == 0 and c["position"] // 65536 == 3}
+    assert cells[0]["kind"] == "note-cut" and cells[0]["position"] % 65536 == 23456
+    assert cells[7]["kind"] == "tracker" and cells[7]["parameter"] == 195
+    expect_error(-32602, lambda: write("pattern.effects.set", pattern=0, columns=[{"channel": 0, "count": 7}]))
+    for _ in range(2): write("history.undo", domain="document")
+    assert client.call("pattern.effects.get", {"pattern": 0})["data"] == after_columns
+    write("history.undo", domain="document")
+    assert client.call("pattern.effects.get", {"pattern": 0})["data"] == initial
+    print("PASS unified FX socket: tracker FX8, precise FX1, dry-run/no-op, shrink protection and one-cell Undo")
 
 
 def plugin_programs(client):
@@ -1508,6 +1584,8 @@ def main():
                 plugin_programs(client)
                 precise_notes_and_recording(client)
                 pattern_performance(client)
+                precise_cut_and_trigger(client)
+                unified_effects(client)
                 plugin_presets(client)
                 song_timing(client)
                 plugin_aliases(client)
@@ -1571,6 +1649,18 @@ def main():
                 methods = {entry["properties"]["method"]["const"] for entry in schema["oneOf"]
                            if "--app" in sys.argv or not entry.get("x-application-only")}
                 assert methods == set(advertised["reads"] + advertised["writes"])
+                timeline=client.call("pattern.timeline.get",{"pattern":0})
+                assert not timeline["changed"] and timeline["data"]["positions"][0]["row"]==0
+                assert timeline["data"]["positions"][0]["beat"]==0
+                expect_error(-32602,lambda:client.call("pattern.timeline.get",{"pattern":True}))
+                expect_error(-32602,lambda:client.call("pattern.timeline.get",{"pattern":0,"typo":1}))
+                playback=client.call("transport.get")["data"]
+                assert "voicePositions" in playback and "audioActive" in playback
+                if app_test:
+                    for mode in ["beats","patternTime","songTime","rows"]:
+                        client.call("workspace.ruler",{"mode":mode})
+                        assert client.call("workspace.get")["data"]["positionMode"]==mode
+                    expect_error(-32602,lambda:client.call("workspace.ruler",{"mode":"garbage"}))
                 navigation_pattern(client)
                 print("PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output")
             finally:

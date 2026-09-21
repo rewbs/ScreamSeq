@@ -143,7 +143,7 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
     pluginStates_ = plugins_->states();
   if (!unit_)
     configure();
-  renderer_ = std::make_unique<Renderer>(bytes, uint32_t(sampleRate_), order, preview, sourcePath, sequence, region);
+  renderer_ = std::make_unique<Renderer>(bytes, uint32_t(sampleRate_), order, preview, sourcePath, sequence, region, preview ? nullptr : native);
   if (native && !preview) {renderer_->applyColumnMutes(*native, renderer_->song());renderer_->preparePreciseNotes(*native);}
   previewing_ = preview;
   plugins_ = pluginStates_.empty() && !(native && (native->mixer.active() || !native->performance.commands.empty()) && !preview)

@@ -7,10 +7,10 @@ extension AppController {
     menu.addItem(ContextAction("Find effect…",key:"?",enabled:!busy){[weak self] in self?.showPatternCommands()})
     menu.addItem(ContextAction("Edit parameter / pitch effect…",key:"e",modifiers:[.command,.shift],enabled:!busy){[weak self] in self?.showPatternPerformance()})
     menu.addItem(ContextAction("Precise notes & retriggers…",key:"n",modifiers:[.command,.shift],enabled:!busy){[weak self] in self?.showPreciseNotes()})
-    let columns=NSMenu(title:"Native effect columns");columns.autoenablesItems=false
-    for count in 0...8 {
+    let columns=NSMenu(title:"FX columns");columns.autoenablesItems=false
+    for count in 1...8 {
       let item=ContextAction(count==0 ? "None" : "\(count) columns",enabled:!busy){[weak self] in self?.setEffectColumns(channel:channel,count:count)}
-      item.state=model.extraColumns(channel)==count ? .on : .off;columns.addItem(item)
+      item.state=model.effectCount(channel)==count ? .on : .off;columns.addItem(item)
     }
     ContextActions.appendMenu(columns,to:menu)
     menu.addItem(.separator())

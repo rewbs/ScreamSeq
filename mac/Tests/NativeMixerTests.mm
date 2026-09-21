@@ -53,6 +53,21 @@ int main(int argc, char **argv) {
     gain.instanceID = "gain"; synth.instanceID = "synth"; delayed.instanceID = "delayed";
     synth.instrument = delayed.instrument = 1;
     for (uint32_t rate : {44100, 48000, 96000}) {
+      auto detached=Document::demo();enable(*detached);
+      detached->annotate([](NativeSong &n){for(auto &bus:n.mixer.buses)bus.output=0;});
+      auto disconnected=render(*detached,{},rate,128);
+      check(std::all_of(disconnected.begin(),disconnected.end(),[](float value){return value==0;}),"Disconnected main outputs render silence");
+      detached->annotate([](NativeSong &n){n.mixer.buses[0].sends.push_back({n.mixer.buses.back().id,0,false,true});});
+      auto sent=render(*detached,{},rate,128);
+      check(std::any_of(sent.begin(),sent.end(),[](float value){return std::abs(value)>1e-5;}),"A disconnected main output preserves independently audible sends");
+      auto synthOnly=Document::demo();enable(*synthOnly);
+      synthOnly->transaction([](CSoundFile &s){s.m_nInstruments=1;s.Instruments[1]=new ModInstrument(1);});
+      synthOnly->annotate([](NativeSong &n){for(auto &bus:n.mixer.buses)bus.output=0;});
+      auto defaultOutput=render(*synthOnly,{synth},rate,128);
+      check(std::any_of(defaultOutput.begin(),defaultOutput.end(),[](float value){return std::abs(value)>1e-5;}),"An unrouted plugin instrument has its default master output");
+      synthOnly->annotate([](NativeSong &n){n.mixer.instruments={{"synth",0,0}};});
+      auto silentPlugin=render(*synthOnly,{synth},rate,128);
+      check(std::all_of(silentPlugin.begin(),silentPlugin.end(),[](float value){return value==0;}),"Explicitly disconnecting a plugin output suppresses its default master route");
       auto doc = Document::demo();
       doc->transaction([](CSoundFile &song) {
         song.Order().assign(2, 0); song.Patterns[0].Resize(4);
@@ -117,8 +132,8 @@ int main(int argc, char **argv) {
     call(@"mixer.enable", @{}, true);
     NSDictionary *initial = call(@"mixer.get", @{})[@"data"];
     NSDictionary *oldMetadata = [NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:&problem][@"native"];
-    check([oldMetadata[@"version"] intValue] == 4 && oldMetadata[@"mixer"][@"buses"][0][@"prePan"] == nil &&
-      [initial[@"buses"][0][@"prePan"] doubleValue] == 0, "Neutral input balance retains older metadata while API exposes the default");
+    check([oldMetadata[@"version"] intValue] == 17 && [oldMetadata[@"mixer"][@"buses"][0][@"prePan"] doubleValue] == 0 &&
+      [initial[@"buses"][0][@"prePan"] doubleValue] == 0, "Neutral input balance is explicit in the current format and API");
     NSString *first = initial[@"buses"][0][@"id"], *master = [initial[@"buses"] lastObject][@"id"];
     NSString *revision = session.automationRevision;
     check(![call(@"mixer.enable", @{}, true)[@"changed"] boolValue] && [revision isEqual:session.automationRevision], "Enable is idempotent");
@@ -149,14 +164,14 @@ int main(int argc, char **argv) {
     NSDictionary *saved = call(@"mixer.get", @{})[@"data"];
     check([session savePath:path error:&problem], problem.localizedDescription.UTF8String ?: "Mixer project saves");
     NSMutableDictionary *encoded = [NSPropertyListSerialization propertyListWithData:[NSData dataWithContentsOfFile:path] options:NSPropertyListMutableContainers format:nil error:&problem];
-    check([encoded[@"native"][@"version"] intValue] == 6 && [encoded[@"native"][@"mixer"][@"buses"][0][@"prePan"] doubleValue] == -.5,
+    check([encoded[@"native"][@"version"] intValue] == 17 && [encoded[@"native"][@"mixer"][@"buses"][0][@"prePan"] doubleValue] == -.5,
       "Non-neutral input balance requires native metadata v6");
     encoded[@"native"][@"version"] = @5;
     NSString *badPath = [path stringByAppendingString:@".invalid.resonance"];
     [[NSPropertyListSerialization dataWithPropertyList:encoded format:NSPropertyListBinaryFormat_v1_0 options:0 error:&problem] writeToFile:badPath atomically:YES];
     revision = session.automationRevision;
     check(![session openPath:badPath error:&problem] && [revision isEqual:session.automationRevision], "Legacy metadata with input balance is rejected without replacing the song");
-    encoded[@"native"][@"version"] = @6; [encoded[@"native"][@"mixer"][@"buses"][0] removeObjectForKey:@"prePan"];
+    encoded[@"native"][@"version"] = @17; [encoded[@"native"][@"mixer"][@"buses"][0] removeObjectForKey:@"prePan"];
     [[NSPropertyListSerialization dataWithPropertyList:encoded format:NSPropertyListBinaryFormat_v1_0 options:0 error:&problem] writeToFile:badPath atomically:YES];
     check(![session openPath:badPath error:&problem] && [revision isEqual:session.automationRevision], "Version 6 requires an explicit valid input balance on every bus");
     [[NSFileManager defaultManager] removeItemAtPath:badPath error:nil];

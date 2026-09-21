@@ -14,7 +14,7 @@ int main(){@autoreleasepool{try{
   auto set=call(@"automation.pattern.set",@{@"pattern":@0,@"plugin":plugin,@"parameter":@1,@"points":points},true);
   check([set[@"changed"] boolValue],"Store scripted lane");
   auto saved=[session serializedData];auto metadata=[NSPropertyListSerialization propertyListWithData:saved options:0 format:nil error:nil];
-  check([metadata[@"native"][@"version"] intValue]==11,"Project identifies scripted automation format");
+  check([metadata[@"native"][@"version"] intValue]==17,"Project identifies scripted automation format");
   NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"resonance-formula-%@.resonance",NSUUID.UUID.UUIDString]];
   check([saved writeToFile:path atomically:YES],"Write test project");TrackerSession *reopened=[TrackerSession new];NSError *error=nil;check([reopened openPath:path error:&error],"Reopen formula project");
   auto r=[reopened automationMethod:@"automation.pattern.get" params:@{@"pattern":@0} error:&error];check([r[@"data"][@"lanes"][0][@"points"] isEqual:points],"Formula text survives project round trip");

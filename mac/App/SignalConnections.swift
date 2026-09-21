@@ -28,7 +28,7 @@ extension SignalGraphEditor {
   @objc func connectionChosen(){selectConnection(connection.indexOfSelectedItem)}
   func selectConnection(_ index:Int){
     guard canvas.edges.indices.contains(index)else{return}
-    canvas.selected=nil;canvas.selectedEdge=index;connection.selectItem(at:index)
+    selectedID=nil;canvas.selected=nil;canvas.selectedEdge=index;connection.selectItem(at:index)
     let edge=canvas.edges[index]
     picker(source,canvas.nodes.map{($0.title,$0.id)},select:edge.source)
     picker(destination,canvas.nodes.map{($0.title,$0.id)},select:edge.target)

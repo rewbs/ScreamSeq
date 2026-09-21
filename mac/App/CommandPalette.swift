@@ -4,6 +4,7 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
   struct Entry { let item: NSMenuItem, path: String; var id: String { path + "/" + NSStringFromSelector(item.action ?? #selector(NSObject.description)) } }
   let search = NSSearchField(), table = NSTableView(), status = Theme.label("Return runs · ↑/↓ choose · Escape closes",size:11,color:Theme.muted)
   var entries = [Entry](), filtered = [Entry](), window: NSPanel?
+  var onShortcutsChanged:(()->Void)?
   var recording = false
   var capturingSequence=false,recordedSequence=[String]()
   let sequences=WorkspaceSequences()

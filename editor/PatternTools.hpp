@@ -24,3 +24,6 @@ std::vector<Edit> preparePatternTransform(const Document &, const std::vector<Pa
 std::vector<Edit> preparePatternPaste(const Document &, uint16_t pattern, uint16_t row, uint16_t channel,
 	uint16_t rows, uint16_t channels, const std::vector<Cell> &, uint8_t fields, const std::string &mode, bool clip);
 } // namespace Tracker
+namespace Tracker {
+NativeSong prepareEffectTransform(const Document &, const std::vector<PatternRegion> &, const PatternTransform &);
+}

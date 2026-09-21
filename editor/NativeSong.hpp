@@ -48,6 +48,7 @@ struct NativeSong {
   void reconcile(const OpenMPT::CSoundFile &song);
   void clonePatternAutomation(uint64_t source, uint64_t destination);
   void validate(const OpenMPT::CSoundFile &song) const;
+  void prepareEffects(OpenMPT::CSoundFile &song) const; // Control thread only.
   bool hasAnnotations() const;
   size_t bytes() const;
   bool operator==(const NativeSong &) const = default;

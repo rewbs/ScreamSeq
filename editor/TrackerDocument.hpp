@@ -1,4 +1,5 @@
 #pragma once
+#include <unordered_map>
 #include "SampleSnap.hpp"
 #include "SampleLoopCrossfade.hpp"
 #include "common/stdafx.h"
@@ -213,6 +214,11 @@ public:
 	static void put(CSoundFile &, const Edit &);
 	static void resizeChannels(CSoundFile &, int channels);
 };
+struct VoicePosition {
+ uint32_t channel = 0, sample = 0, instrument = 0, sampleFrame = 0;
+ uint64_t generation = 0;
+ std::array<uint32_t,3> envelopeTicks{};
+};
 struct Telemetry
 {
 	uint32_t order{}, pattern{}, row{}, voices{};
@@ -235,6 +241,13 @@ struct PreviewNote
 };
 class Renderer
 {
+ // Atomics make bounded snapshot retries race-free even if a consumer is delayed.
+ struct PublishedVoice { std::array<std::atomic<uint64_t>,5> words{}; };
+ std::array<PublishedVoice,512> publishedVoices_{};
+ std::atomic<uint64_t> voiceSequence_{0};
+ std::atomic<uint32_t> publishedVoiceCount_{0};
+ std::unordered_map<const OpenMPT::ModInstrument *,uint32_t> instrumentIndices_;
+ void publishVoices() noexcept;
 	PlaybackRegion region_;
 	std::atomic<bool> loop_{false};
 	bool regionStarted_ = false;
@@ -262,10 +275,10 @@ class Renderer
 	uint16_t nextPreviewChannel_ = 0;
 	std::atomic<bool> panic_{false};
 public:
-	Renderer(const std::vector<std::byte> &bytes, uint32_t sampleRate, uint32_t order = 0, bool preview = false, const std::string &sourcePath = {}, uint32_t sequence = 0, PlaybackRegion region = {});
+	Renderer(const std::vector<std::byte> &bytes, uint32_t sampleRate, uint32_t order = 0, bool preview = false, const std::string &sourcePath = {}, uint32_t sequence = 0, PlaybackRegion region = {}, const NativeSong *native = nullptr);
 	void loop(bool value) noexcept { loop_.store(value, std::memory_order_relaxed); }
 	CSoundFile &song() { return *song_; }
-	void preparePreciseNotes(const NativeSong &native) { preciseNotes_=std::make_unique<PreciseNoteRuntime>(native); }
+	void preparePreciseNotes(const NativeSong &native) { preciseNotes_=std::make_unique<PreciseNoteRuntime>(native); native.prepareEffects(*song_); }
 	void recordingTime(uint64_t hostTime,double ticksPerSample) noexcept { renderHostTime_=hostTime;hostTicksPerSample_=ticksPerSample; }
 	const RecordingClock &recordingClock() const { return *recordingClock_; }
 	bool enqueue(const std::vector<Edit> &edits);
@@ -274,6 +287,7 @@ public:
 	uint32_t render(float *interleaved, uint32_t frames) noexcept;
 	void processNativeTail(float *interleaved, uint32_t frames) noexcept;
 	Telemetry telemetry() const noexcept;
+ std::vector<VoicePosition> voicePositions() const; // Control thread only; bounded snapshot.
 	void mute(uint32_t ch, bool mute) noexcept;
 	void applyColumnMutes(const NativeSong &native, const CSoundFile &source) noexcept;
 	bool faulted() const noexcept { return fault_.load(); }

@@ -56,6 +56,19 @@ static constexpr TEMPO GetMinimumTempoParam(MODTYPE modType)
 // Length
 
 
+#ifdef OPENMPT_EDITOR_CORE
+static uint8 NativeNoteColumn(const ModChannel &chn)
+{
+	uint8 selected = 0; int priority = -1;
+	for(uint8 i = 0; i < 8; ++i) {
+		const auto &e = i ? chn.nativeExtraEffects[i - 1] : chn.rowCommand;
+		const int candidate = e.command == CMD_DELAYCUT || ((e.command == CMD_MODCMDEX || e.command == CMD_S3MCMDEX) && (e.param & 0xF0) == 0xD0) ? 3 : e.IsTonePortamento() ? 2 : e.command != CMD_NONE ? 1 : 0;
+		if(candidate > priority || (candidate == priority && candidate >= 2)) { priority = candidate; selected = i; }
+	}
+	return selected;
+}
+#endif
+
 // Memory class for GetLength() code
 class GetLengthMemory
 {
@@ -156,6 +169,13 @@ public:
 				default:
 					break;
 				}
+#ifdef OPENMPT_EDITOR_CORE
+				const auto sourceCommand = command;
+				for(uint8 column = 0; column < 8; ++column) {
+					const auto m = sndFile.NativeEffectAt(state->m_nPattern, state->m_nRow, channel, column);
+					command = column ? m.command : sourceCommand;
+					CSoundFile::NativeEffectScope scope(sndFile, chn, column, m, column != 0);
+#endif
 				switch(command)
 				{
 				case CMD_TONEPORTAMENTO:
@@ -195,6 +215,10 @@ public:
 				default:
 					break;
 				}
+
+#ifdef OPENMPT_EDITOR_CORE
+				}
+#endif
 
 				if(chn.autoSlide.IsActive(AutoSlideCommand::TonePortamento) && !chn.rowCommand.IsTonePortamento())
 					sndFile.TonePortamento(*state, channel, chn.portamentoSlide);
@@ -516,6 +540,9 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 		if(playState.m_nRow >= Patterns[playState.m_nPattern].GetNumRows())
 			playState.m_nRow = 0;
 
+#ifdef OPENMPT_EDITOR_CORE
+        if(target.onRow) target.onRow(playState.m_nCurrentOrder,playState.m_nRow,memory.elapsedTime);
+#endif
 		// Check whether target was reached.
 		if(target.mode == GetLengthTarget::SeekPosition && playState.m_nCurrentOrder == target.pos.order && playState.m_nRow == target.pos.row)
 		{
@@ -584,7 +611,16 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 		{
 			ModChannel &chn = playState.Chn[nChn];
 			chn.isFirstTick = true;
-			if(p->IsEmpty() || (ignoreMutedChn && ChnSettings[nChn].dwFlags[CHN_MUTE]))  // not even effects are processed on muted S3M channels
+#ifdef OPENMPT_EDITOR_CORE
+			ModCommand sourceCell = *p;
+			const ModCommand *p = &sourceCell;
+			PrepareNativeRow(playState, nChn);
+			const bool extraEffects = std::any_of(chn.nativeExtraEffects.begin(), chn.nativeExtraEffects.end(), [](const auto &e) { return e.command != CMD_NONE; });
+			if((p->IsEmpty() && !extraEffects) ||
+#else
+			if(p->IsEmpty() ||
+#endif
+			   (ignoreMutedChn && ChnSettings[nChn].dwFlags[CHN_MUTE]))  // not even effects are processed on muted S3M channels
 			{
 				chn.rowCommand.Clear();
 				continue;
@@ -596,7 +632,12 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 					playState.m_midiMacroEvaluationResults->pluginParameter[{static_cast<PLUGINDEX>(p->instr - 1), p->GetValueVolCol()}] = p->GetValueEffectCol() / PlugParamValue(ModCommand::maxColumnValue);
 				}
 				chn.rowCommand.Clear();
+#ifdef OPENMPT_EDITOR_CORE
+				sourceCell.Clear();
+				if(!extraEffects) continue;
+#else
 				continue;
+#endif
 			}
 
 			if(p->IsNote())
@@ -618,6 +659,11 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 			}
 
 			chn.rowCommand = *p;
+#ifdef OPENMPT_EDITOR_CORE
+			for(uint8 column = 0; column < (extraEffects ? 8 : 1); ++column) {
+				NativeEffectScope scope(*this, chn, column, column ? chn.nativeExtraEffects[column - 1] : *p, column != 0);
+				const ModCommand *p = &chn.rowCommand;
+#endif
 			switch(p->command)
 			{
 			case CMD_SPEED:
@@ -665,6 +711,9 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 			default:
 				break;
 			}
+#ifdef OPENMPT_EDITOR_CORE
+			}
+#endif
 		}
 		// This may change speed/tempo/global volume/next row
 		playState.m_globalScriptState.NextTick(playState, *this);
@@ -679,13 +728,25 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 		for(CHANNELINDEX nChn = 0; nChn < GetNumChannels(); nChn++)
 		{
 			ModChannel &chn = playState.Chn[nChn];
+
+#ifdef OPENMPT_EDITOR_CORE
+			const auto source = chn.rowCommand;
+			const bool extraEffects = std::any_of(chn.nativeExtraEffects.begin(), chn.nativeExtraEffects.end(), [](const auto &e) { return e.command != CMD_NONE; });
+			for(uint8 column = 0; column < (extraEffects ? 8 : 1); ++column) {
+				NativeEffectScope scope(*this, chn, column, column ? chn.nativeExtraEffects[column - 1] : source, column != 0);
+				if(column && chn.rowCommand.command == CMD_NONE) continue;
+#endif
 			if(chn.rowCommand.IsEmpty() && !chn.autoSlide.AnyActive())
 				continue;
 			ModCommand::COMMAND command = chn.rowCommand.command;
 			ModCommand::PARAM param = chn.rowCommand.param;
 			ModCommand::NOTE note = chn.rowCommand.note;
 
-			if((adjustMode & eAdjust) && !chn.rowCommand.IsEmpty())
+			if((adjustMode & eAdjust) && !chn.rowCommand.IsEmpty()
+#ifdef OPENMPT_EDITOR_CORE
+				&& column == 0
+#endif
+			)
 			{
 				if(chn.rowCommand.instr)
 				{
@@ -1059,6 +1120,9 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 			{
 				UpdateS3MEffectMemory(chn, param);
 			}
+#ifdef OPENMPT_EDITOR_CORE
+			}
+#endif
 		}
 
 		if(!m_globalScript.empty())
@@ -1093,13 +1157,18 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 					continue;
 
 				ModChannel &chn = playState.Chn[nChn];
+#ifdef OPENMPT_EDITOR_CORE
+				const auto sourceRow = chn.rowCommand;
+				const uint8 noteColumn = NativeNoteColumn(chn);
+				NativeEffectScope noteScope(*this, chn, noteColumn, noteColumn ? chn.nativeExtraEffects[noteColumn - 1] : sourceRow, noteColumn != 0);
+#endif
 				const ModCommand &m = chn.rowCommand;
 				if(!chn.nPeriod && m.IsEmpty())
 					continue;
 
 				uint32 paramHi = m.param >> 4, paramLo = m.param & 0x0F;
 				uint32 startTick = 0;
-				const bool porta = m.IsTonePortamento();
+				const bool porta = RowTonePortamento(chn);
 				bool stopNote = false;
 
 				if(m.instr) chn.prevNoteOffset = 0;
@@ -1139,6 +1208,11 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 					}
 				}
 
+#ifdef OPENMPT_EDITOR_CORE
+				for(uint8 column = 0; column < 8; ++column) {
+					NativeEffectScope scope(*this, chn, column, column ? chn.nativeExtraEffects[column - 1] : sourceRow, true);
+					const uint32 paramHi = m.param >> 4, paramLo = m.param & 0x0F;
+#endif
 				if(m.IsNote() || m_playBehaviour[kApplyOffsetWithoutNote])
 				{
 					if(m.command == CMD_OFFSET)
@@ -1153,7 +1227,11 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 						memory.RenderChannel(nChn, oldTickDuration);	// Re-sync what we've got so far
 						ReverseSampleOffset(chn, m.param);
 						startTick = playState.m_nMusicSpeed - 1;
-					} else if(m.volcmd == VOLCMD_OFFSET)
+					} else if(m.volcmd == VOLCMD_OFFSET
+#ifdef OPENMPT_EDITOR_CORE
+						&& column == 0
+#endif
+					)
 					{
 						if(chn.pModSample != nullptr && !chn.pModSample->uFlags[CHN_ADLIB] && m.vol <= std::size(chn.pModSample->cues))
 						{
@@ -1179,7 +1257,11 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 					chn.nVolume = m.param * 4u;
 				else if(m.command == CMD_VOLUME8)
 					chn.nVolume = m.param;
-				else if(m.volcmd == VOLCMD_VOLUME)
+				else if(m.volcmd == VOLCMD_VOLUME
+#ifdef OPENMPT_EDITOR_CORE
+					&& column == 0
+#endif
+				)
 					chn.nVolume = m.vol * 4u;
 				
 				if(chn.pModSample && !stopNote)
@@ -1203,6 +1285,10 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 					}
 				}
 
+#ifdef OPENMPT_EDITOR_CORE
+				}
+#endif
+
 				if(stopNote)
 				{
 					chn.Stop();
@@ -1214,6 +1300,10 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 						memory.RenderChannel(nChn, oldTickDuration);	// Re-sync what we've got so far
 					}
 
+#ifdef OPENMPT_EDITOR_CORE
+					for(uint8 column = 0; column < 8; ++column) {
+						NativeEffectScope scope(*this, chn, column, column ? chn.nativeExtraEffects[column - 1] : sourceRow, true);
+#endif
 					switch(m.command)
 					{
 					case CMD_TONEPORTAVOL:
@@ -1299,6 +1389,10 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 					default:
 						break;
 					}
+#ifdef OPENMPT_EDITOR_CORE
+					}
+#endif
+
 					chn.isFirstTick = true;
 					switch(m.volcmd)
 					{
@@ -1339,7 +1433,11 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 					if(chn.isPaused)
 						continue;
 
-					if(m.IsAnyPitchSlide() || chn.autoSlide.AnyPitchSlideActive())
+					if(m.IsAnyPitchSlide() || chn.autoSlide.AnyPitchSlideActive()
+#ifdef OPENMPT_EDITOR_CORE
+						|| std::any_of(chn.nativeExtraEffects.begin(), chn.nativeExtraEffects.end(), [](const auto &e) { return e.IsAnyPitchSlide(); })
+#endif
+					)
 					{
 						// Portamento needs immediate syncing, as the pitch changes on each tick
 						uint32 portaTick = memory.chnSettings[nChn].ticksToRender + startTick;
@@ -2653,6 +2751,21 @@ void CSoundFile::StopOldNNA(ModChannel &chn, CHANNELINDEX channel)
 
 
 #if defined(OPENMPT_EDITOR_CORE)
+ModCommand CSoundFile::NativeEffectAt(PATTERNINDEX pattern, ROWINDEX row, CHANNELINDEX channel, uint8 column) const
+{
+	if(!Patterns.IsValidPat(pattern) || !Patterns[pattern].IsValidRow(row) || channel >= GetNumChannels()) return {};
+	if(!column) return *Patterns[pattern].GetpModCommand(row, channel);
+	const auto found = nativePatternEffects.find({pattern, row, channel});
+	return found != nativePatternEffects.end() && column <= 7 ? found->second[column - 1] : ModCommand{};
+}
+void CSoundFile::PrepareNativeRow(PlayState &state, CHANNELINDEX channel) const
+{
+	auto &chn = state.Chn[channel];
+	const auto found = nativePatternEffects.find({state.m_nPattern, state.m_nRow, channel});
+	chn.nativeExtraEffects = found == nativePatternEffects.end() ? std::array<ModCommand, 7>{} : found->second;
+	chn.nativeArpeggio = chn.nativeTremor = false;
+}
+
 // Execute the first tick of a note-local command at the precise onset. The
 // caller installs its command for remaining *ordinary* ticks of this row;
 // it never reprocesses other channels or advances their envelopes/LFOs.
@@ -2714,13 +2827,25 @@ bool CSoundFile::ProcessEffects()
 	for(CHANNELINDEX nChn = 0; nChn < GetNumChannels(); nChn++)
 	{
 		ModChannel &chn = m_PlayState.Chn[nChn];
+
+#ifdef OPENMPT_EDITOR_CORE
+		const ModCommand sourceRow = chn.rowCommand;
+		std::array<ModCommand, 8> effects{};
+		effects[0] = sourceRow;
+		for(size_t i = 0; i < chn.nativeExtraEffects.size(); ++i) effects[i + 1] = chn.nativeExtraEffects[i];
+		const uint8 noteColumn = NativeNoteColumn(chn);
+		if(sourceRow.IsPcNote()) effects[0].Clear();
+		const bool multipleEffects = std::any_of(effects.begin() + 1, effects.end(), [](const auto &e) { return e.command != CMD_NONE; });
+		const bool parameterControlRow = multipleEffects && NativeEffectAt(m_PlayState.m_nPattern, m_PlayState.m_nRow, nChn, 0).IsPcNote();
+		NativeEffectScope noteScope(*this, chn, noteColumn, effects[noteColumn], multipleEffects && !parameterControlRow);
+#endif
 		const uint32 tickCount = m_PlayState.m_nTickCount % (m_PlayState.m_nMusicSpeed + m_PlayState.m_nFrameDelay);
 		uint32 instr = chn.rowCommand.instr;
 		ModCommand::VOLCMD volcmd = chn.rowCommand.volcmd;
 		ModCommand::VOL vol = chn.rowCommand.vol;
 		ModCommand::COMMAND cmd = chn.rowCommand.command;
 		uint32 param = chn.rowCommand.param;
-		bool bPorta = chn.rowCommand.IsTonePortamento();
+		bool bPorta = RowTonePortamento(chn);
 
 		uint32 nStartTick = 0;
 		chn.isFirstTick = m_PlayState.m_flags[SONG_FIRSTTICK];
@@ -2871,6 +2996,16 @@ bool CSoundFile::ProcessEffects()
 			}
 		}
 
+
+#ifdef OPENMPT_EDITOR_CORE
+		if(m_PlayState.m_flags[SONG_FIRSTTICK]) for(uint8 i = 0; i < effects.size(); ++i) {
+			if(i == noteColumn) continue;
+			const auto &e = effects[i];
+			if((e.command == CMD_MODCMDEX || e.command == CMD_S3MCMDEX) && (e.param & 0xF0) == 0xE0
+				&& (!(GetType() & (MOD_TYPE_S3M | MOD_TYPE_IT | MOD_TYPE_MPT)) || !m_PlayState.m_nPatternDelay)
+				&& (!(GetType() & MOD_TYPE_S3M) || (e.param & 0x0F))) m_PlayState.m_nPatternDelay = 1 + (e.param & 0x0F);
+		}
+#endif
 		if(GetType() == MOD_TYPE_MTM && cmd == CMD_MODCMDEX && (param & 0xF0) == 0xD0)
 		{
 			// Apparently, retrigger and note delay have the same behaviour in MultiTracker:
@@ -3475,6 +3610,19 @@ bool CSoundFile::ProcessEffects()
 			}
 		}
 
+
+#ifdef OPENMPT_EDITOR_CORE
+		// Effects run left to right. The row's note and volume column ran exactly once.
+		for(uint8 effectColumn = 0; effectColumn < (multipleEffects ? effects.size() : 1); ++effectColumn) {
+			if(multipleEffects && effects[effectColumn].command == CMD_NONE) continue;
+			NativeEffectScope effectScope(*this, chn, effectColumn, effects[effectColumn], multipleEffects);
+			if(multipleEffects) { cmd = chn.rowCommand.command; param = chn.rowCommand.param; }
+			if(multipleEffects && effectColumn != noteColumn && (cmd == CMD_S3MCMDEX || cmd == CMD_MODCMDEX)) {
+				if(!param && (GetType() & (MOD_TYPE_S3M | MOD_TYPE_IT | MOD_TYPE_MPT))) param = chn.nOldCmdEx;
+				else chn.nOldCmdEx = static_cast<uint8>(param);
+			}
+			if(multipleEffects && m_PlayState.m_nTickCount == 0) ResetAutoSlides(chn);
+#endif
 		// Effects
 		if(cmd != CMD_NONE) switch (cmd)
 		{
@@ -3949,6 +4097,12 @@ bool CSoundFile::ProcessEffects()
 			UpdateS3MEffectMemory(chn, static_cast<ModCommand::PARAM>(param));
 		}
 
+#ifdef OPENMPT_EDITOR_CORE
+			if(multipleEffects && chn.nCommand == CMD_ARPEGGIO) chn.nativeArpeggio = true;
+			if(multipleEffects && chn.nCommand == CMD_TREMOR) chn.nativeTremor = true;
+		} // effect columns
+#endif
+
 		if(chn.rowCommand.instr)
 		{
 			// Not necessarily consistent with actually playing instrument for IT compatibility
@@ -4150,6 +4304,10 @@ uint32 CSoundFile::CalculateXParam(PATTERNINDEX pat, ROWINDEX row, CHANNELINDEX 
 	}
 	ROWINDEX maxCommands = 4;
 	const ModCommand *m = Patterns[pat].GetpModCommand(row, chn);
+#ifdef OPENMPT_EDITOR_CORE
+	ModCommand nativeCommand;
+	if(nativeEffectColumn) { nativeCommand = NativeEffectAt(pat, row, chn, nativeEffectColumn); m = &nativeCommand; }
+#endif
 	const auto startCmd = m->command;
 	uint32 val = m->param;
 
@@ -4176,6 +4334,10 @@ uint32 CSoundFile::CalculateXParam(PATTERNINDEX pat, ROWINDEX row, CHANNELINDEX 
 	uint32 extRows = 0;
 	while(numRows > 0)
 	{
+		#ifdef OPENMPT_EDITOR_CORE
+		if(nativeEffectColumn) { nativeCommand = NativeEffectAt(pat, ++row, chn, nativeEffectColumn); m = &nativeCommand; }
+		else
+#endif
 		m += Patterns[pat].GetNumChannels();
 		if(m->command != CMD_XPARAM)
 			break;

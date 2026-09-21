@@ -6,14 +6,14 @@ extension InterfaceTests {
      "commands":[["channel":0,"track":"n2","position":16384,"duration":98304,"column":1,"kind":"parameter-slide","binding":1,"value":0.75]]]
   }
   static func performanceModel()->PatternModel {
-    PatternModel(["channels":3,"rows":64,"extraEffectColumns":[2,0,8],
+    PatternModel(["channels":3,"rows":64,"effectColumns":[2,1,8],
       "performanceCommands":performanceData["commands"]!,"nativePlugins":[["instanceID":"gain","name":"Fixture gain"]],
       "patterns":[["index":0,"rows":64]]])
   }
   static func patternPerformanceFixture()->PatternPerformanceEditor {
     let editor=PatternPerformanceEditor(frame:.zero);editor.onContext={(performanceModel(),0,0,6)}
     editor.onRequest={method,_,reply in
-      reply(["result":["revision":"song:1","data":method=="pattern.performance.get" ? performanceData as Any : [["id":7,"name":"Gain","canSlide":true]] as Any]])
+      reply(["result":["revision":"song:1","data":method=="pattern.effects.get" ? performanceData as Any : [["id":7,"name":"Gain","canSlide":true]] as Any]])
     };editor.capture();editor.onRequest=nil;return editor
   }
   static func patternPerformanceChecks() throws {
@@ -35,7 +35,7 @@ extension InterfaceTests {
       "Preview sends exact native timing, binding and captured revision without duplicate submission")
     replies.removeFirst()(["error":["message":"Song changed"]])
     try require(editor.revision=="song:1" && editor.value.stringValue=="90","Stale rejection retains the user's draft and old revision")
-    editor.kind.selectItem(at:4);editor.apply(dryRun:false)
+    editor.kind.selectItem(at:5);editor.apply(dryRun:false)
     try require((calls.last!.1["commands"] as? [[String:Any]])?.isEmpty==true && calls.last!.1["bindings"]==nil,"Clear removes only selected cell without modifying bindings")
     replies.removeFirst()(["result":["revision":"song:2","data":[:]]])
     try require(editor.commands.isEmpty && editor.revision=="song:2","Saved clear updates captured command data")
@@ -47,9 +47,9 @@ extension InterfaceTests {
     key(grid,124,"");try require(grid.column==5 && grid.cursorChannel==0,"Right arrow enters first extra effect subcolumn")
     key(grid,124,"");try require(grid.column==6 && grid.currentCommandHelp.contains("Slide binding 1"),"Extra command has contextual timing help")
     key(grid,124,"");try require(grid.column==0 && grid.cursorChannel==1,"Arrow leaves the final extra subcolumn")
-    grid.cursorChannel=2;grid.column=12;grid.revealCursor()
-    try require(grid.channelX(2)+grid.fieldOffset(12)+grid.fieldWidth(12)<=Float(grid.bounds.width),"Last effect remains reachable inside a very wide track")
-    var opened=0,cleared=[Int]();grid.onNativeEffect={opened += 1};grid.onClearNativeEffect={cleared=[$0,$1,$2]}
+    grid.cursorChannel=2;grid.column=18;grid.revealCursor()
+    try require(grid.channelX(2)+grid.fieldOffset(18)+grid.fieldWidth(18)<=Float(grid.bounds.width),"Last effect remains reachable inside a very wide track")
+    var opened=0,cleared=[Int]();grid.onEffectPicker={opened += 1};grid.onClearNativeEffect={cleared=[$0,$1,$2]}
     key(grid,36,"\r");key(grid,51,"")
     try require(opened==1 && cleared==[0,2,7],"Return and Delete operate on the precise extra effect cell")
     grid.cursorChannel=0;grid.column=6;grid.firstChannel=0;grid.revealCursor()
@@ -62,15 +62,31 @@ extension InterfaceTests {
     }
     let fresh=PatternPerformanceEditor(frame:.zero)
     fresh.onContext={(performanceModel(),1,1,3)}
-    fresh.onRequest={method,_,reply in reply(["result":["revision":"song:1","data":method=="pattern.performance.get" ? performanceData as Any : [["id":7,"name":"Gain","canSlide":true]] as Any]])}
+    fresh.onRequest={method,_,reply in reply(["result":["revision":"song:1","data":method=="pattern.effects.get" ? performanceData as Any : [["id":7,"name":"Gain","canSlide":true]] as Any]])}
     fresh.capture()
     try require(fresh.columns.selectedTag()==1,"First native effect automatically provisions a column on an unconfigured channel")
+    fresh.duration.stringValue="0";fresh.kind.selectItem(at:1);fresh.changedKind()
+    try require(Double(fresh.duration.stringValue)==1,"Changing an immediate set into a slide supplies a usable duration")
     let precise=0.12345678912345678
     let raw=NativePatternCommand(["kind":"parameter-slide","binding":1,"value":precise])
     try require(raw.text.hasPrefix("PL01") && raw.value==precise,"Two-character effect display never quantizes the stored target")
+    let cut=PatternPerformanceEditor(frame:.zero);cut.requestedKind="note-cut"
+    cut.onContext={(performanceModel(),2,0,5)}
+    var cutRequests=[(String,[String:Any])]()
+    cut.onRequest={method,params,reply in cutRequests.append((method,params));reply(["result":["revision":"cut:1","data":performanceData]])}
+    cut.capture();try require(cut.kind.indexOfSelectedItem==4 && !cut.plugin.isEnabled && !cut.value.isEnabled && cutRequests.count==1,"NC needs no plugin parameter read or binding")
+    let cutHost=NSWindow(contentRect:NSRect(x:0,y:0,width:700,height:780),styleMask:[.titled],backing:.buffered,defer:false);cutHost.contentView=cut
+    cutHost.makeFirstResponder(cut.offset);(cut.offset.currentEditor() as? NSTextView)?.string="0.5"
+    cut.offsetUnits.selectItem(at:1);cut.changedOffsetUnit()
+    try require(Double(cut.offset.stringValue)==0.125,"Half a row at four rows per beat becomes one eighth beat")
+    cut.offset.stringValue="0.03125";cut.apply(dryRun:true)
+    let cutCommand=(cutRequests.last!.1["commands"] as! [[String:Any]]).last!
+    try require(cutCommand["kind"] as? String=="note-cut" && cutCommand["position"] as? Int==2*65536+8192 && cutCommand["duration"] as? Int==0 && cutRequests.last!.1["bindings"]==nil,"NC preserves precise beat offset and needs no binding")
+    cut.offset.stringValue="0.25";let beforeCut=cutRequests.count;cut.apply(dryRun:false)
+    try require(cutRequests.count==beforeCut,"NC cannot escape the row in beat mode")
     let navigation=EditorNavigation()
     let moved=try navigation.prepared(["expectedRevision":"r","expectedContext":navigation.token,"channel":2,"column":12],
-      revision:"r",contextToken:navigation.token,patterns:[["index":0,"rows":64]],channels:3,extraColumns:[2,0,8])
+      revision:"r",contextToken:navigation.token,patterns:[["index":0,"rows":64]],channels:3,effectColumns:[2,1,8])
     try require(moved.column==12,"Agent context navigation reaches every effect subcolumn")
   }
 }

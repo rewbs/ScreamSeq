@@ -51,6 +51,19 @@ extension InterfaceTests {
     source.onRequest={method,params,reply in assignment=params;reply(["result":["revision":"source:2","data":[:]]])}
     source.apply()
     try require(assignment["plugin"] as? String=="synth" && assignment["instrument"] as? Int==1 && assignment["channel"] as? Int==7 && assignment["expectedRevision"] as? String=="source:1","Instrument inspector dispatches the atomic stable-target assignment API")
+    let create=InstrumentPluginEditor(instrument:0,model:PatternModel(["revisionToken":"create:1","nativePlugins":[["instanceID":"synth","name":"Fixture synth","isInstrument":true]]]))
+    var creation=[(String,[String:Any])](),creationReplies=[([String:Any])->Void]()
+    create.onRequest={method,params,reply in creation.append((method,params));creationReplies.append(reply)}
+    let createHost=NSWindow(contentRect:create.frame,styleMask:[.titled],backing:.buffered,defer:false);createHost.contentView=create
+    createHost.makeFirstResponder(create.name);(create.name.currentEditor() as? NSTextView)?.string="Edited trigger name"
+    create.apply();create.apply()
+    try require(creation.count==1 && creation[0].0=="instrument.create" && creation[0].1["empty"] as? Bool==true && creation[0].1["name"] as? String=="Edited trigger name","New plugin trigger creates one empty instrument, without sample mapping")
+    creationReplies.removeFirst()(["result":["revision":"create:2","data":["instrument":5]]])
+    try require(creation.count==2 && creation[1].0=="instrument.plugin.set" && creation[1].1["instrument"] as? Int==5 && creation[1].1["expectedRevision"] as? String=="create:2","Creation continues with the exact new instrument and fresh revision")
+    creationReplies.removeFirst()(["error":["message":"Plugin unavailable"]]);create.apply()
+    try require(creation.count==3 && creation[2].0=="instrument.plugin.set" && create.instrument==5,"Failed assignment retries the same instrument without creating duplicates")
+    creationReplies.removeFirst()(["result":["revision":"create:3","data":[:]]])
+    try require(create.applyButton.title=="Apply assignment","After creation the action describes assignment edits")
     let instrument=InstrumentEditor(frame:.zero);var enabled:[String:Any]=[:]
     instrument.onApply={enabled=$0};instrument.enabled.state = .on;instrument.toggleEnvelopeEnabled()
     try require(enabled["enabled"] as? Bool==true && enabled["envelope"] as? Int==0 && enabled.count==2,"Enable envelope commits only this switch immediately without saving unrelated drafts")

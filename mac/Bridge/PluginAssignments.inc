@@ -1,9 +1,5 @@
 // Included in the session's anonymous namespace. Routing never comes from a preset.
-int nativeProjectVersion(std::span<const PluginState> plugins) {
-  return std::any_of(plugins.begin(), plugins.end(), [](const auto &plugin) {
-    return plugin.midiChannel != 1 || !plugin.aliases.empty();
-  }) ? 5 : 4;
-}
+constexpr int nativeProjectVersion = 6;
 NSArray *encodePluginAssignments(const PluginState &plugin) {
   NSMutableArray *result = [NSMutableArray array];
   for (const auto &a : pluginAssignments(plugin)) [result addObject:@{@"instrument": @(a.instrument), @"channel": @(a.channel)}];

@@ -127,6 +127,28 @@ struct ModChannel
 	CHANNELINDEX nMasterChn;
 	SAMPLEINDEX swapSampleIndex;  // Sample to swap to when current sample (loop) has finished playing
 	ModCommand rowCommand;
+#ifdef OPENMPT_EDITOR_CORE
+	// Prepared row effects. Column zero remains in rowCommand for module playback.
+	std::array<ModCommand, 7> nativeExtraEffects{};
+	bool nativeArpeggio = false, nativeTremor = false;
+#endif
+	bool HasRowEffect(EffectCommand command) const noexcept
+	{
+		if(rowCommand.command == command) return true;
+#ifdef OPENMPT_EDITOR_CORE
+		for(const auto &effect : nativeExtraEffects) if(effect.command == command) return true;
+#endif
+		return false;
+	}
+	bool HasActiveEffect(EffectCommand command) const noexcept
+	{
+#ifdef OPENMPT_EDITOR_CORE
+		if(command == CMD_ARPEGGIO && nativeArpeggio) return true;
+		if(command == CMD_TREMOR && nativeTremor) return true;
+#endif
+		return nCommand == command;
+	}
+
 	// 8-bit members
 	uint8 nGlobalVol;  // Channel volume (CV in ITTECH.TXT) 0...64
 	uint8 nInsVol;     // Sample / Instrument volume (SV * IV in ITTECH.TXT) 0...64
