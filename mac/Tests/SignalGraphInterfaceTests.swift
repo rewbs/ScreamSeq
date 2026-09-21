@@ -1,6 +1,9 @@
 import AppKit
 extension InterfaceTests {
   static func signalGraphChecks() throws {
+    try require(AppLaunchArguments.documentPath(["app","--ui-test-vst3","fixture.vst3","--ui-test-device","BlackHole 2ch","song.screamseq"],exists:{_ in true})=="song.screamseq","Test option paths must not be opened as songs")
+    try require(AppLaunchArguments.isOptionValue(URL(fileURLWithPath:"fixture.vst3").path,arguments:["app","--ui-test-vst3","fixture.vst3"]),"AppKit open-file option events need the same filtering")
+    try require(!AppLaunchArguments.isOptionValue("song.screamseq",arguments:["app","--ui-test-vst3","fixture.vst3","song.screamseq"]),"Actual document arguments must remain openable")
     let editor=SignalGraphEditor(frame:.zero)
     let data:[String:Any]=["library":[["id":"n100","number":1,"name":"Motion","nodes":[
       ["id":"n101","kind":"input","name":"Input","x":30.0,"y":60.0],
@@ -45,6 +48,41 @@ extension InterfaceTests {
     editor.graphID=nil;editor.filterID="n1";editor.update(nested)
     try require(editor.canvas.nodes.contains{$0.id=="n5"} && !editor.canvas.nodes.contains{$0.id=="n6"},"Channel filters recursively retain grouped sidechain inputs without unrelated master siblings")
     editor.onRequest=nil
+    editor.graphID="n100";editor.selectedID=nil;editor.update(data)
+    let parameterNode=editor.canvas.nodes.first{$0.id=="n102"}!
+    try require(parameterNode.inputs.contains{$0.modulation && $0.number==7},"Stable parameter is exposed as an individual modulation socket")
+    editor.selectConnection(2)
+    try require(editor.canvas.selectedEdge==2 && editor.parameter.stringValue=="7" && editor.connectionKind.titleOfSelectedItem=="Modulation","Clicking a modulation wire loads its destination settings")
+    var updated=[String:Any]()
+    editor.onRequest={method,p,reply in updated=p;reply(["error":["message":"test captured"]])}
+    editor.minimum.stringValue="0.2";editor.maximum.stringValue="0.8";editor.updateConnection()
+    let updatedDefinition=updated["definition"] as? [String:Any] ?? [:]
+    try require((updatedDefinition["audio"] as? [[String:Any]])?.count==2 && (updatedDefinition["modulation"] as? [[String:Any]])?.first?["minimum"] as? Double==0.2,"Wire editing preserves audio topology")
+    editor.onRequest=nil
+    var instrumentSong=data;instrumentSong["instruments"]=[["index":1,"id":"n80","name":"Piano","plugin":false]];instrumentSong["instrumentAssignments"]=[["target":"n80","graph":"n100","amount":0.4,"wet":0.7]]
+    editor.graphID=nil;editor.selectedID="instrument:n80";editor.update(instrumentSong)
+    try require(editor.canvas.nodes.contains{$0.id=="instrument-graph:n80:n1"} && editor.assignAmount.doubleValue==0.4,"Instrument graph copies remain connected to their individual channel inputs")
+    editor.onRequest={_,p,reply in updated=p;reply(["error":["message":"test captured"]])};editor.assignSampleInstrument(editor.selectedInstrument!)
+    try require(updated["instrument"] as? Int==1 && updated["graph"] as? String=="n100","Instrument graph assignment uses the public API with its target")
+    editor.onRequest=nil
+    let wireCanvas=SignalCanvas(frame:NSRect(x:0,y:0,width:800,height:400))
+    let a=SignalCanvasNode(id:"a",title:"A",detail:"",kind:"audio",x:40,y:40,outputs:[SignalCanvasPort(),SignalCanvasPort(number:2,label:"Aux")])
+    let b=SignalCanvasNode(id:"b",title:"B",detail:"",kind:"audio",x:440,y:40,inputs:[SignalCanvasPort(),SignalCanvasPort(number:3,label:"Side")])
+    wireCanvas.update([a,b],edges:[SignalCanvasEdge(source:"a",target:"b",label:"",output:2,input:3)])
+    try require(wireCanvas.edge(at:NSPoint(x:330,y:119))==0 && wireCanvas.edge(at:NSPoint(x:330,y:20))==nil,"Wire hit testing follows the selected ports")
+    let envelope=GraphEnvelopeEditor(frame:NSRect(x:0,y:0,width:850,height:260))
+    var envelopeReply:(([String:Any])->Void)?,envelopeParams=[String:Any]()
+    envelope.onRequest={_,p,r in envelopeParams=p;envelopeReply=r}
+    envelope.context(graph:"n100",node:["id":"n105","kind":"automation","name":"Motion"],patterns:[["index":0,"rows":64]],revision:"v1")
+    envelopeReply?(["result":["revision":"v1","data":["rows":64,"rowsPerBeat":4,"points":[]]]])
+    envelope.ramp();envelope.context(graph:"n200",node:["id":"n205","kind":"automation"],patterns:[["index":1]],revision:"v2")
+    try require(envelope.node=="n105" && envelope.hasDraft,"Graph automation draft retains its original target when graph selection changes")
+    envelope.curve.selectItem(at:8);envelope.changeCurve();envelope.formula.stringValue="mix(start,end,t^2)";envelope.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:envelope.formula))
+    envelope.apply()
+    try require(envelopeParams["node"] as? String=="n105" && envelopeParams["expectedRevision"] as? String=="v1" && (envelopeParams["points"] as? [[String:Any]])?.first?["formula"] as? String=="mix(start,end,t^2)","Graph formula edits carry captured target and revision")
+    envelope.ramp();envelopeReply?(["result":["revision":"v3","data":[:]]])
+    try require(envelope.hasDraft && envelope.revision=="v3","Edits made during an in-flight Apply remain pending")
+    envelope.onRequest=nil
     let model=PatternModel(["rows":64,"channels":4,"patterns":[["index":0,"id":"n9"]],"graphLanes":[["target":"n1","name":"Drums","count":3]],"graphCommands":[["target":"n1","graph":"n100","kind":"row","position":32768,"column":1,"number":1,"amount":0.5]]])
     let grid=PatternView();grid.model=model;let host=PatternGraphHost(grid);host.frame=NSRect(x:0,y:0,width:1000,height:500);host.refresh();host.layoutSubtreeIfNeeded()
     try require(host.lanes.lanes.count==3 && host.lanes.frame.width==372 && grid.frame.width==628,"Graph lanes reserve only their required pattern width")

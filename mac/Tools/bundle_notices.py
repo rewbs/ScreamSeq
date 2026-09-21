@@ -13,3 +13,4 @@ text.append('\nOpal OPL3 emulator\nReleased into the public domain by Shayde / R
 (output/'AUTOMATION.md').write_text((root/'mac/AUTOMATION.md').read_text())
 (output/'PLAYBACK_AND_CURVES.md').write_text((root/'mac/PLAYBACK_AND_CURVES.md').read_text())
 (output/'PRECISE_NOTES.md').write_text((root/'mac/PRECISE_NOTES.md').read_text())
+(output/'GRAPH_WORKFLOW.md').write_text((root/'mac/GRAPH_WORKFLOW.md').read_text())

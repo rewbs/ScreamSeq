@@ -27,11 +27,11 @@ while another panel has focus; disable it to type text normally.
    units. Auxiliary port numbers come from its bus catalog. Enable ports before
    connecting them. AU and VST3 custom interfaces edit a separate library draft;
    Apply plugin settings saves that draft in one document Undo.
-4. Add sources such as Amount, LFO, follower, note envelope, random or MIDI CC.
+4. Add sources such as Automation, Amount, LFO, follower, note envelope, random or MIDI CC.
    Choose Modulation, its source, destination and stable parameter ID. The
    Modulate button beside a loaded parameter supplies that ID. Ranges use
    normalized values; descending ranges invert a source. Contributions add to a
-   shared base and clamp to 0…1.
+   shared base and clamp to 0…1. Click Modulate to expose a named parameter socket; drag a gold source socket to it. Audio uses separate green sockets for each enabled bus.
 5. Return to Song graph. Select a channel or group and assign an ordinary graph,
    with separate Amount and Wet values. Its independent copy appears before the
    channel's regular inserts. Open the copy to edit the shared definition.
@@ -50,6 +50,55 @@ Audio routes and modulation dependencies must be acyclic. Plugin feedback effect
 are supported; a wire forming a zero-delay graph cycle is rejected. Auxiliary
 outputs from effects/subgraphs route to groups, returns or master buses. Main
 outputs follow their insert chain.
+
+Click any wire to inspect it. Update wire changes its endpoints, ports, gain or
+modulation range without deleting neighboring connections. Audio gain inside a
+subgraph is a multiplier; song sends and sidechains use dB. Option-Tab selects
+wires, Tab selects nodes, arrows move nodes and Delete removes the selection.
+Plus/minus zoom; Arrange lays out dependencies; Fit shows the complete graph.
+Escape cancels a drag without saving it. Connection menus support the same edits
+from the keyboard. Float a crowded graph panel using its Panel menu.
+
+## Drawn automation inside a graph
+
+Add an **automation** source, select it, and choose a pattern in the curve editor.
+Draw or drag points, change the selected point's outgoing curve, and press Apply.
+The curve repeats with that pattern in every independent copy of this definition.
+Connect its gold output to any exposed plugin parameter. Multiple sources can
+contribute to the same parameter with their own ranges and one shared base.
+
+All nine curve types are available, including Scripted. Formulas use the same
+bounded expression language as pattern automation: `start`, `end`, `t`, `beat`,
+`beats`, `duration`, mathematical functions and deterministic noise. The final
+scripted segment extends to pattern end. Missing/disabled curves output zero.
+Points use 256 units per row. The host sends smooth sample-offset ramps between
+bounded evaluations; step boundaries remain discrete. A plugin's own smoothing
+can still affect the audible result.
+
+Pinch/Option-scroll or +/− zoom the curve; ordinary scrolling pans. Tab selects
+points; arrows adjust timing/value and Shift gives fine adjustment. Numeric Row
+and % fields use Set point. Apply is one Undo transaction and holds the original
+source/pattern/revision while the rest of the workspace changes. Clear all points
+and Apply to remove this pattern's curve. Edits made during an in-flight save
+remain pending. Pattern duplication copies curves; shortening/removing patterns
+prunes out-of-range data.
+
+## Sample instruments before channels
+
+Choose a sample instrument in the graph toolbar and click Instrument graph.
+Assign a library definition, Amount and Wet in the inspector. The overview shows
+its independent copies feeding each raw note channel. Notes keep their original
+channel processing after the instrument stage; older NNA voices retain their
+instrument stage when a channel begins a different instrument.
+
+The order is instrument graph → row graphs → persistent graphs → ordinary channel
+graph → channel inserts. A shared instrument on two channels has two processor
+histories. Plugin instruments continue to use their output bus graph because
+one multitimbral plugin can combine its voices internally. Individual sample-zone
+graphs and instrument graph-switching pattern commands remain separate features.
+The graph budget is shared across channel and sample-instrument copies: 256
+processors and 256 MB of host-owned graph audio storage, plus the existing core
+adapter/output-route limits. Oversized configurations reject before playback.
 
 ## Pattern graph lanes
 
@@ -86,7 +135,9 @@ All graph changes use the same revision-checked local API as the UI. Writes retu
 the new revision; stale writes fail without committing part of the operation.
 `dryRun` validates document mutations without saving them. Graph history belongs
 to the document Undo domain. Recipes, routes, lanes, commands and overview layout
-are saved in native project metadata version 10.
+are saved in native project metadata version 10 or newer. Automation sources and
+instrument graph assignments require version 13; older applications reject those
+projects rather than dropping their data.
 
 | Methods | Purpose |
 | --- | --- |
@@ -94,6 +145,8 @@ are saved in native project metadata version 10.
 | `graph.create`, `.clone`, `.update`, `.remove` | Manage definitions with stable identities and unique numbers. |
 | `graph.node.add`, `.remove` | Allocate/remove nodes. `insertAfter` atomically inserts an effect into a single main connection. |
 | `graph.assign` | Ordinary bus assignment; null clears it. |
+| `graph.instrument.assign` | Sample instrument assignment by instrument slot; the stored target is stable identity. Null clears it. |
+| `graph.automation.get`, `.set` | Read/replace one source’s pattern curve; empty points remove it. |
 | `graph.commands.set` | Upsert lane counts; replace the specified pattern's command collection when supplied. |
 | `graph.routes.set` | Replace supplied external input/output route collections. |
 | `graph.layout.set` | Merge saved node coordinates, or reset them. |
@@ -145,11 +198,14 @@ stacks, revision guards, Undo, persistence and callback allocation/lock auditing
 Graph storage and processor counts are bounded before playback. Third-party
 plugins' private memory cannot be bounded by this host budget.
 
-Structural/recipe changes currently stop playback to prepare safe independent
+Structural/recipe/curve changes currently stop playback to prepare safe independent
 copies. Names, numbers and canvas positions can change while playing. Live
-structural replacement, switching several latency-bearing chains in different
-orders, and commercial plugin/UI qualification remain under review. Repeated-note
-envelope retriggers, MIDI sources, fixed-latency bypass and cut/tail transitions
-have automated coverage. Graph tests also pass address/undefined-behaviour checks.
-The desktop locked during development; offscreen checks do not establish sustained
-60fps presentation or replace final visual/audio testing on the unlocked Mac.
+structural replacement and automatic response to changing plugin latency/bus
+layouts remain engine work. Delayed stop and reactivation/reordering transitions
+are tested against a continuous reference: they switch immediately, keep plugin
+histories advancing, and retain the total reserved compensation. They do not
+promise a click-free crossfade for deliberately abrupt pattern commands.
+
+See the current ScreamSeq delivery report for measured UI/audio qualification and
+commercial-plugin limits. Historical locked-desktop reports are not current
+performance evidence.

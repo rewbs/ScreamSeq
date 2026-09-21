@@ -15,7 +15,8 @@ with tempfile.TemporaryDirectory(prefix='resonance-startup-') as tmp:
     source = directory / 'startup.mptm'
     subprocess.run([str(BUILD / 'qualification-fixture'), str(source)], check=True, capture_output=True)
     with open(directory / 'app.log', 'w+') as log:
-        process = subprocess.Popen([str(BUILD / 'ScreamSeq.app/Contents/MacOS/ScreamSeq'), str(source), '--automation-test'],
+        process = subprocess.Popen([str(BUILD / 'ScreamSeq.app/Contents/MacOS/ScreamSeq'), '--ui-test-vst3',
+            str(BUILD / 'test-plugins/ResonanceFixture.vst3'), str(source), '--automation-test'],
             stdout=log, stderr=log, env={**os.environ, 'RESONANCE_AUTOMATION_TEST_DIRECTORY': tmp})
         try:
             deadline = time.monotonic() + 20

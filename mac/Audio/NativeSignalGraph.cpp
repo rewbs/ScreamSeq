@@ -42,7 +42,7 @@ struct NativeSignalGraph::Instance {
     auto plan=compileSignal(d,info);dryDelay.resize(size_t(plan.totalLatency)*2);tailFrames=uint64_t(std::ceil(tail*sampleRate))+plan.totalLatency;runtime=std::make_unique<SignalRuntime>(d,std::move(plan),sampleRate);
   }
   Processor *processor(uint64_t id)noexcept{for(auto &p:processors)if(p.id==id)return &p;return nullptr;}
-  bool render(float *buffer,uint32_t frames,uint64_t position,PluginTransport transport,std::span<const MixerAudioInput> inputs)noexcept {
+  bool render(float *buffer,uint32_t frames,uint64_t position,PluginTransport transport,SignalClock clock,std::span<const MixerAudioInput> inputs)noexcept {
     runtime->amount(amount);for(auto &p:processors)p.plugin->transport(transport);
     for(uint32_t i=0;i<frames*2;++i){if(dryDelay.empty())dry[i]=buffer[i];else {dry[i]=dryDelay[dryPosition];dryDelay[dryPosition]=buffer[i];if(++dryPosition==dryDelay.size())dryPosition=0;}}
     // Bypass compensation follows the real channel input even while the
@@ -57,7 +57,7 @@ struct NativeSignalGraph::Instance {
       auto range=std::find_if(p->parameters.begin(),p->parameters.end(),[&](const auto &v){return v.id==parameter;});if(range==p->parameters.end())return false;
       return p->plugin->scheduleRamp(parameter,range->min+(range->max-range->min)*a,range->min+(range->max-range->min)*b,position,duration);
     };
-    if(!runtime->render(buffer,frames,position,{transport.beat,transport.tempo,transport.playing},callbacks,inputs))return false;
+    if(!runtime->render(buffer,frames,position,clock,callbacks,inputs))return false;
     for(uint32_t i=0;i<frames*2;++i)buffer[i]=active ? float(buffer[i]*wet+dry[i]*(1-wet)) : dry[i]+(i<uint64_t(tailRemaining)*2 ? float(buffer[i]*wet) : 0.f);return true;
   }
 };
@@ -69,12 +69,15 @@ struct NativeSignalGraph::Bus {
   std::array<std::vector<size_t>,2> renderOrder;
   struct NoteWatch {uint16_t index=0;uint64_t generation=0;};
   std::vector<NoteWatch> channels;
+  const OpenMPT::ModInstrument *instrument=nullptr;
+  uint16_t sampleChannel=0;
   std::map<uint16_t,std::vector<SignalCommand>> patterns;
   const std::vector<SignalCommand> *events=nullptr;
   size_t next=0;
   double begin=0,units=0;
   bool expire=false,commands=true;
   PluginTransport transport;
+  SignalClock clock;
 
   uint32_t reserved=0;
   double tailSeconds=0;
@@ -119,13 +122,14 @@ struct NativeSignalGraph::Bus {
       if(commands&&events)while(next<events->size()&&(*events)[next].position<=now+1e-8)command((*events)[next++]);
       uint32_t count=frames-offset;
       if(commands&&events&&next<events->size()&&units>0){const double sample=std::ceil(((*events)[next].position-begin)/units-1e-9);if(sample>offset&&sample<frames)count=uint32_t(sample)-offset;}
-      auto t=transport;t.beat+=offset*t.tempo/(60*rate);
+      auto t=transport;if(t.playing)t.beat+=offset*t.tempo/(60*rate);
+      auto c=clock;c.beat=t.beat;c.position+=offset*c.unitsPerFrame;
       std::array<MixerAudioInput,64> shifted{};size_t used=0;for(auto input:inputs){if(used==shifted.size())return false;shifted[used++]={input.bus,input.samples?input.samples+offset*2:nullptr};}
       const std::span<const MixerAudioInput> external(shifted.data(),used);
       uint32_t prefix=0,audibleOrder=0;
       auto apply=[&](size_t i){auto &p=*instances[i];prefix+=p.runtime->latency();
         const auto audible=p.active?count:uint32_t(std::min<uint64_t>(count,p.tailRemaining));
-        if(!p.render(buffer+offset*2,count,position+offset,t,p.active?external:std::span<const MixerAudioInput>{}))return false;
+        if(!p.render(buffer+offset*2,count,position+offset,t,c,p.active?external:std::span<const MixerAudioInput>{}))return false;
         auxiliary(p,prefix,offset,count,audible);
         if(!p.active)p.tailRemaining-=audible;
         p.published.store((p.active ? ++audibleOrder : 0) | (p.tailRemaining ? 0x10000u : 0),std::memory_order_relaxed);return true;};
@@ -140,9 +144,10 @@ struct NativeSignalGraph::Bus {
     return true;
   }
 };
-NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool offline):rate_(rate),routedMixer_(signalRoutingGraph(native.mixer,native.signal)){
+NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool offline,std::span<const SignalSampleSource> sampleSources,size_t storageLimit,size_t processorLimit):rate_(rate),routedMixer_(signalRoutingGraph(native.mixer,native.signal)){
+  for(const auto &[index,entity]:native.patterns)patternIDs_.emplace(index,entity.id);
   size_t processors=0,delayBytes=0;
-  auto budget=[&](size_t bytes){if(bytes>256*1024*1024-delayBytes)throw std::invalid_argument("Song graph audio storage exceeds 256 MB");delayBytes+=bytes;};
+  auto budget=[&](size_t bytes){if(bytes>storageLimit-delayBytes)throw std::invalid_argument("Song graph audio storage exceeds 256 MB");delayBytes+=bytes;};
   for(const auto &bus:native.mixer.buses){std::set<std::pair<uint64_t,uint8_t>> required;
     for(const auto &c:native.signal.commands)if(c.target==bus.id&&(c.kind==SignalCommandKind::Row||c.kind==SignalCommandKind::Start))required.emplace(c.graph,c.kind==SignalCommandKind::Row?0:1);
     for(const auto &a:native.signal.assignments)if(a.target==bus.id)required.emplace(a.graph,2);
@@ -150,8 +155,12 @@ NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool o
     auto prepared=std::make_unique<Bus>();prepared->id=bus.id;prepared->rate=rate;
     for(const auto &[channel,track]:native.tracks){auto id=track.id;for(size_t depth=0;id&&depth<native.mixer.buses.size();++depth){if(id==bus.id){prepared->channels.push_back({channel,0});break;}auto source=std::find_if(native.mixer.buses.begin(),native.mixer.buses.end(),[&](const auto &b){return b.id==id;});id=source==native.mixer.buses.end()?0:source->output;}}
 
+    const bool needsNotes=std::any_of(required.begin(),required.end(),[&](const auto &use){auto d=std::find_if(native.signal.library.begin(),native.signal.library.end(),[&](const auto &d){return d.id==use.first;});return d!=native.signal.library.end()&&std::any_of(d->nodes.begin(),d->nodes.end(),[](const auto &n){return n.kind==SignalNodeKind::NoteEnvelope;});});
+    if(!needsNotes)prepared->channels.clear();
+    for(const auto &source:sampleSources)if(needsNotes&&source.target==bus.id){prepared->instrument=source.instrument;prepared->sampleChannel=source.channel;prepared->channels.clear();prepared->channels.push_back({source.channel,0});for(uint16_t i=source.channels;i<OpenMPT::MAX_CHANNELS;++i)prepared->channels.push_back({i,0});}
+    budget(sizeof(Bus)+prepared->channels.size()*sizeof(Bus::NoteWatch));
     for(auto [id,role]:required){auto definition=std::find_if(native.signal.library.begin(),native.signal.library.end(),[&](const auto &d){return d.id==id;});if(definition==native.signal.library.end())throw std::invalid_argument("Unresolved subgraph assignment");
-      processors+=std::count_if(definition->nodes.begin(),definition->nodes.end(),[](const auto &n){return n.kind==SignalNodeKind::Plugin;});if(processors>256)throw std::invalid_argument("Active song graph exceeds 256 prepared plugin copies");
+      processors+=std::count_if(definition->nodes.begin(),definition->nodes.end(),[](const auto &n){return n.kind==SignalNodeKind::Plugin;});if(processors>processorLimit)throw std::invalid_argument("Active song graph exceeds 256 prepared plugin copies");
       for(const auto &edge:definition->audio){
         auto node=std::find_if(definition->nodes.begin(),definition->nodes.end(),[&](const auto &n){return n.id==edge.source;});
         if(node!=definition->nodes.end()&&node->kind==SignalNodeKind::Input&&edge.output)prepared->inputMask|=uint64_t(1)<<edge.output;
@@ -173,6 +182,7 @@ NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool o
     for(auto &[pattern,events]:prepared->patterns)std::sort(events.begin(),events.end(),[](const auto &a,const auto &b){return std::tie(a.position,a.column)<std::tie(b.position,b.column);});
     buses_.push_back(std::move(prepared));
   }
+  storageBytes_=delayBytes;processors_=processors;
 }
 NativeSignalGraph::~NativeSignalGraph()=default;
 std::vector<SignalActivity> NativeSignalGraph::activity() const {
@@ -195,7 +205,7 @@ const float *NativeSignalGraph::output(size_t index,uint32_t port) const noexcep
   auto found=std::find(b.outputPorts.begin(),b.outputPorts.end(),port);
   return found==b.outputPorts.end()?nullptr:b.outputBuffers[size_t(found-b.outputPorts.begin())].data();
 }
-void NativeSignalGraph::begin(const OpenMPT::PlayState &state,uint32_t,uint64_t,PluginTransport transport)noexcept {
+void NativeSignalGraph::begin(const OpenMPT::PlayState &state,uint32_t,uint64_t,PluginTransport transport,uint32_t patternRows)noexcept {
   const bool valid=!state.m_flags[OpenMPT::SONG_PAUSED|OpenMPT::SONG_FADINGSONG]&&state.m_nSamplesPerTick&&state.TicksOnRow();
   const double units=valid?65536.0/(double(state.TicksOnRow())*state.m_nSamplesPerTick):0;
   const double at=double(state.m_nRow)*65536+(valid?double(state.m_nTickCount)*65536/state.TicksOnRow()+state.SamplesIntoTick()*units:0);
@@ -206,17 +216,20 @@ void NativeSignalGraph::begin(const OpenMPT::PlayState &state,uint32_t,uint64_t,
   for(auto &b:buses_){bool gate=false,retrigger=false;
     for(auto &watch:b->channels)if(watch.index<state.Chn.size()){
       const auto &channel=state.Chn[watch.index];
+      if(b->instrument&&(channel.pModInstrument!=b->instrument||(channel.nMasterChn?channel.nMasterChn-1:watch.index)!=b->sampleChannel))continue;
       const bool held=channel.nNote>=1&&channel.nNote<=120&&!channel.dwFlags[OpenMPT::CHN_KEYOFF|OpenMPT::CHN_NOTEFADE|OpenMPT::CHN_MUTE|OpenMPT::CHN_SYNCMUTE];
       const bool sounding=held&&(channel.IsSamplePlaying()||channel.HasMIDIOutput());
       gate|=sounding;retrigger|=sounding&&channel.nativeNoteGeneration!=watch.generation;watch.generation=channel.nativeNoteGeneration;
     }
     for(auto &i:b->instances)i->runtime->note(gate,retrigger);
+    const auto identity=patternIDs_.find(uint16_t(state.m_nPattern));
+    b->clock={transport.beat,transport.tempo,transport.playing,identity==patternIDs_.end()?0:identity->second,at/256,transport.playing?units/256:0,double(patternRows)*256,double(std::max(1u,unsigned(state.m_nCurrentRowsPerBeat)))};
     b->transport=transport;b->begin=at;b->units=units;b->commands=valid;b->expire|=rowChanged;
     if(entering){auto found=b->patterns.find(uint16_t(pattern_));b->events=found==b->patterns.end()?nullptr:&found->second;b->next=0;
       if(b->events)while(b->next<b->events->size()&&(*b->events)[b->next].position<at-1e-8)++b->next;}
     // Note gates are distinct from amplitude followers and aggregate group members.
   }
 }
-void NativeSignalGraph::tail()noexcept {for(auto &b:buses_){b->commands=false;b->transport.playing=false;for(auto &i:b->instances)i->runtime->note(false);}}
+void NativeSignalGraph::tail()noexcept {for(auto &b:buses_){b->commands=false;b->transport.playing=false;b->clock.playing=false;b->clock.unitsPerFrame=0;for(auto &i:b->instances)i->runtime->note(false);}}
 bool NativeSignalGraph::process(size_t index,float *audio,uint32_t frames,uint64_t position,std::span<const MixerAudioInput> inputs)noexcept {return index<buses_.size()&&frames<=4096&&buses_[index]->render(audio,frames,position,inputs);}
 } // namespace Tracker

@@ -19,6 +19,7 @@ void SignalRuntime::Edge::add(uint32_t count) noexcept {
 }
 SignalRuntime::SignalRuntime(SignalDefinition d,SignalPlan p,double rate):definition_(std::move(d)),plan_(std::move(p)),sampleRate_(rate) {
   if(!std::isfinite(rate)||rate<8000||rate>384000)throw std::invalid_argument("Invalid signal graph sample rate");
+  for(auto &node:definition_.nodes)std::sort(node.envelopes.begin(),node.envelopes.end(),[](const auto &a,const auto &b){return a.pattern<b.pattern;});
   nodes_.resize(definition_.nodes.size());
   for(size_t i=0;i<nodes_.size();++i){port(nodes_[i].inputs,0);port(nodes_[i].outputs,0);nodes_[i].attackCoefficient=std::exp(-1/(rate*definition_.nodes[i].attack));nodes_[i].releaseCoefficient=std::exp(-1/(rate*definition_.nodes[i].release));}
   for(size_t i=0;i<definition_.audio.size();++i){const auto &e=plan_.edges[i];auto &spec=definition_.audio[i];
@@ -37,7 +38,12 @@ void SignalRuntime::note(bool gate,bool retrigger) noexcept {
   gate_=gate;
   if(retrigger)for(size_t i=0;i<nodes_.size();++i)if(definition_.nodes[i].kind==SignalNodeKind::NoteEnvelope)nodes_[i].envelope=0;
 }
-double SignalRuntime::source(size_t index,double beat,uint64_t /*frame*/) const noexcept {
+const SignalPatternEnvelope *SignalRuntime::envelope(size_t index,uint64_t pattern) const noexcept {
+  const auto &lanes=definition_.nodes[index].envelopes;
+  auto found=std::lower_bound(lanes.begin(),lanes.end(),pattern,[](const auto &lane,uint64_t p){return lane.pattern<p;});
+  return found!=lanes.end()&&found->pattern==pattern&&found->enabled ? &*found : nullptr;
+}
+double SignalRuntime::source(size_t index,double beat,double position,const SignalClock &clock) const noexcept {
   const auto &n=definition_.nodes[index];
   switch(n.kind){
   case SignalNodeKind::LFO:return .5+.5*std::sin(2*std::numbers::pi*(beat*n.rate+n.phase));
@@ -47,13 +53,23 @@ double SignalRuntime::source(size_t index,double beat,uint64_t /*frame*/) const 
     return double(x>>11)*(1.0/9007199254740991.0);}
   case SignalNodeKind::MIDI:return midi_[n.controller];
   case SignalNodeKind::Amount:return amount_;
+  case SignalNodeKind::Automation:{auto lane=envelope(index,clock.pattern);return lane?automationValue(lane->points,position,clock.endPosition,clock.rowsPerBeat):0;}
   default:return nodes_[index].envelope;
   }
 }
 bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalClock clock,const SignalCallbacks &cb,std::span<const MixerAudioInput> inputs) noexcept {
-  if(!main||frames>maximumFrames||!std::isfinite(clock.beat)||!std::isfinite(clock.tempo)||clock.tempo<=0)return false;
+  if(!main||frames>maximumFrames||!std::isfinite(clock.beat)||!std::isfinite(clock.tempo)||clock.tempo<=0||!std::isfinite(clock.position)||!std::isfinite(clock.unitsPerFrame)||clock.unitsPerFrame<0||!std::isfinite(clock.endPosition)||!std::isfinite(clock.rowsPerBeat)||clock.rowsPerBeat<1)return false;
   const double beatsPerFrame=clock.playing?clock.tempo/(60*sampleRate_):0;
-  for(uint32_t offset=0;offset<frames;){const auto count=std::min<uint32_t>(targets_.empty()?maximumFrames:quantum,frames-offset);
+  for(uint32_t offset=0;offset<frames;){auto count=std::min<uint32_t>(targets_.empty()?maximumFrames:quantum,frames-offset);
+    // Stop at point boundaries so step curves never become short ramps.
+    if(clock.playing&&clock.unitsPerFrame>0)for(size_t i=0;i<nodes_.size();++i)if(definition_.nodes[i].kind==SignalNodeKind::Automation){
+      if(const auto *lane=envelope(i,clock.pattern)){
+        const double now=clock.position+offset*clock.unitsPerFrame;
+        auto next=std::upper_bound(lane->points.begin(),lane->points.end(),now,[](double p,const auto &point){return p<point.position;});
+        if(next!=lane->points.end()){const double framesTo=std::ceil((next->position-clock.position)/clock.unitsPerFrame-1e-9)-offset;if(framesTo>=1&&framesTo<count)count=uint32_t(framesTo);}
+        if(next!=lane->points.begin()&&(next-1)->curve==AutomationCurve::StepNext&&std::abs(now-(next-1)->position)<1e-8)count=1;
+      }
+    }
     for(auto &n:nodes_)for(auto &p:n.inputs)std::fill_n(p->samples.data(),count*2,0.f);
     for(size_t index:plan_.order){auto &n=nodes_[index];const auto &spec=definition_.nodes[index];
       // Every edge is evaluated exactly once, when its destination is ready.
@@ -75,7 +91,7 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
           const double coefficient=(target>n.envelope?n.attackCoefficient:n.releaseCoefficient);
           n.envelope=target+coefficient*(n.envelope-target);if(f==0)n.first=n.envelope;}
         n.last=n.envelope;
-      } else {n.first=source(index,clock.beat+offset*beatsPerFrame,position+offset);n.last=source(index,clock.beat+(offset+count-1)*beatsPerFrame,position+offset+count-1);}
+      } else {n.first=source(index,clock.beat+offset*beatsPerFrame,clock.position+offset*clock.unitsPerFrame,clock);n.last=source(index,clock.beat+(offset+count-1)*beatsPerFrame,clock.position+(offset+count-1)*clock.unitsPerFrame,clock);}
     }
     offset+=count;
   }

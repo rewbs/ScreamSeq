@@ -79,6 +79,7 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
   }
   std::set<uint64_t> graphTargets;
   for(const auto &bus:mixer.buses)graphTargets.insert(bus.id);
+  std::erase_if(signal.instrumentAssignments,[&](const auto &a){return std::none_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.second.id==a.target;});});
   std::erase_if(signal.assignments,[&](const auto &a){return !graphTargets.contains(a.target);});
   std::erase_if(signal.inputs,[&](const auto &r){return !graphTargets.contains(r.source)||!graphTargets.contains(r.target);});
   std::erase_if(signal.outputs,[&](const auto &r){return !graphTargets.contains(r.source)||!graphTargets.contains(r.target);});
@@ -86,6 +87,11 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
   std::erase_if(signal.commands,[&](const auto &c){
     auto pattern=std::find_if(patterns.begin(),patterns.end(),[&](const auto &p){return p.second.id==c.pattern;});
     return !graphTargets.contains(c.target)||pattern==patterns.end()||uint64_t(c.position)>=uint64_t(s.Patterns[pattern->first].GetNumRows())*65536;
+  });
+  for(auto &definition:signal.library)for(auto &node:definition.nodes)std::erase_if(node.envelopes,[&](auto &lane){
+    const auto pattern=std::find_if(patterns.begin(),patterns.end(),[&](const auto &p){return p.second.id==lane.pattern;});
+    if(pattern==patterns.end())return true;
+    std::erase_if(lane.points,[&](const auto &point){return point.position>=uint64_t(s.Patterns[pattern->first].GetNumRows())*256;});return lane.points.empty();
   });
   std::set<uint64_t> surviving;
   for (const auto &[index, track] : tracks) surviving.insert(track.id);
@@ -117,6 +123,10 @@ void NativeSong::clonePatternAutomation(uint64_t source, uint64_t destination) {
   std::vector<SignalCommand> graphCommands;
   for(const auto &command:signal.commands)if(command.pattern==source){auto copy=command;copy.pattern=destination;graphCommands.push_back(copy);}
   signal.commands.insert(signal.commands.end(),graphCommands.begin(),graphCommands.end());
+  for(auto &definition:signal.library)for(auto &node:definition.nodes){
+    auto lane=std::find_if(node.envelopes.begin(),node.envelopes.end(),[&](const auto &e){return e.pattern==source;});
+    if(lane!=node.envelopes.end()){auto copy=*lane;copy.pattern=destination;node.envelopes.push_back(std::move(copy));}
+  }
   std::vector<PreciseNote> notes;
   for(const auto &note:preciseNotes)if(note.pattern==source){auto copy=note;copy.pattern=destination;notes.push_back(copy);}
   preciseNotes.insert(preciseNotes.end(),notes.begin(),notes.end());
@@ -217,7 +227,8 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   for(const auto &bus:mixer.buses)graphTargets.push_back(bus.id);
   std::map<uint64_t,uint32_t> graphPatterns;
   for(const auto &[index,pattern]:patterns)graphPatterns[pattern.id]=s.Patterns[index].GetNumRows();
-  signal.validate(graphTargets,graphPatterns);
+  std::vector<uint64_t> graphInstruments;for(const auto &[index,instrument]:instruments)graphInstruments.push_back(instrument.id);
+  signal.validate(graphTargets,graphPatterns,graphInstruments);
   signalRoutingGraph(mixer,signal).validate(trackIDs);
   for(const auto &definition:signal.library){check({definition.id,{},{},0});for(const auto &node:definition.nodes)check({node.id,{},{},0});}
   if (bytes() > 16 * 1024 * 1024) throw std::invalid_argument("Native song metadata exceeds 16 MB");

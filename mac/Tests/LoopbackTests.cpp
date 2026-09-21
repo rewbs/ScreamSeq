@@ -145,7 +145,8 @@ int main(int argc, char **argv) {
         const auto in=n.makeEntity().id,plugin=n.makeEntity().id,out=n.makeEntity().id,amount=n.makeEntity().id;
         d.nodes={{in,Tracker::SignalNodeKind::Input,"Input"},{plugin,Tracker::SignalNodeKind::Plugin,"Gain"},{out,Tracker::SignalNodeKind::Output,"Output"},{amount,Tracker::SignalNodeKind::Amount,"Amount"}};
         d.nodes[1].plugin={descriptor.format,descriptor.name,descriptor.path,descriptor.classID};d.audio={{in,plugin},{plugin,out}};d.modulation={{amount,plugin,7}};
-        n.signal.library={d};n.signal.assignments={{master,d.id,.8,1}};
+        const auto drawn=n.makeEntity().id;Tracker::SignalNode envelope;envelope.id=drawn;envelope.kind=Tracker::SignalNodeKind::Automation;envelope.name="Drawn motion";envelope.envelopes={{n.patterns.at(0).id,true,{{0,.1,Tracker::AutomationCurve::Smooth},{8192,.9,Tracker::AutomationCurve::Linear}}}};d.nodes.push_back(envelope);d.modulation[0].maximum=.8;d.modulation.push_back({drawn,plugin,7,0,.1,0});
+        n.signal.library={d};n.signal.assignments={{master,d.id,.8,1}};n.signal.instrumentAssignments={{n.instruments.at(1).id,d.id,.9,1}};
         const auto track=n.tracks.at(0).id,pattern=n.patterns.at(0).id;n.signal.lanes[track]=1;
         n.signal.commands={{pattern,track,d.id,0,0,Tracker::SignalCommandKind::Start,.4,1},{pattern,track,d.id,4*65536+32768,0,Tracker::SignalCommandKind::Amount,.7,1},{pattern,track,d.id,8*65536,0,Tracker::SignalCommandKind::Stop},{pattern,track,d.id,12*65536,0,Tracker::SignalCommandKind::Row,.2,1}};
         n.validate(document->song());

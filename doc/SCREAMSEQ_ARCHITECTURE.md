@@ -16,6 +16,8 @@ ScreamSeq is the renamed Resonance application and an independent derivative of 
 
 The renderer and document are separate. Edits occur on the document worker; playback owns its prepared copy. AppKit controls belong to the main thread. Plugins and graph recipes must be prepared outside audio processing, and unsafe structural mutations must not race a live renderer. Do not move Foundation/AppKit into portable `editor/` code.
 
+Sample-instrument graphs are prepared independently per instrument/raw channel and feed the ordinary mixer through sample-only OpenMPT adapters. Their NNA voices keep their original routing. `NativeSignalGraph` handles both that stage and channel/group graphs with a shared 256-processor/256-MiB host-storage budget. Graph automation sources store per-pattern curves using stable IDs, compiled formulas and the shared evaluator. Both additions require native metadata 13. See `mac/GRAPH_WORKFLOW.md` for the current signal order, activity commands, editing semantics and limits.
+
 The current native project wrapper is a versioned binary property list containing an exact song snapshot, metadata and plugin state. Metadata and container versions are separate. Windows needs a compatible portable codec (or a carefully extracted shared persistence layer), rather than treating `.screamseq` as a renamed module or silently dropping native fields. Plugin recipes use stable class identity; local paths are resolution hints. AU remains macOS-only. Missing platform plugins should preserve opaque state and be reported, not replaced silently.
 
 ## Build and qualification
@@ -33,7 +35,7 @@ Build on macOS with `SCREAMSEQ_BUILD_DIR=bin/mac-screamseq SCREAMSEQ_BUILD_JOBS=
 - Precise notes and graph commands use 65536 units/row. Pattern automation points use 256 units/row. Beat offsets use the current pattern signature, not a fixed assumption of four rows/beat.
 - Scripted curves are precompiled bounded mathematical expressions. No general-purpose interpreter executes in the audio callback.
 - VST3 automation uses sample-offset parameter queues within normal blocks. Continuing tracker effects still follow ordinary ticks.
-- Sample/instrument data, note-on/off/cut semantics, NNA, routing and high-resolution native samples must survive save/reopen and Undo.
+- Sample/instrument data, note-on/off/cut semantics, NNA, routing and exact native sample payloads must survive save/reopen and Undo. The current sample voice/storage path remains 8/16-bit.
 - The API schema retains its legacy filename for compatibility. Prefer the `screamseq_api.py` entry point; existing `resonance_api` imports continue to work.
 
 ## Workflow and source control

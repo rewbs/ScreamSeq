@@ -3,8 +3,17 @@
 
       NSMutableArray *plugins=[NSMutableArray array];for(size_t slot=0;slot<_plugins.size();++slot){const auto &p=_plugins[slot];NSMutableDictionary *item=[descriptorDictionary(p.descriptor) mutableCopy];item[@"id"]=@(p.instanceID.c_str());item[@"slot"]=@(slot);item[@"bypass"]=@(p.bypass);NSMutableArray *instruments=[NSMutableArray array];for(const auto &a:pluginAssignments(p))[instruments addObject:@(a.instrument)];item[@"instruments"]=instruments;[plugins addObject:item];}data[@"plugins"]=plugins;
       data[@"mixer"]=encodeMixer(_document->native().mixer);data[@"unitsPerRow"]=@65536;
+      NSMutableArray *patterns=[NSMutableArray array];for(const auto &[index,entity]:_document->native().patterns)if(song.Patterns.IsValidPat(index))[patterns addObject:@{@"index":@(index),@"id":nativeID(entity.id),@"rows":@(song.Patterns[index].GetNumRows()),@"rowsPerBeat":@(preciseRowsPerBeat(song,index)),@"name":@(entity.name.c_str())}];data[@"patterns"]=patterns;
+      NSMutableArray *instrumentList=[NSMutableArray array];for(const auto &[index,entity]:_document->native().instruments){bool plugin=false;for(const auto &p:_plugins)for(const auto &a:pluginAssignments(p))plugin|=a.instrument==index;[instrumentList addObject:@{@"index":@(index),@"id":nativeID(entity.id),@"name":songString(song,song.GetInstrumentName(index)),@"plugin":@(plugin)}];}data[@"instruments"]=instrumentList;
       data[@"activity"]=encodeSignalActivity(_audio->graphActivity());
       result=data;
+    } else if ([method isEqual:@"graph.automation.get"]) {
+      allowed(@[@"graph",@"node",@"pattern"]);const auto id=decodeNativeID(p[@"graph"]),nodeID=decodeNativeID(p[@"node"]);
+      const auto &library=_document->native().signal.library;const auto d=std::find_if(library.begin(),library.end(),[&](const auto &v){return v.id==id;});require(d!=library.end(),"Subgraph does not exist");
+      const auto node=std::find_if(d->nodes.begin(),d->nodes.end(),[&](const auto &v){return v.id==nodeID;});require(node!=d->nodes.end()&&node->kind==SignalNodeKind::Automation,"Choose an automation source node");
+      const auto index=uint16_t(integer(p[@"pattern"],0,UINT16_MAX));require(song.Patterns.IsValidPat(index),"Pattern does not exist");const auto pattern=_document->native().patterns.at(index).id;
+      const auto lane=std::find_if(node->envelopes.begin(),node->envelopes.end(),[&](const auto &v){return v.pattern==pattern;});NSMutableArray *points=[NSMutableArray array];if(lane!=node->envelopes.end())for(const auto &point:lane->points)[points addObject:encodeAutomationPoint(point)];
+      result=@{@"graph":nativeID(id),@"node":nativeID(nodeID),@"pattern":@(index),@"patternID":nativeID(pattern),@"rows":@(song.Patterns[index].GetNumRows()),@"rowsPerBeat":@(preciseRowsPerBeat(song,index)),@"unitsPerRow":@256,@"enabled":@(lane==node->envelopes.end()||lane->enabled),@"points":points};
     } else if ([method isEqual:@"graph.controller"]) {
       allowed(@[@"controller",@"value"]);result=@{@"delivered":@(_audio->graphController(uint8_t(integer(p[@"controller"],0,127)),uint8_t(integer(p[@"value"],0,127))))};
     } else if ([method hasPrefix:@"graph."]) {
@@ -32,7 +41,7 @@
         previous=std::move(updated);
       } else if([method isEqual:@"graph.remove"]) {
         allowed(@[@"graph",@"dryRun"]);affected=definition(p[@"graph"]).id;
-        require(std::none_of(graph.assignments.begin(),graph.assignments.end(),[&](const auto &a){return a.graph==affected;})&&std::none_of(graph.commands.begin(),graph.commands.end(),[&](const auto &c){return c.graph==affected;}),"Remove this subgraph's assignments and pattern commands before deleting it");
+        require(std::none_of(graph.instrumentAssignments.begin(),graph.instrumentAssignments.end(),[&](const auto &a){return a.graph==affected;})&&std::none_of(graph.assignments.begin(),graph.assignments.end(),[&](const auto &a){return a.graph==affected;})&&std::none_of(graph.commands.begin(),graph.commands.end(),[&](const auto &c){return c.graph==affected;}),"Remove this subgraph's assignments and pattern commands before deleting it");
         std::erase_if(graph.library,[&](const auto &d){return d.id==affected;});
       } else if([method isEqual:@"graph.node.add"]) {
         allowed(@[@"graph",@"kind",@"name",@"x",@"y",@"slot",@"plugin",@"insertAfter",@"dryRun"]);auto &d=definition(p[@"graph"]);affected=d.id;
@@ -50,9 +59,21 @@
         allowed(@[@"graph",@"node",@"dryRun"]);auto &d=definition(p[@"graph"]);affected=d.id;nodeID=decodeNativeID(p[@"node"]);
         auto n=std::find_if(d.nodes.begin(),d.nodes.end(),[&](const auto &v){return v.id==nodeID;});require(n!=d.nodes.end()&&n->kind!=SignalNodeKind::Input&&n->kind!=SignalNodeKind::Output,"Select an existing processor or modulation node");
         d.nodes.erase(n);std::erase_if(d.audio,[&](const auto &e){return e.source==nodeID||e.target==nodeID;});std::erase_if(d.modulation,[&](const auto &e){return e.source==nodeID||e.target==nodeID;});
+      } else if([method isEqual:@"graph.automation.set"]) {
+        allowed(@[@"graph",@"node",@"pattern",@"enabled",@"points",@"dryRun"]);auto &d=definition(p[@"graph"]);affected=d.id;nodeID=decodeNativeID(p[@"node"]);
+        auto node=std::find_if(d.nodes.begin(),d.nodes.end(),[&](const auto &v){return v.id==nodeID;});require(node!=d.nodes.end()&&node->kind==SignalNodeKind::Automation,"Choose an automation source node");
+        const auto index=uint16_t(integer(p[@"pattern"],0,UINT16_MAX));require(song.Patterns.IsValidPat(index),"Pattern does not exist");const auto pattern=next.patterns.at(index).id;
+        SignalPatternEnvelope lane;lane.pattern=pattern;lane.enabled=p[@"enabled"]?boolean(p[@"enabled"]):true;
+        for(id point:array(p[@"points"],4096))lane.points.push_back(decodeAutomationPoint(point,uint32_t(song.Patterns[index].GetNumRows())*256-1));
+        std::erase_if(node->envelopes,[&](const auto &v){return v.pattern==pattern;});if(!lane.points.empty())node->envelopes.push_back(std::move(lane));
+        std::sort(node->envelopes.begin(),node->envelopes.end(),[](const auto &a,const auto &b){return a.pattern<b.pattern;});
       } else if([method isEqual:@"graph.assign"]) {
         allowed(@[@"target",@"graph",@"amount",@"wet",@"dryRun"]);const auto target=bus(p[@"target"]);std::erase_if(graph.assignments,[&](const auto &a){return a.target==target;});
         if(p[@"graph"]!=NSNull.null){affected=definition(p[@"graph"]).id;graph.assignments.push_back({target,affected,number(p[@"amount"]?:@1,0,1),number(p[@"wet"]?:@1,0,1)});}
+      } else if([method isEqual:@"graph.instrument.assign"]) {
+        allowed(@[@"instrument",@"graph",@"amount",@"wet",@"dryRun"]);const auto index=instrumentIndex();ensureMixer();const auto id=next.instruments.at(index).id;
+        std::erase_if(graph.instrumentAssignments,[&](const auto &a){return a.target==id;});
+        if(p[@"graph"]!=NSNull.null){for(const auto &plugin:_plugins)for(const auto &a:pluginAssignments(plugin))require(a.instrument!=index,"Plugin instruments use their output bus graph; this assignment processes sample voices");affected=definition(p[@"graph"]).id;graph.instrumentAssignments.push_back({id,affected,number(p[@"amount"]?:@1,0,1),number(p[@"wet"]?:@1,0,1)});}
       } else if([method isEqual:@"graph.layout.set"]) {
         allowed(@[@"positions",@"reset",@"dryRun"]);if(p[@"reset"]&&boolean(p[@"reset"]))graph.layout.clear();for(id raw:array(p[@"positions"]?:@[],8192)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);graph.layout[string(v[@"node"],256).UTF8String]={number(v[@"x"],0,100000),number(v[@"y"],0,100000)};}
       } else if([method isEqual:@"graph.routes.set"]) {

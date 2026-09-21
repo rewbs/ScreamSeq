@@ -10,6 +10,7 @@ The macOS app uses AppKit, Metal and Core Audio. A Windows-native sibling is pla
 - [Architecture and development workflow](doc/SCREAMSEQ_ARCHITECTURE.md)
 - [Graph workflow](mac/GRAPH_WORKFLOW.md), [precise notes](mac/PRECISE_NOTES.md), [agent API](mac/AUTOMATION.md)
 - [Project agent skills](.agents/skills/) and [Windows agent kickoff prompt](doc/WINDOWS_AGENT_PROMPT.md)
+- [Current delivery, verification and remaining work](doc/SCREAMSEQ_DELIVERY_REPORT_2026-09-21.md)
 - [License](LICENSE) and [branding/compatibility notes](assets/branding/BRANDING.md)
 
 New projects use `.screamseq`; legacy `.resonance` projects remain readable. Stable legacy plugin and storage identifiers are intentionally retained.

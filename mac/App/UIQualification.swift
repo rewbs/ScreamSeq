@@ -62,6 +62,11 @@ final class UIQualification {
       options: [.userInitiated, .idleDisplaySleepDisabled],
       reason: "Running visible tracker performance qualification")
     operation({
+      if let index=CommandLine.arguments.firstIndex(of:"--ui-test-device"),index+1<CommandLine.arguments.count {
+        let name=CommandLine.arguments[index+1]
+        guard name=="BlackHole 2ch",let device=self.app.session.devices().first(where:{$0["name"] as? String==name}),let id=device["id"] as? UInt else{throw NSError(domain:"Qualification",code:1,userInfo:[NSLocalizedDescriptionKey:"Requested BlackHole test device is unavailable"])}
+        try self.app.session.configureDevice(id,buffer:512)
+      }
       // Extend the built-in demo if no long fixture was supplied.
       if self.app.model.orders.count == 1 {
         for _ in 0..<Int(ceil(self.duration / 7)) {
@@ -82,6 +87,7 @@ final class UIQualification {
         "type": 0x6175_6678, "subtype": 0x6c70_6173,
         "manufacturer": 0x6170_706c, "name": "Apple: AULowpass",
       ])
+      if CommandLine.arguments.contains("--ui-test-graph"){try self.prepareGraph()}
     }) {
       self.app.refreshAll()
       self.app.model.pattern = self.app.model.orders.first ?? 0
@@ -89,6 +95,24 @@ final class UIQualification {
       self.app.showEditor(0)
       self.beginMeasurementWhenVisible()
     }
+  }
+  func prepareGraph() throws {
+    func call(_ method:String,_ params:[String:Any]=[:],write:Bool=true)throws->[String:Any]{var p=params;if write{p["expectedRevision"]=app.session.automationRevision};var error:NSError?;guard let result=app.session.automationMethod(method,params:p,error:&error),let data=result["data"] as? [String:Any]else{throw error ?? NSError(domain:"Qualification",code:2)};return data}
+    for sample in 1...4{_ = try app.session.addInstrument(sample)}
+    _ = try call("mixer.enable")
+    let graph=try call("graph.create",["name":"Qualification motion"])["graph"] as! String
+    var data=try call("graph.get",write:false)
+    let definition=(data["library"] as! [[String:Any]])[0],input=(definition["nodes"] as! [[String:Any]])[0]["id"] as! String
+    let plugin=try call("graph.node.add",["graph":graph,"kind":"plugin","plugin":["format":"Built-in","classID":"resonance.gainer.v1"],"insertAfter":input])["node"] as! String
+    let source=try call("graph.node.add",["graph":graph,"kind":"automation","name":"Pattern motion"])["node"] as! String
+    data=try call("graph.get",write:false)
+    for pattern in data["patterns"] as! [[String:Any]]{_ = try call("graph.automation.set",["graph":graph,"node":source,"pattern":pattern["index"]!,"points":[["position":0,"value":0.2,"curve":"smooth"],["position":8192,"value":0.8,"curve":"linear"]]])}
+    var changed=(try call("graph.get",write:false)["library"] as! [[String:Any]])[0]
+    changed["modulation"]=[["source":source,"target":plugin,"parameter":1,"minimum":0.7,"maximum":0.8]]
+    _ = try call("graph.update",["definition":changed])
+    _ = try call("graph.instrument.assign",["instrument":1,"graph":graph])
+    let target=(data["mixer"] as! [String:Any])["buses"] as! [[String:Any]]
+    _ = try call("graph.assign",["target":target[0]["id"]!,"graph":graph])
   }
   func beginMeasurementWhenVisible() {
     let now = CFAbsoluteTimeGetCurrent()
@@ -273,6 +297,7 @@ final class UIQualification {
       require((report["pluginFailure"] as? Bool ?? true) == false, "Audio Unit failure")
       require(edits > 0 && undos > 0 && saves > 0, "Edit/undo/save workload did not execute")
     }
+    report["usesGraph"] = CommandLine.arguments.contains("--ui-test-graph")
     report["usesVST3"] = usesVST3
     report["requestedVST3"] = CommandLine.arguments.contains("--ui-test-vst3")
     report["automationPoints"] = app.session.snapshot(app.model.pattern)["automationPoints"]

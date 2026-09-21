@@ -38,3 +38,19 @@ struct EditorNavigation: Equatable {
     return result
   }
 }
+
+// Option values are not document arguments, even when they name existing bundles.
+enum AppLaunchArguments {
+  static let valueOptions:Set<String>=["--ui-test-seconds","--ui-test-vst3","--ui-test-device"]
+  static func isOptionValue(_ filename:String,arguments:[String])->Bool {
+    let path=URL(fileURLWithPath:filename).standardizedFileURL.path
+    return arguments.indices.dropFirst().contains { index in
+      valueOptions.contains(arguments[index-1]) && URL(fileURLWithPath:arguments[index]).standardizedFileURL.path==path
+    }
+  }
+  static func documentPath(_ arguments:[String],exists:(String)->Bool)->String? {
+    var skip=false
+    for argument in arguments.dropFirst(){if skip{skip=false;continue};if valueOptions.contains(argument){skip=true;continue};if !argument.hasPrefix("--"),exists(argument){return argument}}
+    return nil
+  }
+}

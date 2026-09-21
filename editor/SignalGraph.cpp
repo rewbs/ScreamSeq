@@ -12,15 +12,16 @@ bool finite(double value, double lo, double hi) { return std::isfinite(value) &&
 bool text(const std::string &s, size_t limit) { return s.size() <= limit && s.find('\0') == std::string::npos; }
 bool audioSource(SignalNodeKind k) { return k == SignalNodeKind::Input || k == SignalNodeKind::Plugin; }
 bool audioTarget(SignalNodeKind k) { return k == SignalNodeKind::Output || k == SignalNodeKind::Plugin || k == SignalNodeKind::Follower; }
-bool modSource(SignalNodeKind k) { return k >= SignalNodeKind::LFO && k <= SignalNodeKind::Amount; }
+bool modSource(SignalNodeKind k) { return k >= SignalNodeKind::LFO && k <= SignalNodeKind::Automation; }
 }
 size_t SignalDefinition::bytes() const {
   size_t n = sizeof(*this) + name.size() + audio.size()*sizeof(SignalAudioEdge) + modulation.size()*sizeof(SignalModulation);
   for(const auto &v:nodes) n += sizeof(v)+v.name.size()+v.plugin.format.size()+v.plugin.name.size()+v.plugin.path.size()+v.plugin.classID.size()+v.plugin.state.size()+(v.plugin.inputs.size()+v.plugin.outputs.size())*sizeof(uint32_t);
+  for(const auto &node:nodes)for(const auto &lane:node.envelopes){n+=sizeof(lane)+lane.points.size()*sizeof(AutomationPoint);for(const auto &point:lane.points)n+=point.formula.bytes();}
   return n;
 }
 size_t SignalGraph::bytes() const {
-  size_t n = sizeof(*this)+inputs.size()*sizeof(SignalInputRoute)+outputs.size()*sizeof(SignalOutputRoute)+assignments.size()*sizeof(SignalAssignment)+commands.size()*sizeof(SignalCommand)+lanes.size()*sizeof(std::pair<uint64_t,uint8_t>);
+  size_t n = sizeof(*this)+inputs.size()*sizeof(SignalInputRoute)+outputs.size()*sizeof(SignalOutputRoute)+(assignments.size()+instrumentAssignments.size())*sizeof(SignalAssignment)+commands.size()*sizeof(SignalCommand)+lanes.size()*sizeof(std::pair<uint64_t,uint8_t>);
   for(const auto &[key,position]:layout)n+=key.size()+sizeof(position);
   for(const auto &d:library)n += d.bytes();
   return n;
@@ -33,9 +34,18 @@ SignalPlan compileSignal(const SignalDefinition &d, const std::vector<SignalProc
   unsigned inputs = 0, outputs = 0;
   for(size_t i=0;i<d.nodes.size();++i) {
     const auto &n=d.nodes[i];
-    require(n.id && indices.emplace(n.id,i).second && uint8_t(n.kind)<=uint8_t(SignalNodeKind::Amount),"Invalid or duplicate graph node identity");
+    require(n.id && indices.emplace(n.id,i).second && uint8_t(n.kind)<=uint8_t(SignalNodeKind::Automation),"Invalid or duplicate graph node identity");
     require(text(n.name,1024) && finite(n.x,-100000,100000) && finite(n.y,-100000,100000),"Invalid graph node label or position");
     require(finite(n.rate,.0001,1024) && finite(n.phase,0,1) && finite(n.attack,.00001,60) && finite(n.release,.00001,60) && n.controller<=127,"Invalid modulation source settings");
+    require(n.kind==SignalNodeKind::Automation || n.envelopes.empty(),"Only automation sources contain pattern curves");
+    require(n.envelopes.size()<=1024,"Too many graph pattern curves");
+    std::set<uint64_t> patterns;
+    for(const auto &lane:n.envelopes){
+      require(lane.pattern&&patterns.insert(lane.pattern).second&&!lane.points.empty()&&lane.points.size()<=4096,"Graph curves need a distinct pattern and 1..4096 points");
+      uint32_t previous=0;bool first=true;
+      for(const auto &point:lane.points){require((first||point.position>previous)&&finite(point.value,0,1)&&uint8_t(point.curve)<=uint8_t(AutomationCurve::Scripted),"Invalid or unordered graph automation point");
+        require(point.curve!=AutomationCurve::Scripted||!point.formula.source().empty(),"Scripted graph points need a formula");previous=point.position;first=false;}
+    }
     if(n.kind==SignalNodeKind::Input){p.input=i;++inputs;}
     if(n.kind==SignalNodeKind::Output){p.output=i;++outputs;}
     if(n.kind==SignalNodeKind::Plugin) {
@@ -88,11 +98,11 @@ SignalPlan compileSignal(const SignalDefinition &d, const std::vector<SignalProc
   p.totalLatency=p.arrival[p.output];return p;
 }
 bool sameSignalProcessing(const SignalGraph &a,const SignalGraph &b) {
-  if(a.inputs!=b.inputs||a.outputs!=b.outputs||a.assignments!=b.assignments||a.commands!=b.commands||a.library.size()!=b.library.size())return false;
+  if(a.instrumentAssignments!=b.instrumentAssignments||a.inputs!=b.inputs||a.outputs!=b.outputs||a.assignments!=b.assignments||a.commands!=b.commands||a.library.size()!=b.library.size())return false;
   for(size_t i=0;i<a.library.size();++i){const auto &x=a.library[i],&y=b.library[i];
     if(x.id!=y.id||x.audio!=y.audio||x.modulation!=y.modulation||x.nodes.size()!=y.nodes.size())return false;
     for(size_t j=0;j<x.nodes.size();++j){const auto &n=x.nodes[j],&m=y.nodes[j];
-      if(n.id!=m.id||n.kind!=m.kind||n.plugin!=m.plugin||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller)return false;
+      if(n.id!=m.id||n.kind!=m.kind||n.plugin!=m.plugin||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes)return false;
     }
   }
   return true;
@@ -105,14 +115,19 @@ MixerGraph signalRoutingGraph(MixerGraph mixer,const SignalGraph &signal){
   for(const auto &r:signal.outputs)mixer.instruments.push_back({signalBusIdentity(r.source),r.target,r.output});
   return mixer;
 }
-void SignalGraph::validate(const std::vector<uint64_t> &targets,const std::map<uint64_t,uint32_t> &patterns) const {
+void SignalGraph::validate(const std::vector<uint64_t> &targets,const std::map<uint64_t,uint32_t> &patterns,const std::vector<uint64_t> &instruments) const {
   require(library.size()<=128 && commands.size()<=65536 && bytes()<=16*1024*1024,"Graph library exceeds document limits");
   require(layout.size()<=8192,"Too many saved graph positions");for(const auto &[key,p]:layout)require(!key.empty()&&text(key,256)&&finite(p[0],0,100000)&&finite(p[1],0,100000),"Invalid saved graph position");
   std::set<uint64_t> definitions;std::set<uint16_t> numbers;
-  for(const auto &d:library){require(definitions.insert(d.id).second&&numbers.insert(d.number).second,"Subgraph identities and numbers must be unique");compileSignal(d);}
+  for(const auto &d:library){require(definitions.insert(d.id).second&&numbers.insert(d.number).second,"Subgraph identities and numbers must be unique");compileSignal(d);
+    for(const auto &node:d.nodes)for(const auto &lane:node.envelopes){require(patterns.contains(lane.pattern),"Graph automation references an unknown pattern");
+      for(const auto &point:lane.points)require(uint64_t(point.position)<uint64_t(patterns.at(lane.pattern))*256,"Graph automation point is outside its pattern");}
+  }
   auto target=[&](uint64_t id){return std::find(targets.begin(),targets.end(),id)!=targets.end();};
   std::set<uint64_t> assigned;
   for(const auto &a:assignments)require(target(a.target)&&definitions.contains(a.graph)&&assigned.insert(a.target).second&&finite(a.amount,0,1)&&finite(a.wet,0,1),"Invalid or duplicate ordinary subgraph assignment");
+  assigned.clear();require(instrumentAssignments.size()<=128,"Use at most 128 instrument graphs");
+  for(const auto &a:instrumentAssignments)require(std::find(instruments.begin(),instruments.end(),a.target)!=instruments.end()&&definitions.contains(a.graph)&&assigned.insert(a.target).second&&finite(a.amount,0,1)&&finite(a.wet,0,1),"Invalid or duplicate instrument graph assignment");
   for(const auto &[id,count]:lanes)require(target(id)&&count>0&&count<=8,"Graph lanes require an existing bus and one to eight columns");
   require(inputs.size()<=128&&outputs.size()<=128,"Too many external graph routes");
   auto hasPort=[&](uint64_t target,uint32_t port,bool input){std::set<uint64_t> used;for(const auto &a:assignments)if(a.target==target)used.insert(a.graph);for(const auto &c:commands)if(c.target==target&&(c.kind==SignalCommandKind::Row||c.kind==SignalCommandKind::Start))used.insert(c.graph);

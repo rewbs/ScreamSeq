@@ -78,6 +78,30 @@ int main(int argc,char **argv){@autoreleasepool{try{
     for(uint32_t i=0;i<1024;++i){const double raw=i>=64?float(1+(i-64)*.001):0,expected=raw*(i<544?.125:i<768?.25:1);
       check(std::abs(output[i*2]-expected)<2e-7,"Stopping a delayed graph moved the remaining processor or replayed its bypass history");}
   }
-  delayed(false);dlclose(bundle);
+  // Reactivating a stopped A after B changes the chain to B→A. The cut is
+  // immediate; both processors and dry compensation keep their continuous history.
+  timed.signal.commands={{3,1,100,0,0,SignalCommandKind::Start,.5,1},{3,1,200,0,1,SignalCommandKind::Start,.25,1},{3,1,100,65536,0,SignalCommandKind::Stop},{3,1,100,131072,0,SignalCommandKind::Start,.5,1}};
+  std::array<float,1024> expectedReorder{};std::array<std::array<float,32>,2> wetHistory{},dryHistory{};
+  for(uint32_t f=0;f<1024;++f){float value=float(1+f*.001);const std::array<int,2> order=f<512?std::array{0,1}:std::array{1,0};
+    for(auto stage:order){bool active=stage==1||f<256||f>=512;const auto cursor=f%32;const auto wet=wetHistory[stage][cursor],dry=dryHistory[stage][cursor];wetHistory[stage][cursor]=active?value*float(stage==0?.5:.25):0;dryHistory[stage][cursor]=value;value=active?wet:dry;}expectedReorder[f]=value;}
+  for(uint32_t block:{1u,17u,128u,4096u}){NativeSignalGraph graph(timed,48000,true);FixturePlayState clock;clock.m_nMusicSpeed=1;clock.m_nSamplesPerTick=256;clock.m_nTickCount=0;clock.m_nPattern=0;clock.m_nCurrentOrder=0;
+    std::array<float,2048> output{};for(uint32_t i=0;i<1024;++i)output[i*2]=output[i*2+1]=float(1+i*.001);
+    for(uint32_t pos=0;pos<1024;){clock.m_nRow=pos/256;clock.m_nBufferCount=256-pos%256;const auto count=std::min({block,256-pos%256,1024-pos});graph.begin(clock,count,pos,{120,double(pos)/24000,0,4,true});check(graph.process(0,output.data()+pos*2,count,pos,{}),"Reactivated graph render failed");pos+=count;}
+    for(uint32_t i=0;i<1024;++i)check(std::abs(output[i*2]-expectedReorder[i])<2e-7,"Reactivated latent graph order/history differs from continuous reference");
+    const auto active=graph.activity();check(active.size()==2&&active[0].graph==100&&active[0].order==2&&active[1].order==1,"Reactivation must append after the remaining active chain");
+  }
+  delayed(false);
+  // Graph-owned envelopes reach the hosted VST3 at exact row-relative times.
+  auto motion=gain;motion.nodes.back().kind=SignalNodeKind::Automation;
+  motion.nodes.back().envelopes={{3,true,{{0,.1,AutomationCurve::Linear},{63,.8,AutomationCurve::Step},{79,.2,AutomationCurve::Scripted,CurveFormula("L")},{255,.9,AutomationCurve::Step}}}};
+  timed.signal.library={motion};timed.signal.commands.clear();timed.signal.assignments={{1,100,1,1}};
+  for(uint32_t block:{1u,17u,128u,256u}){
+    NativeSignalGraph graph(timed,48000,true);FixturePlayState clock;clock.m_nMusicSpeed=1;clock.m_nSamplesPerTick=256;clock.m_nTickCount=0;clock.m_nPattern=0;clock.m_nCurrentOrder=0;clock.m_nRow=0;clock.m_nCurrentRowsPerBeat=4;
+    std::array<float,512> output;output.fill(1);
+    for(uint32_t pos=0;pos<256;){clock.m_nBufferCount=256-pos;const auto count=std::min(block,256-pos);
+      tracker_audit_begin();graph.begin(clock,count,pos,{120,double(pos)/24000,0,4,true},1);const bool okay=graph.process(0,output.data()+pos*2,count,pos,{});uint64_t a,f,l;tracker_audit_end(&a,&f,&l);check(okay&&a+f+l==0,"Graph automation failed realtime audit");pos+=count;}
+    for(uint32_t i=0;i<256;++i)check(std::abs(output[i*2]-automationValue(motion.nodes.back().envelopes[0].points,i,256,4))<2e-6,"Hosted graph automation onset, curve or step timing incorrect");
+  }
+  dlclose(bundle);
   std::cout<<"PASS hosted graph audio: row→persistent→ordinary ordering, half-row switching, update-in-place, expiry/stop/clear, independent target copies, bit-exact block partitions, delayed wet/dry cut and tails, inactive transport continuity, and zero realtime allocations/frees/locks\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}

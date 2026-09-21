@@ -11997,7 +11997,8 @@
                           "random",
                           "note-envelope",
                           "midi",
-                          "amount"
+                          "amount",
+                          "automation"
                         ]
                       },
                       "name": {
@@ -12103,6 +12104,91 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 127
+                      },
+                      "envelopes": {
+                        "type": "array",
+                        "maxItems": 1024,
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "pattern": {
+                              "type": "string",
+                              "pattern": "^n[1-9][0-9]*$",
+                              "maxLength": 32
+                            },
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "points": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 4096,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "position": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 1048575
+                                  },
+                                  "value": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                  },
+                                  "curve": {
+                                    "enum": [
+                                      "step",
+                                      "linear",
+                                      "smooth",
+                                      "exponential",
+                                      "logarithmic",
+                                      "step-next",
+                                      "exponential-reverse",
+                                      "logarithmic-reverse",
+                                      "scripted"
+                                    ]
+                                  },
+                                  "formula": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048,
+                                    "description": "Bounded math expression. Required with scripted curve. start/end are normalized, t or beatOffset is segment progress, beat is pattern position in beats, beats is elapsed segment beats. Terminal segments extend to pattern end and end equals start."
+                                  }
+                                },
+                                "required": [
+                                  "position",
+                                  "value"
+                                ],
+                                "additionalProperties": false,
+                                "allOf": [
+                                  {
+                                    "if": {
+                                      "properties": {
+                                        "curve": {
+                                          "const": "scripted"
+                                        }
+                                      },
+                                      "required": [
+                                        "curve"
+                                      ]
+                                    },
+                                    "then": {
+                                      "required": [
+                                        "formula"
+                                      ]
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "pattern",
+                            "points"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
@@ -12311,7 +12397,8 @@
                 "random",
                 "note-envelope",
                 "midi",
-                "amount"
+                "amount",
+                "automation"
               ]
             },
             "name": {
@@ -13635,6 +13722,250 @@
         "params"
       ],
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.automation.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "pattern": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          },
+          "required": [
+            "graph",
+            "node",
+            "pattern"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Read reusable definitions, routes, pattern commands, saved layout, rack/mixer context and read-only activity. Activity gives each active copy target, graph, role, one-based audible stack order and tail flag; it is observational and may advance independently of document revision."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.automation.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "pattern": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "points": {
+              "type": "array",
+              "minItems": 0,
+              "maxItems": 4096,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "position": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1048575
+                  },
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "curve": {
+                    "enum": [
+                      "step",
+                      "linear",
+                      "smooth",
+                      "exponential",
+                      "logarithmic",
+                      "step-next",
+                      "exponential-reverse",
+                      "logarithmic-reverse",
+                      "scripted"
+                    ]
+                  },
+                  "formula": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "description": "Bounded math expression. Required with scripted curve. start/end are normalized, t or beatOffset is segment progress, beat is pattern position in beats, beats is elapsed segment beats. Terminal segments extend to pattern end and end equals start."
+                  }
+                },
+                "required": [
+                  "position",
+                  "value"
+                ],
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "curve": {
+                          "const": "scripted"
+                        }
+                      },
+                      "required": [
+                        "curve"
+                      ]
+                    },
+                    "then": {
+                      "required": [
+                        "formula"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "graph",
+            "node",
+            "pattern",
+            "expectedRevision",
+            "points"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Read reusable definitions, routes, pattern commands, saved layout, rack/mixer context and read-only activity. Activity gives each active copy target, graph, role, one-based audible stack order and tail flag; it is observational and may advance independently of document revision."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.instrument.assign"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "amount": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "wet": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "instrument": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            }
+          },
+          "required": [
+            "instrument",
+            "graph",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Assign the ordinary channel/group subgraph; null clears it. Amount and wet mix are independent."
     }
   ]
 }

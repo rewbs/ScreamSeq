@@ -172,7 +172,18 @@ final class AutomationCanvas: NSView {
   }
   override func mouseUp(with event: NSEvent) { dragging = false }
   override func keyDown(with event: NSEvent) {
-    if event.keyCode == 51 || event.keyCode == 117 { removeSelected() } else { super.keyDown(with: event) }
+    if event.keyCode == 51 || event.keyCode == 117 { removeSelected(); return }
+    if event.keyCode == 48 {
+      guard !points.isEmpty else{return};let reverse=event.modifierFlags.contains(.shift)
+      selected=((selected ?? (reverse ? 0 : -1))+(reverse ? points.count-1 : 1))%points.count
+      if let selected{let p=Double(points[selected].position);if p<visibleStart || p>horizontalEnd{setViewport(start:p-horizontalSpan/2,span:horizontalSpan)}}
+      needsDisplay=true;onSelect?();return
+    }
+    if let selected,points.indices.contains(selected),[123,124,125,126].contains(event.keyCode){
+      let point=points[selected],step=event.modifierFlags.contains(.shift) ? 1 : snap,amount=event.modifierFlags.contains(.shift) ? 0.001 : 0.01
+      replaceSelected(position:point.position+(event.keyCode==123 ? -step : event.keyCode==124 ? step : 0),value:point.value+(event.keyCode==125 ? -amount : event.keyCode==126 ? amount : 0),curve:point.curve);return
+    }
+    super.keyDown(with:event)
   }
 }
 

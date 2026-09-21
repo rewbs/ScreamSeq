@@ -387,7 +387,11 @@ std::pair<mixsample_t *, mixsample_t *> CSoundFile::GetChannelOffsets(const ModC
 		pOfsL = &m_surroundLOfsVol;
 	}
 	// Look for plugins associated with this implicit tracker channel.
-	const PLUGINDEX mixPlugin = GetBestPlugin(chn, channel, PrioritiseInstrument, RespectMutes);
+	PLUGINDEX mixPlugin = GetBestPlugin(chn, channel, PrioritiseInstrument, RespectMutes);
+#if defined(OPENMPT_EDITOR_CORE)
+		if(nativeSamplePlugin && !chn.dwFlags[CHN_MUTE | CHN_SYNCMUTE | CHN_NOFX])
+			if(const auto assigned = nativeSamplePlugin(nativeSampleContext, chn, channel)) mixPlugin = assigned;
+#endif
 	if((mixPlugin > 0) && (mixPlugin <= MAX_MIXPLUGINS) && m_MixPlugins[mixPlugin - 1].pMixPlugin != nullptr)
 	{
 		// Render into plugin buffer instead of global buffer
@@ -448,7 +452,11 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 		}
 
 		// Look for plugins associated with this implicit tracker channel.
-		const PLUGINDEX mixPlugin = GetBestPlugin(chn, channel, PrioritiseInstrument, RespectMutes);
+		PLUGINDEX mixPlugin = GetBestPlugin(chn, channel, PrioritiseInstrument, RespectMutes);
+#if defined(OPENMPT_EDITOR_CORE)
+		if(nativeSamplePlugin && !chn.dwFlags[CHN_MUTE | CHN_SYNCMUTE | CHN_NOFX])
+			if(const auto assigned = nativeSamplePlugin(nativeSampleContext, chn, channel)) mixPlugin = assigned;
+#endif
 		if((mixPlugin > 0) && (mixPlugin <= MAX_MIXPLUGINS) && m_MixPlugins[mixPlugin - 1].pMixPlugin != nullptr)
 		{
 			// Render into plugin buffer instead of global buffer

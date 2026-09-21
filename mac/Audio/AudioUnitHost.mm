@@ -880,8 +880,12 @@ bool PluginChain::popEdit(size_t slot, uint32_t &id, float &value) noexcept {
   return slot < plugins_.size() && plugins_[slot]->popEdit(id, value);
 }
 
-bool PluginChain::graphController(uint8_t cc,uint8_t value) noexcept {if(!signalGraph_)return false;signalGraph_->controller(cc,value);return true;}
-std::vector<SignalActivity> PluginChain::graphActivity() const {return signalGraph_?signalGraph_->activity():std::vector<SignalActivity>{};}
+bool PluginChain::graphController(uint8_t cc,uint8_t value) noexcept {if(signalGraph_)signalGraph_->controller(cc,value);if(sampleSignalGraph_)sampleSignalGraph_->controller(cc,value);return bool(signalGraph_)||bool(sampleSignalGraph_);}
+std::vector<SignalActivity> PluginChain::graphActivity() const {
+  auto result=signalGraph_?signalGraph_->activity():std::vector<SignalActivity>{};
+  if(sampleSignalGraph_)for(auto value:sampleSignalGraph_->activity()){const auto index=value.target-NativeSong::maximumID-1;if(index<sampleRoutes_.size()){value.target=sampleRoutes_[index].target;value.instrument=sampleRoutes_[index].instrumentID;value.role=3;result.push_back(value);}}
+  return result;
+}
 void PluginChain::beginMixer(uint32_t frames) noexcept {
   if (!mixer_) return;
   applyPending(); mixer_->begin(frames, mixer_->through());
@@ -892,6 +896,12 @@ void PluginChain::routeInstrument(size_t processor, const float *buffer) noexcep
     for (const auto &bus : plugins_[processor]->buses()) if (!bus.input && bus.index && bus.active)
       mixer_->instrument(processor, bus.index, plugins_[processor]->auxiliaryOutput(bus.index));
   }
+}
+void PluginChain::processSampleGraph(size_t index,const float *left,const float *right,uint32_t frames) noexcept {
+  if(!sampleSignalGraph_||!mixer_||index>=sampleRoutes_.size()||frames>4096){failed_=true;return;}
+  for(uint32_t f=0;f<frames;++f){sampleGraphBuffer_[f*2]=left?left[f]:0;sampleGraphBuffer_[f*2+1]=right?right[f]:0;}
+  if(!sampleSignalGraph_->process(index,sampleGraphBuffer_.data(),frames,mixer_->through(),{})){failed_=true;return;}
+  mixer_->instrument(sampleRoutes_[index].processor,0,sampleGraphBuffer_.data());
 }
 const float *PluginChain::processMixerBus(size_t bus, const float *left, const float *right) noexcept {
   if (!mixer_) return nullptr;
@@ -919,6 +929,7 @@ bool PluginChain::finishMixer(float *buffer, uint32_t frames) noexcept {
     const auto count = frames - offset;
     mixer_->begin(count, position_ + offset);
     if(signalGraph_)signalGraph_->tail();
+    if(sampleSignalGraph_){sampleSignalGraph_->tail();for(size_t i=0;i<sampleRoutes_.size();++i)processSampleGraph(i,nullptr,nullptr,count);}
     for (size_t i = 0; i < plugins_.size(); ++i) if (plugins_[i]->isInstrument() && !bypass_[i] && instruments_[i]) {
       tailBuffer_.fill(0);
       if (!plugins_[i]->process(tailBuffer_.data(), count, position_ + offset)) failed_ = true;

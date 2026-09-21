@@ -46,6 +46,19 @@ int main(){try{
   envelopeRuntime.note(true,true);envelopeRuntime.render(samples.data(),128,256,{},fixture.callbacks());check(std::abs(fixture.values[383]-peak)<1e-12,"Repeated note did not retrigger envelope");
   envelopeRuntime.note(false);envelopeRuntime.render(samples.data(),128,384,{},fixture.callbacks());check(std::abs(fixture.values[511]-peak*std::exp(-128./4800))<1e-12,"Note-off release is not sample timed");
   auto midi=mod;midi.nodes.back().kind=SignalNodeKind::MIDI;midi.nodes.back().controller=74;SignalRuntime midiRuntime(midi,compileSignal(midi),48000);midiRuntime.controller(74,64./127);midiRuntime.render(samples.data(),128,0,{},fixture.callbacks());check(std::abs(fixture.values[127]-64./127)<1e-12,"MIDI CC source mapping wrong");
+  auto curveGraph=mod;curveGraph.nodes.back().kind=SignalNodeKind::Automation;
+  curveGraph.nodes.back().envelopes={{91,true,{{0,.1,AutomationCurve::Linear},{63,.8,AutomationCurve::Step},{79,.2,AutomationCurve::Linear},{127,.9,AutomationCurve::Linear}}}};
+  for(uint32_t block:{1u,7u,17u,128u}){
+    Fixture curveFixture;SignalRuntime curves(curveGraph,compileSignal(curveGraph),48000);
+    for(uint32_t at=0;at<128;){const auto count=std::min(block,128-at);check(curves.render(samples.data(),count,at,{0,120,true,91,double(at),1,128,4},curveFixture.callbacks()),"Pattern curve render failed");at+=count;}
+    for(size_t i=0;i<128;++i)check(std::abs(curveFixture.values[i]-automationValue(curveGraph.nodes.back().envelopes[0].points,i,128,4))<1e-12,"Graph curve timing or step interpolation differs with callback size");
+    curves.render(samples.data(),128,0,{0,120,true,92,0,1,128,4},curveFixture.callbacks());check(curveFixture.values[100]==0,"Missing pattern curve did not output zero");
+  }
+  curveGraph.nodes.back().envelopes[0].points={{0,0,AutomationCurve::Scripted,CurveFormula("t")}};
+  Fixture scripted;SignalRuntime scriptRuntime(curveGraph,compileSignal(curveGraph),48000);scriptRuntime.render(samples.data(),128,0,{0,120,true,91,0,1,128,4},scripted.callbacks());
+  check(std::abs(scripted.values[127]-127./128)<1e-12,"Final scripted graph segment ignored pattern end");
+  SignalGraph automated;automated.library={curveGraph};automated.validate({},{{91,1}});
+  rejects([&]{automated.validate({},{{92,1}});});automated.library[0].nodes.back().envelopes[0].points[0].position=256;rejects([&]{automated.validate({},{{91,1}});});
   auto cycle=d;cycle.audio.push_back({2,2});rejects([&]{compileSignal(cycle);});
   cycle=d;cycle.nodes.push_back({4,SignalNodeKind::Follower,"Follower"});cycle.audio.push_back({2,4});cycle.modulation.push_back({4,2});rejects([&]{compileSignal(cycle);});
   auto dangling=d;dangling.audio[0].source=999;rejects([&]{compileSignal(dangling);});

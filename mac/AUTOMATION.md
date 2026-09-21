@@ -1273,3 +1273,23 @@ sources and other sessions remain available.
 See [Playback and curves](PLAYBACK_AND_CURVES.md) for the transport methods, `curve: "scripted"` point schema, formula preview endpoint, timing variables, runtime limits and project compatibility. Transport changes require `expectedRevision` but do not change song history. Formula previews are read-only and use the playback evaluator.
 
 Precise-note beat coordinates, per-hit effects and their parameter catalog are documented in [Precise notes](PRECISE_NOTES.md).
+
+
+### ScreamSeq graph additions (native metadata 13)
+
+`graph.get` now includes pattern and instrument catalogs, `instrumentAssignments`,
+and graph automation sources. `graph.automation.get(graph,node,pattern)` returns
+one curve with rows, rowsPerBeat, unitsPerRow=256, enabled and points.
+`graph.automation.set` accepts those identifiers plus points, enabled, dryRun and
+expectedRevision. It replaces only that source/pattern curve; an empty array
+removes it. `graph.update` also preserves/edits node `envelopes` (stable pattern ID,
+enabled and points). All nine automation curves and compiled formulas are valid.
+
+`graph.instrument.assign(instrument,graph,amount,wet)` assigns a pre-channel graph
+to a sample instrument; graph=null clears it. The wire format stores its stable
+instrument ID. Each raw channel gets independent processors, and NNA sample
+voices retain their original ownership. Plugin instruments use their output bus
+graph instead. Both additions use document Undo and native persistence. Graph
+activity for instrument copies has role `instrument`, the originating instrument
+ID and destination channel bus. Empty `instrument` on other activity entries means
+there is no instrument-specific source.

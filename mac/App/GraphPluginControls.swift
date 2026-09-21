@@ -7,6 +7,7 @@ final class GraphPluginControls: NSView {
   let message=Theme.label("Load controls to inspect this effect",size:10,color:Theme.muted)
   var onRequest:((String,[String:Any],@escaping ([String:Any])->Void)->Void)?
   var onChanged:(()->Void)?,onParameter:((UInt32)->Void)?
+  var onCatalog:((String,String,[String:Any])->Void)?
   var currentRevision:(()->String)?
   private var graph="",node="",revision="",parameters=[[String:Any]](),pending=false
   private var editor:String?,editorGraph="",editorNode=""
@@ -39,6 +40,7 @@ final class GraphPluginControls: NSView {
     }
   }
   private func populate(_ data:[String:Any]){
+    onCatalog?(graph,node,data)
     parameters=data["parameters"] as? [[String:Any]] ?? [];parameter.removeAllItems();parameter.addItems(withTitles:parameters.map{$0["name"] as? String ?? "Parameter"});selectParameter()
     let buses=data["buses"] as? [[String:Any]] ?? []
     for (field,direction) in [(inputs,"input"),(outputs,"output")]{field.stringValue=buses.filter{$0["direction"] as? String==direction && $0["active"] as? Bool==true && ($0["index"] as? Int ?? 0)>0}.compactMap{$0["index"] as? Int}.map(String.init).joined(separator:", ")}

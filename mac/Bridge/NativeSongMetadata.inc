@@ -158,13 +158,14 @@ NSDictionary *encodeNativeSong(const NativeSong &native) {
   const bool hasEffectOutput=std::any_of(native.mixer.instruments.begin(),native.mixer.instruments.end(),[&](const auto &route){return std::any_of(native.mixer.buses.begin(),native.mixer.buses.end(),[&](const auto &bus){return std::find(bus.inserts.begin(),bus.inserts.end(),route.plugin)!=bus.inserts.end();});});
   const bool hasScripts = std::any_of(native.automation.begin(), native.automation.end(), [](const auto &lane) { return std::any_of(lane.points.begin(),lane.points.end(),[](const auto &p){return !p.formula.source().empty();}); });
   const bool hasNoteEffects=std::any_of(native.preciseNotes.begin(),native.preciseNotes.end(),[](const auto &n){return n.effect!=0;});
+  const bool hasGraphCurves=!native.signal.instrumentAssignments.empty()||std::any_of(native.signal.library.begin(),native.signal.library.end(),[](const auto &d){return std::any_of(d.nodes.begin(),d.nodes.end(),[](const auto &n){return n.kind==SignalNodeKind::Automation;});});
   const bool hasGraph = hasNoteEffects || hasScripts || !native.signal.empty() || hasEffectOutput;
   const bool hasNotes = !native.preciseNotes.empty() || hasGraph;
   const bool hasPerformance = !native.performance.empty() || hasNotes;
   const bool hasPitch = std::any_of(native.performance.commands.begin(),native.performance.commands.end(),[](const auto &c){return c.kind==PatternCommandKind::PitchSet||c.kind==PatternCommandKind::PitchSlide;});
   const bool hasColumns = noteTracks.count || mutes.count;
   const bool hasPrePan = std::any_of(native.mixer.buses.begin(), native.mixer.buses.end(), [](const auto &bus) { return bus.prePan != 0; });
-  NSMutableDictionary *result = [@{@"version": @(hasNoteEffects ? 12 : hasScripts ? 11 : hasGraph ? 10 : hasNotes ? 9 : hasPitch ? 8 : hasPerformance ? 7 : hasPrePan ? 6 : hasColumns ? 5 : 4), @"nextID": @(native.nextID), @"patterns": map(native.patterns),
+  NSMutableDictionary *result = [@{@"version": @(hasGraphCurves ? 13 : hasNoteEffects ? 12 : hasScripts ? 11 : hasGraph ? 10 : hasNotes ? 9 : hasPitch ? 8 : hasPerformance ? 7 : hasPrePan ? 6 : hasColumns ? 5 : 4), @"nextID": @(native.nextID), @"patterns": map(native.patterns),
            @"tracks": map(native.tracks), @"samples": map(native.samples), @"instruments": map(native.instruments),
            @"sequences": sequences, @"automation": automation, @"mixer": encodeMixer(native.mixer, hasPrePan || hasPerformance)} mutableCopy];
   if(hasGraph) result[@"signalGraph"] = encodeSignalGraph(native.signal);
@@ -183,7 +184,7 @@ NativeSong decodeNativeSong(id raw) {
   using namespace Automation;
   auto value = object(raw);
   keys(value, @[@"version", @"nextID", @"patterns", @"tracks", @"samples", @"instruments", @"sequences", @"automation", @"mixer", @"noteTracks", @"columnMutes", @"performance", @"preciseNotes", @"signalGraph"]);
-  const auto version = integer(value[@"version"], 1, 12);
+  const auto version = integer(value[@"version"], 1, 13);
   NativeSong result;
   result.nextID = integer(value[@"nextID"], 1, NativeSong::maximumID);
   auto map = [&](NSString *key, auto &out) {
@@ -227,7 +228,7 @@ NativeSong decodeNativeSong(id raw) {
       uint16_t(integer(n[@"instrument"],0,255)),uint8_t(integer(n[@"note"],1,255)),uint8_t(integer(n[@"velocity"],1,127)),
       uint8_t(integer(n[@"effect"]?:@0,0,255)),uint8_t(integer(n[@"parameter"]?:@0,0,255))});
   } else require(value[@"preciseNotes"]==nil,"Legacy metadata cannot contain precise notes");
-  if(version>=10) result.signal=decodeSignalGraph(value[@"signalGraph"]);
+  if(version>=10) {result.signal=decodeSignalGraph(value[@"signalGraph"]);if(version<13){require(result.signal.instrumentAssignments.empty(),"Legacy metadata cannot contain instrument graphs");}if(version<13)for(const auto &d:result.signal.library)for(const auto &n:d.nodes)require(n.kind!=SignalNodeKind::Automation,"Legacy metadata cannot contain graph automation sources");}
   else require(value[@"signalGraph"]==nil,"Legacy metadata cannot contain signal graphs");
   if(version>=7) result.performance=decodePatternPerformance(value[@"performance"]);
   else require(value[@"performance"]==nil,"Legacy metadata cannot contain native pattern commands");

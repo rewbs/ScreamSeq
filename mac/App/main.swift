@@ -187,9 +187,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       self?.tick()
     }
     uiReady = true
-    let argumentURL = CommandLine.arguments.dropFirst().first {
-      !$0.hasPrefix("--") && FileManager.default.fileExists(atPath: $0)
-    }.map { URL(fileURLWithPath: $0) }
+    let argumentURL = AppLaunchArguments.documentPath(CommandLine.arguments,exists:{FileManager.default.fileExists(atPath:$0)}).map{URL(fileURLWithPath:$0)}
     if let file = pendingOpenURL ?? argumentURL {
       pendingOpenURL = nil
       load(file)
@@ -1453,6 +1451,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     recoveryTimer?.invalidate()
   }
   func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+    // AppKit may deliver positional option values as open-file events as well.
+    if AppLaunchArguments.isOptionValue(filename,arguments:CommandLine.arguments){return true}
     let url = URL(fileURLWithPath: filename)
     if uiReady { load(url) } else { pendingOpenURL = url }
     return true

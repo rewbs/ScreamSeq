@@ -1021,6 +1021,9 @@ public:
 	uint32 (*nativePrepareMix)(void *, uint32) noexcept = nullptr;
 	void TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect = 0, uint8 parameter = 0);
 	void ApplyNativeNoteEffect(CHANNELINDEX channel, uint8 effect, uint8 parameter);
+	// Sample-only routing preserves channel ownership and instrument NNA voices.
+	void *nativeSampleContext = nullptr;
+	PLUGINDEX (*nativeSamplePlugin)(void *, const ModChannel &, CHANNELINDEX) noexcept = nullptr;
 	void *nativeMixContext = nullptr;
 	void (*nativeMixObserver)(void *, const PlayState &, uint32) noexcept = nullptr;
 	// Prepared host pitch curves for this mix chunk. Only explicitly controlled

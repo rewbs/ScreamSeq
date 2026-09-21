@@ -11,6 +11,8 @@ User-visible musical edits also need an agent API path, schema, Undo and persist
 
 Preserve panel drafts, their captured target/revision, selection, scroll, focus and pin state. Refreshes must not steal focus or redirect an edit. Prefer connected dockable inspectors and compact controls over blocking dialogs. Playback position, editing cursor and keyboard focus are separate. Global transport shortcuts yield to intentional local overrides; text fields and live musical typing have different responsibilities.
 
+Graph curve drafts capture the graph, source, pattern and revision. An Apply completion must not discard edits made while that request was in flight; compare a draft generation as well as the target. Keep socket geometry and wire hit-testing in the same coordinate system, cache curves outside drawing, and preserve untouched routes when updating a selected wire. Floating the graph is useful for dense patching, but narrow dock layouts still need readable controls.
+
 Before converting integer types, validate the source range or widen first. Past Swift crashes came from narrowing sample/velocity fields, and playback bugs came from modifying a different channel while handling a precise event. Validate whole batches before committing. Keep module-format limits and special note values explicit.
 
 ScreamSeq branding intentionally retains legacy `org.resonance` identifiers, built-in class IDs, discovery/cache/recovery locations and wire magic. See `assets/branding/BRANDING.md`; do not globally replace persisted identifiers. New projects use `.screamseq`; legacy `.resonance` files remain valid.

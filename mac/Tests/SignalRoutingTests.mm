@@ -1,5 +1,6 @@
 #include "../Audio/AudioUnitHost.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "soundlib/ModInstrument.h"
 #include <iostream>
 #include <cmath>
 using namespace Tracker;
@@ -40,6 +41,26 @@ int main(){@autoreleasepool{try{
     check(difference(baseline,render(*doc,rate,17))<2e-7,"Group row/persistent commands alter a unity graph");
     auto before=doc->native();bool rejected=false;try{doc->annotate([&](NativeSong &n){n.signal.assignments={{target,graph}};auto &d=n.signal.library[0];d.audio.push_back({d.nodes[0].id,d.nodes[1].id,1,1,1});n.signal.inputs={{master,target,1}};n.signal.outputs={{target,aux,1}};});}catch(const std::invalid_argument &){rejected=true;}
     check(rejected&&doc->native()==before,"Cross-subgraph feedback cycle partially committed");
+  }
+  for(uint32_t rate:{44100u,48000u,96000u}){
+    auto doc=Document::demo();doc->transaction([](CSoundFile &song){
+      song.m_nInstruments=2;song.Instruments[1]=new ModInstrument(1);song.Instruments[2]=new ModInstrument(2);song.Instruments[1]->nNNA=NewNoteAction::Continue;
+      for(auto &p:song.Patterns)if(p.IsValid())for(ROWINDEX r=0;r<p.GetNumRows();++r)for(CHANNELINDEX ch=0;ch<song.GetNumChannels();++ch)*p.GetpModCommand(r,ch)={};
+      song.Order().SetDefaultSpeed(1);song.Order().SetDefaultTempoInt(125);
+      for(auto [r,ch,inst]:{std::tuple{0,0,1},std::tuple{0,1,1},std::tuple{1,0,2},std::tuple{2,1,1},std::tuple{3,1,2}}){auto &c=*song.Patterns[0].GetpModCommand(r,ch);c.note=61;c.instr=uint8_t(inst);}
+      song.ChnSettings[0].nPan=0;song.ChnSettings[1].nPan=256;
+    });
+    uint64_t instrumentGraph=0;
+    doc->annotate([&](NativeSong &n){auto master=n.makeEntity().id;for(const auto &[channel,track]:n.tracks)n.mixer.buses.push_back({track.id,master,MixerBusKind::Track,"Track"});n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});
+      instrumentGraph=n.makeEntity().id;auto in=n.makeEntity().id,out=n.makeEntity().id;n.signal.library.push_back({instrumentGraph,1,"Half level",{{in,SignalNodeKind::Input,"Input"},{out,SignalNodeKind::Output,"Output"}},{{in,out,0,0,.5}}, {}});
+      auto channelGraph=n.makeEntity().id;in=n.makeEntity().id;out=n.makeEntity().id;n.signal.library.push_back({channelGraph,2,"Channel double",{{in,SignalNodeKind::Input,"Input"},{out,SignalNodeKind::Output,"Output"}},{{in,out,0,0,2}}, {}});n.signal.assignments={{n.tracks.at(0).id,channelGraph,1,1}};
+    });
+    const auto sampleOneVolume=doc->song().GetSample(1).nGlobalVol,sampleTwoVolume=doc->song().GetSample(2).nGlobalVol;
+    doc->transaction([](CSoundFile &song){song.GetSample(2).nGlobalVol=0;});auto onlyOne=render(*doc,rate,128);
+    doc->transaction([&](CSoundFile &song){song.GetSample(2).nGlobalVol=sampleTwoVolume;song.GetSample(1).nGlobalVol=0;});auto onlyTwo=render(*doc,rate,128);
+    doc->transaction([&](CSoundFile &song){song.GetSample(1).nGlobalVol=sampleOneVolume;});
+    doc->annotate([&](NativeSong &n){n.signal.instrumentAssignments={{n.instruments.at(1).id,instrumentGraph,1,1}};});
+    for(uint32_t block:{17u,128u,4096u}){auto result=render(*doc,rate,block);for(size_t i=0;i<result.size();++i)check(std::abs(result[i]-(onlyOne[i]*.5+onlyTwo[i]))<3e-6,"Instrument graph loses per-channel routing, NNA ownership, or dry neighboring instruments");}
   }
   std::cout<<"PASS song graph integration: sample voices, external sidechains, auxiliary returns, group command stacks, three sample rates, callback partitions, realtime safety, atomic feedback rejection\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}

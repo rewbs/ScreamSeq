@@ -12,13 +12,13 @@
     string(method, 80);
     object(p);
     NSArray *reads = @[
-      @"transport.get", @"automation.formula.preview", @"graph.get", @"graph.plugin.get",
+      @"transport.get", @"automation.formula.preview", @"graph.get", @"graph.automation.get", @"graph.plugin.get",
       @"recording.get", @"pattern.notes.get", @"pattern.performance.get", @"instrument.envelope.get", @"instrument.envelope.copy",
       @"plugin.programs.get", @"plugin.instruments.get", @"document.timing.get", @"track.get", @"api.describe", @"document.get", @"pattern.get", @"pattern.commands", @"sample.get", @"sample.waveform.get", @"sample.snap.get", @"sample.pcm.get", @"sample.clipboard.get", @"instrument.get",
       @"plugin.preset.inspect", @"plugin.library.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
     ];
     NSArray *writes = @[
-      @"transport.play", @"transport.stop", @"transport.loop", @"graph.plugin.set", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.routes.set", @"graph.controller", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.assign", @"graph.commands.set",
+      @"transport.play", @"transport.stop", @"transport.loop", @"graph.plugin.set", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.routes.set", @"graph.controller", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
       @"recording.start", @"recording.capture", @"recording.stop", @"recording.commit", @"recording.discard", @"pattern.notes.set", @"pattern.performance.set", @"instrument.envelope.transform",
       @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule",
       @"sequence.select", @"sample.patch",          @"sample.process",    @"sample.import", @"sample.importMany", @"sample.clipboard.copy", @"sample.clipboard.set", @"sample.cut", @"sample.delete", @"sample.paste",
@@ -92,10 +92,11 @@
           @"precedence":@"At an identical time, later raw channels then later subcolumns win. A new command interrupts the current slide continuously."},
         @"signalGraph":@{@"unitsPerRow":@65536,@"maximumDefinitions":@128,@"maximumNodesPerDefinition":@64,@"maximumPreparedPlugins":@256,@"maximumAudioStorageBytes":@(256*1024*1024),
           @"order":@"Row-only stack, then persistent stack, then ordinary assignment, then channel inserts. Repeating start updates Amount and Wet in place.",
-          @"instances":@"Each bus and row/persistent/ordinary role gets independent processor copies. Inactive copies process silence continuously; auxiliary inputs are silent too. Group commands process their summed bus input.",
+          @"instances":@"Each bus and row/persistent/ordinary role gets independent processor copies. Sample instruments can have a pre-channel graph with independent copies per raw channel; their NNA voices retain their original instrument and channel. Native plugin instruments use output bus routing. Inactive copies process silence continuously; auxiliary inputs are silent too. Group commands process their summed bus input.",
           @"timing":@"Commands begin at the next audio sample at their 1/65536-row position. Row-only copies expire on the next row. Stop cuts output unless tails=true; clear stops persistent copies.",
           @"routing":@"Acyclic audio and modulation dependencies. Input/Output node ports expose external buses; multiple active copies sum each auxiliary output. Plugin and subgraph auxiliary destinations are groups, returns or master.",
           @"editing":@"Structure and recipe changes stop playback for safe preparation. Layout/name/number edits do not. Custom interfaces edit an independent draft; editor.commit saves the recipe as one Undo.",
+          @"automation":@"Automation source nodes hold per-pattern curves at 256 units per row. graph.automation.get/set reads or replaces one curve; an empty points array removes it. Curves support all nine shapes including compiled scripts, repeat with the pattern and drive normalized modulation. Missing or disabled pattern curves output zero. New source kind requires native metadata 13.",
           @"amount":@"Normalized 0..1 macro, separate from wet. Modulation adds scaled sources to one shared base then clamps to normalized parameter range."},
         @"preciseNotes": @{@"unitsPerRow":@(performanceUnitsPerRow),@"maximumEvents":@(maximumPreciseNotes),@"metadataVersion":@12,
           @"notes":@"1..120 note on; 255 off; 254 cut. Instrument 0 recalls the voice. Velocity 1..127; releases use instrument 0 and velocity 127.",

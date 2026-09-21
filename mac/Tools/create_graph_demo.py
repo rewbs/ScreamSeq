@@ -2,14 +2,14 @@
 """Create a disposable graph tutorial through the same API available to agents.
 
 Starts its own headless demo session; never connects to a musician's open song.
-Usage: RESONANCE_BUILD_DIR=bin/mac-background python3 mac/Tools/create_graph_demo.py /absolute/output.resonance
+Usage: SCREAMSEQ_BUILD_DIR=bin/mac-screamseq python3 mac/Tools/create_graph_demo.py /absolute/output.screamseq
 """
 import json, os, subprocess, sys, tempfile, time
 from pathlib import Path
 from resonance_api import Client, endpoints
 
 ROOT = Path(__file__).resolve().parents[2]
-BUILD = Path(os.environ.get('RESONANCE_BUILD_DIR', ROOT / 'bin/mac-background')).resolve()
+BUILD = Path(os.environ.get('SCREAMSEQ_BUILD_DIR', os.environ.get('RESONANCE_BUILD_DIR', ROOT / 'bin/mac-screamseq'))).resolve()
 output = Path(sys.argv[1]).resolve()
 if output.exists():
     raise SystemExit('Choose a new output file; this tutorial never overwrites songs.')
@@ -57,6 +57,7 @@ with tempfile.TemporaryDirectory(prefix='resonance-graph-demo-') as temporary:
                 write('graph.update', definition=d)
                 return identity, processors
             write('document.patch', title='Connected Circuit — graph tutorial')
+            for sample in range(1,5): write('instrument.create', sample=sample)
             write('mixer.enable')
             buses = graph_data()['mixer']['buses']
             tracks = [b for b in buses if b['kind']=='track']
@@ -73,12 +74,23 @@ with tempfile.TemporaryDirectory(prefix='resonance-graph-demo-') as temporary:
             d['modulation']=[{'source':lfo,'target':liquid_nodes[1],'parameter':2,'minimum':.06,'maximum':.3},
                              {'source':amount,'target':liquid_nodes[0],'parameter':3,'minimum':.55,'maximum':.8}]
             write('graph.update', definition=d)
+            curve=write('graph.node.add',graph=liquid,kind='automation',name='Drawn cutoff',x=760,y=270)['node']
+            write('graph.automation.set',graph=liquid,node=curve,pattern=0,points=[
+                {'position':0,'value':0,'curve':'smooth'},
+                {'position':4096,'value':.4,'curve':'exponential'},
+                {'position':8192,'value':.12,'curve':'scripted','formula':'L+0.08*sin(tau*beats)'},
+                {'position':16383,'value':.1,'curve':'linear'}])
+            d=definition(liquid)
+            d['modulation'].append({'source':curve,'target':liquid_nodes[1],'parameter':2,'minimum':0,'maximum':.15})
+            write('graph.update',definition=d)
             crunch, crunch_nodes = chain('Crunch', [('resonance.distortion.v1','Soft drive',{1:10,6:-12})])
             amount = write('graph.node.add', graph=crunch, kind='amount',name='Amount → drive',x=280,y=250)['node']
             d=definition(crunch)
             d['modulation']=[{'source':amount,'target':crunch_nodes[0],'parameter':1,'minimum':.1,'maximum':.45}]
             write('graph.update', definition=d)
             trim, _ = chain('Listening trim', [('resonance.gainer.v1','Output trim',{1:-9})])
+            instrument_trim, _ = chain('Instrument character', [('resonance.gainer.v1','Instrument trim',{1:-3})])
+            write('graph.instrument.assign',instrument=1,graph=instrument_trim)
             write('graph.assign',target=master,graph=trim)
             lead=tracks[0]['id'];drums=tracks[2]['id']
             write('graph.assign',target=lead,graph=liquid,amount=.25,wet=.35)

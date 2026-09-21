@@ -11,7 +11,7 @@
 #include "../../editor/MixerRuntime.hpp"
 #include "../../editor/NativeEffects.hpp"
 #include "../../editor/SignalGraph.hpp"
-namespace OpenMPT {class CSoundFile;}
+namespace OpenMPT {class CSoundFile;struct ModInstrument;}
 namespace Tracker {
 class VST3Plugin;
 class PatternCommandRuntime;
@@ -198,7 +198,10 @@ class PluginChain {
   uint64_t dryThrough_ = 0;
   double sampleRate_ = 48000;
   bool offline_ = false;
-  std::shared_ptr<NativeSignalGraph> signalGraph_;
+  std::shared_ptr<NativeSignalGraph> signalGraph_,sampleSignalGraph_;
+  struct SampleRoute {const OpenMPT::ModInstrument *instrument=nullptr;uint16_t channel=0,slot=0;size_t processor=0;uint64_t instrumentID=0,target=0;};
+  std::vector<SampleRoute> sampleRoutes_;
+  std::array<float,8192> sampleGraphBuffer_{};
   std::vector<bool> bypass_;
   std::array<ParameterChange, 1024> queue_{};
   std::atomic<uint32_t> write_{0}, read_{0};
@@ -223,6 +226,7 @@ public:
   bool graphController(uint8_t,uint8_t) noexcept;
   std::vector<SignalActivity> graphActivity() const;
   void routeInstrument(size_t processor, const float *buffer) noexcept;
+  void processSampleGraph(size_t,const float *,const float *,uint32_t) noexcept;
   const float *processMixerBus(size_t bus, const float *, const float *) noexcept;
   bool mixerControls(const std::vector<MixerControls> &controls) noexcept { return mixer_ && mixer_->controls(controls); }
   std::vector<MixerMeter> mixerMeters() const { return mixer_ ? mixer_->meters() : std::vector<MixerMeter>{}; }

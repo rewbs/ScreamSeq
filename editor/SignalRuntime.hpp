@@ -6,7 +6,7 @@
 #include <span>
 
 namespace Tracker {
-struct SignalClock { double beat = 0, tempo = 120; bool playing = true; };
+struct SignalClock { double beat = 0, tempo = 120; bool playing = true; uint64_t pattern = 0; double position = 0, unitsPerFrame = 0, endPosition = 0, rowsPerBeat = 4; };
 struct SignalCallbacks {
   void *context = nullptr;
   bool (*process)(void *, uint64_t, float *, uint32_t, uint64_t, std::span<const MixerAudioInput>) noexcept = nullptr;
@@ -43,7 +43,8 @@ class SignalRuntime {
   std::vector<std::unique_ptr<Port>> result_;
   static Port *port(std::vector<std::unique_ptr<Port>> &,uint32_t);
   static Port *lookup(const std::vector<std::unique_ptr<Port>> &,uint32_t) noexcept;
-  double source(size_t,double,uint64_t) const noexcept;
+  double source(size_t,double,double,const SignalClock &) const noexcept;
+  const SignalPatternEnvelope *envelope(size_t,uint64_t) const noexcept;
 public:
   SignalRuntime(SignalDefinition, SignalPlan, double sampleRate);
   bool render(float *main, uint32_t frames, uint64_t position, SignalClock,

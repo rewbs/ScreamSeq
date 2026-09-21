@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include "MixerGraph.hpp"
+#include "MusicalAutomation.hpp"
 
 namespace Tracker {
 // Graph recipes belong to the document, never to a mutable rack slot. Each use
@@ -17,7 +18,13 @@ struct GraphPluginRecipe {
   std::vector<uint32_t> inputs, outputs;
   bool operator==(const GraphPluginRecipe &) const = default;
 };
-enum class SignalNodeKind : uint8_t { Input, Output, Plugin, LFO, Follower, Random, NoteEnvelope, MIDI, Amount };
+enum class SignalNodeKind : uint8_t { Input, Output, Plugin, LFO, Follower, Random, NoteEnvelope, MIDI, Amount, Automation };
+struct SignalPatternEnvelope {
+  uint64_t pattern = 0;
+  bool enabled = true;
+  std::vector<AutomationPoint> points;
+  bool operator==(const SignalPatternEnvelope &) const = default;
+};
 struct SignalNode {
   uint64_t id = 0;
   SignalNodeKind kind = SignalNodeKind::Plugin;
@@ -28,6 +35,7 @@ struct SignalNode {
   // MIDI controller 0..127, note envelope/follower attack and release.
   double rate = 1, phase = 0, attack = .01, release = .1;
   uint32_t controller = 1;
+  std::vector<SignalPatternEnvelope> envelopes;
   bool operator==(const SignalNode &) const = default;
 };
 struct SignalAudioEdge {
@@ -80,21 +88,22 @@ struct SignalOutputRoute {
 };
 // Read-only playback observation. Order is one-based across the active stack;
 // role is row=0, persistent=1, ordinary=2. Inactive tails have order zero.
-struct SignalActivity { uint64_t target=0,graph=0; uint8_t role=0; uint16_t order=0; bool tail=false; };
+struct SignalActivity { uint64_t target=0,graph=0; uint8_t role=0; uint16_t order=0; bool tail=false; uint64_t instrument=0; };
 struct SignalGraph {
   std::vector<SignalDefinition> library;
   std::vector<SignalAssignment> assignments;
+  std::vector<SignalAssignment> instrumentAssignments; // target is stable instrument identity.
   std::vector<SignalCommand> commands;
   std::map<uint64_t, uint8_t> lanes;
   std::map<std::string,std::array<double,2>> layout;
   std::vector<SignalInputRoute> inputs;
   std::vector<SignalOutputRoute> outputs;
   bool operator==(const SignalGraph &) const = default;
-  bool empty() const { return library.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty(); }
+  bool empty() const { return library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty(); }
   size_t bytes() const;
   // Callers supply stable song identities, not slot numbers.
   void validate(const std::vector<uint64_t> &targets,
-                const std::map<uint64_t, uint32_t> &patternRows) const;
+                const std::map<uint64_t, uint32_t> &patternRows, const std::vector<uint64_t> &instruments = {}) const;
 };
 // Layout and labels do not invalidate prepared audio processing.
 bool sameSignalProcessing(const SignalGraph &, const SignalGraph &);
