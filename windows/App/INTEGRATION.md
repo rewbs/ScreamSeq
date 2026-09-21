@@ -10,8 +10,9 @@ wrappers reject before document replacement, matching upstream; module import
 remains supported. Unified FX, note cuts and disconnected routes have shared
 API/rendering and native editing controls. The reusable graph canvas is covered
 in `../GRAPH_EDITOR_PROGRESS.md`; graph pattern curves and the shared modulation
-sampling fix are covered in `../GRAPH_CURVES_PROGRESS.md`. Song overview remains
-pending.
+sampling fix are covered in `../GRAPH_CURVES_PROGRESS.md`. The modeless envelope
+bank and its two reuse levels are covered in `../ENVELOPE_BANK_PROGRESS.md`.
+Song overview remains pending.
 
 ## Owner boundaries
 
@@ -44,6 +45,15 @@ against stale snapshots. Stop and navigation remain usable. Stop during renderer
 preparation cancels the subsequent start. Device shutdown precedes renderer
 replacement/disposal. Committed cell batches enqueue on the prepared renderer;
 queue overflow stops playback without claiming that the document commit failed.
+
+`NativeToolWindow` owns native child controls and a separate Direct2D surface for
+modeless editors. Its input stays local to that owned window; painting consumes
+cached geometry. `EnvelopeBankWindow` receives guarded request/context callbacks
+from the source curve editor. The document worker retains all validation,
+catalogue I/O, history and project ownership. The bank captures source identity
+and draft generation independently of its own template draft, so navigation,
+new text and stale external edits cannot redirect a completion. F6 switches
+between the bank canvas and its native controls; Ctrl+S saves its song master.
 
 Document identity changes only after a candidate opens successfully. Structural
 operations stop playback only after operation-layer validation. Failed opens and

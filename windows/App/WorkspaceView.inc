@@ -217,7 +217,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=curvePattern&&id<=curveEnable) && !(id>=graphCommand&&id<=graphDeleteNode) && !(id>=mixerCommand&&id<=mixerTiming) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
+            if(!(id>=curvePattern&&id<=curveBank) && !(id>=graphCommand&&id<=graphDeleteNode) && !(id>=mixerCommand&&id<=mixerTiming) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginTogglePort) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
     bool handleKey(WPARAM code) {

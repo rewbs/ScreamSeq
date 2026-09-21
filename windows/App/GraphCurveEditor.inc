@@ -10,20 +10,47 @@
     std::wstring curveStatus=L"Select an automation source node to edit its pattern curve";
     std::wstring curveTitle=L"Pattern automation";
     ScreamSeq::AutomationCanvas curveCanvas;
+    std::unique_ptr<ScreamSeq::EnvelopeBankWindow> envelopeBank;
+    void openCurveBank(){
+        if(envelopeBank&&(envelopeBank->visible()||envelopeBank->retainedDraft())){envelopeBank->show();return;}
+        if(curveGraph.empty()||!curveCurrent()||curveFieldsDirty)throw std::runtime_error("Load a current curve and set its pending point fields before opening the bank");
+        const auto document=curveDocument,graph=curveGraph,node=curveNode;const auto pattern=curvePatternIndex;
+        auto generation=std::make_shared<uint64_t>(curveGeneration);
+        auto sourceCurrent=[this,document,graph,node,pattern,generation]{return documentId==document&&curveDocument==document&&curveGraph==graph&&curveNode==node&&curvePatternIndex==pattern&&curveGeneration==*generation&&!curveFieldsDirty;};
+        auto context=[this]{return std::pair(documentId,view->session.revision);};
+        auto request=[this,sourceCurrent,generation](const std::string &method,const Json &params){
+            const bool source=sourceCurrent(),previousPending=curvePending;
+            if(source)curvePending=true;Json result;
+            try{result=documentOperation(method,params);}catch(...){curvePending=previousPending;throw;}
+            curvePending=previousPending;
+            if(params.contains("expectedRevision")&&source&&sourceCurrent()){
+                curveRevision=view->session.revision;
+                if(method=="envelope.bank.apply"||((method=="envelope.bank.unlink"||method=="envelope.bank.save")&&!curveDraft())){
+                    const auto before=curveGeneration;curveLoad(true);
+                    if(!curveDraft()&&curveGeneration==before+1)*generation=curveGeneration;
+                }
+            }
+            return result;
+        };
+        Json target={{"kind","graph"},{"graph",graph},{"node",node},{"pattern",pattern}},shape;
+        if(!curvePoints.empty())shape={{"span",curveRows*256},{"rowsPerBeat",curveRowsPerBeat},{"points",curvePoints}};
+        auto next=std::make_unique<ScreamSeq::EnvelopeBankWindow>(window,target,shape,document,curveRevision,curveTitle+L" · Pattern "+std::to_wstring(pattern),std::move(request),std::move(context),std::move(sourceCurrent));
+        envelopeBank=std::move(next);envelopeBank->show();
+    }
     static constexpr const char *curveNames[]={"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse","scripted"};
     bool curveDraft()const{return curveDirty||curveFieldsDirty;}
     bool graphCurveVisible()const{return graphEditorVisible()&&graphPageIndex==5;}
     bool curveCurrent()const{return curveDocument==documentId&&curveRevision==view->session.revision;}
     bool curveContextChanged(){auto node=graphSelectedNode();return node&&node->at("kind")=="automation"?(curveGraph!=graphID||curveNode!=graphNode||!curveCurrent()):!curveGraph.empty();}
     void installGraphCurveControls(){
-        for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{curveApply,L"Apply curve"},{curveReload,L"Reload"},{curveSetPoint,L"Set point"},{curveDelete,L"Delete point"},{curveRamp,L"Ramp"},{curveClear,L"Clear"},{curveFit,L"Fit"},{curveZoomIn,L"+"},{curveZoomOut,L"−"},{curvePreview,L"Check / preview"},{curveEnable,L"Enabled"}})
+        for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{curveApply,L"Apply curve"},{curveReload,L"Reload"},{curveSetPoint,L"Set point"},{curveDelete,L"Delete point"},{curveRamp,L"Ramp"},{curveClear,L"Clear"},{curveFit,L"Fit"},{curveZoomIn,L"+"},{curveZoomOut,L"−"},{curvePreview,L"Check / preview"},{curveEnable,L"Enabled"},{curveBank,L"Bank…"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(int id:{curvePattern,curveKind,curveSnap})controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(int id:{curveRow,curveValue,curveFormula}){controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);SendMessageW(controls.at(id),EM_SETLIMITTEXT,id==curveFormula?2048:32,0);}
         for(auto label:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})SendMessageW(controls.at(curveKind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         for(auto label:{L"Row",L"½ row",L"¼ row",L"1/256 row"})SendMessageW(controls.at(curveSnap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         SendMessageW(controls.at(curveKind),CB_SETCURSEL,1,0);SendMessageW(controls.at(curveSnap),CB_SETCURSEL,0,0);
-        for(int id=curvePattern;id<=curveEnable;++id)if(!controls.at(id))throw std::runtime_error("Cannot create curve controls");
+        for(int id=curvePattern;id<=curveBank;++id)if(!controls.at(id))throw std::runtime_error("Cannot create curve controls");
     }
     void curveShowFields(){
         settingCurveFields=true;const Json point=curveSelected>=0&&size_t(curveSelected)<curvePoints.size()?curvePoints[size_t(curveSelected)]:Json{{"position",0},{"value",.5},{"curve","linear"}};
@@ -69,8 +96,8 @@
         at(curvePattern,r.x+6,r.y+36,std::max(90.0f,r.w-600),230);at(curveSnap,x-326,r.y+36,110,230);at(curveFit,x-210,r.y+36,44,25);at(curveZoomOut,x-162,r.y+36,38,25);at(curveZoomIn,x-120,r.y+36,38,25);at(curveEnable,x-78,r.y+36,72,25);
         at(curveRow,x,r.y+86,120,25);at(curveValue,x+128,r.y+86,120,25);at(curveKind,x,r.y+117,248,220);at(curveFormula,x,r.y+148,248,25,curveKindIndex==8);
         at(curveSetPoint,x,r.y+179,120,25);at(curveDelete,x+128,r.y+179,120,25);at(curveRamp,x,r.y+210,60,25);at(curveClear,x+64,r.y+210,58,25);at(curvePreview,x+128,r.y+210,120,25);
-        at(curveApply,x-260,r.y+5,120,25);at(curveReload,x-132,r.y+5,120,25);
-        for(int id=curvePattern;id<=curveEnable;++id){if(!placed.contains(id))ShowWindow(controls.at(id),SW_HIDE);EnableWindow(controls.at(id),!curvePending&&(id==curveReload||!curveGraph.empty()));}
+        at(curveApply,x-260,r.y+5,92,25);at(curveReload,x-162,r.y+5,74,25);at(curveBank,x-82,r.y+5,70,25);
+        for(int id=curvePattern;id<=curveBank;++id){if(!placed.contains(id))ShowWindow(controls.at(id),SW_HIDE);EnableWindow(controls.at(id),!curvePending&&(id==curveReload||!curveGraph.empty()));}
         rebuildCurveCanvas();if(show&&((!curveDraft()&&curveContextChanged())||curvePreviewNeeded))SetTimer(window,5,120,nullptr);
     }
     Json curvePointFromFields(){
@@ -85,7 +112,8 @@
         curveSelected=-1;for(size_t i=0;i<next.size();++i)if(next[i].at("position")==position)curveSelected=int(i);if(next!=curvePoints){curvePoints=std::move(next);curveChanged();}curveShowFields();
     }
     bool graphCurveCommand(int id){
-        if(id<curvePattern||id>curveEnable)return false;if(busy||curvePending||dragging>=6)throw std::runtime_error("Curve editor is busy");workspaceState.focus="graphCurve";
+        if(id<curvePattern||id>curveBank)return false;if(busy||curvePending||dragging>=6)throw std::runtime_error("Curve editor is busy");workspaceState.focus="graphCurve";
+        if(id==curveBank){openCurveBank();return true;}
         if(id==curveReload){if(graphDocument!=documentId)throw std::runtime_error("Document changed; reload the graph before replacing its curve draft");++curveGeneration;curveLoad(true);return true;}
         if(curveGraph.empty())throw std::runtime_error("Select an automation source node");
         if(id==curvePattern){const auto index=SendMessageW(controls.at(id),CB_GETCURSEL,0,0);auto restore=[&]{for(int i=0;i<SendMessageW(controls.at(id),CB_GETCOUNT,0,0);++i)if(SendMessageW(controls.at(id),CB_GETITEMDATA,i,0)==curvePatternIndex)SendMessageW(controls.at(id),CB_SETCURSEL,i,0);};if(curveDraft()){restore();throw std::runtime_error("Apply or reload this curve before changing pattern");}if(index>=0)try{curveLoad(false,unsigned(SendMessageW(controls.at(id),CB_GETITEMDATA,index,0)));}catch(...){restore();throw;}return true;}
@@ -112,7 +140,7 @@
     void curveCancelDrag(){curvePoints=curveDragBefore;curveDirty=curveDragWasDirty;curveSelected=curveDragSelection;++curveGeneration;curvePreviewValues=Json::array();curvePreviewNeeded=true;dragging=0;ReleaseCapture();curveShowFields();rebuildCurveCanvas();}
     bool curveKey(WPARAM key,bool ctrl,bool alt,bool shift){
         if(!graphCurveVisible())return false;if(key==VK_ESCAPE&&dragging==9){curveCancelDrag();return true;}const auto focus=GetFocus();const int id=focus==window?0:GetDlgCtrlID(focus);
-        if(id>=curvePattern&&id<=curveEnable){if(key==VK_ESCAPE){++curveGeneration;curveShowFields();return true;}if(ctrl&&key==VK_RETURN){command(curveApply);return true;}if(key==VK_RETURN&&(id==curveRow||id==curveValue||id==curveFormula)){command(curveSetPoint);return true;}return false;}
+        if(id>=curvePattern&&id<=curveBank){if(key==VK_ESCAPE){++curveGeneration;curveShowFields();return true;}if(ctrl&&key==VK_RETURN){command(curveApply);return true;}if(key==VK_RETURN&&(id==curveRow||id==curveValue||id==curveFormula)){command(curveSetPoint);return true;}return false;}
         if(focus!=window||workspaceState.focus!="graphCurve")return false;if(ctrl&&key==VK_RETURN){command(curveApply);return true;}if(ctrl||alt)return false;
         if(key==VK_ESCAPE){++curveGeneration;curveShowFields();return true;}if(key==VK_DELETE){command(curveDelete);return true;}if(key==VK_HOME){command(curveFit);return true;}if(key==VK_OEM_PLUS||key==VK_ADD){command(curveZoomIn);return true;}if(key==VK_OEM_MINUS||key==VK_SUBTRACT){command(curveZoomOut);return true;}
         if(curveFieldsDirty)return false;

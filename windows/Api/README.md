@@ -31,8 +31,20 @@ graph/source/pattern/revision, retained point fields, selection, viewport and
 preview status. Values use the shared 256 units per row and normalized 0..1
 model; native fields display rows and percent. All nine curve types and scripted
 expressions use the shared evaluator. Formula previews run on the worker and
-painting consumes cached samples. Song overview, the expanded formula workbench
-and native envelope-bank controls remain outstanding.
+painting consumes cached samples. Song overview and the expanded formula
+workbench remain outstanding.
+
+The curve's **Bank…** button opens a modeless native envelope bank. It uses the
+same guarded bank/catalogue operations for captured-curve templates, linked or
+independent use, master edits, unlinking, removal, catalogue publication and
+explicit replacement/import. `workspace.get.envelopeBank` exposes the window's
+captured target/document/revision, catalogue revision, scope, selection, draft,
+preview and parent-source guard. Closing the window retains an unsaved draft;
+reopening raises it. Reload/discard is explicit. Catalogue copies remain outside
+document Undo; importing and editing song templates use document history.
+Source drafts are rechecked on completion, and unlinking retains pending source
+points. See `../ENVELOPE_BANK_PROGRESS.md` for coverage and remaining native
+parameter/instrument entry points.
 
 The normal Windows envelope catalogue lives at
 `%LOCALAPPDATA%/org.resonance.tracker/envelope-catalogue-v1.json`. Reading an absent

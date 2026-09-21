@@ -17,7 +17,7 @@ device and plugin hosting belong to each platform. See
 | Unified 1–8 FX columns, ordinary tracker commands plus PS/PL/BS/BL/NC | Shared engine/API, variable native grid, two-character entry, searchable FX inspector, stable bindings, row transforms and Pattern 2 clipboard with binding remap integrated. FX 1→FX 8/4 PCM is identical at three rates and four block sizes. See `PATTERN_FX_PROGRESS.md` and `PATTERN_NOTES_PROGRESS.md`. | Broader row-tool controls, first-letter completion and visible layout/accessibility qualification. |
 | Precise note cut and plugin trigger instruments | Shared semantics/persistence, current precise-note API, native row-draft editor and timing/velocity canvas, NC inspector, empty trigger API, native creation/assignment and independent history integrated. Installed Surge XT trigger PCM/WASAPI checks pass with documented fixture constraints. | Broader instrument/routing qualification, foreground visual/accessibility verification and live native-edit publication. |
 | Project container 6 / metadata 17; RSONGS2 snapshots | Current-only native open/save, strict rejection of historical native wrappers, opaque-state retention, sample-exact save/reopen tests. MOD/XM/IT/S3M import remains available. | Obtain a newly exported Mac format-17 fixture and perform Windows→Mac→Windows reopen. The supplied format-14 reference is historical and is not silently migrated. |
-| Explicit disconnected mixer/plugin destinations | Actual-app mixer/graph API, native bus controls and reusable graph canvas integrated. Socket dragging, wire properties, graph plugin drafts, assignments, disconnection, history and reopen are tested. See `MIXER_GRAPH_PROGRESS.md` and `GRAPH_EDITOR_PROGRESS.md`. | Song routing overview, native sends/inserts/sidechains, graph curves and broader routing/long-session qualification. |
+| Explicit disconnected mixer/plugin destinations | Actual-app mixer/graph API, native bus controls, reusable graph canvas, pattern curves and a modeless envelope bank integrated. Socket dragging, wire properties, graph plugin drafts, assignments, disconnection, history and reopen are tested. See `MIXER_GRAPH_PROGRESS.md`, `GRAPH_EDITOR_PROGRESS.md`, `GRAPH_CURVES_PROGRESS.md` and `ENVELOPE_BANK_PROGRESS.md`. | Song routing overview, native sends/inserts/sidechains, other automation/envelope editors and broader routing/long-session qualification. |
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields and sample waveform markers integrated. | Envelope editor markers and audition UI, including overlapping voices and release tails. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
 | Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, native program/port controls, independent history and editor ownership integrated; live parameter batches and editor gestures reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. | Live opaque-state replacement (including Surge's first-open zoom state), native alias controls, presets/library, explicit path resolution, graph/mixer connections and missing-plugin recovery. |
@@ -58,9 +58,12 @@ in force. A fresh fetch during this continuation found no newer upstream commits
    and independent graph-plugin editing now have native UI, persistence and PCM
    coverage (`GRAPH_EDITOR_PROGRESS.md`). Native graph pattern curves, scripted
    previews and stable modulation sampling are now covered in
-   `GRAPH_CURVES_PROGRESS.md`. Complete song routing overview, pattern-parameter
-   automation, the expanded formula workbench and both envelope
-   bank levels, with retained drawing, meaningful context menus and keyboard use.
+   `GRAPH_CURVES_PROGRESS.md`. Both envelope bank levels now have modeless native
+   controls, launched from graph curves, with guarded drafts, linked updates,
+   explicit catalogue copies and native app coverage (`ENVELOPE_BANK_PROGRESS.md`).
+   Complete song routing overview, pattern-parameter automation, native instrument
+   envelopes, the expanded formula workbench and bank entry points from those
+   editors, with retained drawing, meaningful context menus and keyboard use.
 4. **Recording and workspace.** Device selection, MIDI input and mapping,
    precise recording/recovery, sample zoom/drawing/crossfade/audition, floating
    and persisted docks, accessibility, configurable keys and command palette
