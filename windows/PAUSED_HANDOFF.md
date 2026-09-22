@@ -3,7 +3,9 @@
 > Resumed explicitly on 2026-09-21. See `RESUME_PROGRESS.md` for the newer
 > continuation checkpoint, current test evidence and remaining work; the historical record below
 > is preserved.
-> Latest continuation: `SURGE_RESTART_PROGRESS.md` covers the diagnosed Surge
+> Latest continuation: `DEFERRED_VIEWS_PROGRESS.md` covers retained view requests
+> and complete private-desktop suite isolation: 247 application tests pass.
+> Previous continuation: `SURGE_RESTART_PROGRESS.md` covers the diagnosed Surge
 > post-Undo restart fault, safe parameter-title refresh and provider diagnostics.
 > Previous continuation: `INSTRUMENT_IMPORT_PROGRESS.md` covers native instrument
 > import, selected imported sounds and a visible keymap with retained range drafts.

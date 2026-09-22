@@ -218,6 +218,12 @@ token. Navigation/selection never change song revision, Undo or transport.
 `following` is the canonical Mac field; `follow` remains a read-only legacy alias.
 Selection bounds are inclusive, matching Mac, and are part of the context token.
 
+`workspace.get.pendingViewCommands` counts native view-opening requests retained
+while workers settle, including a currently draining request. Captured document
+or target changes discard those requests; returning focus to the pattern cancels
+them. Edits are never replayed by this queue. See `../DEFERRED_VIEWS_PROGRESS.md`
+and `../Tests/README.md` for qualification and the isolated suite runner.
+
 `workspace.get` reports retained `notes`/`samples` panels, `locations`, `right`, `visible`,
 `pins`, `targets`, `focus`, and `focusLayout`. Windows extensions include `layout`,
 structured `inspection`, `returnPoints`, DIP `geometry`, `dpi`, and `viewport`.

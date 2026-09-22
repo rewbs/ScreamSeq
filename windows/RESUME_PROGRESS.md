@@ -1,6 +1,11 @@
 # Windows continuation — 2026-09-21
 
-Latest continuation: `SURGE_RESTART_PROGRESS.md` identifies the post-Undo Surge
+Latest continuation: `DEFERRED_VIEWS_PROGRESS.md` fixes lost native view requests
+during worker activity, preserves captured targets and isolates legacy app tests
+on a private desktop. All 247 application tests and 29 native CTests pass.
+Sample library/browser/preview work follows; full parity remains active.
+
+Previous continuation: `SURGE_RESTART_PROGRESS.md` identifies the post-Undo Surge
 audition failure as rejection of a parameter-title notification and adds safe
 control-thread catalog refresh plus first-failure diagnostics. Full qualification
 is recorded there; full parity remains active.

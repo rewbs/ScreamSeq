@@ -42,6 +42,7 @@
 #include <vector>
 
 namespace {
+constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int playCommand=101, stopCommand=102, followCommand=103, composeCommand=104,
 	patternCommand=105, soundCommand=106, notesCommand=107, samplesCommand=108,
 	pinCommand=109, cursorCommand=110, returnCommand=111, paletteCommand=112,
@@ -252,7 +253,7 @@ public:
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
 			{"locations",locations},{"liveKeyboard",liveKeyboard},{"musicalTyping",typingSnapshot()},
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
-            {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"status",utf8Path(status)},
+            {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"pendingViewCommands",deferredViews.size()+(drainingViews?1u:0u)},{"status",utf8Path(status)},
             {"sampleEditor",sampleEditorSnapshot()},
             {"graphEditor",graphEditorSnapshot()},
             {"graphCurve",graphCurveSnapshot()},
@@ -445,6 +446,7 @@ public:
 		device.stop(); lastAudio = device.stats();
 		status = L"Stopped / Space: play from song start / cursor remains independent";
 	}
+    #include "DeferredViews.inc"
 	#include "WorkspaceView.inc"
     #include "EditingView.inc"
     #include "SampleEditor.inc"
@@ -564,6 +566,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 	try {
 		switch(message) {
 		case ScreamSeq::ApiDispatch::message: if(app->api && !app->refreshingPlugins) app->api->drain(); return 0;
+        case deferredViewsMessage: app->drainViews();return 0;
 		case WM_CLOSE: if(app->busy) {app->stop();return 0;} if(!app->protectUnsaved()) return 0;break;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
         case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==5)app->graphCurveTimer();return 0;
@@ -717,6 +720,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 				TranslateMessage(&message); DispatchMessageW(&message);
 			}
 			if(closed) break;
+            app.drainViews();
 			if(result == WAIT_FAILED) throw std::runtime_error("Frame wait failed");
 			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) app.draw();
 			if(seconds && (ScreamSeq::ticks() - start) / app.frequency >= seconds) break;

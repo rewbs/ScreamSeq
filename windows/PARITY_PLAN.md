@@ -10,7 +10,10 @@ device and plugin hosting belong to each platform. See
 [qualification evidence](UPSTREAM_PLUGIN_QUALIFICATION.md) and
 [current app interfaces](App/INTEGRATION.md).
 
-Latest continuation: `SURGE_RESTART_PROGRESS.md` diagnoses and fixes the
+Latest continuation: `DEFERRED_VIEWS_PROGRESS.md` retains native view-opening
+requests during background reads without replaying edits or stale targets. The
+full isolated suite passes 247/247 application tests and 29/29 native CTests.
+`SURGE_RESTART_PROGRESS.md` diagnoses and fixes the
 post-Undo Surge audition fault: the host rejected a parameter-title notification.
 Title/unit refresh now publishes a separate control snapshot while the audio
 contract stays immutable; first-failure diagnostics preserve future fault causes.
@@ -23,10 +26,10 @@ creation, and fixes implicit panning and relative-tuning changes on partial edit
 entry, sample/instrument editor typing and main-workspace Live keys. A fresh
 fetch still finds no newer upstream commits. The installed Contourtonist,
 OrbitCab and Surge XT binary hashes were rechecked before current app testing.
-The installed Surge repetition gate passes 20/20. The full application run has
-241 passes and two failures: foreground preservation at mixer-test teardown,
-and a routing open command rejected during a background document read. Fix the
-lost view-command path next; retain the strict desktop check and add context.
+The installed Surge repetition gate passes 20/20. The preceding run's lost
+routing command is fixed and covered by real-worker regressions. The entire
+suite now inherits a private desktop; strict foreground/clipboard checks pass.
+The older foreground failure remains unattributed and preserved in its report.
 Following implementation priorities are the sample library/browser and multisample
 workflow, then MIDI/device/recording and workspace
 parity. Existing plugin and cross-platform release gates remain in force.

@@ -42,6 +42,8 @@ class PrivateDesktop:
     def __enter__(self):
         self.clip = user.GetClipboardSequenceNumber()
         self.foreground = user.GetForegroundWindow()
+        self.foreground_owner = w.DWORD()
+        user.GetWindowThreadProcessId(self.foreground, ctypes.byref(self.foreground_owner))
         self.original = user.GetThreadDesktop(kernel.GetCurrentThreadId())
         self.name = 'ScreamSeqTest-' + uuid.uuid4().hex
         self.desktop = check(user.CreateDesktopW(self.name, None, None, 0, 0xF01FF, None))
@@ -91,5 +93,12 @@ class PrivateDesktop:
             kernel.CloseHandle(info.hProcess)
         check(user.SetThreadDesktop(self.original))
         check(user.CloseDesktop(self.desktop))
-        assert user.GetClipboardSequenceNumber() == self.clip
-        assert user.GetForegroundWindow() == self.foreground
+        assert user.GetClipboardSequenceNumber() == self.clip, 'Clipboard sequence changed during private-desktop qualification'
+        current = user.GetForegroundWindow()
+        current_owner = w.DWORD()
+        user.GetWindowThreadProcessId(current, ctypes.byref(current_owner))
+        assert current == self.foreground, dict(
+            problem='Foreground HWND changed during private-desktop qualification',
+            before=self.foreground, beforePID=self.foreground_owner.value,
+            after=current, afterPID=current_owner.value,
+            ownedPIDs=[info.dwProcessId for info in self.processes])
