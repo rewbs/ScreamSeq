@@ -27,13 +27,16 @@ class PreviewVoice {
   const PreviewAudio *audio_=nullptr;
   uint64_t position_=0;
   uint32_t tail_=0;
+  float currentGain_=0,targetGain_=0;
+  uint32_t gainFrames_=0;
   bool silent_=false;
-  std::atomic<float> gain_{.25f};
+  std::atomic<float> gain_{.25118864f};
   std::atomic<bool> finished_{true};
   std::atomic<uint64_t> rendered_{0};
 public:
   void prepare(const PreviewAudio &,uint32_t tailFrames,bool silent=false);
   void gain(float value) noexcept;
+  float gain()const noexcept{return gain_.load(std::memory_order_relaxed);}
   void render(float *,uint32_t) noexcept;
   bool finished()const noexcept{return finished_.load(std::memory_order_acquire);}
   uint64_t rendered()const noexcept{return rendered_.load(std::memory_order_relaxed);}
@@ -47,6 +50,8 @@ class PreviewPlayer final {
 public:
   ~PreviewPlayer(){stop();}
   void play(std::shared_ptr<const PreviewAudio>,float gain,bool silent=false);
+  void gain(float value)noexcept{voice_.gain(value);}
+  float gain()const noexcept{return voice_.gain();}
   void stop()noexcept;
   void service()noexcept;
   bool playing()const noexcept{return device_.running()&&!voice_.finished();}

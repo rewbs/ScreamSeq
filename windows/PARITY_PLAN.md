@@ -13,9 +13,10 @@ device and plugin hosting belong to each platform. See
 Latest continuation: `SAMPLE_LIBRARY_PROGRESS.md` adds all eight library APIs,
 background indexing/search, independent sample preview, the native browser and
 guarded family import review. All 257 isolated application tests, 30 primary
-native CTests, two index/worker tests and two adapter tests pass. Next finish
-running-preview gain/feedback, then native device selection, MIDI, recording
-and recovery.
+native CTests, two index/worker tests and two adapter tests pass. A subsequent
+live-gain/preview-feedback refinement passes 11 focused app tests and its native
+callback/device tests. Next implement native device selection, MIDI, recording
+and recovery. A fresh fetch on 2026-09-22 still finds no newer upstream commits.
 `DEFERRED_VIEWS_PROGRESS.md` retains native view-opening
 requests during background reads without replaying edits or stale targets. The
 full isolated suite passes 247/247 application tests and 29/29 native CTests.

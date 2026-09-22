@@ -169,6 +169,21 @@ class SampleLibraryTests(unittest.TestCase):
         self.assertIn('2 samples imported',self.browser()['status']);self.assertEqual(len(self.browser()['selectedPaths']),2)
         self.client.call('history.undo',dict(domain='document',expectedRevision=after['revision']));self.assertEqual(self.client.call('document.get')['data']['samples'],before['data']['samples'])
 
+    def test_native_preview_gain_applies_immediately_and_partial_text_preserves_target(self):
+        self.open_browser();self.select_files([0]);before=self.client.call('document.get')
+        preview=lambda:self.read('workspace.get')['sampleLibrary']['preview']
+        for db in (-24,-60,0,-6):
+            state=self.field(5412,str(db));self.assertEqual(state['gainDB'],str(db))
+            self.assertAlmostEqual(preview()['gain'],10**(db/20),places=7)
+        retained=preview()['gain']
+        for partial in ('-','','NaN','1','-61'):
+            self.field(5412,partial);self.assertEqual(preview()['gain'],retained)
+        self.press(5410);self.assertIn('-60 to 0 dB',self.browser()['status']);self.assertFalse(preview()['deviceOpen'])
+        self.field(5412,'-18');self.press(5410);self.assertAlmostEqual(preview()['gain'],10**(-18/20),places=7)
+        self.assertFalse(self.browser()['previewPlaying']);self.assertEqual(self.browser()['previewPosition'],0)
+        self.press(5418);self.desktop.send(self.desktop.hwnd(self.pid),0x111,511);self.assertEqual(self.idle_browser()['gainDB'],'-18')
+        self.assertEqual(before,self.client.call('document.get'))
+
     def test_native_multisample_roots_stale_guard_retained_draft_and_rebase(self):
         self.open_browser();self.field(5401,'piano');self.select_files([0]);self.press(5415);state=self.browser()['multisample'];self.assertTrue(state['visible']);self.assertEqual(state['octaveShift'],'1')
         self.field(5601,'Glass keys',True);self.field(5602,'0',True);self.press(5603,True);state=self.browser()['multisample'];self.assertEqual([z['rootNote'] for z in state['zones']],[37,41,44])

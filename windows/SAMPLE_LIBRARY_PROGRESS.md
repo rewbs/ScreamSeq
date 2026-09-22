@@ -4,6 +4,30 @@ Windows now implements the Mac sample-library workflow and all eight
 `sample.library.*` methods from `mac/AUTOMATION.md`. Existing shared imports,
 musical Undo and native persistence remain the editing boundary.
 
+## Live preview follow-up — 2026-09-22
+
+Valid gain edits now update the running preview through its atomic control,
+without reopening the output or restarting the sample. The callback ramps a new
+level over 2 ms. Partial or invalid text retains the preceding level; Enter or
+Preview validates the complete value. Gain remains editable during decoding,
+and a completed decode uses the latest level. The browser shows Playing and a
+waveform position marker for its selected file, polls at 50 ms during playback,
+returns to 200 ms while idle, and stops polling when hidden. Unchanged polling
+no longer relays out every native control.
+
+This follow-up executable SHA-256 is
+`CB31C0EA0363B7A1A22FA3C7D0566BD08BAF3B7F3B694B669132FBB8BC9F295C`.
+The focused sample-library suite passes **11/11**, 7.999 seconds, including
+immediate gain, partial input, retained fields and independent document history
+(`bin/windows-sample-preview-live-gain-app.log`); strict desktop isolation passes.
+The preview CTest passes, 0.52 seconds, with exact PCM across 1/17/128/4096-frame
+partitions, live gain changes at known source frames, no restart and zero scoped
+C++ allocations/frees. Silent WASAPI tests at 44.1/48/96 kHz retain the independent
+song stream and report zero overruns, starvation, device or MMCSS errors.
+Logs use `bin/windows-sample-preview-live-gain-*`. The full 257-test gate below
+belongs to the preceding preserved build; it was not repeated for this bounded
+follow-up. Foreground playback-marker presentation remains unqualified.
+
 ## Implemented
 
 - Separate request/index workers publish immutable, bounded indexes. Searches
@@ -91,8 +115,5 @@ throughput/RSS has not been measured. Cancellation discards stale results but
 does not interrupt a running codec. Preview currently uses the default stereo
 endpoint; explicit devices and other layouts remain work. Session library
 revisions do not merge simultaneous preferences writes from separate processes.
-The browser gain field currently applies on Preview; Mac's immediate adjustment
-of a running preview remains a small UI follow-up, along with clearer playback
-feedback. The preview voice already has a lock-free gain control.
 No Mac runtime or reciprocal project round trip was performed. The remaining
 device/MIDI/recording/recovery, workspace, plugin and release gates remain active.

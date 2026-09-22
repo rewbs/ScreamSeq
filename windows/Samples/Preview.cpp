@@ -83,7 +83,7 @@ std::future<std::shared_ptr<const PreviewAudio>> PreviewDecoder::decode(std::str
 void PreviewVoice::prepare(const PreviewAudio &audio,uint32_t tail,bool silent) {
   if(!audio.frames||audio.frames>2097152||audio.rate<100||audio.rate>768000||audio.channels<1||audio.channels>2||audio.pcm.size()!=size_t(audio.frames)*audio.channels)
     throw std::invalid_argument("Invalid prepared preview audio");
-  audio_=&audio;position_=0;tail_=tail;silent_=silent;rendered_=0;finished_=false;
+  audio_=&audio;position_=0;tail_=tail;silent_=silent;rendered_=0;finished_=false;gainFrames_=0;
 }
 void PreviewVoice::gain(float value)noexcept {gain_.store(std::isfinite(value)?std::clamp(value,0.f,1.f):0.f,std::memory_order_relaxed);}
 void PreviewVoice::render(float *out,uint32_t frames)noexcept {
@@ -92,8 +92,11 @@ void PreviewVoice::render(float *out,uint32_t frames)noexcept {
   if(!audio_||finished_.load(std::memory_order_relaxed))return;
   const auto available=uint32_t(std::min<uint64_t>(frames,position_<audio_->frames?audio_->frames-position_:0));
   const auto scale=gain_.load(std::memory_order_relaxed);const auto edge=std::max(1.,audio_->rate*.002);
+  if(!position_)currentGain_=targetGain_=scale;
+  else if(scale!=targetGain_){targetGain_=scale;gainFrames_=uint32_t(std::ceil(edge));}
   for(uint32_t f=0;f<available;++f) {
-    const auto at=uint32_t(position_+f);const auto fade=float(std::min(1.,double(std::min(at+1,audio_->frames-at))/edge))*scale;
+    if(gainFrames_){currentGain_+=(targetGain_-currentGain_)/gainFrames_;if(!--gainFrames_)currentGain_=targetGain_;}
+    const auto at=uint32_t(position_+f);const auto fade=float(std::min(1.,double(std::min(at+1,audio_->frames-at))/edge))*currentGain_;
     for(unsigned c=0;c<2;++c){const auto value=audio_->pcm[size_t(at)*audio_->channels+(audio_->channels==1?0:c)];out[size_t(f)*2+c]=std::isfinite(value)?std::clamp(value,-1.f,1.f)*fade:0.f;}
   }
   if(silent_)std::fill_n(out,size_t(frames)*2,0.f);
@@ -117,6 +120,7 @@ void PreviewPlayer::service()noexcept {if(audio_&&(voice_.finished()||!device_.r
 Json PreviewPlayer::status()const {
   const auto s=audio_?device_.stats():last_;
   return {{"playing",playing()},{"deviceOpen",bool(audio_)},{"renderedFrames",voice_.rendered()},
+    {"path",audio_?audio_->path:""},{"rate",audio_?audio_->rate:0},{"frames",audio_?audio_->frames:0},{"gain",gain()},
     {"callbacks",s.callbackCount},{"deadlineOverruns",s.deadlineOverruns},{"starvationIndicators",s.starvationIndicators},
     {"deviceErrors",s.deviceErrors},{"lastError",s.lastError},{"mmcssError",s.mmcssError}};
 }

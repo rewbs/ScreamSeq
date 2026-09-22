@@ -5,7 +5,6 @@
     ScreamSeq::Samples::PreviewPlayer samplePreview;
     unsigned libraryWaits=0;
     bool allowSamplePreview=false;
-    float samplePreviewGain=.25f;
     std::unique_ptr<ScreamSeq::SampleLibraryWindow> sampleBrowser;
 
     void openSampleBrowser() {
@@ -13,6 +12,8 @@
         if(!sampleBrowser)sampleBrowser=std::make_unique<ScreamSeq::SampleLibraryWindow>(window,
             [this](const auto &method,const auto &params){return method.starts_with("sample.library.")?independentOperation(method,params).at("data"):documentOperation(method,params);},
             [this]{return sampleLibrary->status();},
+            [this]{return samplePreview.status();},
+            [this](double db){samplePreview.gain(float(std::pow(10.,db/20.)));},
             [this]{return ScreamSeq::SampleLibraryWindow::Context{documentId,view->session.revision,view->instruments!=0};},
             [this](const Json &result,const std::string &document){
                 if(documentId!=document)return;
@@ -73,14 +74,14 @@
             for(auto i=p.begin();i!=p.end();++i)need(i.key()=="path"||(preview&&i.key()=="gainDB"),"Unknown sample library field");
             need(p.contains("path")&&p.at("path").is_string(),"Use an absolute sample path");
             std::string path;try{path=ScreamSeq::Samples::LibraryIndex::canonicalPath(p.at("path").get<std::string>());}catch(const std::invalid_argument &e){throw ScreamSeq::Api::ApiError(-32602,e.what());}
-            float gain=samplePreviewGain;
+            float gain=samplePreview.gain();
             if(p.contains("gainDB")){const auto &v=p.at("gainDB");need(v.is_number(),"Preview gain must be -60 to 0 dB");const double db=v.get<double>();need(std::isfinite(db)&&db>=-60&&db<=0,"Preview gain must be -60 to 0 dB");gain=float(std::pow(10.,db/20.));}
             uint64_t generation=0;std::function<bool()> cancelled;
-            if(preview){generation=++samplePreviewGeneration;samplePreview.stop();samplePreviewGain=gain;cancelled=[this,generation]{return samplePreviewGeneration.load()!=generation;};}
+            if(preview){generation=++samplePreviewGeneration;samplePreview.stop();samplePreview.gain(gain);cancelled=[this,generation]{return samplePreviewGeneration.load()!=generation;};}
             const auto audio=awaitLibrary(sampleDecoder->decode(path,cancelled));
             if(preview&&cancelled())throw ScreamSeq::Api::ApiError(-32002,"Sample preview cancelled by a newer selection or Stop");
             auto data=audio->dictionary();
-            if(preview){if(allowSamplePreview)samplePreview.play(audio,gain);data["audible"]=allowSamplePreview;}
+            if(preview){if(allowSamplePreview)samplePreview.play(audio,samplePreview.gain());data["audible"]=allowSamplePreview;}
             return reply(std::move(data));
         }
         return awaitLibrary(sampleLibrary->invoke(method,p));

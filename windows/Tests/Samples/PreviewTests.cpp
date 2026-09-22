@@ -36,11 +36,24 @@ static void voiceTests(){
       check(std::abs(output[2*(audio.frames/2)+1]-(channels==1?.2f:-.4f))<1e-6,"mono/stereo channel identity");
       check(output[0]>0&&output[0]<.003&&output[2*(audio.frames-1)]<.003&&output[2*audio.frames]==0,"2ms edge fades or end silence");
     }
+    reference.clear();
+    for(unsigned block:{1u,17u,128u,4096u}){
+      PreviewVoice live;live.prepare(audio,0);live.gain(.5f);std::vector<float> output(size_t(audio.frames)*2);
+      unsigned at=0;for(unsigned boundary:{500u,1000u,audio.frames}){
+        if(at==500)live.gain(.125f);if(at==1000)live.gain(1.f);
+        while(at<boundary){const auto frames=std::min(block,boundary-at);{AudioAudit::Scope audit;live.render(output.data()+size_t(at)*2,frames);}at+=frames;}
+      }
+      check(live.rendered()==audio.frames&&live.finished(),"live gain restarted or truncated preview");
+      if(reference.empty())reference=output;else check(reference==output,"live gain ramp depends on callback partition");
+      const auto ramp=unsigned(std::ceil(rate*.002));
+      check(output[1000]<.2f&&output[1000]>.19f&&std::abs(output[2*(500+ramp)]-.05f)<1e-6,"live gain must smoothly reach its target in 2ms");
+      check(output[2000]>.05f&&output[2000]<.06f&&std::abs(output[2*(1000+ramp)]-.4f)<1e-6,"live gain increase ramp");
+    }
     PreviewVoice voice;voice.prepare(audio,0,true);std::vector<float> silent(64,1);{AudioAudit::Scope audit;voice.render(silent.data(),32);}check(std::all_of(silent.begin(),silent.end(),[](float v){return v==0;}),"qualification silence applied after DSP");
     audio.pcm[0]=std::numeric_limits<float>::quiet_NaN();audio.pcm[1]=10;voice.prepare(audio,0);voice.gain(1);voice.render(silent.data(),32);check(silent[0]==0&&std::all_of(silent.begin(),silent.end(),[](float v){return std::isfinite(v)&&std::abs(v)<=1;}),"nonfinite/clamped PCM");
   }
   check(AudioAudit::allocations.load()==0&&AudioAudit::deallocations.load()==0,"preview callback allocated/freed C++ storage");
-  std::cout<<"PASS mono/stereo, gain, 2ms fades, end silence, nonfinite clamp; partition exact at 44.1/48/96 kHz with blocks 1/17/128/4096; callback C++ allocations/frees = 0\n";
+  std::cout<<"PASS mono/stereo, live gain with 2ms ramps and no restart, 2ms fades, end silence, nonfinite clamp; partition exact at 44.1/48/96 kHz with blocks 1/17/128/4096; callback C++ allocations/frees = 0\n";
 }
 static void decoderTests(const fs::path &parent){
   Folder folder(parent);PreviewDecoder decoder;
@@ -67,7 +80,10 @@ static void deviceTests(){
   check(song.open(render,&songFrames)&&song.start(),"open silent song stream");
   for(unsigned rate:{44100u,48000u,96000u}){
     auto audio=std::make_shared<PreviewAudio>();audio->rate=rate;audio->channels=2;audio->frames=rate/5;audio->totalFrames=audio->frames;audio->pcm.resize(size_t(audio->frames)*2,.1f);
+    audio->path="owned-live-gain-preview.wav";
     PreviewPlayer preview;const auto before=songFrames.load();preview.play(audio,.25f,true);
+    check(preview.status()["playing"]==true&&preview.status()["path"]==audio->path&&preview.status()["frames"]==audio->frames&&preview.status()["rate"]==rate,"active preview feedback identity");
+    preview.gain(.125f);check(preview.status()["gain"]==.125f&&preview.status()["deviceOpen"]==true,"live player gain closed output or ignored target");
     const auto deadline=std::chrono::steady_clock::now()+3s;while(preview.status()["deviceOpen"].get<bool>()&&std::chrono::steady_clock::now()<deadline){preview.service();std::this_thread::sleep_for(5ms);}
     auto state=preview.status();check(!state["deviceOpen"].get<bool>()&&state["renderedFrames"]==audio->frames&&state["callbacks"]>0,"preview completion/retirement");
     check(state["deviceErrors"]==0&&state["lastError"]==0&&state["mmcssError"]==0,"preview device fault");
