@@ -1,5 +1,10 @@
 # Windows document-worker application integration
 
+Native Audio settings now selects an output endpoint and preferred buffer period
+through independent guarded session APIs. Driver-supported periods and buffer
+capacity are reported separately from preferences. See
+`../AUDIO_SETTINGS_PROGRESS.md`; timestamps/MIDI/recording remain in progress.
+
 The current sample-library/browser, independent preview, filename families and
 captured multi-sample import review are covered in `../SAMPLE_LIBRARY_PROGRESS.md`.
 They use independent library workers and the existing shared musical transactions.
@@ -12,8 +17,7 @@ artifact. Current upstream scope and qualification are documented in
 Native sample properties, captured file replacement, batch sample/mapped-
 instrument import and sample-instrument creation are covered in
 `../SAMPLE_SETTINGS_PROGRESS.md`. They reuse shared transactions and retain
-target/revision guards, drafts, Undo and native persistence. Windows sample
-library/preview remains separate work. Native instrument import, imported-sound
+target/revision guards, drafts, Undo and native persistence. Native instrument import, imported-sound
 selection and the keymap list beside the envelope are covered in
 `../INSTRUMENT_IMPORT_PROGRESS.md`; they retain unfinished mapping fields too.
 

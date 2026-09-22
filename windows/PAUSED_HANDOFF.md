@@ -3,7 +3,9 @@
 > Resumed explicitly on 2026-09-21. See `RESUME_PROGRESS.md` for the newer
 > continuation checkpoint, current test evidence and remaining work; the historical record below
 > is preserved.
-> Latest continuation: `SAMPLE_LIBRARY_PROGRESS.md` covers the native library,
+> Latest continuation: `AUDIO_SETTINGS_PROGRESS.md` covers native output-device
+> and buffer settings with independent revision guards. Full parity remains active.
+> Previous continuation: `SAMPLE_LIBRARY_PROGRESS.md` covers the native library,
 > independent preview and guarded family review/import. Full parity remains active.
 > Previous continuation: `DEFERRED_VIEWS_PROGRESS.md` covers retained view requests
 > and complete private-desktop suite isolation: 247 application tests pass.

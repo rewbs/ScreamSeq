@@ -10,12 +10,12 @@
         case effectsCommand:case mixerCommand:case mixerRouting:case graphCommand:
         case curveBank:case curveReference:case graphCommandsCommand:
         case parameterAutomationCommand:case absoluteAutomationCommand:
-        case sampleDetailCommand:case sampleBrowseCommand:case instrumentEnvelopeCommand:case auditionCommand:return true;
+        case sampleDetailCommand:case sampleBrowseCommand:case audioSettingsCommand:case instrumentEnvelopeCommand:case auditionCommand:return true;
         default:return false;
         }
     }
     Json viewCommandTarget(int id)const {
-        if(id==mixerRouting||id==curveReference||id==pluginBrowse||id==sampleBrowseCommand)return Json::array();
+        if(id==mixerRouting||id==curveReference||id==pluginBrowse||id==sampleBrowseCommand||id==audioSettingsCommand)return Json::array();
         if(id==curveBank)return Json::array({curveGraph,curveNode,curvePatternIndex,curveGeneration,curveFieldsDirty});
         if(id==graphCommand)return Json::array({graphID,graphNode,graphGeneration});
         if(id==mixerCommand)return Json::array({mixerTarget});

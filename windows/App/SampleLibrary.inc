@@ -58,10 +58,11 @@
         }
         auto result=future.get();if(presentationFailed)status=L"Library operation completed; display presentation failed";return result;
     }
-    std::vector<std::string> independentReads()const override {auto methods=ScreamSeq::Samples::Library::reads();methods.push_back("sample.library.inspect");return methods;}
-    std::vector<std::string> independentWrites()const override {auto methods=ScreamSeq::Samples::Library::writes();methods.insert(methods.end(),{"sample.library.preview","sample.library.preview.stop"});return methods;}
-    Json independentGuards()const override {return {{"sample.library.roots.set",{"expectedLibraryRevision"}},{"sample.library.rescan",{"expectedLibraryRevision"}},{"sample.library.preview",Json::array()},{"sample.library.preview.stop",Json::array()}};}
+    std::vector<std::string> independentReads()const override {auto methods=ScreamSeq::Samples::Library::reads();methods.insert(methods.end(),{"sample.library.inspect","audio.devices.get","audio.settings.get"});return methods;}
+    std::vector<std::string> independentWrites()const override {auto methods=ScreamSeq::Samples::Library::writes();methods.insert(methods.end(),{"sample.library.preview","sample.library.preview.stop","audio.settings.set"});return methods;}
+    Json independentGuards()const override {return {{"sample.library.roots.set",{"expectedLibraryRevision"}},{"sample.library.rescan",{"expectedLibraryRevision"}},{"sample.library.preview",Json::array()},{"sample.library.preview.stop",Json::array()},{"audio.settings.set",{"expectedAudioRevision"}}};}
     Json independentOperation(const std::string &method,const Json &p) override {
+        if(method.starts_with("audio."))return audioOperation(method,p);
         if(libraryWaits>=8)throw ScreamSeq::Api::ApiError(-32002,"Sample library requests are busy");
         prepareSampleLibrary();
         auto need=[](bool value,const char *message){if(!value)throw ScreamSeq::Api::ApiError(-32602,message);};

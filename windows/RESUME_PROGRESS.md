@@ -1,6 +1,13 @@
 # Windows continuation — 2026-09-21
 
-Latest continuation: `SAMPLE_LIBRARY_PROGRESS.md` adds the native library/browser,
+Latest continuation: `AUDIO_SETTINGS_PROGRESS.md` adds native output-device and
+buffer selection plus independent settings APIs. The six output tests and eleven
+library tests pass together, as do 30 primary CTests and silent device tests. All
+**264 application tests pass**, no failures or skips, in 671.289 seconds, with
+strict desktop isolation. The package is
+`bin/windows-checkpoints/audio-settings-20260922/`. Full parity remains active.
+
+Previous continuation: `SAMPLE_LIBRARY_PROGRESS.md` adds the native library/browser,
 independent preview and guarded family import. All 257 application tests pass
 with no failures or skips, as do 30 primary native CTests, two index/worker tests
 and two adapter tests. The preserved package is

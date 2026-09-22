@@ -47,6 +47,7 @@
 		place(playCommand,174,12,64,26);place(stopCommand,242,12,60,26);place(followCommand,306,12,90,26);
 		place(paletteCommand,402,12,154,26);
         place(instrumentEnvelopeCommand,564,12,126,26);
+        place(audioSettingsCommand,698,12,110,26);
 		place(composeCommand,174,52,80,26);place(patternCommand,258,52,106,26);place(soundCommand,368,52,108,26);
         place(mixerCommand,564,52,76,26);
         place(parameterAutomationCommand,644,52,96,26);
@@ -115,6 +116,7 @@
 			{notesCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
             {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},{liveKeysCommand,L"Live keys"},{sampleBrowseCommand,L"Browse samples…"},
+            {audioSettingsCommand,L"Audio settings…"},
             {openCommand,L"Open"},{saveCommand,L"Save"},{saveAsCommand,L"Save As"},{undoCommand,L"Undo"},{redoCommand,L"Redo"},{graphCommandsCommand,L"Graphs…"},{parameterAutomationCommand,L"Automation…"},
             {sampleImportCommand,L"Import…"},{sampleAllCommand,L"All"},{sampleReverseCommand,L"Reverse"},{sampleNormalizeCommand,L"Normalize"},
             {sampleFadeInCommand,L"Fade in"},{sampleFadeOutCommand,L"Fade out"},{sampleTrimCommand,L"Trim"},{sampleLoopCommand,L"Set loop"},{sampleRangeCommand,L"Set range"},
@@ -151,6 +153,7 @@
             {absoluteAutomationCommand,L"Automation / Absolute song parameter lane",L""},
             {sampleDetailCommand,L"Sample / Detailed waveform, drawing and crossfade",L""},
             {sampleBrowseCommand,L"Sample / Browse library, preview and import sample families",L""},
+            {audioSettingsCommand,L"Audio / Output device and buffer settings",L""},
             {auditionCommand,L"Playback / Sample and instrument audition",L""},
             {instrumentEnvelopeCommand,L"Instrument / Envelopes, settings and sample keymap",L""},
             {effectsCommand,L"Pattern / Inspect FX and parameter bindings",L"Enter on an FX cell"},
@@ -210,6 +213,7 @@
             else if(id==absoluteAutomationCommand){openAbsoluteAutomation();return;}
             else if(id==sampleDetailCommand){openSampleDetail();return;}
             else if(id==sampleBrowseCommand){openSampleBrowser();return;}
+            else if(id==audioSettingsCommand){openAudioSettings();return;}
             else if(id==auditionCommand){openAudition();return;}
             else if(id==instrumentEnvelopeCommand){openInstrumentEnvelope();return;}
             else if(id==instrumentImportCommand){openInstrumentEnvelope();instrumentEnvelopeWindow->importInstrument();return;}

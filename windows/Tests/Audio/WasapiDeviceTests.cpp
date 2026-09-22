@@ -1,5 +1,6 @@
-// Silent, opt-in hardware integration test. Never selects capture or changes routing.
+// Silent, opt-in hardware integration test. Never captures or changes system defaults.
 #include "../../Audio/WasapiDevice.hpp"
+#include "../../Audio/PeriodSelection.hpp"
 #ifdef SCREAMSEQ_WASAPI_ALLOCATION_AUDIT
 #include "../../Audio/RealtimeAudit.hpp"
 #include <malloc.h>
@@ -35,6 +36,7 @@ void operator delete[](void* p, std::size_t, std::align_val_t alignment) noexcep
 #include <cstring>
 #include <thread>
 #include <type_traits>
+#include <limits>
 
 namespace {
 struct CallbackState {
@@ -59,6 +61,8 @@ int main(int argc, char** argv) {
   static_assert(std::is_standard_layout_v<ScreamSeq::WasapiDevice::Stats>);
   ScreamSeq::WasapiDevice device;
   bool ok = require(!device.running(), "new device is stopped");
+  for(const auto &row:std::vector<std::vector<std::uint32_t>>{{0,4,48,448,48},{64,4,48,448,64},{65,4,48,448,68},{512,4,48,448,448},{64,128,256,1024,256},{257,128,256,1024,384},{0,4,49,448,52},{0,0,1,4,0},{0,4,8,4,0},{4,8,1,7,0},{UINT32_MAX,4,4,UINT32_MAX,UINT32_MAX-3}})
+    ok &= require(ScreamSeq::sharedPeriod(row[0],row[1],row[2],row[3])==row[4],"legal period rounding, clamping and widened overflow");
 #ifdef SCREAMSEQ_WASAPI_ALLOCATION_AUDIT
   {
     ScreamSeq::AudioAudit::Scope scope;
@@ -75,6 +79,9 @@ int main(int argc, char** argv) {
   device.stop(); device.close(); device.close();
   ok &= require(!device.start(), "start without open fails");
   ok &= require(!device.open(nullptr, nullptr), "null callback fails");
+  CallbackState invalid;
+  ok &= require(!device.open(silence,&invalid,{L"",65537}),"out-of-range requested period fails before opening hardware");
+  ok &= require(!device.open(silence,&invalid,{std::wstring(L"a\0b",3),128}),"embedded null endpoint rejected");
   if (argc < 2 || std::strcmp(argv[1], "--silence") != 0) {
     std::puts("Lifecycle tests only. Pass --silence [cycles] [milliseconds] for real output tests.");
     return ok ? 0 : 1;
@@ -89,6 +96,9 @@ int main(int argc, char** argv) {
     return 1;
   }
   const auto negotiated = device.stats();
+  const auto resolved=device.endpointId();
+  auto endpoints=ScreamSeq::WasapiDevice::endpoints();
+  ok &= require(!resolved.empty()&&std::any_of(endpoints.begin(),endpoints.end(),[&](const auto &e){return e.id==resolved&&e.isDefault&&!e.name.empty();}),"enumeration identifies the opened default endpoint");
   std::printf("sample_rate=%u period_frames=%u buffer_frames=%u endpoint_channels=%u mode=%u fallback_hr=0x%08x\n",
     device.sampleRate(), device.periodFrames(), negotiated.bufferFrames,
     negotiated.endpointChannels, static_cast<unsigned>(negotiated.mode), static_cast<unsigned>(negotiated.fallbackError));
@@ -99,6 +109,7 @@ int main(int argc, char** argv) {
   for (int cycle = 0; cycle < cycles && ok; ++cycle) {
     auto before = state.calls.load();
     ok &= require(device.start(), "start succeeds");
+    ok &= require(device.endpointId()==resolved,"restart retains the prepared output endpoint");
     ok &= require(device.start(), "start is idempotent");
     std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     ok &= require(device.running(), "still running before stop");
@@ -126,6 +137,20 @@ int main(int argc, char** argv) {
   ok &= require(s.deviceErrors == 0 && s.lastError == 0, "stream completed without device error");
   device.close();
   ok &= require(device.sampleRate() == 0 && device.periodFrames() == 0, "close clears negotiated format");
+  ok &= require(device.endpointId().empty(),"close clears endpoint identity");
+  for(unsigned preferred:{64u,128u,256u,512u}) {
+    ScreamSeq::WasapiDevice selected;
+    ok &= require(selected.open(silence,&state,{resolved,preferred}),"explicit output and preferred period opens");
+    ok &= require(selected.endpointId()==resolved&&selected.periodFrames()>0,"explicit endpoint retained with truthful negotiation");
+    ok &= require(selected.start(),"explicit output starts");
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    ScreamSeq::WasapiDevice missing;
+    ok &= require(!missing.open(silence,&state,{L"ScreamSeq-QA-missing-output",preferred}),"missing selected output must not fall back to default");
+    ok &= require(selected.running(),"failed independent configuration disrupted live output");
+    selected.stop();const auto measured=selected.stats();
+    std::printf("explicit_preferred=%u actual_period=%u buffer=%u callbacks=%llu overruns=%llu starvation=%llu faults=%llu fallback=0x%08x\n",preferred,selected.periodFrames(),measured.bufferFrames,static_cast<unsigned long long>(measured.callbackCount),static_cast<unsigned long long>(measured.deadlineOverruns),static_cast<unsigned long long>(measured.starvationIndicators),static_cast<unsigned long long>(measured.deviceErrors),static_cast<unsigned>(measured.fallbackError));
+    ok &= require(measured.callbackCount>0&&measured.deviceErrors==0&&measured.lastError==0,"selected output rendered without device faults");
+  }
   // Exercise ownership cleanup without an explicit stop.
   { ScreamSeq::WasapiDevice disposable;
     ok &= require(disposable.open(silence, &state), "reopen default endpoint");

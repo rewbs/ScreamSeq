@@ -6,6 +6,18 @@ query the running instance's `api.describe` for its current method catalog. Do n
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
 
+Windows output selection is available through `audio.devices.get`,
+`audio.settings.get` and `audio.settings.set`; see
+[`audio-settings.schema.json`](audio-settings.schema.json). Set requires
+`expectedAudioRevision`, `endpoint` (opaque active output ID, or empty for System
+default) and `periodFrames` (0/64/128/256/512). Optional `dryRun` validates without
+applying. These session preferences have independent `audio:` revisions and
+successful request-ID replay, with no document Undo or project mutation.
+Replies use `changed:false` and report `playbackStopped` truthfully. A successful
+changed Apply stops output; a failed validation or no-op preserves it. Inspection
+does not open hardware. `checked` reports the latest validation probe; active
+device fields report actual negotiation. See `../AUDIO_SETTINGS_PROGRESS.md`.
+
 The application supports revision-guarded `transport.note` and `transport.panic`
 using the shared renderer's preview queue. See `mac/AUTOMATION.md` for note,
 sample/instrument, velocity and release semantics. Stopped audition prepares a

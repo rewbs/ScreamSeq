@@ -2,17 +2,20 @@
 #define NOMINMAX
 #endif
 #include "WasapiDevice.hpp"
+#include "PeriodSelection.hpp"
 #include "RealtimeAudit.hpp"
 #include <windows.h>
 #include <audioclient.h>
 #include <avrt.h>
 #include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
 #include <ks.h>
 #include <ksmedia.h>
 #include <wrl/client.h>
 #include <atomic>
 #include <cstring>
 #include <new>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -42,6 +45,8 @@ struct CoFormat {
   WAVEFORMATEX* value = nullptr;
   ~CoFormat() { CoTaskMemFree(value); }
 };
+struct CoText {LPWSTR value=nullptr;~CoText(){CoTaskMemFree(value);}};
+void require(HRESULT hr,const char *message) {if(FAILED(hr))throw std::runtime_error(std::string(message)+" / HRESULT "+std::to_string(static_cast<std::int32_t>(hr)));}
 std::uint64_t ticks() noexcept {
   LARGE_INTEGER value{}; QueryPerformanceCounter(&value);
   return static_cast<std::uint64_t>(value.QuadPart);
@@ -58,6 +63,8 @@ struct WasapiDevice::Impl {
   RenderCallback callback = nullptr;
   void* context = nullptr;
   std::uint32_t convertedRate = 0;
+  Options options;
+  std::wstring endpoint;
   bool opened = false;
   std::atomic<bool> active{false};
   std::atomic<std::int32_t> initResult{E_FAIL}, startResult{E_FAIL};
@@ -136,10 +143,10 @@ struct WasapiDevice::Impl {
       lowHr = client3->GetSharedModeEnginePeriod(&format.Format, &defaultPeriod,
                                                 &fundamentalPeriod, &minPeriod, &maxPeriod);
       if (SUCCEEDED(lowHr)) {
-        if (!minPeriod || !fundamentalPeriod || minPeriod > maxPeriod)
+        chosenPeriod=sharedPeriod(options.periodFrames,fundamentalPeriod,minPeriod,maxPeriod);
+        if (!chosenPeriod)
           lowHr = E_UNEXPECTED;
         else {
-          chosenPeriod = minPeriod;
           lowHr = client3->InitializeSharedAudioStream(AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
                                                        chosenPeriod, &format.Format, nullptr);
         }
@@ -269,7 +276,17 @@ struct WasapiDevice::Impl {
       if (SUCCEEDED(hr) && !audioEvent.value) hr = HRESULT_FROM_WIN32(GetLastError());
       if (SUCCEEDED(hr)) hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                               __uuidof(IMMDeviceEnumerator), reinterpret_cast<void**>(enumerator.GetAddressOf()));
-      if (SUCCEEDED(hr)) hr = enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &device);
+      if (SUCCEEDED(hr)) {
+        const auto &selected=reopening?endpoint:options.endpoint;
+        hr=selected.empty()?enumerator->GetDefaultAudioEndpoint(eRender,eMultimedia,&device):enumerator->GetDevice(selected.c_str(),&device);
+      }
+      if (SUCCEEDED(hr)) {
+        ComPtr<IMMEndpoint> output;hr=device.As(&output);EDataFlow flow=eAll;
+        if(SUCCEEDED(hr))hr=output->GetDataFlow(&flow);
+        if(SUCCEEDED(hr)&&flow!=eRender)hr=E_INVALIDARG;
+        CoText id;if(SUCCEEDED(hr))hr=device->GetId(&id.value);
+        if(SUCCEEDED(hr)&&!reopening)endpoint=id.value;
+      }
       if (SUCCEEDED(hr)) hr = initialize(device.Get(), client, render, audioEvent.value, samples, reopening);
       if (FAILED(hr)) fail(hr);
       initResult.store(hr); SetEvent(readyEvent.value); ready = true;
@@ -291,22 +308,53 @@ struct WasapiDevice::Impl {
 
 WasapiDevice::WasapiDevice() : impl_(std::make_unique<Impl>()) {}
 WasapiDevice::~WasapiDevice() { close(); }
+std::vector<WasapiDevice::Endpoint> WasapiDevice::endpoints() {
+  Apartment apartment;
+  if(apartment.result!=RPC_E_CHANGED_MODE)require(apartment.result,"Cannot initialize output enumeration");
+  ComPtr<IMMDeviceEnumerator> enumerator;
+  require(CoCreateInstance(__uuidof(MMDeviceEnumerator),nullptr,CLSCTX_ALL,__uuidof(IMMDeviceEnumerator),reinterpret_cast<void **>(enumerator.GetAddressOf())),"Cannot enumerate audio outputs");
+  ComPtr<IMMDevice> defaultDevice;CoText defaultId;
+  if(SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender,eMultimedia,&defaultDevice)))defaultDevice->GetId(&defaultId.value);
+  ComPtr<IMMDeviceCollection> devices;require(enumerator->EnumAudioEndpoints(eRender,DEVICE_STATE_ACTIVE,&devices),"Cannot enumerate active outputs");
+  UINT count=0;require(devices->GetCount(&count),"Cannot count outputs");
+  if(count>1024)throw std::runtime_error("Too many audio endpoints");
+  std::vector<Endpoint> result;result.reserve(count);
+  for(UINT i=0;i<count;++i){
+    ComPtr<IMMDevice> device;CoText id;
+    if(FAILED(devices->Item(i,&device))||FAILED(device->GetId(&id.value)))continue;
+    Endpoint entry{id.value,id.value,defaultId.value&&std::wstring_view(id.value)==defaultId.value};
+    ComPtr<IPropertyStore> properties;
+    if(SUCCEEDED(device->OpenPropertyStore(STGM_READ,&properties))){
+      PROPVARIANT value{};const auto hr=properties->GetValue(PKEY_Device_FriendlyName,&value);
+      if(SUCCEEDED(hr)&&value.vt==VT_LPWSTR&&value.pwszVal)entry.name=value.pwszVal;
+      PropVariantClear(&value);
+    }
+    result.push_back(std::move(entry));
+  }
+  std::sort(result.begin(),result.end(),[](const auto &a,const auto &b){if(a.isDefault!=b.isDefault)return a.isDefault;return a.name!=b.name?a.name<b.name:a.id<b.id;});
+  return result;
+}
 bool WasapiDevice::open(RenderCallback callback, void* context) {
+  return open(callback,context,Options{});
+}
+bool WasapiDevice::open(RenderCallback callback, void* context,const Options &options) {
   close(); impl_->resetStats();
-  if (!callback) { impl_->fail(E_INVALIDARG); return false; }
+  if (!callback||options.endpoint.size()>4096||options.endpoint.find(L'\0')!=std::wstring::npos||options.periodFrames>65536) { impl_->fail(E_INVALIDARG); return false; }
+  impl_->options=options;
   impl_->callback = callback; impl_->context = context;
-  if (!impl_->launch(false)) return false;
+  if (!impl_->launch(false)) {impl_->endpoint.clear();return false;}
   impl_->opened = true; return true;
 }
 bool WasapiDevice::openConverted(RenderCallback callback,void* context,std::uint32_t rate) {
   close();impl_->resetStats();
   if(!callback||rate<100||rate>768000){impl_->fail(E_INVALIDARG);return false;}
   impl_->convertedRate=rate;impl_->callback=callback;impl_->context=context;
-  if(!impl_->launch(false))return false;
+  if(!impl_->launch(false)){impl_->endpoint.clear();return false;}
   impl_->opened=true;return true;
 }
 std::uint32_t WasapiDevice::sampleRate() const noexcept { return impl_->rate.load(); }
 std::uint32_t WasapiDevice::periodFrames() const noexcept { return impl_->period.load(); }
+std::wstring WasapiDevice::endpointId()const{return impl_->endpoint;}
 bool WasapiDevice::start() {
   if (!impl_->opened) { impl_->fail(E_UNEXPECTED); return false; }
   if (impl_->active.load()) return true;
@@ -324,6 +372,7 @@ bool WasapiDevice::start() {
 void WasapiDevice::stop() noexcept { impl_->stop(); }
 void WasapiDevice::close() noexcept {
   impl_->stop(); impl_->opened = false; impl_->callback = nullptr; impl_->context = nullptr;impl_->convertedRate=0;
+  impl_->options=Options{};impl_->endpoint.clear();
   impl_->rate = 0; impl_->period = 0; impl_->bufferFrames = 0; impl_->channels = 0; impl_->mode = Mode::Closed;
 }
 bool WasapiDevice::running() const noexcept { return impl_->active.load(); }

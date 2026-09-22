@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace ScreamSeq {
 
@@ -11,6 +13,13 @@ class WasapiDevice final {
 public:
   using RenderCallback = void (*)(void*, float*, std::uint32_t) noexcept;
   enum class Mode : std::uint32_t { Closed, LowLatencyShared, StandardShared };
+  struct Options {
+    std::wstring endpoint; // Empty selects the current multimedia default.
+    std::uint32_t periodFrames=0; // Zero selects the lowest supported period.
+  };
+  struct Endpoint {std::wstring id,name;bool isDefault=false;};
+  // Control-thread enumeration only. Never changes system routing or defaults.
+  static std::vector<Endpoint> endpoints();
   struct Stats {
     std::uint64_t callbackCount;
     std::uint64_t framesRendered;
@@ -36,15 +45,19 @@ public:
   WasapiDevice(WasapiDevice&&) = delete;
   WasapiDevice& operator=(WasapiDevice&&) = delete;
 
-  // Selects the existing default eRender/eMultimedia endpoint, stereo float only.
+  // With no options, selects the existing eRender/eMultimedia default endpoint.
+  // The explicit overload uses an opaque output endpoint ID, stereo float only.
   // Other channel layouts are explicitly rejected, not silently remapped.
   // No callback runs until start(). Prepare the renderer at sampleRate() first.
   bool open(RenderCallback callback, void* context);
+  bool open(RenderCallback callback, void* context, const Options &options);
   // Dedicated sample-file preview: retain the source rate and use Windows'
   // quality shared-mode converter. Does not alter the endpoint or song device.
   bool openConverted(RenderCallback callback, void* context, std::uint32_t sourceRate);
   std::uint32_t sampleRate() const noexcept;
   std::uint32_t periodFrames() const noexcept;
+  // Serialized with lifecycle calls. Retained across stop/start; empty if closed.
+  std::wstring endpointId() const;
   bool start();
   // Wakes either start/event wait and joins. A driver call or user callback which
   // never returns can still block the join: threads are never unsafely detached.

@@ -26,6 +26,7 @@
 #include "../Samples/Library.hpp"
 #include "../Samples/Preview.hpp"
 #include "SampleLibraryWindow.hpp"
+#include "AudioSettingsWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -83,7 +84,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     curvePattern=480,curveKind=481,curveSnap=482,curveRow=483,curveValue=484,curveFormula=485,
     curveApply=486,curveReload=487,curveSetPoint=488,curveDelete=489,curveRamp=490,curveClear=491,
     curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497,curveExpand=498,curveReference=499,
-    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511;
+    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511,audioSettingsCommand=512;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -258,6 +259,7 @@ public:
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
             {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"pendingViewCommands",deferredViews.size()+(drainingViews?1u:0u)},{"status",utf8Path(status)},
             {"sampleEditor",sampleEditorSnapshot()},{"sampleLibrary",sampleLibrarySnapshot()},
+            {"audioSettings",audioSettingsSnapshot()},
             {"graphEditor",graphEditorSnapshot()},
             {"graphCurve",graphCurveSnapshot()},
             {"formulaWorkbench",formulaWorkbench?formulaWorkbench->snapshot():Json{{"visible",false}}},
@@ -384,9 +386,11 @@ public:
         catch(...) {refreshDocument();throw;}
     }
     #include "SampleLibrary.inc"
+    #include "AudioSettings.inc"
     explicit Application(const std::filesystem::path &input={},bool inspectionMode=false,std::optional<std::filesystem::path> catalogue={},std::optional<std::filesystem::path> library={}) : inspection(inspectionMode) {
         GUID id{};ScreamSeq::check(CoCreateGuid(&id),"Create session identity");
         wchar_t buffer[40]{};StringFromGUID2(id,buffer,40);for(auto ch:std::wstring_view(buffer)) documentId+=char(ch);
+        audioSettingsIdentity=documentId;
         ScreamSeq::PlaybackHooks playback;
         playback.feedback=[this]{
             ScreamSeq::PlaybackFeedback result;result.playing=device.running()&&!auditionOnly;result.sampleRate=lastRate?lastRate:48000;
@@ -429,7 +433,7 @@ public:
         // The old prepared chain is disposed on the worker. Drop UI readers
         // only after the device has joined, before pumping messages in await().
         preparedPlayback=nullptr;renderer=nullptr;
-		if(!device.open(renderAudio, this)) {
+		if(!device.open(renderAudio, this, audioOptions)) {
 			lastAudio = device.stats(); throw ScreamSeq::Api::ApiError(-32003,"Audio endpoint unavailable / HRESULT " + std::to_string(lastAudio.lastError));
 		}
 		try {

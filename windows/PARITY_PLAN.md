@@ -10,13 +10,18 @@ device and plugin hosting belong to each platform. See
 [qualification evidence](UPSTREAM_PLUGIN_QUALIFICATION.md) and
 [current app interfaces](App/INTEGRATION.md).
 
-Latest continuation: `SAMPLE_LIBRARY_PROGRESS.md` adds all eight library APIs,
+Latest continuation: `AUDIO_SETTINGS_PROGRESS.md` adds native output selection,
+supported buffer-period negotiation and independent guarded settings APIs. Six
+focused output cases plus eleven library cases and all 30 primary CTests pass.
+The full isolated suite passes **264/264**, with no failures or skips. Timestamped MIDI/recording and recovery remain
+next, with device-change notification and multichannel output still unimplemented.
+
+Previous continuation: `SAMPLE_LIBRARY_PROGRESS.md` adds all eight library APIs,
 background indexing/search, independent sample preview, the native browser and
 guarded family import review. All 257 isolated application tests, 30 primary
 native CTests, two index/worker tests and two adapter tests pass. A subsequent
 live-gain/preview-feedback refinement passes 11 focused app tests and its native
-callback/device tests. Next implement native device selection, MIDI, recording
-and recovery. A fresh fetch on 2026-09-22 still finds no newer upstream commits.
+callback/device tests. A fresh fetch on 2026-09-22 still finds no newer upstream commits.
 `DEFERRED_VIEWS_PROGRESS.md` retains native view-opening
 requests during background reads without replaying edits or stale targets. The
 full isolated suite passes 247/247 application tests and 29/29 native CTests.
@@ -47,8 +52,8 @@ The instrument step matches `mac/App/main.swift::importInstrument`
 (ITI/XI/PAT/SFZ, new slot, select the imported sound) and the octave/sample
 mapping summary in `mac/App/AssetEditors.swift`. Windows now stages numeric
 key ranges alongside a native map list in `InstrumentEnvelopeWindow.hpp` and
-guards imports without discarding that parent draft. The next sample-library
-step should match `SampleLibraryIntegration.swift`: separate library revisions,
+guards imports without discarding that parent draft. The sample library now
+follows `SampleLibraryIntegration.swift`: separate library revisions,
 bounded background indexing/search, folder tags, preview, and the existing
 atomic `sample.importMany` / `instrument.importMultisample` transactions.
 
@@ -59,8 +64,9 @@ The current Mac source has output selection/64–512-frame preferences in
 application-owned autosave/recovery. Windows has shared recording primitives
 and preserved recovery-take data, but no integrated capture/recovery workflow.
 
-1. Extend the native WASAPI owner with explicit endpoint selection and truthful
-   negotiated periods, without changing system defaults. Publish correlated
+1. Explicit endpoint selection and truthful negotiated periods are now implemented
+   and tested (`AUDIO_SETTINGS_PROGRESS.md`), without changing system defaults.
+   Next publish correlated
    audio presentation time, not the UI's callback arrival time. The shared
    renderer resets its frame offset on every `render`; Windows' hosted renderer
    splits at 4,096 frames, so timestamp origins must advance for every slice.
@@ -69,7 +75,9 @@ and preserved recovery-take data, but no integrated capture/recovery workflow.
    report overflow and release held voices on disconnect/overflow. WinMM timestamps
    are milliseconds from `midiInStart`; WASAPI's correlated QPC values use 100 ns
    units. Explicitly convert to one advertised host clock and qualify its
-   precision; do not label millisecond hardware timing sample-accurate.
+   precision; do not label millisecond hardware timing sample-accurate. Discover
+   opaque [device-interface identities](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/obtaining-a-device-interface-name)
+   off-thread; don't reconnect to an unrelated device when WinMM ordinals change.
 3. Integrate the existing `recording.start/capture/get/stop/commit/discard`
    contract and shared `NoteRecording`. Preserve takes across stale edits; validate
    whole capture batches, use actual presentation-clock history, keep replies
@@ -83,6 +91,18 @@ Clock contracts were checked against Microsoft's
 [IAudioClock::GetPosition](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclock-getposition)
 and [MIM_DATA](https://learn.microsoft.com/en-us/windows/win32/multimedia/mim-data).
 Hardware timing, hotplug and reciprocal Mac recovery remain qualification gates.
+
+The 2026-09-22 read-only WinMM inventory found no MIDI input devices. Enumeration
+itself was slow, reinforcing the requirement to keep discovery off the UI thread.
+Physical MIDI timing/hotplug therefore remains external qualification; bounded
+callback injection and real audio-clock/API capture can still be tested locally.
+For the clock, count the initial primed silence in submitted stream frames and
+derive the next presentation origin from correlated device position/frequency
+and QPC, using 100 ns host units. Startup zero positions and inaccurate readings
+must not fabricate clock mappings. Underruns, clock regression and stream restart
+need explicit validity handling; keep source-frame mapping independent of plugin
+latency maintenance. Tests must include a callback larger than 4,096 frames and
+delayed timestamp lookup, with equivalent PCM at different callback sizes.
 
 ## What changed upstream and how it changes the work
 
