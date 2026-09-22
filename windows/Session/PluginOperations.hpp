@@ -43,6 +43,7 @@ public:
   static std::vector<std::string> reads();
   static std::vector<std::string> writes();
   Json invoke(const std::string &,const Json &);
+  Json invokeAutomation(const std::string &,const Json &);
   Json invokeLibrary(const std::string &,const Json &);
   Json invokePath(const std::string &,const Json &);
   Json invokeGraph(const std::string &,const Json &,unsigned sampleRate);

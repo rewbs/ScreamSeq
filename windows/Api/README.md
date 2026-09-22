@@ -5,6 +5,15 @@ not full macOS API parity. The attached host determines document-operation suppo
 query the running instance's `api.describe` for its current method catalog. Do not
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
+
+The application now implements Mac-compatible `automation.get` and
+`automation.replaceLane` for absolute song parameter points. Timestamps are
+48 kHz frames, values are native parameter units, and replacement uses plugin
+Undo. The native Song automation window opens from the command palette or the
+pattern-curve editor. `workspace.get.absoluteAutomation` reports captured target,
+revision, draft, viewport and bounded draw geometry; its point preview truncates
+at 4096 while `pointCount` reports the complete lane. Use paginated
+`automation.get` to read every point. See `../ABSOLUTE_AUTOMATION_PROGRESS.md`.
 The actual application now also registers `graph.*`, `mixer.*` and
 `envelope.bank.*` / `envelope.catalogue.*` operations. Their fields match the
 existing Mac schema. Graph recipe copies use the real rack's saved baseline;

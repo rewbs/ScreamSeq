@@ -555,6 +555,19 @@ Plugin state is an opaque base64 blob, limited to 16 MiB decoded. `plugin.state.
 
 `automation.replaceLane` accepts a plugin slot, parameter ID, and `{frame,value}` points. It sorts timestamps, rejects duplicates and out-of-range values, and replaces that lane atomically. An empty list deletes the lane. The whole project remains bounded at 100,000 points. `automation.get` supports offset/limit pagination.
 
+Both native applications expose this contract. Frames use a fixed 48 kHz time
+base (0–29,030,400,000, up to seven days), independent of the playback device's
+sample rate. Values use the parameter catalogue's native units and hold until
+the next point. Get returns `points`, `total`, `offset` and `sampleRate:48000`;
+its limit defaults to 1000 and is bounded at 4096. Each read point also carries
+its current `slot` and parameter `id`. Check the revision across paginated reads.
+Replacement requires `expectedRevision`, preserves unrelated lanes and opaque
+plugin state, and uses the **plugins** history domain. Nonempty lanes reject
+enabled pattern curves or pattern commands controlling the same parameter.
+The parameter must exist even for a deletion. Retain stable plugin identity in
+an editor, resolving its slot only at the guarded revision; rack reorder/removal
+remaps or removes the corresponding stored records.
+
 Structural operations, plugin parameter batches, plugin-state restoration and automation replacement stop transport before rebuilding assets. Small pattern batches can use the live edit queue; oversized or saturated batches stop playback while retaining the committed edit. The reply reports whether playback stopped. The API never starts playback or auditions notes, opens/replaces documents, or executes arbitrary scripts. Project/export and preset saving require explicit file commands; native saving/recovery retains API edits normally.
 
 ### Shared plugin instruments and MIDI channels

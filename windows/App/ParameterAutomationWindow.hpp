@@ -10,10 +10,11 @@ public:
 private:
   using Request=std::function<Json(const std::string &,const Json &)>;
   enum : int {pattern=4201,plugin,search,parameters,kind,snap,pointRow,pointValue,formula,setPoint,deletePoint,rampUp,rampDown,enabled,apply,verify,remove,reload,fromCursor,bank,expand,reference,lastTouched,openRack,fit,zoomOut,zoomIn,panLeft,panRight,tool,rangeStart,rangeEnd,toolValue0,toolValue1,toolValue2,toolValue3,copyRange,previewTool,close,
-    heading=4300,targetLabel,rowLabel,valueLabel,formulaLabel,rangeLabel,toolLabel0,toolLabel1,toolLabel2,toolLabel3,statusLabel};
+    absolute=4240,heading=4300,targetLabel,rowLabel,valueLabel,formulaLabel,rangeLabel,toolLabel0,toolLabel1,toolLabel2,toolLabel3,statusLabel};
   static constexpr std::array<const char *,9> curves={"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse","scripted"};
   static constexpr std::array<const char *,9> operations={"flip-time","flip-values","shift","scale","ramp","sine","humanize","paste","insert"};
   Request request_;std::function<Cursor()> context_;std::function<void(const std::string &,uint32_t)> inspect_;
+  std::function<void(const std::string &,uint32_t)> absolute_;
   Cursor captured_;std::string patternID_,pluginID_,laneID_;std::optional<uint32_t> parameter_;
   Json lanes_=Json::array(),plugins_=Json::array(),catalog_=Json::array(),points_=Json::array(),values_=Json::array(),clip_;
   std::vector<size_t> filtered_;unsigned rows_=64,rowsPerBeat_=4,snap_=256;int selected_=-1,kind_=1,tool_=0;
@@ -165,6 +166,7 @@ private:
     if(id==reload)load(false);else if(id==fromCursor)load(true);else if(id==lastTouched)touch();else if(id==bank)openBank();else if(id==expand)openFormula();
     else if(id==reference){if(!reference_)reference_=std::make_unique<FormulaWorkbenchWindow>(window_,L"Envelope formula reference","",Json::object(),-1,request_);reference_->show();}
     else if(id==openRack){requireCurrent();require(parameter_.has_value(),"Choose a parameter");inspect_(pluginID_,*parameter_);}
+    else if(id==absolute){requireCurrent();require(parameter_.has_value(),"Choose a parameter");absolute_(pluginID_,*parameter_);}
     else if(id==setPoint)setPointFields();else if(id==apply||id==verify||id==remove)commit(id==verify,id==remove);
     else if(id==copyRange||id==previewTool)transform(id==copyRange);
     else if(id==enabled){enabled_=!enabled_;changed();}
@@ -200,7 +202,8 @@ private:
   void timer(UINT_PTR id)override{if(id!=3)return;KillTimer(window_,3);if(!visible())return;if(pending_||dragging_){SetTimer(window_,3,120,nullptr);return;}if(previewNeeded_)previewNow();}
   void layout()override{
     const auto [w,h]=size();place(heading,18,14,w-36,24);place(pattern,18,48,214,220);place(plugin,246,48,w-694,260);place(lastTouched,w-438,48,138,26);place(bank,w-292,48,134,26);place(openRack,w-150,48,132,26);
-    place(search,18,90,214,26);place(parameters,18,126,214,std::max(120.f,h-346));place(targetLabel,260,84,w-280,23);
+    place(search,18,90,214,26);place(parameters,18,126,214,std::max(120.f,h-354));place(targetLabel,260,84,w-280,23);
+    place(absolute,18,h-220,214,26);EnableWindow(controls_.at(absolute),!pending_&&parameter_.has_value());
     place(kind,260,112,214,230);place(snap,482,112,104,220);place(enabled,594,112,104,26);
     float x=706;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{panLeft,32.f},{zoomOut,32.f},{fit,40.f},{zoomIn,32.f},{panRight,32.f}}){place(id,x,112,width,26);x+=width+4;}
     canvas_.viewport={260,170,w-280,std::max(100.f,h-468)};rebuild();
@@ -223,10 +226,11 @@ private:
     wchar_t label[160]{};swprintf_s(label,L"Rows %.2f–%.2f · %.1f–%.1f%% · Ctrl+wheel zooms; Ctrl+Shift zooms values",canvas_.start/256,canvas_.end/256,canvas_.valueLow*100,canvas_.valueHigh*100);s.uiText(label,r.x,r.y-22,r.w,0x93aabd);
   }
 public:
-  ParameterAutomationWindow(HWND owner,Request request,std::function<Cursor()> context,std::function<void(const std::string &,uint32_t)> inspect):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)){
+  ParameterAutomationWindow(HWND owner,Request request,std::function<Cursor()> context,std::function<void(const std::string &,uint32_t)> inspect,std::function<void(const std::string &,uint32_t)> absoluteEditor):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)),absolute_(std::move(absoluteEditor)){
     minimumWidth_=1040;minimumHeight_=760;create(L"ScreamSeq.ParameterAutomation",L"Pattern parameter automation",1240,850);
     for(int id:{pattern,plugin,kind,snap,tool})combo(id);for(int id:{search,pointRow,pointValue,formula,rangeStart,rangeEnd,toolValue0,toolValue1,toolValue2,toolValue3})edit(id,L"",id==formula?2048:id==search?128:32);
     add(parameters,L"LISTBOX",L"Automation parameters",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL);
+    button(absolute,L"Song automation…");
     for(auto name:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})SendMessageW(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(kind,1);
     for(auto name:{L"1 row",L"½ row",L"¼ row",L"1/256 row"})SendMessageW(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(snap,0);
     for(auto name:{L"Flip time",L"Flip values",L"Shift",L"Scale",L"Ramp",L"Sine",L"Humanize",L"Paste",L"Insert paste"})SendMessageW(controls_.at(tool),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(tool,0);

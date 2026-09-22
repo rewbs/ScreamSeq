@@ -17,7 +17,7 @@ device and plugin hosting belong to each platform. See
 | Unified 1–8 FX columns, ordinary tracker commands plus PS/PL/BS/BL/NC | Shared engine/API, variable native grid, two-character entry, searchable FX inspector, stable bindings, row transforms and Pattern 2 clipboard with binding remap integrated. FX 1→FX 8/4 PCM is identical at three rates and four block sizes. See `PATTERN_FX_PROGRESS.md` and `PATTERN_NOTES_PROGRESS.md`. | Broader row-tool controls, first-letter completion and visible layout/accessibility qualification. |
 | Precise note cut and plugin trigger instruments | Shared semantics/persistence, current precise-note API, native row-draft editor and timing/velocity canvas, NC inspector, empty trigger API, native creation/assignment and independent history integrated. Installed Surge XT trigger PCM/WASAPI checks pass with documented fixture constraints. | Broader instrument/routing qualification, foreground visual/accessibility verification and live native-edit publication. |
 | Project container 6 / metadata 17; RSONGS2 snapshots | Current-only native open/save, strict rejection of historical native wrappers, opaque-state retention, sample-exact save/reopen tests. MOD/XM/IT/S3M import remains available. | Obtain a newly exported Mac format-17 fixture and perform Windows→Mac→Windows reopen. The supplied format-14 reference is historical and is not silently migrated. |
-| Explicit disconnected mixer/plugin destinations | Actual-app mixer/graph API, native bus controls, reusable graph canvas, pattern curves, envelope bank and song routing overview integrated. Native graph command lanes connect pattern rows to row/persistent graph stages. Pattern parameter automation now has the shared API and a native curve editor with transforms, bank and formula workbench connections. See `GRAPH_COMMANDS_PROGRESS.md` and `PARAMETER_AUTOMATION_PROGRESS.md` for these latest additions. | Native instrument import/audition, absolute automation dispatch, inline completion and broader routing/long-session qualification. |
+| Explicit disconnected mixer/plugin destinations | Actual-app mixer/graph API, native bus controls, reusable graph canvas, pattern curves, envelope bank and song routing overview integrated. Native graph command lanes connect pattern rows to row/persistent graph stages. Pattern parameter automation now has the shared API and a native curve editor with transforms, bank and formula workbench connections. See `GRAPH_COMMANDS_PROGRESS.md` and `PARAMETER_AUTOMATION_PROGRESS.md` for these latest additions. | Native instrument import/audition, inline completion and broader routing/long-session qualification. |
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields, sample waveform markers and native instrument-envelope markers integrated. See `INSTRUMENT_ENVELOPE_PROGRESS.md`. | Audition UI and broader overlapping-voice/release-tail qualification. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
 | Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, program/port controls, modeless instrument aliases/MIDI channels, sound presets, library organization, explicit VST3 location repair and native graph/mixer connections integrated; live parameters reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. See `PLUGIN_ALIASES_PROGRESS.md`, `PLUGIN_PRESETS_PROGRESS.md`, `PLUGIN_LIBRARY_PROGRESS.md`, `PLUGIN_PATH_PROGRESS.md` and `SONG_ROUTING_PROGRESS.md`. | Live opaque-state replacement (including Surge's first-open zoom state) and broader missing-plugin recovery. |
@@ -100,8 +100,11 @@ preserve concurrent edit guards.
    their API, native control and rendered-audio qualification. Native instrument
    volume/pan/pitch envelopes, point and marker controls,
    shared transforms, bank entry, settings/keymap and bounded voice markers are
-   implemented in `INSTRUMENT_ENVELOPE_PROGRESS.md`. Complete native
-   instrument import/audition, absolute automation read/replacement, inline formula
+   implemented in `INSTRUMENT_ENVELOPE_PROGRESS.md`. Absolute song automation
+   now has the existing Mac read/replacement API and a retained native editor
+   with bounded drawing, exact frame/native value fields, plugin history and
+   cross-view navigation (`ABSOLUTE_AUTOMATION_PROGRESS.md`). Complete native
+   instrument import/audition, inline formula
    completion and the remaining bank/workbench entry points, with retained
    drawing, meaningful context menus and keyboard use.
 4. **Recording and workspace.** Device selection, MIDI input and mapping,
@@ -115,13 +118,14 @@ preserve concurrent edit guards.
    audits. Current short runs do not establish sustained 60 Hz or top-of-class
    audio capacity. Native ARM64 is exercised here; x64 and bridging remain open.
 
-The next absolute-automation integration must match the Mac
-`automation.get` / `automation.replaceLane` contract: 48 kHz frame timestamps,
-native parameter values, preserved unrelated lanes and plugin-history Undo.
-Windows already preserves and renders these records in the project wrapper;
-the missing work is dispatch/editing and its validation, not a new storage
-format. Pattern-curve and command conflicts must use the same live catalogues
-and retained plugin identities as the existing pattern automation operations.
+Absolute song automation now matches the Mac `automation.get` /
+`automation.replaceLane` contract: fixed 48 kHz frame timestamps, native
+parameter values, preserved unrelated lanes and plugin-history Undo. Windows
+uses the existing project wrapper and renderer, with live-catalogue validation
+and pattern-curve/command conflicts. Native controls, 100,000-point storage and
+bounded drawing, history, reopen, silent live behavior and enabled/absent audio
+comparisons are covered in `ABSOLUTE_AUTOMATION_PROGRESS.md`. Long loaded audio
+and reciprocal Mac qualification remain release gates.
 
 ## Evidence rules
 

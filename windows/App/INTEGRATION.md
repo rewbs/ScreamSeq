@@ -33,6 +33,13 @@ one document transaction. Playback lines consume the renderer's bounded voice
 snapshot; paint never queries the engine or document worker. See
 `../INSTRUMENT_ENVELOPE_PROGRESS.md` for evidence and remaining limitations.
 
+The native song automation window uses `AbsoluteAutomationWindow.hpp` and
+`PluginOperations::invokeAutomation` for `automation.get` /
+`automation.replaceLane`. Its 48 kHz/native-value step lane remains in the
+existing project wrapper and plugin history. Paginated reads recheck captured
+identity/revision; dense drawing aggregates transitions by display column and
+retains exact values independently. See `../ABSOLUTE_AUTOMATION_PROGRESS.md`.
+
 ## Owner boundaries
 
 `Session/DocumentController` constructs, owns and disposes the shared Document on

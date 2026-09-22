@@ -1,6 +1,11 @@
 # Windows continuation — 2026-09-21
 
-Latest editor continuation: `INSTRUMENT_ENVELOPE_PROGRESS.md` records native
+Latest editor continuation: `ABSOLUTE_AUTOMATION_PROGRESS.md` records the
+Mac-compatible absolute lane API and native song automation editor, with
+plugin history and bounded dense-lane drawing. All 199 actual-app tests pass
+with zero failures or skips; the preserved build is
+`bin/windows-checkpoints/absolute-automation-20260921/`.
+`INSTRUMENT_ENVELOPE_PROGRESS.md` records native
 instrument curves, settings/keymaps, transforms, bank integration and playback
 markers, with 187 actual-app tests passing.
 `PARAMETER_AUTOMATION_PROGRESS.md` records native
