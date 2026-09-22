@@ -345,13 +345,14 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p) {
   if(method=="sample.patch") {
     keys(p,{"sample","values"});const auto index=sampleIndex();const auto &v=field(p,"values");
     keys(v,{"name","rate","volume","pan","loopStart","loopEnd","loop","pingpong"});const auto &s=song.GetSample(index);
-    const auto rate=int(integer(v.value("rate",Json(s.nC5Speed)),100,192000)),volume=int(integer(v.value("volume",Json(s.nVolume/4)),0,64)),pan=int(integer(v.value("pan",Json(s.nPan)),0,256));
-    const auto start=uint32_t(integer(v.value("loopStart",Json(s.nLoopStart)),0,s.nLength)),end=uint32_t(integer(v.value("loopEnd",Json(s.nLoopEnd)),0,s.nLength));
+    const SampleSettingsFields fields{v.contains("rate"),v.contains("volume"),v.contains("pan"),v.contains("loopStart")||v.contains("loopEnd")||v.contains("loop")||v.contains("pingpong")};
+    const auto rate=fields.rate?int(integer(v.at("rate"),100,192000)):0,volume=fields.volume?int(integer(v.at("volume"),0,64)):0,pan=fields.pan?int(integer(v.at("pan"),0,256)):0;
+    const auto start=v.contains("loopStart")?uint32_t(integer(v.at("loopStart"),0,s.nLength)):s.nLoopStart,end=v.contains("loopEnd")?uint32_t(integer(v.at("loopEnd"),0,s.nLength)):s.nLoopEnd;
     const bool loop=boolean(v.value("loop",Json(bool(s.uFlags[CHN_LOOP])))),pingpong=boolean(v.value("pingpong",Json(bool(s.uFlags[CHN_PINGPONGLOOP]))));
-    require(!loop||start<end,"Loop end must follow its start inside the sample");
+    require(!fields.loops||!loop||(start<end&&end<=s.nLength),"Loop end must follow its start inside the sample");
     std::optional<std::string> name;if(v.contains("name"))name=text(v.at("name"),200);
     if(v.empty())return Json::object();
-    const auto op=[&](Document &d){d.sampleSettings(index,rate,volume,pan,start,end,loop,pingpong,name);};
+    const auto op=[&](Document &d){d.sampleSettings(index,rate,volume,pan,start,end,loop,pingpong,name,fields);};
     if(preflight(document_,op)){stop();op(document_);}return Json::object();
   }
   if(method=="sample.clipboard.get") {

@@ -822,9 +822,9 @@
       for (NSString *key in @[ @"loop", @"pingpong" ])
         if (v[key])
           boolean(v[key]);
-      NSMutableDictionary *merged = [[self sampleInfo:index includeWaveform:NO] mutableCopy];
-      [merged addEntriesFromDictionary:v];
-      succeeded([self sampleSettings:index values:merged error:&problem], problem);
+      // Preserve field presence; sampleSettings merges saved values internally.
+      // Passing a synthetic pan field would enable sample panning on name/volume edits.
+      succeeded([self sampleSettings:index values:v error:&problem], problem);
 
 #include "SampleProcessingAPI.inc"
 #include "SampleDrawingAPI.inc"

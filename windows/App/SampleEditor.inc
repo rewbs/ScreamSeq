@@ -62,21 +62,26 @@
         if(first>last) throw std::runtime_error("Range end must follow its start");
         auto &r=sampleRange();r.first=first;r.last=last;sampleDraft=false;refreshSampleFields();
     }
-    void importSample() {
-        if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
-        const auto revision=view->session.revision;
-        std::vector<wchar_t> path(32768);OPENFILENAMEW choice{};choice.lStructSize=sizeof(choice);choice.hwndOwner=window;
-        choice.lpstrFile=path.data();choice.nMaxFile=DWORD(path.size());choice.lpstrTitle=L"Import sample";
-        choice.lpstrFilter=L"Audio samples\0*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3;*.its;*.s3i;*.xi\0All files\0*.*\0\0";
-        choice.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_DONTADDTORECENT|OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST;
-        if(!GetOpenFileNameW(&choice)) return;
-        auto result=documentOperation("sample.import",{{"expectedRevision",revision},{"path",utf8Path(path.data())}});
+    bool sampleImportPending=false;
+    void importSample(std::optional<bool> instruments={}) {
+        if(busy||sampleImportPending) throw ScreamSeq::Api::ApiError(-32002,"Sample import or document worker busy");
+        const auto revision=view->session.revision,document=documentId;
+        const bool createInstruments=instruments.value_or(view->instruments!=0);
+        sampleImportPending=true;struct Guard{bool &pending;~Guard(){pending=false;}} guard{sampleImportPending};
+        const auto paths=ScreamSeq::chooseSampleFiles(window,createInstruments?L"Import samples as instruments":L"Import samples",true);
+        if(paths.empty())return;
+        if(documentId!=document||view->session.revision!=revision)throw std::runtime_error("Song changed while choosing samples / reopen Import to use the current song");
+        Json files=Json::array();for(const auto &path:paths)files.push_back(utf8Path(path));
+        auto result=documentOperation("sample.importMany",{{"expectedRevision",revision},{"paths",files},{"createInstruments",createInstruments}});
+        if(documentId!=document)return;
         workspaceState.show("samples",position(),cursorSample(),true);auto &p=workspaceState.panel("samples");
-        p.sample=result.at("index").get<unsigned>();p.pinned=true;sampleDraft=false;
-        status=L"Sample imported / Undo restores the previous song";
+        const auto &first=result.at("samples").at(0);p.sample=first.at("sample");p.pinned=true;sampleDraft=false;
+        if(createInstruments||!view->instruments){const auto held=typingTarget(!createInstruments,first.at(createInstruments?"instrument":"sample"),49,window);typingSoundId=held.identity;refreshTypingSounds();}
+        status=std::to_wstring(result.at("count").get<unsigned>())+L" sample(s) imported / one Undo restores the previous song";
     }
     bool sampleCommand(int id) {
         if(id==sampleImportCommand) {importSample();return true;}
+        if(id==sampleImportRawCommand||id==sampleImportInstrumentsCommand) {importSample(id==sampleImportInstrumentsCommand);return true;}
         if(id<sampleAllCommand || id>sampleLoopSelectCommand) return false;
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         if(selectedSampleId().empty()) throw std::runtime_error("Choose a sample first");

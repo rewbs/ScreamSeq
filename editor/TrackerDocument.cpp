@@ -741,11 +741,26 @@ void Document::processSample(int index, const std::string &operation, uint32_t f
 		sample.PrecomputeLoops(s, false);
 	});
 }
-void Document::sampleSettings(int index, int rate, int volume, int pan, uint32_t start, uint32_t end, bool loop, bool pingpong, const std::optional<std::string> &name)
+void Document::sampleSettings(int index, int rate, int volume, int pan, uint32_t start, uint32_t end, bool loop, bool pingpong, const std::optional<std::string> &name, SampleSettingsFields fields)
 {
 	if(index < 1 || index > song_->GetNumSamples()) throw std::runtime_error("Select a sample first.");
 	transaction([&](CSoundFile &s)
-	{auto &sample=s.GetSample(index);if(name)s.m_szNames[index]=::OpenMPT::mpt::ToCharset(s.GetCharsetInternal(), ::OpenMPT::mpt::Charset::UTF8,*name);sample.nC5Speed=std::clamp(rate,100,192000);if(s.GetType()&(MOD_TYPE_MOD|MOD_TYPE_XM))sample.FrequencyToTranspose();sample.nVolume=std::clamp(volume,0,64)*4;sample.nPan=std::clamp(pan,0,256);sample.uFlags.set(CHN_PANNING);if(loop&&(start>=end || end>sample.nLength))throw std::runtime_error("Loop end must follow its start and lie inside the sample.");sample.SetLoop(start,end,loop,pingpong,s); });
+	{
+		auto &sample=s.GetSample(index);
+		if(name)s.m_szNames[index]=::OpenMPT::mpt::ToCharset(s.GetCharsetInternal(), ::OpenMPT::mpt::Charset::UTF8,*name);
+		if(fields.rate) {
+			sample.nC5Speed=std::clamp(rate,100,192000);
+			if(s.GetType()&(MOD_TYPE_MOD|MOD_TYPE_XM))sample.FrequencyToTranspose();
+		}
+		if(fields.volume)sample.nVolume=std::clamp(volume,0,64)*4;
+		// An omitted pan field must preserve channel/instrument panning.
+		// Explicit pan (even its current numeric value) enables sample panning.
+		if(fields.pan){sample.nPan=std::clamp(pan,0,256);sample.uFlags.set(CHN_PANNING);}
+		if(fields.loops) {
+			if(loop&&(start>=end || end>sample.nLength))throw std::runtime_error("Loop end must follow its start and lie inside the sample.");
+			sample.SetLoop(start,end,loop,pingpong,s);
+		}
+	});
 }
 
 Renderer::Renderer(const std::vector<std::byte> &bytes, uint32_t rate, uint32_t order, bool preview, const std::string &sourcePath, uint32_t sequence, PlaybackRegion region, const NativeSong *native)

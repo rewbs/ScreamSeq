@@ -5,6 +5,12 @@ This is an editing integration, not a full Mac-parity release. The preserved
 artifact. Current upstream scope and qualification are documented in
 `../PARITY_PLAN.md` and `../UPSTREAM_PLUGIN_QUALIFICATION.md`.
 
+Native sample properties, captured file replacement, batch sample/mapped-
+instrument import and sample-instrument creation are covered in
+`../SAMPLE_SETTINGS_PROGRESS.md`. They reuse shared transactions and retain
+target/revision guards, drafts, Undo and native persistence. Windows sample
+library/preview and instrument-import presentation remain separate work.
+
 The current native format is container 6 / metadata 17. Historical native
 wrappers reject before document replacement, matching upstream; module import
 remains supported. Unified FX, note cuts and disconnected routes have shared

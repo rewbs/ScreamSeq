@@ -419,6 +419,15 @@ client.call("sample.loops.set", {**request, "dryRun": False})
 
 The native Samples panel provides both loop rows, **Use selection**, **Preview loops**, **Apply loops**, and **Reload loops**. Drafts and previews keep their originating revision across document refreshes. Reload explicitly discards the pending draft. General **Apply settings** handles name/rate/volume/pan separately and leaves saved loop settings intact.
 
+In `sample.patch`, omitting `pan` preserves whether the sample inherits panning
+from its channel/instrument. Supplying `pan` enables the sample's own panning,
+including when the numeric value is unchanged. A volume/name edit alone must
+not silently enable that override.
+Other omitted settings groups are also left untouched: a name/volume edit does
+not recalculate legacy MOD/XM relative tuning, round an untouched stored volume,
+or rebuild loops. Explicit rate and loop requests retain their existing format
+conversion and validation behavior.
+
 ### Loop crossfades
 
 `sample.crossfade` processes an enabled forward loop. It accepts `sample`, `expectedRevision`, `frames` (2…1,048,576), optional `loop` (`normal`, default, or `sustain`), `mode` (`preserve`, default, or `overlap`), `curve` (`linear`, default, or `equal-power`) and `dryRun`. Missing/disabled, invalid, ping-pong and reverse loops reject before playback is stopped. Both stereo channels use the same frame weights; this operation always processes the complete mono/stereo loop. Other loop settings, sample length and cues are preserved. `sample.get` also reports `sustainLoop`, `sustainStart`, `sustainEnd` and `sustainPingpong` for all sample sustain loops.

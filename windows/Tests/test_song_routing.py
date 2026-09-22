@@ -81,7 +81,9 @@ class SongRoutingTests(unittest.TestCase):
             data.update(privateDesktop=True,foregroundVisualQualified=False)
             (folder/(name+'.json')).write_text(json.dumps(data,indent=2),encoding='utf-8')
     def bus(self,identifier):return next(b for b in self.buses() if b['id']==identifier)
-    def start(self):self.idle();self.main_command(417);self.idle();self.assertTrue(self.local()['visible'])
+    def start(self):
+        self.idle();self.main_command(417);self.idle();state=self.read('workspace.get')
+        self.assertTrue(state['songRouting']['visible'],json.dumps(state,ensure_ascii=False))
     def setup_mixer(self):
         self.write('mixer.enable');b=self.buses();return b[0]['id'],b[1]['id'],b[-1]['id']
     def route(self,kind,source,target,gain=None,input=None,output=None):

@@ -4,7 +4,9 @@ This is a development checkpoint, not full Mac parity. The work plan is
 [PARITY_PLAN.md](PARITY_PLAN.md). Evidence files below are local ignored artifacts
 under `bin/`, not files distributed with the product.
 
-For the latest installed-plugin continuation, see `MUSICAL_TYPING_PROGRESS.md`:
+The latest sample/editor continuation and application regression is recorded in
+`SAMPLE_SETTINGS_PROGRESS.md`. It retains the same installed-plugin gate.
+For the musical-input plugin continuation, see `MUSICAL_TYPING_PROGRESS.md`:
 the same three ARM64 QA bundles were reverified, and current application tests
 connect selected-sound pattern entry and native editor typing to their lifecycle.
 The older test counts and executable fingerprint below remain historical.

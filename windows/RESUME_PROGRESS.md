@@ -1,6 +1,10 @@
 # Windows continuation — 2026-09-21
 
-Latest continuation: `MUSICAL_TYPING_PROGRESS.md` records selected-sound pattern
+Latest continuation: `SAMPLE_SETTINGS_PROGRESS.md` records native sample settings,
+batch imports, captured replacement and sample-instrument creation, plus a shared
+fix preserving omitted tuning, volume, panning and loop settings. Full parity remains active.
+
+Previous continuation: `MUSICAL_TYPING_PROGRESS.md` records selected-sound pattern
 entry, sample/instrument musical typing, main-workspace Live keys and voice
 ownership through focus changes and worker waits. The final build passes all
 29 native tests and 17 focused audition/typing tests. Its full application run

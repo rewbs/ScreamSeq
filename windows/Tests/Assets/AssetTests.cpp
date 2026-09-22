@@ -14,8 +14,8 @@
 using namespace Tracker;
 using Json=nlohmann::json;
 void check(bool ok,const char *message) { if(!ok) throw std::runtime_error(message); }
-std::unique_ptr<Document> fixture() {
-  auto d=std::make_unique<Document>();
+std::unique_ptr<Document> fixture(MODTYPE type=MOD_TYPE_MPT) {
+  auto d=std::make_unique<Document>(type);
   d->transaction([](CSoundFile &s){
     s.m_nSamples=1; auto &x=s.GetSample(1); x.Initialize(s.GetType());
     x.nLength=16; x.nC5Speed=44100; x.uFlags.set(CHN_16BIT);
@@ -120,10 +120,29 @@ void pcmTest() {
 }
 void patchTest() {
   auto d=fixture();int stopped=0;ScreamSeq::AssetOperations api(*d,[&]{++stopped;});
+  const auto unchanged=d->snapshotData();
+  check(!d->song().GetSample(1).uFlags[CHN_PANNING],"sample fixture inherits channel pan");
+  api.invoke("sample.patch",{{"sample",1},{"values",{{"volume",64}}}});
+  check(stopped==0&&!d->canUndo()&&d->snapshotData()==unchanged,"omitted pan must not enable sample panning on a volume noop");
+  api.invoke("sample.patch",{{"sample",1},{"values",{{"name","Keep channel pan"}}}});
+  check(stopped==1&&!d->song().GetSample(1).uFlags[CHN_PANNING],"rename preserves inherited pan");d->undo();stopped=0;
+  api.invoke("sample.patch",{{"sample",1},{"values",{{"pan",128}}}});
+  check(stopped==1&&d->song().GetSample(1).uFlags[CHN_PANNING],"explicit pan enables sample override");d->undo();stopped=0;
   Json p={{"sample",1},{"values",{{"name","波形"},{"volume",40},{"pan",64},{"loopStart",3},{"loopEnd",14},{"loop",true}}}};
   auto bad=p;bad["values"]["loopEnd"]=2;rejects([&]{api.invoke("sample.patch",bad);});check(stopped==0&&!d->canUndo(),"sample patch atomic");
   api.invoke("sample.patch",p);check(d->song().GetSample(1).nVolume==160&&stopped==1,"sample patch shared settings");
   api.invoke("sample.patch",p);check(stopped==1,"sample patch noop");d->undo();check(!d->canUndo()&&d->song().GetSample(1).nVolume==256,"patch one Undo");
+  auto tuned=fixture(MOD_TYPE_XM);auto &sample=tuned->song().GetSample(1);
+  sample.nC5Speed=8363;sample.RelativeTone=12;sample.nFineTune=17;const auto stored=tuned->snapshotData();
+  int tuningStops=0;ScreamSeq::AssetOperations tuning(*tuned,[&]{++tuningStops;});
+  tuning.invoke("sample.patch",{{"sample",1},{"values",{{"volume",64}}}});
+  check(tuned->snapshotData()==stored&&tuningStops==0,"volume noop must preserve XM relative tuning");
+  tuning.invoke("sample.patch",{{"sample",1},{"values",{{"loopStart",2},{"loopEnd",12},{"loop",true}}}});
+  check(sample.RelativeTone==12&&sample.nFineTune==17,"loop edits preserve XM relative tuning");
+  auto unusual=fixture();auto &untouched=unusual->song().GetSample(1);untouched.nC5Speed=384000;untouched.nVolume=255;
+  ScreamSeq::AssetOperations partial(*unusual);
+  partial.invoke("sample.patch",{{"sample",1},{"values",{{"name","Untouched precision"}}}});
+  check(untouched.nC5Speed==384000&&untouched.nVolume==255&&!untouched.uFlags[CHN_PANNING],"rename preserves omitted high rate, sub-unit volume and inherited pan");
 }
 std::unique_ptr<Document> instrumentFixture() {
   auto d=fixture();d->transaction([](CSoundFile &s){s.m_nInstruments=1;s.Instruments[1]=new ModInstrument(1);

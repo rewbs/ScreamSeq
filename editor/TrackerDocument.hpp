@@ -37,6 +37,10 @@ struct SampleLoopSettings
 	bool enabled = false, pingpong = false;
 	bool reverse = false;
 };
+struct SampleSettingsFields
+{
+	bool rate = true, volume = true, pan = true, loops = true;
+};
 class Document
 {
 	std::unique_ptr<CSoundFile> song_;
@@ -209,7 +213,7 @@ public:
 private:
 	PreparedSampleEdit prepareSampleSplice(int sample, SampleSplicePlan plan) const;
 public:
-	void sampleSettings(int sample, int rate, int volume, int pan, uint32_t start, uint32_t end, bool loop, bool pingpong, const std::optional<std::string> &name = std::nullopt);
+	void sampleSettings(int sample, int rate, int volume, int pan, uint32_t start, uint32_t end, bool loop, bool pingpong, const std::optional<std::string> &name = std::nullopt, SampleSettingsFields fields = {});
 	std::vector<float> waveform(int sample, size_t bins) const;
 	std::vector<float> waveform(int sample, uint32_t first, uint32_t last, size_t bins, SampleChannels channels) const;
 	size_t historyBytes() const;

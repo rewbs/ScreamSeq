@@ -603,3 +603,12 @@ inputs with captured sound/pitch and pending/started flags. These are transient
 UI fields, outside document persistence and Undo. Native pattern typing uses
 the existing `pattern.apply`; explicit audition uses `transport.note` and
 `transport.panic`. See `../MUSICAL_TYPING_PROGRESS.md`.
+
+Sample detail settings/replacement and native multi-file imports use
+`sample.patch`, `sample.import`, `sample.importMany` and `instrument.create`.
+Omitted `pan` now preserves inherited panning rather than enabling a sample
+override. Explicit `pan` still enables the override. `workspace.get.status`
+reports the main window's status text for native workflow diagnostics.
+Omitted rate, volume and loop fields also retain their exact stored values,
+including legacy relative tuning and sub-unit volume precision.
+See `../SAMPLE_SETTINGS_PROGRESS.md` for the retained-draft/file-chooser behavior.

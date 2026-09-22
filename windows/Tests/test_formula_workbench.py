@@ -1,6 +1,7 @@
 """Real native formula drafts, Rich Edit input and guarded parent completion."""
 import ctypes
 from ctypes import wintypes
+import json
 import time
 import unittest
 import private_desktop
@@ -276,6 +277,8 @@ class FormulaWorkbenchTests(unittest.TestCase):
         self.setup_formula()
         graph_formula = self.whwnd()
         self.command(497)
+        workspace = self.read('workspace.get')
+        self.assertTrue(workspace['envelopeBank']['visible'], json.dumps(workspace))
         self.bcommand(1005)
         self.select_first_point()
         self.bcommand(1026)

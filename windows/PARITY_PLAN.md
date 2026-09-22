@@ -10,16 +10,28 @@ device and plugin hosting belong to each platform. See
 [qualification evidence](UPSTREAM_PLUGIN_QUALIFICATION.md) and
 [current app interfaces](App/INTEGRATION.md).
 
-Latest continuation: `MUSICAL_TYPING_PROGRESS.md` adds selected-sound pattern
+Latest continuation: `SAMPLE_SETTINGS_PROGRESS.md` adds native sample settings,
+batch sample/mapped-instrument import, captured replacement and instrument
+creation, and fixes implicit panning and relative-tuning changes on partial edits.
+`MUSICAL_TYPING_PROGRESS.md` adds selected-sound pattern
 entry, sample/instrument editor typing and main-workspace Live keys. A fresh
 fetch still finds no newer upstream commits. The installed Contourtonist,
 OrbitCab and Surge XT binary hashes were rechecked before current app testing.
-Next implementation priorities are native sample properties and batch/replacement import,
-instrument import/keymap presentation, then MIDI/device/recording and workspace
+Next implementation priorities are native instrument import/keymap presentation,
+the sample library/browser and multisample workflow, then MIDI/device/recording and workspace
 parity. Existing plugin and cross-platform release gates remain in force.
 The Mac source confirms sample settings and batch import. Sample export is a
 separate enhancement; no existing Mac sample-export UI/API was found in this
 review, so it is not treated as an established parity gap.
+
+The next instrument step is grounded in `mac/App/main.swift::importInstrument`
+(ITI/XI/PAT/SFZ, new slot, select the imported sound) and the octave/sample
+mapping summary in `mac/App/AssetEditors.swift`. Windows already stages numeric
+key ranges in `InstrumentEnvelopeWindow.hpp`; add visible map inspection and
+guarded import without discarding that parent draft. The following sample-library
+step should match `SampleLibraryIntegration.swift`: separate library revisions,
+bounded background indexing/search, folder tags, preview, and the existing
+atomic `sample.importMany` / `instrument.importMultisample` transactions.
 
 ## What changed upstream and how it changes the work
 
@@ -122,12 +134,14 @@ preserve concurrent edit guards.
    snapping and clipboard controls are implemented in `SAMPLE_DETAIL_PROGRESS.md`;
    their current qualification is recorded there. Native sample/instrument audition
    and detailed voice markers are implemented in `AUDITION_PROGRESS.md`. Complete
-   sample property/import/export controls, device selection, MIDI input
+   the sample-library/browser and multisample workflow, device selection, MIDI input
    and mapping, precise recording/recovery, floating
    and persisted docks, accessibility, configurable keys and command palette
    parity. Keep cursor, selection, focus, pins and playback independent.
    Pattern/dock typing and main-workspace Live keys are implemented in
    `MUSICAL_TYPING_PROGRESS.md`; broader floating-tool keyboard behavior remains.
+   Native sample settings, batch import, captured replacement and creation of a
+   sample instrument are implemented in `SAMPLE_SETTINGS_PROGRESS.md`.
 5. **Release qualification.** Fresh Mac and Windows builds against the same
    source, reciprocal project reopen and offline comparisons, commercial-plugin
    matrix, endpoint switching, long loaded playback, loopback, foreground

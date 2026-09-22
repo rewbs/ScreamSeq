@@ -988,6 +988,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)sampleSettings:(NSInteger)sample values:(NSDictionary *)v error:(NSError **)error {
   try {
+    const Tracker::SampleSettingsFields fields{v[@"rate"] != nil, v[@"volume"] != nil, v[@"pan"] != nil,
+        v[@"loopStart"] != nil || v[@"loopEnd"] != nil || v[@"loop"] != nil || v[@"pingpong"] != nil};
+    const auto name = [v[@"name"] isKindOfClass:NSString.class] ? std::optional<std::string>([v[@"name"] UTF8String]) : std::nullopt;
     NSMutableDictionary *merged = [[self sampleInfo:sample includeWaveform:NO] mutableCopy];
     [merged addEntriesFromDictionary:v];
     v = merged;
@@ -996,7 +999,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
         int(sample), [v[@"rate"] intValue], [v[@"volume"] intValue], [v[@"pan"] intValue],
         [v[@"loopStart"] unsignedIntValue], [v[@"loopEnd"] unsignedIntValue], [v[@"loop"] boolValue],
         [v[@"pingpong"] boolValue],
-        [v[@"name"] isKindOfClass:NSString.class] ? std::optional<std::string>([v[@"name"] UTF8String]) : std::nullopt);
+        name, fields);
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);

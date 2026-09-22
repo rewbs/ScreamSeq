@@ -174,7 +174,10 @@
             {openCommand,L"File / Open project or module",L"Ctrl+O"},{saveCommand,L"File / Save native project",L"Ctrl+S"},
             {saveAsCommand,L"File / Save As",L"Ctrl+Shift+S"},{undoCommand,L"Edit / Undo",L"Ctrl+Z"},{redoCommand,L"Edit / Redo",L"Ctrl+Y"},
             {copyCommand,L"Pattern / Copy rectangular cells",L"Ctrl+C"},{pasteCommand,L"Pattern / Paste rectangular cells",L"Ctrl+V"},{clearCommand,L"Pattern / Clear selection",L"Delete"},
-            {sampleImportCommand,L"Sample / Import audio",L"Ctrl+I"},{sampleAllCommand,L"Sample / Select all",L"Ctrl+A in samples"},
+            {sampleImportCommand,L"Sample / Import audio files",L"Ctrl+I"},
+            {sampleImportRawCommand,L"Sample / Import audio files as samples",L""},
+            {sampleImportInstrumentsCommand,L"Sample / Import audio files as mapped instruments",L""},
+            {sampleAllCommand,L"Sample / Select all",L"Ctrl+A in samples"},
             {sampleReverseCommand,L"Sample / Reverse selection",L""},{sampleNormalizeCommand,L"Sample / Normalize selection",L""},
             {sampleFadeInCommand,L"Sample / Fade in",L""},{sampleFadeOutCommand,L"Sample / Fade out",L""},
             {sampleTrimCommand,L"Sample / Trim to selection",L""},{sampleLoopCommand,L"Sample / Set normal loop to selection",L"L in samples"},
@@ -281,6 +284,7 @@
         if(noteKey(key,ctrl,alt,shift))return true;
         if(curveKey(key,ctrl,alt,shift)||graphKey(key,ctrl,alt,shift)||graphLaneKey(key,ctrl,alt,shift))return true;
         if(mixerKey(key))return true;
+        if(key==VK_F6) { command(workspaceState.focus=="pattern"&&!view->graphPattern->lanes.empty()?graphLanesFocus:nextPanelCommand);return true; }
         if(textOwnsKeyboard() && key!=VK_ESCAPE) return false;
         if(ctrl && key=='I') {command(sampleImportCommand);return true;}
         if(ctrl && key=='O') {command(openCommand);return true;}
@@ -293,7 +297,6 @@
 		if(ctrl && key=='P') { command(pinCommand);return true; }
 		if(ctrl && key==VK_HOME) { command(cursorCommand);return true; }
 		if(alt && key==VK_LEFT) { command(returnCommand);return true; }
-		if(key==VK_F6) { command(workspaceState.focus=="pattern"&&!view->graphPattern->lanes.empty()?graphLanesFocus:nextPanelCommand);return true; }
 		if(key==VK_ESCAPE && dragging==4) {sampleRange()=sampleDragBefore;dragging=0;ReleaseCapture();refreshSampleFields();return true;}
 		if(key==VK_ESCAPE && dragging) { workspaceState.rightWidth=dragRight;workspaceState.lowerHeight=dragLower;dragging=0;ReleaseCapture();layoutControls();return true; }
 		if(key==VK_ESCAPE) {if(!effectPrefix.empty()){effectPrefix.clear();status=L"Effect prefix cancelled";return true;}if(pluginDraft){pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;} stop();command(focusPatternCommand);return true; }

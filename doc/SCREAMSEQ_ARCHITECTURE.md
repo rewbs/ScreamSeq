@@ -48,6 +48,7 @@ Quit must drain document/recovery work asynchronously, then call `TrackerSession
 - Scripted curves are precompiled bounded mathematical expressions. No general-purpose interpreter executes in the audio callback.
 - VST3 automation uses sample-offset parameter queues within normal blocks. Continuing tracker effects still follow ordinary ticks.
 - Sample/instrument data, note-on/off/cut semantics, NNA, routing and exact native sample payloads must survive save/reopen and Undo. The current sample voice/storage path remains 8/16-bit.
+- Partial sample settings preserve omitted rate, volume, pan and loop groups. Windows and Mac adapters retain field presence before filling saved defaults; a name/volume edit cannot silently recalculate MOD/XM tuning or enable a sample-panning override. Explicit pan enables the override. See `windows/SAMPLE_SETTINGS_PROGRESS.md` for the regressions and native settings/import controls.
 - The API schema retains its legacy filename for compatibility. Prefer the `screamseq_api.py` entry point; existing `resonance_api` imports continue to work.
 
 ## Workflow and source control
