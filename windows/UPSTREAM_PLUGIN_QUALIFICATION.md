@@ -4,6 +4,14 @@ This is a development checkpoint, not full Mac parity. The work plan is
 [PARITY_PLAN.md](PARITY_PLAN.md). Evidence files below are local ignored artifacts
 under `bin/`, not files distributed with the product.
 
+Later automation qualification adds a limitation to the Contourtonist offline
+results below: its unmeasured default fixture processes with a flat filter.
+Finite, partition-consistent PCM and exact state retention remain valid checks,
+but they do not establish audible modulation of that vendor's parameters.
+See `PARAMETER_AUTOMATION_PROGRESS.md` for the source evidence and the separate
+built-in/external-fixture audible automation comparisons. OrbitCab's reported
+partition failure remains unresolved.
+
 ## Source integration
 
 `origin/main` does not exist. `origin/HEAD` names `codex/screamseq`; the fetched

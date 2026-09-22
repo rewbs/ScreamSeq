@@ -38,6 +38,9 @@
 > instrument/bus graph assignments: `SONG_ROUTING_PROGRESS.md`. Full parity remains active.
 > Native row-aligned graph command lanes, captured editor drafts and installed
 > plugin command rendering: `GRAPH_COMMANDS_PROGRESS.md`. Full parity remains active.
+> Native pattern parameter curves, shared transform API, connected bank/formula
+> editing and installed-plugin automation: `PARAMETER_AUTOMATION_PROGRESS.md`.
+> Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late

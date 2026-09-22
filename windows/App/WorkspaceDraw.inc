@@ -13,7 +13,7 @@
         s.uiText(busy ? L"Document worker busy" : L"Z-M / Q-U: note entry",12,513,142,muted);
         if(inspection) s.uiText(L"QA clipboard is private",12,535,142,muted);
 		s.uiText(L"OpenMPT audio engine",12,height-68,142,muted);
-		s.uiText(std::to_wstring(int(view->session.document.at("tempo").get<double>()))+L" BPM   /   "+std::to_wstring(view->session.document.at("speed").get<unsigned>())+L" ticks   /   "+wide(view->session.document.at("format").get<std::string>()),650,58,std::max(1.0f,width-658),muted);
+		s.uiText(std::to_wstring(int(view->session.document.at("tempo").get<double>()))+L" BPM   /   "+std::to_wstring(view->session.document.at("speed").get<unsigned>())+L" ticks   /   "+wide(view->session.document.at("format").get<std::string>()),846,58,std::max(1.0f,width-854),muted);
 		// Virtualized grid: field colors and geometry are shared by hit-testing.
 		const auto r=patternGridRect(); s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x10161e);
 		s.fill(r.x,r.y,r.w,gridHeader,0x202834);

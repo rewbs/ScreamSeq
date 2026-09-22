@@ -1264,6 +1264,7 @@
         [lanes addObject:item];
       }
       result = @{@"pattern": @(index), @"patternID": nativeID(pattern), @"rows": @(song.Patterns[index].GetNumRows()),
+                 @"rowsPerBeat": @(std::max<uint32_t>(1, song.Patterns[index].GetOverrideSignature() ? song.Patterns[index].GetRowsPerBeat() : song.m_nDefaultRowsPerBeat ? song.m_nDefaultRowsPerBeat : 4)),
                  @"unitsPerRow": @256, @"lanes": lanes};
     } else if ([method isEqual:@"automation.pattern.set"] || [method isEqual:@"automation.pattern.remove"]) {
       const bool remove = [method isEqual:@"automation.pattern.remove"];

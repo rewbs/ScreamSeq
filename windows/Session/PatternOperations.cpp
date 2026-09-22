@@ -3,6 +3,8 @@
 #include "editor/TrackerDocument.hpp"
 #include "editor/PatternCommands.hpp"
 #include "editor/PatternTools.hpp"
+#include "editor/AutomationTools.hpp"
+#include "editor/EnvelopeBank.hpp"
 #include "soundlib/mod_specifications.h"
 #include "soundlib/NativeNoteEffects.h"
 #include <cmath>
@@ -48,10 +50,12 @@ Json noteEffects(Document &d) {
 }
 #include "PatternTransform.inc"
 #include "PatternPaste.inc"
+#include "PatternAutomation.inc"
 PatternOperations::PatternOperations(Tracker::Document &d,std::function<void()> stop,PatternHostHooks host):document_(d),stop_(std::move(stop)),host_(std::move(host)){}
-std::vector<std::string> PatternOperations::reads(){return {"pattern.performance.get","pattern.effects.get","pattern.notes.get"};}
-std::vector<std::string> PatternOperations::writes(){return {"pattern.performance.set","pattern.effects.set","pattern.effect.set","pattern.notes.set","pattern.transform","pattern.paste"};}
+std::vector<std::string> PatternOperations::reads(){return {"pattern.performance.get","pattern.effects.get","pattern.notes.get","automation.pattern.get","automation.pattern.copy"};}
+std::vector<std::string> PatternOperations::writes(){return {"pattern.performance.set","pattern.effects.set","pattern.effect.set","pattern.notes.set","pattern.transform","pattern.paste","automation.pattern.set","automation.pattern.remove","automation.pattern.transform"};}
 Json PatternOperations::invoke(const std::string &method,const Json &input){
+  if(method.starts_with("automation.pattern."))return patternAutomation(document_,method,input,stop_,host_);
   using namespace Tracker;const auto &song=document_.song();Json p=input;
   if(method=="pattern.transform")return transformPattern(document_,p,stop_,host_);
   if(method=="pattern.paste")return pastePattern(document_,p,stop_,host_);

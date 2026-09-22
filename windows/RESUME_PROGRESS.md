@@ -1,8 +1,9 @@
 # Windows continuation — 2026-09-21
 
-Latest editor continuation: `GRAPH_COMMANDS_PROGRESS.md` records native
-row-aligned graph lanes, captured command editing, immutable display caching
-and installed-plugin command rendering. The preceding native song routing,
+Latest editor continuation: `PARAMETER_AUTOMATION_PROGRESS.md` records native
+pattern parameter curves, the shared transform API and connected envelope bank
+and formula editing. `GRAPH_COMMANDS_PROGRESS.md` records the preceding native
+row-aligned graph lanes and installed-plugin command rendering. Native song routing,
 plugin library/presets/location repair, graph curves and precise-note milestones
 are linked from `PAUSED_HANDOFF.md`. The broader work and installed-plugin
 limitations remain in `PARITY_PLAN.md`.

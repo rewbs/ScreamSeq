@@ -43,6 +43,7 @@ protected:
   virtual void action(int,unsigned)=0;
   virtual bool key(WPARAM,bool,bool){return false;}
   virtual void mouse(UINT,float,float,WPARAM){}
+  virtual bool wheel(UINT,float,float,WPARAM){return false;}
   virtual void timer(UINT_PTR){}
   virtual void error(const std::exception &e){status_=wide(e.what());requestPaint();}
   virtual void drawControl(const DRAWITEMSTRUCT &d){RECT r=d.rcItem;const bool disabled=(d.itemState&ODS_DISABLED)!=0;SetDCBrushColor(d.hDC,RGB(35,49,63));FillRect(d.hDC,&r,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,disabled?RGB(103,119,133):RGB(218,232,241));SelectObject(d.hDC,font_);std::wstring text;
@@ -77,6 +78,7 @@ protected:
       case WM_MEASUREITEM:reinterpret_cast<MEASUREITEMSTRUCT *>(l)->itemHeight=unsigned(22*GetDpiForWindow(h)/96);return TRUE;
       case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:SetTextColor(reinterpret_cast<HDC>(w),RGB(218,232,241));SetBkColor(reinterpret_cast<HDC>(w),RGB(24,34,45));SetDCBrushColor(reinterpret_cast<HDC>(w),RGB(24,34,45));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
       case WM_KEYDOWN:case WM_SYSKEYDOWN:if(self->key(w,(GetKeyState(VK_CONTROL)&0x8000)!=0,(GetKeyState(VK_SHIFT)&0x8000)!=0))return 0;break;
+      case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT p{GET_X_LPARAM(l),GET_Y_LPARAM(l)};ScreenToClient(h,&p);const float scale=96.0f/GetDpiForWindow(h);if(self->wheel(m,p.x*scale,p.y*scale,w))return 0;break;}
       case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_MOUSEMOVE:case WM_CAPTURECHANGED:{const float scale=96.0f/GetDpiForWindow(h);self->mouse(m,GET_X_LPARAM(l)*scale,GET_Y_LPARAM(l)*scale,w);self->requestPaint();return 0;}
     }}catch(const std::exception &e){self->error(e);}return DefWindowProcW(h,m,w,l);
   }

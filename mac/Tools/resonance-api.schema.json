@@ -6730,7 +6730,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Read pattern-relative normalized parameter envelopes and target availability.",
+      "description": "Read pattern-relative normalized parameter envelopes, target availability, rows and rowsPerBeat including pattern overrides. Available in the native Mac and Windows applications.",
       "type": "object",
       "properties": {
         "jsonrpc": {

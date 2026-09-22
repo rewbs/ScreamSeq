@@ -16,7 +16,14 @@ The modeless formula workbench and reference are covered in
 `../FORMULA_WORKBENCH_PROGRESS.md`.
 Native shared-plugin instrument assignments and MIDI channels are covered in
 `../PLUGIN_ALIASES_PROGRESS.md`.
-Song overview remains pending.
+The native song overview and graph command lanes are covered in
+`../SONG_ROUTING_PROGRESS.md` and `../GRAPH_COMMANDS_PROGRESS.md`.
+Pattern parameter curves, transforms, connected bank and formula workbench are
+covered in `../PARAMETER_AUTOMATION_PROGRESS.md`. They dispatch through
+`PatternOperations` with real rack parameter/conflict hooks, document revision
+guards and Undo. The modeless editor captures stable pattern/plugin/parameter
+identity and a draft generation; worker reads and previews populate cached
+geometry without querying the document or plugins during paint.
 
 ## Owner boundaries
 

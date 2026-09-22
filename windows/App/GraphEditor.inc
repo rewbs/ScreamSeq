@@ -68,7 +68,7 @@
     template<class Place>void layoutGraphControls(Place place){
         const auto r=sampleEditorRect();const bool show=graphEditorVisible();const float x=r.x+r.w-256;const bool chosen=!graphID.empty();
         std::set<int> placed;auto showControl=[&](int id,float a,float b,float w,float h,bool visible){placed.insert(id);place(id,a,b,w,h,visible);};
-        showControl(graphCommand,560,52,76,26,true);
+        showControl(graphCommand,744,52,76,26,true);
         showControl(graphLibrary,r.x+6,r.y+5,std::max(80.0f,r.w-524),230,show);float a=x-260;
         showControl(graphNew,a,r.y+5,44,25,show&&graphPageIndex!=5);showControl(graphFit,a+48,r.y+5,42,25,show&&graphPageIndex!=5);showControl(graphApply,a+94,r.y+5,65,25,show&&graphPageIndex!=5);showControl(graphReload,a+163,r.y+5,85,25,show&&graphPageIndex!=5);
         showControl(graphKind,r.x+6,r.y+36,112,210,show&&graphPageIndex!=5);showControl(graphAddSource,r.x+122,r.y+36,78,25,show&&graphPageIndex!=5);
