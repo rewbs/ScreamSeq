@@ -40,6 +40,13 @@ existing project wrapper and plugin history. Paginated reads recheck captured
 identity/revision; dense drawing aggregates transitions by display column and
 retains exact values independently. See `../ABSOLUTE_AUTOMATION_PROGRESS.md`.
 
+`SampleDetailWindow.hpp` connects the sample dock and command palette to the
+existing sample operations. Its stable captured target/revision and generation
+guard waveform reads and edits. It retains at most 4096 peak bins and 4096
+staged drawing points, with per-sample viewport/selection state. Painting reads
+cached data; shared prepared operations perform validation, PCM edits, history
+and stop-before-publication. See `../SAMPLE_DETAIL_PROGRESS.md`.
+
 ## Owner boundaries
 
 `Session/DocumentController` constructs, owns and disposes the shared Document on

@@ -107,8 +107,11 @@ preserve concurrent edit guards.
    instrument import/audition, inline formula
    completion and the remaining bank/workbench entry points, with retained
    drawing, meaningful context menus and keyboard use.
-4. **Recording and workspace.** Device selection, MIDI input and mapping,
-   precise recording/recovery, sample zoom/drawing/crossfade/audition, floating
+4. **Recording and workspace.** Native sample zoom/drawing/crossfade, processing,
+   snapping and clipboard controls are implemented in `SAMPLE_DETAIL_PROGRESS.md`;
+   their current qualification is recorded there. Complete sample audition,
+   broader sample property/import/export controls, device selection, MIDI input
+   and mapping, precise recording/recovery, floating
    and persisted docks, accessibility, configurable keys and command palette
    parity. Keep cursor, selection, focus, pins and playback independent.
 5. **Release qualification.** Fresh Mac and Windows builds against the same

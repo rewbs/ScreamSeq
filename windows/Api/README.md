@@ -14,6 +14,14 @@ pattern-curve editor. `workspace.get.absoluteAutomation` reports captured target
 revision, draft, viewport and bounded draw geometry; its point preview truncates
 at 4096 while `pointCount` reports the complete lane. Use paginated
 `automation.get` to read every point. See `../ABSOLUTE_AUTOMATION_PROGRESS.md`.
+
+`workspace.get.sampleDetail` exposes the detailed sample editor's captured
+identity/revision, draft points, selection, viewport, channels, bounded waveform
+cache and latest operation report. Its native controls call the existing
+`sample.*` methods with the same guarded document history and PCM semantics.
+The dock's Detail button and command palette open this window. See
+`../SAMPLE_DETAIL_PROGRESS.md`.
+
 The actual application now also registers `graph.*`, `mixer.*` and
 `envelope.bank.*` / `envelope.catalogue.*` operations. Their fields match the
 existing Mac schema. Graph recipe copies use the real rack's saved baseline;

@@ -1,6 +1,10 @@
 # Windows continuation — 2026-09-21
 
-Latest editor continuation: `ABSOLUTE_AUTOMATION_PROGRESS.md` records the
+Latest editor continuation: `SAMPLE_DETAIL_PROGRESS.md` records the native
+detailed waveform, drawing, processing, crossfade, snapping and clipboard
+controls. All 211 application tests pass with no failures or skips; the preserved
+build is `bin/windows-checkpoints/sample-detail-20260921/`.
+`ABSOLUTE_AUTOMATION_PROGRESS.md` records the
 Mac-compatible absolute lane API and native song automation editor, with
 plugin history and bounded dense-lane drawing. All 199 actual-app tests pass
 with zero failures or skips; the preserved build is

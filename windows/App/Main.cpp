@@ -21,6 +21,7 @@
 #include "ParameterAutomationWindow.hpp"
 #include "InstrumentEnvelopeWindow.hpp"
 #include "AbsoluteAutomationWindow.hpp"
+#include "SampleDetailWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -77,7 +78,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     curvePattern=480,curveKind=481,curveSnap=482,curveRow=483,curveValue=484,curveFormula=485,
     curveApply=486,curveReload=487,curveSetPoint=488,curveDelete=489,curveRamp=490,curveClear=491,
     curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497,curveExpand=498,curveReference=499,
-    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504;
+    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -256,6 +257,7 @@ public:
             {"parameterAutomation",parameterAutomationWindow?parameterAutomationWindow->snapshot():Json{{"visible",false}}},
             {"instrumentEnvelope",instrumentEnvelopeWindow?instrumentEnvelopeWindow->snapshot():Json{{"visible",false}}},
             {"absoluteAutomation",absoluteAutomationWindow?absoluteAutomationWindow->snapshot():Json{{"visible",false}}},
+            {"sampleDetail",sampleDetailWindow?sampleDetailWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
             {"noteEditor",{{"visible",noteEditorVisible()},{"pattern",notePattern},{"row",noteRow},{"channel",noteChannel},
@@ -435,6 +437,11 @@ public:
     void openInstrumentEnvelope(){
         if(!instrumentEnvelopeWindow)instrumentEnvelopeWindow=std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};});
         instrumentEnvelopeWindow->openAt();
+    }
+    std::unique_ptr<ScreamSeq::SampleDetailWindow> sampleDetailWindow;
+    void openSampleDetail(){
+        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};});
+        sampleDetailWindow->openAt();
     }
     std::unique_ptr<ScreamSeq::AbsoluteAutomationWindow> absoluteAutomationWindow;
     void openAbsoluteAutomation(std::string plugin={},std::optional<uint32_t> parameter={}){

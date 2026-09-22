@@ -73,6 +73,7 @@
         place(sampleStartField,editor.x+50,editor.y+editor.h-32,88,25,editSample);
         place(sampleEndField,editor.x+182,editor.y+editor.h-32,88,25,editSample);
         place(sampleRangeCommand,editor.x+278,editor.y+editor.h-32,85,25,editSample);
+        place(sampleDetailCommand,editor.x+10,editor.y+4,132,24,editSample);
         const bool loopControls=editSample && g.inspector.h>=340;
         const auto ix=g.inspector.x+10,iy=g.inspector.y+g.inspector.h-57;
         place(sampleLoopToggleCommand,ix,iy,83,24,loopControls);place(sampleLoopModeCommand,ix+87,iy,90,24,loopControls);
@@ -109,7 +110,7 @@
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
 			{notesCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
-            {instrumentEnvelopeCommand,L"Instrument…"},
+            {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},
             {openCommand,L"Open"},{saveCommand,L"Save"},{saveAsCommand,L"Save As"},{undoCommand,L"Undo"},{redoCommand,L"Redo"},{graphCommandsCommand,L"Graphs…"},{parameterAutomationCommand,L"Automation…"},
             {sampleImportCommand,L"Import…"},{sampleAllCommand,L"All"},{sampleReverseCommand,L"Reverse"},{sampleNormalizeCommand,L"Normalize"},
             {sampleFadeInCommand,L"Fade in"},{sampleFadeOutCommand,L"Fade out"},{sampleTrimCommand,L"Trim"},{sampleLoopCommand,L"Set loop"},{sampleRangeCommand,L"Set range"},
@@ -143,6 +144,7 @@
             {graphLanesFocus,L"Pattern / Focus graph command lanes",L"F6 from pattern"},
             {parameterAutomationCommand,L"Automation / Pattern parameter curves and tools",L""},
             {absoluteAutomationCommand,L"Automation / Absolute song parameter lane",L""},
+            {sampleDetailCommand,L"Sample / Detailed waveform, drawing and crossfade",L""},
             {instrumentEnvelopeCommand,L"Instrument / Envelopes, settings and sample keymap",L""},
             {effectsCommand,L"Pattern / Inspect FX and parameter bindings",L"Enter on an FX cell"},
             {patternPasteMix,L"Pattern / Mix paste into empty fields",L"Ctrl+Shift+V"},
@@ -193,6 +195,7 @@
             else if(id==graphCommandsCommand){openGraphCommands(workspaceState.focus=="graphLanes");return;}
             else if(id==parameterAutomationCommand){openParameterAutomation();return;}
             else if(id==absoluteAutomationCommand){openAbsoluteAutomation();return;}
+            else if(id==sampleDetailCommand){openSampleDetail();return;}
             else if(id==instrumentEnvelopeCommand){openInstrumentEnvelope();return;}
             else if(id==graphLanesFocus){if(!view->graphPattern->lanes.empty()){workspaceState.focus="graphLanes";revealGraphLane();}else{openGraphCommands();return;}}
             else if(id==openCommand) openFile();

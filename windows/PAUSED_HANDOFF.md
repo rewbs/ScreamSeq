@@ -44,6 +44,8 @@
 > voice markers: `INSTRUMENT_ENVELOPE_PROGRESS.md`.
 > Absolute song parameter automation API, native controls, plugin history and
 > bounded dense-lane drawing: `ABSOLUTE_AUTOMATION_PROGRESS.md`. Full parity remains active.
+> Native detailed sample waveform, drawing, processing, crossfade, snapping and
+> clipboard controls: `SAMPLE_DETAIL_PROGRESS.md`. Full parity remains active.
 
 The user requested a natural stopping point and **stop**. No further development,
 review-fix dispatches or integration should run automatically in response to late
