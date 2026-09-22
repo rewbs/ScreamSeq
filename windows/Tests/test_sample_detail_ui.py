@@ -149,7 +149,7 @@ class SampleDetailUITests(unittest.TestCase):
 
     def test_native_controls_fit_minimum_without_overlap(self):
         user=private_desktop.user;user.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT];user.GetClientRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)];user.GetWindowRect.argtypes=user.GetClientRect.argtypes;user.MapWindowPoints.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.POINTER(wintypes.POINT),wintypes.UINT];scale=self.read('workspace.get')['dpi']/96;private_desktop.check(user.SetWindowPos(self.window(),None,0,0,int(1080*scale),int(790*scale),0x16));self.idle();client=wintypes.RECT();user.GetClientRect(self.window(),ctypes.byref(client));rects=[]
-        for identifier in range(4801,4855):
+        for identifier in range(4801,4856):
             rect=wintypes.RECT();user.GetWindowRect(self.control(identifier),ctypes.byref(rect));p=(wintypes.POINT*2)(wintypes.POINT(rect.left,rect.top),wintypes.POINT(rect.right,rect.bottom));user.MapWindowPoints(None,self.window(),p,2);self.assertGreaterEqual(p[0].x,0,identifier);self.assertGreaterEqual(p[0].y,0,identifier);self.assertLessEqual(p[1].x,client.right,identifier);self.assertLessEqual(p[1].y,client.bottom,identifier);rects.append((identifier,p[0].x,p[0].y,p[1].x,p[1].y))
         for i,a in enumerate(rects):
             for b in rects[i+1:]:self.assertFalse(max(a[1],b[1])<min(a[3],b[3]) and max(a[2],b[2])<min(a[4],b[4]),(a,b))

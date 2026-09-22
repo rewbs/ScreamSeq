@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "editor/TrackerDocument.hpp"
 
 namespace ScreamSeq {
 // Detailed sample work stays on the document worker. The window retains only
@@ -10,17 +11,19 @@ public:
   struct Context {std::string document,revision;unsigned sample=0;Json samples;};
 private:
   using Request=std::function<Json(const std::string &,const Json &)>;
+  using Audition=std::function<void(unsigned,const std::string &,const std::string &,const std::string &)>;Audition audition_;
   enum:int {sample=4801,fromCursor,reload,undo,redo,close,fit,zoomIn,zoomOut,zoomSelection,panLeft,panRight,channels,drawMode,
     rangeStart,rangeEnd,setRange,all,viewStart,viewEnd,setView,pointFrame,pointValue,stagePoint,applyDraw,discardDraw,interpolation,
     operation,fadeCurve,amount,exponent,previewProcess,applyProcess,crossLoop,crossMode,crossCurve,crossFrames,previewCross,applyCross,
     snapMode,snapDirection,snapSize,snapRange,normalLoop,sustainLoop,disableNormal,disableSustain,loopDirection,
-    copy,cut,erase,pasteMode,paste,copyNew,
+    copy,cut,erase,pasteMode,paste,copyNew,audition,
     heading=4900,targetLabel,rangeLabel,viewLabel,pointLabel,processLabel,crossLabel,snapLabel,loopsLabel,clipboardLabel,statusLabel,helpLabel};
   struct Region {unsigned first=0,last=0,start=0,end=0,frames=0;};
   Request request_;std::function<Context(bool)> context_;Context captured_;std::string id_;unsigned slot_=0;
   Json info_=Json::object(),report_=Json::object();std::map<std::string,Region> regions_;Region region_;
   std::set<int> edited_;
   std::vector<float> peaks_;std::map<unsigned,double> stroke_,dragBefore_;
+  std::vector<double> playbackFrames_;
   unsigned waveStart_=0,waveEnd_=0,anchor_=0,lastFrame_=0;double lastValue_=0;
   int channel_=0;unsigned bins_=0;uint64_t generation_=0;
   bool setting_=false,pending_=false,fields_=false,drawing_=false,dragging_=false,selecting_=false,priorPoint_=false;
@@ -120,6 +123,7 @@ private:
     if(notification==CBN_SELCHANGE){if(id==sample){const auto selected=choice(sample);require(selected>=0&&size_t(selected)<captured_.samples.size(),"Choose a sample");if(draft()||!current()){for(size_t i=0;i<captured_.samples.size();++i)if(captured_.samples[i].at("id")==id_)choose(sample,int(i));requireCurrent();throw std::runtime_error("Apply or reload the captured draft before changing sample");}load(true,captured_.samples[size_t(selected)].at("index"));return;}
       if(id==channels){const auto next=choice(channels);if(!stroke_.empty()||next==2&&info_.at("channels")==1){choose(channels,channel_);throw std::runtime_error(!stroke_.empty()?"Apply or discard the drawing before changing channels":"This sample has no right channel");}channel_=next;++generation_;refreshWave();return;}edited_.insert(id);fields_=true;++generation_;report_=Json::object();return;}
     if(notification!=BN_CLICKED)return;
+    if(id==audition){requireCurrent();audition_(slot_,id_,captured_.document,captured_.revision);return;}
     if(id==close){hide();return;}if(id==fromCursor){load(true);return;}if(id==reload){load(false);return;}
     if(id==undo||id==redo){require(!draft(),"Apply or Reload the draft before document Undo/Redo");mutate(id==undo?"history.undo":"history.redo",{{"domain","document"}});return;}
     if(id==fit){if(region_.frames)viewport(0,region_.frames);return;}if(id==zoomIn||id==zoomOut){zoom(id==zoomIn?2:.5);return;}if(id==panLeft||id==panRight){pan(id==panLeft?-1:1);return;}
@@ -142,7 +146,7 @@ private:
     layoutWidth_=w;layoutHeight_=h;layoutDpi_=dpi;layoutPending_=pending_;
     const auto oldWidth=canvas_.w;canvas_={14,140,w-28,std::max(90.f,h-540)};
     place(heading,14,12,156,23);place(sample,172,8,w-678,240);place(fromCursor,w-498,8,106,28);place(reload,w-388,8,88,28);place(undo,w-296,8,80,28);place(redo,w-212,8,80,28);place(close,w-128,8,114,28);
-    place(targetLabel,14,44,w-28,23);float x=14;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{fit,58.f},{zoomIn,50.f},{zoomOut,50.f},{zoomSelection,124.f},{panLeft,66.f},{panRight,66.f},{channels,116.f},{drawMode,90.f}}){place(id,x,72,width,id==channels?180:28);x+=width+6;}
+    place(targetLabel,14,44,w-28,23);float x=14;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{fit,58.f},{zoomIn,50.f},{zoomOut,50.f},{zoomSelection,124.f},{panLeft,66.f},{panRight,66.f},{channels,116.f},{drawMode,90.f},{audition,124.f}}){place(id,x,72,width,id==channels?180:28);x+=width+6;}
     place(viewLabel,14,112,58,20);place(viewStart,74,108,94,26);place(viewEnd,176,108,94,26);place(setView,278,108,88,26);place(helpLabel,380,110,w-394,24);
     const auto y=h-388;place(rangeLabel,14,y,74,25);place(rangeStart,90,y,94,26);place(rangeEnd,192,y,94,26);place(setRange,294,y,88,26);place(all,390,y,60,26);place(clipboardLabel,470,y,64,24);place(copy,536,y,58,26);place(cut,600,y,52,26);place(erase,658,y,64,26);place(pasteMode,728,y,110,180);place(paste,844,y,68,26);place(copyNew,918,y,w-932,26);
     place(pointLabel,14,y+40,74,25);place(pointFrame,90,y+40,94,26);place(pointValue,192,y+40,94,26);place(stagePoint,294,y+40,100,26);place(interpolation,400,y+40,116,180);place(applyDraw,524,y+40,132,26);place(discardDraw,664,y+40,130,26);
@@ -161,19 +165,21 @@ private:
     for(const auto frame:{region_.first,region_.last})if(frame>=region_.start&&frame<=region_.end)s.line(xAt(frame),r.y,xAt(frame),r.y+r.h,0xb0f2df);
     if(!info_.empty())for(int sustain=0;sustain<2;++sustain)if(info_.value(sustain?"sustainLoop":"loop",false))for(const auto *key:{sustain?"sustainStart":"loopStart",sustain?"sustainEnd":"loopEnd"}){const unsigned frame=info_.at(key);if(frame>=region_.start&&frame<=region_.end)s.line(xAt(frame),r.y,xAt(frame),r.y+r.h,sustain?0xb5a0e8:0xe2b86c,2);}
     std::optional<std::pair<float,float>> previous;for(const auto &[frame,value]:stroke_){if(frame<region_.start||frame>=region_.end)continue;const auto x=xAt(frame+.5),y=mid-float(value)*amplitude;if(previous)s.line(previous->first,previous->second,x,y,0xf3c778,2);s.fill(x-2,y-2,4,4,0xffe1a7);previous={{x,y}};}
+    for(const auto frame:playbackFrames_)if(frame>=region_.start&&frame<region_.end)s.line(xAt(frame),r.y+24,xAt(frame),r.y+r.h,0xebaeed,1);
     s.outline(r.x,r.y,r.w,r.h,0x548e87);s.uiText(current()?(precise()?L"Individual frames · draw or enter exact values":L"Peak overview · zoom in to draw"):L"Stale sample · Reload retains the captured target",r.x+8,r.y+6,r.w-16,0x9bacbc);
     s.uiText(L"Process amount: gain / target dB, or odd smoothing window. Fade exponent applies to exponential/logarithmic curves.",14,h-144,w-28,0x9bacbc);
   }
 public:
-  SampleDetailWindow(HWND owner,Request request,std::function<Context(bool)> context):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)){
+  SampleDetailWindow(HWND owner,Request request,std::function<Context(bool)> context,Audition auditionCallback):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),audition_(std::move(auditionCallback)){
     minimumWidth_=1080;minimumHeight_=790;create(L"ScreamSeq.SampleDetail",L"Sample detail",1180,880);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"SAMPLE DETAIL"},{targetLabel,L""},{rangeLabel,L"Selection"},{viewLabel,L"Visible"},{pointLabel,L"Frame / ±1"},{processLabel,L"Process"},{crossLabel,L"Crossfade"},{snapLabel,L"Snap range"},{loopsLabel,L"Set loop"},{clipboardLabel,L"Clipboard"},{statusLabel,L""},{helpLabel,L"Ctrl+wheel zoom · wheel pan · F6 canvas/fields · Escape cancels gesture"}})label(id,text);
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{fromCursor,L"From cursor"},{reload,L"Reload"},{undo,L"Undo"},{redo,L"Redo"},{close,L"Close"},{fit,L"Fit"},{zoomIn,L"+"},{zoomOut,L"−"},{zoomSelection,L"Zoom selection"},{panLeft,L"← Pan"},{panRight,L"Pan →"},{drawMode,L"Draw off"},{setRange,L"Set range"},{all,L"All"},{setView,L"Set view"},{stagePoint,L"Stage point"},{applyDraw,L"Apply drawing"},{discardDraw,L"Discard drawing"},{previewProcess,L"Preview process"},{applyProcess,L"Apply process"},{previewCross,L"Preview fade"},{applyCross,L"Apply fade"},{snapRange,L"Snap selection"},{normalLoop,L"Normal selection"},{sustainLoop,L"Sustain selection"},{disableNormal,L"Disable normal"},{disableSustain,L"Disable sustain"},{copy,L"Copy"},{cut,L"Cut"},{erase,L"Delete"},{paste,L"Paste"},{copyNew,L"To new"}})button(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{fromCursor,L"From cursor"},{reload,L"Reload"},{undo,L"Undo"},{redo,L"Redo"},{close,L"Close"},{fit,L"Fit"},{zoomIn,L"+"},{zoomOut,L"−"},{zoomSelection,L"Zoom selection"},{panLeft,L"← Pan"},{panRight,L"Pan →"},{drawMode,L"Draw off"},{setRange,L"Set range"},{all,L"All"},{setView,L"Set view"},{stagePoint,L"Stage point"},{applyDraw,L"Apply drawing"},{discardDraw,L"Discard drawing"},{previewProcess,L"Preview process"},{applyProcess,L"Apply process"},{previewCross,L"Preview fade"},{applyCross,L"Apply fade"},{snapRange,L"Snap selection"},{normalLoop,L"Normal selection"},{sustainLoop,L"Sustain selection"},{disableNormal,L"Disable normal"},{disableSustain,L"Disable sustain"},{copy,L"Copy"},{cut,L"Cut"},{erase,L"Delete"},{paste,L"Paste"},{copyNew,L"To new"},{audition,L"Audition…"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{rangeStart,L"0"},{rangeEnd,L"0"},{viewStart,L"0"},{viewEnd,L"0"},{pointFrame,L"0"},{pointValue,L"0"},{amount,L"0"},{exponent,L"3"},{crossFrames,L"64"},{snapSize,L"2048"}})edit(id,text,24);
     combo(sample);auto options=[&](int id,std::initializer_list<const wchar_t *> values){combo(id);for(auto text:values)SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));choose(id,0);};
     options(channels,{L"Both channels",L"Left",L"Right"});options(interpolation,{L"Linear draw",L"Step draw"});options(operation,{L"Reverse",L"Normalize",L"Gain",L"Fade in",L"Fade out",L"Invert",L"Remove DC",L"Smooth",L"Trim",L"Silence",L"Swap channels",L"Copy left",L"Copy right",L"Stereo average"});options(fadeCurve,{L"Linear fade",L"Smooth",L"Exponential",L"Logarithmic"});options(crossLoop,{L"Normal loop",L"Sustain loop"});options(crossMode,{L"Preserve duration",L"Overlap"});options(crossCurve,{L"Linear",L"Equal power"});options(snapMode,{L"Zero crossing",L"Grid"});options(snapDirection,{L"Nearest",L"Before",L"After"});options(loopDirection,{L"Forward",L"Ping pong",L"Reverse"});options(pasteMode,{L"Insert",L"Overwrite",L"Mix",L"Replace"});finish();
   }
   void openAt(){if(id_.empty())load(true);show();}
-  Json snapshot()const{Json points=Json::array();for(const auto &[frame,value]:stroke_)points.push_back({{"frame",frame},{"value",value}});return {{"visible",visible()},{"sample",slot_},{"id",id_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"stale",!current()},{"pending",pending_},{"fieldDraft",fields_},{"drawing",drawing_},{"dragging",dragging_},{"points",points},{"start",region_.first},{"end",region_.last},{"frames",region_.frames},{"viewStart",region_.start},{"viewEnd",region_.end},{"channels",channelName()},{"precise",precise()},{"waveStart",waveStart_},{"waveEnd",waveEnd_},{"waveBins",bins_},{"peaks",peaks_},{"canvas",Json::array({canvas_.x,canvas_.y,canvas_.w,canvas_.h})},{"status",utf8(status_)},{"report",report_}};}
+  void playback(const std::string &document,const Json &samples,const std::vector<Tracker::VoicePosition> &voices){if(!visible())return;std::vector<double> next;if(document==captured_.document&&std::any_of(samples.begin(),samples.end(),[&](const auto &v){return v.at("id")==id_&&v.at("index")==slot_;}))for(const auto &v:voices)if(v.sample==slot_)next.push_back(v.sampleFrame);if(next!=playbackFrames_){playbackFrames_=std::move(next);requestPaint();}}
+  Json snapshot()const{Json points=Json::array();for(const auto &[frame,value]:stroke_)points.push_back({{"frame",frame},{"value",value}});return {{"visible",visible()},{"sample",slot_},{"id",id_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"stale",!current()},{"pending",pending_},{"fieldDraft",fields_},{"drawing",drawing_},{"dragging",dragging_},{"points",points},{"start",region_.first},{"end",region_.last},{"frames",region_.frames},{"viewStart",region_.start},{"viewEnd",region_.end},{"channels",channelName()},{"precise",precise()},{"waveStart",waveStart_},{"waveEnd",waveEnd_},{"playbackFrames",playbackFrames_},{"waveBins",bins_},{"peaks",peaks_},{"canvas",Json::array({canvas_.x,canvas_.y,canvas_.w,canvas_.h})},{"status",utf8(status_)},{"report",report_}};}
 };
 }

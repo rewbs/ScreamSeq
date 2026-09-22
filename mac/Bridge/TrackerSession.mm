@@ -612,7 +612,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   if(_audio->active() && _audio->renderer()) for(const auto &v:_audio->renderer()->voicePositions())
     [positions addObject:@{@"channel":@(v.channel),@"sample":@(v.sample),@"instrument":@(v.instrument),@"sampleFrame":@(v.sampleFrame),@"generation":@(v.generation),@"envelopeTicks":@[@(v.envelopeTicks[0]),@(v.envelopeTicks[1]),@(v.envelopeTicks[2])]}];
   return @{
-    @"voicePositions":positions, @"audioActive":@(_audio->active()),
+    @"voicePositions":positions, @"audioActive":@(_audio->active()), @"audition":@(_audio->active()&&!self.playing),
     @"playing": @(self.playing), @"loop": @(_playbackLoop), @"region": _playbackRegion ?: @{},
     @"order" : @(t.order),
     @"pattern" : @(t.pattern),

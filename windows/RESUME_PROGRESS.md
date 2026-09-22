@@ -1,6 +1,14 @@
 # Windows continuation — 2026-09-21
 
-Latest editor continuation: `SAMPLE_DETAIL_PROGRESS.md` records the native
+Latest continuation: `AUDITION_PROGRESS.md` records the native sample/instrument
+piano, shared audition API, preview cut/retrigger corrections, detailed sample
+voice markers and idle presentation behavior. All 29 native CTests pass. The
+full app run covers 221 cases (220 passes, one formula-test worker-busy error);
+the test's readiness wait is corrected and all nine formula cases pass on rerun.
+The exact results are retained in the report and preserved development package
+`bin/windows-checkpoints/audition-20260921/`. Full parity remains active.
+
+Previous editor continuation: `SAMPLE_DETAIL_PROGRESS.md` records the native
 detailed waveform, drawing, processing, crossfade, snapping and clipboard
 controls. All 211 application tests pass with no failures or skips; the preserved
 build is `bin/windows-checkpoints/sample-detail-20260921/`.

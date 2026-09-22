@@ -194,6 +194,10 @@ class FormulaWorkbenchTests(unittest.TestCase):
 
     def test_reference_search_insert_local_focus_and_minimum_bounds(self):
         self.setup_formula()
+        # The workbench preview can finish before its parent graph's timed
+        # preview. Wait for the worker before this independent reference read;
+        # a busy API response is a valid refusal, not a formula result.
+        self.idle()
         reference = self.read('automation.formula.reference')
         self.assertEqual(self.workbench()['symbols'], [s['name'] for s in reference['symbols']])
         self.wfield(2001, '.5 + ')

@@ -23,7 +23,7 @@
       @"plugin.preset.inspect", @"plugin.library.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
     ];
     NSArray *writes = @[
-      @"envelope.bank.save", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.loop", @"graph.plugin.set", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.routes.set", @"graph.controller", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
+      @"envelope.bank.save", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.routes.set", @"graph.controller", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
       @"recording.start", @"recording.capture", @"recording.stop", @"recording.commit", @"recording.discard", @"pattern.notes.set", @"pattern.performance.set", @"pattern.effects.set", @"pattern.effect.set", @"instrument.envelope.transform",
       @"instrument.plugin.set", @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule",
       @"sequence.select", @"sample.patch",          @"sample.process",    @"sample.import", @"sample.importMany", @"sample.clipboard.copy", @"sample.clipboard.set", @"sample.cut", @"sample.delete", @"sample.paste",
@@ -1218,6 +1218,24 @@
 #include "PatternPerformanceAPI.inc"
     } else if ([method isEqual:@"transport.get"]) {
       allowed(@[]); result = [self telemetry];
+    } else if ([method isEqual:@"transport.note"]) {
+      allowed(@[@"note",@"sample",@"instrument",@"velocity",@"on"]);
+      require(bool(p[@"sample"])!=bool(p[@"instrument"]),"Choose exactly one sample or instrument");
+      const auto note=integer(p[@"note"],1,120),velocity=integer(p[@"velocity"]?:@100,0,127);const bool on=boolean(p[@"on"]);
+      const auto sample=p[@"sample"]?sampleIndex():0,instrument=p[@"instrument"]?instrumentIndex():0;
+      if(on&&velocity&&sample)require(song.GetSample(SAMPLEINDEX(sample)).nLength>0,"The selected sample is empty");
+      bool queued=false;
+      if(on&&velocity) {
+        if(![self prepareAudition:&problem])throw std::runtime_error(problem.localizedDescription.UTF8String);
+        queued=sample?[self sampleNote:note sample:sample velocity:velocity on:YES]:[self note:note instrument:instrument velocity:velocity on:YES];
+        if(!queued)throw Error(-32003,"Audition queue full / preview voices released");
+      } else if(_audio->active()&&!_isolatedSamplePreview) {
+        queued=sample?[self sampleNote:note sample:sample velocity:velocity on:NO]:[self note:note instrument:instrument velocity:velocity on:NO];
+        if(!queued)throw Error(-32003,"Audition queue full / preview voices released");
+      }
+      result=@{@"queued":@(queued),@"audioActive":@(_audio->active()),@"playing":@(self.playing),@"audition":@(_audio->active()&&!self.playing)};
+    } else if ([method isEqual:@"transport.panic"]) {
+      allowed(@[]);[self panic];result=@{@"queued":@NO,@"audioActive":@(_audio->active()),@"playing":@(self.playing),@"audition":@(_audio->active()&&!self.playing)};
     } else if ([method isEqual:@"transport.play"]) {
       allowed(@[@"order", @"pattern", @"startRow", @"endRow", @"cursorRow", @"loop"]);
       NSMutableDictionary *settings = [p mutableCopy]; [settings removeObjectForKey:@"expectedRevision"];

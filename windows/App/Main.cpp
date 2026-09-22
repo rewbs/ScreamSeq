@@ -22,6 +22,7 @@
 #include "InstrumentEnvelopeWindow.hpp"
 #include "AbsoluteAutomationWindow.hpp"
 #include "SampleDetailWindow.hpp"
+#include "AuditionWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -78,7 +79,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     curvePattern=480,curveKind=481,curveSnap=482,curveRow=483,curveValue=484,curveFormula=485,
     curveApply=486,curveReload=487,curveSetPoint=488,curveDelete=489,curveRamp=490,curveClear=491,
     curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497,curveExpand=498,curveReference=499,
-    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505;
+    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -115,37 +116,45 @@ void offlineTest(const std::filesystem::path &report) {
 	out.close();
 	if(!out || !finite || maxDelta >= 1e-6 || energy <= 0.1) throw std::runtime_error("Shared-engine offline qualification failed");
 }
-void offlineHostedTest(const std::filesystem::path &project,const std::filesystem::path &report) {
+void offlineHostedTest(const std::filesystem::path &project,const std::filesystem::path &report,unsigned sample=0,unsigned instrument=0) {
+    const bool audition=sample||instrument;
     ScreamSeq::DocumentController controller(project,"offline-hosted",[]{},[](const auto &){});
-    const auto before=controller.view();double energy=0,maxDelta=0;bool finite=true;
+    const auto before=controller.view();double energy=0,maxDelta=0;bool finite=true,stationary=true;
     ScreamSeq::Json renders=ScreamSeq::Json::array();
     for(unsigned rate:{44100u,48000u,96000u}) {
         std::vector<float> reference;
         for(unsigned block:{17u,128u,4096u,8193u}) {
             // No callback or telemetry reader retains the previous preparation.
-            auto *playback=controller.prepare(rate,ScreamSeq::Json::object(),false,true).get();
-            std::vector<float> audio(size_t(rate)*2);
-            for(unsigned at=0;at<rate;) {
-                const auto count=std::min(block,rate-at);
+            auto *playback=controller.prepare(rate,ScreamSeq::Json::object(),false,true,audition).get();
+            const auto initial=playback->renderer().telemetry();const auto frames=rate*(audition?2:1),on=rate/4,off=rate*3/4;
+            std::vector<float> audio(size_t(frames)*2);
+            for(unsigned at=0;at<frames;) {
+                auto boundary=frames;
+                if(audition){
+                    if(at==on||at==off)if(!playback->renderer().preview({49,uint16_t(instrument),100,at==on,uint16_t(sample)}))throw std::runtime_error("Offline audition queue rejected a note");
+                    boundary=at<on?on:at<off?off:frames;
+                }
+                const auto count=std::min(block,boundary-at);
                 if(!playback->render(audio.data()+size_t(at)*2,count)) throw std::runtime_error("Hosted offline processor failed");
+                const auto position=playback->renderer().telemetry();if(audition)stationary&=initial.order==position.order&&initial.row==position.row&&initial.pattern==position.pattern;
                 at+=count;
             }
             if(reference.empty()) reference=audio;
             else for(size_t i=0;i<audio.size();++i) maxDelta=std::max(maxDelta,std::abs(double(reference[i])-audio[i]));
-            std::array<double,4> quarters{};unsigned firstAudible=rate;
-            for(unsigned frame=0;frame<rate;++frame)for(unsigned channel=0;channel<2;++channel) {
+            std::vector<double> quarters(audition?8:4);unsigned firstAudible=frames;
+            for(unsigned frame=0;frame<frames;++frame)for(unsigned channel=0;channel<2;++channel) {
                 const double sample=audio[size_t(frame)*2+channel];finite &= std::isfinite(sample);energy+=std::abs(sample);
-                quarters[std::min(3u,unsigned(uint64_t(frame)*4/rate))]+=sample*sample;
+                quarters[std::min(unsigned(quarters.size()-1),unsigned(uint64_t(frame)*4/rate))]+=sample*sample;
                 if(std::abs(sample)>1e-6)firstAudible=std::min(firstAudible,frame);
             }
-            renders.push_back({{"rate",rate},{"block",block},{"firstAudibleFrame",firstAudible==rate?ScreamSeq::Json(nullptr):ScreamSeq::Json(firstAudible)},{"quarterSecondEnergy",quarters}});
+            renders.push_back({{"rate",rate},{"block",block},{"firstAudibleFrame",firstAudible==frames?ScreamSeq::Json(nullptr):ScreamSeq::Json(firstAudible)},{"quarterSecondEnergy",quarters}});
         }
     }
     const bool unchanged=controller.view()==before;
     std::ofstream out(report,std::ios::binary);
     out<<std::boolalpha<<std::setprecision(12)<<"{\"finite\":"<<finite<<",\"energy\":"<<energy<<",\"maxPartitionDelta\":"<<maxDelta
-       <<",\"documentUnchanged\":"<<unchanged<<",\"rates\":[44100,48000,96000],\"partitions\":[17,128,4096,8193],\"secondsPerRender\":1,\"renders\":"<<renders.dump()<<"}";
-    out.close();if(!out||!finite||maxDelta>=1e-6||!unchanged) throw std::runtime_error("Hosted application offline qualification failed");
+       <<",\"documentUnchanged\":"<<unchanged<<",\"rates\":[44100,48000,96000],\"partitions\":[17,128,4096,8193],\"secondsPerRender\":"<<(audition?2:1)<<",\"audition\":"<<audition<<",\"songPositionStationary\":"<<stationary<<",\"renders\":"<<renders.dump()<<"}";
+    out.close();if(!out||!finite||maxDelta>=1e-6||!unchanged||!stationary) throw std::runtime_error("Hosted application offline qualification failed");
 }
 class Application : public ScreamSeq::Api::SessionHost {
 public:
@@ -184,12 +193,13 @@ public:
 		result.context = {{"documentId",documentId},{"contextRevision",documentId + ":context:" + std::to_string(contextRevision) + ":" + selection().dump()},
 			{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",column},{"following",follow},{"follow",follow},{"selection",selection()},
 			{"file",view->path.empty() ? Json(nullptr) : Json(utf8Path(view->path))},{"dirty",view->dirty},
-            {"playback",{{"playing",device.running()},{"pattern",t.pattern},{"row",t.row}}}};
-		result.transport = {{"playing",device.running()},{"loop",playbackLoop},{"region",playbackRegion},
+            {"playback",{{"playing",device.running()&&!auditionOnly},{"pattern",t.pattern},{"row",t.row}}}};
+		result.transport = {{"playing",device.running()&&!auditionOnly},{"loop",playbackLoop},{"region",playbackRegion},
 			{"order",t.order},{"pattern",t.pattern},{"row",t.row},{"voices",t.voices},{"left",t.left},{"right",t.right},
 			{"frames",t.frames},{"callbacks",audio.callbackCount},{"overruns",audio.deadlineOverruns},
 			{"maxMicros",audio.maxCallbackNanoseconds / 1000.0},{"fault",preparedPlayback && preparedPlayback->failed()}};
-        result.transport["audioActive"]=device.running();
+        result.transport["audioActive"]=device.running();result.transport["audition"]=device.running()&&auditionOnly;result.transport["auditionDropped"]=auditionDropped;result.transport["playbackEpoch"]=stopGeneration;
+        result.transport["presentation"]={{"frames",cpuDraw.size()},{"idleWaits",idleWaits}};
         auto &positions=result.transport["voicePositions"]=Json::array();
         if(device.running() && renderer) for(const auto &v:renderer->voicePositions())
             positions.push_back({{"channel",v.channel},{"sample",v.sample},{"instrument",v.instrument},
@@ -258,6 +268,7 @@ public:
             {"instrumentEnvelope",instrumentEnvelopeWindow?instrumentEnvelopeWindow->snapshot():Json{{"visible",false}}},
             {"absoluteAutomation",absoluteAutomationWindow?absoluteAutomationWindow->snapshot():Json{{"visible",false}}},
             {"sampleDetail",sampleDetailWindow?sampleDetailWindow->snapshot():Json{{"visible",false}}},
+            {"audition",auditionWindow?auditionWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
             {"noteEditor",{{"visible",noteEditorVisible()},{"pattern",notePattern},{"row",noteRow},{"channel",noteChannel},
@@ -333,11 +344,12 @@ public:
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
                 if(message.message==WM_QUIT) {PostQuitMessage(int(message.wParam));break;}
                 if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && handleKey(message.wParam)) continue;
+                if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&releaseAuditionKey(message.wParam))continue;
                 TranslateMessage(&message);DispatchMessageW(&message);
             }
             // Complete the owned task even if presentation is lost; unwinding
             // with a pending worker-to-main playback hook would deadlock join.
-            if(surface && !IsIconic(window) && !presentationError && (frameRequested || device.running()) && WaitForSingleObject(surface->ready(),0)==WAIT_OBJECT_0)
+            if(surface && !IsIconic(window) && !presentationError && presentationNeeded() && WaitForSingleObject(surface->ready(),0)==WAIT_OBJECT_0)
                 try {draw();} catch(...) {presentationError=std::current_exception();}
             MsgWaitForMultipleObjectsEx(0,nullptr,4,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
         }
@@ -359,8 +371,9 @@ public:
     }
     bool supportsDocumentOperations() const override {return true;}
     std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::EnvelopeOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
-    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     Json documentOperation(const std::string &method,const Json &params) override {
+        if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
         try {auto result=await(controller->invoke(method,params));refreshDocument();return result;}
         catch(...) {refreshDocument();throw;}
@@ -370,7 +383,7 @@ public:
         wchar_t buffer[40]{};StringFromGUID2(id,buffer,40);for(auto ch:std::wstring_view(buffer)) documentId+=char(ch);
         ScreamSeq::PlaybackHooks playback;
         playback.feedback=[this]{
-            ScreamSeq::PlaybackFeedback result;result.playing=device.running();result.sampleRate=lastRate?lastRate:48000;
+            ScreamSeq::PlaybackFeedback result;result.playing=device.running()&&!auditionOnly;result.sampleRate=lastRate?lastRate:48000;
             if(result.playing&&preparedPlayback){result.latency=preparedPlayback->chain().latency();result.meters=preparedPlayback->chain().mixerMeters();result.activity=preparedPlayback->chain().graphActivity();}
             return result;
         };
@@ -394,13 +407,18 @@ public:
 		// Demo monitor attenuation is explicit; never touches endpoint/master volume.
 		for(size_t i = 0; i < size_t(frames) * 2; ++i) samples[i] *= 0.1f;
 	}
+    #include "Audition.inc"
 	void play() { play(Json::object()); }
-    void play(const Json &settings) override {
+    void play(const Json &settings) override {startPlayback(settings,false);}
+    void startPlayback(const Json &settings,bool audition) {
         frameRequested=true;
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
-        documentOperation("flushPluginEditors",{{"force",true}});
+        // Audition uses the saved baseline and must not commit an editor draft.
+        if(!audition)documentOperation("flushPluginEditors",{{"force",true}});
+        if(audition&&!pendingAuditionCount)throw ScreamSeq::Api::ApiError(-32003,"Audition cancelled during preparation");
+        if(!audition)pendingAuditionCount=0;
 		if(inspection) throw ScreamSeq::Api::ApiError(-32003,"Inspection mode: hardware output disabled");
-		device.close();
+		++stopGeneration;device.close();auditionOnly=false;
         // The old prepared chain is disposed on the worker. Drop UI readers
         // only after the device has joined, before pumping messages in await().
         preparedPlayback=nullptr;renderer=nullptr;
@@ -410,16 +428,17 @@ public:
 		try {
 			lastRate = device.sampleRate(); lastPeriod = device.periodFrames();
             auto generation=stopGeneration;
-			preparedPlayback=await(controller->prepare(lastRate,settings,playbackLoop));renderer=&preparedPlayback->renderer();
+			preparedPlayback=await(controller->prepare(lastRate,settings,playbackLoop,false,audition));renderer=&preparedPlayback->renderer();
             if(generation!=stopGeneration) throw ScreamSeq::Api::ApiError(-32003,"Playback preparation cancelled by Stop");
 			if(!device.start()) throw std::runtime_error("WASAPI start failed");
-			playbackLoop = settings.value("loop",playbackLoop); playbackRegion = settings;
-			status = L"Playing / monitor -20 dB / " + std::to_wstring(lastRate) + L" Hz / " + std::to_wstring(lastPeriod) + L" frames";
+            auditionOnly=audition;
+			if(!audition){playbackLoop = settings.value("loop",playbackLoop); playbackRegion = settings;}
+			status = (audition?L"Audition / song position stopped / ":L"Playing / monitor -20 dB / ") + std::to_wstring(lastRate) + L" Hz / " + std::to_wstring(lastPeriod) + L" frames";
 		} catch(...) { device.close(); throw; }
 	}
 	void stop() override {
         frameRequested=true;
-        ++stopGeneration;
+        ++stopGeneration;pendingAuditionCount=0;auditionOnly=false;
 		device.stop(); lastAudio = device.stats();
 		status = L"Stopped / Space: play from song start / cursor remains independent";
 	}
@@ -435,12 +454,21 @@ public:
     #include "GraphPatternLanes.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
     void openInstrumentEnvelope(){
-        if(!instrumentEnvelopeWindow)instrumentEnvelopeWindow=std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};});
+        if(!instrumentEnvelopeWindow)instrumentEnvelopeWindow=std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);});
         instrumentEnvelopeWindow->openAt();
     }
+    std::unique_ptr<ScreamSeq::AuditionWindow> auditionWindow;
+    void openAudition(bool sample=true,unsigned slot=0,std::string identity={},std::string document={},std::string revision={}){
+        if(!document.empty()&&(document!=documentId||revision!=view->session.revision))throw std::runtime_error("Audition source changed / Reload the captured editor");
+        const auto &catalog=view->session.document.at(sample?"samples":"instruments");
+        if(slot||!identity.empty()){const auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &v){return v.at("index")==slot&&(identity.empty()||v.at("id")==identity);});if(found==catalog.end())throw std::runtime_error("Audition target is unavailable");identity=found->at("id");}
+        if(!auditionWindow)auditionWindow=std::make_unique<ScreamSeq::AuditionWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::AuditionWindow::Context{documentId,view->session.revision,selectedSample(),unsigned(view->cell(patternIndex,row,channel).instrument),stopGeneration,view->session.document.at("samples"),view->session.document.at("instruments")};});
+        auditionWindow->openAt(sample,std::move(identity));
+    }
+    bool releaseAuditionKey(WPARAM key){return auditionWindow&&auditionWindow->releaseKey(key);}
     std::unique_ptr<ScreamSeq::SampleDetailWindow> sampleDetailWindow;
     void openSampleDetail(){
-        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};});
+        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);});
         sampleDetailWindow->openAt();
     }
     std::unique_ptr<ScreamSeq::AbsoluteAutomationWindow> absoluteAutomationWindow;
@@ -465,6 +493,7 @@ public:
 	#include "WorkspaceDraw.inc"
 	void draw() {
         frameRequested=false;
+        auditionWasAnimating=auditionOnly&&auditionAnimating();
         if(!busy && device.running() && preparedPlayback && preparedPlayback->chain().latencyChangePending()) {
             const auto generation=stopGeneration;
             device.stop();
@@ -478,8 +507,12 @@ public:
         if(device.running() && preparedPlayback && preparedPlayback->failed()) {stop();status=L"Playback stopped: audio processor reported a fault";}
 		auto begin = ScreamSeq::ticks();
 		auto playback = renderer ? renderer->telemetry() : Tracker::Telemetry{};
-        if(instrumentEnvelopeWindow&&instrumentEnvelopeWindow->visible())instrumentEnvelopeWindow->playback(documentId,view->session.document.at("instruments"),device.running()&&renderer?renderer->voicePositions():std::vector<Tracker::VoicePosition>{});
-		if(follow && device.running() && playback.pattern==patternIndex) firstRow = playback.row > visibleRows()/2 ? playback.row - visibleRows()/2 : 0;
+        if((instrumentEnvelopeWindow&&instrumentEnvelopeWindow->visible())||(sampleDetailWindow&&sampleDetailWindow->visible())) {
+            const auto voices=device.running()&&renderer?renderer->voicePositions():std::vector<Tracker::VoicePosition>{};
+            if(instrumentEnvelopeWindow)instrumentEnvelopeWindow->playback(documentId,view->session.document.at("instruments"),voices);
+            if(sampleDetailWindow)sampleDetailWindow->playback(documentId,view->session.document.at("samples"),voices);
+        }
+		if(follow && device.running() && !auditionOnly && playback.pattern==patternIndex) firstRow = playback.row > visibleRows()/2 ? playback.row - visibleRows()/2 : 0;
 		surface->begin();
 		drawWorkspace(playback);
 		surface->finishDrawing();
@@ -568,6 +601,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             if(LOWORD(wp)==sampleCommandBase && HIWORD(wp)!=LBN_SELCHANGE && HIWORD(wp)!=LBN_DBLCLK) return 0;
             app->command(LOWORD(wp));return 0;
 		case WM_KEYDOWN:case WM_SYSKEYDOWN: if(app->key(wp)) return 0;break;
+        case WM_KEYUP:case WM_SYSKEYUP:if(app->releaseAuditionKey(wp))return 0;break;
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
         case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->graphLaneClick(x,y,true))app->noteMouseDown(x,y,true);return 0;}
@@ -592,10 +626,16 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		if(!argv) throw std::runtime_error("Cannot parse command line");
 		std::vector<std::wstring> args(argv, argv + argc); LocalFree(argv);
         bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false, audioTestAllowStop=false;
+        unsigned auditionSample=0,auditionInstrument=0;
 		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride,libraryOverride;
 		for(size_t i = 1; i < args.size(); ++i) {
 			if(args[i] == L"--offline-test") offline = true;
             else if(args[i]==L"--offline-hosted-test") hostedOffline=true;
+            else if((args[i]==L"--offline-audition-sample"||args[i]==L"--offline-audition-instrument")&&i+1<args.size()) {
+                const bool sample=args[i]==L"--offline-audition-sample";size_t end=0;const auto value=std::stoul(args[++i],&end);
+                if(end!=args[i].size()||value<1||value>UINT16_MAX||auditionSample||auditionInstrument)throw std::runtime_error("Choose one valid offline audition target");
+                (sample?auditionSample:auditionInstrument)=unsigned(value);hostedOffline=true;
+            }
 			else if(args[i] == L"--inspection") inspection = true;
 			else if(args[i] == L"--automation") automation = true;
 			else if(args[i] == L"--audio-test") audioTest = true;
@@ -615,7 +655,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             Tracker::WindowsVST3::configure(utf8Path(std::filesystem::absolute(args[0]).parent_path()/L"ScreamSeqVST3Scanner.exe"),utf8Path(pluginCache));
         }
 		if(offline) { if(!projectPath.empty()) throw std::runtime_error("The demo offline test does not accept a native project"); if(report.empty()) throw std::runtime_error("Offline test requires --report"); offlineTest(report); return 0; }
-        if(hostedOffline) {if(report.empty()) throw std::runtime_error("Hosted offline test requires --report");offlineHostedTest(projectPath,report);return 0;}
+        if(hostedOffline) {if(report.empty()) throw std::runtime_error("Hosted offline test requires --report");offlineHostedTest(projectPath,report,auditionSample,auditionInstrument);return 0;}
         if(audioTest && (inspection || !seconds)) throw std::runtime_error("Audio test requires --seconds and cannot use inspection mode");
         if(audioTestAllowStop&&(!audioTest||!automation))throw std::runtime_error("--audio-test-allow-stop requires an automated audio qualification session");
 		SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -656,7 +696,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		bool closed = false; double start = ScreamSeq::ticks();
 		while(!closed) {
 			HANDLE event = app.surface->ready();
-            const bool renderPending=!IsIconic(window) && (app.frameRequested || app.device.running());
+            const bool renderPending=!IsIconic(window) && app.presentationNeeded();
             if(!renderPending) ++app.idleWaits;
             // A ready swapchain stays signaled without Present. Exclude it while
             // stopped/unchanged, otherwise the idle loop spins at full CPU.
@@ -665,6 +705,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }
 				if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && app.handleKey(message.wParam)) continue;
+				if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&app.releaseAuditionKey(message.wParam))continue;
 				TranslateMessage(&message); DispatchMessageW(&message);
 			}
 			if(closed) break;

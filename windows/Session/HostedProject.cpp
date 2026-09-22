@@ -74,13 +74,16 @@ HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const P
   require(rate>=8000 && rate<=384000,"Unsupported hosted playback sample rate");
   native_=document.native();native_.validate(document.song());auto states=projectPluginStates(project);
   Tracker::validatePluginCapacity(states,native_.mixer.buses.size());auto automation=projectAbsoluteAutomation(project);
-  renderer_=std::make_unique<Tracker::Renderer>(document.snapshotData(),rate,settings.order,false,document.sourcePath(),document.song().Order.GetCurrentSequenceIndex(),settings.region,&native_);
+  // Match Mac's stopped audition: paused pattern clock, sample/instrument
+  // envelopes and the saved plugin rack, without song mixer/graph commands.
+  const auto *musical=settings.audition?nullptr:&native_;
+  renderer_=std::make_unique<Tracker::Renderer>(document.snapshotData(),rate,settings.order,settings.audition,document.sourcePath(),document.song().Order.GetCurrentSequenceIndex(),settings.region,musical);
   const auto start=uint64_t(double(renderer_->telemetry().frames)*48000/rate);
   chain_=std::make_unique<Tracker::PluginChain>(states,rate,offline,automation,start);
-  renderer_->applyColumnMutes(native_,renderer_->song());renderer_->loop(settings.region.loop);
+  if(musical)renderer_->applyColumnMutes(native_,renderer_->song());renderer_->loop(settings.region.loop);
   // Empty rack is not empty musical processing: mixer, precise notes and sample
   // instrument graphs still need this shared preparation path.
-  chain_->attachInstruments(*renderer_,&native_);chain_->attachMusicalAutomation(*renderer_,native_);
+  chain_->attachInstruments(*renderer_,musical);if(musical)chain_->attachMusicalAutomation(*renderer_,*musical);
 }
 HostedProjectPlayback::~HostedProjectPlayback(){renderer_.reset();chain_.reset();}
 bool HostedProjectPlayback::failed() const noexcept {return renderer_->faulted() || chain_->failed();}

@@ -145,6 +145,7 @@
             {parameterAutomationCommand,L"Automation / Pattern parameter curves and tools",L""},
             {absoluteAutomationCommand,L"Automation / Absolute song parameter lane",L""},
             {sampleDetailCommand,L"Sample / Detailed waveform, drawing and crossfade",L""},
+            {auditionCommand,L"Playback / Sample and instrument audition",L""},
             {instrumentEnvelopeCommand,L"Instrument / Envelopes, settings and sample keymap",L""},
             {effectsCommand,L"Pattern / Inspect FX and parameter bindings",L"Enter on an FX cell"},
             {patternPasteMix,L"Pattern / Mix paste into empty fields",L"Ctrl+Shift+V"},
@@ -196,6 +197,7 @@
             else if(id==parameterAutomationCommand){openParameterAutomation();return;}
             else if(id==absoluteAutomationCommand){openAbsoluteAutomation();return;}
             else if(id==sampleDetailCommand){openSampleDetail();return;}
+            else if(id==auditionCommand){openAudition();return;}
             else if(id==instrumentEnvelopeCommand){openInstrumentEnvelope();return;}
             else if(id==graphLanesFocus){if(!view->graphPattern->lanes.empty()){workspaceState.focus="graphLanes";revealGraphLane();}else{openGraphCommands();return;}}
             else if(id==openCommand) openFile();
@@ -286,7 +288,7 @@
 		if(key==VK_ESCAPE && dragging==4) {sampleRange()=sampleDragBefore;dragging=0;ReleaseCapture();refreshSampleFields();return true;}
 		if(key==VK_ESCAPE && dragging) { workspaceState.rightWidth=dragRight;workspaceState.lowerHeight=dragLower;dragging=0;ReleaseCapture();layoutControls();return true; }
 		if(key==VK_ESCAPE) {if(!effectPrefix.empty()){effectPrefix.clear();status=L"Effect prefix cancelled";return true;}if(pluginDraft){pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;} stop();command(focusPatternCommand);return true; }
-		if(!ctrl && !alt && key==VK_SPACE) { if(device.running()) stop();else command(playCommand);return true; }
+		if(!ctrl && !alt && key==VK_SPACE) { if(device.running()&&!auditionOnly) stop();else command(playCommand);return true; }
 		if(!ctrl && !alt && key=='F' && (column==0 || workspaceState.focus!="pattern")) { command(followCommand);return true; }
         if(workspaceState.focus=="samples") {
             if(ctrl && (key=='A'||key=='C'||key=='V'||key=='X')) {command(key=='A'?sampleAllCommand:key=='C'?sampleCopyCommand:key=='V'?samplePasteCommand:sampleCutCommand);return true;}

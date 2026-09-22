@@ -3,6 +3,8 @@
 > Resumed explicitly on 2026-09-21. See `RESUME_PROGRESS.md` for the newer
 > continuation checkpoint, current test evidence and remaining work; the historical record below
 > is preserved.
+> Current continuation: `AUDITION_PROGRESS.md` covers the native piano, shared
+> preview API, audio release fixes and sample markers. Full parity remains active.
 > Latest upstream integration: `PARITY_PLAN.md` and
 > `UPSTREAM_PLUGIN_QUALIFICATION.md`. Prior source is preserved in a local Git
 > checkpoint; the statements about uncommitted work below are historical.

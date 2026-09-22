@@ -6,6 +6,21 @@ query the running instance's `api.describe` for its current method catalog. Do n
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
 
+The application supports revision-guarded `transport.note` and `transport.panic`
+using the shared renderer's preview queue. See `mac/AUTOMATION.md` for note,
+sample/instrument, velocity and release semantics. Stopped audition prepares a
+paused renderer; `transport.get` distinguishes `playing`, `audioActive` and
+`audition`. Native piano input has independent held-key ownership and guards
+against late releases from an earlier playback preparation. Windows responses
+also expose a transient `epoch`; clients should not persist it. Previewing never
+changes document history or native project data.
+`workspace.get.audition` reports the retained target, revision, keyboard geometry
+and held inputs. `sampleDetail.playbackFrames` reports bounded sample-voice
+positions. `transport.get.presentation` contains `frames` (capped at 120000)
+and `idleWaits`; these are presentation
+diagnostics, not a sustained frame-rate qualification. See
+`../AUDITION_PROGRESS.md` for evidence and limitations.
+
 The application now implements Mac-compatible `automation.get` and
 `automation.replaceLane` for absolute song parameter points. Timestamps are
 48 kHz frames, values are native parameter units, and replacement uses plugin

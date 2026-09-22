@@ -451,13 +451,13 @@ std::future<Json> DocumentController::invoke(std::string method,Json params) {
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
 }
-std::future<HostedProjectPlayback *> DocumentController::prepare(unsigned rate,Json settings,bool loop,bool offline) {
-  auto task=std::make_shared<std::packaged_task<HostedProjectPlayback *()>>([this,rate,settings,loop,offline]{
+std::future<HostedProjectPlayback *> DocumentController::prepare(unsigned rate,Json settings,bool loop,bool offline,bool audition) {
+  auto task=std::make_shared<std::packaged_task<HostedProjectPlayback *()>>([this,rate,settings,loop,offline,audition]{
     Tracker::PlaybackRegion region;region.pattern=settings.value("pattern",UINT32_MAX);region.startRow=settings.value("startRow",0u);
     if(region.pattern!=UINT32_MAX && !document_->song().Patterns.IsValidPat(region.pattern)) throw Api::ApiError(-32602,"Pattern does not exist");
     region.endRow=settings.value("endRow",region.pattern==UINT32_MAX ? 0u : unsigned(document_->song().Patterns[region.pattern].GetNumRows()));
     region.cursorRow=settings.value("cursorRow",0u);region.loop=settings.value("loop",loop);
-    auto result=std::make_unique<HostedProjectPlayback>(*document_,project_,rate,HostedPlaybackSettings{settings.value("order",0u),region},offline);
+    auto result=std::make_unique<HostedProjectPlayback>(*document_,project_,rate,HostedPlaybackSettings{settings.value("order",0u),region,audition},offline);
     playback_=std::move(result);return playback_.get();
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;

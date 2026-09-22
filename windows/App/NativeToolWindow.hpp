@@ -42,6 +42,8 @@ protected:
   virtual void paint(RenderSurface &)=0;
   virtual void action(int,unsigned)=0;
   virtual bool key(WPARAM,bool,bool){return false;}
+  virtual bool keyUp(WPARAM){return false;}
+  virtual void deactivate(){}
   virtual void mouse(UINT,float,float,WPARAM){}
   virtual bool wheel(UINT,float,float,WPARAM){return false;}
   virtual void timer(UINT_PTR){}
@@ -51,6 +53,8 @@ protected:
     r.left+=7;r.right-=5;DrawTextW(d.hDC,text.c_str(),int(text.size()),&r,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|(d.CtlType==ODT_BUTTON?DT_CENTER:DT_LEFT));if(d.itemState&ODS_FOCUS){r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}}
   static LRESULT CALLBACK childProc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR context){
     auto &self=*reinterpret_cast<NativeToolWindow *>(context);
+    if(m==WM_KEYUP||m==WM_SYSKEYUP)try{if(self.keyUp(w))return 0;}catch(const std::exception &e){self.error(e);return 0;}
+    if(m==WM_KILLFOCUS&&reinterpret_cast<HWND>(w)!=self.window_&&!IsChild(self.window_,reinterpret_cast<HWND>(w)))self.deactivate();
     // TranslateMessage may have queued a character before keyDown consumed an
     // editor command. Do not insert that Enter/Tab/Space into the text as well.
     if(m==WM_CHAR&&self.handledCharacterWindow_==h){const auto expected=self.handledCharacter_;self.handledCharacter_=0;self.handledCharacterWindow_=nullptr;if(expected&&(w==expected||(expected==VK_RETURN&&w=='\n')))return 0;}
@@ -66,6 +70,7 @@ protected:
   static LRESULT CALLBACK proc(HWND h,UINT m,WPARAM w,LPARAM l){auto self=reinterpret_cast<NativeToolWindow *>(GetWindowLongPtrW(h,GWLP_USERDATA));if(m==WM_NCCREATE){self=static_cast<NativeToolWindow *>(reinterpret_cast<CREATESTRUCTW *>(l)->lpCreateParams);self->window_=h;SetWindowLongPtrW(h,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}if(!self)return DefWindowProcW(h,m,w,l);
     try{switch(m){
       case WM_CLOSE:self->hide();return 0;
+      case WM_ACTIVATE:if(LOWORD(w)==WA_INACTIVE)self->deactivate();break;
       case WM_NCDESTROY:self->window_=nullptr;self->ready_=false;break;
       case WM_SIZE:self->layoutAll();return 0;
       case WM_DPICHANGED:{auto r=reinterpret_cast<RECT *>(l);SetWindowPos(h,nullptr,r->left,r->top,r->right-r->left,r->bottom-r->top,SWP_NOZORDER|SWP_NOACTIVATE);self->layoutAll();return 0;}
@@ -78,6 +83,7 @@ protected:
       case WM_MEASUREITEM:reinterpret_cast<MEASUREITEMSTRUCT *>(l)->itemHeight=unsigned(22*GetDpiForWindow(h)/96);return TRUE;
       case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:SetTextColor(reinterpret_cast<HDC>(w),RGB(218,232,241));SetBkColor(reinterpret_cast<HDC>(w),RGB(24,34,45));SetDCBrushColor(reinterpret_cast<HDC>(w),RGB(24,34,45));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
       case WM_KEYDOWN:case WM_SYSKEYDOWN:if(self->key(w,(GetKeyState(VK_CONTROL)&0x8000)!=0,(GetKeyState(VK_SHIFT)&0x8000)!=0))return 0;break;
+      case WM_KEYUP:case WM_SYSKEYUP:if(self->keyUp(w))return 0;break;
       case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT p{GET_X_LPARAM(l),GET_Y_LPARAM(l)};ScreenToClient(h,&p);const float scale=96.0f/GetDpiForWindow(h);if(self->wheel(m,p.x*scale,p.y*scale,w))return 0;break;}
       case WM_LBUTTONDBLCLK:case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_MOUSEMOVE:case WM_CAPTURECHANGED:{const float scale=96.0f/GetDpiForWindow(h);self->mouse(m,GET_X_LPARAM(l)*scale,GET_Y_LPARAM(l)*scale,w);self->requestPaint();return 0;}
     }}catch(const std::exception &e){self->error(e);}return DefWindowProcW(h,m,w,l);
@@ -90,6 +96,6 @@ public:
   bool visible()const{return window_&&IsWindowVisible(window_);}
   HWND window()const{return window_;}
   void show(){ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE);requestPaint();}
-  void hide(){if(window_){KillTimer(window_,2);ShowWindow(window_,SW_HIDE);}SetFocus(owner_);}
+  void hide(){deactivate();if(window_){KillTimer(window_,2);ShowWindow(window_,SW_HIDE);}SetFocus(owner_);}
 };
 }

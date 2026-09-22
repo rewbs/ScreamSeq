@@ -22,6 +22,21 @@ static std::vector<float> render(Tracker::Document &doc,const Project::ProjectSt
   HostedProjectPlayback playback(doc,state,rate,settings,true);return renderPrepared(playback,rate,block);
 }
 static double energy(const std::vector<float>&audio){double sum=0;for(auto value:audio){check(std::isfinite(value),"finite lifetime PCM");sum+=std::abs(value);}return sum;}
+static std::vector<float> audition(Tracker::Document &doc,const Project::ProjectState &state,unsigned rate,unsigned block){
+  HostedPlaybackSettings settings;settings.audition=true;HostedProjectPlayback playback(doc,state,rate,settings,true);
+  std::vector<float> output(size_t(rate)*4);const auto initial=playback.renderer().telemetry();
+  const unsigned on=rate/4,off=rate*3/4,end=rate*2;
+  for(unsigned at=0;at<end;){
+    if(at==on||at==off){bool queued=false;{AudioAudit::Scope scope;queued=playback.renderer().preview({49,0,100,at==on,1});}check(queued,"audition events accepted");}
+    const auto boundary=at<on?on:at<off?off:end;const auto frames=std::min(block,boundary-at);bool ok=false;
+    {AudioAudit::Scope scope;ok=playback.render(output.data()+size_t(at)*2,frames);}check(ok,"audition render");
+    const auto position=playback.renderer().telemetry();check(position.order==initial.order&&position.row==initial.row&&position.pattern==initial.pattern,"audition freezes song position");at+=frames;
+  }
+  check(std::all_of(output.begin(),output.begin()+on*2,[](float x){return x==0;}),"paused song is silent before audition");
+  check(energy(output)>1,"audition produces PCM");
+  check(std::all_of(output.begin()+rate*2,output.end(),[](float x){return std::abs(x)<1e-6f;}),"sample note-off terminates preview");
+  return output;
+}
 int main(){try{
   {AudioAudit::Scope scope;auto p=::operator new(8);::operator delete(p);
     auto aligned=::operator new(64,std::align_val_t{64});::operator delete(aligned,std::align_val_t{64});}
@@ -47,6 +62,32 @@ int main(){try{
   state.preserved["automation"]=Json::array({Json::array({0,1,-12,48000})});
   auto automation=projectAbsoluteAutomation(state);check(automation.size()==1&&automation[0].frame==48000,"canonical 48-kHz automation not rescaled twice");
   state.preserved["automation"]=Json::array();
+  for(unsigned rate:{44100u,48000u,96000u}){
+    const auto original=doc->snapshotData();auto baseline=audition(*doc,state,rate,128);double worst=0;
+    for(unsigned block:{17u,4096u,8193u}){auto other=audition(*doc,state,rate,block);for(size_t i=0;i<baseline.size();++i)worst=std::max(worst,std::abs(double(other[i])-baseline[i]));}
+    check(worst<1e-6&&original==doc->snapshotData(),"audition callback partition and source preservation");
+    std::cout<<"audition rate="<<rate<<" energy="<<energy(baseline)<<" partition="<<worst<<'\n';
+  }
+  {
+    HostedPlaybackSettings settings;settings.audition=true;HostedProjectPlayback preview(*doc,state,48000,settings,true);
+    for(unsigned i=0;i<128;++i)check(preview.renderer().preview({49,0,100,true,1}),"bounded audition queue capacity");
+    check(!preview.renderer().preview({50,0,100,true,1}),"overflow rejects and requests panic");
+    check(energy(renderPrepared(preview,48000,128))==0,"queue overflow discards queued notes without a stuck voice");
+    check(preview.renderer().preview({49,0,100,true,1}),"queue recovers after overflow");
+    check(energy(renderPrepared(preview,48000,128))>0,"audition recovers after overflow");
+    {AudioAudit::Scope scope;preview.renderer().panic();}
+    auto released=renderPrepared(preview,48000,128);
+    double panicPeak=0;size_t panicLast=0;for(size_t i=2048;i<released.size();++i)if(std::abs(released[i])>1e-6f){panicPeak=std::max(panicPeak,double(std::abs(released[i])));panicLast=i/2;}
+    std::cout<<"panic residual peak="<<panicPeak<<" lastFrame="<<panicLast<<" voices="<<preview.renderer().voicePositions().size()<<'\n';
+    check(std::all_of(released.begin()+2048,released.end(),[](float x){return std::abs(x)<1e-6f;}),"panic releases preview voices");
+    check(preview.renderer().preview({49,0,100,true,1}),"first repeated pitch");
+    renderPrepared(preview,48000,128);
+    check(preview.renderer().preview({49,0,100,true,1}),"second repeated pitch");
+    renderPrepared(preview,48000,128);
+    check(preview.renderer().preview({49,0,100,false,1}),"release repeated pitch");
+    const auto repeated=renderPrepared(preview,48000,128);
+    check(std::all_of(repeated.begin()+2048,repeated.end(),[](float x){return std::abs(x)<1e-6f;}),"retriggered raw sample cannot leave an orphaned looping voice");
+  }
   for(unsigned rate:{44100u,48000u,96000u}){
     auto dryState=Project::newProjectState(*doc);auto dry=render(*doc,dryState,rate,128),wet=render(*doc,state,rate,128);
     double energy=0,difference=0,worst=0;for(size_t i=0;i<wet.size();++i){check(std::isfinite(wet[i]),"finite PCM");energy+=std::abs(wet[i]);difference+=std::abs(wet[i]-dry[i]);}

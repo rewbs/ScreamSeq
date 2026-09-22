@@ -869,11 +869,25 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 			if(auto *plugin = song_->m_MixPlugins[instrument->nMixPlug - 1].pMixPlugin)
 				plugin->MidiCommand(*instrument, note, volume, channel);
 	};
+	auto releasePreview = [&](ModChannel &chn, bool cut) {
+		const auto increment = chn.increment;
+		song_->NoteChange(chn, cut ? NOTE_NOTECUT : NOTE_KEYOFF);
+		if(cut) {
+			// Like native NC, keep the sample moving while ramping it down.
+			// Legacy IT cut freezes its increment and leaves a long DC tail.
+			// Preview releases must also take effect between tracker ticks.
+			chn.increment = increment;
+			chn.nVolume = 0;
+			chn.newLeftVol = chn.newRightVol = 0;
+			chn.dwFlags.set(CHN_FASTVOLRAMP | CHN_VOLUMERAMP);
+			song_->ProcessRamping(chn);
+		}
+	};
 	if(panic_.exchange(false))
 	{
 		noteRead_.store(noteWrite_.load(std::memory_order_acquire), std::memory_order_release);
 		for(auto &chn : song_->m_PlayState.BackgroundChannels(*song_))
-			if(chn.isPreviewNote) { pluginNote(static_cast<CHANNELINDEX>(&chn-song_->m_PlayState.Chn.data()), NOTE_KEYOFF, 0); song_->NoteChange(chn, NOTE_NOTECUT); }
+			if(chn.isPreviewNote) { pluginNote(static_cast<CHANNELINDEX>(&chn-song_->m_PlayState.Chn.data()), NOTE_KEYOFF, 0); releasePreview(chn, true); }
 		noteChannels_.fill(CHANNELINDEX_INVALID);
 	}
 	auto noteRead = noteRead_.load(std::memory_order_relaxed), noteWrite = noteWrite_.load(std::memory_order_acquire);
@@ -887,12 +901,16 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 			if(channel < MAX_CHANNELS)
 			{
 				pluginNote(channel, NOTE_KEYOFF, 0);
-				song_->NoteChange(song_->m_PlayState.Chn[channel], event.sample ? NOTE_NOTECUT : NOTE_KEYOFF);
+				releasePreview(song_->m_PlayState.Chn[channel], event.sample != 0);
 				noteChannels_[event.note] = CHANNELINDEX_INVALID;
 			}
 			continue;
 		}
-		if(noteChannels_[event.note] < MAX_CHANNELS) pluginNote(noteChannels_[event.note], NOTE_KEYOFF, 0);
+		if(noteChannels_[event.note] < MAX_CHANNELS) {
+			auto &previous = song_->m_PlayState.Chn[noteChannels_[event.note]];
+			pluginNote(noteChannels_[event.note], NOTE_KEYOFF, 0);
+			releasePreview(previous, previous.pModInstrument == nullptr);
+		}
 		CHANNELINDEX channel = nextPreviewChannel_++;
 		pluginNote(channel, NOTE_KEYOFF, 0);
 		if(nextPreviewChannel_ >= MAX_CHANNELS) nextPreviewChannel_ = song_->GetNumChannels();

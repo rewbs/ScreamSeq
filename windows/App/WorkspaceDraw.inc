@@ -31,7 +31,7 @@
 		for(unsigned line=0;line<visibleRows() && firstRow+line<rows;++line) {
 			unsigned rr=firstRow+line;float y=r.y+gridHeader+line*rowHeight;
 			if(rr%4==0) s.fill(r.x,y,r.w,rowHeight,rr%16==0 ? 0x202d3c : 0x192431);
-			if(device.running() && playback.pattern==patternIndex && playback.row==rr) {s.fill(r.x,y,r.w,rowHeight,0x174238);s.fill(r.x,y,3,rowHeight,accent);}
+			if(device.running() && !auditionOnly && playback.pattern==patternIndex && playback.row==rr) {s.fill(r.x,y,r.w,rowHeight,0x174238);s.fill(r.x,y,3,rowHeight,accent);}
 			wchar_t number[8]{};swprintf_s(number,L"%03u",rr);s.text(number,r.x+7,y,gutter-9,muted);
 			s.clip(r.x+gutter,y,r.w-gutter,rowHeight);
 			for(unsigned c=first;c<count && c<first+visibleChannels();++c) {

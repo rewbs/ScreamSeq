@@ -568,7 +568,7 @@ The parameter must exist even for a deletion. Retain stable plugin identity in
 an editor, resolving its slot only at the guarded revision; rack reorder/removal
 remaps or removes the corresponding stored records.
 
-Structural operations, plugin parameter batches, plugin-state restoration and automation replacement stop transport before rebuilding assets. Small pattern batches can use the live edit queue; oversized or saturated batches stop playback while retaining the committed edit. The reply reports whether playback stopped. The API never starts playback or auditions notes, opens/replaces documents, or executes arbitrary scripts. Project/export and preset saving require explicit file commands; native saving/recovery retains API edits normally.
+Structural operations, plugin parameter batches, plugin-state restoration and automation replacement stop transport before rebuilding assets. Small pattern batches can use the live edit queue; oversized or saturated batches stop playback while retaining the committed edit. The reply reports whether playback stopped. Editing operations do not implicitly start playback, audition notes, open/replace documents or execute arbitrary scripts. Transport/audition and project/file actions require their explicit commands; native saving/recovery retains API edits normally.
 
 ### Shared plugin instruments and MIDI channels
 
@@ -1317,6 +1317,28 @@ sources and other sessions remain available.
 ## Transport and scripted curves
 
 See [Playback and curves](PLAYBACK_AND_CURVES.md) for the transport methods, `curve: "scripted"` point schema, formula preview endpoint, timing variables, runtime limits and project compatibility. Transport changes require `expectedRevision` but do not change song history. Formula previews are read-only and use the playback evaluator.
+
+`transport.note {expectedRevision, note, sample|instrument, on, velocity?}`
+previews a saved sound. Choose exactly one existing one-based sample or instrument
+slot; note is an integer from 1 through 120, velocity is 0 through 127 (default
+100), and `on` is boolean. A sample target plays its raw sample; an instrument
+target uses its mapping, envelopes and plugin assignment. Velocity zero releases
+the note. A release never starts audio. A nonzero note-on starts prepared audition
+audio if stopped, with the song clock paused. During ordinary playback it queues
+the note in the existing renderer and leaves song transport running. Stopped
+audition follows the existing Mac path: saved instrument/sample settings and the
+plugin rack, without the song mixer, graph commands or pattern automation.
+
+`transport.panic {expectedRevision}` drops queued preview notes and releases
+preview voices while leaving song playback running. Both methods return
+`queued`, `audioActive`, `playing` and `audition`. `transport.get.audition` is true
+when audio is active with the song stopped. Preview commands never change
+document revision, Undo or persisted project data. They use a bounded 128-event
+queue; saturation returns an error and releases previews to avoid stuck voices.
+The renderer tracks one held preview per pitch: retriggering a pitch releases
+its preceding voice. Instrument release envelopes and plugin tails can continue
+after note-off or Panic. `transport.stop` closes playback for complete silence.
+Windows inspection sessions reject note-ons because hardware output is disabled.
 
 Precise-note beat coordinates, per-hit effects and their parameter catalog are documented in [Precise notes](PRECISE_NOTES.md).
 

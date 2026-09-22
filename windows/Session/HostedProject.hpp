@@ -11,6 +11,7 @@ std::vector<Tracker::ParameterChange> projectAbsoluteAutomation(const Project::P
 struct HostedPlaybackSettings {
   uint32_t order=0;
   Tracker::PlaybackRegion region{};
+  bool audition=false;
 };
 // Construct/destroy on the stopped document/control owner. The callback may use
 // the prepared renderer/chain only; no Document or project tree is retained.

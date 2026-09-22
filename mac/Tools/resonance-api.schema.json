@@ -11541,7 +11541,7 @@
       "x-application-only": true
     },
     {
-      "description": "Atomically append 1\u2013128 sample files, optionally creating instruments; one document Undo. Every file is decoded before commit.",
+      "description": "Atomically append 1–128 sample files, optionally creating instruments; one document Undo. Every file is decoded before commit.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -12841,7 +12841,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Allocate a node. Effects require exactly one rack slot or independent plugin recipe. Optional insertAfter splices an effect into the node\u2019s single main audio connection atomically."
+      "description": "Allocate a node. Effects require exactly one rack slot or independent plugin recipe. Optional insertAfter splices an effect into the node’s single main audio connection atomically."
     },
     {
       "type": "object",
@@ -15883,6 +15883,118 @@
             "channel",
             "column",
             "command",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Queue or release a transient sample/instrument audition note without document history. Starts a paused preview host if needed.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "transport.note"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1
+            },
+            "note": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120
+            },
+            "sample": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "instrument": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "velocity": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127,
+              "default": 100
+            },
+            "on": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "note",
+            "on"
+          ],
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "sample"
+              ]
+            },
+            {
+              "required": [
+                "instrument"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Release all preview voices without stopping song playback or changing document history.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "transport.panic"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
             "expectedRevision"
           ],
           "additionalProperties": false
