@@ -58,6 +58,8 @@ extern "C" __declspec(dllexport) int FixtureCount(int what){return what==0?liveO
 
 static std::atomic<bool> requireOutput{false};
 static int outputMode=0;
+static int titleMode=0;
+extern "C" __declspec(dllexport) void FixtureTitleMode(int n){titleMode=n;}
 extern "C" __declspec(dllexport) void FixtureOutputMode(int n){outputMode=n;}
 static std::atomic<double> lastQueueStart{0},lastQueueEnd{0};
 extern "C" __declspec(dllexport) void FixtureRequireOutput(bool v){requireOutput=v;}
@@ -235,7 +237,7 @@ public:
     if (type == kAudio && dir == kInput) inputsActive[index] = active;
     return kResultOk;
   }
-  tresult PLUGIN_API setActive(TBool v) override {if(v&&failureMode==4)return kResultFalse;if(isProcessing&&!v)++lifecycleErrors;if(bool(v)!=isActive){activeObjects+=v?1:-1;isActive=v;}if(v&&appliedLatency!=fixtureLatency.load()){appliedLatency=fixtureLatency.load();dynamicDelay.fill(0);dynamicPosition=0;}return kResultOk; }
+  tresult PLUGIN_API setActive(TBool v) override {if(v&&failureMode==4)return kResultFalse;if(isProcessing&&!v)++lifecycleErrors;if(bool(v)!=isActive){activeObjects+=v?1:-1;isActive=v;}if(v&&appliedLatency!=fixtureLatency.load()){appliedLatency=fixtureLatency.load();dynamicDelay.fill(0);dynamicPosition=0;}if(v&&titleMode==8&&handler){titleMode=1;handler->restartComponent(kParamTitlesChanged);}return kResultOk; }
   tresult PLUGIN_API setState(IBStream *s) override {
     if(controllerOnly&&reviewMode==5)return kNotImplemented;
     if(controllerOnly&&reviewMode==6)return kInternalError;
@@ -377,9 +379,9 @@ public:
     return kResultOk;
   }
   tresult PLUGIN_API setComponentState(IBStream *s) override {if(reviewMode==2)return kNotImplemented;if(reviewMode==8)return kInternalError;if(reviewMode==50&&handler)handler->restartComponent(kParamValuesChanged|kParamIDMappingChanged);if(!controllerOnly)return setState(s);float value=0;int32 n=0;if(s->read(&value,4,&n)!=kResultOk||n!=4)return kResultFalse;gain=value;return kResultOk;}
-  int32 PLUGIN_API getParameterCount() override { if(reviewMode==31)return 0;return programs ? 3 : instrument && fixturePitchMode ? 17 : 1; }
+  int32 PLUGIN_API getParameterCount() override { if(reviewMode==31||titleMode==6)return 0;return programs ? 3 : instrument && fixturePitchMode ? 17 : 1; }
   tresult PLUGIN_API getParameterInfo(int32 i, ParameterInfo &p) override {
-    if(reviewMode==30)return kInternalError;
+    if(reviewMode==30||titleMode==7)return kInternalError;
     if(i<0 || i>=getParameterCount()) return kInvalidArgument;
     p = {};
     if(i && instrument && fixturePitchMode){p.id=999+i;p.defaultNormalizedValue=8192./16383;p.flags=ParameterInfo::kCanAutomate | ParameterInfo::kIsHidden;std::copy_n(u"Pitch wheel",12,p.title);return kResultOk;}
@@ -389,6 +391,11 @@ public:
     std::copy_n(u"Gain", 5, p.title);
     p.defaultNormalizedValue = .5;
     p.flags = ParameterInfo::kCanAutomate;
+    if(titleMode&&titleMode!=8){std::copy_n(u"Updated gain",13,p.title);std::copy_n(u"dB",3,p.units);p.defaultNormalizedValue=.25;}
+    if(titleMode==2)p.stepCount=2;
+    if(titleMode==3)p.flags|=ParameterInfo::kIsReadOnly;
+    if(titleMode==4)p.unitId=7;
+    if(titleMode==5)p.id=8;
     return kResultOk;
   }
   tresult PLUGIN_API getParamStringByValue(ParamID, ParamValue, String128) override { return kNotImplemented; }

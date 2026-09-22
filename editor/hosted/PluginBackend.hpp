@@ -33,6 +33,7 @@ public:
   virtual void closeEditor() = 0;
   virtual bool editorOpen() const = 0;
   virtual bool popEdit(uint32_t &, float &) noexcept = 0;
+  virtual PluginFailure failure() const noexcept { return {}; }
 };
 class PluginBackendFactory {
 public:

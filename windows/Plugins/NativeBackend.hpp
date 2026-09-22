@@ -25,5 +25,6 @@ public:
  void closeEditor()override;
  bool editorOpen()const override;
  bool popEdit(uint32_t &,float &)noexcept override;
+ PluginFailure failure()const noexcept override;
 };
 }

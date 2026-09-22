@@ -87,6 +87,11 @@ HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const P
 }
 HostedProjectPlayback::~HostedProjectPlayback(){renderer_.reset();chain_.reset();}
 bool HostedProjectPlayback::failed() const noexcept {return renderer_->faulted() || chain_->failed();}
+Json HostedProjectPlayback::failureDiagnostics() const {
+  Json plugins=Json::array();
+  if(chain_->failed())for(const auto &entry:chain_->failureDiagnostics())plugins.push_back({{"slot",entry.slot},{"instanceID",entry.instanceID},{"reason",entry.failure.reason},{"detail",entry.failure.detail}});
+  return {{"renderer",renderer_->faulted()},{"chain",chain_->failed()},{"plugins",plugins}};
+}
 bool HostedProjectPlayback::render(float *stereo,uint32_t frames) noexcept {
   if(failed()) {std::fill_n(stereo,size_t(frames)*2,0.0f);return false;}
   for(uint32_t at=0;at<frames;) {

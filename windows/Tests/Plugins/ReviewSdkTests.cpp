@@ -47,6 +47,10 @@ int main(int argc,char **argv){try{
   for(int optional:{23,24,25}){set(optional);auto p=f.create(recipe,48000,true);pcm(*p,.5f);if(optional==23)check(p->parameters().size()==1,"optional IoMode lost controller");p.reset();set(0);}
  }
  else if(scenario=="catalog"){
+  auto titles=reinterpret_cast<void(*)(int)>(GetProcAddress(dll,"FixtureTitleMode"));auto restart=reinterpret_cast<int(*)(int)>(GetProcAddress(dll,"FixtureRestart"));check(titles&&restart,"title exports");
+  WindowsVST3::pluginMainCall([&]{titles(1);restart(1<<4);});
+  check(keep->parameters()[0].name=="Updated gain"&&keep->parameters()[0].unitLabel=="dB","controller title notification not reflected");pcm(*keep,.5f);
+  WindowsVST3::pluginMainCall([&]{titles(0);restart(1<<4);});check(keep->parameters()[0].name=="Gain","controller title reset not reflected");
   set(50);{auto p=f.create(recipe,48000,true);pcm(*p,.5f);auto saved=p->state();auto q=f.create(saved,48000,true);pcm(*q,.5f);}set(0);
   set(30);rejects([&]{f.create(recipe,48000,true);},"advertised parameter metadata failure accepted as partial catalog");set(0);
   set(31);{auto p=f.create(recipe,48000,true);check(p->parameters().empty(),"legitimate zero-parameter controller rejected");pcm(*p,.5f);}set(0);

@@ -334,6 +334,12 @@ struct NativeBackend::Impl {
   Owned<Changes> changes{new Changes}, outputChanges{new Changes};
   std::array<float, 4096> left{}, right{}, outLeft{}, outRight{};
   std::vector<PluginParameter> metadata;
+  // The audio-side parameter contract is immutable after preparation. Only
+  // control readers use this separately published presentation snapshot.
+  struct ParameterContract {ParamID id;int32 stepCount,flags;UnitID unitId;};
+  std::vector<ParameterContract> parameterInfos;
+  bool parameterTitlesPending=false;
+  std::atomic<std::shared_ptr<const std::vector<PluginParameter>>> parameterPresentation;
   std::vector<float> controllerValues;
   std::unique_ptr<std::atomic<float>[]> values;
   std::array<std::array<ParamID, 130>, 16> midiMap{};
@@ -347,6 +353,15 @@ struct NativeBackend::Impl {
   std::atomic<uint32_t> audioWrite{0}, audioRead{0};
   std::atomic<uint32_t> editWrite{0}, editRead{0};
   std::atomic<bool> failed{false};
+  enum class Failure:uint32_t {None,CallbackThread,EditorQueue,EditorValue,Restart,Resize,EditorException,ControllerParameter,InputParameterCapacity,InputEventCapacity,Process,Block,Transport,AudioEdit,InputOffset,ProcessorException,OutputEventCapacity,OutputParameterCapacity,OutputEventOffset,OutputParameterOffset,OutputParameterValue,ProcessorResult,AuxiliaryNonfinite,MainNonfinite,Latency,ParameterCatalog};
+  // A first-failure record is a single lock-free publication. It neither logs
+  // nor allocates on the callback; reason text is decoded by the control owner.
+  static_assert(std::atomic<uint64_t>::is_always_lock_free);
+  std::atomic<uint64_t> firstFailure{0};
+  bool fail(Failure reason,uint32_t detail=0)noexcept {
+    uint64_t empty=0;firstFailure.compare_exchange_strong(empty,(uint64_t(reason)<<32)|detail,std::memory_order_relaxed);
+    failed.store(true,std::memory_order_release);return false;
+  }
   std::atomic<bool> latencyChanged{false};
   std::atomic<int32> rejectedRestart{0};
   const DWORD ownerThread=GetCurrentThreadId();
@@ -361,7 +376,7 @@ struct NativeBackend::Impl {
       else if(same(id,IPlugFrame::iid))*out=static_cast<IPlugFrame*>(this);
       if(*out){addRef();return kResultOk;}return kNoInterface;
     }
-    bool owner(){if(!target)return false;if(GetCurrentThreadId()==target->ownerThread)return true;target->failed=true;return false;}
+    bool owner(){if(!target)return false;if(GetCurrentThreadId()==target->ownerThread)return true;return target->fail(Failure::CallbackThread,GetCurrentThreadId());}
     tresult PLUGIN_API beginEdit(ParamID)override{return owner()?kResultOk:kResultFalse;}
     tresult PLUGIN_API endEdit(ParamID)override{return owner()?kResultOk:kResultFalse;}
     tresult PLUGIN_API performEdit(ParamID id,ParamValue v)override{return owner()?target->performEdit(id,v):kResultFalse;}
@@ -372,8 +387,12 @@ struct NativeBackend::Impl {
   tresult performEdit(ParamID id, ParamValue value) {
     auto w = editWrite.load(std::memory_order_relaxed), r = editRead.load(std::memory_order_acquire);
     auto aw = audioWrite.load(std::memory_order_relaxed), ar = audioRead.load(std::memory_order_acquire);
-    if (w - r >= edits.size() || aw - ar >= audioEdits.size() || !std::isfinite(value)||value<0||value>1) {
-      failed = true;
+    if (w - r >= edits.size() || aw - ar >= audioEdits.size()) {
+      fail(Failure::EditorQueue,id);
+      return kResultFalse;
+    }
+    if (!std::isfinite(value)||value<0||value>1) {
+      fail(Failure::EditorValue,id);
       return kResultFalse;
     }
     auto p = std::lower_bound(metadata.begin(), metadata.end(), id, [](auto &p, uint32_t key) { return p.id < key; });
@@ -389,6 +408,28 @@ struct NativeBackend::Impl {
     audioWrite.store(aw + 1, std::memory_order_release);
     return kResultOk;
   }
+  bool refreshParameterPresentation() {
+    // Called only by the component-handler's STA owner. Do not mutate the
+    // catalog traversed by process()/setParameter(), or call the controller
+    // from the render callback. Publish only a complete validated replacement.
+    if(!controller)return true;
+    if(controller->getParameterCount()!=int32(metadata.size()))return fail(Failure::ParameterCatalog);
+    auto replacement=std::make_shared<std::vector<PluginParameter>>(metadata);
+    std::vector<bool> seen(metadata.size());
+    for(int32 i=0;i<int32(metadata.size());++i){
+      ParameterInfo p{};
+      if(controller->getParameterInfo(i,p)!=kResultOk)return fail(Failure::ParameterCatalog,uint32_t(i));
+      const auto it=std::lower_bound(parameterInfos.begin(),parameterInfos.end(),p.id,[](const auto &a,ParamID id){return a.id<id;});
+      if(it==parameterInfos.end()||it->id!=p.id)return fail(Failure::ParameterCatalog,p.id);
+      const auto index=size_t(it-parameterInfos.begin());
+      // A change in ramp/write/program semantics needs a stopped rebuild of
+      // prepared automation. A title/unit/default-value change does not.
+      if(seen[index]||it->stepCount!=p.stepCount||it->flags!=p.flags||it->unitId!=p.unitId)return fail(Failure::ParameterCatalog,p.id);
+      seen[index]=true;(*replacement)[index].name=utf8(p.title);(*replacement)[index].unitLabel=utf8(p.units);
+    }
+    parameterPresentation.store(std::move(replacement),std::memory_order_release);
+    return true;
+  }
   tresult restartComponent(int32 flags) {
     // JUCE announces compatible-class parameter mappings during component-state
     // synchronization. No host catalog/automation has been prepared yet; the
@@ -397,10 +438,15 @@ struct NativeBackend::Impl {
     if(preparing) flags &= ~kParamIDMappingChanged;
     // Changes to buses/latency require a stopped graph rebuild; never continue
     // with buffers that no longer match the processor's contract.
-    if (flags & ~(kParamValuesChanged | kLatencyChanged)) {
+    if (flags & ~(kParamValuesChanged | kLatencyChanged | kParamTitlesChanged)) {
       rejectedRestart.store(flags);
-      failed = true;
+      fail(Failure::Restart,uint32_t(flags));
       return kResultFalse;
+    }
+    if(flags & kParamTitlesChanged){
+      if(preparing)parameterTitlesPending=true;
+      else try{if(!refreshParameterPresentation())return kResultFalse;}
+      catch(...){fail(Failure::ParameterCatalog);return kResultFalse;}
     }
     if (flags & kLatencyChanged) latencyChanged.store(true, std::memory_order_release);
     if (controller && (flags & kParamValuesChanged))
@@ -456,7 +502,7 @@ struct NativeBackend::Impl {
     RECT client{};if(!GetClientRect(window,&client)||client.right<=0||client.bottom<=0)return;
     if(client.right==viewWidth&&client.bottom==viewHeight)return;
     auto size=userSize({0,0,client.right,client.bottom});
-    if(applySize(size)!=kResultOk)failed=true;
+    if(applySize(size)!=kResultOk)fail(Failure::Resize);
   }
   void userSizing(RECT &r,WPARAM edge) {
     if(resizeBusy||!attached||!view)return;
@@ -509,12 +555,12 @@ struct NativeBackend::Impl {
       if(self && msg==WM_TIMER){pluginMainCall([&]{if(!self->resizeBusy)self->syncController();});return 0;}
       if(self && msg==WM_SIZE){if(w!=SIZE_MINIMIZED)pluginMainCall([&]{self->userSized();});return 0;}
       if(self && msg==WM_SIZING && l){pluginMainCall([&]{self->userSizing(*reinterpret_cast<RECT*>(l),w);});return TRUE;}
-    }catch(...){if(self)self->failed=true;return 0;}
+    }catch(...){if(self)self->fail(Failure::EditorException);return 0;}
     return DefWindowProcW(hwnd,msg,w,l);
   }
   void syncController(){
     if(!controller||failed)return;
-    for(size_t i=0;i<metadata.size();++i){auto v=values[i].load(std::memory_order_relaxed);if(controllerValues[i]!=v){if(controller->setParamNormalized(metadata[i].id,v)!=kResultOk){failed=true;return;}controllerValues[i]=v;}}
+    for(size_t i=0;i<metadata.size();++i){auto v=values[i].load(std::memory_order_relaxed);if(controllerValues[i]!=v){if(controller->setParamNormalized(metadata[i].id,v)!=kResultOk){fail(Failure::ControllerParameter,metadata[i].id);return;}controllerValues[i]=v;}}
   }
   void close() {
     if(view){if(attached)view->removed();attached=false;view->setFrame(nullptr);view->release();view=nullptr;}
@@ -661,6 +707,7 @@ struct NativeBackend::Impl {
       for (int i = 0; i < n; ++i) {
         ParameterInfo p{};
         require(controller->getParameterInfo(i, p),"Cannot read advertised VST3 parameter");
+        parameterInfos.push_back({p.id,p.stepCount,p.flags,p.unitId});
         metadata.push_back({p.id, utf8(p.title), 0, 1, float(controller->getParamNormalized(p.id)), 0});
         if(p.stepCount<0)throw std::runtime_error("Invalid VST3 parameter step count");
         metadata.back().step=p.stepCount?1.f/p.stepCount:0.f;
@@ -670,6 +717,7 @@ struct NativeBackend::Impl {
       }
     }
     std::sort(metadata.begin(), metadata.end(), [](auto &a, auto &b) { return a.id < b.id; });
+    std::sort(parameterInfos.begin(),parameterInfos.end(),[](auto &a,auto &b){return a.id<b.id;});
     if(std::adjacent_find(metadata.begin(),metadata.end(),[](auto &a,auto &b){return a.id==b.id;})!=metadata.end())throw std::runtime_error("Duplicate VST3 parameter ID");
     values = std::make_unique<std::atomic<float>[]>(metadata.size());
     for (size_t i = 0; i < metadata.size(); ++i) {
@@ -695,6 +743,7 @@ struct NativeBackend::Impl {
     processing = true;
     if(failed) throw std::runtime_error("VST3 failed during preparation; unsupported restart flags="+std::to_string(rejectedRestart.load()));
     preparing=false;
+    if(parameterTitlesPending&&!refreshParameterPresentation())throw std::runtime_error("VST3 changed its prepared parameter contract during activation");
   }
   bool setParameter(uint32_t id, double value, uint32_t offset) noexcept {
     if (failed || offset >= 4096 || !std::isfinite(value) || value < 0 || value > 1)
@@ -704,7 +753,7 @@ struct NativeBackend::Impl {
       return false;
     int32 index = 0;
     auto *q = changes->addParameterData(id, index);
-    if (!q || q->addPoint(offset,value,index)!=kResultOk) {failed=true;return false;}
+    if (!q || q->addPoint(offset,value,index)!=kResultOk)return fail(Failure::InputParameterCapacity,id);
     values[it - metadata.begin()].store(value, std::memory_order_relaxed);
     return true;
   }
@@ -722,6 +771,12 @@ NativeBackend::NativeBackend(const PluginState &s, double rate, bool offline,con
 }
 NativeBackend::~NativeBackend() {
   pluginMainCall([&] { impl_.reset(); });
+}
+PluginFailure NativeBackend::failure() const noexcept {
+  const auto value=impl_->firstFailure.load(std::memory_order_acquire);
+  static constexpr const char *reasons[]={nullptr,"vst3.callback-thread","vst3.editor-queue","vst3.editor-value","vst3.restart-flags","vst3.editor-resize","vst3.editor-exception","vst3.controller-parameter","vst3.input-parameter-capacity","vst3.input-event-capacity","vst3.process","vst3.process-block","vst3.transport","vst3.audio-edit-parameter","vst3.input-parameter-offset","vst3.processor-exception","vst3.output-event-capacity","vst3.output-parameter-capacity","vst3.output-event-offset","vst3.output-parameter-offset","vst3.output-parameter-value","vst3.processor-result","vst3.auxiliary-nonfinite","vst3.main-nonfinite","vst3.latency","vst3.parameter-catalog"};
+  static_assert(std::size(reasons)==size_t(Impl::Failure::ParameterCatalog)+1);
+  const auto code=size_t(value>>32);return {code<std::size(reasons)?reasons[code]:"vst3.unknown",uint32_t(value)};
 }
 bool NativeBackend::parameter(uint32_t id, double value, uint32_t offset) noexcept {
   return impl_->setParameter(id, value, offset);
@@ -768,7 +823,7 @@ bool NativeBackend::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
       for (int pitch = 0; pitch < 128; ++pitch)
         while (s.notes[ch][pitch]) {
           if (!midi(0x80 | ch, pitch, 0)) {
-            s.failed = true;
+            s.fail(Impl::Failure::InputEventCapacity,pitch);
             return false;
           }
         }
@@ -783,7 +838,7 @@ bool NativeBackend::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
     double v = kind == 0xe0 ? double(a + (b << 7)) / 16383 : double(kind == 0xd0 ? a : b) / 127;
     return s.setParameter(id, v, 0);
   }
-  if(s.events->addEvent(e)!=kResultOk){s.failed=true;return false;}return true;
+  if(s.events->addEvent(e)!=kResultOk)return s.fail(Impl::Failure::InputEventCapacity,a);return true;
 }
 bool NativeBackend::process(float *buffer, uint32_t frames, uint64_t position, const float *const *inputs, uint32_t offset,const PluginTransport &time) noexcept {
   auto &s = *impl_;
@@ -792,20 +847,20 @@ bool NativeBackend::process(float *buffer, uint32_t frames, uint64_t position, c
   struct Finish{Impl &s;float *buffer;uint32_t frames;bool &success;~Finish(){
     s.events->count=s.outputEvents->count=s.changes->count=s.outputChanges->count=0;
     s.events->overflow=s.outputEvents->overflow=s.changes->overflow=s.outputChanges->overflow=false;
-    if(!success){s.failed=true;if(buffer)std::fill_n(buffer,std::min(frames,4096u)*2,0.f);for(auto &b:s.outputStorage)if(b)std::fill(b->interleaved.begin(),b->interleaved.end(),0.f);}
+    if(!success){s.fail(Impl::Failure::Process);if(buffer)std::fill_n(buffer,std::min(frames,4096u)*2,0.f);for(auto &b:s.outputStorage)if(b)std::fill(b->interleaved.begin(),b->interleaved.end(),0.f);}
   }}finish{s,buffer,frames,success};
-  if ((!buffer && frames)||frames > 4096 || offset>4096 || frames>4096-offset || position>INT64_MAX || !std::isfinite(time.tempo)||time.tempo<=0||!std::isfinite(time.beat)||!std::isfinite(time.bar)||time.numerator<1 || s.failed)
-    return false;
+  if(s.failed)return false;
+  if ((!buffer && frames)||frames > 4096 || offset>4096 || frames>4096-offset || position>INT64_MAX)return s.fail(Impl::Failure::Block,frames);
+  if(!std::isfinite(time.tempo)||time.tempo<=0||!std::isfinite(time.beat)||!std::isfinite(time.bar)||time.numerator<1)return s.fail(Impl::Failure::Transport,uint32_t(time.numerator));
   auto ar = s.audioRead.load(std::memory_order_relaxed), aw = s.audioWrite.load(std::memory_order_acquire);
   for (int n = 0; ar != aw && n < 128; ++n, ++ar) {
     auto edit = s.audioEdits[ar % s.audioEdits.size()];
     if (!s.setParameter(edit.id, edit.value, 0)) {
-      s.failed = true;
-      return false;
+      return s.fail(Impl::Failure::AudioEdit,edit.id);
     }
   }
   s.audioRead.store(ar, std::memory_order_release);
-  for(int32 i=0;i<s.changes->count;++i)for(int32 j=0;j<s.changes->items[i]->count;++j)if(uint32_t(s.changes->items[i]->points[j].offset)>=std::max(1u,frames))return false;
+  for(int32 i=0;i<s.changes->count;++i)for(int32 j=0;j<s.changes->items[i]->count;++j)if(uint32_t(s.changes->items[i]->points[j].offset)>=std::max(1u,frames))return s.fail(Impl::Failure::InputOffset,s.changes->items[i]->id);
   for (uint32_t i = 0; i < frames; ++i) {
     s.left[i] = buffer[i * 2];
     s.right[i] = buffer[i * 2 + 1];
@@ -851,18 +906,19 @@ bool NativeBackend::process(float *buffer, uint32_t frames, uint64_t position, c
   data.inputParameterChanges = s.changes.get();
   data.outputParameterChanges = s.outputChanges.get();
   data.processContext = &context;
-  tresult result=kResultFalse;try{result=s.processor->process(data);}catch(...){return false;}
+  tresult result=kResultFalse;try{result=s.processor->process(data);}catch(...){return s.fail(Impl::Failure::ProcessorException);}
   s.events->count = 0;
   s.changes->count = 0;
-  if(s.outputEvents->overflow||s.outputChanges->overflow)return false;
-  for(int32 i=0;i<s.outputEvents->count;++i){const auto &e=s.outputEvents->items[i];if(e.sampleOffset<0||uint32_t(e.sampleOffset)>=std::max(1u,frames))return false;}
+  if(s.outputEvents->overflow)return s.fail(Impl::Failure::OutputEventCapacity,s.outputEvents->count);
+  if(s.outputChanges->overflow)return s.fail(Impl::Failure::OutputParameterCapacity,s.outputChanges->count);
+  for(int32 i=0;i<s.outputEvents->count;++i){const auto &e=s.outputEvents->items[i];if(e.sampleOffset<0||uint32_t(e.sampleOffset)>=std::max(1u,frames))return s.fail(Impl::Failure::OutputEventOffset,i);}
   // The facade has no MIDI-output routing API. Consume bounded output events
   // here (never feed them back into this processor or retain vendor pointers).
-  for(int32 i=0;i<s.outputChanges->count;++i){auto &q=*s.outputChanges->items[i];if(q.overflow)return false;for(int32 j=0;j<q.count;++j){auto point=q.points[j];if(point.offset<0||uint32_t(point.offset)>=std::max(1u,frames)||!std::isfinite(point.value)||point.value<0||point.value>1)return false;
+  for(int32 i=0;i<s.outputChanges->count;++i){auto &q=*s.outputChanges->items[i];if(q.overflow)return s.fail(Impl::Failure::OutputParameterCapacity,q.id);for(int32 j=0;j<q.count;++j){auto point=q.points[j];if(point.offset<0||uint32_t(point.offset)>=std::max(1u,frames))return s.fail(Impl::Failure::OutputParameterOffset,q.id);if(!std::isfinite(point.value)||point.value<0||point.value>1)return s.fail(Impl::Failure::OutputParameterValue,q.id);
     auto it=std::lower_bound(s.metadata.begin(),s.metadata.end(),q.id,[](auto &p,uint32_t id){return p.id<id;});if(it!=s.metadata.end()&&it->id==q.id)s.values[it-s.metadata.begin()].store(float(point.value),std::memory_order_relaxed);
   }}
   if (result != kResultOk)
-    return false;
+    return s.fail(Impl::Failure::ProcessorResult,uint32_t(result));
   for (size_t bus = 1; bus < s.outputStorage.size(); ++bus) if (s.outputStorage[bus]) {
     auto &audio = *s.outputStorage[bus];
     for (uint32_t i = 0; i < frames; ++i) {
@@ -870,13 +926,13 @@ bool NativeBackend::process(float *buffer, uint32_t frames, uint64_t position, c
       const auto flags = s.outputBuffers[bus].silenceFlags;
       const float l = flags & 1 ? 0 : audio.left[i];
       const float r = s.outputBuffers[bus].numChannels == 1 ? l : (flags & 2 ? 0 : audio.right[i]);
-      if (!std::isfinite(l) || !std::isfinite(r)) return false;
+      if (!std::isfinite(l) || !std::isfinite(r))return s.fail(Impl::Failure::AuxiliaryNonfinite,uint32_t(bus));
       audio.interleaved[i * 2] = l; audio.interleaved[i * 2 + 1] = r;
     }
   }
   for (uint32_t i = 0; i < frames; ++i) {
     if (!std::isfinite(s.outLeft[i]) || !std::isfinite(s.outRight[i]))
-      return false;
+      return s.fail(Impl::Failure::MainNonfinite);
     buffer[i * 2] = s.outputBuffers[0].silenceFlags & 1 ? 0 : s.outLeft[i];
     buffer[i * 2 + 1] = s.outputBuffers[0].silenceFlags & 2 ? 0 : s.outRight[i];
   }
@@ -889,7 +945,8 @@ const float *NativeBackend::auxiliaryOutput(uint32_t bus) const noexcept {
     ? impl_->outputStorage[bus]->interleaved.data() : nullptr;
 }
 std::vector<PluginParameter> NativeBackend::parameters() const {
-  auto result = impl_->metadata;
+  const auto presentation=impl_->parameterPresentation.load(std::memory_order_acquire);
+  auto result = presentation?*presentation:impl_->metadata;
   for (size_t i = 0; i < result.size(); ++i)
     result[i].value = impl_->values[i].load(std::memory_order_relaxed);
   return result;
@@ -964,7 +1021,7 @@ void NativeBackend::refreshLatency() {
       s.preparedLatency=frames/s.rate;
       s.preparedTail=std::min(30.0,s.processor->getTailSamples()/s.rate);
       require(s.processor->setProcessing(true), "Cannot resume VST3 after latency update"); s.processing=true;
-    } catch (...) { s.failed=true; throw; }
+    } catch (...) { s.fail(Impl::Failure::Latency); throw; }
   });
 }
 double NativeBackend::tail() const {

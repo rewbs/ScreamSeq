@@ -21,6 +21,16 @@ and `idleWaits`; these are presentation
 diagnostics, not a sustained frame-rate qualification. See
 `../AUDITION_PROGRESS.md` for evidence and limitations.
 
+Windows `transport.get.faultDetails` is `null` without a prepared renderer,
+otherwise `{renderer, chain, plugins}`. A failed rack plugin can report
+`{slot, instanceID, reason, detail}`; `reason` is a static provider code such as
+`vst3.restart-flags`, and `detail` is its restart bit mask, parameter ID, bus index
+or SDK result as applicable. The first provider failure is retained. This is
+transient diagnostic state, outside document history/persistence. An empty
+`plugins` list does not rule out a graph/renderer/chain failure; it describes
+only available rack-provider evidence. The audio-test host report includes the
+same `audio.faultDetails`. No vendor calls or serialization occur on rendering.
+
 The application now implements Mac-compatible `automation.get` and
 `automation.replaceLane` for absolute song parameter points. Timestamps are
 48 kHz frames, values are native parameter units, and replacement uses plugin

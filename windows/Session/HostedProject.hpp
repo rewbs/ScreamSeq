@@ -34,5 +34,6 @@ public:
   // Preparation and destruction remain on a stopped control owner.
   bool render(float *stereo,uint32_t frames) noexcept;
   bool failed() const noexcept;
+  Json failureDiagnostics() const; // Control owner; no vendor calls.
 };
 }

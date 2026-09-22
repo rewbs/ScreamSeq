@@ -10,7 +10,11 @@ device and plugin hosting belong to each platform. See
 [qualification evidence](UPSTREAM_PLUGIN_QUALIFICATION.md) and
 [current app interfaces](App/INTEGRATION.md).
 
-Latest continuation: `INSTRUMENT_IMPORT_PROGRESS.md` adds guarded native
+Latest continuation: `SURGE_RESTART_PROGRESS.md` diagnoses and fixes the
+post-Undo Surge audition fault: the host rejected a parameter-title notification.
+Title/unit refresh now publishes a separate control snapshot while the audio
+contract stays immutable; first-failure diagnostics preserve future fault causes.
+`INSTRUMENT_IMPORT_PROGRESS.md` adds guarded native
 instrument import, imported-sound selection and a visible keymap beside the
 envelope, including retained range drafts. `SAMPLE_SETTINGS_PROGRESS.md` adds native sample settings,
 batch sample/mapped-instrument import, captured replacement and instrument
@@ -19,10 +23,11 @@ creation, and fixes implicit panning and relative-tuning changes on partial edit
 entry, sample/instrument editor typing and main-workspace Live keys. A fresh
 fetch still finds no newer upstream commits. The installed Contourtonist,
 OrbitCab and Surge XT binary hashes were rechecked before current app testing.
-First investigate the installed Surge live-audition processor fault reported by
-the current full regression. Its host report has zero overruns/device errors;
-this is not yet attributed to a vendor or host cause. Next implementation
-priorities are the sample library/browser and multisample
+The installed Surge repetition gate passes 20/20. The full application run has
+241 passes and two failures: foreground preservation at mixer-test teardown,
+and a routing open command rejected during a background document read. Fix the
+lost view-command path next; retain the strict desktop check and add context.
+Following implementation priorities are the sample library/browser and multisample
 workflow, then MIDI/device/recording and workspace
 parity. Existing plugin and cross-platform release gates remain in force.
 The Mac source confirms sample settings and batch import. Sample export is a

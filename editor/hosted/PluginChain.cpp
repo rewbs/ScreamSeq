@@ -178,6 +178,14 @@ std::vector<PluginState> PluginChain::states() {
   }
   return out;
 }
+std::vector<PluginFailureEntry> PluginChain::failureDiagnostics() const {
+  std::vector<PluginFailureEntry> result;
+  for(size_t i=0;i<plugins_.size();++i) {
+    const auto failure=plugins_[i]->failure();
+    if(failure.reason)result.push_back({i,instances_[i],failure});
+  }
+  return result;
+}
 std::vector<PluginParameter> PluginChain::parameters(size_t slot) const {
   return slot < plugins_.size() ? plugins_[slot]->parameters() : std::vector<PluginParameter>{};
 }

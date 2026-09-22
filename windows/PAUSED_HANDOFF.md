@@ -3,7 +3,9 @@
 > Resumed explicitly on 2026-09-21. See `RESUME_PROGRESS.md` for the newer
 > continuation checkpoint, current test evidence and remaining work; the historical record below
 > is preserved.
-> Latest continuation: `INSTRUMENT_IMPORT_PROGRESS.md` covers native instrument
+> Latest continuation: `SURGE_RESTART_PROGRESS.md` covers the diagnosed Surge
+> post-Undo restart fault, safe parameter-title refresh and provider diagnostics.
+> Previous continuation: `INSTRUMENT_IMPORT_PROGRESS.md` covers native instrument
 > import, selected imported sounds and a visible keymap with retained range drafts.
 > Previous continuation: `SAMPLE_SETTINGS_PROGRESS.md` covers native sample settings,
 > batch import, captured replacement and the inherited-panning correction.

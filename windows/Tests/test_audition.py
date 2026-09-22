@@ -207,9 +207,11 @@ class AuditionTests(unittest.TestCase):
         self.write('plugin.remove',slot=0);self.assertFalse(self.read('transport.get')['audioActive'])
         self.write('history.undo',domain='plugins');self.assertEqual(opaque,self.read('plugin.state.get',slot=0))
         self.note(instrument=index);restored=self.settled()
-        self.assertGreater(max(restored['left'],restored['right']),1e-6)
-        self.write('transport.stop')
         self.remember('surge-live-audition',dict(first=first,after=after,restored=restored))
+        self.assertFalse(restored['fault'],restored)
+        self.assertTrue(restored['audioActive'] and restored['audition'],restored)
+        self.assertGreater(max(restored['left'],restored['right']),1e-6,restored)
+        self.write('transport.stop')
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
     def test_song_preview_panic_and_space_transition(self):

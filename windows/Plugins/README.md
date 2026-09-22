@@ -2,8 +2,10 @@
 
 See [current installed-plugin qualification](../UPSTREAM_PLUGIN_QUALIFICATION.md)
 for Contourtonist/OrbitCab evidence, dynamic latency support, initial JUCE mapping
-notification handling and the retained OrbitCab offline failure. Provider checks
-do not establish the pending application rack/editor history workflow.
+notification handling and the retained OrbitCab offline failure. Application
+rack/editor/history coverage is recorded there separately from provider checks.
+See [Surge restart qualification](../SURGE_RESTART_PROGRESS.md) for the restored
+audition fault and parameter-title notification fix.
 
 This is a platform provider for the existing `editor/hosted/PluginBackend.hpp`.
 It does not replace the shared scheduler, tracker DSP, graphs, project records,
@@ -116,10 +118,17 @@ The shared README remains the authoritative provider contract. This adapter:
   consumes output events. **The shared facade has no MIDI-output routing API**:
   output MIDI is deliberately not routed or fed back to the same processor;
 - reports prepared latency/tail in seconds and stable Mac-style unit/program IDs;
+- refreshes parameter names and units on `kParamTitlesChanged` using a complete
+  validated presentation snapshot. The callback's prepared parameter catalog
+  stays immutable. Count/identity, step, flags or unit-group changes require a
+  stopped rebuild and still fault; a default-value change is harmless because
+  the facade does not cache default values;
+- handles latency notifications through stopped latency maintenance; bus/reload
+  and other unsupported structural restarts still latch a fault. Stop and
+  recreate on the control owner; continuing with stale buffers is unsupported;
 - faults/silences on queue overflow, invalid output and processing failure.
-  Structural restartComponent notifications (latency/buses/reload and other
-  metadata changes) latch a fault. Stop and recreate on the control owner;
-  continuing with stale prepared buffers is not supported.
+  A lock-free first-failure record retains a static reason and numeric detail;
+  control-thread diagnostics can inspect it without invoking vendor code.
 
 There is no additional backend stop/resume API in the shared interface: stopping
 means the caller stops processing; resumed calls reuse the prepared instance.

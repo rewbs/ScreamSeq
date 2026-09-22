@@ -200,6 +200,7 @@ public:
 			{"maxMicros",audio.maxCallbackNanoseconds / 1000.0},{"fault",preparedPlayback && preparedPlayback->failed()}};
         result.transport["audioActive"]=device.running();result.transport["audition"]=device.running()&&auditionOnly;result.transport["auditionDropped"]=auditionDropped;result.transport["playbackEpoch"]=stopGeneration;
         result.transport["presentation"]={{"frames",cpuDraw.size()},{"idleWaits",idleWaits}};
+        result.transport["faultDetails"]=preparedPlayback?preparedPlayback->failureDiagnostics():Json(nullptr);
         auto &positions=result.transport["voicePositions"]=Json::array();
         if(device.running() && renderer) for(const auto &v:renderer->voicePositions())
             positions.push_back({{"channel",v.channel},{"sample",v.sample},{"instrument",v.instrument},
@@ -540,6 +541,7 @@ public:
 			<< ",\"audio\":{\"sampleRate\":" << lastRate << ",\"periodFrames\":" << lastPeriod
             << ",\"silentOutput\":" << (silentOutput?"true":"false") << ",\"preparedPlayback\":" << (preparedPlayback?"true":"false")
             << ",\"processorFault\":" << (preparedPlayback && preparedPlayback->failed()?"true":"false")
+            << ",\"faultDetails\":" << (preparedPlayback?preparedPlayback->failureDiagnostics():Json(nullptr)).dump()
 			<< ",\"callbackCount\":" << lastAudio.callbackCount << ",\"renderedFrames\":" << lastAudio.framesRendered
 			<< ",\"maxCallbackMicros\":" << lastAudio.maxCallbackNanoseconds / 1000.0
 			<< ",\"maxServiceMicros\":" << lastAudio.maxServiceNanoseconds / 1000.0

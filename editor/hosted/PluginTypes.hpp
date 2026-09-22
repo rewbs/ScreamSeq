@@ -14,6 +14,11 @@ struct PluginTransport {
   int numerator = 4;
   bool playing = true;
 };
+// Transient fault evidence, never serialized into a plugin recipe. Implementors
+// return a static reason string and atomically published numeric detail, so the
+// control owner can inspect a failure without calling a vendor from rendering.
+struct PluginFailure { const char *reason = nullptr; uint32_t detail = 0; };
+struct PluginFailureEntry { size_t slot; std::string instanceID; PluginFailure failure; };
 struct PluginDescriptor {
   uint32_t type = 0, subtype = 0, manufacturer = 0;
   std::string name;

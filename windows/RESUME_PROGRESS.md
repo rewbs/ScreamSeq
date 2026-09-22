@@ -1,6 +1,11 @@
 # Windows continuation — 2026-09-21
 
-Latest continuation: `INSTRUMENT_IMPORT_PROGRESS.md` records native guarded
+Latest continuation: `SURGE_RESTART_PROGRESS.md` identifies the post-Undo Surge
+audition failure as rejection of a parameter-title notification and adds safe
+control-thread catalog refresh plus first-failure diagnostics. Full qualification
+is recorded there; full parity remains active.
+
+Previous continuation: `INSTRUMENT_IMPORT_PROGRESS.md` records native guarded
 instrument import, selected imported sounds and a keymap list alongside the
 envelope. Range fields retain their captured draft through selection and Close.
 

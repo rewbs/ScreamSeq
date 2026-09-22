@@ -98,6 +98,7 @@ public:
     outputDelayPosition_ = 0;
   }
   bool popEdit(uint32_t &, float &) noexcept;
+  PluginFailure failure() const noexcept { return backend_ ? backend_->failure() : PluginFailure{}; }
 };
 class PluginChain {
   struct MusicalLane {
@@ -185,6 +186,7 @@ public:
   std::optional<EffectMeters> meters(size_t slot) const { return slot < plugins_.size() ? plugins_[slot]->meters() : std::nullopt; }
   std::vector<PluginAudioBus> buses(size_t slot) const { return slot < plugins_.size() ? plugins_[slot]->buses() : std::vector<PluginAudioBus>{}; }
   bool failed() const { return failed_.load(); }
+  std::vector<PluginFailureEntry> failureDiagnostics() const; // Control owner only.
   bool latencyChangePending() const noexcept;
   void refreshLatencies(); // Control thread, retaining processors and transport.
   bool hasAutomatedState() const { return hasMusicalControls_ || !automation_.empty(); }

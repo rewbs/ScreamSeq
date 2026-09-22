@@ -4,7 +4,12 @@ This is a development checkpoint, not full Mac parity. The work plan is
 [PARITY_PLAN.md](PARITY_PLAN.md). Evidence files below are local ignored artifacts
 under `bin/`, not files distributed with the product.
 
-The latest instrument/editor continuation and application regression is recorded
+The latest plugin continuation is `SURGE_RESTART_PROGRESS.md`: the intermittent
+post-Undo Surge audition fault was traced to rejection of `kParamTitlesChanged`.
+The Windows provider now refreshes title/unit snapshots without altering the
+audio-side parameter catalog and retains first-failure diagnostics.
+
+The preceding instrument/editor continuation and application regression is recorded
 in `INSTRUMENT_IMPORT_PROGRESS.md`, following `SAMPLE_SETTINGS_PROGRESS.md`.
 It retains the same installed-plugin gate.
 For the musical-input plugin continuation, see `MUSICAL_TYPING_PROGRESS.md`:
