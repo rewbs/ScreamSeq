@@ -1,6 +1,10 @@
 # Windows continuation — 2026-09-21
 
-Latest continuation: `SAMPLE_SETTINGS_PROGRESS.md` records native sample settings,
+Latest continuation: `INSTRUMENT_IMPORT_PROGRESS.md` records native guarded
+instrument import, selected imported sounds and a keymap list alongside the
+envelope. Range fields retain their captured draft through selection and Close.
+
+Previous continuation: `SAMPLE_SETTINGS_PROGRESS.md` records native sample settings,
 batch imports, captured replacement and sample-instrument creation, plus a shared
 fix preserving omitted tuning, volume, panning and loop settings. Full parity remains active.
 

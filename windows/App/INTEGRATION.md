@@ -9,7 +9,9 @@ Native sample properties, captured file replacement, batch sample/mapped-
 instrument import and sample-instrument creation are covered in
 `../SAMPLE_SETTINGS_PROGRESS.md`. They reuse shared transactions and retain
 target/revision guards, drafts, Undo and native persistence. Windows sample
-library/preview and instrument-import presentation remain separate work.
+library/preview remains separate work. Native instrument import, imported-sound
+selection and the keymap list beside the envelope are covered in
+`../INSTRUMENT_IMPORT_PROGRESS.md`; they retain unfinished mapping fields too.
 
 The current native format is container 6 / metadata 17. Historical native
 wrappers reject before document replacement, matching upstream; module import

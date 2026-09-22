@@ -10,25 +10,30 @@ device and plugin hosting belong to each platform. See
 [qualification evidence](UPSTREAM_PLUGIN_QUALIFICATION.md) and
 [current app interfaces](App/INTEGRATION.md).
 
-Latest continuation: `SAMPLE_SETTINGS_PROGRESS.md` adds native sample settings,
+Latest continuation: `INSTRUMENT_IMPORT_PROGRESS.md` adds guarded native
+instrument import, imported-sound selection and a visible keymap beside the
+envelope, including retained range drafts. `SAMPLE_SETTINGS_PROGRESS.md` adds native sample settings,
 batch sample/mapped-instrument import, captured replacement and instrument
 creation, and fixes implicit panning and relative-tuning changes on partial edits.
 `MUSICAL_TYPING_PROGRESS.md` adds selected-sound pattern
 entry, sample/instrument editor typing and main-workspace Live keys. A fresh
 fetch still finds no newer upstream commits. The installed Contourtonist,
 OrbitCab and Surge XT binary hashes were rechecked before current app testing.
-Next implementation priorities are native instrument import/keymap presentation,
-the sample library/browser and multisample workflow, then MIDI/device/recording and workspace
+First investigate the installed Surge live-audition processor fault reported by
+the current full regression. Its host report has zero overruns/device errors;
+this is not yet attributed to a vendor or host cause. Next implementation
+priorities are the sample library/browser and multisample
+workflow, then MIDI/device/recording and workspace
 parity. Existing plugin and cross-platform release gates remain in force.
 The Mac source confirms sample settings and batch import. Sample export is a
 separate enhancement; no existing Mac sample-export UI/API was found in this
 review, so it is not treated as an established parity gap.
 
-The next instrument step is grounded in `mac/App/main.swift::importInstrument`
+The instrument step matches `mac/App/main.swift::importInstrument`
 (ITI/XI/PAT/SFZ, new slot, select the imported sound) and the octave/sample
-mapping summary in `mac/App/AssetEditors.swift`. Windows already stages numeric
-key ranges in `InstrumentEnvelopeWindow.hpp`; add visible map inspection and
-guarded import without discarding that parent draft. The following sample-library
+mapping summary in `mac/App/AssetEditors.swift`. Windows now stages numeric
+key ranges alongside a native map list in `InstrumentEnvelopeWindow.hpp` and
+guards imports without discarding that parent draft. The next sample-library
 step should match `SampleLibraryIntegration.swift`: separate library revisions,
 bounded background indexing/search, folder tags, preview, and the existing
 atomic `sample.importMany` / `instrument.importMultisample` transactions.
@@ -40,7 +45,7 @@ atomic `sample.importMany` / `instrument.importMultisample` transactions.
 | Unified 1–8 FX columns, ordinary tracker commands plus PS/PL/BS/BL/NC | Shared engine/API, variable native grid, two-character entry, searchable FX inspector, stable bindings, row transforms and Pattern 2 clipboard with binding remap integrated. FX 1→FX 8/4 PCM is identical at three rates and four block sizes. See `PATTERN_FX_PROGRESS.md` and `PATTERN_NOTES_PROGRESS.md`. | Broader row-tool controls, first-letter completion and visible layout/accessibility qualification. |
 | Precise note cut and plugin trigger instruments | Shared semantics/persistence, current precise-note API, native row-draft editor and timing/velocity canvas, NC inspector, empty trigger API, native creation/assignment and independent history integrated. Installed Surge XT trigger PCM/WASAPI checks pass with documented fixture constraints. | Broader instrument/routing qualification, foreground visual/accessibility verification and live native-edit publication. |
 | Project container 6 / metadata 17; RSONGS2 snapshots | Current-only native open/save, strict rejection of historical native wrappers, opaque-state retention, sample-exact save/reopen tests. MOD/XM/IT/S3M import remains available. | Obtain a newly exported Mac format-17 fixture and perform Windows→Mac→Windows reopen. The supplied format-14 reference is historical and is not silently migrated. |
-| Explicit disconnected mixer/plugin destinations | Actual-app mixer/graph API, native bus controls, reusable graph canvas, pattern curves, envelope bank and song routing overview integrated. Native graph command lanes connect pattern rows to row/persistent graph stages. Pattern parameter automation now has the shared API and a native curve editor with transforms, bank and formula workbench connections. See `GRAPH_COMMANDS_PROGRESS.md` and `PARAMETER_AUTOMATION_PROGRESS.md` for these latest additions. | Native instrument import, inline completion and broader routing/long-session qualification. The audition piano and shared API are implemented in `AUDITION_PROGRESS.md`. |
+| Explicit disconnected mixer/plugin destinations | Actual-app mixer/graph API, native bus controls, reusable graph canvas, pattern curves, envelope bank and song routing overview integrated. Native graph command lanes connect pattern rows to row/persistent graph stages. Pattern parameter automation now has the shared API and a native curve editor with transforms, bank and formula workbench connections. See `GRAPH_COMMANDS_PROGRESS.md` and `PARAMETER_AUTOMATION_PROGRESS.md` for these latest additions. | Inline completion and broader routing/long-session qualification. The audition piano and shared API are implemented in `AUDITION_PROGRESS.md`. |
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields, sample waveform markers and native instrument-envelope markers integrated. See `INSTRUMENT_ENVELOPE_PROGRESS.md`. | Audition piano, detailed waveform markers and preview releases are implemented in `AUDITION_PROGRESS.md`; broader vendor release-tail qualification remains. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
 | Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, program/port controls, modeless instrument aliases/MIDI channels, sound presets, library organization, explicit VST3 location repair and native graph/mixer connections integrated; live parameters reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. See `PLUGIN_ALIASES_PROGRESS.md`, `PLUGIN_PRESETS_PROGRESS.md`, `PLUGIN_LIBRARY_PROGRESS.md`, `PLUGIN_PATH_PROGRESS.md` and `SONG_ROUTING_PROGRESS.md`. | Live opaque-state replacement (including Surge's first-open zoom state) and broader missing-plugin recovery. |
@@ -127,8 +132,7 @@ preserve concurrent edit guards.
    now has the existing Mac read/replacement API and a retained native editor
    with bounded drawing, exact frame/native value fields, plugin history and
    cross-view navigation (`ABSOLUTE_AUTOMATION_PROGRESS.md`). Complete native
-   instrument import and visual keymaps, inline formula
-   completion and the remaining bank/workbench entry points, with retained
+   inline formula completion and the remaining bank/workbench entry points, with retained
    drawing, meaningful context menus and keyboard use.
 4. **Recording and workspace.** Native sample zoom/drawing/crossfade, processing,
    snapping and clipboard controls are implemented in `SAMPLE_DETAIL_PROGRESS.md`;

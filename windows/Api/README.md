@@ -612,3 +612,10 @@ reports the main window's status text for native workflow diagnostics.
 Omitted rate, volume and loop fields also retain their exact stored values,
 including legacy relative tuning and sub-unit volume precision.
 See `../SAMPLE_SETTINGS_PROGRESS.md` for the retained-draft/file-chooser behavior.
+
+Native instrument import uses `instrument.import` with a captured revision and
+new slot. The keymap list stages the existing `instrument.patch.values.mapping`;
+it does not introduce different musical editing semantics. Windows-only
+`workspace.get.instrumentEnvelope.mappingFields`, `mappingDirty` and
+`selectedKey` expose unfinished range fields, staged mapping state and the
+native list selection. See `../INSTRUMENT_IMPORT_PROGRESS.md`.

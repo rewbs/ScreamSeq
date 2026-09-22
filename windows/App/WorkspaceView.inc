@@ -177,6 +177,7 @@
             {sampleImportCommand,L"Sample / Import audio files",L"Ctrl+I"},
             {sampleImportRawCommand,L"Sample / Import audio files as samples",L""},
             {sampleImportInstrumentsCommand,L"Sample / Import audio files as mapped instruments",L""},
+            {instrumentImportCommand,L"Instrument / Import ITI, XI, PAT or SFZ",L""},
             {sampleAllCommand,L"Sample / Select all",L"Ctrl+A in samples"},
             {sampleReverseCommand,L"Sample / Reverse selection",L""},{sampleNormalizeCommand,L"Sample / Normalize selection",L""},
             {sampleFadeInCommand,L"Sample / Fade in",L""},{sampleFadeOutCommand,L"Sample / Fade out",L""},
@@ -206,6 +207,7 @@
             else if(id==sampleDetailCommand){openSampleDetail();return;}
             else if(id==auditionCommand){openAudition();return;}
             else if(id==instrumentEnvelopeCommand){openInstrumentEnvelope();return;}
+            else if(id==instrumentImportCommand){openInstrumentEnvelope();instrumentEnvelopeWindow->importInstrument();return;}
             else if(id==liveKeysCommand){liveKeyboard=!liveKeyboard;if(!liveKeyboard)releaseTypedNotes();status=liveKeyboard?L"Live keys / selected sound plays across workspace panels / Ctrl+Alt+L releases":L"Keyboard follows focus / pattern entry and sample audition";}
             else if(id==soundChooser)selectTypingSound();
             else if(id==graphLanesFocus){if(!view->graphPattern->lanes.empty()){workspaceState.focus="graphLanes";revealGraphLane();}else{openGraphCommands();return;}}

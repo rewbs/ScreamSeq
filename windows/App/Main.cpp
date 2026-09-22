@@ -51,7 +51,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     patternChooser=130, orderChooser=131, octaveChooser=132, stepChooser=133, effectColumnChooser=134, soundChooser=135, liveKeysCommand=507, sampleCommandBase=200,
     patternReverse=140,patternRotate=141,patternExpand=142,patternShrink=143,patternInsertRows=144,patternDeleteRows=145,patternTransposeUp=146,patternTransposeDown=147,
     patternPasteMix=148,patternPasteMerge=149,
-    sampleImportCommand=201,sampleImportRawCommand=508,sampleImportInstrumentsCommand=509,sampleAllCommand=202,sampleReverseCommand=203,sampleNormalizeCommand=204,
+    sampleImportCommand=201,sampleImportRawCommand=508,sampleImportInstrumentsCommand=509,instrumentImportCommand=510,sampleAllCommand=202,sampleReverseCommand=203,sampleNormalizeCommand=204,
     sampleFadeInCommand=205,sampleFadeOutCommand=206,sampleTrimCommand=207,sampleLoopCommand=208,
     sampleRangeCommand=209,sampleCopyCommand=210,samplePasteCommand=211,sampleCutCommand=212,sampleClearCommand=213,
     sampleLoopToggleCommand=214,sampleLoopModeCommand=215,sampleSustainSetCommand=216,
@@ -456,7 +456,7 @@ public:
     #include "GraphPatternLanes.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
     void openInstrumentEnvelope(){
-        if(!instrumentEnvelopeWindow)instrumentEnvelopeWindow=std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);});
+        if(!instrumentEnvelopeWindow)instrumentEnvelopeWindow=std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();});
         connectTyping(*instrumentEnvelopeWindow,[this]{return instrumentEnvelopeWindow->musicalTarget();});
         instrumentEnvelopeWindow->openAt();
     }
