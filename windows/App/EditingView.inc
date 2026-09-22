@@ -225,7 +225,7 @@
             if(order) SendMessageW(controls.at(orderChooser),CB_SETCURSEL,orderSelection>=0 && size_t(orderSelection)<order ? orderSelection : 0,0);
             listedCatalog=view->catalogRevision;
         }
-        unsigned selected=0;for(auto &[p,v]:view->patterns) {if(p==patternIndex) break;++selected;}SendMessageW(controls.at(patternChooser),CB_SETCURSEL,selected,0);
-        SendMessageW(controls.at(octaveChooser),CB_SETCURSEL,octave,0);SendMessageW(controls.at(stepChooser),CB_SETCURSEL,editStep,0);
-        SendMessageW(controls.at(effectColumnChooser),CB_SETCURSEL,view->effectColumns.at(channel)-1,0);
+        unsigned selected=0;for(auto &[p,v]:view->patterns) {if(p==patternIndex) break;++selected;}ScreamSeq::NativeControls::select(controls.at(patternChooser),selected);
+        ScreamSeq::NativeControls::select(controls.at(octaveChooser),octave);ScreamSeq::NativeControls::select(controls.at(stepChooser),editStep);
+        ScreamSeq::NativeControls::select(controls.at(effectColumnChooser),view->effectColumns.at(channel)-1);
     }

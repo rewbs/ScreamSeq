@@ -41,8 +41,7 @@
 			if(controlFont) DeleteObject(controlFont);controlFont=next;controlDpi=dpi;
 		}
 		auto place=[&](int id,float x,float y,float w,float h,bool visible=true) {
-			SetWindowPos(controls.at(id),nullptr,int(x*s),int(y*s),int(w*s),int(h*s),SWP_NOZORDER|SWP_NOACTIVATE);
-			ShowWindow(controls.at(id),visible ? SW_SHOWNOACTIVATE : SW_HIDE);
+			ScreamSeq::NativeControls::place(controls.at(id),int(x*s),int(y*s),int(w*s),int(h*s),visible);
 		};
 		place(playCommand,174,12,64,26);place(stopCommand,242,12,60,26);place(followCommand,306,12,90,26);
 		place(paletteCommand,402,12,154,26);
@@ -86,10 +85,10 @@
         place(sampleSustainSetCommand,ix+181,iy+28,100,24,loopControls);
         if(view->samples.contains(selectedSample())) {
             const auto &info=view->samples.at(selectedSample());
-            SetWindowTextW(controls.at(sampleLoopToggleCommand),info.value("loop",false)?L"Loop on":L"Loop off");
-            SetWindowTextW(controls.at(sampleSustainToggleCommand),info.value("sustainLoop",false)?L"Sustain on":L"Sustain off");
-            SetWindowTextW(controls.at(sampleLoopModeCommand),info.value("reverseLoop",false)?L"Reverse":info.value("pingpong",false)?L"Ping pong":L"Forward");
-            SetWindowTextW(controls.at(sampleSustainModeCommand),info.value("sustainReverse",false)?L"Reverse":info.value("sustainPingpong",false)?L"Ping pong":L"Forward");
+            ScreamSeq::NativeControls::text(controls.at(sampleLoopToggleCommand),info.value("loop",false)?L"Loop on":L"Loop off");
+            ScreamSeq::NativeControls::text(controls.at(sampleSustainToggleCommand),info.value("sustainLoop",false)?L"Sustain on":L"Sustain off");
+            ScreamSeq::NativeControls::text(controls.at(sampleLoopModeCommand),info.value("reverseLoop",false)?L"Reverse":info.value("pingpong",false)?L"Ping pong":L"Forward");
+            ScreamSeq::NativeControls::text(controls.at(sampleSustainModeCommand),info.value("sustainReverse",false)?L"Reverse":info.value("sustainPingpong",false)?L"Ping pong":L"Forward");
             EnableWindow(controls.at(sampleLoopModeCommand),info.value("loop",false));
             EnableWindow(controls.at(sampleSustainModeCommand),info.value("sustainLoop",false));
         }
@@ -100,10 +99,11 @@
         layoutMixerControls(place);
         layoutGraphControls(place);
         layoutGraphCurveControls(place);
-		SetWindowTextW(controls.at(followCommand),follow ? L"Follow on [F]" : L"Detached [F]");
-        SetWindowTextW(controls.at(liveKeysCommand),liveKeyboard?L"LIVE KEYS ON":L"Live keys");
-		SetWindowTextW(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
-		for(auto [id,h]:controls) InvalidateRect(h,nullptr,FALSE);
+		ScreamSeq::NativeControls::text(controls.at(followCommand),follow ? L"Follow on [F]" : L"Detached [F]");
+        ScreamSeq::NativeControls::text(controls.at(liveKeysCommand),liveKeyboard?L"LIVE KEYS ON":L"Live keys");
+		ScreamSeq::NativeControls::text(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
+        for(int id:{liveKeysCommand,composeCommand,patternCommand,soundCommand,notesCommand,samplesCommand})
+            ScreamSeq::NativeControls::active(controls.at(id),controlActive(id));
 	}
 	void installControls() {
 		auto add=[&](int id,const std::wstring &label) {
@@ -142,6 +142,8 @@
         installMixerControls();
         installGraphControls();
         installGraphCurveControls();
+        if(inspection)SetPropW(window,ScreamSeq::NativeControls::inspectionProperty,reinterpret_cast<HANDLE>(1));
+        for(auto [id,h]:controls)ScreamSeq::NativeControls::install(h,inspection);
 		std::vector<ScreamSeq::WorkspaceCommand> commands={
             {liveKeysCommand,L"Keyboard / Toggle live musical typing",L"Ctrl+Alt+L"},
             {graphCommand,L"Graph / Open reusable routing and modulation canvas",L""},
@@ -391,7 +393,12 @@
         const float available=std::max(1.0f,patternGridRect().w-gutter);
         horizontalScroll=std::clamp(horizontalScroll+float(delta)*fxWidth/WHEEL_DELTA,0.0f,std::max(0.0f,channelStart(view->channels)-available));
     }
+	bool controlActive(int id) const {
+        return (id==liveKeysCommand && liveKeyboard) || (id==composeCommand && workspaceState.layout=="Compose") || (id==patternCommand && workspaceState.layout=="Pattern focus") || (id==soundCommand && workspaceState.layout=="Sound design") || (id==notesCommand && workspaceState.active=="notes") || (id==samplesCommand && workspaceState.active=="samples");
+    }
 	void drawButton(const DRAWITEMSTRUCT &d) {
+        ScreamSeq::NativeControls::recordDraw(d.hwndItem);
+        if(d.CtlType==ODT_COMBOBOX){ScreamSeq::NativeControls::comboItem(d);return;}
 		if(d.CtlType==ODT_LISTBOX || d.CtlType==ODT_COMBOBOX) {
             const bool list=d.CtlType==ODT_LISTBOX;std::wstring label;
             if(d.CtlID==noteList&&d.itemID!=UINT(-1))label=noteListLabel(d.itemID);
@@ -407,7 +414,7 @@
             SelectObject(d.hDC,old);if(d.itemState&ODS_FOCUS) {InflateRect(&r,-1,-1);DrawFocusRect(d.hDC,&r);}return;
         }
 		wchar_t text[128]{};GetWindowTextW(d.hwndItem,text,128);
-		bool active=(d.CtlID==liveKeysCommand && liveKeyboard) || (d.CtlID==composeCommand && workspaceState.layout=="Compose") || (d.CtlID==patternCommand && workspaceState.layout=="Pattern focus") || (d.CtlID==soundCommand && workspaceState.layout=="Sound design") || (d.CtlID==notesCommand && workspaceState.active=="notes") || (d.CtlID==samplesCommand && workspaceState.active=="samples");
+		bool active=controlActive(d.CtlID);
 		SetDCBrushColor(d.hDC,(d.itemState&ODS_SELECTED) ? RGB(66,80,94) : active ? RGB(46,67,77) : RGB(42,51,63));FillRect(d.hDC,&d.rcItem,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
 		SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,(d.itemState&ODS_DISABLED) ? RGB(111,126,140) : active ? RGB(125,228,206) : RGB(215,225,235));auto old=SelectObject(d.hDC,controlFont);
 		RECT r=d.rcItem;r.left+=6;r.right-=6;DrawTextW(d.hDC,text,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);SelectObject(d.hDC,old);

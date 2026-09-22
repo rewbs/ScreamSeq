@@ -113,7 +113,7 @@
         at(curveRow,x,r.y+86,120,25);at(curveValue,x+128,r.y+86,120,25);at(curveKind,x,r.y+117,248,220);at(curveFormula,x,r.y+148,120,25,curveKindIndex==8);at(curveExpand,x+128,r.y+148,58,25,curveKindIndex==8);at(curveReference,x+190,r.y+148,58,25);
         at(curveSetPoint,x,r.y+179,120,25);at(curveDelete,x+128,r.y+179,120,25);at(curveRamp,x,r.y+210,60,25);at(curveClear,x+64,r.y+210,58,25);at(curvePreview,x+128,r.y+210,120,25);
         at(curveApply,x-260,r.y+5,92,25);at(curveReload,x-162,r.y+5,74,25);at(curveBank,x-82,r.y+5,70,25);
-        for(int id=curvePattern;id<=curveReference;++id){if(!placed.contains(id))ShowWindow(controls.at(id),SW_HIDE);EnableWindow(controls.at(id),!curvePending&&(id==curveReload||!curveGraph.empty()));}
+        for(int id=curvePattern;id<=curveReference;++id){if(!placed.contains(id))ScreamSeq::NativeControls::show(controls.at(id),false);EnableWindow(controls.at(id),!curvePending&&(id==curveReload||!curveGraph.empty()));}
         rebuildCurveCanvas();if(show&&((!curveDraft()&&curveContextChanged())||curvePreviewNeeded))SetTimer(window,5,120,nullptr);
     }
     Json curvePointFromFields(){

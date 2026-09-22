@@ -10,7 +10,14 @@ device and plugin hosting belong to each platform. See
 [qualification evidence](UPSTREAM_PLUGIN_QUALIFICATION.md) and
 [current app interfaces](App/INTEGRATION.md).
 
-Latest continuation: `AUDIO_SETTINGS_PROGRESS.md` adds native output selection,
+Latest user-directed refinement: `FLAT_CONTROLS_PROGRESS.md` removes cursor-driven
+redraws of unchanged native controls and gives workspace/modeless selectors a
+shared flat appearance. Both platform frontends remain in this source tree;
+Mac runtime and reciprocal project qualification remain outstanding.
+All 268 application tests and 31 native CTests pass. The separate ARM64 package
+is `bin/windows-checkpoints/flat-controls-20260922/`.
+
+Previous continuation: `AUDIO_SETTINGS_PROGRESS.md` adds native output selection,
 supported buffer-period negotiation and independent guarded settings APIs. Six
 focused output cases plus eleven library cases and all 30 primary CTests pass.
 The full isolated suite passes **264/264**, with no failures or skips. Timestamped MIDI/recording and recovery remain

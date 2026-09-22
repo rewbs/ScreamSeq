@@ -168,12 +168,14 @@
         place(noteOffset,x+214,r.y+48,92,25,show);place(noteUnitControl,x+312,r.y+48,72,160,show);place(noteSnapControl,x+390,r.y+48,92,160,show);
         place(noteEffectControl,x,r.y+96,242,260,show);place(noteParameter,x+248,r.y+96,58,25,show);place(noteReplace,x+312,r.y+96,170,25,show);
         place(noteAdd,x,r.y+131,64,25,show);place(noteRemove,x+70,r.y+131,66,25,show);place(noteRepeatCount,x+192,r.y+131,48,25,show);place(noteEndVelocity,x+268,r.y+131,48,25,show);place(noteRepeat,x+322,r.y+131,160,25,show);
-        SetWindowTextW(controls.at(noteReplace),noteReplaceLegacy?L"Replace row note: on":L"Replace row note: off");
-        for(int id=noteList;id<=noteEndVelocity;++id)EnableWindow(controls.at(id),!notePending);
-        EnableWindow(controls.at(noteRemove),!notePending&&noteSelected>=0);
+        ScreamSeq::NativeControls::text(controls.at(noteReplace),noteReplaceLegacy?L"Replace row note: on":L"Replace row note: off");
         const auto pitch=SendMessageW(controls.at(notePitch),CB_GETCURSEL,0,0);const bool onset=pitch>=0&&pitch<120;
-        for(int id:{noteInstrument,noteVelocity,noteEffectControl,noteParameter})EnableWindow(controls.at(id),!notePending&&onset);
-        EnableWindow(controls.at(noteRepeat),!notePending&&onset&&noteSelected>=0);
+        for(int id=noteList;id<=noteEndVelocity;++id){
+            bool enabled=!notePending;
+            if(id==noteRemove||id==noteRepeat)enabled=enabled&&noteSelected>=0;
+            if(id==noteInstrument||id==noteVelocity||id==noteEffectControl||id==noteParameter||id==noteRepeat)enabled=enabled&&onset;
+            EnableWindow(controls.at(id),enabled);
+        }
     }
     ScreamSeq::WorkspaceRect noteTimelineRect() const {
         const auto r=effectEditorRect();return {r.x+204,r.y+192,std::max(1.0f,r.w-226),std::max(1.0f,r.h-226)};

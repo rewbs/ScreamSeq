@@ -123,12 +123,20 @@ structural replacement/publication is not implemented by this extraction.
 
 ## Qualification and Mac review
 
-See `windows/Tests/Hosted/README.md` for actual offline results and reproduction.
-Windows currently supports built-ins; AU and VST3 creation throw explicit
-unavailable errors. The test-only factory is not a vendor loader implementation.
+Both native frontends coexist in the same source tree and consume this target.
+Mac supplies AU/VST3 hosting; Windows supplies its native VST3 backend through
+`windows/Plugins/Provider.cmake`. AU instances remain unavailable on Windows and
+their identities/state must be preserved. Plugin binary locations are platform
+specific even when a VST3 class and its state are portable.
+
+See `windows/Tests/Hosted/README.md` for the original extraction's offline tests,
+and `windows/UPSTREAM_PLUGIN_QUALIFICATION.md` and subsequent Windows progress
+reports for installed VST3 lifecycle evidence. The extraction report predates
+the Windows vendor loader; it is not a current built-ins-only limitation.
 
 Mac cannot be built/run on this Windows host. Before merge, compile Mac CMake and
 run existing AU/VST3 fixtures, especially bus activation/output splitting, state,
 program/editor lifetime and transport host callbacks. Review the private backend
 storage move, the per-slice auxiliary copy, double parameter forwarding and the
-TrackerPlugins forwarding target. The original Mac checkout was not modified.
+TrackerPlugins forwarding target. Source integration is not Mac runtime
+qualification: a real Mac-to-Windows-to-Mac project round trip is still required.

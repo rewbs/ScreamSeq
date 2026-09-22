@@ -1,6 +1,14 @@
 # Windows continuation — 2026-09-21
 
-Latest continuation: `AUDIO_SETTINGS_PROGRESS.md` adds native output-device and
+Latest user-directed refinement: `FLAT_CONTROLS_PROGRESS.md` removes unrelated
+control redraws during cursor movement and gives native selectors a flat style.
+The Mac and Windows frontends coexist; Mac build/runtime qualification remains
+outstanding. Full parity remains active.
+All 268 isolated application tests pass with no failures or skips, alongside
+31 native CTests. The package is `bin/windows-checkpoints/flat-controls-20260922/`;
+the musician's previous process was left running.
+
+Previous continuation: `AUDIO_SETTINGS_PROGRESS.md` adds native output-device and
 buffer selection plus independent settings APIs. The six output tests and eleven
 library tests pass together, as do 30 primary CTests and silent device tests. All
 **264 application tests pass**, no failures or skips, in 671.289 seconds, with

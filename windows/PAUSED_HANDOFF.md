@@ -3,7 +3,9 @@
 > Resumed explicitly on 2026-09-21. See `RESUME_PROGRESS.md` for the newer
 > continuation checkpoint, current test evidence and remaining work; the historical record below
 > is preserved.
-> Latest continuation: `AUDIO_SETTINGS_PROGRESS.md` covers native output-device
+> Latest user-directed refinement: `FLAT_CONTROLS_PROGRESS.md` covers retained
+> control redraws, flat selectors and the current Mac coexistence assessment.
+> Previous continuation: `AUDIO_SETTINGS_PROGRESS.md` covers native output-device
 > and buffer settings with independent revision guards. Full parity remains active.
 > Previous continuation: `SAMPLE_LIBRARY_PROGRESS.md` covers the native library,
 > independent preview and guarded family review/import. Full parity remains active.

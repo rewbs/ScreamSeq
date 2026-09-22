@@ -193,12 +193,12 @@
         EnableWindow(controls.at(pluginAliases),instrument);
         for(int id:{pluginSavePreset,pluginLoadPreset})EnableWindow(controls.at(id),selected&&!pluginPresetPending);
         place(pluginInstrument,x,y+131,r.w-424,220,show && instrument && pluginDetailPage==0 && r.h>=164);place(pluginNewInstrument,r.x+r.w-188,y+131,108,24,show && instrument && pluginDetailPage==0 && r.h>=164);place(pluginAssign,r.x+r.w-76,y+131,68,24,show && instrument && pluginDetailPage==0 && r.h>=164);
-        EnableWindow(controls.at(pluginNewInstrument),instrument);SetWindowTextW(controls.at(pluginNewInstrument),pendingPluginTriggers.contains(selectedPlugin)?L"Retry assign":L"New trigger");
-        for(int id:{pluginEditor,pluginBypass,pluginRemove,pluginUp,pluginDown,pluginAssign}) EnableWindow(controls.at(id),selected);
+        EnableWindow(controls.at(pluginNewInstrument),instrument);ScreamSeq::NativeControls::text(controls.at(pluginNewInstrument),pendingPluginTriggers.contains(selectedPlugin)?L"Retry assign":L"New trigger");
+        for(int id:{pluginBypass,pluginRemove,pluginAssign}) EnableWindow(controls.at(id),selected);
         EnableWindow(controls.at(pluginEditor),selected && plugin.value("format","")=="VST3");
         EnableWindow(controls.at(pluginReconnect),selected&&plugin.value("format","")=="VST3");
         EnableWindow(controls.at(pluginUp),selected && slot>0);EnableWindow(controls.at(pluginDown),selected && size_t(slot+1)<listedPlugins.size());
-        SetWindowTextW(controls.at(pluginBypass),selected && plugin.value("bypass",false)?L"Enable":L"Bypass");
+        ScreamSeq::NativeControls::text(controls.at(pluginBypass),selected && plugin.value("bypass",false)?L"Enable":L"Bypass");
         bool writable=false;for(const auto &p:pluginParameters)if(p.at("id")==selectedParameter)writable=p.value("writable",false);
         EnableWindow(controls.at(pluginApply),selected && writable);EnableWindow(controls.at(pluginValue),selected && writable);
         EnableWindow(controls.at(pluginUndo),view->session.document.value("canUndoPlugins",false));EnableWindow(controls.at(pluginRedo),view->session.document.value("canRedoPlugins",false));
@@ -207,7 +207,7 @@
         EnableWindow(controls.at(pluginProgram),!pluginPrograms.empty());EnableWindow(controls.at(pluginLoadProgram),selected&&loadable);
         const auto port=selectedPort>=0 && size_t(selectedPort)<pluginPorts.size()?pluginPorts[size_t(selectedPort)]:Json();
         EnableWindow(controls.at(pluginPort),!pluginPorts.empty());EnableWindow(controls.at(pluginTogglePort),!port.is_null()&&port.at("index")!=0&&port.at("supported").get<bool>());
-        SetWindowTextW(controls.at(pluginTogglePort),!port.is_null()&&port.at("active").get<bool>()?L"Disable port":L"Enable port");
+        ScreamSeq::NativeControls::text(controls.at(pluginTogglePort),!port.is_null()&&port.at("active").get<bool>()?L"Disable port":L"Enable port");
     }
     bool pluginCommand(int id) {
         if(id<pluginList || id>pluginReconnect)return false;

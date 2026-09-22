@@ -1,6 +1,7 @@
 #pragma once
 #include "RenderSurface.hpp"
 #include "AutomationCanvas.hpp"
+#include "NativeControls.hpp"
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <windowsx.h>
@@ -15,7 +16,7 @@ protected:
   HWND owner_{},window_{};
   std::map<int,HWND> controls_;
   std::unique_ptr<RenderSurface> surface_;
-  HFONT font_{};bool ready_=false;
+  HFONT font_{};unsigned fontDpi_=0;bool ready_=false;
   int minimumWidth_=900,minimumHeight_=620;
   std::wstring status_;
   HWND handledCharacterWindow_{};WPARAM handledCharacter_{};
@@ -26,20 +27,20 @@ protected:
   void handledKey(HWND control,WPARAM key,bool ctrl){handledCharacterWindow_=control;handledCharacter_=0;if(key==VK_RETURN||key==VK_TAB||key==VK_SPACE||key==VK_ESCAPE)handledCharacter_=key;else if(ctrl&&key>='A'&&key<='Z')handledCharacter_=key-'A'+1;}
   static std::wstring wide(const std::string &s){int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0);std::wstring out(n,0);MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),out.data(),n);return out;}
   static std::string utf8(const std::wstring &s){int n=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0,nullptr,nullptr);if(!n&&!s.empty())throw std::runtime_error("Invalid text");std::string out(n,0);WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,s.data(),int(s.size()),out.data(),n,nullptr,nullptr);return out;}
-  HWND add(int id,const wchar_t *kind,const wchar_t *text,DWORD style){auto h=CreateWindowExW(_wcsicmp(kind,L"EDIT")==0?WS_EX_CLIENTEDGE:0,kind,text,WS_CHILD|(_wcsicmp(kind,L"STATIC")?WS_TABSTOP:0)|style,0,0,1,1,window_,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);if(!h)throw std::runtime_error("Cannot create editor control");controls_[id]=h;SetWindowSubclass(h,childProc,1,reinterpret_cast<DWORD_PTR>(this));return h;}
+  HWND add(int id,const wchar_t *kind,const wchar_t *text,DWORD style){auto h=CreateWindowExW(_wcsicmp(kind,L"EDIT")==0?WS_EX_CLIENTEDGE:0,kind,text,WS_CHILD|(_wcsicmp(kind,L"STATIC")?WS_TABSTOP:0)|style,0,0,1,1,window_,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);if(!h)throw std::runtime_error("Cannot create editor control");controls_[id]=h;NativeControls::install(h,GetPropW(owner_,NativeControls::inspectionProperty)!=nullptr);SetWindowSubclass(h,childProc,1,reinterpret_cast<DWORD_PTR>(this));return h;}
   void button(int id,const wchar_t *text){add(id,L"BUTTON",text,BS_OWNERDRAW);}
   void edit(int id,const wchar_t *text,int limit){auto h=add(id,L"EDIT",text,ES_AUTOHSCROLL);SendMessageW(h,EM_SETLIMITTEXT,limit,0);}
   void combo(int id){add(id,L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_VSCROLL);}
   void label(int id,const wchar_t *text){add(id,L"STATIC",text,SS_LEFT);}
-  void set(int id,const std::wstring &s){SetWindowTextW(controls_.at(id),s.c_str());}
+  void set(int id,const std::wstring &s){NativeControls::text(controls_.at(id),s);}
   void set(int id,const wchar_t *s){set(id,std::wstring(s));}
   void set(int id,const Api::Json &v){set(id,wide(v.is_string()?v.get<std::string>():v.dump()));}
   std::wstring field(int id)const{auto h=controls_.at(id);std::wstring s(size_t(GetWindowTextLengthW(h))+1,0);GetWindowTextW(h,s.data(),int(s.size()));s.resize(wcslen(s.c_str()));return s;}
   double number(int id)const{auto s=field(id);size_t end=0;auto value=std::stod(s,&end);if(end!=s.size()||!std::isfinite(value))throw std::runtime_error("Enter a finite number");return value;}
-  void place(int id,float x,float y,float w,float h,bool show=true){auto control=controls_.at(id);if(show){const auto scale=GetDpiForWindow(window_)/96.0f;SetWindowPos(control,nullptr,int(x*scale),int(y*scale),std::max(1,int(w*scale)),std::max(1,int(h*scale)),SWP_NOZORDER|SWP_NOACTIVATE);ShowWindow(control,SW_SHOWNOACTIVATE);}else ShowWindow(control,SW_HIDE);}
+  void place(int id,float x,float y,float w,float h,bool show=true){const auto scale=GetDpiForWindow(window_)/96.0f;NativeControls::place(controls_.at(id),int(x*scale),int(y*scale),int(w*scale),int(h*scale),show);}
   std::pair<float,float> size()const{RECT r{};GetClientRect(window_,&r);const auto scale=96.0f/GetDpiForWindow(window_);return {r.right*scale,r.bottom*scale};}
   void requestPaint(){if(window_&&IsWindowVisible(window_))InvalidateRect(window_,nullptr,FALSE);}
-  void layoutAll(){if(!ready_)return;auto scale=GetDpiForWindow(window_)/96.0f;auto font=CreateFontW(-int(13*scale),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");for(auto [id,h]:controls_)SendMessageW(h,WM_SETFONT,reinterpret_cast<WPARAM>(font),FALSE);if(font_)DeleteObject(font_);font_=font;fontsChanged();layout();requestPaint();}
+  void layoutAll(){if(!ready_)return;const auto dpi=GetDpiForWindow(window_);if(fontDpi_!=dpi){auto scale=dpi/96.0f;auto font=CreateFontW(-int(13*scale),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");for(auto [id,h]:controls_)SendMessageW(h,WM_SETFONT,reinterpret_cast<WPARAM>(font),TRUE);if(font_)DeleteObject(font_);font_=font;fontDpi_=dpi;fontsChanged();}layout();requestPaint();}
   void render(){if(!ready_||!IsWindowVisible(window_)||IsIconic(window_))return;if(WaitForSingleObject(surface_->ready(),0)!=WAIT_OBJECT_0){SetTimer(window_,2,16,nullptr);return;}surface_->begin();paint(*surface_);surface_->finishDrawing();check(surface_->present(),"Present editor tool");}
   virtual void layout()=0;
   virtual void fontsChanged(){}
@@ -52,7 +53,7 @@ protected:
   virtual bool wheel(UINT,float,float,WPARAM){return false;}
   virtual void timer(UINT_PTR){}
   virtual void error(const std::exception &e){status_=wide(e.what());requestPaint();}
-  virtual void drawControl(const DRAWITEMSTRUCT &d){RECT r=d.rcItem;const bool disabled=(d.itemState&ODS_DISABLED)!=0;SetDCBrushColor(d.hDC,RGB(35,49,63));FillRect(d.hDC,&r,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,disabled?RGB(103,119,133):RGB(218,232,241));SelectObject(d.hDC,font_);std::wstring text;
+  virtual void drawControl(const DRAWITEMSTRUCT &d){NativeControls::recordDraw(d.hwndItem);if(d.CtlType==ODT_COMBOBOX){NativeControls::comboItem(d);return;}RECT r=d.rcItem;const bool disabled=(d.itemState&ODS_DISABLED)!=0;SetDCBrushColor(d.hDC,RGB(35,49,63));FillRect(d.hDC,&r,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,disabled?RGB(103,119,133):RGB(218,232,241));SelectObject(d.hDC,font_);std::wstring text;
     if(d.CtlType==ODT_COMBOBOX){if(d.itemID!=UINT(-1)){auto length=SendMessageW(d.hwndItem,CB_GETLBTEXTLEN,d.itemID,0);if(length>=0){text.resize(size_t(length)+1);SendMessageW(d.hwndItem,CB_GETLBTEXT,d.itemID,reinterpret_cast<LPARAM>(text.data()));text.resize(size_t(length));}}}else {text.resize(size_t(GetWindowTextLengthW(d.hwndItem))+1);GetWindowTextW(d.hwndItem,text.data(),int(text.size()));text.resize(wcslen(text.c_str()));}
     r.left+=7;r.right-=5;DrawTextW(d.hDC,text.c_str(),int(text.size()),&r,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|(d.CtlType==ODT_BUTTON?DT_CENTER:DT_LEFT));if(d.itemState&ODS_FOCUS){r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}}
   static LRESULT CALLBACK childProc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR context){
@@ -64,6 +65,13 @@ protected:
     if(m==WM_CHAR&&self.handledCharacterWindow_==h){const auto expected=self.handledCharacter_;self.handledCharacter_=0;self.handledCharacterWindow_=nullptr;if(expected&&(w==expected||(expected==VK_RETURN&&w=='\n')))return 0;}
     if(m==WM_KEYDOWN||m==WM_SYSKEYDOWN)try{
       self.handledCharacter_=0;self.handledCharacterWindow_=nullptr;
+      // An open selector owns navigation/Enter/Escape. In particular, Escape
+      // must dismiss its popup before an editor shortcut can close the tool.
+      auto control=NativeControls::state(h);
+      if(control&&control->combo&&SendMessageW(h,CB_GETDROPPEDSTATE,0,0)){
+        if(w==VK_TAB)SendMessageW(h,CB_SHOWDROPDOWN,FALSE,0);
+        else {if(w==VK_RETURN||w==VK_ESCAPE)self.handledKey(h,w,false);return DefSubclassProc(h,m,w,l);}
+      }
       const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,shift=(GetKeyState(VK_SHIFT)&0x8000)!=0;
       bool handled=(self.musicalKey_&&self.musicalKey_(h,w,(l&(1LL<<30))!=0))||self.key(w,ctrl,shift);
       if(!handled&&w==VK_TAB){auto next=GetNextDlgTabItem(self.window_,h,shift);if(next)SetFocus(next);handled=true;}

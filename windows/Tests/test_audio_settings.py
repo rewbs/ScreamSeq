@@ -87,7 +87,16 @@ class AudioSettingsTests(unittest.TestCase):
             time.sleep(.01)
         self.fail(str(state))
     def press(self,id):
-        self.desktop.send(self.tool(),0x111,id,self.control(id));return self.window()
+        self.desktop.send(self.tool(),0x111,id,self.control(id))
+        # Device enumeration pumps the UI while pending. A sent command can
+        # be observed before that outer operation has finished; wait for the
+        # same readiness that enables the real button before the next action.
+        end=time.monotonic()+8
+        while time.monotonic()<end:
+            state=self.window()
+            if not state['pending']:return state
+            time.sleep(.01)
+        self.fail(str(state))
     def select(self,id,index):
         control=self.control(id);self.desktop.send(control,0x14E,index);self.desktop.send(self.tool(),0x111,id|(1<<16),control);return self.window()
 

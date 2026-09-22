@@ -144,7 +144,7 @@ class GraphMixerAppTests(unittest.TestCase):
         path = self.folder / 'live-mixer.screamseq'
         self.write('document.save', path=str(path))
         pid = self.desktop.launch([os.environ['SCREAMSEQ_TEST_EXE'], '--audio-test-silent', '--automation',
-                                   '--seconds', '30', '--project', str(path)])
+                                   '--audio-test-allow-stop', '--seconds', '30', '--project', str(path)])
         self.client = Client(r'\\.\pipe\ScreamSeq.Api.' + str(pid), timeout=20)
         for _ in range(100):
             try:

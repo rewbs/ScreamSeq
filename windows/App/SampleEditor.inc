@@ -41,8 +41,8 @@
         const auto r=sampleRange();
         if(!controls.contains(sampleStartField) || sampleDraft) return;
         settingSampleFields=true;
-        SetWindowTextW(controls.at(sampleStartField),std::to_wstring(r.first).c_str());
-        SetWindowTextW(controls.at(sampleEndField),std::to_wstring(r.last).c_str());
+        ScreamSeq::NativeControls::text(controls.at(sampleStartField),std::to_wstring(r.first));
+        ScreamSeq::NativeControls::text(controls.at(sampleEndField),std::to_wstring(r.last));
         settingSampleFields=false;
     }
     void sampleFieldChanged() {

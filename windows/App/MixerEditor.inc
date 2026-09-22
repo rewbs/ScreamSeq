@@ -70,11 +70,11 @@
         place(mixerMute,x,r.y+192,88,25,show);place(mixerSolo,x+92,r.y+192,88,25,show);
         place(mixerReload,r.x+r.w-164,r.y+192,76,25,show);place(mixerApply,r.x+r.w-84,r.y+192,76,25,show);
         const bool active=mixerData.value("active",false),selected=mixerSelected()>=0;
-        SetWindowTextW(controls.at(mixerEnable),active?L"Mixer enabled":L"Enable mixer");EnableWindow(controls.at(mixerEnable),!active&&!mixerPending);
+        ScreamSeq::NativeControls::text(controls.at(mixerEnable),active?L"Mixer enabled":L"Enable mixer");EnableWindow(controls.at(mixerEnable),!active&&!mixerPending);
         EnableWindow(controls.at(mixerAdd),active&&!mixerDirty&&!mixerPending);EnableWindow(controls.at(mixerRemove),selected&&!mixerDirty&&!mixerPending&&(mixerDraft.value("kind","")=="group"||mixerDraft.value("kind","")=="return"));
         for(int id=mixerName;id<=mixerTiming;++id)EnableWindow(controls.at(id),selected);
         EnableWindow(controls.at(mixerOutput),selected&&mixerDraft.value("kind","")!="master");EnableWindow(controls.at(mixerApply),selected&&!mixerPending);
-        for(int id:{mixerMute,mixerSolo}){EnableWindow(controls.at(id),selected);SetWindowTextW(controls.at(id),id==mixerMute?(mixerDraft.value("mute",false)?L"Mute on":L"Mute off"):(mixerDraft.value("solo",false)?L"Solo on":L"Solo off"));}
+        for(int id:{mixerMute,mixerSolo}){EnableWindow(controls.at(id),selected);ScreamSeq::NativeControls::text(controls.at(id),id==mixerMute?(mixerDraft.value("mute",false)?L"Mute on":L"Mute off"):(mixerDraft.value("solo",false)?L"Solo on":L"Solo off"));}
         if(show)SetTimer(window,3,50,nullptr);
     }
     bool mixerControlCommand(int id) {
