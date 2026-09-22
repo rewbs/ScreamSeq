@@ -104,18 +104,15 @@
         return focus!=window && (_wcsicmp(name,L"Edit")==0 || _wcsicmp(name,L"ComboBox")==0 || _wcsicmp(name,L"ListBox")==0);
     }
     void advance() {auto n=position();n["row"]=std::min(row+editStep,patternRows()-1);n["following"]=false;navigate(n);}
-    bool enterCell(WPARAM key) {
+    bool enterCell(WPARAM key,bool repeat=false) {
         if(workspaceState.focus!="pattern") return false;
         if(busy) {status=L"Document busy / Stop and navigation remain available";return true;}
         if(column>=3)return enterEffect(key);
         auto c=view->cell(patternIndex,row,channel);
         Json cell={{"pattern",patternIndex},{"row",row},{"channel",channel}};
         if(column==0) {
-            const std::string lower="ZSXDCVGBHNJM",upper="Q2W3ER5T6Y7UI";
-            auto low=lower.find(char(key)),high=upper.find(char(key));
-            if(low!=std::string::npos) cell["note"]=1+octave*12+low;
-            else if(high!=std::string::npos) cell["note"]=1+(octave+1)*12+high;
-            else if(key==VK_OEM_1) cell["note"]=255;
+            if(enterPatternNote(key,repeat))return true;
+            if(key==VK_OEM_1||key=='1') {if(repeat)return true;cell["note"]=255;}
             else return false;
         } else if(column==1) {
             int digit=key>='0' && key<='9' ? int(key-'0') : key>='A' && key<='F' ? int(key-'A'+10) : -1;
@@ -214,6 +211,7 @@
     void refreshChoosers() {
         if(!controls.contains(patternChooser)) return;
         if(listedCatalog!=view->catalogRevision) {
+            refreshTypingSounds();
             const auto sampleSelection=SendMessageW(controls.at(sampleCommandBase),LB_GETCURSEL,0,0);
             const auto orderSelection=SendMessageW(controls.at(orderChooser),CB_GETCURSEL,0,0);
             for(int id:{patternChooser,orderChooser,sampleCommandBase}) SendMessageW(controls.at(id),id==sampleCommandBase ? LB_RESETCONTENT : CB_RESETCONTENT,0,0);

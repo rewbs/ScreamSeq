@@ -271,12 +271,14 @@ class Renderer
 	std::atomic<uint64_t> frames_{0};
 	std::array<std::atomic<bool>, 192> mute_{};
 	std::atomic<bool> fault_{false};
-	std::array<PreviewNote, 128> notes_{};
+	struct PreviewEvent { PreviewNote note; uint32_t epoch; };
+	std::array<PreviewEvent, 128> notes_{};
 	std::array<float, 512> nativeTailLeft_{}, nativeTailRight_{};
 	std::atomic<uint32_t> noteWrite_{0}, noteRead_{0};
 	std::array<uint16_t, 128> noteChannels_{};
 	uint16_t nextPreviewChannel_ = 0;
-	std::atomic<bool> panic_{false};
+	std::atomic<uint32_t> panicEpoch_{0};
+	uint32_t previewEpoch_ = 0; // Audio-thread acknowledgement.
 public:
 	Renderer(const std::vector<std::byte> &bytes, uint32_t sampleRate, uint32_t order = 0, bool preview = false, const std::string &sourcePath = {}, uint32_t sequence = 0, PlaybackRegion region = {}, const NativeSong *native = nullptr);
 	void loop(bool value) noexcept { loop_.store(value, std::memory_order_relaxed); }
@@ -286,7 +288,7 @@ public:
 	const RecordingClock &recordingClock() const { return *recordingClock_; }
 	bool enqueue(const std::vector<Edit> &edits);
 	bool preview(PreviewNote) noexcept;
-	void panic() noexcept { panic_.store(true); }
+	void panic() noexcept { panicEpoch_.fetch_add(1, std::memory_order_release); }
 	uint32_t render(float *interleaved, uint32_t frames) noexcept;
 	void processNativeTail(float *interleaved, uint32_t frames) noexcept;
 	Telemetry telemetry() const noexcept;

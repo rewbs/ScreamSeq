@@ -177,6 +177,7 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   DocumentOperations operations(document);next->commands=operations.invoke("pattern.commands",Json::object());
   for(const auto &effect:next->commands.at("effect"))if(effect.at("parameterMask")!=0)next->effectMasks.at(effect.at("command").get<unsigned>())=effect.at("parameterMask").get<uint8_t>();
   const auto &spec=song.GetModSpecifications();
+  next->noteMin=spec.noteMin;next->noteMax=spec.noteMax;
   for(unsigned n=0;n<256;++n) {
     next->volumeLetters[n]=n<OpenMPT::MAX_VOLCMDS ? wchar_t(spec.GetVolEffectLetter(static_cast<OpenMPT::VolumeCommand>(n))) : L'?';
     next->effectLetters[n]=n<OpenMPT::MAX_EFFECTS ? wchar_t(spec.GetEffectLetter(static_cast<OpenMPT::EffectCommand>(n))) : L'?';

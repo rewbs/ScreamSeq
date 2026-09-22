@@ -80,14 +80,35 @@ int main(){try{
     double panicPeak=0;size_t panicLast=0;for(size_t i=2048;i<released.size();++i)if(std::abs(released[i])>1e-6f){panicPeak=std::max(panicPeak,double(std::abs(released[i])));panicLast=i/2;}
     std::cout<<"panic residual peak="<<panicPeak<<" lastFrame="<<panicLast<<" voices="<<preview.renderer().voicePositions().size()<<'\n';
     check(std::all_of(released.begin()+2048,released.end(),[](float x){return std::abs(x)<1e-6f;}),"panic releases preview voices");
+    for(unsigned i=0;i<64;++i)check(preview.renderer().preview({49,0,100,true,1}),"notes before ordered panic");
+    preview.renderer().panic();
+    check(preview.renderer().preview({49,0,100,true,2}),"note immediately after ordered panic");
+    check(energy(renderPrepared(preview,128,128))>0,"panic preserves notes queued after it in the first callback despite older pending notes");
+    const auto afterPanic=preview.renderer().voicePositions();
+    check(!afterPanic.empty()&&std::all_of(afterPanic.begin(),afterPanic.end(),[](const auto &v){return v.sample==2;}),"panic discards only preceding notes and retains the newer sound");
+    preview.renderer().panic();renderPrepared(preview,48000,128);
     check(preview.renderer().preview({49,0,100,true,1}),"first repeated pitch");
     renderPrepared(preview,48000,128);
     check(preview.renderer().preview({49,0,100,true,1}),"second repeated pitch");
     renderPrepared(preview,48000,128);
     check(preview.renderer().preview({49,0,100,false,1}),"release repeated pitch");
     const auto repeated=renderPrepared(preview,48000,128);
+    double repeatedPeak=0;size_t repeatedLast=0;for(size_t i=2048;i<repeated.size();++i)if(std::abs(repeated[i])>1e-6f){repeatedPeak=std::max(repeatedPeak,double(std::abs(repeated[i])));repeatedLast=i/2;}
+    std::cout<<"repeated residual peak="<<repeatedPeak<<" lastFrame="<<repeatedLast<<" voices="<<preview.renderer().voicePositions().size()<<'\n';
     check(std::all_of(repeated.begin()+2048,repeated.end(),[](float x){return std::abs(x)<1e-6f;}),"retriggered raw sample cannot leave an orphaned looping voice");
   }
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned phase:{1u,17u,128u,480u,968u,1000u})for(bool panic:{false,true}) {
+    HostedPlaybackSettings settings;settings.audition=true;HostedProjectPlayback preview(*doc,state,rate,settings,true);
+    check(preview.renderer().preview({49,0,100,true,1}),"release-phase first note");
+    renderPrepared(preview,rate/20+phase,128);
+    check(preview.renderer().preview({49,0,100,true,1}),"release-phase retrigger");
+    renderPrepared(preview,rate/10,128);
+    if(panic)preview.renderer().panic();else check(preview.renderer().preview({49,0,100,false,1}),"release-phase key up");
+    const auto tail=renderPrepared(preview,rate/10,128);const auto settled=size_t(rate)*1024/48000*2;
+    check(std::all_of(tail.begin()+settled,tail.end(),[](float x){return std::abs(x)<1e-6f;}),"preview cuts finish their ramp across tick phases");
+    check(preview.renderer().voicePositions().empty(),"preview cut retires its voice after ramping");
+  }
+  std::cout<<"PASS preview release ramps at 3 rates, 6 tick phases, note-off and Panic\n";
   for(unsigned rate:{44100u,48000u,96000u}){
     auto dryState=Project::newProjectState(*doc);auto dry=render(*doc,dryState,rate,128),wet=render(*doc,state,rate,128);
     double energy=0,difference=0,worst=0;for(size_t i=0;i<wet.size();++i){check(std::isfinite(wet[i]),"finite PCM");energy+=std::abs(wet[i]);difference+=std::abs(wet[i]-dry[i]);}

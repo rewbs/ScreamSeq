@@ -48,7 +48,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
 	focusPatternCommand=113, nextPanelCommand=114, widerCommand=115, narrowerCommand=116,
 	tallerCommand=117, shorterCommand=118, openCommand=119, saveCommand=120, saveAsCommand=121,
     undoCommand=122, redoCommand=123, copyCommand=124, pasteCommand=125, clearCommand=126,
-    patternChooser=130, orderChooser=131, octaveChooser=132, stepChooser=133, effectColumnChooser=134, sampleCommandBase=200,
+    patternChooser=130, orderChooser=131, octaveChooser=132, stepChooser=133, effectColumnChooser=134, soundChooser=135, liveKeysCommand=507, sampleCommandBase=200,
     patternReverse=140,patternRotate=141,patternExpand=142,patternShrink=143,patternInsertRows=144,patternDeleteRows=145,patternTransposeUp=146,patternTransposeDown=147,
     patternPasteMix=148,patternPasteMerge=149,
     sampleImportCommand=201,sampleAllCommand=202,sampleReverseCommand=203,sampleNormalizeCommand=204,
@@ -249,7 +249,7 @@ public:
 			{"panels",{"notes","samples"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
 			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",workspaceState.focus},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
-			{"locations",locations},{"liveKeyboard",false},
+			{"locations",locations},{"liveKeyboard",liveKeyboard},{"musicalTyping",typingSnapshot()},
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
 			{"octave",octave},{"editStep",editStep},{"documentBusy",busy},
             {"sampleEditor",sampleEditorSnapshot()},
@@ -343,7 +343,7 @@ public:
             MSG message{};
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
                 if(message.message==WM_QUIT) {PostQuitMessage(int(message.wParam));break;}
-                if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && handleKey(message.wParam)) continue;
+                if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
                 if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&releaseAuditionKey(message.wParam))continue;
                 TranslateMessage(&message);DispatchMessageW(&message);
             }
@@ -365,7 +365,7 @@ public:
         row=std::min(row,patternRows()-1);channel=std::min(channel,view->channels-1);
         column=std::min(column,2u+2u*view->effectColumns.at(channel));
         anchorRow=std::min(anchorRow,patternRows()-1);anchorChannel=std::min(anchorChannel,view->channels-1);
-        if(previous!=documentId) {row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;}
+        if(previous!=documentId) {releaseTypedNotes();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;}
         else if(oldPosition!=position()) ++contextRevision;
         revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();
     }
@@ -408,6 +408,7 @@ public:
 		for(size_t i = 0; i < size_t(frames) * 2; ++i) samples[i] *= 0.1f;
 	}
     #include "Audition.inc"
+    #include "MusicalTyping.inc"
 	void play() { play(Json::object()); }
     void play(const Json &settings) override {startPlayback(settings,false);}
     void startPlayback(const Json &settings,bool audition) {
@@ -436,8 +437,9 @@ public:
 			status = (audition?L"Audition / song position stopped / ":L"Playing / monitor -20 dB / ") + std::to_wstring(lastRate) + L" Hz / " + std::to_wstring(lastPeriod) + L" frames";
 		} catch(...) { device.close(); throw; }
 	}
-	void stop() override {
+    void stop() override {
         frameRequested=true;
+        typedNotes.clear();
         ++stopGeneration;pendingAuditionCount=0;auditionOnly=false;
 		device.stop(); lastAudio = device.stats();
 		status = L"Stopped / Space: play from song start / cursor remains independent";
@@ -455,6 +457,7 @@ public:
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
     void openInstrumentEnvelope(){
         if(!instrumentEnvelopeWindow)instrumentEnvelopeWindow=std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);});
+        connectTyping(*instrumentEnvelopeWindow,[this]{return instrumentEnvelopeWindow->musicalTarget();});
         instrumentEnvelopeWindow->openAt();
     }
     std::unique_ptr<ScreamSeq::AuditionWindow> auditionWindow;
@@ -462,13 +465,14 @@ public:
         if(!document.empty()&&(document!=documentId||revision!=view->session.revision))throw std::runtime_error("Audition source changed / Reload the captured editor");
         const auto &catalog=view->session.document.at(sample?"samples":"instruments");
         if(slot||!identity.empty()){const auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &v){return v.at("index")==slot&&(identity.empty()||v.at("id")==identity);});if(found==catalog.end())throw std::runtime_error("Audition target is unavailable");identity=found->at("id");}
-        if(!auditionWindow)auditionWindow=std::make_unique<ScreamSeq::AuditionWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::AuditionWindow::Context{documentId,view->session.revision,selectedSample(),unsigned(view->cell(patternIndex,row,channel).instrument),stopGeneration,view->session.document.at("samples"),view->session.document.at("instruments")};});
+        if(!auditionWindow)auditionWindow=std::make_unique<ScreamSeq::AuditionWindow>(window,[this](const auto &method,const auto &p){return pianoOperation(method,p);},[this]{return ScreamSeq::AuditionWindow::Context{documentId,view->session.revision,selectedSample(),unsigned(view->cell(patternIndex,row,channel).instrument),stopGeneration,view->session.document.at("samples"),view->session.document.at("instruments")};});
         auditionWindow->openAt(sample,std::move(identity));
     }
-    bool releaseAuditionKey(WPARAM key){return auditionWindow&&auditionWindow->releaseKey(key);}
+    bool releaseAuditionKey(WPARAM key){const bool typed=releaseTypedKey(key);return (auditionWindow&&auditionWindow->releaseKey(key))||typed;}
     std::unique_ptr<ScreamSeq::SampleDetailWindow> sampleDetailWindow;
     void openSampleDetail(){
         if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);});
+        connectTyping(*sampleDetailWindow,[this]{return sampleDetailWindow->musicalTarget();});
         sampleDetailWindow->openAt();
     }
     std::unique_ptr<ScreamSeq::AbsoluteAutomationWindow> absoluteAutomationWindow;
@@ -597,11 +601,13 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             if(LOWORD(wp)==sampleStartField || LOWORD(wp)==sampleEndField) {
                 if(HIWORD(wp)==EN_CHANGE) app->sampleFieldChanged();return 0;
             }
-            if(LOWORD(wp)>=patternChooser && LOWORD(wp)<=effectColumnChooser && HIWORD(wp)!=CBN_SELCHANGE) return 0;
+            if(LOWORD(wp)>=patternChooser && LOWORD(wp)<=soundChooser && HIWORD(wp)!=CBN_SELCHANGE) return 0;
             if(LOWORD(wp)==sampleCommandBase && HIWORD(wp)!=LBN_SELCHANGE && HIWORD(wp)!=LBN_DBLCLK) return 0;
             app->command(LOWORD(wp));return 0;
-		case WM_KEYDOWN:case WM_SYSKEYDOWN: if(app->key(wp)) return 0;break;
+		case WM_KEYDOWN:case WM_SYSKEYDOWN: if(app->key(wp,(lp&(1LL<<30))!=0)) return 0;break;
         case WM_KEYUP:case WM_SYSKEYUP:if(app->releaseAuditionKey(wp))return 0;break;
+        case WM_KILLFOCUS:if(!app->liveKeyboard)app->releaseTypedNotes(window);break;
+        case WM_ACTIVATEAPP:if(!wp)app->releaseTypedNotes();break;
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
         case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->graphLaneClick(x,y,true))app->noteMouseDown(x,y,true);return 0;}
@@ -704,7 +710,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			MSG message{};
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }
-				if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && app.handleKey(message.wParam)) continue;
+				if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && app.handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
 				if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&app.releaseAuditionKey(message.wParam))continue;
 				TranslateMessage(&message); DispatchMessageW(&message);
 			}

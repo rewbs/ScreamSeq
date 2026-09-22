@@ -103,3 +103,12 @@ rendering or timeline walks. The Windows frontend must use these same semantics.
 The Mac grid has separate code/value fields at `3+2*column` / `4+2*column`.
 Clipboard payload `ScreamSeq Pattern 2` carries extra/precise FX plus bindings;
 structural pattern transforms move all columns in one Undo transaction.
+
+Manual preview notes use a 128-entry SPSC queue, with at most 32 active events
+processed per render. Events carry the producer's Panic generation; the callback
+releases older preview voices and skips older events while retaining notes
+accepted after Panic. Preview cuts use the native volume ramp and fade-to-zero
+state, keeping the moving sample alive through a tracker-tick boundary until
+the ramp finishes. These preview rules do not change ordinary song note/cut
+semantics. Windows typing additionally captures stable sound identity and native
+input ownership on the UI thread; see `windows/MUSICAL_TYPING_PROGRESS.md`.

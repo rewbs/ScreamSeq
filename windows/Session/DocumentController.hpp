@@ -61,6 +61,7 @@ struct DocumentView {
   uint64_t catalogRevision=0;
   size_t cacheBytes=0;
   unsigned channels=0, instruments=0;
+  unsigned noteMin=1,noteMax=120;
   const Api::PatternSnapshot &pattern(unsigned p) const {return *patterns.at(p);}
   Tracker::Cell cell(unsigned p,unsigned r,unsigned c) const;
   std::wstring displayCell(unsigned p,unsigned r,unsigned c) const;

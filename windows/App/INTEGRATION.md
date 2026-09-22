@@ -42,6 +42,14 @@ window now draws live voice positions from the same bounded snapshot as the
 instrument envelopes. Idle audition audio does not continuously present an
 unchanged workspace. See `../AUDITION_PROGRESS.md`.
 
+`MusicalTyping.inc` connects pattern entry to the selected sound and adds
+preview typing in the sample dock, detailed sample window and instrument
+envelope window. The highlighted Live keys mode retains musical input across
+main workspace panels; text and selection controls keep their normal keys.
+Original sound/voice ownership survives worker waits and focus changes. Typed
+edits use `pattern.apply`, Undo and native persistence; audition is transient.
+See `../MUSICAL_TYPING_PROGRESS.md` for the current qualification and limits.
+
 The native song automation window uses `AbsoluteAutomationWindow.hpp` and
 `PluginOperations::invokeAutomation` for `automation.get` /
 `automation.replaceLane`. Its 48 kHz/native-value step lane remains in the
@@ -249,8 +257,9 @@ state remain separate. Removed Return targets reject safely after Undo.
 
 The sample editor draws bounded live voice cursors from shared atomic telemetry;
 overlapping voices and sample loops use actual positions. Stopped transport
-publishes `audioActive:false` and no `voicePositions`. Envelope cursors and
-audition UI remain open work.
+publishes `audioActive:false` and no `voicePositions`. Envelope cursors, the
+audition piano and pattern/dock musical typing are implemented in the reports
+linked above. Browser preview and MIDI recording remain open work.
 
 `--vst3-test-cache <absolute path>` selects an isolated registry for inspection,
 offline-hosted or audio qualification mode. It does not scan automatically.

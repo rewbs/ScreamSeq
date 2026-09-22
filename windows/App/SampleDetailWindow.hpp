@@ -68,7 +68,7 @@ private:
       stroke_.clear();dragBefore_.clear();dragging_=selecting_=fields_=false;edited_.clear();++generation_;report_=Json::object();
       if(!same||channel_==2&&data.at("channels")==1)channel_=0;
       sampleChoices();syncFields();pointFields(region_.start,0);describeTarget();readWave();
-    });status(L"Captured sample / edits use document Undo; close keeps drafts");
+    });status(L"Captured sample / F6: waveform or text focus / Z–M, Q–U: audition saved sound");
   }
   void applyRange(){const auto first=integerField(rangeStart,region_.frames),last=integerField(rangeEnd,region_.frames);require(first<=last,"Range end must follow its start");region_.first=first;region_.last=last;clearFields({rangeStart,rangeEnd});syncFields();}
   void viewport(unsigned first,unsigned last){require(stroke_.empty()&&!dragging_,"Apply or discard the drawing before changing its view");require(first<last&&last<=region_.frames,"Visible range must be nonempty and inside the sample");region_.start=first;region_.end=last;clearFields({viewStart,viewEnd});++generation_;syncFields();refreshWave();}
@@ -179,6 +179,7 @@ public:
     options(channels,{L"Both channels",L"Left",L"Right"});options(interpolation,{L"Linear draw",L"Step draw"});options(operation,{L"Reverse",L"Normalize",L"Gain",L"Fade in",L"Fade out",L"Invert",L"Remove DC",L"Smooth",L"Trim",L"Silence",L"Swap channels",L"Copy left",L"Copy right",L"Stereo average"});options(fadeCurve,{L"Linear fade",L"Smooth",L"Exponential",L"Logarithmic"});options(crossLoop,{L"Normal loop",L"Sustain loop"});options(crossMode,{L"Preserve duration",L"Overlap"});options(crossCurve,{L"Linear",L"Equal power"});options(snapMode,{L"Zero crossing",L"Grid"});options(snapDirection,{L"Nearest",L"Before",L"After"});options(loopDirection,{L"Forward",L"Ping pong",L"Reverse"});options(pasteMode,{L"Insert",L"Overwrite",L"Mix",L"Replace"});finish();
   }
   void openAt(){if(id_.empty())load(true);show();}
+  Json musicalTarget()const{return {{"document",captured_.document},{"revision",captured_.revision},{"sample",true},{"slot",slot_},{"id",id_}};}
   void playback(const std::string &document,const Json &samples,const std::vector<Tracker::VoicePosition> &voices){if(!visible())return;std::vector<double> next;if(document==captured_.document&&std::any_of(samples.begin(),samples.end(),[&](const auto &v){return v.at("id")==id_&&v.at("index")==slot_;}))for(const auto &v:voices)if(v.sample==slot_)next.push_back(v.sampleFrame);if(next!=playbackFrames_){playbackFrames_=std::move(next);requestPaint();}}
   Json snapshot()const{Json points=Json::array();for(const auto &[frame,value]:stroke_)points.push_back({{"frame",frame},{"value",value}});return {{"visible",visible()},{"sample",slot_},{"id",id_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"stale",!current()},{"pending",pending_},{"fieldDraft",fields_},{"drawing",drawing_},{"dragging",dragging_},{"points",points},{"start",region_.first},{"end",region_.last},{"frames",region_.frames},{"viewStart",region_.start},{"viewEnd",region_.end},{"channels",channelName()},{"precise",precise()},{"waveStart",waveStart_},{"waveEnd",waveEnd_},{"playbackFrames",playbackFrames_},{"waveBins",bins_},{"peaks",peaks_},{"canvas",Json::array({canvas_.x,canvas_.y,canvas_.w,canvas_.h})},{"status",utf8(status_)},{"report",report_}};}
 };

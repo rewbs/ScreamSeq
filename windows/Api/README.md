@@ -595,3 +595,11 @@ stable pattern/bus targets, row/lane, draft/pending/stale flags and status.
 `workspace.get.graphLanes` reports the row-aligned strip bounds, lane identities,
 selected/first lane and visible formatted commands. These are Windows UI
 observations, not a new musical command schema. See `../GRAPH_COMMANDS_PROGRESS.md`.
+
+`workspace.get.liveKeyboard` now reports the native Live keys mode. The
+Windows-only `musicalTyping` observation contains the selected sound's `sample`
+kind flag, `slot`, stable `id`, module `noteMin`/`noteMax`, and `held` physical
+inputs with captured sound/pitch and pending/started flags. These are transient
+UI fields, outside document persistence and Undo. Native pattern typing uses
+the existing `pattern.apply`; explicit audition uses `transport.note` and
+`transport.panic`. See `../MUSICAL_TYPING_PROGRESS.md`.

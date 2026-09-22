@@ -10,6 +10,17 @@ device and plugin hosting belong to each platform. See
 [qualification evidence](UPSTREAM_PLUGIN_QUALIFICATION.md) and
 [current app interfaces](App/INTEGRATION.md).
 
+Latest continuation: `MUSICAL_TYPING_PROGRESS.md` adds selected-sound pattern
+entry, sample/instrument editor typing and main-workspace Live keys. A fresh
+fetch still finds no newer upstream commits. The installed Contourtonist,
+OrbitCab and Surge XT binary hashes were rechecked before current app testing.
+Next implementation priorities are native sample properties and batch/replacement import,
+instrument import/keymap presentation, then MIDI/device/recording and workspace
+parity. Existing plugin and cross-platform release gates remain in force.
+The Mac source confirms sample settings and batch import. Sample export is a
+separate enhancement; no existing Mac sample-export UI/API was found in this
+review, so it is not treated as an established parity gap.
+
 ## What changed upstream and how it changes the work
 
 | Landed capability | Windows status after integration | Remaining work |
@@ -111,10 +122,12 @@ preserve concurrent edit guards.
    snapping and clipboard controls are implemented in `SAMPLE_DETAIL_PROGRESS.md`;
    their current qualification is recorded there. Native sample/instrument audition
    and detailed voice markers are implemented in `AUDITION_PROGRESS.md`. Complete
-   pattern/dock musical typing, sample property/import/export controls, device selection, MIDI input
+   sample property/import/export controls, device selection, MIDI input
    and mapping, precise recording/recovery, floating
    and persisted docks, accessibility, configurable keys and command palette
    parity. Keep cursor, selection, focus, pins and playback independent.
+   Pattern/dock typing and main-workspace Live keys are implemented in
+   `MUSICAL_TYPING_PROGRESS.md`; broader floating-tool keyboard behavior remains.
 5. **Release qualification.** Fresh Mac and Windows builds against the same
    source, reciprocal project reopen and offline comparisons, commercial-plugin
    matrix, endpoint switching, long loaded playback, loopback, foreground

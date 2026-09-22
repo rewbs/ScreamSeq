@@ -1,6 +1,15 @@
 # Windows continuation — 2026-09-21
 
-Latest continuation: `AUDITION_PROGRESS.md` records the native sample/instrument
+Latest continuation: `MUSICAL_TYPING_PROGRESS.md` records selected-sound pattern
+entry, sample/instrument musical typing, main-workspace Live keys and voice
+ownership through focus changes and worker waits. The final build passes all
+29 native tests and 17 focused audition/typing tests. Its full application run
+has 227 passes and one routing-window visibility failure out of 228 cases;
+the routing module passes separately, with the intermittent failure retained
+as unresolved. The preserved package is
+`bin/windows-checkpoints/musical-typing-20260921/`. Full parity remains active.
+
+Previous continuation: `AUDITION_PROGRESS.md` records the native sample/instrument
 piano, shared audition API, preview cut/retrigger corrections, detailed sample
 voice markers and idle presentation behavior. All 29 native CTests pass. The
 full app run covers 221 cases (220 passes, one formula-test worker-busy error);

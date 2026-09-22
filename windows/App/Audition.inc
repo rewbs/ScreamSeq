@@ -6,6 +6,7 @@
     size_t pendingAuditionCount=0;
     uint64_t auditionDropped=0;
     bool auditionWasAnimating=false;
+    std::array<uint64_t,121> auditionVoices{},pianoVoices{};
     bool auditionAnimating()const {
         if(!device.running()||!renderer)return false;const auto t=renderer->telemetry();
         return t.voices||t.left>1e-6f||t.right>1e-6f;
@@ -15,6 +16,8 @@
         return !auditionOnly||auditionWasAnimating||auditionAnimating()||(preparedPlayback&&(preparedPlayback->failed()||preparedPlayback->chain().latencyChangePending()));
     }
     void panicAudition() {
+        typedNotes.clear();
+        for(auto &voice:auditionVoices)++voice;
         pendingAuditionCount=0;if(auditionPreparing)++stopGeneration;
         if(renderer)renderer->panic();
         frameRequested=true;
@@ -42,11 +45,13 @@
         Tracker::PreviewNote event{uint8_t(note),uint16_t(sample?0:slot),uint8_t(velocity),on,uint16_t(sample?slot:0)};
         if(auditionPreparing){
             if(pendingAuditionCount==pendingAudition.size()){++auditionDropped;panicAudition();++stopGeneration;throw ScreamSeq::Api::ApiError(-32003,"Audition preparation queue full / notes released");}
+            if(on&&velocity)++auditionVoices[note];
             pendingAudition[pendingAuditionCount++]=event;return result(true);
         }
         if(!on||!velocity){if(!device.running()||!renderer)return result(false);if(!renderer->preview(event)){++auditionDropped;throw ScreamSeq::Api::ApiError(-32003,"Audition queue full / preview voices released");}frameRequested=true;return result(true);}
         if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy / note not queued");
         if(inspection)throw ScreamSeq::Api::ApiError(-32003,"Inspection mode: hardware output disabled");
+        ++auditionVoices[note];
         if(!device.running()){
             auditionPreparing=true;pendingAuditionCount=1;pendingAudition[0]=event;
             try{startPlayback(Json::object(),true);auditionPreparing=false;}
@@ -55,4 +60,12 @@
             pendingAuditionCount=0;
         }else if(!renderer->preview(event)){++auditionDropped;throw ScreamSeq::Api::ApiError(-32003,"Audition queue full / preview voices released");}
         frameRequested=true;return result(true);
+    }
+    Json pianoOperation(const std::string &method,const Json &p) {
+        if(method=="transport.note") {
+            const auto note=p.at("note").get<unsigned>();
+            if(p.at("on")==true)pianoVoices.at(note)=auditionVoices.at(note)+1;
+            else if(pianoVoices.at(note)!=auditionVoices.at(note))return {{"queued",false}};
+        }
+        return documentOperation(method,p);
     }

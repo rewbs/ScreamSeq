@@ -50,10 +50,12 @@
 		place(composeCommand,174,52,80,26);place(patternCommand,258,52,106,26);place(soundCommand,368,52,108,26);
         place(mixerCommand,564,52,76,26);
         place(parameterAutomationCommand,644,52,96,26);
+        place(liveKeysCommand,744,52,92,26);
         place(openCommand,10,292,68,25);place(saveCommand,82,292,74,25);place(saveAsCommand,10,322,146,25);
         place(undoCommand,10,354,68,25);place(redoCommand,82,354,74,25);
         place(patternChooser,10,389,146,250);place(orderChooser,10,420,146,250);
         place(octaveChooser,10,452,70,230);place(stepChooser,84,452,72,230);
+        place(soundChooser,10,484,146,230);
 		auto g=geometry(); bool show=workspaceState.visible();
         const auto grid=patternGridRect();place(effectColumnChooser,grid.x+grid.w-82,grid.y+3,76,230);
         place(graphCommandsCommand,grid.x+grid.w-172,grid.y+3,84,23);
@@ -97,6 +99,7 @@
         layoutGraphControls(place);
         layoutGraphCurveControls(place);
 		SetWindowTextW(controls.at(followCommand),follow ? L"Follow on [F]" : L"Detached [F]");
+        SetWindowTextW(controls.at(liveKeysCommand),liveKeyboard?L"LIVE KEYS ON":L"Live keys");
 		SetWindowTextW(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
 		for(auto [id,h]:controls) InvalidateRect(h,nullptr,FALSE);
 	}
@@ -110,7 +113,7 @@
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
 			{notesCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
-            {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},
+            {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},{liveKeysCommand,L"Live keys"},
             {openCommand,L"Open"},{saveCommand,L"Save"},{saveAsCommand,L"Save As"},{undoCommand,L"Undo"},{redoCommand,L"Redo"},{graphCommandsCommand,L"Graphs…"},{parameterAutomationCommand,L"Automation…"},
             {sampleImportCommand,L"Import…"},{sampleAllCommand,L"All"},{sampleReverseCommand,L"Reverse"},{sampleNormalizeCommand,L"Normalize"},
             {sampleFadeInCommand,L"Fade in"},{sampleFadeOutCommand,L"Fade out"},{sampleTrimCommand,L"Trim"},{sampleLoopCommand,L"Set loop"},{sampleRangeCommand,L"Set range"},
@@ -120,7 +123,7 @@
             controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"0",WS_CHILD|WS_TABSTOP|ES_NUMBER|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
             SendMessageW(controls.at(id),EM_SETLIMITTEXT,10,0);
         }
-        for(int id:{patternChooser,orderChooser,octaveChooser,stepChooser,effectColumnChooser}) controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
+        for(int id:{patternChooser,orderChooser,octaveChooser,stepChooser,effectColumnChooser,soundChooser}) controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(unsigned i=1;i<=8;++i) {auto label=std::to_wstring(i)+L" FX";SendMessageW(controls.at(effectColumnChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
         for(unsigned i=0;i<=9;++i) {auto label=L"Oct "+std::to_wstring(i);SendMessageW(controls.at(octaveChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
         for(unsigned i=0;i<=16;++i) {auto label=L"Step "+std::to_wstring(i);SendMessageW(controls.at(stepChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
@@ -137,6 +140,7 @@
         installGraphControls();
         installGraphCurveControls();
 		std::vector<ScreamSeq::WorkspaceCommand> commands={
+            {liveKeysCommand,L"Keyboard / Toggle live musical typing",L"Ctrl+Alt+L"},
             {graphCommand,L"Graph / Open reusable routing and modulation canvas",L""},
             {mixerCommand,L"Mix / Open mixer controls and routing",L""},
             {mixerRouting,L"Mix / Song routing overview, inserts, sends and sidechains",L""},
@@ -171,7 +175,7 @@
             {saveAsCommand,L"File / Save As",L"Ctrl+Shift+S"},{undoCommand,L"Edit / Undo",L"Ctrl+Z"},{redoCommand,L"Edit / Redo",L"Ctrl+Y"},
             {copyCommand,L"Pattern / Copy rectangular cells",L"Ctrl+C"},{pasteCommand,L"Pattern / Paste rectangular cells",L"Ctrl+V"},{clearCommand,L"Pattern / Clear selection",L"Delete"},
             {sampleImportCommand,L"Sample / Import audio",L"Ctrl+I"},{sampleAllCommand,L"Sample / Select all",L"Ctrl+A in samples"},
-            {sampleReverseCommand,L"Sample / Reverse selection",L"R in samples"},{sampleNormalizeCommand,L"Sample / Normalize selection",L"N in samples"},
+            {sampleReverseCommand,L"Sample / Reverse selection",L""},{sampleNormalizeCommand,L"Sample / Normalize selection",L""},
             {sampleFadeInCommand,L"Sample / Fade in",L""},{sampleFadeOutCommand,L"Sample / Fade out",L""},
             {sampleTrimCommand,L"Sample / Trim to selection",L""},{sampleLoopCommand,L"Sample / Set normal loop to selection",L"L in samples"},
             {sampleSustainSetCommand,L"Sample / Set sustain loop to selection",L"Shift+L in samples"},
@@ -199,6 +203,8 @@
             else if(id==sampleDetailCommand){openSampleDetail();return;}
             else if(id==auditionCommand){openAudition();return;}
             else if(id==instrumentEnvelopeCommand){openInstrumentEnvelope();return;}
+            else if(id==liveKeysCommand){liveKeyboard=!liveKeyboard;if(!liveKeyboard)releaseTypedNotes();status=liveKeyboard?L"Live keys / selected sound plays across workspace panels / Ctrl+Alt+L releases":L"Keyboard follows focus / pattern entry and sample audition";}
+            else if(id==soundChooser)selectTypingSound();
             else if(id==graphLanesFocus){if(!view->graphPattern->lanes.empty()){workspaceState.focus="graphLanes";revealGraphLane();}else{openGraphCommands();return;}}
             else if(id==openCommand) openFile();
             else if(id==saveCommand || id==saveAsCommand) saveFile(id==saveAsCommand);
@@ -232,25 +238,28 @@
 			else if(id==pinCommand) workspace("workspace.panel",{{"panel",workspaceState.active},{"pinned",!workspaceState.panel(workspaceState.active).pinned}});
 			else if(id==cursorCommand) workspace("workspace.panel",{{"panel",workspaceState.active},{"follow",true}});
 			else if(id==returnCommand) workspace("workspace.panel",{{"panel",workspaceState.active},{"return",true}});
-			else if(id==paletteCommand) { palette->show();return; }
+			else if(id==paletteCommand) { releaseTypedNotes();palette->show();return; }
 			else if(id==focusPatternCommand) workspaceState.focus="pattern";
 			else if(id==nextPanelCommand) workspaceState.focus=workspaceState.focus=="pattern" && workspaceState.visible() ? workspaceState.active : "pattern";
 			else if(id==widerCommand || id==narrowerCommand) workspaceState.rightWidth=std::clamp(workspaceState.rightWidth+(id==widerCommand ? 24 : -24),300.0f,650.0f);
 			else if(id==tallerCommand || id==shorterCommand) workspaceState.lowerHeight=std::clamp(workspaceState.lowerHeight+(id==tallerCommand ? 24 : -24),128.0f,480.0f);
 			else if(id==sampleCommandBase) {
 				workspaceState.show("samples",position(),cursorSample(),true);auto &p=workspaceState.panel("samples");auto chosen=SendMessageW(controls.at(sampleCommandBase),LB_GETCURSEL,0,0);if(chosen!=LB_ERR) p.sample=unsigned(SendMessageW(controls.at(sampleCommandBase),LB_GETITEMDATA,chosen,0));p.pinned=true;
+                if(typingSample&&view->samples.contains(p.sample)){typingSoundId=view->samples.at(p.sample).at("id");refreshTypingSounds();}
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=curvePattern&&id<=curveReference) && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouting) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginReconnect) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
+            if(!(id>=curvePattern&&id<=curveReference) && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouting) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginReconnect) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
-    bool handleKey(WPARAM code) {
-        try {return key(code);} catch(const std::exception &e) {status=wide(e.what());return true;}
+    bool handleKey(WPARAM code,bool repeat=false) {
+        try {return key(code,repeat);} catch(const std::exception &e) {status=wide(e.what());return true;}
     }
-	bool key(WPARAM key) {
+	bool key(WPARAM key,bool repeat=false) {
         frameRequested=true;
 		const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,alt=(GetKeyState(VK_MENU)&0x8000)!=0,shift=(GetKeyState(VK_SHIFT)&0x8000)!=0;
+        if(ctrl&&alt&&key=='L'){if(!repeat)command(liveKeysCommand);return true;}
+        if(workspaceMusicalKey(key,repeat))return true;
         if(GetFocus()!=window && IsChild(window,GetFocus())) {
             if(key==VK_TAB) {auto next=GetNextDlgTabItem(window,GetFocus(),shift);if(next) SetFocus(next);return true;}
             wchar_t klass[32]{};GetClassNameW(GetFocus(),klass,32);
@@ -288,11 +297,11 @@
 		if(key==VK_ESCAPE && dragging==4) {sampleRange()=sampleDragBefore;dragging=0;ReleaseCapture();refreshSampleFields();return true;}
 		if(key==VK_ESCAPE && dragging) { workspaceState.rightWidth=dragRight;workspaceState.lowerHeight=dragLower;dragging=0;ReleaseCapture();layoutControls();return true; }
 		if(key==VK_ESCAPE) {if(!effectPrefix.empty()){effectPrefix.clear();status=L"Effect prefix cancelled";return true;}if(pluginDraft){pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;} stop();command(focusPatternCommand);return true; }
-		if(!ctrl && !alt && key==VK_SPACE) { if(device.running()&&!auditionOnly) stop();else command(playCommand);return true; }
+		if(!ctrl && !alt && key==VK_SPACE) { if(!repeat){if(device.running()&&!auditionOnly) stop();else command(playCommand);}return true; }
 		if(!ctrl && !alt && key=='F' && (column==0 || workspaceState.focus!="pattern")) { command(followCommand);return true; }
         if(workspaceState.focus=="samples") {
             if(ctrl && (key=='A'||key=='C'||key=='V'||key=='X')) {command(key=='A'?sampleAllCommand:key=='C'?sampleCopyCommand:key=='V'?samplePasteCommand:sampleCutCommand);return true;}
-            if(!ctrl && !alt && (key=='R'||key=='N'||key=='L'||key==VK_DELETE)) {command(key=='R'?sampleReverseCommand:key=='N'?sampleNormalizeCommand:key=='L'?(shift?sampleSustainSetCommand:sampleLoopCommand):sampleClearCommand);return true;}
+            if(!ctrl && !alt && (key=='L'||key==VK_DELETE)) {command(key=='L'?(shift?sampleSustainSetCommand:sampleLoopCommand):sampleClearCommand);return true;}
             if(!ctrl && !alt && key==VK_TAB) {SetFocus(controls.at(sampleStartField));return true;}
             if(!ctrl && !alt && (key==VK_LEFT||key==VK_RIGHT||key==VK_HOME||key==VK_END)) {
                 auto &r=sampleRange();const unsigned step=shift ? 1u : std::max(1u,r.frames/256);
@@ -318,7 +327,7 @@
 		else if(key==VK_TAB) { c=shift ? (channel+channels-1)%channels : (channel+1)%channels;col=0; }
 		else if(key==VK_LEFT) { if(col) --col;else if(c) {--c;col=2+2*view->effectColumns.at(c);} }
 		else if(key==VK_RIGHT) { if(col<2+2*view->effectColumns.at(c)) ++col;else if(c+1<channels) {++c;col=0;} }
-		else return enterCell(key);
+		else return enterCell(key,repeat);
 		const unsigned ar=selecting ? anchorRow : row,ac=selecting ? anchorChannel : channel;
 		n["row"]=r;n["channel"]=c;n["column"]=col;n["following"]=false;navigate(n);
 		selecting=shift && key!=VK_TAB;anchorRow=ar;anchorChannel=ac;ensureCursorVisible();return true;
@@ -384,7 +393,7 @@
             SelectObject(d.hDC,old);if(d.itemState&ODS_FOCUS) {InflateRect(&r,-1,-1);DrawFocusRect(d.hDC,&r);}return;
         }
 		wchar_t text[128]{};GetWindowTextW(d.hwndItem,text,128);
-		bool active=(d.CtlID==composeCommand && workspaceState.layout=="Compose") || (d.CtlID==patternCommand && workspaceState.layout=="Pattern focus") || (d.CtlID==soundCommand && workspaceState.layout=="Sound design") || (d.CtlID==notesCommand && workspaceState.active=="notes") || (d.CtlID==samplesCommand && workspaceState.active=="samples");
+		bool active=(d.CtlID==liveKeysCommand && liveKeyboard) || (d.CtlID==composeCommand && workspaceState.layout=="Compose") || (d.CtlID==patternCommand && workspaceState.layout=="Pattern focus") || (d.CtlID==soundCommand && workspaceState.layout=="Sound design") || (d.CtlID==notesCommand && workspaceState.active=="notes") || (d.CtlID==samplesCommand && workspaceState.active=="samples");
 		SetDCBrushColor(d.hDC,(d.itemState&ODS_SELECTED) ? RGB(66,80,94) : active ? RGB(46,67,77) : RGB(42,51,63));FillRect(d.hDC,&d.rcItem,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
 		SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,(d.itemState&ODS_DISABLED) ? RGB(111,126,140) : active ? RGB(125,228,206) : RGB(215,225,235));auto old=SelectObject(d.hDC,controlFont);
 		RECT r=d.rcItem;r.left+=6;r.right-=6;DrawTextW(d.hDC,text,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);SelectObject(d.hDC,old);

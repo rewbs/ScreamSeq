@@ -9,9 +9,8 @@
 		s.fill(0,44,164,height-44,0x1a202a);
 		s.uiText(L"PROJECT",12,58,142,muted);s.uiText(wide(view->session.document.at("title").get<std::string>()),12,79,142);
 		s.uiText(std::to_wstring(view->channels)+L" channels",12,99,142,muted);s.uiText(L"SAMPLES",12,130,142,muted);
-		s.uiText(view->dirty ? L"Unsaved changes" : L"Saved baseline",12,491,142,gold);
-        s.uiText(busy ? L"Document worker busy" : L"Z-M / Q-U: note entry",12,513,142,muted);
-        if(inspection) s.uiText(L"QA clipboard is private",12,535,142,muted);
+        if(height>630)s.uiText(busy ? L"Document worker busy" : L"Z-M / Q-U: selected sound",12,519,142,muted);
+        if(inspection&&height>670)s.uiText(L"QA clipboard is private",12,541,142,muted);
 		s.uiText(L"OpenMPT audio engine",12,height-68,142,muted);
 		s.uiText(std::to_wstring(int(view->session.document.at("tempo").get<double>()))+L" BPM   /   "+std::to_wstring(view->session.document.at("speed").get<unsigned>())+L" ticks   /   "+wide(view->session.document.at("format").get<std::string>()),846,58,std::max(1.0f,width-854),muted);
 		// Virtualized grid: field colors and geometry are shared by hit-testing.
@@ -102,6 +101,6 @@
 			if(workspaceState.visible()) s.fill(g.verticalDivider.x,g.verticalDivider.y,g.verticalDivider.w,g.verticalDivider.h,0x344151);
 		}
 		s.fill(164,height-40,width-164,40,0x202834);
-		s.text(L"EDIT P"+std::to_wstring(patternIndex)+L" R"+std::to_wstring(row)+L" CH"+std::to_wstring(channel+1)+L" / "+(follow ? L"FOLLOW" : L"DETACHED")+L" / FOCUS "+wide(workspaceState.focus),174,height-38,width-184);
+		s.text(L"EDIT P"+std::to_wstring(patternIndex)+L" R"+std::to_wstring(row)+L" CH"+std::to_wstring(channel+1)+L" / "+(follow ? L"FOLLOW" : L"DETACHED")+L" / FOCUS "+wide(workspaceState.focus)+(liveKeyboard?L" / LIVE KEYS":L""),174,height-38,width-184);
 		s.uiText(status,174,height-19,width-184,muted);
 	}

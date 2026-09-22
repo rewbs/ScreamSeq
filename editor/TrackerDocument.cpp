@@ -845,10 +845,10 @@ bool Renderer::preview(PreviewNote note) noexcept
 	auto w = noteWrite_.load(std::memory_order_relaxed), r = noteRead_.load(std::memory_order_acquire);
 	if(w - r >= notes_.size())
 	{
-		panic_ = true;
+		panic();
 		return false;
 	}
-	notes_[w % notes_.size()] = note;
+	notes_[w % notes_.size()] = {note, panicEpoch_.load(std::memory_order_acquire)};
 	noteWrite_.store(w + 1, std::memory_order_release);
 	return true;
 }
@@ -871,29 +871,43 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 	};
 	auto releasePreview = [&](ModChannel &chn, bool cut) {
 		const auto increment = chn.increment;
+		const auto volume = chn.nVolume;
 		song_->NoteChange(chn, cut ? NOTE_NOTECUT : NOTE_KEYOFF);
 		if(cut) {
 			// Like native NC, keep the sample moving while ramping it down.
 			// Legacy IT cut freezes its increment and leaves a long DC tail.
 			// Preview releases must also take effect between tracker ticks.
 			chn.increment = increment;
-			chn.nVolume = 0;
+			// A zero channel volume retires background channels at the next
+			// tick, possibly before this ramp finishes. Fade-to-zero keeps the
+			// moving sample alive until the mixer has completed its ramp.
+			chn.nVolume = std::max(1, volume);
+			chn.nFadeOutVol = 0;
+			chn.dwFlags.set(CHN_NOTEFADE);
 			chn.newLeftVol = chn.newRightVol = 0;
 			chn.dwFlags.set(CHN_FASTVOLRAMP | CHN_VOLUMERAMP);
 			song_->ProcessRamping(chn);
 		}
 	};
-	if(panic_.exchange(false))
-	{
-		noteRead_.store(noteWrite_.load(std::memory_order_acquire), std::memory_order_release);
+	auto synchronizePanic = [&] {
+		const auto epoch = panicEpoch_.load(std::memory_order_acquire);
+		if(epoch == previewEpoch_) return;
 		for(auto &chn : song_->m_PlayState.BackgroundChannels(*song_))
 			if(chn.isPreviewNote) { pluginNote(static_cast<CHANNELINDEX>(&chn-song_->m_PlayState.Chn.data()), NOTE_KEYOFF, 0); releasePreview(chn, true); }
 		noteChannels_.fill(CHANNELINDEX_INVALID);
-	}
+		previewEpoch_ = epoch;
+	};
+	synchronizePanic();
 	auto noteRead = noteRead_.load(std::memory_order_relaxed), noteWrite = noteWrite_.load(std::memory_order_acquire);
-	for(int consumed = 0; noteRead != noteWrite && consumed < 32; ++noteRead, ++consumed)
+	for(int consumed = 0; noteRead != noteWrite && consumed < 32; ++noteRead)
 	{
-		auto event = notes_[noteRead % notes_.size()];
+		const auto queued = notes_[noteRead % notes_.size()];
+		// A Panic can precede this event, including one arriving after the
+		// callback's initial epoch read. Never flush newer accepted notes.
+		if(queued.epoch != previewEpoch_) synchronizePanic();
+		if(queued.epoch != previewEpoch_) continue;
+		++consumed; // At most 32 active events; at most 128 total queue slots.
+		const auto event = queued.note;
 		if(event.note < 1 || event.note > 120) continue;
 		if(!event.on || !event.velocity)
 		{

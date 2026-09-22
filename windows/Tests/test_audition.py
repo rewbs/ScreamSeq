@@ -287,5 +287,160 @@ class AuditionTests(unittest.TestCase):
             for b in rects[i+1:]: self.assertFalse(max(a[1],b[1])<min(a[3],b[3]) and max(a[2],b[2])<min(a[4],b[4]),(a,b))
         self.remember('piano-scene',dict(workspace=self.state(),controls=rects,privateDesktop=True))
 
+    def typing(self): return self.read('workspace.get')['musicalTyping']
+
+    def navigate(self, **fields):
+        context=self.client.call('context.get')
+        return self.client.call('context.set',dict(expectedRevision=context['revision'],
+            expectedContext=context['data']['contextRevision'],**fields))['data']
+
+    def root_key(self,key,up=False,repeat=False):
+        self.desktop.send(self.desktop.hwnd(self.pid),0x101 if up else 0x100,
+                          ord(key) if isinstance(key,str) else key,(1<<30) if repeat else 0)
+
+    def root_select(self,identifier,index):
+        root=self.desktop.hwnd(self.pid);control=private_desktop.user.GetDlgItem(root,identifier)
+        self.assertTrue(control);self.desktop.send(control,0x14E,index)
+        self.desktop.send(root,0x111,identifier|(1<<16),control)
+
+    def cell_at(self,row):
+        return self.read('pattern.get',pattern=0,startRow=row,rowCount=1,channelCount=1)['cells'][0]
+
+    def test_pattern_typing_selected_sound_repeat_limits_history_and_reopen(self):
+        root=self.desktop.hwnd(self.pid);self.root_select(135,1)
+        selected=self.typing();self.assertEqual(selected['slot'],2)
+        self.desktop.send(root,0x111,113);self.navigate(row=1,column=0,following=False)
+        before=self.cell_at(1);self.root_key('Z');saved=self.cell_at(1)
+        self.assertEqual((saved['note'],saved['instrument']),(49,2))
+        after=self.doc();self.root_key('Z');self.root_key('Z',repeat=True)
+        self.assertEqual(after,self.doc());self.assertEqual(self.read('context.get')['row'],2)
+        self.root_key('Z',up=True);self.assertFalse(self.typing()['held'])
+        self.write('history.undo',domain='document');self.assertEqual(before,self.cell_at(1))
+        self.write('history.redo',domain='document');self.assertEqual(saved,self.cell_at(1))
+        path=self.folder/'typed.screamseq';self.write('document.save',path=str(path))
+        self.write('document.open',path=str(path),discard=True);self.assertEqual(saved,self.cell_at(1))
+        self.root_select(132,9);self.desktop.send(root,0x111,113);self.navigate(row=2,column=0)
+        self.root_key('U');self.root_key('U',up=True)
+        self.assertEqual(self.cell_at(2)['note'],self.typing()['noteMax'])
+        self.assertFalse(self.read('transport.get')['audioActive'])
+        self.remember('typing-history',dict(selected=selected,cell=saved,high=self.cell_at(2)))
+
+    def test_typing_routes_precise_rows_to_the_captured_editor(self):
+        events=[dict(channel=0,position=65536+16384,note=65)]
+        self.write('pattern.notes.set',pattern=0,events=events)
+        self.navigate(row=1,column=0,following=False)
+        self.desktop.send(self.desktop.hwnd(self.pid),0x111,113)
+        before=self.doc();notes=self.read('pattern.notes.get',pattern=0)
+        self.root_key('Z');self.root_key('Z',up=True)
+        self.assertEqual(before,self.doc());self.assertEqual(notes,self.read('pattern.notes.get',pattern=0))
+        state=self.read('workspace.get')['noteEditor'];self.assertTrue(state['visible'])
+        self.assertEqual(state['row'],1);self.assertFalse(self.typing()['held'])
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
+    def test_pattern_typing_audition_release_and_external_voice_ownership(self):
+        self.live();root=self.desktop.hwnd(self.pid);self.desktop.send(root,0x111,113)
+        self.navigate(row=1,column=0,following=False);self.root_key('Z')
+        self.assertEqual(self.cell_at(1)['note'],49)
+        first=self.settled();self.assertTrue(first['audition']);self.assertTrue(first['voicePositions'])
+        after=self.doc();self.root_key('Z',repeat=True);self.assertEqual(after,self.doc())
+        self.note(sample=2);self.root_key('Z',up=True)
+        newer=self.settled();self.assertTrue(any(v['sample']==2 for v in newer['voicePositions']))
+        self.note(on=False,sample=2);self.assertFalse(self.settled()['voicePositions'])
+        self.root_key('X');self.desktop.send(root,0x8,0)  # WM_KILLFOCUS
+        self.assertFalse(self.typing()['held']);self.assertFalse(self.settled()['voicePositions'])
+        self.root_key('X',repeat=True);self.assertFalse(self.typing()['held'])
+        self.write('transport.stop');self.remember('typing-pattern-host',dict(first=first,newer=newer))
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
+    def test_sample_dock_typing_live_mode_and_text_focus(self):
+        self.live();root=self.desktop.hwnd(self.pid)
+        self.client.call('workspace.panel',dict(panel='samples',focus=True))
+        before=self.doc();position=self.read('context.get')['row'];self.root_key('R');self.root_key('N')
+        self.assertEqual(before,self.doc());self.assertEqual(self.read('context.get')['row'],position)
+        self.assertEqual(len(self.typing()['held']),2);self.assertTrue(self.settled()['voicePositions'])
+        self.root_key('R',up=True);self.root_key('N',up=True);self.assertFalse(self.settled()['voicePositions'])
+        self.desktop.send(root,0x111,113);self.desktop.send(root,0x111,507)
+        self.assertTrue(self.read('workspace.get')['liveKeyboard']);self.root_key('Z')
+        self.assertEqual(before,self.doc());self.assertTrue(self.settled()['voicePositions'])
+        self.client.call('workspace.panel',dict(panel='samples',focus=True));self.root_key(9)
+        focus=self.desktop.focus(root);self.assertEqual(focus,private_desktop.user.GetDlgItem(root,230))
+        self.root_key('X');self.assertEqual(len(self.typing()['held']),1)
+        # A release delivered to a different main control is handled by the pump.
+        private_desktop.user.PostMessageW.argtypes=[wintypes.HWND,wintypes.UINT,wintypes.WPARAM,wintypes.LPARAM]
+        private_desktop.check(private_desktop.user.PostMessageW(focus,0x101,ord('Z'),0))
+        self.assertFalse(self.settled()['voicePositions']);self.assertFalse(self.typing()['held'])
+        self.desktop.send(root,0x111,507);self.assertFalse(self.read('workspace.get')['liveKeyboard'])
+        self.assertEqual(before,self.doc());self.write('transport.stop')
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
+    def test_native_sample_and_instrument_typing_capture_text_and_close(self):
+        self.write('instrument.create',sample=1)
+        # The demo's mapped instrument has a looping sample and no fadeout.
+        # Give this release fixture an explicit short fade; key-off must retain
+        # instrument semantics rather than forcibly cutting every instrument.
+        for instrument in self.doc()['data']['instruments']:
+            self.write('instrument.patch',instrument=instrument['index'],values=dict(fadeout=32768))
+        self.live();root=self.desktop.hwnd(self.pid)
+        for command,kind,field in [(505,'ScreamSeq.SampleDetail','sampleDetail'),(503,'ScreamSeq.InstrumentEnvelope','instrumentEnvelope')]:
+            self.desktop.send(root,0x111,command);window=self.window(kind)
+            if self.desktop.focus(window)!=window:self.desktop.send(window,0x100,0x75)  # F6: canvas focus
+            self.assertEqual(self.desktop.focus(window),window)
+            before=self.doc();self.desktop.send(window,0x100,ord('Z'))
+            self.assertTrue(self.settled()['voicePositions']);self.assertEqual(before,self.doc())
+            self.desktop.send(window,0x100,0x75)  # F6: intentional text/control focus
+            self.desktop.send(self.desktop.focus(window),0x100,ord('X'))
+            self.assertEqual(len(self.typing()['held']),1)
+            self.desktop.send(self.desktop.focus(window),0x101,ord('Z'))
+            self.assertFalse(self.settled()['voicePositions'])
+            self.desktop.send(window,0x100,0x75);self.desktop.send(window,0x100,ord('C'))
+            self.desktop.send(window,0x10)  # WM_CLOSE releases this editor's voices
+            self.assertFalse(self.typing()['held']);self.assertFalse(self.settled()['voicePositions'])
+            self.assertEqual(before,self.doc())
+        self.desktop.send(root,0x111,505)
+        if self.desktop.focus(self.window('ScreamSeq.SampleDetail'))!=self.window('ScreamSeq.SampleDetail'):self.desktop.send(self.window('ScreamSeq.SampleDetail'),0x100,0x75)
+        self.write('document.patch',title='Changed after opening editor')
+        self.desktop.send(self.window('ScreamSeq.SampleDetail'),0x100,ord('Z'))
+        self.assertFalse(self.typing()['held'])
+        self.assertIn('Reload',self.read('workspace.get')['sampleDetail']['status'])
+        self.write('transport.stop')
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_INSTRUMENT_CACHE') and os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','installed Surge XT and explicit silent WASAPI qualification')
+    def test_installed_surge_pattern_typing_and_piano_retrigger_ownership(self):
+        index=self.plugin_instrument('ABCDEF019182FAEB566D624153675854');self.live()
+        catalog=self.doc()['data']['instruments'];self.root_select(135,next(n for n,v in enumerate(catalog) if v['index']==index))
+        root=self.desktop.hwnd(self.pid);self.desktop.send(root,0x111,113);self.navigate(row=1,column=0)
+        opaque=self.read('plugin.state.get',slot=0);self.root_key('Z')
+        self.assertEqual(self.cell_at(1)['instrument'],index)
+        first=self.settled();self.assertGreater(max(first['left'],first['right']),1e-6)
+        self.root_key('Z',up=True);self.write('transport.panic')
+        self.start();self.press(5105);self.note(sample=2);self.press(5106)
+        self.assertTrue(any(v['sample']==2 for v in self.settled()['voicePositions']))
+        self.note(on=False,sample=2);self.assertEqual(opaque,self.read('plugin.state.get',slot=0))
+        self.write('transport.stop');self.remember('surge-typing',dict(first=first))
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
+    def test_keyup_during_document_wait_never_starts_a_late_voice(self):
+        self.live();root=self.desktop.hwnd(self.pid);self.desktop.send(root,0x111,113)
+        self.navigate(row=1,column=0)
+        private_desktop.user.PostMessageW.argtypes=[wintypes.HWND,wintypes.UINT,wintypes.WPARAM,wintypes.LPARAM]
+        for message in (0x100,0x101):private_desktop.check(private_desktop.user.PostMessageW(root,message,ord('Z'),0))
+        end=time.monotonic()+10
+        while time.monotonic()<end:
+            state=self.read('workspace.get')
+            if not state['documentBusy'] and self.read('context.get')['row']==2 and not state['musicalTyping']['held']:break
+            time.sleep(.01)
+        else:self.fail(str(state))
+        self.assertEqual(self.cell_at(1)['note'],49);self.assertFalse(self.settled()['voicePositions'])
+        private_desktop.check(private_desktop.user.PostMessageW(root,0x100,ord('X'),0))
+        private_desktop.check(private_desktop.user.PostMessageW(root,0x111,102,0))
+        end=time.monotonic()+10
+        while time.monotonic()<end:
+            state=self.read('workspace.get')
+            if not state['documentBusy'] and self.read('context.get')['row']==3 and not state['musicalTyping']['held']:break
+            time.sleep(.01)
+        else:self.fail(str(state))
+        self.assertEqual(self.cell_at(2)['note'],51)
+        self.assertFalse(self.settled()['audioActive'])
+
 
 if __name__ == '__main__': unittest.main()
