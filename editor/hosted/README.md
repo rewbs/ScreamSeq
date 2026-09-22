@@ -23,6 +23,10 @@ vendor SDK types appear in these public headers or `PluginBackend.hpp`.
   storage/callbacks/editor/state code and the Mac AU/VST3 factory. Existing
   `VST3Host.mm` remains unchanged. Mac CMake compiles these into TrackerHosted;
   TrackerPlugins forwards to that target instead of building another scheduler.
+  That forwarding target is an interface, not an archive. Direct Swift compiler
+  invocations in `mac/build.sh` and `mac/test-shutdown.sh` link `TrackerHosted`
+  from the build's `hosted/` directory; they must not link a stale
+  `libTrackerPlugins.a` left by an earlier build.
 
 All existing OpenMPT/ScreamSeq attribution and repository licensing still apply.
 This extraction does not change the project storage format or stable class IDs.

@@ -15,7 +15,7 @@ cmake --build "$tracker_build" -j "$tracker_jobs"
 mkdir -p "$tracker_app/Contents/MacOS" "$tracker_app/Contents/Resources"
 xcrun swiftc -O -whole-module-optimization -num-threads "$tracker_jobs" -g -swift-version 5 -target "${tracker_arch}-apple-macosx14.0" \
   -import-objc-header mac/Bridge/TrackerSession.h mac/App/*.swift \
-  -L "$tracker_build" -lTrackerMac -lTrackerPlugins -lTrackerEditor -lOpenMPTCore -lTrackerFLAC -lc++ \
+  -L "$tracker_build" -L "$tracker_build/hosted" -lTrackerMac -lTrackerHosted -lTrackerEditor -lOpenMPTCore -lTrackerFLAC -lc++ \
   -framework AppKit -framework Metal -framework MetalKit -framework AVFoundation -framework AudioToolbox -framework CoreAudio -framework CoreMIDI \
   -o "$tracker_app/Contents/MacOS/ScreamSeq"
 xcrun swiftc -O mac/App/RecoveryStore.swift mac/Tests/RecoveryTests.swift -o "$tracker_build/recovery-tests"
@@ -23,7 +23,7 @@ xcrun swiftc -O mac/App/PluginPicker.swift mac/Tests/PluginPickerTests.swift -o 
 xcrun swiftc -O -swift-version 5 mac/App/SampleLibrary.swift mac/App/SampleMultisample.swift mac/App/SampleAudition.swift mac/Tests/SampleLibraryTests.swift -framework AVFoundation -o "$tracker_build/sample-library-tests"
 xcrun swiftc -O -swift-version 5 -import-objc-header mac/Bridge/TrackerSession.h \
   mac/App/AutomationServer.swift mac/App/EditorNavigation.swift mac/Tests/AutomationHost.swift \
-  -L "$tracker_build" -lTrackerMac -lTrackerPlugins -lTrackerEditor -lOpenMPTCore -lTrackerFLAC -lc++ \
+  -L "$tracker_build" -L "$tracker_build/hosted" -lTrackerMac -lTrackerHosted -lTrackerEditor -lOpenMPTCore -lTrackerFLAC -lc++ \
   -framework AppKit -framework AudioToolbox -framework CoreAudio -framework CoreMIDI \
   -o "$tracker_build/automation-test-host"
 cp "$tracker_build/plugin-scanner" "$tracker_app/Contents/MacOS/plugin-scanner"

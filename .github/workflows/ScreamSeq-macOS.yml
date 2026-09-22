@@ -1,0 +1,59 @@
+name: ScreamSeq macOS
+
+on:
+  push:
+    branches: [codex/screamseq, codex/windows-native]
+  pull_request:
+    branches: [codex/screamseq]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screamseq-macos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-app:
+    name: Native app (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      SCREAMSEQ_BUILD_DIR: bin/mac-ci
+      SCREAMSEQ_BUILD_JOBS: "2"
+      RESONANCE_DEVELOPMENT_BUILD: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Build C++ targets and Swift application from a clean tree
+        shell: bash
+        run: |
+          set -o pipefail
+          bash mac/build.sh 2>&1 | tee screamseq-macos-build.log
+      - name: Native model and host tests
+        shell: bash
+        run: |
+          set -o pipefail
+          ctest --test-dir "$SCREAMSEQ_BUILD_DIR" --output-on-failure --timeout 120 -j 2 2>&1 | tee screamseq-macos-tests.log
+      - name: Swift recovery and picker tests
+        shell: bash
+        run: |
+          "$SCREAMSEQ_BUILD_DIR/recovery-tests"
+          "$SCREAMSEQ_BUILD_DIR/plugin-picker-tests"
+      - name: Preserve qualification logs
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: screamseq-macos-${{ matrix.runner }}-logs
+          path: |
+            screamseq-macos-*.log
+            bin/mac-ci/Testing/Temporary/*.log
+            bin/mac-ci/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: warn
+          retention-days: 14
