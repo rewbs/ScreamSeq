@@ -1365,6 +1365,15 @@
                 "filter": {
                   "type": "boolean"
                 },
+                "carry": {
+                  "type": "boolean"
+                },
+                "releaseNode": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255,
+                  "description": "Existing node index, or 255 to clear the release marker."
+                },
                 "sustainPoint": {
                   "type": "integer",
                   "minimum": 0,

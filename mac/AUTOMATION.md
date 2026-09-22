@@ -1044,6 +1044,15 @@ When a source module format loses these settings, native projects/history/playba
 
 ### Instrument envelope tools
 
+`instrument.patch {instrument, values, expectedRevision}` uses the numeric slot
+captured at that revision. Its envelope fields include `carry` (boolean) and
+`releaseNode` (an existing node index, or 255 to clear it), alongside points,
+enabled/loop/sustain/filter flags and loop/sustain node indices. Select the
+envelope with `values.envelope`: 0 volume, 1 pan, 2 pitch. A point replacement
+and its marker updates commit atomically with any instrument settings/keymap
+changes. No-ops preserve history; invalid flags or release nodes reject the
+whole patch. Linked envelopes must be unlinked or changed through their master.
+
 These methods use the stable instrument `id` from `document.get`, rather than its
 numeric slot. `envelope` is `volume`, `pan` or `pitch` (the pitch envelope may be
 in filter mode). XM does not support pitch-envelope editing.

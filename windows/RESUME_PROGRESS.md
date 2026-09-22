@@ -1,6 +1,9 @@
 # Windows continuation — 2026-09-21
 
-Latest editor continuation: `PARAMETER_AUTOMATION_PROGRESS.md` records native
+Latest editor continuation: `INSTRUMENT_ENVELOPE_PROGRESS.md` records native
+instrument curves, settings/keymaps, transforms, bank integration and playback
+markers, with 187 actual-app tests passing.
+`PARAMETER_AUTOMATION_PROGRESS.md` records native
 pattern parameter curves, the shared transform API and connected envelope bank
 and formula editing. `GRAPH_COMMANDS_PROGRESS.md` records the preceding native
 row-aligned graph lanes and installed-plugin command rendering. Native song routing,

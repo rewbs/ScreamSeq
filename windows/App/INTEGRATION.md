@@ -25,6 +25,14 @@ guards and Undo. The modeless editor captures stable pattern/plugin/parameter
 identity and a draft generation; worker reads and previews populate cached
 geometry without querying the document or plugins during paint.
 
+Native instrument envelopes and settings use `InstrumentEnvelopeWindow.hpp`,
+opened from the Instrument toolbar button or command palette. The retained
+window calls the shared asset/envelope APIs with captured document revision and
+stable instrument identity. Its settings, keymap and envelope draft apply in
+one document transaction. Playback lines consume the renderer's bounded voice
+snapshot; paint never queries the engine or document worker. See
+`../INSTRUMENT_ENVELOPE_PROGRESS.md` for evidence and remaining limitations.
+
 ## Owner boundaries
 
 `Session/DocumentController` constructs, owns and disposes the shared Document on

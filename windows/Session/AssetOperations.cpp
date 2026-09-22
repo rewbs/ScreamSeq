@@ -437,7 +437,7 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p) {
     if(method=="instrument.get")keys(p,{"instrument"});else keys(p,{"instrument","values"});
     const auto index=INSTRUMENTINDEX(integer(field(p,"instrument"),1,song.GetNumInstruments()));require(song.Instruments[index]!=nullptr,"Select an instrument");
     const auto &before=*song.Instruments[index];if(method=="instrument.get")return instrumentInfo(song,before);
-    const auto &v=field(p,"values");keys(v,{"name","volume","pan","fadeout","nna","dct","dna","mapping","envelope","points","enabled","sustain","sustainPoint","sustainEnd","loop","loopStart","loopEnd","filter"});
+    const auto &v=field(p,"values");keys(v,{"name","volume","pan","fadeout","nna","dct","dna","mapping","envelope","points","enabled","sustain","sustainPoint","sustainEnd","loop","loopStart","loopEnd","filter","carry","releaseNode"});
     auto next=before;const int kind=int(integer(v.value("envelope",Json(0)),0,2));require(kind!=2||song.GetType()!=MOD_TYPE_XM,"XM does not store pitch envelopes");
     auto &e=kind==0?next.VolEnv:kind==1?next.PanEnv:next.PitchEnv;
     if(v.contains("name"))next.name=::OpenMPT::mpt::ToCharset(song.GetCharsetInternal(),::OpenMPT::mpt::Charset::UTF8,text(v.at("name"),200));
@@ -456,7 +456,9 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p) {
     }
     const auto last=e.empty()?0:e.size()-1;
     for(auto key:{"sustainPoint","sustainEnd","loopStart","loopEnd"})if(v.contains(key))integer(v.at(key),0,last);
-    for(auto key:{"enabled","sustain","loop","filter"})if(v.contains(key))boolean(v.at(key));
+    for(auto key:{"enabled","sustain","loop","filter","carry"})if(v.contains(key))boolean(v.at(key));
+    if(v.contains("releaseNode")){const auto release=integer(v.at("releaseNode"),0,255);require(release==255||release<e.size(),"Release node must exist, or use 255 for none");e.nReleaseNode=uint8_t(release);}
+    if(v.contains("carry"))e.dwFlags.set(ENV_CARRY,boolean(v.at("carry")));
     if(v.contains("enabled"))e.dwFlags.set(ENV_ENABLED,boolean(v.at("enabled")));
     if(v.contains("sustain"))e.dwFlags.set(ENV_SUSTAIN,boolean(v.at("sustain")));
     if(v.contains("sustainPoint"))e.nSustainStart=uint8_t(integer(v.at("sustainPoint"),0,last));

@@ -4,8 +4,8 @@
 		constexpr UINT32 bg=0x141922,panelBg=0x1a202a,muted=0x8390a2,accent=0x6edac5,gold=0xdcb971;
 		s.fill(0,0,width,height,bg);s.fill(0,0,width,44,0x222a35);
 		s.uiText(L"SCREAMSEQ",12,12,146,accent);
-		s.uiText(wide(view->session.document.at("title").get<std::string>())+L" / "+(view->path.empty() ? L"Demo" : view->path.filename().wstring()),570,9,std::max(1.0f,width-580));
-		s.uiText(inspection ? L"Inspection / audio hardware disabled" : silentOutput ? L"Silent hardware qualification / DSP active" : L"Monitor -20 dB / Space to play or stop",570,26,std::max(1.0f,width-580),muted);
+		s.uiText(wide(view->session.document.at("title").get<std::string>())+L" / "+(view->path.empty() ? L"Demo" : view->path.filename().wstring()),704,9,std::max(1.0f,width-714));
+		s.uiText(inspection ? L"Inspection / audio hardware disabled" : silentOutput ? L"Silent hardware qualification / DSP active" : L"Monitor -20 dB / Space to play or stop",704,26,std::max(1.0f,width-714),muted);
 		s.fill(0,44,164,height-44,0x1a202a);
 		s.uiText(L"PROJECT",12,58,142,muted);s.uiText(wide(view->session.document.at("title").get<std::string>()),12,79,142);
 		s.uiText(std::to_wstring(view->channels)+L" channels",12,99,142,muted);s.uiText(L"SAMPLES",12,130,142,muted);

@@ -1143,6 +1143,14 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
         envelope.nLoopEnd = uint8_t(std::clamp([v[@"loopEnd"] intValue], int(envelope.nLoopStart), last));
       if (v[@"filter"] && envelopeKind == 2)
         envelope.dwFlags.set(ENV_FILTER, [v[@"filter"] boolValue]);
+      if (v[@"carry"])
+        envelope.dwFlags.set(ENV_CARRY, [v[@"carry"] boolValue]);
+      if (v[@"releaseNode"]) {
+        const int release = [v[@"releaseNode"] intValue];
+        if (release != 255 && (release < 0 || size_t(release) >= envelope.size()))
+          throw std::runtime_error("Release node must exist, or use 255 for none");
+        envelope.nReleaseNode = uint8_t(release);
+      }
       envelope.Sanitize();
     });
     return YES;

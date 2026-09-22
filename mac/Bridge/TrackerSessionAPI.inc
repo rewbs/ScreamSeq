@@ -931,7 +931,7 @@
       NSDictionary *v = object(p[@"values"]);
       keys(v, @[
         @"name", @"volume", @"pan", @"fadeout", @"nna", @"dct", @"dna", @"mapping", @"envelope", @"points", @"enabled",
-        @"sustain", @"sustainPoint", @"sustainEnd", @"loop", @"loopStart", @"loopEnd", @"filter"
+        @"sustain", @"sustainPoint", @"sustainEnd", @"loop", @"loopStart", @"loopEnd", @"filter", @"carry", @"releaseNode"
       ]);
       if (v[@"name"])
         string(v[@"name"], 200);
@@ -947,7 +947,7 @@
       for (NSString *key in limits)
         if (v[key])
           integer(v[key], 0, [limits[key] unsignedIntValue]);
-      for (NSString *key in @[ @"enabled", @"sustain", @"loop", @"filter" ])
+      for (NSString *key in @[ @"enabled", @"sustain", @"loop", @"filter", @"carry" ])
         if (v[key])
           boolean(v[key]);
       if (v[@"mapping"]) {
@@ -974,6 +974,10 @@
       for (NSString *key in @[ @"sustainPoint", @"sustainEnd", @"loopStart", @"loopEnd" ])
         if (v[key])
           integer(v[key], 0, count ? count - 1 : 0);
+      if (v[@"releaseNode"]) {
+        const auto release = integer(v[@"releaseNode"], 0, 255);
+        require(release == 255 || release < count, "Release node must exist, or use 255 for none");
+      }
       succeeded([self instrumentSettings:index values:v error:&problem], problem);
 #include "PluginLibraryAPI.inc"
     } else if ([method isEqual:@"plugin.discover"]) {

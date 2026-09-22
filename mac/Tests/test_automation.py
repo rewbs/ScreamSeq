@@ -36,7 +36,12 @@ def instrument_envelopes(client):
     empty=read();made=write("instrument.envelope.transform",**target,operation="ramp",end=13)
     assert made["changed"] and read()["data"]["points"]==[[0,0],[12,64]] and not read()["data"]["enabled"]
     write("history.undo",domain="document");assert read()["data"]==empty["data"]
-    write("instrument.patch",instrument=index,values={"envelope":0,"points":[[0,64],[4,48],[8,32],[12,0]],"enabled":True,"loop":True,"loopStart":1,"loopEnd":2,"sustain":True,"sustainPoint":1,"sustainEnd":2})
+    write("instrument.patch",instrument=index,values={"envelope":0,"points":[[0,64],[4,48],[8,32],[12,0]],"enabled":True,"loop":True,"loopStart":1,"loopEnd":2,"sustain":True,"sustainPoint":1,"sustainEnd":2,"carry":True,"releaseNode":2})
+    before=read()
+    assert before["data"]["carry"] and before["data"]["releaseNode"]==2
+    for values in [{"carry":1},{"releaseNode":True},{"releaseNode":4},{"releaseNode":256},{"points":[],"releaseNode":0}]:
+        expect_error(-32602,lambda:write("instrument.patch",instrument=index,values=values))
+        assert read()==before
     baseline=read();clip=client.call("instrument.envelope.copy",{**target,"start":0,"end":5})["data"]
     assert clip=={"span":5,"points":[[0,64],[4,48]],"units":"ticks"}
     tools=[("flip-time",0,13,{}),("flip-values",0,13,{}),("shift",4,9,{"amount":1}),
