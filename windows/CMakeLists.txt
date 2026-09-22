@@ -83,13 +83,13 @@ target_link_libraries(ScreamSeqProject PUBLIC TrackerEditor PRIVATE crypt32 bcry
 
 if(SCREAMSEQ_BUILD_APP)
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/App/Main.cpp" AND TARGET ScreamSeqAudio)
-    add_executable(ScreamSeq WIN32 App/Main.cpp Session/DocumentController.cpp Session/DocumentOperations.cpp Session/TimelineOperations.cpp Session/AssetOperations.cpp Session/PluginOperations.cpp Session/PatternOperations.cpp Session/GraphOperations.cpp Session/MixerOperations.cpp Session/EnvelopeOperations.cpp Api/PipeServer.cpp Resources/ScreamSeq.rc)
+    add_executable(ScreamSeq WIN32 App/Main.cpp Samples/Library.cpp Samples/LibraryIndex.cpp Samples/Preview.cpp Session/DocumentController.cpp Session/DocumentOperations.cpp Session/TimelineOperations.cpp Session/AssetOperations.cpp Session/PluginOperations.cpp Session/PatternOperations.cpp Session/GraphOperations.cpp Session/MixerOperations.cpp Session/EnvelopeOperations.cpp Api/PipeServer.cpp Resources/ScreamSeq.rc)
     if(MSVC)
       target_link_options(ScreamSeq PRIVATE /STACK:8388608)
     endif()
     target_include_directories(ScreamSeq PRIVATE Resources "${ROOT}/include/nlohmann-json/include")
     target_link_libraries(ScreamSeq PRIVATE ScreamSeqProject ScreamSeqAudio ScreamSeqPlayback
-      d3d11 d2d1 dwrite dxgi dwmapi shell32 comdlg32 comctl32 advapi32)
+      d3d11 d2d1 dwrite dxgi dwmapi shell32 comdlg32 comctl32 advapi32 normaliz)
     add_dependencies(ScreamSeq ScreamSeqVST3Scanner)
     add_custom_command(TARGET ScreamSeq POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ScreamSeq>/THIRD-PARTY-NOTICES"
@@ -109,6 +109,12 @@ if(SCREAMSEQ_BUILD_RENDER_PROBE)
 endif()
 
 if(BUILD_TESTING)
+  add_executable(sample-preview-tests Tests/Samples/PreviewTests.cpp Tests/HostedProject/CallbackAudit.cpp Samples/Preview.cpp Samples/LibraryIndex.cpp)
+  target_link_libraries(sample-preview-tests PRIVATE ScreamSeqProject ScreamSeqAudio normaliz)
+  target_compile_definitions(sample-preview-tests PRIVATE SCREAMSEQ_WASAPI_ALLOCATION_AUDIT=1)
+  target_link_options(sample-preview-tests PRIVATE /STACK:8388608)
+  add_test(NAME sample-preview-tests COMMAND sample-preview-tests "${CMAKE_CURRENT_BINARY_DIR}")
+  set_tests_properties(sample-preview-tests PROPERTIES LABELS "samples;cxx-allocation-audit" TIMEOUT 60)
   include(cmake/PortableTests.cmake)
   foreach(case "unified-effects;UnifiedEffects" "playback-display;PlaybackDisplay")
     list(GET case 0 name)

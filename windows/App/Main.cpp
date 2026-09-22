@@ -23,6 +23,9 @@
 #include "AbsoluteAutomationWindow.hpp"
 #include "SampleDetailWindow.hpp"
 #include "AuditionWindow.hpp"
+#include "../Samples/Library.hpp"
+#include "../Samples/Preview.hpp"
+#include "SampleLibraryWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -80,7 +83,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     curvePattern=480,curveKind=481,curveSnap=482,curveRow=483,curveValue=484,curveFormula=485,
     curveApply=486,curveReload=487,curveSetPoint=488,curveDelete=489,curveRamp=490,curveClear=491,
     curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497,curveExpand=498,curveReference=499,
-    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506;
+    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -254,7 +257,7 @@ public:
 			{"locations",locations},{"liveKeyboard",liveKeyboard},{"musicalTyping",typingSnapshot()},
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
             {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"pendingViewCommands",deferredViews.size()+(drainingViews?1u:0u)},{"status",utf8Path(status)},
-            {"sampleEditor",sampleEditorSnapshot()},
+            {"sampleEditor",sampleEditorSnapshot()},{"sampleLibrary",sampleLibrarySnapshot()},
             {"graphEditor",graphEditorSnapshot()},
             {"graphCurve",graphCurveSnapshot()},
             {"formulaWorkbench",formulaWorkbench?formulaWorkbench->snapshot():Json{{"visible",false}}},
@@ -380,6 +383,7 @@ public:
         try {auto result=await(controller->invoke(method,params));refreshDocument();return result;}
         catch(...) {refreshDocument();throw;}
     }
+    #include "SampleLibrary.inc"
     explicit Application(const std::filesystem::path &input={},bool inspectionMode=false,std::optional<std::filesystem::path> catalogue={},std::optional<std::filesystem::path> library={}) : inspection(inspectionMode) {
         GUID id{};ScreamSeq::check(CoCreateGuid(&id),"Create session identity");
         wchar_t buffer[40]{};StringFromGUID2(id,buffer,40);for(auto ch:std::wstring_view(buffer)) documentId+=char(ch);
@@ -401,7 +405,7 @@ public:
         cpuDraw.reserve(120000);submitIntervals.reserve(120000);updateInspector();
         status=input.empty() ? L"Ready / select a pattern cell or a sample" : L"Project opened";
     }
-	~Application() { api.reset(); device.close(); palette.reset(); if(controlFont) DeleteObject(controlFont); }
+	~Application() { api.reset();sampleBrowser.reset();++samplePreviewGeneration;samplePreview.stop();sampleDecoder.reset();sampleLibrary.reset();device.close();palette.reset();if(controlFont)DeleteObject(controlFont); }
 	static void renderAudio(void *context, float *samples, uint32_t frames) noexcept {
 		auto &self = *static_cast<Application *>(context);
 		self.preparedPlayback->render(samples, frames);
@@ -567,7 +571,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		switch(message) {
 		case ScreamSeq::ApiDispatch::message: if(app->api && !app->refreshingPlugins) app->api->drain(); return 0;
         case deferredViewsMessage: app->drainViews();return 0;
-		case WM_CLOSE: if(app->busy) {app->stop();return 0;} if(!app->protectUnsaved()) return 0;break;
+		case WM_CLOSE: if(app->busy||app->libraryWaits) {app->stop();++app->samplePreviewGeneration;app->samplePreview.stop();return 0;} if(!app->protectUnsaved()) return 0;break;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
         case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==5)app->graphCurveTimer();return 0;
 		case WM_DPICHANGED: {
@@ -638,7 +642,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		std::vector<std::wstring> args(argv, argv + argc); LocalFree(argv);
         bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false, audioTestAllowStop=false;
         unsigned auditionSample=0,auditionInstrument=0;
-		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride,libraryOverride;
+		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride,libraryOverride,sampleLibraryOverride;
 		for(size_t i = 1; i < args.size(); ++i) {
 			if(args[i] == L"--offline-test") offline = true;
             else if(args[i]==L"--offline-hosted-test") hostedOffline=true;
@@ -658,6 +662,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             else if(args[i]==L"--vst3-test-cache" && i+1<args.size()) pluginCache=args[++i];
             else if(args[i]==L"--envelope-test-catalogue" && i+1<args.size()) catalogueOverride=args[++i];
             else if(args[i]==L"--plugin-test-library" && i+1<args.size()) libraryOverride=args[++i];
+            else if(args[i]==L"--sample-test-library" && i+1<args.size()) sampleLibraryOverride=args[++i];
 			else throw std::runtime_error("Unknown/incomplete command-line argument");
 		}
 		if(seconds < 0 || seconds > 1800 || !std::isfinite(seconds)) throw std::runtime_error("Invalid test duration");
@@ -688,6 +693,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             try{library=std::filesystem::path(local)/L"org.resonance.tracker"/L"plugin-library-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
         }
 		Application app(projectPath,inspection,std::move(catalogue),std::move(library));app.silentOutput=silentOutput;
+        app.allowSamplePreview=!inspection&&!audioTest;
+        if(!sampleLibraryOverride.empty()){
+            if(!(inspection||audioTest)||!sampleLibraryOverride.is_absolute())throw std::runtime_error("An absolute private sample library requires inspection or audio qualification mode");
+            app.sampleLibraryDirectory=sampleLibraryOverride;
+        }else if(!inspection&&!audioTest){
+            PWSTR local{};ScreamSeq::check(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local),"Find sample library directory");
+            try{app.sampleLibraryDirectory=std::filesystem::path(local)/L"org.resonance.tracker"/L"SampleLibrary";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
+        }
 		WNDCLASSW klass{}; klass.style=CS_DBLCLKS;klass.lpfnWndProc = windowProc; klass.hInstance = instance;
 		klass.lpszClassName = L"ScreamSeqWindowsDevelopment"; klass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
 		klass.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(101));
@@ -721,6 +734,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			}
 			if(closed) break;
             app.drainViews();
+            app.samplePreview.service();
 			if(result == WAIT_FAILED) throw std::runtime_error("Frame wait failed");
 			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) app.draw();
 			if(seconds && (ScreamSeq::ticks() - start) / app.frequency >= seconds) break;

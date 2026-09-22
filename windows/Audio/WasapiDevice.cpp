@@ -57,6 +57,7 @@ struct WasapiDevice::Impl {
   std::thread worker;
   RenderCallback callback = nullptr;
   void* context = nullptr;
+  std::uint32_t convertedRate = 0;
   bool opened = false;
   std::atomic<bool> active{false};
   std::atomic<std::int32_t> initResult{E_FAIL}, startResult{E_FAIL};
@@ -112,7 +113,7 @@ struct WasapiDevice::Impl {
     WAVEFORMATEXTENSIBLE format{};
     format.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
     format.Format.nChannels = 2;
-    format.Format.nSamplesPerSec = mix.value->nSamplesPerSec;
+    format.Format.nSamplesPerSec = convertedRate ? convertedRate : mix.value->nSamplesPerSec;
     format.Format.wBitsPerSample = 32;
     format.Format.nBlockAlign = 8;
     format.Format.nAvgBytesPerSec = format.Format.nSamplesPerSec * 8;
@@ -121,14 +122,16 @@ struct WasapiDevice::Impl {
     format.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
     format.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
     CoFormat closest;
-    hr = client->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, &format.Format, &closest.value);
-    if (hr != S_OK) return FAILED(hr) ? hr : AUDCLNT_E_UNSUPPORTED_FORMAT;
+    if(!convertedRate) {
+      hr = client->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, &format.Format, &closest.value);
+      if (hr != S_OK) return FAILED(hr) ? hr : AUDCLNT_E_UNSUPPORTED_FORMAT;
+    }
 
     ComPtr<IAudioClient3> client3;
     UINT32 defaultPeriod = 0, fundamentalPeriod = 0, minPeriod = 0, maxPeriod = 0;
     UINT32 chosenPeriod = 0;
     Mode chosenMode = Mode::LowLatencyShared;
-    HRESULT lowHr = client.As(&client3);
+    HRESULT lowHr = convertedRate ? E_NOTIMPL : client.As(&client3);
     if (SUCCEEDED(lowHr)) {
       lowHr = client3->GetSharedModeEnginePeriod(&format.Format, &defaultPeriod,
                                                 &fundamentalPeriod, &minPeriod, &maxPeriod);
@@ -143,7 +146,7 @@ struct WasapiDevice::Impl {
       }
     }
     if (FAILED(lowHr)) {
-      fallbackError.store(static_cast<std::int32_t>(lowHr));
+      fallbackError.store(convertedRate ? 0 : static_cast<std::int32_t>(lowHr));
       if (lowHr == AUDCLNT_E_DEVICE_INVALIDATED || lowHr == AUDCLNT_E_SERVICE_NOT_RUNNING)
         return lowHr;
       // A failed Initialize can leave a client unusable. Activate a fresh one.
@@ -151,7 +154,9 @@ struct WasapiDevice::Impl {
       hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
                             reinterpret_cast<void**>(client.GetAddressOf()));
       if (FAILED(hr)) return hr;
-      hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+      const DWORD flags=AUDCLNT_STREAMFLAGS_EVENTCALLBACK | (convertedRate ?
+        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM|AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY|AUDCLNT_STREAMFLAGS_NOPERSIST : 0);
+      hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED, flags,
                               0, 0, &format.Format, nullptr);
       if (FAILED(hr)) return hr;
       REFERENCE_TIME defaultDuration = 0, minimumDuration = 0;
@@ -293,6 +298,13 @@ bool WasapiDevice::open(RenderCallback callback, void* context) {
   if (!impl_->launch(false)) return false;
   impl_->opened = true; return true;
 }
+bool WasapiDevice::openConverted(RenderCallback callback,void* context,std::uint32_t rate) {
+  close();impl_->resetStats();
+  if(!callback||rate<100||rate>768000){impl_->fail(E_INVALIDARG);return false;}
+  impl_->convertedRate=rate;impl_->callback=callback;impl_->context=context;
+  if(!impl_->launch(false))return false;
+  impl_->opened=true;return true;
+}
 std::uint32_t WasapiDevice::sampleRate() const noexcept { return impl_->rate.load(); }
 std::uint32_t WasapiDevice::periodFrames() const noexcept { return impl_->period.load(); }
 bool WasapiDevice::start() {
@@ -311,7 +323,7 @@ bool WasapiDevice::start() {
 }
 void WasapiDevice::stop() noexcept { impl_->stop(); }
 void WasapiDevice::close() noexcept {
-  impl_->stop(); impl_->opened = false; impl_->callback = nullptr; impl_->context = nullptr;
+  impl_->stop(); impl_->opened = false; impl_->callback = nullptr; impl_->context = nullptr;impl_->convertedRate=0;
   impl_->rate = 0; impl_->period = 0; impl_->bufferFrames = 0; impl_->channels = 0; impl_->mode = Mode::Closed;
 }
 bool WasapiDevice::running() const noexcept { return impl_->active.load(); }

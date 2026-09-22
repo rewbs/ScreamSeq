@@ -245,10 +245,41 @@ void serializationFailure() {
   check(api.handle(seed)==seeded,"serialization failure does not discard earlier retained success");
   std::cout<<"PASS cache serialization failure skips retention without falsifying commit outcome\n";
 }
+void independentServices() {
+  struct LibraryHost : CacheHost {
+    unsigned snapshots=0,libraryCalls=0;
+    std::function<void()> nested;
+    SessionSnapshot snapshot()override{++snapshots;return CacheHost::snapshot();}
+    std::vector<std::string> independentReads()const override{return {"sample.library.get"};}
+    std::vector<std::string> independentWrites()const override{return {"sample.library.roots.set"};}
+    Json independentGuards()const override{return {{"sample.library.roots.set",{"expectedLibraryRevision"}}};}
+    Json independentOperation(const std::string &method,const Json &params)override{
+      ++libraryCalls;
+      if(nested){auto call=std::move(nested);call();}
+      if(method=="sample.library.roots.set"&&params.value("expectedLibraryRevision",std::string{})!="test-library")throw ApiError(-32001,"Library changed");
+      return {{"revision","library:test-library"},{"changed",false},{"playbackStopped",false},{"data",{{"roots",Json::array()}}}};
+    }
+  }host;
+  SessionAdapter api(host);const auto before=host.state;
+  auto info=api.handle(request("api.describe",Json::object(),"describe"))["result"]["data"];
+  check(info["revisionGuards"]["sample.library.roots.set"]==Json::array({"expectedLibraryRevision"}),"independent guard discovery");
+  host.snapshots=0;
+  auto read=api.handle(request("sample.library.get",Json::object(),"library-read"));
+  check(read["result"]["revision"]=="library:test-library"&&!read["result"].contains("documentId"),"independent envelope polluted with document identity");
+  auto q=request("sample.library.roots.set",{{"expectedLibraryRevision","test-library"}},"library-write");
+  host.nested=[&]{error(api.handle(q),-32002,"in-flight independent write entered twice while pumping UI messages");};
+  auto reply=api.handle(q);check(reply.contains("result"),"library write incorrectly requires song revision");
+  check(api.handle(q)==reply&&host.libraryCalls==2,"independent write replay re-entered the host");
+  auto conflict=q;conflict["params"]["expectedLibraryRevision"]="stale";error(api.handle(conflict),-32600,"conflicting independent request ID accepted");
+  conflict["id"]="stale-library";auto rejected=api.handle(conflict);error(rejected,-32001,"independent stale guard bypassed");
+  check(!rejected["error"].contains("data"),"independent error advertised a song revision");
+  check(host.snapshots==0&&host.calls==0&&host.state.revision==before.revision,"independent service used song snapshot/operation/history");
+  std::cout<<"PASS independent revision/envelope, guarded write replay and absence of song ownership\n";
+}
 }
 int main() {
   try {
     discovery(); byteEviction(); entryEviction(); boundariesAndOversize(); failuresAndExactReplay();
-    noOpDryRunAndContext(); serializationFailure(); return 0;
+    noOpDryRunAndContext(); serializationFailure(); independentServices();return 0;
   } catch(const std::exception &e) { std::cerr<<"FAIL: "<<e.what()<<'\n'; return 1; }
 }

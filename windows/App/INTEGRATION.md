@@ -1,5 +1,9 @@
 # Windows document-worker application integration
 
+The current sample-library/browser, independent preview, filename families and
+captured multi-sample import review are covered in `../SAMPLE_LIBRARY_PROGRESS.md`.
+They use independent library workers and the existing shared musical transactions.
+
 This is an editing integration, not a full Mac-parity release. The preserved
 `bin/windows-checkpoints/workspace-preview/ScreamSeq.exe` remains a historical
 artifact. Current upstream scope and qualification are documented in

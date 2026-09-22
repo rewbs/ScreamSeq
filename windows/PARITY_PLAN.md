@@ -10,7 +10,13 @@ device and plugin hosting belong to each platform. See
 [qualification evidence](UPSTREAM_PLUGIN_QUALIFICATION.md) and
 [current app interfaces](App/INTEGRATION.md).
 
-Latest continuation: `DEFERRED_VIEWS_PROGRESS.md` retains native view-opening
+Latest continuation: `SAMPLE_LIBRARY_PROGRESS.md` adds all eight library APIs,
+background indexing/search, independent sample preview, the native browser and
+guarded family import review. All 257 isolated application tests, 30 primary
+native CTests, two index/worker tests and two adapter tests pass. Next finish
+running-preview gain/feedback, then native device selection, MIDI, recording
+and recovery.
+`DEFERRED_VIEWS_PROGRESS.md` retains native view-opening
 requests during background reads without replaying edits or stale targets. The
 full isolated suite passes 247/247 application tests and 29/29 native CTests.
 `SURGE_RESTART_PROGRESS.md` diagnoses and fixes the
@@ -30,9 +36,8 @@ The installed Surge repetition gate passes 20/20. The preceding run's lost
 routing command is fixed and covered by real-worker regressions. The entire
 suite now inherits a private desktop; strict foreground/clipboard checks pass.
 The older foreground failure remains unattributed and preserved in its report.
-Following implementation priorities are the sample library/browser and multisample
-workflow, then MIDI/device/recording and workspace
-parity. Existing plugin and cross-platform release gates remain in force.
+Following implementation priorities are MIDI/device/recording/recovery and
+workspace parity. Existing plugin and cross-platform release gates remain in force.
 The Mac source confirms sample settings and batch import. Sample export is a
 separate enhancement; no existing Mac sample-export UI/API was found in this
 review, so it is not treated as an established parity gap.
@@ -45,6 +50,38 @@ guards imports without discarding that parent draft. The next sample-library
 step should match `SampleLibraryIntegration.swift`: separate library revisions,
 bounded background indexing/search, folder tags, preview, and the existing
 atomic `sample.importMany` / `instrument.importMultisample` transactions.
+
+## Next: devices, timestamped MIDI/recording and recovery
+
+The current Mac source has output selection/64–512-frame preferences in
+`mac/App/main.swift`, CoreMIDI input, shared `NoteRecording` transactions, and
+application-owned autosave/recovery. Windows has shared recording primitives
+and preserved recovery-take data, but no integrated capture/recovery workflow.
+
+1. Extend the native WASAPI owner with explicit endpoint selection and truthful
+   negotiated periods, without changing system defaults. Publish correlated
+   audio presentation time, not the UI's callback arrival time. The shared
+   renderer resets its frame offset on every `render`; Windows' hosted renderer
+   splits at 4,096 frames, so timestamp origins must advance for every slice.
+   Validate stream restart/discontinuity and buffer/latency accounting.
+2. Native MIDI input must retain driver timestamps, use bounded callback queues,
+   report overflow and release held voices on disconnect/overflow. WinMM timestamps
+   are milliseconds from `midiInStart`; WASAPI's correlated QPC values use 100 ns
+   units. Explicitly convert to one advertised host clock and qualify its
+   precision; do not label millisecond hardware timing sample-accurate.
+3. Integrate the existing `recording.start/capture/get/stop/commit/discard`
+   contract and shared `NoteRecording`. Preserve takes across stale edits; validate
+   whole capture batches, use actual presentation-clock history, keep replies
+   bounded, and commit in one document Undo. Save/Open protect unfinished takes.
+4. Add private immutable recovery snapshots, atomic generation writes, browser,
+   explicit guarded restore and take recovery. `windows/Project/NativeProject.cpp`
+   already preserves `recoveryTake` and its compatibility provenance; retain that
+   boundary and never overwrite the source song during restore.
+
+Clock contracts were checked against Microsoft's
+[IAudioClock::GetPosition](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclock-getposition)
+and [MIM_DATA](https://learn.microsoft.com/en-us/windows/win32/multimedia/mim-data).
+Hardware timing, hotplug and reciprocal Mac recovery remain qualification gates.
 
 ## What changed upstream and how it changes the work
 
@@ -146,7 +183,7 @@ preserve concurrent edit guards.
    snapping and clipboard controls are implemented in `SAMPLE_DETAIL_PROGRESS.md`;
    their current qualification is recorded there. Native sample/instrument audition
    and detailed voice markers are implemented in `AUDITION_PROGRESS.md`. Complete
-   the sample-library/browser and multisample workflow, device selection, MIDI input
+   device selection, MIDI input
    and mapping, precise recording/recovery, floating
    and persisted docks, accessibility, configurable keys and command palette
    parity. Keep cursor, selection, focus, pins and playback independent.
@@ -154,6 +191,9 @@ preserve concurrent edit guards.
    `MUSICAL_TYPING_PROGRESS.md`; broader floating-tool keyboard behavior remains.
    Native sample settings, batch import, captured replacement and creation of a
    sample instrument are implemented in `SAMPLE_SETTINGS_PROGRESS.md`.
+   Native library search/tags/preview and guarded family review/import are now
+   implemented in `SAMPLE_LIBRARY_PROGRESS.md`; foreground and large-pack
+   performance qualification remain open.
 5. **Release qualification.** Fresh Mac and Windows builds against the same
    source, reciprocal project reopen and offline comparisons, commercial-plugin
    matrix, endpoint switching, long loaded playback, loopback, foreground

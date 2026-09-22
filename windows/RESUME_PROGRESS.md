@@ -1,6 +1,12 @@
 # Windows continuation — 2026-09-21
 
-Latest continuation: `DEFERRED_VIEWS_PROGRESS.md` fixes lost native view requests
+Latest continuation: `SAMPLE_LIBRARY_PROGRESS.md` adds the native library/browser,
+independent preview and guarded family import. All 257 application tests pass
+with no failures or skips, as do 30 primary native CTests, two index/worker tests
+and two adapter tests. The preserved package is
+`bin/windows-checkpoints/sample-library-20260922/`. Full parity remains active.
+
+Previous continuation: `DEFERRED_VIEWS_PROGRESS.md` fixes lost native view requests
 during worker activity, preserves captured targets and isolates legacy app tests
 on a private desktop. All 247 application tests and 29 native CTests pass.
 Sample library/browser/preview work follows; full parity remains active.

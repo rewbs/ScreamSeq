@@ -40,6 +40,9 @@ public:
   // Other channel layouts are explicitly rejected, not silently remapped.
   // No callback runs until start(). Prepare the renderer at sampleRate() first.
   bool open(RenderCallback callback, void* context);
+  // Dedicated sample-file preview: retain the source rate and use Windows'
+  // quality shared-mode converter. Does not alter the endpoint or song device.
+  bool openConverted(RenderCallback callback, void* context, std::uint32_t sourceRate);
   std::uint32_t sampleRate() const noexcept;
   std::uint32_t periodFrames() const noexcept;
   bool start();

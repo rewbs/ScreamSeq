@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <deque>
 #include <stdexcept>
+#include <set>
 #include <string>
 #include <thread>
 #include <utility>
@@ -48,6 +49,12 @@ public:
   virtual std::vector<std::string> additionalDocumentReads() const {return {};}
   virtual std::vector<std::string> additionalDocumentWrites() const {return {};}
   virtual Json documentOperation(const std::string &,const Json &) {throw ApiError(-32601,"Document operations unavailable");}
+  // Non-document services own their revision/envelope; never snapshot the song
+  // or impose its history/transport semantics on a library preference write.
+  virtual std::vector<std::string> independentReads() const {return {};}
+  virtual std::vector<std::string> independentWrites() const {return {};}
+  virtual Json independentGuards() const {return Json::object();}
+  virtual Json independentOperation(const std::string &,const Json &) {throw ApiError(-32601,"Independent service unavailable");}
   virtual PatternSnapshot pattern(unsigned index) = 0;
   // Called on the owning control thread only, after complete validation.
   // Preserve requested region settings and existing loop default. Throw ApiError
@@ -65,6 +72,7 @@ class SessionAdapter {
   struct Cached { std::string id, request; Json response; std::size_t bytes; };
   std::deque<Cached> cache_;
   std::size_t cacheBytes_ = 0;
+  std::set<std::string> activeWrites_;
   // Successful writes only, FIFO by insertion (replays do not refresh age).
   // Charge compact UTF-8 JSON request + response bytes, excluding newlines.
   // This bounds retained serialized content, not JSON DOM/allocator heap usage.
@@ -144,6 +152,11 @@ class SessionAdapter {
         {"timing","65536 units per row; tracker commands require row boundaries. Bindings use stable plugin instance and parameter IDs."},
         {"transforms","pattern.transform uses shared selection/channel/note-track/pattern/song transforms; field effect includes all FX columns. Precise notes remain independent."}};
     }
+    if(host_) {
+      for(const auto &m:host_->independentReads())result["reads"].push_back(m);
+      for(const auto &m:host_->independentWrites())result["writes"].push_back(m);
+      result["revisionGuards"].update(host_->independentGuards());
+    }
     return result;
   }
   Json getPattern(const Json &p) {
@@ -222,10 +235,14 @@ public:
     const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout";
     const auto reads=host_ ? host_->additionalDocumentReads() : std::vector<std::string>{};
     const auto writes=host_ ? host_->additionalDocumentWrites() : std::vector<std::string>{};
+    const auto separateReads=host_?host_->independentReads():std::vector<std::string>{};
+    const auto separateWrites=host_?host_->independentWrites():std::vector<std::string>{};
+    const bool independentRead=std::find(separateReads.begin(),separateReads.end(),method)!=separateReads.end();
+    const bool independentWrite=std::find(separateWrites.begin(),separateWrites.end(),method)!=separateWrites.end();
     const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="document.timing.get" || method=="automation.formula.reference" || method=="automation.formula.preview");
     const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set");
-    const bool write=docWrite || method=="transport.play" || method=="transport.stop" || method=="context.set" || (workspace && method!="workspace.get");
-    if(!write && !docRead && !workspace && method!="api.describe" && method!="document.get" && method!="context.get" && method!="pattern.get" && method!="transport.get")
+    const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || method=="context.set" || (workspace && method!="workspace.get");
+    if(!write && !independentRead && !docRead && !workspace && method!="api.describe" && method!="document.get" && method!="context.get" && method!="pattern.get" && method!="transport.get")
       return errorResponse(q["id"],-32601,"Unknown method; call api.describe");
     std::string revision;
     try {
@@ -236,6 +253,15 @@ public:
         return cached.response;
       }
       if(!host_ && method!="api.describe") throw ApiError(-32002,"Session is not attached");
+      const auto requestId=q["id"].get<std::string>();
+      if(write&&!activeWrites_.insert(requestId).second)throw ApiError(-32002,"Request is still running; retry with the same ID after it completes");
+      struct ActiveGuard {std::set<std::string> &ids;const std::string &id;bool active;~ActiveGuard(){if(active)ids.erase(id);}}active{activeWrites_,requestId,write};
+      if(independentRead || independentWrite) {
+        auto result=host_->independentOperation(method,p);
+        Json response={{"jsonrpc","2.0"},{"id",q["id"]},{"result",std::move(result)}};
+        if(write)cacheSuccess(q,response);
+        return response;
+      }
       SessionSnapshot before;
       if(host_) before=host_->snapshot();
       else before.revision="unbound";

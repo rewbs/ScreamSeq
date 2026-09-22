@@ -218,6 +218,22 @@ token. Navigation/selection never change song revision, Undo or transport.
 `following` is the canonical Mac field; `follow` remains a read-only legacy alias.
 Selection bounds are inclusive, matching Mac, and are part of the context token.
 
+All eight Mac `sample.library.*` methods are supported by independent Windows
+workers: `get`, `search`, `roots.set`, `rescan`, `inspect`, `preview`,
+`preview.stop`, and `multisample.get`. Their contract follows
+`../../mac/AUTOMATION.md` and the existing schema. Replies use `library:<uuid>`,
+`changed:false`, `playbackStopped:false`, and no document ID. Use
+`data.libraryRevision` for roots/rescan guards and optional search/family guards;
+imports still need the song's `expectedRevision`. In-flight duplicate write IDs
+reject busy; completed retained writes replay.
+
+Normal settings live under `%LOCALAPPDATA%/org.resonance.tracker/SampleLibrary`.
+Inspection/audio-test sessions use in-memory roots and preview without opening
+hardware. An absolute `--sample-test-library <directory>` enables private
+persisted fixtures only in those modes. `workspace.get.sampleLibrary` includes
+service status, `pendingRequests`, preview counters and the browser's selection,
+inspection and family draft. See `../SAMPLE_LIBRARY_PROGRESS.md`.
+
 `workspace.get.pendingViewCommands` counts native view-opening requests retained
 while workers settle, including a currently draining request. Captured document
 or target changes discard those requests; returning focus to the pattern cancels

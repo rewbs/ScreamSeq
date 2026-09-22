@@ -64,8 +64,9 @@
 		place(pinCommand,g.inspector.x+6,g.inspector.y+34,100,24,show);
 		place(cursorCommand,g.inspector.x+110,g.inspector.y+34,70,24,show);
 		place(returnCommand,g.inspector.x+184,g.inspector.y+34,70,24,show);
-		place(sampleCommandBase,10,154,146,124);
+		place(sampleCommandBase,10,154,146,96);
         place(sampleImportCommand,84,126,72,22);
+        place(sampleBrowseCommand,10,254,146,24);
         const auto editor=sampleEditorRect();const bool editSample=sampleEditorVisible();
         float actionX=editor.x+150;
         for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{sampleAllCommand,48.0f},{sampleReverseCommand,66.0f},{sampleNormalizeCommand,78.0f},
@@ -113,7 +114,7 @@
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
 			{notesCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
-            {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},{liveKeysCommand,L"Live keys"},
+            {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},{liveKeysCommand,L"Live keys"},{sampleBrowseCommand,L"Browse samples…"},
             {openCommand,L"Open"},{saveCommand,L"Save"},{saveAsCommand,L"Save As"},{undoCommand,L"Undo"},{redoCommand,L"Redo"},{graphCommandsCommand,L"Graphs…"},{parameterAutomationCommand,L"Automation…"},
             {sampleImportCommand,L"Import…"},{sampleAllCommand,L"All"},{sampleReverseCommand,L"Reverse"},{sampleNormalizeCommand,L"Normalize"},
             {sampleFadeInCommand,L"Fade in"},{sampleFadeOutCommand,L"Fade out"},{sampleTrimCommand,L"Trim"},{sampleLoopCommand,L"Set loop"},{sampleRangeCommand,L"Set range"},
@@ -149,6 +150,7 @@
             {parameterAutomationCommand,L"Automation / Pattern parameter curves and tools",L""},
             {absoluteAutomationCommand,L"Automation / Absolute song parameter lane",L""},
             {sampleDetailCommand,L"Sample / Detailed waveform, drawing and crossfade",L""},
+            {sampleBrowseCommand,L"Sample / Browse library, preview and import sample families",L""},
             {auditionCommand,L"Playback / Sample and instrument audition",L""},
             {instrumentEnvelopeCommand,L"Instrument / Envelopes, settings and sample keymap",L""},
             {effectsCommand,L"Pattern / Inspect FX and parameter bindings",L"Enter on an FX cell"},
@@ -207,6 +209,7 @@
             else if(id==parameterAutomationCommand){openParameterAutomation();return;}
             else if(id==absoluteAutomationCommand){openAbsoluteAutomation();return;}
             else if(id==sampleDetailCommand){openSampleDetail();return;}
+            else if(id==sampleBrowseCommand){openSampleBrowser();return;}
             else if(id==auditionCommand){openAudition();return;}
             else if(id==instrumentEnvelopeCommand){openInstrumentEnvelope();return;}
             else if(id==instrumentImportCommand){openInstrumentEnvelope();instrumentEnvelopeWindow->importInstrument();return;}

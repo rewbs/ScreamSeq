@@ -102,6 +102,6 @@ public:
   HWND window()const{return window_;}
   void musicalTyping(std::function<bool(HWND,WPARAM,bool)> key,std::function<bool(WPARAM)> release,std::function<void()> deactivate){musicalKey_=std::move(key);musicalRelease_=std::move(release);musicalDeactivate_=std::move(deactivate);}
   void show(){ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE);requestPaint();}
-  void hide(){releaseMusicalInput();if(window_){KillTimer(window_,2);ShowWindow(window_,SW_HIDE);}SetFocus(owner_);}
+  virtual void hide(){releaseMusicalInput();if(window_){KillTimer(window_,2);ShowWindow(window_,SW_HIDE);}SetFocus(owner_);}
 };
 }
