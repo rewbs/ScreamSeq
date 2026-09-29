@@ -24,7 +24,12 @@ uint32_t PreciseNoteRuntime::prepare(OpenMPT::CSoundFile &song,uint32_t count) n
   const double unitsPerSample=double(performanceUnitsPerRow)/(double(state.TicksOnRow())*state.m_nSamplesPerTick);
   const double tick=double(state.m_nRow)*performanceUnitsPerRow+double(state.m_nTickCount)*performanceUnitsPerRow/state.TicksOnRow();
   const double position=tick+double(state.SamplesIntoTick())*unitsPerSample;
-  const bool restart=pattern_!=state.m_nPattern||order_!=state.m_nCurrentOrder||position<=previous_;
+  // The mixer calls this at least once per tick, so ordinary playback (including
+  // tempo changes, pattern delay and row repeat) stays on a row or advances by one.
+  // Any other row is a jump within the same pattern and order (position jump, or a
+  // pattern break wrapping to this order) and must not fire the skipped events.
+  const bool jump=row_!=UINT32_MAX&&state.m_nRow!=row_&&state.m_nRow!=row_+1;
+  const bool restart=pattern_!=state.m_nPattern||order_!=state.m_nCurrentOrder||position<=previous_||jump;
   if(restart || row_!=state.m_nRow) {
     row_=state.m_nRow;
     effectOverrides_.fill(false);

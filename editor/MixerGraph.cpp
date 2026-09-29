@@ -117,8 +117,8 @@ MixerPlan compileMixer(const MixerGraph &graph, const std::vector<uint64_t> &tra
   std::set<size_t> assigned;
   for (size_t i = 0; i < processors.size(); ++i) {
     const auto &p = processors[i];
-    require(!p.instance.empty() && pluginIndices.emplace(p.instance, i).second && p.latency <= rate * 10 && range(p.tail, 0, 60) && p.outputBuses >= 1 && p.outputBuses <= 64 && (p.activeOutputs & 1),
-            "Invalid mixer processor description");
+    if (!(!p.instance.empty() && pluginIndices.emplace(p.instance, i).second && p.latency <= rate * 10 && range(p.tail, 0, mixerMaximumTailSeconds) && p.outputBuses >= 1 && p.outputBuses <= 64 && (p.activeOutputs & 1)))
+      throw std::invalid_argument("Invalid mixer processor description: " + (p.instance.empty() ? "processor " + std::to_string(i) : p.instance.substr(0, 128)));
   }
   plan.nodes.resize(graph.buses.size());
   std::vector<double> tails(graph.buses.size());

@@ -1,4 +1,5 @@
 #import "../Bridge/TrackerSession.h"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioUnitHost.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/ArrangementTools.hpp"
@@ -20,7 +21,7 @@ static NSDictionary *descriptor(const PluginDescriptor &d) {
     @"name": @(d.name.c_str()), @"format": @(d.format.c_str()), @"path": @(d.path.c_str()),
     @"classID": @(d.classID.c_str()), @"isInstrument": @(d.instrument)};
 }
-int main(int argc, char **argv) {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool {
     try {
       check(argc == 2, "Fixture path required");

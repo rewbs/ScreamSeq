@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "soundlib/ModInstrument.h"
 #import "../Bridge/TrackerSession.h"
@@ -45,7 +46,7 @@ static double error(const std::vector<float> &a, const std::vector<float> &b) {
   for (size_t i = 0; i < a.size(); ++i) result = std::max(result, std::abs(double(a[i]) - b[i]));
   return result;
 }
-int main(int argc, char **argv) {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool { try {
     check(argc == 2, "Fixture bundle path required");
     auto descriptions = NativePlugin::discoverVST3(argv[1]);

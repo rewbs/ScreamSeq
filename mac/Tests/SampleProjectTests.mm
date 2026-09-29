@@ -117,7 +117,8 @@ int main() {
         sample.nLength = 11;
         sample.uFlags.set(CHN_16BIT, stride == 4);
         sample.uFlags.set(CHN_STEREO, stride == 4);
-        sample.uFlags.set(CHN_LOOP | CHN_PANNING);
+        // A loop-only sample.patch keeps the module's own sample-panning state.
+        sample.uFlags.set(CHN_LOOP);
         sample.nLoopStart = 1;
         sample.nLoopEnd = 11;
         check(sample.AllocateSample() != 0, "Independent renderer PCM allocation");
@@ -192,7 +193,7 @@ int main() {
           target.nLength = uint32_t(referencePCM.size() / stride);
           target.uFlags.set(CHN_16BIT, stride == 4);
           target.uFlags.set(CHN_STEREO, stride == 4);
-          target.uFlags.set(CHN_LOOP | CHN_PANNING);
+          target.uFlags.set(CHN_LOOP);
           target.nLoopStart = 1;
           target.nLoopEnd = target.nLength;
           check(target.AllocateSample() != 0, "Independent clipboard render allocation");

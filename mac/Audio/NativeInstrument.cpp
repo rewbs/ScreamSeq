@@ -169,7 +169,12 @@ void PluginChain::attachMusicalAutomation(Renderer &renderer, const NativeSong &
   auto &song = renderer.song();
   song.nativeMixObserver = nullptr; song.nativeMixContext = nullptr;
   hasMusicalControls_=!native.performance.commands.empty()||std::any_of(native.automation.begin(),native.automation.end(),[](const auto &lane){return lane.enabled;});
-  commandRuntime_=std::make_shared<PatternCommandRuntime>(native,plugins_,instances_,bypass_,automation_);
+  // With a mixer, an unassigned instrument has no adapter and no tail stage:
+  // nothing renders it, so nothing would ever consume its musical events and
+  // the bounded event store would fill and stop playback. Schedule nothing.
+  std::vector<bool> unscheduled=bypass_;
+  for(size_t i=0;i<plugins_.size();++i)if(mixer_&&plugins_[i]->isInstrument()&&!instruments_[i])unscheduled[i]=true;
+  commandRuntime_=std::make_shared<PatternCommandRuntime>(native,plugins_,instances_,unscheduled,automation_);
   musicalSong_=&song;song.nativePitchRatios.fill(nullptr);
   pitchRuntime_=std::make_shared<PatternPitchRuntime>(native,song,plugins_,bypass_);
   musicalPatterns_.clear();
@@ -182,7 +187,7 @@ void PluginChain::attachMusicalAutomation(Renderer &renderer, const NativeSong &
     auto pattern = std::find_if(native.patterns.begin(), native.patterns.end(), [&](const auto &p) { return p.second.id == lane.pattern; });
     if (instance == instances_.end() || pattern == native.patterns.end()) continue;
     size_t slot = size_t(instance - instances_.begin());
-    if (bypass_[slot]) continue;
+    if (unscheduled[slot]) continue;
     auto parameters = plugins_[slot]->parameters();
     auto parameter = std::find_if(parameters.begin(), parameters.end(), [&](const auto &p) { return p.id == lane.parameter; });
     if (parameter == parameters.end()) continue; // Retain unavailable destinations without retargeting.

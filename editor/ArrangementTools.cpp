@@ -1,5 +1,6 @@
 #include "ArrangementTools.hpp"
 #include "soundlib/mod_specifications.h"
+#include <algorithm>
 #include <stdexcept>
 namespace Tracker {
 ArrangementCopyPlan prepareArrangementCopy(const Document &doc, const ArrangementCopy &copy) {
@@ -47,16 +48,27 @@ void applyArrangementCopy(Document &doc, const ArrangementCopyPlan &plan) {
     if (plan.clone) {
       auto rows = s.Patterns[plan.originalPattern].GetNumRows();
       if (!s.Patterns.Insert(plan.targetPattern, rows)) throw std::runtime_error("Could not allocate independent pattern");
-      for (uint16_t r = 0; r < rows; ++r)
-        for (uint16_t c = 0; c < s.GetNumChannels(); ++c)
-          *s.Patterns[plan.targetPattern].GetpModCommand(r, c) = *s.Patterns[plan.originalPattern].GetpModCommand(r, c);
+      // Pattern assignment also copies name, colour, signature and tempo swing.
+      s.Patterns[plan.targetPattern] = s.Patterns[plan.originalPattern];
       s.Order()[plan.targetOrder] = plan.targetPattern;
       auto entity = native.patterns.at(plan.originalPattern);
       entity.id = native.makeEntity().id;
       native.clonePatternAutomation(native.patterns.at(plan.originalPattern).id, entity.id);
       native.patterns[plan.targetPattern] = std::move(entity);
     }
-    for (auto edit : plan.edits) { edit.pattern = plan.targetPattern; Document::put(s, edit); }
+    const auto pattern = native.patterns.at(plan.targetPattern).id;
+    for (auto edit : plan.edits) {
+      edit.pattern = plan.targetPattern;
+      // As in Document::edit: a changed source-format effect replaces FX 1's precise command.
+      const auto &before = *s.Patterns[edit.pattern].GetpModCommand(edit.row, edit.channel);
+      if (before.command != OpenMPT::EffectCommand(edit.after.effect) || before.param != edit.after.parameter) {
+        const auto track = native.tracks.at(edit.channel).id;
+        std::erase_if(native.performance.commands, [&](const auto &c) {
+          return c.pattern == pattern && c.track == track && !c.column && c.position / performanceUnitsPerRow == edit.row;
+        });
+      }
+      Document::put(s, edit);
+    }
   });
 }
 } // namespace Tracker

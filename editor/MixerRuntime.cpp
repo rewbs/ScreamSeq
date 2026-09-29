@@ -185,7 +185,7 @@ const float *MixerRuntime::process(size_t bus, const float *directLeft, const fl
     const auto &side = plan_.sidechains[index];
     sideDelays_[index].add(side.preFader ? node.input.data() : node.work.data(), sideTargets_[index], frames_, float(side.gain));
   }
-  const float decay = float(std::exp(-frames_ / (rate_ * .2)));
+  const float decay = float(std::exp(-double(frames_) / (double(rate_) * .2)));
   meters_[bus * 2].store(std::max(peakL, meters_[bus * 2].load(std::memory_order_relaxed) * decay), std::memory_order_relaxed);
   meters_[bus * 2 + 1].store(std::max(peakR, meters_[bus * 2 + 1].load(std::memory_order_relaxed) * decay), std::memory_order_relaxed);
   return node.work.data();

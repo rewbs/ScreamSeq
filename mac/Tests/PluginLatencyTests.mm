@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #include "../Audio/NativeSignalGraph.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "soundlib/ModInstrument.h"
@@ -17,7 +18,7 @@ static void enable(Document &doc) {
     n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});
   });
 }
-int main(int argc, char **argv) { @autoreleasepool { try {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleasepool { try {
   check(argc == 2, "Pass fixture bundle");
   auto descriptors = NativePlugin::discoverVST3(argv[1]);
   void *module = dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(), RTLD_NOW|RTLD_LOCAL);

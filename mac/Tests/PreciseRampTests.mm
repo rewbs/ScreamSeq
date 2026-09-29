@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #include <chrono>
 #include <iostream>
 #include <limits>
@@ -12,7 +13,7 @@ extern "C" void tracker_audit_begin();
 extern "C" void tracker_audit_end(uint64_t *,uint64_t *,uint64_t *);
 #endif
 static void check(bool value,const char *message){if(!value)throw std::runtime_error(message);}
-int main(int argc,char **argv){@autoreleasepool{try{
+int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Local VST3 fixture required");const auto vst=NativePlugin::discoverVST3(argv[1]),au=registerFixtureAUs();
   const auto start=std::chrono::steady_clock::now();
   SampleRamp formula{100,1000,.1,.9};

@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "PluginInventory.hpp"
 #import <Foundation/Foundation.h>
 #include <cerrno>
 #include <iostream>
@@ -24,6 +25,10 @@ int main(int argc, char **argv) {
       }
     };
     try {
+      // This isolated process examines exactly the bundle it was given: one the
+      // user or an agent chose, or one found while scanning the standard folders.
+      if ((argc == 3 && std::string(argv[1]) == "--list-vst3") || (argc == 5 && std::string(argv[1]) == "--validate-vst3"))
+        Tracker::PluginTrust::trust([NSString stringWithUTF8String:argv[2]]);
       if ((argc == 2 && std::string(argv[1]) == "--list") || (argc == 3 && std::string(argv[1]) == "--list-vst3")) {
         auto list = [NSMutableArray array];
         for (auto &plugin :

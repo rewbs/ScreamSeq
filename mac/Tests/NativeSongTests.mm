@@ -67,6 +67,62 @@ int main() {
       blocks->annotate([](NativeSong &n) { n.tracks.at(0).name = "Changed"; });
       try { applyArrangementCopy(*blocks, plan); check(false, "Reject stale prepared block"); }
       catch (const std::invalid_argument &) {}
+      {
+        // Duplicates and independent block copies keep the pattern's own settings.
+        auto timed = Document::demo();
+        timed->transaction([](CSoundFile &s) {
+          auto &pattern = s.Patterns[0];
+          TempoSwing swing; swing.resize(3, TempoSwing::Unity); swing[0] += TempoSwing::Unity / 4; swing.Normalize();
+          check(pattern.SetSignature(3, 12) && pattern.SetName("Verse"), "Pattern settings fixture");
+          pattern.SetTempoSwing(swing); pattern.SetColor(0x336699);
+        });
+        auto same = [&](int copy, int rows) {
+          const auto &s = timed->song(); const auto &a = s.Patterns[0], &b = s.Patterns[copy];
+          return b.GetNumRows() == ROWINDEX(rows) && b.GetOverrideSignature() && b.GetRowsPerBeat() == 3 && b.GetRowsPerMeasure() == 12 &&
+            b.HasTempoSwing() && b.GetTempoSwing() == a.GetTempoSwing() && b.GetName() == "Verse" && b.GetColor() == 0x336699 &&
+            timed->cell(copy, 0, 0) == timed->cell(0, 0, 0) && timed->cell(copy, 16, 1) == timed->cell(0, 16, 1);
+        };
+        const auto duplicate = timed->addPattern(64, true, 0), shorter = timed->addPattern(32, true, 0);
+        check(same(duplicate, 64) && timed->song().Patterns[duplicate] == timed->song().Patterns[0], "Pattern duplicate keeps signature, tempo swing, name and colour");
+        check(same(shorter, 32), "Shorter pattern duplicate keeps settings and overlapping rows");
+        timed->undo(); timed->undo();
+        timed->editOrder(0, 0, "after");
+        ArrangementCopy block{0, 1, 0, 4};
+        auto unique = prepareArrangementCopy(*timed, block);
+        check(unique.clone, "Shared pattern requires an independent copy");
+        applyArrangementCopy(*timed, unique);
+        check(same(unique.targetPattern, 64), "Independent block copy keeps signature, tempo swing, name and colour");
+      }
+      {
+        // A copied source-format effect replaces FX 1's precise command, as Document::edit does.
+        auto fx = Document::demo();
+        fx->edit({Edit{0, 0, 0, {}, {49, 1, VOLCMD_VOLUME, 38, CMD_VIBRATO, 0x34}}});
+        fx->editOrder(0, 0, "after");
+        fx->annotate([](NativeSong &n) {
+          const auto p = n.patterns.at(0).id, t = n.tracks.at(4).id;
+          n.performance.columns[t] = 2;
+          n.performance.commands = {{p, t, 100, 0, 0, PatternCommandKind::PitchSet, 0, 1.0},
+            {p, t, 65536, 0, 0, PatternCommandKind::PitchSet, 0, 2.0}, {p, t, 0, 0, 1, PatternCommandKind::PitchSet, 0, 3.0}};
+        });
+        auto commands = [&](int pattern) {
+          std::vector<double> values; const auto &n = fx->native();
+          for (const auto &c : n.performance.commands) if (c.pattern == n.patterns.at(pattern).id) values.push_back(c.value);
+          std::sort(values.begin(), values.end()); return values;
+        };
+        ArrangementCopy block{0, 1, 0, 4};
+        for (bool unique : {true, false}) {
+          block.makeUnique = unique;
+          const auto plan = prepareArrangementCopy(*fx, block);
+          check(plan.clone == unique, "Block copy fixture");
+          applyArrangementCopy(*fx, plan);
+          check(fx->cell(plan.targetPattern, 0, 4).effect == CMD_VIBRATO && commands(plan.targetPattern) == std::vector<double>{2.0, 3.0},
+                "Block copy replaces the conflicting FX 1 precise command and keeps other rows and columns");
+          if (unique) check(commands(0) == std::vector<double>{1.0, 2.0, 3.0}, "Independent block copy leaves the shared pattern's commands");
+          fx->native().validate(fx->song());
+          fx->undo();
+          check(commands(0) == std::vector<double>{1.0, 2.0, 3.0} && fx->cell(0, 0, 4) == Cell{}, "One Undo restores the replaced precise command");
+        }
+      }
       auto folder = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
       [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
       for (auto type : {MOD_TYPE_MOD, MOD_TYPE_XM, MOD_TYPE_S3M, MOD_TYPE_IT, MOD_TYPE_MPT}) {
@@ -83,6 +139,11 @@ int main() {
           if (!response) throw std::runtime_error(error.localizedDescription.UTF8String);
           return response[@"data"];
         };
+        {
+          // Deleting plain cells changes no native data, so it need not stop playback.
+          NSDictionary *preview = call(@"pattern.transform", @{@"operation": @"clear", @"scope": @"pattern", @"pattern": @0, @"dryRun": @YES}, true);
+          check([preview[@"changedCells"] intValue] > 0 && ![preview[@"effectsChanged"] boolValue], "Delete over plain cells reports unchanged native data");
+        }
         auto arrangement = call(@"arrangement.get", @{});
         auto original = [session snapshot:0];
         NSString *slot = arrangement[@"orders"][0][@"id"];

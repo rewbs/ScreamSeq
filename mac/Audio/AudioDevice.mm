@@ -77,6 +77,20 @@ void AudioDevice::configure(uint32_t deviceID, uint32_t frames) {
   if (!component)
     throw std::runtime_error("Core Audio output is unavailable.");
   check(AudioComponentInstanceNew(component, &unit_), "Cannot create audio output");
+  try {
+    configureUnit(deviceID);
+  } catch (...) {
+    // Never retain a half-built output: play() reconfigures only without one.
+    AudioComponentInstanceDispose(unit_);
+    unit_ = nullptr;
+    throw;
+  }
+  mach_timebase_info_data_t timebase;
+  mach_timebase_info(&timebase);
+  nanosPerTick_ = double(timebase.numer) / timebase.denom;
+  addListeners();
+}
+void AudioDevice::configureUnit(uint32_t deviceID) {
   check(AudioUnitSetProperty(unit_, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &deviceID,
                              sizeof(deviceID)),
         "Cannot select output device");
@@ -95,9 +109,8 @@ void AudioDevice::configure(uint32_t deviceID, uint32_t frames) {
   check(AudioUnitSetProperty(unit_, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &cb, sizeof(cb)),
         "Cannot set render callback");
   check(AudioUnitInitialize(unit_), "Cannot initialize output");
-  mach_timebase_info_data_t timebase;
-  mach_timebase_info(&timebase);
-  nanosPerTick_ = double(timebase.numer) / timebase.denom;
+}
+void AudioDevice::addListeners() {
   for (auto selector : std::array<AudioObjectPropertySelector, 3>{kAudioDevicePropertyNominalSampleRate,
                                                                   kAudioDevicePropertyDeviceIsAlive,
                                                                   kAudioDevicePropertyBufferFrameSize}) {
@@ -215,44 +228,57 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
       std::memset(buffers->mBuffers[i].mData, 0, buffers->mBuffers[i].mDataByteSize);
   if (self.playing_.load(std::memory_order_relaxed) && !self.pluginLatencyChanged() && self.renderer_ && buffers->mNumberBuffers == 1 &&
       buffers->mBuffers[0].mData && buffers->mBuffers[0].mDataByteSize >= frames * 8) {
-    auto *output = static_cast<float *>(buffers->mBuffers[0].mData);
-    if (self.plugins_) {
-      self.plugins_->beginRenderBlock();
-      self.plugins_->syncTransport(*self.renderer_);
-    }
-    if (!self.renderEnded_) {
-      self.renderer_->recordingTime(timestamp && (timestamp->mFlags & kAudioTimeStampHostTimeValid) ? timestamp->mHostTime : 0,
-        1e9/(self.sampleRate_*self.nanosPerTick_));
-      auto received = self.renderer_->render(output, frames);
-      if (received < frames) {
-        if (self.plugins_)
-          self.plugins_->endNotes();
-        self.renderEnded_ = true;
-        self.tailFrames_ = self.tailBudgetFrames_ =
-            self.plugins_ ? uint64_t(std::ceil((self.plugins_->tail() + self.plugins_->latency()) * self.sampleRate_))
-                          : 0;
-        auto silence = frames - received;
-        self.tailFrames_ = self.tailFrames_ > silence ? self.tailFrames_ - silence : 0;
-      }
-    } else
-      self.tailFrames_ = self.tailFrames_ > frames ? self.tailFrames_ - frames : 0;
-    if (self.plugins_ && !self.plugins_->process(output, frames))
-      self.playing_ = false;
-    if (self.renderEnded_ && self.plugins_) {
-      const auto budget = uint64_t(std::ceil((self.plugins_->tail() + self.plugins_->latency()) * self.sampleRate_));
-      if (budget > self.tailBudgetFrames_) self.tailFrames_ += budget - self.tailBudgetFrames_;
-      self.tailBudgetFrames_ = std::max(self.tailBudgetFrames_, budget);
-      // A control edit can move stored energy into a slower mode even when it
-      // remains inside a precomputed range. Allow decay from that edit too.
-      if (self.plugins_->tailRevision() != self.tailRevision_) self.tailFrames_ = std::max(self.tailFrames_, budget);
-    }
-    if (self.plugins_) self.tailRevision_ = self.plugins_->tailRevision();
-    if (self.renderEnded_ && !self.tailFrames_)
-      self.playing_ = false;
+    auto *const callbackOutput = static_cast<float *>(buffers->mBuffers[0].mData);
+    const UInt32 callbackFrames = frames;
+    const double ticksPerFrame = 1e9 / (self.sampleRate_ * self.nanosPerTick_);
     float left = 0, right = 0;
-    for (uint32_t frame = 0; frame < frames; ++frame) {
-      left = std::max(left, std::abs(output[frame * 2]));
-      right = std::max(right, std::abs(output[frame * 2 + 1]));
+    // A device may deliver more frames than it negotiated, or more than the
+    // 4096 prepared by every plugin, mixer and graph buffer. Render such a
+    // callback as consecutive blocks: results do not depend on the partition.
+    for (UInt32 done = 0; done < callbackFrames && self.playing_.load(std::memory_order_relaxed) &&
+                          (!done || !self.pluginLatencyChanged());) {
+      const UInt32 frames = std::min<UInt32>(callbackFrames - done, maximumBlockFrames);
+      auto *const output = callbackOutput + size_t(done) * 2;
+      const UInt32 blockStart = done;
+      done += frames;
+      if (self.plugins_) {
+        self.plugins_->beginRenderBlock();
+        self.plugins_->syncTransport(*self.renderer_);
+      }
+      if (!self.renderEnded_) {
+        self.renderer_->recordingTime(timestamp && (timestamp->mFlags & kAudioTimeStampHostTimeValid)
+                                          ? timestamp->mHostTime + uint64_t(std::llround(blockStart * ticksPerFrame)) : 0,
+          ticksPerFrame);
+        auto received = self.renderer_->render(output, frames);
+        if (received < frames) {
+          if (self.plugins_)
+            self.plugins_->endNotes();
+          self.renderEnded_ = true;
+          self.tailFrames_ = self.tailBudgetFrames_ =
+              self.plugins_ ? uint64_t(std::ceil((self.plugins_->tail() + self.plugins_->latency()) * self.sampleRate_))
+                            : 0;
+          auto silence = frames - received;
+          self.tailFrames_ = self.tailFrames_ > silence ? self.tailFrames_ - silence : 0;
+        }
+      } else
+        self.tailFrames_ = self.tailFrames_ > frames ? self.tailFrames_ - frames : 0;
+      if (self.plugins_ && !self.plugins_->process(output, frames))
+        self.playing_ = false;
+      if (self.renderEnded_ && self.plugins_) {
+        const auto budget = uint64_t(std::ceil((self.plugins_->tail() + self.plugins_->latency()) * self.sampleRate_));
+        if (budget > self.tailBudgetFrames_) self.tailFrames_ += budget - self.tailBudgetFrames_;
+        self.tailBudgetFrames_ = std::max(self.tailBudgetFrames_, budget);
+        // A control edit can move stored energy into a slower mode even when it
+        // remains inside a precomputed range. Allow decay from that edit too.
+        if (self.plugins_->tailRevision() != self.tailRevision_) self.tailFrames_ = std::max(self.tailFrames_, budget);
+      }
+      if (self.plugins_) self.tailRevision_ = self.plugins_->tailRevision();
+      if (self.renderEnded_ && !self.tailFrames_)
+        self.playing_ = false;
+      for (uint32_t frame = 0; frame < frames; ++frame) {
+        left = std::max(left, std::abs(output[frame * 2]));
+        right = std::max(right, std::abs(output[frame * 2 + 1]));
+      }
     }
     self.outputLeft_ = left;
     self.outputRight_ = right;

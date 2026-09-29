@@ -29,6 +29,9 @@ class AudioDevice {
   std::atomic<bool> deviceChanged_{false};
   static OSStatus propertyChanged(AudioObjectID, UInt32, const AudioObjectPropertyAddress *, void *);
   void removeListeners();
+  void addListeners();
+  void configureUnit(uint32_t deviceID); // Throws; configure() disposes the unit.
+  static constexpr uint32_t maximumBlockFrames = 4096; // Prepared plugin/mixer block size.
   static OSStatus callback(void *, AudioUnitRenderActionFlags *, const AudioTimeStamp *, UInt32, UInt32,
                            AudioBufferList *);
 

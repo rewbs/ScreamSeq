@@ -1,4 +1,5 @@
 #import "../Bridge/TrackerSession.h"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioUnitHost.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "soundlib/ModInstrument.h"
@@ -25,7 +26,7 @@ static std::unique_ptr<Document> song(){
       auto &off=*s.Patterns[0].GetpModCommand(i,i-1);off.note=NOTE_KEYOFF;}
   });return doc;
 }
-int main(int argc,char **argv){@autoreleasepool{try{
+int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Fixture path required");NSString *path=@(argv[1]);
   void *handle=dlopen([path stringByAppendingPathComponent:@"Contents/MacOS/ResonanceFixture"].UTF8String,RTLD_NOW|RTLD_LOCAL);
   check(handle,"Open private VST3 fixture");auto weighted=reinterpret_cast<void(*)(bool)>(dlsym(handle,"ResonanceFixtureChannelWeights"));check(weighted,"Weighted channel test hook");weighted(true);setFixtureAUChannelWeights(true);

@@ -211,7 +211,8 @@ public:
 	                                    const std::optional<std::string> &name = std::nullopt) const;
 	int applySampleCopy(PreparedSampleCopy prepared);
 private:
-	PreparedSampleEdit prepareSampleSplice(int sample, SampleSplicePlan plan) const;
+	// keepPoints: Overwrite/Mix rewrite audio in place and may only extend the sample.
+	PreparedSampleEdit prepareSampleSplice(int sample, SampleSplicePlan plan, bool keepPoints = false) const;
 public:
 	void sampleSettings(int sample, int rate, int volume, int pan, uint32_t start, uint32_t end, bool loop, bool pingpong, const std::optional<std::string> &name = std::nullopt, SampleSettingsFields fields = {});
 	std::vector<float> waveform(int sample, size_t bins) const;

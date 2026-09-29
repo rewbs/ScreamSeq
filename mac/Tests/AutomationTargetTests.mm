@@ -1,4 +1,5 @@
 #import "../Bridge/TrackerSession.h"
+#include "FixtureTrust.hpp"
 #include <cmath>
 #include <dlfcn.h>
 #include <iostream>
@@ -6,7 +7,7 @@
 #include <stdexcept>
 
 static void check(bool condition, const char *message) { if (!condition) throw std::runtime_error(message); }
-int main(int argc, const char **argv) {
+int main(int argc, const char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool {
     try {
       check(argc == 2, "Pass the local VST3 fixture path");

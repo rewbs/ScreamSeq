@@ -1,4 +1,5 @@
 #include "../Audio/NativeSignalGraph.hpp"
+#include "FixtureTrust.hpp"
 #include <chrono>
 #include <iostream>
 #include <algorithm>
@@ -6,7 +7,7 @@
 using namespace Tracker;
 #include "GraphRealtimeAudit.hpp"
 struct ClockState : OpenMPT::PlayState {using PlayState::m_nBufferCount;};
-int main(int argc,char **argv){@autoreleasepool{try{
+int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   if(argc!=2)throw std::runtime_error("Supply fixture bundle");auto vst=NativePlugin::discoverVST3(argv[1]).at(0);
   auto builtins=NativePlugin::builtins();auto gain=*std::find_if(builtins.begin(),builtins.end(),[](const auto &p){return p.classID=="resonance.gainer.v1";});
   PluginDescriptor au{kAudioUnitType_Effect,kAudioUnitSubType_LowPassFilter,kAudioUnitManufacturer_Apple,"Apple AULowpass"};

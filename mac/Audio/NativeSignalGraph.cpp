@@ -37,7 +37,7 @@ struct NativeSignalGraph::Instance {
         if(p==parameters.end()||!p->writable||!p->continuous||p->max<=p->min)throw std::invalid_argument("Modulation requires a writable continuous plugin parameter");
         plugin->prepareMusicalAutomation();plugin->includeParameterRange(m.parameter,p->min,p->max);
       }
-      tail=std::min(120.,tail+std::max(0.,plugin->tail()));processors.push_back({n.id,std::move(plugin),std::move(parameters)});
+      tail=std::min(mixerMaximumTailSeconds,tail+std::max(0.,plugin->tail()));processors.push_back({n.id,std::move(plugin),std::move(parameters)});
     }
     auto plan=compileSignal(d,info);dryDelay.resize(size_t(plan.totalLatency)*2);tailFrames=uint64_t(std::ceil(tail*sampleRate))+plan.totalLatency;runtime=std::make_unique<SignalRuntime>(d,std::move(plan),sampleRate);
   }
@@ -165,7 +165,7 @@ NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool o
         auto node=std::find_if(definition->nodes.begin(),definition->nodes.end(),[&](const auto &n){return n.id==edge.source;});
         if(node!=definition->nodes.end()&&node->kind==SignalNodeKind::Input&&edge.output)prepared->inputMask|=uint64_t(1)<<edge.output;
       }
-      auto instance=std::make_unique<Instance>(*definition,role,rate,offline);budget(sizeof(Instance)+instance->dryDelay.size()*sizeof(float)+instance->runtime->storageBytes());prepared->reserved+=instance->runtime->latency();prepared->tailSeconds=std::min(120.,prepared->tailSeconds+instance->tailFrames/rate);
+      auto instance=std::make_unique<Instance>(*definition,role,rate,offline);budget(sizeof(Instance)+instance->dryDelay.size()*sizeof(float)+instance->runtime->storageBytes());prepared->reserved+=instance->runtime->latency();prepared->tailSeconds=std::min(mixerMaximumTailSeconds,prepared->tailSeconds+instance->tailFrames/rate);
       if(role==2){instance->active=true;for(const auto &a:native.signal.assignments)if(a.target==bus.id){instance->amount=a.amount;instance->wet=a.wet;}}
       prepared->instances.push_back(std::move(instance));
       if(role<2)prepared->renderOrder[role].push_back(prepared->instances.size()-1);
@@ -208,7 +208,7 @@ void NativeSignalGraph::refreshLatencies(std::vector<MixerProcessorInfo> &mixerP
         for (const auto &bus : p.plugin->buses()) if (bus.active && bus.supported && bus.index < 64)
           (bus.input ? inputs : outputs) |= uint64_t(1) << bus.index;
         info.push_back({p.id, uint32_t(std::llround(p.plugin->latency() * rate_)), inputs, outputs});
-        tail = std::min(120., tail + std::max(0., p.plugin->tail()));
+        tail = std::min(mixerMaximumTailSeconds, tail + std::max(0., p.plugin->tail()));
       }
       auto plan = compileSignal(i->runtime->definition(), info);
       const auto oldStorage = i->runtime->storageBytes() + i->dryDelay.size() * sizeof(float);
@@ -219,7 +219,7 @@ void NativeSignalGraph::refreshLatencies(std::vector<MixerProcessorInfo> &mixerP
       storageBytes_ = storageBytes_ - oldStorage + i->runtime->storageBytes() + i->dryDelay.size() * sizeof(float);
       i->tailFrames = uint64_t(std::ceil(tail * rate_)) + i->runtime->latency();
       b->reserved += i->runtime->latency();
-      b->tailSeconds = std::min(120., b->tailSeconds + i->tailFrames / rate_);
+      b->tailSeconds = std::min(mixerMaximumTailSeconds, b->tailSeconds + i->tailFrames / rate_);
     }
     if (b->reserved > 1048576) throw std::invalid_argument("Channel graph compensation exceeds supported delay");
     if (b->reserved != previousReserved) for (auto &i : b->instances) for (auto &port : i->auxiliary) {
