@@ -37,6 +37,12 @@ final class PatternPerformanceEditor: NSView {
   private(set) var commands=[[String:Any]](), bindings=[[String:Any]](), plugins=[[String:Any]](), parameters=[[String:Any]]()
   private var rows=64, generation=0, rowsPerBeat=4
   private var lastOffsetUnit=0
+  // Popup selections are resolved by stable ID. addItem(withTitle:) removes an
+  // earlier item with an equal title, so an index is not a reliable key.
+  private var selectedPlugin:[String:Any]? {guard let id=plugin.selectedItem?.representedObject as? String else{return nil};return plugins.first{$0["instanceID"] as? String==id}}
+  private var selectedParameter:[String:Any]? {guard let id=parameter.selectedItem?.representedObject as? Int else{return nil};return parameters.first{$0["id"] as? Int==id}}
+  private func item(_ title:String,id:Any?,tag:Int=0)->NSMenuItem {let item=NSMenuItem(title:title,action:nil,keyEquivalent:"");item.representedObject=id;item.tag=tag;return item}
+  private func choosePlugin(_ id:String?) {plugin.selectItem(at:id.map{plugin.indexOfItem(withRepresentedObject:$0)} ?? -1)}
   var requestedKind: String?
   var requestedTarget: (plugin: String, parameter: Int)?
   let targetSummary=Theme.label("",size:12,color:Theme.accent)
@@ -87,8 +93,10 @@ final class PatternPerformanceEditor: NSView {
     generation += 1;let current=generation;pending=true;revision=nil;controls()
     capturedPattern=model.pattern;capturedRow=row;capturedChannel=channel;rows=model.rows;rowsPerBeat=max(1,model.rowsPerBeat);plugins=model.nativePlugins
     offsetUnits.selectItem(at:0);lastOffsetUnit=0
+    let previousPlugin=plugin.selectedItem?.representedObject as? String
     plugin.removeAllItems()
-    for (slot,item) in plugins.enumerated() {plugin.addItem(withTitle:"\(slot+1) · \(item["name"] as? String ?? "Plugin")");plugin.lastItem?.representedObject=item["instanceID"]}
+    for (slot,entry) in plugins.enumerated() {plugin.menu?.addItem(item("\(slot+1) · \(entry["name"] as? String ?? "Plugin")",id:entry["instanceID"]))}
+    if let previousPlugin,plugin.indexOfItem(withRepresentedObject:previousPlugin)>=0 {choosePlugin(previousPlugin)}
     location.stringValue="Pattern \(model.pattern) · Row \(row) · Channel \(channel+1)"
     onRequest("pattern.effects.get",["pattern":model.pattern]){[weak self] reply in
       guard let self,self.generation==current else{return};self.pending=false
@@ -97,8 +105,8 @@ final class PatternPerformanceEditor: NSView {
       self.revision=revision;self.commands=data["commands"] as? [[String:Any]] ?? [];self.bindings=data["bindings"] as? [[String:Any]] ?? []
       let count=(data["columns"] as? [[String:Any]] ?? []).first{$0["channel"] as? Int==channel}?["count"] as? Int ?? 1
       self.columns.selectItem(withTag:max(count,max(0,min(7,(column-3)/2))+1));self.effectColumn.selectItem(withTag:max(0,min(7,(column-3)/2)))
-      self.binding.removeAllItems();self.binding.addItem(withTitle:"Choose a plugin & parameter…")
-      for item in self.bindings {self.binding.addItem(withTitle:"\(item["id"] as? Int ?? 0) · \(item["name"] as? String ?? "")\(item["resolved"] as? Bool==true ? "" : " (unresolved)")");self.binding.lastItem?.tag=item["id"] as? Int ?? 0}
+      self.binding.removeAllItems();self.binding.menu?.addItem(self.item("Choose a plugin & parameter…",id:nil))
+      for entry in self.bindings {self.binding.menu?.addItem(self.item("\(entry["id"] as? Int ?? 0) · \(entry["name"] as? String ?? "")\(entry["resolved"] as? Bool==true ? "" : " (unresolved)")",id:nil,tag:entry["id"] as? Int ?? 0))}
       self.selectCell();self.status.stringValue="Edit this cell, or choose Use current cursor to move the editor.";self.controls()
     }
   }
@@ -136,29 +144,28 @@ final class PatternPerformanceEditor: NSView {
     bindingNumber.stringValue=String(existing?["id"] as? Int ?? ((1...255).first{n in !bindings.contains{$0["id"] as? Int==n}} ?? 255))
     bindingName.stringValue=existing?["name"] as? String ?? ""
     if let target=requestedTarget {
-      requestedTarget=nil; bindingName.stringValue=""; plugin.selectItem(at:plugins.firstIndex(where:{$0["instanceID"] as? String==target.plugin}) ?? -1)
+      requestedTarget=nil; bindingName.stringValue=""; choosePlugin(target.plugin)
       loadParameters(selected:target.parameter); return
     }
-    if let id=existing?["plugin"] as? String {plugin.selectItem(at:plugins.firstIndex(where:{$0["instanceID"] as? String==id}) ?? -1)}
+    if let id=existing?["plugin"] as? String {choosePlugin(id)}
     loadParameters(selected:existing?["parameter"] as? Int)
   }
   @objc func selectPlugin(){binding.selectItem(at:0);bindingName.stringValue="";loadParameters(selected:nil)}
   @objc func selectParameter(){
-    guard plugins.indices.contains(plugin.indexOfSelectedItem),parameters.indices.contains(parameter.indexOfSelectedItem) else{targetSummary.stringValue="Choose an available instrument or effect plugin.";return}
-    let p=plugins[plugin.indexOfSelectedItem],q=parameters[parameter.indexOfSelectedItem]
+    guard let p=selectedPlugin,let q=selectedParameter else{targetSummary.stringValue="Choose an available instrument or effect plugin.";return}
     targetSummary.stringValue="\(p["name"] as? String ?? "Plugin") → \(q["name"] as? String ?? "Parameter") · \(q["canSlide"] as? Bool==true ? "set or slide" : "set only")"
   }
   func loadParameters(selected:Int?) {
-    guard !pending,plugins.indices.contains(plugin.indexOfSelectedItem),let onRequest else{parameters=[];parameter.removeAllItems();controls();return}
-    let slot=plugin.indexOfSelectedItem,current=generation;pending=true;controls()
+    guard !pending,let chosen=selectedPlugin?["instanceID"] as? String,let slot=plugins.firstIndex(where:{$0["instanceID"] as? String==chosen}),let onRequest else{parameters=[];parameter.removeAllItems();controls();return}
+    let current=generation;pending=true;controls()
     onRequest("plugin.parameters.get",["slot":slot]){[weak self] reply in
       guard let self,self.generation==current else{return};self.pending=false
       guard let result=reply["result"] as? [String:Any],result["revision"] as? String==self.revision,let data=result["data"] as? [[String:Any]] else {
         self.parameters=[];self.parameter.removeAllItems();self.failure(reply);return
       }
       self.parameters=data.filter{$0["writable"] as? Bool != false};self.parameter.removeAllItems()
-      for item in self.parameters {self.parameter.addItem(withTitle:"\(item["name"] as? String ?? "Parameter")\(item["canSlide"] as? Bool==true ? "" : " · set only")");self.parameter.lastItem?.tag=item["id"] as? Int ?? 0}
-      if let selected {if !self.parameter.selectItem(withTag:selected){self.parameter.selectItem(at:-1)}}
+      for entry in self.parameters {let id=entry["id"] as? Int ?? 0;self.parameter.menu?.addItem(self.item("\(entry["name"] as? String ?? "Parameter")\(entry["canSlide"] as? Bool==true ? "" : " · set only")",id:id,tag:id))}
+      if let selected {self.parameter.selectItem(at:self.parameter.indexOfItem(withRepresentedObject:selected))}
       self.selectParameter();self.controls()
     }
   }
@@ -186,18 +193,16 @@ final class PatternPerformanceEditor: NSView {
         guard let range=Int(pitchRange.stringValue),(1...96).contains(range) else{status.stringValue="Plugin wheel range must be 1–96 semitones, matching the instrument's setting.";return}
         command["binding"]=0;command["pitchRange"]=range
       } else {
-        guard plugins.indices.contains(plugin.indexOfSelectedItem),
-          parameters.indices.contains(parameter.indexOfSelectedItem),let pluginID=plugins[plugin.indexOfSelectedItem]["instanceID"] as? String else {
+        guard let pluginData=selectedPlugin,let parameterData=selectedParameter,let pluginID=pluginData["instanceID"] as? String else {
           status.stringValue="Choose a binding number, plugin and parameter.";return
         }
-        let parameterData=parameters[parameter.indexOfSelectedItem]
         guard !slide || parameterData["canSlide"] as? Bool==true else{status.stringValue="This parameter supports set commands only.";return}
         let parameterID=parameterData["id"] as? Int ?? 0
         // Choosing a new target must never silently retarget other cells. Reuse
         // the same stable target, or allocate a new song-wide binding.
         let saved=bindings.first{$0["plugin"] as? String==pluginID && $0["parameter"] as? Int==parameterID}
         guard let number=saved?["id"] as? Int ?? (1...255).first(where:{n in !bindings.contains{$0["id"] as? Int==n}}) else{status.stringValue="All 255 target bindings are in use.";return}
-        let name=bindingName.stringValue.isEmpty ? "\(plugins[plugin.indexOfSelectedItem]["name"] as? String ?? "Plugin") · \(parameterData["name"] as? String ?? "Parameter")" : bindingName.stringValue
+        let name=bindingName.stringValue.isEmpty ? "\(pluginData["name"] as? String ?? "Plugin") · \(parameterData["name"] as? String ?? "Parameter")" : bindingName.stringValue
         command["binding"]=number
         request["bindings"]=[["id":number,"plugin":pluginID,"parameter":parameterID,"name":name]]
       }
@@ -212,7 +217,7 @@ final class PatternPerformanceEditor: NSView {
         self.commands=replacement
         if let changed=(request["bindings"] as? [[String:Any]])?.first,let number=changed["id"] as? Int {
           self.bindings.removeAll{$0["id"] as? Int==number};self.bindings.append(changed);self.bindingNumber.stringValue=String(number)
-          if self.binding.indexOfItem(withTag:number)<0 {self.binding.addItem(withTitle:"\(number) · \(changed["name"] as? String ?? "")");self.binding.lastItem?.tag=number}
+          if self.binding.indexOfItem(withTag:number)<0 {self.binding.menu?.addItem(self.item("\(number) · \(changed["name"] as? String ?? "")",id:nil,tag:number))}
         }
       }
       self.status.stringValue=dryRun ? "Preview is valid. Apply will save this command and its binding." : "Pattern effect saved. Undo restores the previous command and binding."

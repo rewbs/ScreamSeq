@@ -44,7 +44,8 @@ extension InterfaceTests {
     answer("second")
     editor.pingpong.state = .on; editor.loopModeChanged(editor.pingpong)
     try require(editor.loopReverse.state == .off, "Selecting ping-pong excludes reverse")
+    editor.name.stringValue = "Renamed loop"
     var settings: [String: Any] = [:]; editor.onSettings = { settings = $0 }; editor.apply()
-    try require(settings["loop"] == nil && settings["loopStart"] == nil && settings["name"] != nil, "General sample properties do not submit unreviewed loop drafts")
+    try require(settings["loop"] == nil && settings["loopStart"] == nil && settings["name"] as? String == "Renamed loop", "General sample properties do not submit unreviewed loop drafts")
   }
 }

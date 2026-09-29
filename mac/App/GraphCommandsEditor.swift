@@ -31,15 +31,23 @@ final class GraphCommandsEditor:NSView {
     content.stretchAcrossAxis();content.fill(self,inset:12)
   }
   required init?(coder:NSCoder){fatalError()}
-  func capture(){guard !pending,let onRequest,let current=onContext?()else{return};captured=current.0;let selectedRow=preferredRow ?? current.1
+  /// `preserving` holds the fields that were just saved. When the musician
+  /// kept editing during that request, the reload refreshes the data and
+  /// revision but leaves the newer field values as a draft.
+  func capture(preserving:[String]?=nil){guard !pending,let onRequest,let current=onContext?()else{return};captured=current.0;let selectedRow=preferredRow ?? current.1
     patternID=captured.patterns.first{$0["index"] as? Int==captured.pattern}?["id"] as? String ?? "";pending=true
     onRequest("graph.get",["includeState":false]){[weak self] response in guard let self else{return};self.pending=false
       guard let result=response["result"] as? [String:Any],let data=result["data"] as? [String:Any]else{self.showError(response);return}
       self.revision=result["revision"] as? String ?? "";guard self.captured.revisionToken.isEmpty || self.revision==self.captured.revisionToken else{self.status.stringValue="Song changed; reload from cursor";return};self.data=data
       self.context.stringValue="Pattern \(self.captured.pattern) · Graph commands"
       let mixer=data["mixer"] as? [String:Any] ?? [:],buses=mixer["buses"] as? [[String:Any]] ?? [],library=data["library"] as? [[String:Any]] ?? []
+      let draft=preserving.flatMap{saved in self.fields != saved ? saved : nil},keptTarget=self.bus,keptGraph=self.graph.selectedItem?.representedObject as? String
       self.target.removeAllItems();for b in buses{let item=NSMenuItem(title:b["name"] as? String ?? "Bus",action:nil,keyEquivalent:"");item.representedObject=b["id"];self.target.menu?.addItem(item)}
       self.graph.removeAllItems();for d in library{let item=NSMenuItem(title:"\(d["number"] as? Int ?? 0) · \(d["name"] as? String ?? "Subgraph")",action:nil,keyEquivalent:"");item.representedObject=d["id"];self.graph.menu?.addItem(item)}
+      if let draft {
+        for (popup,id) in [(self.target,keptTarget),(self.graph,keptGraph ?? "")]{if let index=popup.itemArray.firstIndex(where:{$0.representedObject as? String==id}){popup.selectItem(at:index)}}
+        self.baseline=draft;self.status.stringValue="Saved. Edits made meanwhile are kept as a draft · Apply command to save them.";return
+      }
       let selected=self.preferredTarget ?? current.0.tracks.first{$0["index"] as? Int==current.2}?["id"] as? String
       if let index=self.target.itemArray.firstIndex(where:{$0.representedObject as? String==selected}){self.target.selectItem(at:index)}
       self.column.selectItem(at:max(0,min(7,self.preferredColumn)));self.row.integerValue=selectedRow;self.selectionChanged()
@@ -64,5 +72,8 @@ final class GraphCommandsEditor:NSView {
   }
   private func showError(_ response:[String:Any]){status.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Graph command failed"}
   private func mutate(_ method:String,_ params:[String:Any]){guard !pending,let onRequest else{return};pending=true;var p=params;p["expectedRevision"]=revision;preferredTarget=bus;preferredColumn=column.indexOfSelectedItem;preferredRow=row.integerValue
-    onRequest(method,p){[weak self] response in guard let self else{return};self.pending=false;guard response["result"] != nil else{self.showError(response);return};self.baseline=[];self.capture()}}
+    let sent=fields
+    onRequest(method,p){[weak self] response in guard let self else{return};self.pending=false;guard response["result"] != nil else{self.showError(response);return}
+      // The saved state is what was sent, not whatever the fields hold now.
+      self.baseline=sent;self.capture(preserving:sent)}}
 }

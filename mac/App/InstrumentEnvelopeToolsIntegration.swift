@@ -1,9 +1,14 @@
 import AppKit
 extension AppController {
   func showInstrumentEnvelopeBank(_ kind:Int){
-    if let instrumentEnvelopeBank,instrumentEnvelopeBank.window?.isVisible==true{instrumentEnvelopeBank.window?.makeKeyAndOrderFront(nil);return}
-    guard !busy,model.editable,(0...2).contains(kind),let item=model.instruments.first(where:{$0["index"] as? Int==instrumentEditor.index}),let identity=item["id"] as? String else{return}
+    // Without a resolvable target the only safe action is to show the bank that is already open.
+    guard (0...2).contains(kind),let item=model.instruments.first(where:{$0["index"] as? Int==instrumentEditor.index}),let identity=item["id"] as? String else{
+      if let instrumentEnvelopeBank,instrumentEnvelopeBank.window?.isVisible==true{instrumentEnvelopeBank.window?.makeKeyAndOrderFront(nil)};return}
     let target:[String:Any]=["kind":["volume","pan","pitch"][kind],"instrument":identity]
+    // "Use linked" writes to the bank's captured target, so a bank opened for
+    // another envelope must not be presented as if it belonged to this one.
+    if EnvelopeBankWindow.reuse(instrumentEnvelopeBank,for:target,refused:{[weak self] in self?.statusLabel.stringValue=$0}){return}
+    guard !busy,model.editable else{return}
     instrumentEnvelopeBank?.close();instrumentEnvelopeBank=EnvelopeBankWindow(title:"Instrument \(instrumentEditor.index)",target:target,shape:nil,revision:"",request:{[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)},applied:{[weak self] in self?.refreshAssets()})
   }
 

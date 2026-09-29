@@ -17,7 +17,7 @@ final class RecoveryBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate 
     table.setAccessibilityLabel("Recovery copies, newest first")
     let scroll = NSScrollView(); scroll.documentView = table; scroll.hasVerticalScroller = true
     scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
-    let detail = Theme.label("Autosave keeps up to ten copies per session. Your current unsaved song is protected before restoring. Recovered songs open unsaved, ready for Save As.", size: 12, color: Theme.muted)
+    let detail = Theme.label("Autosave keeps up to ten copies per session. After 30 days only the latest copy of each song is kept. Your current unsaved song is protected before restoring. Recovered songs open unsaved, ready for Save As.", size: 12, color: Theme.muted)
     detail.maximumNumberOfLines = 3; detail.lineBreakMode = .byWordWrapping
     message.maximumNumberOfLines = 3; message.lineBreakMode = .byWordWrapping
     restore.handler = { [weak self] in

@@ -8,6 +8,9 @@ extension AppController {
     guard NSApp.isActive, event.type == .keyDown,
       event.keyCode == 49 || event.keyCode == KeyboardSettings.transportKey,
       commandPalette.window?.isKeyWindow != true else { return false }
+    // Space belongs to an open dialog or sheet (file lists, buttons), not the transport.
+    let target = event.window ?? NSApp.keyWindow
+    guard NSApp.modalWindow == nil, window.attachedSheet == nil, target?.attachedSheet == nil, target?.sheetParent == nil else { return false }
     let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
     guard !modifiers.contains(.command), !modifiers.contains(.option) else { return false }
     let focus = focusedView(event)

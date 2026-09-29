@@ -4,7 +4,12 @@ struct WorkspaceStroke: Equatable {
   let key:String,modifiers:NSEvent.ModifierFlags
   static let mask:NSEvent.ModifierFlags=[.command,.control,.option,.shift]
   init?(_ event:NSEvent){guard let key=event.charactersIgnoringModifiers?.lowercased(),key.count==1 else{return nil};self.key=key;modifiers=event.modifierFlags.intersection(Self.mask)}
-  init?(_ value:String){let parts=value.lowercased().split(separator:"+",omittingEmptySubsequences:false).map(String.init);guard let last=parts.last else{return nil};let named=["space":" ","tab":"\t","return":"\r"]
+  init?(_ value:String){var text=value.lowercased()
+    // "+" is both the separator and a key: "cmd+shift++" and "+" name the plus key.
+    // The stored format is unchanged, so existing saved bindings still load.
+    let plus=text.hasSuffix("+");if plus{text.removeLast();guard text.isEmpty || text.hasSuffix("+") else{return nil};if !text.isEmpty{text.removeLast()}}
+    var parts=text.isEmpty ? [] : text.split(separator:"+",omittingEmptySubsequences:false).map(String.init);if plus{parts.append("+")}
+    guard let last=parts.last else{return nil};let named=["space":" ","tab":"\t","return":"\r"]
     key=named[last] ?? last;guard key.count==1 else{return nil};var flags:NSEvent.ModifierFlags=[]
     for name in parts.dropLast(){let flag:NSEvent.ModifierFlags;switch name{case "cmd":flag = .command;case "ctrl":flag = .control;case "opt":flag = .option;case "shift":flag = .shift;default:return nil};guard !flags.contains(flag)else{return nil};flags.insert(flag)};modifiers=flags
   }
@@ -33,10 +38,11 @@ final class WorkspaceSequences {
 
 extension WorkspaceCommandPalette {
   func shortcutCommands()->[[String:Any]] {entries.map{entry in let key=entry.item.keyEquivalent;let single=key.isEmpty ? [] : [WorkspaceStrokeString(key,entry.item.keyEquivalentModifierMask)];return ["id":entry.id,"name":entry.path,"keys":sequences.bindings[entry.id]?.map(\.encoded) ?? single]}}
-  func setShortcut(_ id:String,keys:[String],persist:Bool=true)->String?{
+  // allowUnmodified is only for restoring a built-in default such as a bare "?".
+  func setShortcut(_ id:String,keys:[String],persist:Bool=true,allowUnmodified:Bool=false)->String?{
     guard let entry=entries.first(where:{$0.id==id}),keys.count<=4 else{return "Choose a known command and at most four keys"}
     let strokes=keys.compactMap(WorkspaceStroke.init);guard strokes.count==keys.count else{return "Use keys such as cmd+g, ctrl+opt+r, or space"}
-    if let first=strokes.first{guard !first.modifiers.intersection([.command,.control,.option]).isEmpty else{return "The first key needs cmd, ctrl or opt to preserve note entry"}
+    if let first=strokes.first{guard allowUnmodified || !first.modifiers.intersection([.command,.control,.option]).isEmpty else{return "The first key needs cmd, ctrl or opt to preserve note entry"}
       if entries.contains(where:{$0.id != id && $0.item.keyEquivalent==first.key && $0.item.keyEquivalentModifierMask.intersection(WorkspaceStroke.mask)==first.modifiers}){return "That first key already runs a command"}
       if sequences.conflict(strokes,except:id){return "That sequence overlaps another shortcut"}
     }

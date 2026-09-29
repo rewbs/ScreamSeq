@@ -28,6 +28,7 @@ final class ParameterSlider: NSSlider {
 final class ParameterValueField: NSTextField, NSTextFieldDelegate {
   var commit: ((String) -> Void)?
   var editingText: (() -> String)?
+  private var displayed: String?
   init() {
     super.init(frame: .zero)
     font = .monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -42,7 +43,18 @@ final class ParameterValueField: NSTextField, NSTextFieldDelegate {
   }
   required init?(coder: NSCoder) { fatalError() }
   @objc func submit() { commit?(stringValue) }
-  func controlTextDidBeginEditing(_ notification: Notification) { if let text = editingText?() { stringValue = text } }
+  /// Replaces the rounded display with the full-precision value. This happens
+  /// before the field editor exists: assigning during
+  /// controlTextDidBeginEditing, which runs inside the first keystroke,
+  /// discarded the character being typed.
+  func showEditingText() { if let text = editingText?() { displayed = stringValue; stringValue = text } }
+  override func becomeFirstResponder() -> Bool {
+    guard isEditable, currentEditor() == nil else { return super.becomeFirstResponder() }
+    let before = stringValue
+    showEditingText()
+    if super.becomeFirstResponder() { return true }
+    stringValue = before; displayed = nil; return false
+  }
   func controlTextDidEndEditing(_ notification: Notification) { submit() }
 }
 final class PluginParameterRow: NSTableCellView {
@@ -105,7 +117,19 @@ final class DynamicsMeterView: NSView {
 
 final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate
 {
-  var selected = 0, plugins = [[String: Any]]()
+  // A rack slot is a position, not an identity. Once a refresh has resolved
+  // the slot, the selection follows that plugin's stable instance ID when the
+  // rack is reordered. Assigning `selected` from outside addresses a slot of
+  // the next refresh, so it clears the identity rather than guessing one from
+  // the list currently on display.
+  var selected = 0 { didSet { if !updatingSelection { selectedPlugin = nil } } }
+  var plugins = [[String: Any]]()
+  private(set) var selectedPlugin: String?
+  private var updatingSelection = false
+  /// Asked before a parameter edit is sent. While the document is busy the
+  /// edit is retried instead of being recorded as applied.
+  var canEdit: (() -> Bool)?
+  var parameterRetryDelay = 0.1, parameterRetryLimit = 30
   private var parameterGeneration: UInt64 = 0
   var parameterValues = [[AnyHashable: Any]](), filteredValues = [[AnyHashable: Any]]()
   let search = NSSearchField()
@@ -231,11 +255,27 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     }
   }
   required init?(coder: NSCoder) { fatalError() }
+  private var deferredEdits = [Int: Int](), editTicket = 0
+  private func deferEdit(_ id: Int, slot: Int, generation: UInt64, value: Double, attempt: Int,
+    accept: @escaping (Double) -> Void, revert: @escaping () -> Void) {
+    editTicket += 1; let ticket = editTicket; deferredEdits[id] = ticket
+    DispatchQueue.main.asyncAfter(deadline: .now() + parameterRetryDelay) { [weak self] in
+      // A newer edit of this parameter, or a refreshed list, supersedes this one.
+      guard let self, self.deferredEdits[id] == ticket else { return }
+      self.deferredEdits[id] = nil
+      guard self.selected == slot, self.parameterGeneration == generation else { return }
+      if self.canEdit?() != false { accept(value) }
+      else if attempt < self.parameterRetryLimit {
+        self.deferEdit(id, slot: slot, generation: generation, value: value, attempt: attempt + 1, accept: accept, revert: revert)
+      } else { revert() }
+    }
+  }
   @objc func assignInstrument() {
     onAssign?(selected, assignment.selectedTag())
   }
   @objc func selectPlugin() {
     selected = picker.indexOfSelectedItem
+    selectedPlugin = plugins.indices.contains(selected) ? plugins[selected]["instanceID"] as? String : nil
     onSelect?(selected)
   }
   func update(model: PatternModel, values: [[AnyHashable: Any]]) {
@@ -243,25 +283,27 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     plugins = model.nativePlugins
     undoButton.isEnabled = model.canUndoEffect
     redoButton.isEnabled = model.canRedoEffect
+    updatingSelection = true
+    if let selectedPlugin, let moved = plugins.firstIndex(where: { $0["instanceID"] as? String == selectedPlugin }) { selected = moved }
     selected = max(0, min(selected, plugins.count - 1))
+    updatingSelection = false
+    selectedPlugin = plugins.indices.contains(selected) ? plugins[selected]["instanceID"] as? String : nil
     picker.removeAllItems()
     for (i, p) in plugins.enumerated() {
-      picker.addItem(
-        withTitle:
-          "\(i+1). \(p["name"] ?? "Audio Unit")\((p["bypass"] as? Bool ?? false) ? " · bypassed":"")"
-      )
+      let item = NSMenuItem(title: "\(i+1). \(p["name"] ?? "Audio Unit")\((p["bypass"] as? Bool ?? false) ? " · bypassed":"")", action: nil, keyEquivalent: "")
+      item.representedObject = p["instanceID"]; picker.menu?.addItem(item)
     }
     if !plugins.isEmpty { picker.selectItem(at: selected) }
     note.stringValue =
       model.pluginError.isEmpty
       ? "Built-in · AU · VST3  ·  \(model.automationPoints) automation points" : model.pluginError
     assignment.removeAllItems()
-    assignment.addItem(withTitle: "Unassigned")
-    assignment.lastItem?.tag = 0
-    for instrument in model.instruments {
+    for (index, title) in [(0, "Unassigned")] + model.instruments.map({ instrument -> (Int, String) in
       let index = instrument["index"] as? Int ?? 0
-      assignment.addItem(withTitle: "\(index). \(instrument["name"] as? String ?? "Instrument")")
-      assignment.lastItem?.tag = index
+      return (index, "\(index). \(instrument["name"] as? String ?? "Instrument")")
+    }) {
+      let item = NSMenuItem(title: title, action: nil, keyEquivalent: ""); item.tag = index
+      assignment.menu?.addItem(item)
     }
     let chosen = plugins.isEmpty ? [:] : plugins[selected]
     programsButton.isEnabled = !plugins.isEmpty
@@ -357,6 +399,19 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     view.reading.toolTip = validValue ? reading(value) : "The plugin reported an invalid value or range. This control is unavailable."
     view.reading.lineBreakMode = .byTruncatingTail
     var currentValue = value
+    let accept: (Double) -> Void = { [weak self] value in
+      guard let self else { return }
+      currentValue = value
+      self.onParameter?(self.selected, id, value, self.record.state == .on)
+    }
+    let revert: () -> Void = { [weak self, weak view] in
+      view?.slider.doubleValue = toSlider(currentValue)
+      view?.reading.stringValue = reading(currentValue); view?.reading.toolTip = reading(currentValue)
+      guard let self else { return }
+      if let index = self.parameterValues.firstIndex(where: { ($0["id"] as? Int) == id }) { self.parameterValues[index]["value"] = currentValue }
+      if let index = self.filteredValues.firstIndex(where: { ($0["id"] as? Int) == id }) { self.filteredValues[index]["value"] = currentValue }
+      self.note.stringValue = "The document was busy; \(name) was not changed."
+    }
     let apply: (Double) -> Void = { [weak self, weak view] requested in
       guard let self, self.selected == slot, self.parameterGeneration == generation, validValue, requested.isFinite else { return }
       var value = max(minimum, min(maximum, requested))
@@ -375,15 +430,21 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
       if let index = self.filteredValues.firstIndex(where: { ($0["id"] as? Int) == id }) {
         self.filteredValues[index]["value"] = value
       }
-      if value != currentValue {
-        currentValue = value
-        self.onParameter?(self.selected, id, value, self.record.state == .on)
-      }
+      self.deferredEdits[id] = nil
+      guard value != currentValue else { return }
+      // currentValue advances only when the edit is really sent. While the
+      // document is busy the edit waits, so it is neither lost nor mistaken
+      // for one that was applied.
+      if self.canEdit?() == false {
+        self.deferEdit(id, slot: slot, generation: generation, value: value, attempt: 0, accept: accept, revert: revert)
+      } else { accept(value) }
     }
     view.slider.changed = { if $0.isFinite { apply(fromSlider($0)) } }
     view.reading.editingText = { String(currentValue) }
     view.reading.commit = { [weak view] text in
       if text == reading(currentValue) { return }
+      // Focusing the field shows the unrounded value; leaving it untouched is not an edit.
+      if text == String(currentValue) { view?.reading.stringValue = reading(currentValue); return }
       var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
       if !label.isEmpty && text.hasSuffix(label) { text = String(text.dropLast(label.count)).trimmingCharacters(in: .whitespaces) }
       let parsed = Double(text) ?? (label == "MIDI" ? midiNoteNumber(text) : nil)

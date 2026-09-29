@@ -11,6 +11,10 @@ final class GraphPluginControls: NSView {
   var currentRevision:(()->String)?
   private var graph="",node="",revision="",parameters=[[String:Any]](),pending=false
   private var editor:String?,editorGraph="",editorNode=""
+  // Parameters are looked up by their stable ID: names may repeat, and
+  // addItem(withTitle:) would silently drop the earlier duplicate.
+  private var chosenParameter:[String:Any]?{guard let id=parameter.selectedItem?.representedObject as? NSNumber else{return nil};return parameters.first{($0["id"] as? NSNumber)==id}}
+  private var shownValue:(id:NSNumber,text:String)?
   override init(frame:NSRect){
     super.init(frame:frame)
     parameter.target=self;parameter.action = #selector(selectParameter)
@@ -26,7 +30,7 @@ final class GraphPluginControls: NSView {
     ],spacing:5);content.stretchAcrossAxis();content.fill(self)
   }
   required init?(coder:NSCoder){fatalError()}
-  func context(graph:String?,node:String?){let g=graph ?? "",n=node ?? "";guard g != self.graph || n != self.node else{return};self.graph=g;self.node=n;parameters=[];parameter.removeAllItems();value.stringValue="";inputs.stringValue="";outputs.stringValue="";revision="";message.stringValue="Load controls to inspect this effect"}
+  func context(graph:String?,node:String?){let g=graph ?? "",n=node ?? "";guard g != self.graph || n != self.node else{return};self.graph=g;self.node=n;parameters=[];parameter.removeAllItems();shownValue=nil;shownPorts=[:];value.stringValue="";inputs.stringValue="";outputs.stringValue="";revision="";message.stringValue="Load controls to inspect this effect"}
   private func request(_ method:String,_ extra:[String:Any]=[:],write:Bool=false,done:@escaping([String:Any])->Void){
     guard !pending,!graph.isEmpty,!node.isEmpty,let onRequest else{return};pending=true;let g=graph,n=node
     var params=extra;params["graph"]=g;params["node"]=n;if write{params["expectedRevision"]=revision.isEmpty ? currentRevision?() ?? "" : revision}
@@ -41,18 +45,29 @@ final class GraphPluginControls: NSView {
   }
   private func populate(_ data:[String:Any]){
     onCatalog?(graph,node,data)
-    parameters=data["parameters"] as? [[String:Any]] ?? [];parameter.removeAllItems();parameter.addItems(withTitles:parameters.map{$0["name"] as? String ?? "Parameter"});selectParameter()
+    let previous=parameter.selectedItem?.representedObject as? NSNumber,typed=value.stringValue,edited=shownValue.map{$0.id==previous && $0.text != typed} ?? false
+    parameters=data["parameters"] as? [[String:Any]] ?? [];parameter.removeAllItems()
+    for p in parameters{let item=NSMenuItem(title:p["name"] as? String ?? "Parameter",action:nil,keyEquivalent:"");item.representedObject=p["id"] as? NSNumber;parameter.menu?.addItem(item)}
+    if let previous{let index=parameter.indexOfItem(withRepresentedObject:previous);if index>=0{parameter.selectItem(at:index)}}
+    selectParameter()
+    // A value typed for the same parameter while the request ran is still a draft.
+    if edited,let previous,(parameter.selectedItem?.representedObject as? NSNumber)==previous{value.stringValue=typed}
     let buses=data["buses"] as? [[String:Any]] ?? []
-    for (field,direction) in [(inputs,"input"),(outputs,"output")]{field.stringValue=buses.filter{$0["direction"] as? String==direction && $0["active"] as? Bool==true && ($0["index"] as? Int ?? 0)>0}.compactMap{$0["index"] as? Int}.map(String.init).joined(separator:", ")}
+    for (field,direction) in [(inputs,"input"),(outputs,"output")]{
+      let text=buses.filter{$0["direction"] as? String==direction && $0["active"] as? Bool==true && ($0["index"] as? Int ?? 0)>0}.compactMap{$0["index"] as? Int}.map(String.init).joined(separator:", ")
+      let key=ObjectIdentifier(field),kept=shownPorts[key].map{$0 != field.stringValue} ?? false
+      shownPorts[key]=text;if !kept{field.stringValue=text}
+    }
     message.stringValue=buses.filter{($0["index"] as? Int ?? 0)>0}.map{"\($0["direction"] as? String ?? "") \($0["index"] as? Int ?? 0): \($0["name"] as? String ?? "")"}.joined(separator:" · ")
     if message.stringValue.isEmpty{message.stringValue="Settings update this library recipe and all its future playback copies."}
   }
   func load(){request("graph.plugin.get"){[weak self] data in self?.populate(data)}}
-  @objc private func selectParameter(){guard parameters.indices.contains(parameter.indexOfSelectedItem)else{return};let p=parameters[parameter.indexOfSelectedItem];value.stringValue="\(p["value"] ?? 0)";value.isEnabled=p["writable"] as? Bool ?? false;value.toolTip="\(p["min"] ?? 0)…\(p["max"] ?? 1) \(p["unitLabel"] ?? "")"}
-  private func useParameter(){guard parameters.indices.contains(parameter.indexOfSelectedItem),let id=(parameters[parameter.indexOfSelectedItem]["id"] as? NSNumber)?.uint32Value else{return};onParameter?(id)}
-  private func setValue(){guard parameters.indices.contains(parameter.indexOfSelectedItem),let id=parameters[parameter.indexOfSelectedItem]["id"],let amount=Double(value.stringValue),amount.isFinite else{return};request("graph.plugin.set",["parameters":[["id":id,"value":amount]]],write:true){[weak self] data in self?.populate(data);self?.onChanged?()}}
+  private var shownPorts=[ObjectIdentifier:String]()
+  @objc private func selectParameter(){guard let p=chosenParameter else{shownValue=nil;return};value.stringValue="\(p["value"] ?? 0)";if let id=p["id"] as? NSNumber{shownValue=(id,value.stringValue)};value.isEnabled=p["writable"] as? Bool ?? false;value.toolTip="\(p["min"] ?? 0)…\(p["max"] ?? 1) \(p["unitLabel"] ?? "")"}
+  private func useParameter(){guard let id=(chosenParameter?["id"] as? NSNumber)?.uint32Value else{return};onParameter?(id)}
+  private func setValue(){guard !pending,let id=chosenParameter?["id"],let amount=Double(value.stringValue),amount.isFinite else{return};if let key=id as? NSNumber{shownValue=(key,value.stringValue)};request("graph.plugin.set",["parameters":[["id":id,"value":amount]]],write:true){[weak self] data in self?.populate(data);self?.onChanged?()}}
   private func ports(_ field:NSTextField)->[Int]?{if field.stringValue.trimmingCharacters(in:.whitespaces).isEmpty{return []};let values=field.stringValue.split(separator:",").map{$0.trimmingCharacters(in:.whitespaces)};let numbers=values.compactMap(Int.init);return numbers.count==values.count ? numbers : nil}
-  private func setPorts(){guard let i=ports(inputs),let o=ports(outputs)else{message.stringValue="Use comma-separated auxiliary bus numbers";return};request("graph.plugin.set",["inputs":i,"outputs":o],write:true){[weak self] data in self?.populate(data);self?.onChanged?()}}
+  private func setPorts(){guard !pending else{return};guard let i=ports(inputs),let o=ports(outputs)else{message.stringValue="Use comma-separated auxiliary bus numbers";return};for field in [inputs,outputs]{shownPorts[ObjectIdentifier(field)]=field.stringValue};request("graph.plugin.set",["inputs":i,"outputs":o],write:true){[weak self] data in self?.populate(data);self?.onChanged?()}}
   func openEditor(){revision=currentRevision?() ?? revision;request("graph.plugin.editor.open",write:true){[weak self] data in guard let self else{return};self.editor=data["editor"] as? String;self.editorGraph=self.graph;self.editorNode=self.node;self.message.stringValue=data["message"] as? String ?? "Apply plugin settings when finished"}}
   private func commitEditor(){guard let editor,graph==editorGraph,node==editorNode else{message.stringValue="Open this effect's custom interface first";return};revision=currentRevision?() ?? revision;request("graph.plugin.editor.commit",["editor":editor],write:true){[weak self] data in self?.populate(data);self?.onChanged?()}}
   private func closeEditor(){guard !pending,let editor,let onRequest else{return};pending=true;onRequest("graph.plugin.editor.close",["editor":editor,"expectedRevision":currentRevision?() ?? revision]){[weak self] response in guard let self else{return};self.pending=false;if response["result"] != nil{self.editor=nil;self.message.stringValue="Interface closed"}else{self.message.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Could not close interface"}}}

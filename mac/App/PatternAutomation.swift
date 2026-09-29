@@ -59,7 +59,7 @@ final class AutomationCanvas: NSView {
     super.init(frame: frame)
     setAccessibilityElement(true); setAccessibilityRole(.group)
     setAccessibilityLabel("Pattern automation envelope")
-    setAccessibilityHelp("Click to add or select a point. Drag to move it. Delete removes the selected point. Apply saves the draft.")
+    setAccessibilityHelp("Click to add or select a point. Drag to move it. Tab and Shift-Tab step through the points and then move to the next control; Option-Tab cycles within the curve. Arrow keys move the selected point. Delete removes it. Apply saves the draft.")
   }
   required init?(coder: NSCoder) { fatalError() }
   func location(_ point: EnvelopePoint) -> NSPoint {
@@ -174,8 +174,14 @@ final class AutomationCanvas: NSView {
   override func keyDown(with event: NSEvent) {
     if event.keyCode == 51 || event.keyCode == 117 { removeSelected(); return }
     if event.keyCode == 48 {
-      guard !points.isEmpty else{return};let reverse=event.modifierFlags.contains(.shift)
-      selected=((selected ?? (reverse ? 0 : -1))+(reverse ? points.count-1 : 1))%points.count
+      // Tab walks the points and then leaves the canvas, so keyboard focus is
+      // never trapped here. Option-Tab wraps around inside the curve instead.
+      let reverse=event.modifierFlags.contains(.shift),wrap=event.modifierFlags.contains(.option)
+      let next=(selected ?? (reverse ? points.count : -1))+(reverse ? -1 : 1)
+      guard !points.isEmpty,wrap || points.indices.contains(next) else{
+        if reverse{window?.selectPreviousKeyView(self)}else{window?.selectNextKeyView(self)};return
+      }
+      selected=(next+points.count)%points.count
       if let selected{let p=Double(points[selected].position);if p<visibleStart || p>horizontalEnd{setViewport(start:p-horizontalSpan/2,span:horizontalSpan)}}
       needsDisplay=true;onSelect?();return
     }
@@ -272,9 +278,9 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
   }
   required init?(coder: NSCoder) { fatalError() }
   func showBank(){
-    if let bankWindow,bankWindow.window?.isVisible==true{bankWindow.window?.makeKeyAndOrderFront(nil);return}
     guard !loading,let parameterID,model.nativePlugins.indices.contains(pluginIndex),let plugin=model.nativePlugins[pluginIndex]["instanceID"] as? String,let onRequest else{return}
     let target:[String:Any]=["kind":"parameter","pattern":model.pattern,"plugin":plugin,"parameter":parameterID]
+    if EnvelopeBankWindow.reuse(bankWindow,for:target,refused:{[weak self] in self?.status.stringValue=$0}){return}
     let shape:[String:Any] = ["span":canvas.rows*256,"rowsPerBeat":model.rowsPerBeat,"points":canvas.points.map(\.dictionary)]
     let points=canvas.points,pattern=model.pattern;bankWindow?.close();bankWindow=EnvelopeBankWindow(title:"Pattern \(model.pattern)",target:target,shape:canvas.points.isEmpty ? nil:shape,revision:revision,request:onRequest,canReplace:{[weak self] in (self?.hasDraft==false || self?.canvas.points==points) && self?.model.pattern==pattern && self?.parameterID==parameterID && self?.pluginIndex==self?.model.nativePlugins.firstIndex(where:{$0["instanceID"] as? String==plugin})},applied:{[weak self] in self?.hasDraft=false;self?.load()})
   }
@@ -284,25 +290,37 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     let tools=body.arrangedSubviews[3];tools.isHidden=true
     if let row=body.arrangedSubviews[1] as? NSStackView {row.addArrangedSubview(ActionButton("Tools"){ tools.isHidden.toggle() })}
   }
+  // Reload / discard. The generation captured here decides, when each reply
+  // arrives, whether the musician started a new draft in the meantime; such a
+  // draft and its target are kept instead of being cleared underneath them.
   func load() {
     guard !loading, let context = onContext?() else { return }
     draftGeneration += 1
+    let token = draftGeneration
     let samePattern = context.pattern == model.pattern
     preferredParameter = parameterID
     preferredPointPosition = canvas.selected.flatMap { canvas.points.indices.contains($0) ? canvas.points[$0].position : nil }
     if !samePattern { canvas.fit(); preferredPointPosition=nil }
     formulaPreviewGeneration += 1; formulaPreviewWork?.cancel()
-    model = context; hasDraft = false; parameterID = nil
+    let samePlugin = model.nativePlugins.indices.contains(pluginIndex) && context.nativePlugins.indices.contains(pluginIndex)
+      && model.nativePlugins[pluginIndex]["instanceID"] as? String == context.nativePlugins[pluginIndex]["instanceID"] as? String
+    let sameTarget = samePattern && samePlugin && parameterID != nil
+    model = context; hasDraft = false
+    // Points of another pattern or plugin must not become a draft for this one.
+    if !sameTarget { canvas.points = []; canvas.selected = nil; laneID = nil; parameterID = nil }
     heading.stringValue = "Pattern \(model.pattern) · automation"
     plugin.removeAllItems()
     for (i, item) in model.nativePlugins.enumerated() { plugin.addItem(withTitle: "\(i + 1). \(item["name"] ?? "Plugin")") }
     pluginIndex = min(pluginIndex, max(0, model.nativePlugins.count - 1)); plugin.selectItem(at: pluginIndex)
     request("automation.pattern.get", ["pattern": model.pattern]) { data in
-      self.lanes = data["lanes"] as? [[String: Any]] ?? []; self.canvas.rows = data["rows"] as? Int ?? 64
-      self.toolStart.stringValue = "0"; self.toolEnd.stringValue = String(self.canvas.rows)
-      self.loadParameters()
+      let rows = data["rows"] as? Int ?? 64, resized = rows != self.canvas.rows
+      self.lanes = data["lanes"] as? [[String: Any]] ?? []; self.canvas.rows = rows
+      if resized || !samePattern || self.toolRows != rows { self.toolStart.stringValue = "0"; self.toolEnd.stringValue = String(rows); self.toolRows = rows }
+      self.loadParameters(clearing: false, since: token)
     }
   }
+  private var toolRows = -1
+  private var draftTargetValid: Bool { hasDraft && parameterID != nil }
   func request(_ method: String, _ params: [String: Any], done: @escaping ([String: Any]) -> Void) {
     guard !loading, let onRequest else { return }
     loading = true
@@ -320,14 +338,29 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
       else { done(["values": result["data"] as? [[String: Any]] ?? []]) }
     }
   }
-  func loadParameters() {
-    canvas.points = []; canvas.selected = nil; laneID = nil; parameterID = nil
+  func loadParameters(clearing: Bool = true, since: Int? = nil) {
+    if clearing { canvas.points = []; canvas.selected = nil; laneID = nil; parameterID = nil }
     guard model.nativePlugins.indices.contains(pluginIndex) else {
+      canvas.points = []; canvas.selected = nil; laneID = nil; parameterID = nil; hasDraft = false
       values = []; filter(); status.stringValue = "Add an AU or VST3 plugin to create an envelope."; return
     }
+    let token = since ?? draftGeneration
     request("plugin.parameters.get", ["slot": pluginIndex]) { data in
       self.values = data["values"] as? [[String: Any]] ?? []; self.filter()
-      if !self.filtered.isEmpty { let row = self.filtered.firstIndex { $0["id"] as? Int == self.preferredParameter } ?? 0; self.table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
+      if self.draftGeneration != token, self.draftTargetValid, let id = self.parameterID, self.values.contains(where: { $0["id"] as? Int == id }) {
+        // Edited while loading: keep the points and their target, refresh only what surrounds them.
+        if let row = self.filtered.firstIndex(where: { $0["id"] as? Int == id }) { self.table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
+        let instance = self.model.nativePlugins[self.pluginIndex]["instanceID"] as? String
+        self.laneID = self.lanes.first { $0["plugin"] as? String == instance && $0["parameter"] as? Int == id }?["id"] as? String
+        self.status.stringValue = "Draft kept · Apply to save, or Reload to discard."; return
+      }
+      // A draft without a target cannot be applied; drop it rather than leave the editor stuck.
+      self.hasDraft = false; self.canvas.points = []; self.canvas.selected = nil; self.laneID = nil; self.parameterID = nil
+      if !self.filtered.isEmpty {
+        let row = self.filtered.firstIndex { $0["id"] as? Int == self.preferredParameter } ?? 0
+        self.table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        if self.parameterID == nil { self.showSelectedParameter() }
+      }
     }
   }
   @objc func selectPlugin() {
@@ -352,7 +385,8 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
   func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
     if hasDraft || loading { status.stringValue = "Apply or reload the draft before changing parameter."; return false }; return true
   }
-  func tableViewSelectionDidChange(_ notification: Notification) {
+  func tableViewSelectionDidChange(_ notification: Notification) { showSelectedParameter() }
+  private func showSelectedParameter() {
     guard !loading, !hasDraft, model.nativePlugins.indices.contains(pluginIndex), filtered.indices.contains(table.selectedRow) else { return }
     parameterID = filtered[table.selectedRow]["id"] as? Int
     let instance = model.nativePlugins[pluginIndex]["instanceID"] as? String

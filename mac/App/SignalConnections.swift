@@ -42,7 +42,7 @@ extension SignalGraphEditor {
     status.stringValue="Selected wire · edit its settings, then Update wire"
   }
   func updateConnection(){
-    guard let raw=chosen(connection),let index=Int(raw),canvas.edges.indices.contains(index),let a=chosen(source),let b=chosen(destination)else{status.stringValue="Select a wire first";return}
+    guard let index=canvas.selectedEdge,canvas.edges.indices.contains(index),let a=chosen(source),let b=chosen(destination)else{status.stringValue="Select a wire first";return}
     guard graphID != nil else{updateSongConnection(index,source:a,target:b);return}
     let audio=definition?["audio"] as? [[String:Any]] ?? [],mods=definition?["modulation"] as? [[String:Any]] ?? []
     if index<audio.count {
@@ -74,7 +74,11 @@ extension SignalGraphEditor {
   func updateSongConnection(_ index:Int,source a:String,target b:String){
     guard songConnections.indices.contains(index)else{return};let action=songConnections[index],from=songNodeBus[a] ?? a,to=songNodeBus[b] ?? b
     switch action["kind"] as? String {
-    case "output":mutate("mixer.bus.set",["bus":from,"output":to])
+    case "output":
+      // The Source popup is only a display of the wire's origin. Writing its
+      // value would reroute whichever bus it happens to show.
+      guard from==action["source"] as? String else{status.stringValue="Remove and reconnect to change a main output's source";return}
+      mutate("mixer.bus.set",["bus":from,"output":to])
     case "send":
       guard from==action["source"] as? String,let bus=buses.first(where:{$0["id"] as? String==from}),let i=action["index"] as? Int,let gain=Double(connectionGain.stringValue)else{status.stringValue="Remove and reconnect to change a send's source";return}
       var sends=bus["sends"] as? [[String:Any]] ?? [];guard sends.indices.contains(i)else{return};sends[i]["target"]=to;sends[i]["gainDB"]=gain;mutate("mixer.sends.set",["bus":from,"sends":sends])

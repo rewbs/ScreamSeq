@@ -12,13 +12,18 @@ final class GraphLaneStrip:NSView {
   weak var pattern:PatternView?
   var lanes=[GraphPatternLane](),commands=[String:GraphPatternCommand](),selected=0,firstLane=0
   var onEdit:((String,Int,Int)->Void)?,onClear:((String,Int,Int)->Void)?
-  private var state=""
+  // refresh() runs on the display tick. Comparing plain values avoids building
+  // and comparing a formatted string sixty times a second.
+  private struct State:Equatable{var revision="",pattern = -1,firstRow=0,cursorRow=0,playRow = -1,playPattern = -1,header:Float=0,row:Float=0,firstLane=0,selected=0,lanes=0}
+  private var state:State?
   override var isFlipped:Bool{true}
   override var acceptsFirstResponder:Bool{true}
-  override init(frame:NSRect){super.init(frame:frame);setAccessibilityRole(.group);setAccessibilityLabel("Pattern graph command lanes");setAccessibilityHelp("Graph commands aligned to pattern rows. Arrow keys select row and lane. Return edits, Delete removes the command.")}
+  override init(frame:NSRect){super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel("Pattern graph command lanes");setAccessibilityHelp("Graph commands aligned to pattern rows. Arrow keys select row and lane. Return edits, Delete removes the command.")}
   required init?(coder:NSCoder){fatalError()}
   static func key(_ row:Int,_ target:String,_ column:Int)->String{"\(row):\(target):\(column)"}
-  func refresh(){guard let pattern else{return};let newState="\(pattern.model.revisionToken):\(pattern.model.pattern):\(pattern.firstRow):\(pattern.cursorRow):\(pattern.playRow):\(pattern.headerHeight):\(pattern.rowHeight):\(firstLane):\(selected)";guard newState != state else{return};state=newState;lanes=pattern.model.graphLanes;commands=pattern.model.graphCommands;selected=min(selected,max(0,lanes.count-1));firstLane=min(firstLane,max(0,lanes.count-1));needsDisplay=true}
+  func refresh(){guard let pattern else{return}
+    let newState=State(revision:pattern.model.revisionToken,pattern:pattern.model.pattern,firstRow:pattern.firstRow,cursorRow:pattern.cursorRow,playRow:pattern.playRow,playPattern:pattern.playPattern,header:pattern.headerHeight,row:pattern.rowHeight,firstLane:firstLane,selected:selected,lanes:pattern.model.graphLanes.count)
+    guard newState != state else{return};state=newState;lanes=pattern.model.graphLanes;commands=pattern.model.graphCommands;selected=min(selected,max(0,lanes.count-1));firstLane=min(firstLane,max(0,lanes.count-1));needsDisplay=true}
   private func text(_ value:String,x:CGFloat,y:CGFloat,color:NSColor,size:CGFloat=11,width:CGFloat=116){let paragraph=NSMutableParagraphStyle();paragraph.lineBreakMode = .byTruncatingTail;(value as NSString).draw(in:NSRect(x:x,y:y,width:width,height:18),withAttributes:[.font:NSFont.monospacedSystemFont(ofSize:size,weight:.regular),.foregroundColor:color,.paragraphStyle:paragraph])}
   override func draw(_ dirty:NSRect){guard let pattern else{return};Theme.bg.setFill();bounds.fill();let header=CGFloat(pattern.headerHeight),height=CGFloat(pattern.rowHeight);Theme.panel.setFill();NSRect(x:0,y:0,width:bounds.width,height:header).fill()
     for i in firstLane..<min(lanes.count,firstLane+Int(ceil(bounds.width/124))){let lane=lanes[i],x=CGFloat(i-firstLane)*124;Theme.border.setFill();NSRect(x:x,y:0,width:1,height:bounds.height).fill();text(lane.name,x:x+7,y:5,color:Theme.gold,size:10);text("GRAPH \(lane.column+1)",x:x+7,y:header-18,color:Theme.muted,size:10)

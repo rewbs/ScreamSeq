@@ -71,8 +71,33 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var settingsWindow: NSWindow?
   let worker = DispatchQueue(label: "org.resonance.document", qos: .userInitiated)
   let recoveryWriter = DispatchQueue(label: "org.resonance.recovery", qos: .utility)
-  var busy = false
+  // Typing queued by the pattern grid while busy replays once the current
+  // completion (including its refresh) has finished.
+  var busy = false { didSet { if oldValue && !busy { DispatchQueue.main.async { [weak self] in self?.drainDeferred(); self?.patternView.replayDeferredKeys() } } } }
   var shuttingDown = false
+  // Quit was already confirmed (saved or discarded) by the unsaved-changes prompt.
+  var terminateConfirmed = false
+  // Inspector reads running on the worker without holding `busy`. The session is
+  // unlocked, so main-thread edits and new operations wait until they finish.
+  var sessionReads = 0
+  // Requests waiting for the document to be idle (no operation, no read). They
+  // run in order, one at a time; `cancel` answers a request that cannot run.
+  var deferredActions = [(run: () -> Void, cancel: (() -> Void)?)]()
+  var drainingDeferred = false
+  func deferUntilIdle(_ run: @escaping () -> Void, cancel: (() -> Void)? = nil) { deferredActions.append((run, cancel)) }
+  func drainDeferred() {
+    dispatchPrecondition(condition: .onQueue(.main))
+    guard !drainingDeferred else { return }
+    drainingDeferred = true; defer { drainingDeferred = false }
+    // An action may start an operation or a read: the rest wait for it to finish.
+    while !shuttingDown, !busy, !sessionReading, !deferredActions.isEmpty { deferredActions.removeFirst().run() }
+    if shuttingDown { cancelDeferred() }
+  }
+  func cancelDeferred() {
+    let waiting = deferredActions; deferredActions.removeAll()
+    for action in waiting { action.cancel?() }
+  }
+  var sessionReading: Bool { sessionReads > 0 }
   var currentPlaying = false
   let presetWorkflow = PluginPresetWorkflow()
   var uiReady = false
@@ -133,6 +158,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     window.backgroundColor = Theme.panel
     window.minSize = NSSize(width: 940, height: 580)
     window.delegate = self
+    // AppController owns this window for the life of the application.
+    window.isReleasedWhenClosed = false
     if !automationTest && !inspectionTest {
       if let screen = NSScreen.screens.max(by: { $0.visibleFrame.width*$0.visibleFrame.height < $1.visibleFrame.width*$1.visibleFrame.height }) {
         window.setFrame(screen.visibleFrame.insetBy(dx:8,dy:8),display:false)
@@ -142,6 +169,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     createContent()
     patternView.onEdit = { [weak self] row, channel, values in
       guard let self, !self.busy else { return }
+      if self.sessionReading {
+        // Keep the edit in order behind the read rather than racing or losing it.
+        let pattern = self.model.pattern
+        self.deferUntilIdle { [weak self] in
+          guard let self, self.model.pattern == pattern, row < self.model.rows, channel < self.model.channels else { return }
+          self.patternView.onEdit?(row, channel, values)
+        }
+        return
+      }
       do {
         try self.session.editPattern(
           self.model.pattern, row: row, channel: channel, values: values.map { NSNumber(value: $0) }
@@ -194,12 +230,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       window.makeFirstResponder(patternView)
       NSApp.activate(ignoringOtherApps: true)
     }
-    recoveryTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-      self?.autosave()
-    }
-    tickTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-      self?.tick()
-    }
+    // Common modes keep the playhead, meters, MIDI input, live recording capture
+    // and recovery copies running during menus, control drags, resizing and dialogs.
+    let recovery = Timer(timeInterval: 10, repeats: true) { [weak self] _ in self?.autosave() }
+    let ticks = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.tick() }
+    RunLoop.main.add(recovery, forMode: .common); RunLoop.main.add(ticks, forMode: .common)
+    recoveryTimer = recovery; tickTimer = ticks
     uiReady = true
     let argumentURL = AppLaunchArguments.documentPath(CommandLine.arguments,exists:{FileManager.default.fileExists(atPath:$0)}).map{URL(fileURLWithPath:$0)}
     if let file = pendingOpenURL ?? argumentURL {
@@ -212,7 +248,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       qualification?.startWhenReady()
     }
     if inspectionTest || (automationTest && !CommandLine.arguments.contains("--recovery-test")) { recoveryTimer?.invalidate() }
-    if !automationTest && !inspectionTest && !CommandLine.arguments.contains("--ui-test") { listRecovery() }
+    if !automationTest && !inspectionTest && !CommandLine.arguments.contains("--ui-test") { pruneRecovery(); listRecovery() }
     if CommandLine.arguments.contains("--automation") || automationTest { toggleAutomation() }
   }
   func createContent() {
@@ -658,14 +694,22 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     finishLiveRecording()
   }
   func tick() {
-    guard !busy else { return }
-    if session.pluginLatencyChanged() {
+    guard !busy, !sessionReading else { return }
+    // This also runs while a dialog is open. An application-modal dialog owns the
+    // document until it closes: keep input and displays alive, but start no
+    // operation, edit or request that its own action would find in the way.
+    let appModal = NSApp.modalWindow != nil, dialog = appModal || window.attachedSheet != nil
+    if !dialog, uiReady, let url = pendingOpenURL {
+      pendingOpenURL = nil; load(url)
+      return
+    }
+    if !dialog && session.pluginLatencyChanged() {
       perform("Updating plugin delay compensation…", refresh: false, {
         try self.session.refreshPluginLatencies()
       })
       return
     }
-    if session.deviceChanged() {
+    if !dialog && session.deviceChanged() {
       perform(
         "Reconfiguring audio device…", refresh: false, { try self.session.refreshDevice() },
         completion: { self.statusLabel.stringValue = "Audio device changed · playback stopped" })
@@ -680,9 +724,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.isDocumentEdited = true
       }
     } catch { statusLabel.stringValue = error.localizedDescription }
-    drainNotes()
+    // A sheet's own action (Save, Open) must not find the document busy.
+    if !dialog { drainNotes() }
     guard !busy else { return }
-    updatePositionTimeline()
+    if !dialog { updatePositionTimeline() }
     guard !busy else {return}
     let t = session.telemetry()
     let positions=t["voicePositions"] as? [[String:Any]] ?? []
@@ -702,8 +747,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if t["pluginFailure"] as? Bool == true {
       statusLabel.stringValue = "Playback stopped: a plugin returned invalid output"
     }
-    handleMIDI(session.midiEvents(), telemetry: t)
-    if !playing && recordingTakeID != nil && !recordingFinishing {finishLiveRecording()}
+    handleMIDI(session.midiEvents(), telemetry: t, allowEdits: !appModal)
+    // Finishing a take is a document request, which a dialog would reject.
+    if !dialog && !playing && recordingTakeID != nil && !recordingFinishing {finishLiveRecording()}
     let transportTitle = playing ? "Stop" : "Play"
     if playButton.title != transportTitle {
       playButton.title = transportTitle
@@ -745,7 +791,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     patternGraphHost.refresh()
     let now = CFAbsoluteTimeGetCurrent()
-    if now - lastWorkspaceRefresh > 0.12 { lastWorkspaceRefresh = now; updateWorkspaceContext();if workspace?.visibleIDs.contains("graph") == true{signalGraphEditor.showActivity(t["graphActivity"] as? [[String:Any]] ?? [],playing:playing)} }
+    if now - lastWorkspaceRefresh > 0.12 { lastWorkspaceRefresh = now; if !appModal {updateWorkspaceContext()};if workspace?.visibleIDs.contains("graph") == true{signalGraphEditor.showActivity(t["graphActivity"] as? [[String:Any]] ?? [],playing:playing)} }
     if workspace?.visibleIDs.contains("plugins") == true && pluginEditor.meterRefreshDue(now) {
       pluginEditor.showMeters(session.pluginMeters(pluginEditor.selected))
     }
@@ -766,15 +812,21 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       }
     }
   }
+  // Text being edited in whichever window has the keyboard, including the
+  // shared field editor of a text field. Undo belongs to that text, not the song.
+  var editedText: NSTextView? {
+    guard let text = (NSApp.keyWindow ?? window)?.firstResponder as? NSTextView, text.isEditable else { return nil }
+    return text
+  }
   @objc func undo() {
-    if let text = window.firstResponder as? NSTextView, text.isEditable {
+    if let text = editedText {
       text.undoManager?.undo()
       return
     }
     perform("Undo…", markDirty: true, { self.session.undo() })
   }
   @objc func redo() {
-    if let text = window.firstResponder as? NSTextView, text.isEditable {
+    if let text = editedText {
       text.undoManager?.redo()
       return
     }
@@ -793,9 +845,22 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
   }
   func load(_ url: URL) {
-    guard !busy, discardChanges() else { return }
+    guard !busy else {
+      // Keep the request: tick opens it once the current operation has finished.
+      pendingOpenURL = url
+      statusLabel.stringValue = "\(url.lastPathComponent) will open when the current operation finishes"
+      return
+    }
+    confirmUnsavedChanges { [weak self] in self?.open(url) }
+  }
+  func open(_ url: URL) {
+    var untrustedPlugins = [[String: Any]]()
     perform(
-      "Opening \(url.lastPathComponent)…", { try self.session.openPath(url.path) },
+      "Opening \(url.lastPathComponent)…",
+      {
+        try self.session.openPath(url.path)
+        untrustedPlugins = self.session.unresolvedPluginLocations as? [[String: Any]] ?? []
+      },
       completion: {
         self.documentURL = url.deletingLastPathComponent().standardizedFileURL == self.recoveryDirectory.standardizedFileURL ? nil : url
         self.recordingTakeID = self.session.recordingTakeID
@@ -812,30 +877,69 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.statusLabel.stringValue =
           "Opened \(url.lastPathComponent)"
           + (self.model.issues.isEmpty ? "" : " · \(self.model.issues.count) import notes")
+        self.offerPluginTrust(untrustedPlugins)
       })
   }
-  @objc func saveFile() {
+  // A project or recovery copy names plug-in bundles outside the trusted
+  // locations. Nothing is loaded unless the user approves these exact paths.
+  func offerPluginTrust(_ entries: [[String: Any]]) {
+    guard !entries.isEmpty, !automationTest, !inspectionTest, !CommandLine.arguments.contains("--ui-test") else { return }
+    var paths = [String](), lines = [String]()
+    for entry in entries {
+      guard let path = entry["canonicalPath"] as? String, !paths.contains(path) else { continue }
+      paths.append(path)
+      lines.append("\(entry["name"] as? String ?? "Plug-in")\n\(path)")
+    }
+    guard !paths.isEmpty else { return }
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "Load plug-ins from outside the standard plug-in folders?"
+    alert.informativeText =
+      "This project wants to load plug-in code from outside the standard plug-in folders. A plug-in runs with your privileges, so trust these locations only if you installed the plug-ins yourself.\n\n"
+      + lines.joined(separator: "\n\n")
+      + "\n\nIf you don’t load them, the plug-ins stay missing, their saved settings are kept and playback is unavailable."
+    alert.addButton(withTitle: "Don't Load")  // First button: the default.
+    alert.addButton(withTitle: "Trust and Load")
+    guard alert.runModal() == .alertSecondButtonReturn else { return }
+    perform(
+      "Loading trusted plug-ins…", { try self.session.trustPluginLocations(paths) },
+      completion: { self.statusLabel.stringValue = self.model.pluginError.isEmpty ? "Plug-ins loaded" : self.model.pluginError })
+  }
+  @objc func saveFile() { saveDocument() }
+  @objc func saveAs() { saveDocumentAs() }
+  // `then` runs only after the song has actually been written.
+  func saveDocument(then: (() -> Void)? = nil) {
     if !["screamseq", "resonance"].contains(documentURL?.pathExtension.lowercased() ?? "") {
-      saveAs()
+      saveDocumentAs(then: then)
       return
     }
     if let url = documentURL {
-      save(to: url)
+      save(to: url, then: then)
       return
     }
-    saveAs()
+    saveDocumentAs(then: then)
   }
-  @objc func saveAs() {
-    guard !busy else { return }
+  func saveDocumentAs(then: (() -> Void)? = nil) {
+    guard !busy else {
+      statusLabel.stringValue = "Save will continue when the current operation finishes"
+      deferUntilIdle { [weak self] in self?.saveDocumentAs(then: then) }
+      return
+    }
     let ext = "screamseq"
     let panel = NSSavePanel()
     panel.nameFieldStringValue = (model.title.isEmpty ? "Untitled" : model.title) + "." + ext
     panel.allowedContentTypes = [UTType(filenameExtension: ext) ?? .data]
     panel.beginSheetModal(for: window) { [weak self] response in
-      if response == .OK, let url = panel.url { self?.save(to: url) }
+      if response == .OK, let url = panel.url { self?.save(to: url, then: then) }
     }
   }
-  func save(to url: URL) {
+  func save(to url: URL, then: (() -> Void)? = nil) {
+    guard !busy, !sessionReading else {
+      // Keep the save and whatever follows it (quit, open) instead of dropping them.
+      if busy { statusLabel.stringValue = "Saving \(url.lastPathComponent) when the current operation finishes" }
+      deferUntilIdle { [weak self] in self?.save(to: url, then: then) }
+      return
+    }
     perform(
       "Saving…", refresh: false, { try self.session.savePath(url.path) },
       completion: {
@@ -844,26 +948,20 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.window.isDocumentEdited = false
         self.statusLabel.stringValue = "Saved \(url.lastPathComponent)"
         self.clearRecovery()
+        then?()
       })
   }
   @objc func newFile() {
-    guard !busy, discardChanges() else { return }
-    perform(
-      "Creating song…", { self.session.newSong(false) },
-      completion: {
-        self.documentURL = nil
-        self.recoveryID = UUID().uuidString
-        self.dirty = false
-        self.selectedOrder = 0
-        self.model.pattern = 0
-        self.patternView.muted.removeAll()
-        self.refreshAll()
-      })
+    guard !busy else { return }
+    confirmUnsavedChanges { [weak self] in self?.createSong(demo: false) }
   }
   @objc func demoFile() {
-    guard !busy, discardChanges() else { return }
+    guard !busy else { return }
+    confirmUnsavedChanges { [weak self] in self?.createSong(demo: true) }
+  }
+  func createSong(demo: Bool) {
     perform(
-      "Opening demo…", { self.session.newSong(true) },
+      demo ? "Opening demo…" : "Creating song…", { self.session.newSong(demo) },
       completion: {
         self.documentURL = nil
         self.recoveryID = UUID().uuidString
@@ -989,6 +1087,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
           self.refreshAll()
         })
     }
+    sampleEditor.onMessage = { [weak self] message in self?.statusLabel.stringValue = message }
+    instrumentEditor.onMessage = { [weak self] message in self?.statusLabel.stringValue = message }
     sampleEditor.onInstrument = { [weak self] in self?.addInstrument() }
     instrumentEditor.onPluginAssignment = {[weak self] in self?.showInstrumentPluginAssignment()}
     instrumentEditor.onNewPluginInstrument = {[weak self] in self?.showNewPluginInstrument()}
@@ -1057,8 +1157,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       self?.perform(
         "Redoing effect change…", markDirty: true, { try self?.session.redoEffectChange() })
     }
+    // onParameter ignores edits while busy; the editor waits and retries instead of losing them.
+    pluginEditor.canEdit = { [weak self] in self.map { !$0.busy } ?? false }
     pluginEditor.onParameter = { [weak self] slot, id, value, record in
       guard let self, !self.busy else { return }
+      if self.sessionReading {
+        self.deferUntilIdle { [weak self] in self?.pluginEditor.onParameter?(slot, id, value, record) }
+        return
+      }
       do {
         try self.session.pluginParameter(slot, identifier: id, value: value, record: record)
         self.dirty = true
@@ -1066,7 +1172,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       } catch { self.show(error) }
     }
     patternView.onAudition = { [weak self] note, on in self?.audition(note: note, on: on) }
-    patternView.canEdit = { [weak self] in self.map { !$0.busy && $0.model.editable } ?? false }
+    patternView.canEdit = { [weak self] in self.map { !$0.busy && !$0.sessionReading && $0.model.editable } ?? false }
     patternView.onMessage = { [weak self] message in self?.statusLabel.stringValue = message }
     patternView.commandRevision = { [weak self] in self?.session.automationRevision ?? "" }
     patternView.onPaste = { [weak self] params in
@@ -1117,14 +1223,23 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     guard !busy else{return}
     let token=(workspaceAssetTokens[id] ?? 0)+1;workspaceAssetTokens[id]=token
     let sample=id=="samples",index=sample ? sampleEditor.index : instrumentEditor.index
+    sessionReads += 1
     worker.async {
       let data=sample ? self.session.sampleInfo(index) : self.session.instrumentInfo(index)
       let revision=self.session.automationRevision
       DispatchQueue.main.async {
+        defer { self.finishSessionRead() }
         guard self.workspaceAssetTokens[id]==token,(sample ? self.sampleEditor.index : self.instrumentEditor.index)==index else{return}
         if sample {self.sampleEditor.update(data,samples:self.model.samples,revision:revision)} else {self.instrumentEditor.update(data,model:self.model)}
       }
     }
+  }
+  // Main thread. Edits and operations that arrived during the read run now, in order.
+  func finishSessionRead() {
+    sessionReads -= 1
+    guard sessionReads == 0 else { return }
+    drainDeferred()
+    DispatchQueue.main.async { [weak self] in self?.patternView.replayDeferredKeys() }
   }
   func importSample(replacing slot: Int = 0) {
     guard !busy else { return }
@@ -1249,9 +1364,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     assetToken += 1
     let token = assetToken
     let index = pluginEditor.selected
+    sessionReads += 1
     worker.async {
       let parameters = self.session.pluginParameters(index)
       DispatchQueue.main.async {
+        defer { self.finishSessionRead() }
         guard token == self.assetToken, self.editorMode == 3 else { return }
         self.pluginEditor.update(model: self.model, values: parameters)
       }
@@ -1283,7 +1400,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     guard !busy else { return }
     perform("Restoring audio device…", refresh: false, { try self.session.refreshDevice() })
   }
-  func audition(note: Int, velocity: Int = 100, on: Bool) {
+  func audition(note: Int, velocity: Int = 100, on: Bool, prepare: Bool = true) {
     let instrument = patternView.instrument
     if busy {
       pendingNotes.append((note, instrument, velocity, on))
@@ -1291,7 +1408,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     if !session.note(note, instrument: instrument, velocity: velocity, on: on) {
       pendingNotes.append((note, instrument, velocity, on))
-      perform("Preparing audition…", refresh: false, { try self.session.prepareAudition() })
+      if prepare { perform("Preparing audition…", refresh: false, { try self.session.prepareAudition() }) }
     }
   }
   func drainNotes() {
@@ -1308,7 +1425,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       perform("Preparing audition…", refresh: false, { try self.session.prepareAudition() })
     }
   }
-  func handleMIDI(_ events: [[AnyHashable: Any]], telemetry: [AnyHashable: Any]) {
+  func handleMIDI(_ events: [[AnyHashable: Any]], telemetry: [AnyHashable: Any], allowEdits: Bool = true) {
     guard !events.isEmpty else { return }
     var auditions = [(Int, Int, Bool)]()
     var edits = [[String: Any]]()
@@ -1325,7 +1442,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       }
       let on = status == 0x90 && velocity > 0
       auditions.append((note, velocity, on))
-      guard midiArmed else { continue }
+      // Step entry waits out an application-modal dialog; the notes still sound.
+      guard midiArmed, allowEdits else { continue }
       // Live input was timestamped and added to the take by the session. Poll
       // timing is used only for stopped, explicit step entry.
       if currentPlaying || recordingTakeID != nil {continue}
@@ -1351,7 +1469,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         refreshPattern()
       } catch { show(error) }
     }
-    for event in auditions { audition(note: event.0, velocity: event.1, on: event.2) }
+    for event in auditions { audition(note: event.0, velocity: event.1, on: event.2, prepare: allowEdits && window.attachedSheet == nil) }
   }
   @objc func midiSettings() {
     guard !busy else { return }
@@ -1416,6 +1534,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       NSSound.beep()
       return
     }
+    if sessionReading {
+      // Runs as soon as the inspector read has finished; the worker would
+      // serialize the operation anyway, but collecting plugin edits must wait too.
+      deferUntilIdle { [weak self] in
+        self?.perform(message, refresh: refresh, markDirty: markDirty, operation, completion: completion)
+      }
+      return
+    }
     var pluginError: NSError?
     let pluginEdits = session.collectPluginEdits(
       pluginEditor.record.state == .on, error: &pluginError)
@@ -1454,18 +1580,47 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     statusLabel.stringValue = error.localizedDescription
     NSSound.beep()
   }
-  func discardChanges() -> Bool {
-    if session.recordingTakeID != nil {statusLabel.stringValue="Finish or discard the recording take from the Pattern menu before closing or replacing the song.";return false}
-    if !dirty { return true }
+  enum UnsavedChoice { case proceed, save, cancel }
+  func unsavedChoice() -> UnsavedChoice {
+    if session.recordingTakeID != nil {statusLabel.stringValue="Finish or discard the recording take from the Pattern menu before closing or replacing the song.";return .cancel}
+    if !dirty { return .proceed }
     let alert = NSAlert()
-    alert.messageText = "Discard unsaved changes?"
-    alert.informativeText = "Save your module before replacing this document."
+    alert.messageText = "Save changes to “\(model.title.isEmpty ? "Untitled" : model.title)”?"
+    alert.informativeText = "Unsaved changes are lost if you discard them."
+    alert.addButton(withTitle: "Save")
     alert.addButton(withTitle: "Cancel")
-    alert.addButton(withTitle: "Discard")
-    return alert.runModal() == .alertSecondButtonReturn
+    let discard = alert.addButton(withTitle: "Discard")
+    discard.hasDestructiveAction = true
+    discard.keyEquivalent = "d"; discard.keyEquivalentModifierMask = .command
+    switch alert.runModal() {
+    case .alertFirstButtonReturn: return .save
+    case .alertThirdButtonReturn: return .proceed
+    default: return .cancel
+    }
+  }
+  // Runs `proceed` at once when nothing is unsaved or the musician discards, and
+  // after a successful save when they choose Save. A cancelled or failed save
+  // leaves the song open and unchanged.
+  func confirmUnsavedChanges(_ proceed: @escaping () -> Void) {
+    switch unsavedChoice() {
+    case .proceed: proceed()
+    case .save: saveDocument(then: proceed)
+    case .cancel: break
+    }
+  }
+  // Quit from the run loop, like a menu event. AppKit waits for terminateLater in
+  // a nested loop, which must not sit inside a block of the serial main queue.
+  func requestQuit() {
+    let timer = Timer(timeInterval: 0, repeats: false) { _ in NSApp.terminate(nil) }
+    RunLoop.main.add(timer, forMode: .common)
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
-    sender !== window || (!busy && discardChanges())
+    guard sender === window else { return true }
+    // The main window lives as long as the application, so closing it is a
+    // request to quit. applicationShouldTerminate asks about unsaved changes
+    // once; if that is cancelled the window simply stays open.
+    if !shuttingDown { requestQuit() }
+    return false
   }
   func windowWillClose(_ notification: Notification) {
     guard let closing = notification.object as? NSWindow, closing !== window else { return }
@@ -1483,10 +1638,26 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     if shuttingDown { return .terminateLater }
-    if busy { return .terminateCancel }
-    guard discardChanges() else { return .terminateCancel }
+    let confirmed = terminateConfirmed; terminateConfirmed = false
+    if busy {
+      statusLabel.stringValue = "Still working: quit again when the current operation has finished"
+      NSSound.beep()
+      return .terminateCancel
+    }
+    if !confirmed {
+      switch unsavedChoice() {
+      case .proceed: break
+      case .cancel: return .terminateCancel
+      case .save:
+        // Saving is asynchronous and may need a Save As sheet. Stay open, and
+        // quit without asking again once the song has been written.
+        saveDocument(then: { [weak self] in self?.terminateConfirmed = true; self?.requestQuit() })
+        return .terminateCancel
+      }
+    }
     shuttingDown = true
     busy = true
+    cancelDeferred()
     workspaceHeldKeys.removeAll()
     inspectorHeldKeys.removeAll()
     pendingNotes.removeAll()

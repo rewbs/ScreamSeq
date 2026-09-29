@@ -74,7 +74,10 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     formulaBox.isHidden=formula.isHidden;if p.curve=="scripted"{FormulaCatalog.load(onRequest)}
   }
   func controlTextDidChange(_ notification:Notification){
-    if notification.object as? NSTextField === formula,let i=canvas.selected,canvas.points.indices.contains(i){canvas.points[i].formula=formula.stringValue;FormulaCatalog.suggest(formula.currentEditor() as? NSTextView)};markDraft()
+    // Row and Value are entry fields for "Set point": typing there changes no
+    // point, so it must not create a draft that blocks retargeting.
+    guard notification.object as? NSTextField === formula,let i=canvas.selected,canvas.points.indices.contains(i),canvas.points[i].formula != formula.stringValue else{return}
+    canvas.points[i].formula=formula.stringValue;FormulaCatalog.suggest(formula.currentEditor() as? NSTextView);markDraft()
   }
   func control(_ control:NSControl,textView:NSTextView,completions words:[String],forPartialWordRange range:NSRange,indexOfSelectedItem index:UnsafeMutablePointer<Int>)->[String]{
     guard control === formula else{return words};index.pointee = -1;return FormulaCatalog.completions(textView.string,range:range)
@@ -90,9 +93,9 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     }
   }
   func showBank(){
-    if let bankWindow,bankWindow.window?.isVisible==true{bankWindow.window?.makeKeyAndOrderFront(nil);return}
     guard !loading,let graph,let node,let onRequest else{return};let points=canvas.points,pattern=patternIndex
     let target:[String:Any]=["kind":"graph","graph":graph,"node":node,"pattern":patternIndex]
+    if EnvelopeBankWindow.reuse(bankWindow,for:target,refused:{[weak self] in self?.status.stringValue=$0}){return}
     let shape:[String:Any]=["span":canvas.rows*256,"rowsPerBeat":rowsPerBeat,"points":canvas.points.map(\.dictionary)]
     bankWindow?.close();bankWindow=EnvelopeBankWindow(title:heading.stringValue,target:target,shape:canvas.points.isEmpty ? nil:shape,revision:revision,request:onRequest,canReplace:{[weak self] in (self?.hasDraft==false || self?.canvas.points==points) && self?.graph==graph && self?.node==node && self?.patternIndex==pattern},applied:{[weak self] in self?.hasDraft=false;self?.load();self?.onChanged?()})
   }

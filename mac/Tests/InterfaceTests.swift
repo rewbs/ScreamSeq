@@ -308,7 +308,7 @@ struct InterfaceFailure: Error { let message: String }
     frequencyRow.reading.stringValue = "nan"; frequencyRow.reading.submit()
     frequencyRow.reading.stringValue = "25000"; frequencyRow.reading.submit()
     try require(frequencyEdits.count == count, "Repeated, invalid and out-of-range text does not create edits")
-    frequencyRow.reading.controlTextDidBeginEditing(Notification(name: NSControl.textDidBeginEditingNotification))
+    frequencyRow.reading.showEditingText()
     try require(frequencyRow.reading.stringValue == "1234.56789", "Editing exposes full precision, without unit suffix")
     frequencyRow.reading.submit()
     try require(frequencyEdits.count == count, "Focusing and leaving a numeric field does not round its value")
@@ -784,6 +784,7 @@ struct InterfaceFailure: Error { let message: String }
     ]
     UserDefaults.standard.setVolatileDomain(defaults, forName: UserDefaults.argumentDomain)
     do {
+      try editorDraftChecks()
       try automationToolsChecks()
       try automationTargetChecks()
       try mixerStripsChecks()
@@ -800,6 +801,7 @@ struct InterfaceFailure: Error { let message: String }
       try instrumentEnvelopeChecks()
       try envelopeBankChecks()
       try navigationChecks()
+      try patternGridChecks()
       try noteTrackChecks()
       try pluginBrowserChecks()
       let grid = PatternView()

@@ -121,7 +121,7 @@ extension AppController {
       if id=="samples" {
         if !model.instruments.isEmpty {
           handleAutomation("instrument.get",params:["instrument":instrument]){[weak self] reply in
-            guard let self,self.workspaceContextTokens[id]==token,let data=(reply["result"] as? [String:Any])?["data"] as? [String:Any],let mapping=data["mapping"] as? [Int] else{return}
+            guard let self,self.workspaceContextTokens[id]==token,force || !self.sampleEditor.hasDraft,let data=(reply["result"] as? [String:Any])?["data"] as? [String:Any],let mapping=data["mapping"] as? [Int] else{return}
             let key=max(0,min(127,Int(cell[0])-1));let mapped=mapping.indices.contains(key) ? mapping[key] : 0
             if mapped>0 {self.sampleEditor.index=mapped;self.workspace?.panels[id]?.target.stringValue="Sample \(mapped)";self.refreshWorkspaceAsset(id)}
           };return

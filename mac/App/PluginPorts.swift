@@ -16,6 +16,11 @@ final class PluginPortsEditor: NSView, NSTableViewDataSource, NSTableViewDelegat
   var onRequest: ((String, [String: Any], @escaping ([String: Any]) -> Void) -> Void)?
   var slot = 0, revision = "", identity: String?, loading = false
   var buses = [[String: Any]]()
+  let target = Theme.label("", size: 12, weight: .semibold)
+  // The newest plugin asked for while a request was running. It is opened as
+  // soon as that request finishes, so the window never stays on an older plugin.
+  private(set) var queued: (slot: Int, name: String?)?
+  private var name: String?
   override init(frame: NSRect) {
     super.init(frame: frame)
     table.addTableColumn(NSTableColumn(identifier: .init("port")))
@@ -25,6 +30,7 @@ final class PluginPortsEditor: NSView, NSTableViewDataSource, NSTableViewDelegat
     let content = stack(.vertical, [
       stack(.horizontal, [Theme.label("Plugin audio buses", size: 20, weight: .semibold), NSView(),
         ActionButton("Reload") { [weak self] in self?.load() }]),
+      target,
       Theme.label("Enable outputs here, then choose their destinations in the Mixer.", size: 12),
       scroll, status,
       Theme.label("Main buses stay enabled. Changes stop playback and have one plugin Undo.", size: 11, color: Theme.muted)
@@ -32,7 +38,17 @@ final class PluginPortsEditor: NSView, NSTableViewDataSource, NSTableViewDelegat
     content.stretchAcrossAxis(); content.fill(self, inset: 20)
   }
   required init?(coder: NSCoder) { fatalError() }
-  func open(slot: Int) { guard !loading else { return }; self.slot = slot; identity = nil; buses = []; table.reloadData(); load() }
+  func open(slot: Int, name: String? = nil) {
+    guard !loading else {
+      queued = (slot, name)
+      status.stringValue = "Switching to \(name ?? "rack slot \(slot + 1)") when the current request finishes…"; return
+    }
+    queued = nil; self.slot = slot; self.name = name; identity = nil; buses = []; table.reloadData(); showTarget(); load()
+  }
+  private func showTarget() {
+    target.stringValue = "Editing \(name ?? "plugin") · rack slot \(slot + 1)" + (identity.map { " · \($0)" } ?? "")
+    table.setAccessibilityLabel("Audio inputs and outputs of \(name ?? "the plugin in rack slot \(slot + 1)")")
+  }
   func load() {
     guard !loading, let onRequest else { return }
     loading = true
@@ -40,6 +56,7 @@ final class PluginPortsEditor: NSView, NSTableViewDataSource, NSTableViewDelegat
   }
   private func receive(_ reply: [String: Any]) {
     loading = false
+    if let next = queued { open(slot: next.slot, name: next.name); return }
     guard let result = reply["result"] as? [String: Any], let data = result["data"] as? [String: Any] else {
       status.stringValue = (reply["error"] as? [String: Any])?["message"] as? String ?? "Could not read plugin buses."
       table.reloadData(); return
@@ -48,7 +65,7 @@ final class PluginPortsEditor: NSView, NSTableViewDataSource, NSTableViewDelegat
       if let identity, identity != found {
         buses = []; table.reloadData(); status.stringValue = "The plugin moved. Reopen Audio buses from the plugin you want."; return
       }
-      identity = found
+      identity = found; showTarget()
     }
     revision = result["revision"] as? String ?? revision
     buses = data["buses"] as? [[String: Any]] ?? []

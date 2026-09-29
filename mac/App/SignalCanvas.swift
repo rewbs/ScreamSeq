@@ -38,15 +38,30 @@ final class SignalCanvas: NSView {
   private var wires=[Wire]()
   private var dragging: String?, origin = NSPoint.zero, original = NSPoint.zero
   private var wiring: (String,SignalCanvasPort)?, pointer = NSPoint.zero
+  // Arrow-key nudges move the node locally and are written once, when the key
+  // is released or after a short pause, instead of once per key repeat.
+  private var nudged: String?, nudgeWork: DispatchWorkItem?
+  var nudgeDelay = 0.35
+  func commitNudge() {
+    nudgeWork?.cancel(); nudgeWork=nil
+    guard let id=nudged else{return}; nudged=nil
+    if let node=nodes.first(where:{$0.id==id}){onMove?(id,node.x,node.y)}
+  }
+  override func keyUp(with event:NSEvent){if [123,124,125,126].contains(event.keyCode){commitNudge()}else{super.keyUp(with:event)}}
+  override func resignFirstResponder()->Bool{commitNudge();return super.resignFirstResponder()}
   override var isFlipped: Bool {true}
   override var acceptsFirstResponder: Bool {true}
   override init(frame: NSRect) {
     super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel("Audio and modulation graph")
-    setAccessibilityHelp("Tab selects nodes; Option-Tab selects wires. Arrows move a node. Return opens controls. Delete removes the selected node or connection. Drag matching ports to connect. Plus/minus zoom. Escape cancels a wire.")
+    setAccessibilityHelp("Tab and Shift-Tab step through the nodes and then move to the next control. Option-Tab cycles through wires. Arrows move a node. Return opens controls. Delete removes the selected node or connection. Drag matching ports to connect. Plus/minus zoom. Escape cancels a wire.")
   }
   required init?(coder:NSCoder){fatalError()}
   func update(_ nodes:[SignalCanvasNode],edges:[SignalCanvasEdge]) {
-    self.nodes=nodes;self.edges=edges
+    // A refresh must not pull a node out from under a drag or an unsent nudge.
+    let held=[dragging,nudged].compactMap{$0}.compactMap{id in self.nodes.first{$0.id==id}}
+    self.nodes=nodes
+    for node in held{if let i=self.nodes.firstIndex(where:{$0.id==node.id}){self.nodes[i].x=node.x;self.nodes[i].y=node.y}}
+    self.edges=edges
     if let selectedEdge,!edges.indices.contains(selectedEdge){self.selectedEdge=nil}
     resizeCanvas()
     setAccessibilityValue(nodes.map{node in node.title+" → "+edges.filter{$0.source==node.id}.map{$0.label}.joined(separator:", ")}.joined(separator:"; "))
@@ -107,7 +122,7 @@ final class SignalCanvas: NSView {
     else {selected=nil;selectedEdge=edge(at:point);if let selectedEdge{onSelectEdge?(selectedEdge)}}
   }
   override func mouseDown(with event:NSEvent){
-    window?.makeFirstResponder(self);let point=convert(event.locationInWindow,from:nil);pointer=point
+    commitNudge();window?.makeFirstResponder(self);let point=convert(event.locationInWindow,from:nil);pointer=point
     for node in nodes.reversed(){if let port=node.outputs.first(where:{hypot(node.portPoint($0,output:true).x-point.x,node.portPoint($0,output:true).y-point.y)<12}){selected=node.id;selectedEdge=nil;onSelect?(node.id);wiring=(node.id,port);return}}
     if let node=nodes.reversed().first(where:{$0.rect.contains(point)}){selected=node.id;selectedEdge=nil;onSelect?(node.id)
       if event.clickCount>=2{dragging=nil;onOpen?(node.id);return};dragging=node.id;origin=point;original=NSPoint(x:node.x,y:node.y);return}
@@ -127,16 +142,24 @@ final class SignalCanvas: NSView {
   }
   override func keyDown(with event:NSEvent){
     if event.keyCode==53{if let dragging,let i=nodes.firstIndex(where:{$0.id==dragging}){nodes[i].x=original.x;nodes[i].y=original.y;rebuildGeometry()};wiring=nil;dragging=nil;selectedEdge=nil;needsDisplay=true;return}
-    if event.keyCode==51 || event.keyCode==117{onDelete?();return}
+    if event.keyCode==51 || event.keyCode==117{commitNudge();onDelete?();return}
     if event.characters=="+" || event.characters=="="{onZoom?(1.2);return};if event.characters=="-"{onZoom?(1/1.2);return}
     if event.keyCode==48{
-      if event.modifierFlags.contains(.option){guard !edges.isEmpty else{return};let current=selectedEdge ?? (event.modifierFlags.contains(.shift) ? 0 : -1);selectedEdge=(current+(event.modifierFlags.contains(.shift) ? edges.count-1 : 1)+edges.count)%edges.count;selected=nil;onSelectEdge?(selectedEdge!);scrollToVisible(wires[selectedEdge!].bounds);return}
-      guard !nodes.isEmpty else{return};let current=nodes.firstIndex(where:{$0.id==selected}) ?? (event.modifierFlags.contains(.shift) ? 0 : -1);let next=(current+(event.modifierFlags.contains(.shift) ? nodes.count-1 : 1)+nodes.count)%nodes.count;selected=nodes[next].id;selectedEdge=nil;onSelect?(nodes[next].id);scrollToVisible(nodes[next].rect.insetBy(dx:-20,dy:-20));return
+      if event.modifierFlags.contains(.option){commitNudge();guard !edges.isEmpty else{return};let current=selectedEdge ?? (event.modifierFlags.contains(.shift) ? 0 : -1);selectedEdge=(current+(event.modifierFlags.contains(.shift) ? edges.count-1 : 1)+edges.count)%edges.count;selected=nil;onSelectEdge?(selectedEdge!);scrollToVisible(wires[selectedEdge!].bounds);return}
+      // Past the last (or before the first) node, Tab continues to the next
+      // control instead of wrapping, so the keyboard can always leave the canvas.
+      let reverse=event.modifierFlags.contains(.shift),next=(nodes.firstIndex(where:{$0.id==selected}) ?? (reverse ? nodes.count : -1))+(reverse ? -1 : 1)
+      commitNudge()
+      guard nodes.indices.contains(next) else{if reverse{window?.selectPreviousKeyView(self)}else{window?.selectNextKeyView(self)};return}
+      selected=nodes[next].id;selectedEdge=nil;onSelect?(nodes[next].id);scrollToVisible(nodes[next].rect.insetBy(dx:-20,dy:-20));return
     }
     guard let selected,let index=nodes.firstIndex(where:{$0.id==selected})else{super.keyDown(with:event);return}
-    if event.keyCode==36{onOpen?(selected);return}
+    if event.keyCode==36{commitNudge();onOpen?(selected);return}
     let step=event.modifierFlags.contains(.shift) ? 24.0 : 4.0
     switch event.keyCode{case 123:nodes[index].x=max(8,nodes[index].x-step);case 124:nodes[index].x+=step;case 125:nodes[index].y+=step;case 126:nodes[index].y=max(8,nodes[index].y-step);default:super.keyDown(with:event);return}
-    rebuildGeometry();resizeCanvas();onMove?(selected,nodes[index].x,nodes[index].y)
+    if let nudged,nudged != selected{commitNudge()}
+    rebuildGeometry();resizeCanvas();nudged=selected;nudgeWork?.cancel()
+    let work=DispatchWorkItem{[weak self] in self?.commitNudge()};nudgeWork=work
+    DispatchQueue.main.asyncAfter(deadline:.now()+nudgeDelay,execute:work)
   }
 }

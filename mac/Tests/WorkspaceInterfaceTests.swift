@@ -44,6 +44,59 @@ extension InterfaceTests {
     palette.entries=[.init(item:one,path:"One"),.init(item:two,path:"Two")];let command=palette.entries[0].id
     try require(palette.setShortcut(command,keys:["cmd+x","m"],persist:false) != nil && palette.setShortcut(command,keys:["g","m"],persist:false) != nil,"Existing menu commands and plain note-entry prefixes are protected")
     try require(palette.setShortcut(command,keys:["ctrl+g","m"],persist:false)==nil && palette.shortcutCommands()[0]["keys"] as? [String]==["ctrl+g","m"],"Palette exposes configured sequences without changing the song")
-    print("PASS connected workspace: retained panels/pins, focus layout, placement, saved layout, compact automation")
+    try assetApplyChecks()
+    try layoutRestoreChecks()
+    print("PASS connected workspace: retained panels/pins, focus layout, placement, saved layout, compact automation, changed-field asset apply, restored dividers")
+  }
+  static func assetApplyChecks() throws {
+    let sample=SampleEditor(frame:NSRect(x:0,y:0,width:729,height:1400))
+    var sent=[[String:Any]](),messages=[String]()
+    sample.onSettings={sent.append($0)};sample.onMessage={messages.append($0)}
+    sample.update(["name":"Kick","frames":1000,"rate":8363,"volume":64,"pan":128],samples:[["index":1,"name":"Kick"]],revision:"r1")
+    sample.apply()
+    try require(sent.isEmpty && messages.count==1,"Applying untouched sample settings sends nothing and says so")
+    sample.name.stringValue="Kick 2";sample.apply()
+    try require(sent.count==1 && Set(sent[0].keys)==["name"] && sent[0]["name"] as? String=="Kick 2","Renaming a sample sends only its name: no pan override, no retune")
+    sample.settingsDraft.accept(sent[0].keys)
+    sample.rate.stringValue="44.1k";sample.apply()
+    try require(sent.count==1 && messages.last?.contains("44.1k")==true,"A rate that is not a whole number is reported instead of being read as 44")
+    sample.rate.stringValue=" 44100 ";sample.pan.stringValue="64";sample.apply()
+    try require(sent.count==2 && Set(sent[1].keys)==["rate","pan"] && sent[1]["rate"] as? Int==44100 && sent[1]["pan"] as? Int==64,"Changed numeric sample fields are sent exactly")
+    let model=PatternModel(["format":"IT","instruments":[["index":1,"name":"Lead"]],"samples":[["index":1,"name":"Kick"]]])
+    let instrument=InstrumentEditor(frame:.zero);var applied=[[String:Any]](),notes=[String]()
+    instrument.onApply={applied.append($0)};instrument.onMessage={notes.append($0)}
+    let points=[[0,64],[10,32],[20,0]]
+    let envelope:[String:Any]=["points":points,"enabled":true,"sustain":true,"sustainPoint":1,"sustainEnd":2,"loop":false,"loopStart":0,"loopEnd":0]
+    instrument.update(["name":"Lead","volume":64,"pan":128,"fadeout":256,"nna":0,"dct":0,"dna":0,"envelopes":[envelope,[:],[:]]],model:model)
+    instrument.apply()
+    try require(applied.isEmpty && notes.count==1,"Applying untouched instrument settings sends nothing and says so")
+    instrument.name.stringValue="Lead 2";instrument.apply()
+    try require(applied.count==1 && Set(applied[0].keys)==["name","envelope"],"Renaming an instrument sends no pan, volume, envelope flags or points")
+    instrument.settingsDraft.accept(applied[0].keys)
+    instrument.sustainPoint.stringValue="0";instrument.nna.selectItem(at:2);instrument.apply()
+    try require(applied.count==2 && Set(applied[1].keys)==["sustainPoint","sustainEnd","nna","envelope"] && applied[1]["sustainEnd"] as? Int==2 && applied[1]["nna"] as? Int==2,
+      "A moved sustain start keeps the displayed end; other settings stay untouched")
+    instrument.settingsDraft.accept(applied[1].keys)
+    instrument.fade.stringValue="1e3";instrument.apply()
+    try require(applied.count==2 && notes.last?.contains("1e3")==true,"Instrument numbers that are not whole are reported, not truncated")
+    instrument.fade.stringValue="512";instrument.envelope.points=[[0,64],[10,48],[20,0]];instrument.apply()
+    try require(applied.count==3 && Set(applied[2].keys)==["fadeout","points","envelope"],"Envelope nodes that did not reach the song are sent with the next apply")
+  }
+  static func layoutRestoreChecks() throws {
+    let workspace=DockWorkspace(patternView:NSView())
+    let host=NSWindow(contentRect:NSRect(x:0,y:0,width:2000,height:1000),styleMask:[.titled,.resizable],backing:.buffered,defer:true)
+    host.isReleasedWhenClosed=false;workspace.fill(host.contentView!);host.contentView!.layoutSubtreeIfNeeded()
+    for (id,place) in [("notes","right"),("graph","bottom"),("automation","secondary")] { workspace.register(WorkspacePanel(id:id,title:id,view:NSView()),location:place) }
+    workspace.layoutSubtreeIfNeeded()
+    func settle(){RunLoop.current.run(until:Date().addingTimeInterval(0.05));workspace.layoutSubtreeIfNeeded()}
+    func fractions()->[Double]{let state=workspace.state;return ["vertical","upper","lower"].map{(state[$0] as? NSNumber)?.doubleValue ?? -1}}
+    workspace.preset("Compose");settle()
+    let defaults=fractions()
+    try require(abs(defaults[0]-0.4)>0.05 && abs(defaults[2]-0.3)>0.05,"The preset's own deferred dividers differ from the layout saved below")
+    var saved=workspace.state;saved["vertical"]=0.4;saved["upper"]=0.5;saved["lower"]=0.3
+    // Launch order: the preset queues its defaults, then the saved layout is restored.
+    workspace.preset("Compose");workspace.restore(saved);settle()
+    let restored=fractions()
+    try require(abs(restored[0]-0.4)<0.02 && abs(restored[1]-0.5)<0.02 && abs(restored[2]-0.3)<0.02,"A restored layout keeps its dividers after the preset's deferred defaults")
   }
 }

@@ -40,13 +40,24 @@ final class EnvelopeBankWindow:NSWindowController,NSTableViewDataSource,NSTableV
     help.maximumNumberOfLines=0;help.lineBreakMode = .byWordWrapping;help.preferredMaxLayoutWidth=600;help.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     status.maximumNumberOfLines=3;status.lineBreakMode = .byWordWrapping;status.preferredMaxLayoutWidth=880;status.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     link.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-    let right=stack(.vertical,[name,canvas,controls,formulaRow!,stack(.horizontal,[saveMaster,NSView(),ActionButton("Reload / discard"){[weak self] in self?.reload()}],spacing:6),stack(.horizontal,[copy,linked,importButton,NSView()],spacing:6),help],spacing:8);right.stretchAcrossAxis()
+    let right=stack(.vertical,[name,canvas,controls,formulaRow!,stack(.horizontal,[saveMaster,NSView(),ActionButton("Reload / discard"){[weak self] in self?.reload(discard:true)}],spacing:6),stack(.horizontal,[copy,linked,importButton,NSView()],spacing:6),help],spacing:8);right.stretchAcrossAxis()
     let editors=stack(.horizontal,[list,right],spacing:12);right.heightAnchor.constraint(equalTo:editors.heightAnchor).isActive=true;list.heightAnchor.constraint(equalTo:editors.heightAnchor).isActive=true
     let body=stack(.vertical,[stack(.horizontal,[scope,NSView(),saveCurrent],spacing:8),link,editors,stack(.horizontal,[independent,remove,NSView()],spacing:6),stack(.horizontal,[publish,overwrite,NSView()],spacing:6),status],spacing:10);body.stretchAcrossAxis();let root=NSView();body.fill(root,inset:16);window.contentView=root
     formulaRow.isHidden=true;window.center();window.makeKeyAndOrderFront(nil);reload()
   }
   required init?(coder:NSCoder){fatalError()}
   var isCatalogue:Bool{scope.indexOfSelectedItem==1}
+  private var restoring=false
+  /// Shared reopening rule for every envelope editor. Returns true when the
+  /// caller must not create a new bank: the visible bank already belongs to
+  /// `target`, or it holds an unsaved draft for another envelope.
+  static func reuse(_ bank:EnvelopeBankWindow?,for target:[String:Any],refused:(String)->Void)->Bool{
+    guard let bank,bank.window?.isVisible==true else{return false}
+    if NSDictionary(dictionary:bank.target).isEqual(to:target){bank.window?.makeKeyAndOrderFront(nil);return true}
+    guard bank.dirty || bank.pending else{return false}
+    let message="Save or discard the open envelope bank draft before opening the bank for another envelope."
+    bank.window?.makeKeyAndOrderFront(nil);bank.status.stringValue=message;refused(message);return true
+  }
   func call(_ method:String,_ params:[String:Any],write:Bool=false,done:@escaping ([String:Any])->Void){
     guard !pending else{return};pending=true;buttons.forEach{$0.isEnabled=false};var params=params
     if write{params["expectedRevision"]=revision}
@@ -58,21 +69,31 @@ final class EnvelopeBankWindow:NSWindowController,NSTableViewDataSource,NSTableV
       done(data)
     }
   }
-  func reload(){guard !pending else{return};dirty=false;generation+=1
+  // `discard` is the explicit "Reload / discard" action. The draft stays dirty
+  // until the list has really arrived: a failed reload must not mark edited
+  // points clean, and edits made while the request ran are kept.
+  func reload(discard:Bool=false){guard !pending else{return};if discard{generation+=1};let token=generation,wasDirty=dirty
     call("envelope.bank.list",["target":target]){[weak self] data in guard let self else{return};self.linkedTemplate=data["linkedTemplate"] as? String ?? ""
       let entries=data["entries"] as? [[String:Any]] ?? [];let linked=entries.first{$0["id"] as? String==self.linkedTemplate}?["name"] as? String
       self.link.stringValue=linked.map{"Current envelope is linked to “\($0)” in this song."} ?? "Current envelope is independent."
-      if self.isCatalogue {self.call("envelope.catalogue.list",[:]){[weak self] cat in guard let self else{return};self.catalogueRevision=cat["revision"] as? String ?? "";self.show(cat["entries"] as? [[String:Any]] ?? [])}}
-      else{self.show(entries)}
+      let keep:()->Bool={[weak self] in guard let self else{return false};return self.dirty && (self.generation != token || (wasDirty && !discard))}
+      if self.isCatalogue {self.call("envelope.catalogue.list",[:]){[weak self] cat in guard let self else{return};self.catalogueRevision=cat["revision"] as? String ?? "";self.show(cat["entries"] as? [[String:Any]] ?? [],keepingDraft:keep())}}
+      else{self.show(entries,keepingDraft:keep())}
     }
   }
   func updateControls(){for b in buttons {let songOnly=["Save song template","Use independent copy","Use linked","Remove song template","Publish copy to catalogue","Replace catalogue entry…"].contains(b.title);b.isHidden=(songOnly && isCatalogue) || (b.title=="Copy into song bank" && !isCatalogue);b.isEnabled = !pending && (!songOnly || selected != nil) && (b.title != "Make current independent" || !linkedTemplate.isEmpty)}}
-  func show(_ items:[[String:Any]]){let id=selected?["id"] as? String;entries=items;selected=nil;table.reloadData();if !items.isEmpty{let index=items.firstIndex{$0["id"] as? String==id} ?? 0;table.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false);select(index)}else{draft=[:];canvas.points=[];status.stringValue="Save the current envelope to start this bank."};showPoint();updateControls()}
+  func show(_ items:[[String:Any]],keepingDraft:Bool=false){let id=selected?["id"] as? String
+    if keepingDraft,let id,let index=items.firstIndex(where:{$0["id"] as? String==id}){
+      // Refresh the list around the draft without reloading its points or name.
+      restoring=true;entries=items;table.reloadData();table.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false);restoring=false
+      selected=items[index];status.stringValue="Unsaved master template changes are kept · Save song template, or Reload / discard.";updateControls();return
+    }
+    entries=items;selected=nil;table.reloadData();if !items.isEmpty{let index=items.firstIndex{$0["id"] as? String==id} ?? 0;table.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false);select(index)}else{draft=[:];canvas.points=[];status.stringValue="Save the current envelope to start this bank."};showPoint();updateControls()}
   @objc func changeScope(){guard !dirty,!pending else{scope.selectItem(at:isCatalogue ? 0:1);status.stringValue="Save or discard the template draft before changing banks.";return};selected=nil;reload()}
   func numberOfRows(in tableView:NSTableView)->Int{entries.count}
   func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int)->NSView?{Theme.label(entries[row]["name"] as? String ?? "Envelope",size:12)}
   func tableView(_ tableView:NSTableView,shouldSelectRow row:Int)->Bool{if dirty||pending{status.stringValue="Save or discard the template draft before changing selection.";return false};return true}
-  func tableViewSelectionDidChange(_ notification:Notification){if entries.indices.contains(table.selectedRow){select(table.selectedRow)}}
+  func tableViewSelectionDidChange(_ notification:Notification){if !restoring,entries.indices.contains(table.selectedRow){select(table.selectedRow)}}
   func select(_ index:Int){selected=entries[index];draft=selected?["shape"] as? [String:Any] ?? [:];name.stringValue=selected?["name"] as? String ?? "";canvas.rows=max(1,((draft["span"] as? Int ?? 16384)+255)/256);canvas.points=(draft["points"] as? [[String:Any]] ?? []).map{EnvelopePoint(position:$0["position"] as? Int ?? 0,value:$0["value"] as? Double ?? 0,curve:$0["curve"] as? String ?? "linear",formula:$0["formula"] as? String ?? "")};canvas.selected=nil;dirty=false;generation+=1;preview();showPoint();status.stringValue=isCatalogue ? "Catalogue preview. Copy into the song bank to edit or use it." : "Edit the master here, then Save song template. Linked uses update together."}
   func markDraft(){guard !isCatalogue,selected != nil else{if entries.indices.contains(table.selectedRow){select(table.selectedRow)};return};dirty=true;generation+=1;draft["points"]=canvas.points.map(\.dictionary);status.stringValue="Unsaved master template changes · Save updates every linked use in this song.";preview()}
   func controlTextDidChange(_ notification:Notification){if notification.object as? NSTextField === formula,let i=canvas.selected,canvas.points.indices.contains(i){canvas.points[i].formula=formula.stringValue;FormulaCatalog.suggest(formula.currentEditor() as? NSTextView)};markDraft()}
@@ -85,14 +106,23 @@ final class EnvelopeBankWindow:NSWindowController,NSTableViewDataSource,NSTableV
   }
   func expandFormula(){if let workbench,workbench.window?.isVisible==true{workbench.window?.makeKeyAndOrderFront(nil);return};guard !isCatalogue,let i=canvas.selected,canvas.points.indices.contains(i),canvas.points[i].curve=="scripted" else{return};let token=generation;workbench?.close();workbench=FormulaWorkbench(source:canvas.points[i].formula,title:"Song template · \(name.stringValue)",points:canvas.points.map(\.dictionary),selected:i,rows:canvas.rows,rowsPerBeat:draft["rowsPerBeat"] as? Int ?? 4,span:draft["span"] as? Int,request:request){[weak self] text in guard let self,self.generation==token,self.canvas.selected==i else{return false};self.canvas.points[i].formula=text;self.formula.stringValue=text;self.markDraft();return true}}
   func askName(_ title:String,initial:String,done:@escaping (String)->Void){guard let window else{return};let alert=NSAlert();alert.messageText=title;alert.addButton(withTitle:"Save");alert.addButton(withTitle:"Cancel");let field=NSTextField(string:initial);field.frame=NSRect(x:0,y:0,width:330,height:24);alert.accessoryView=field;alert.beginSheetModal(for:window){response in if response == .alertFirstButtonReturn{done(field.stringValue)}};alert.window.makeFirstResponder(field)}
-  func saveCurrent(){guard !dirty,canReplace() else{status.stringValue="Save or discard the master draft first.";return};askName("Save current envelope into this song",initial:"New envelope"){[weak self] name in guard let self else{return};var p:[String:Any]=["name":name];if let shape=self.sourceShape{p["shape"]=shape}else{p["target"]=self.target};self.call("envelope.bank.save",p,write:true){[weak self] data in self?.scope.selectItem(at:0);self?.selected=["id":data["id"] ?? ""];self?.reload()}}}
+  func saveCurrent(){guard !dirty,canReplace() else{status.stringValue="Save or discard the master draft first.";return};askName("Save current envelope into this song",initial:"New envelope"){[weak self] name in guard let self else{return};var p:[String:Any]=["name":name];if let shape=self.sourceShape{p["shape"]=shape}else{p["target"]=self.target};self.call("envelope.bank.save",p,write:true){[weak self] data in guard let self else{return};self.scope.selectItem(at:0);if !self.dirty{self.selected=["id":data["id"] ?? ""]};self.reload()}}}
   func saveMaster(){guard !isCatalogue,let id=selected?["id"] else{status.stringValue="Select a song template to save its master.";return};let token=generation;call("envelope.bank.save",["id":id,"name":name.stringValue,"shape":draft],write:true){[weak self] _ in guard let self else{return};if self.generation==token{self.dirty=false;self.reload()}else{self.status.stringValue="Saved. Newer draft edits remain unsaved."}}}
   func use(linked:Bool){guard !dirty,!isCatalogue,let id=selected?["id"],canReplace() else{status.stringValue="Save the template first and keep the original editor unchanged. Catalogue entries must be copied into the song bank.";return};call("envelope.bank.apply",["template":id,"target":target,"linked":linked],write:true){[weak self] _ in guard let self else{return};if self.canReplace(){self.onApplied()};self.close()}}
   func unlink(){guard !dirty,canReplace() else{status.stringValue="Save/discard this draft and reopen from the unchanged envelope editor.";return};call("envelope.bank.unlink",["target":target],write:true){[weak self] _ in guard let self else{return};if self.canReplace(){self.onApplied()};self.close()}}
   func remove(){guard !dirty,!isCatalogue,let id=selected?["id"] else{return};call("envelope.bank.remove",["id":id],write:true){[weak self] _ in self?.selected=nil;self?.reload()}}
   func importEntry(){guard isCatalogue,let id=selected?["id"] else{status.stringValue="Choose an envelope in the app catalogue.";return};call("envelope.catalogue.import",["catalogueID":id,"expectedCatalogueRevision":catalogueRevision],write:true){[weak self] data in self?.scope.selectItem(at:0);self?.selected=["id":data["id"] ?? ""];self?.reload()}}
+  /// Catalogue entries may share a name. addItems(withTitles:) would drop the
+  /// earlier duplicate and shift the rest, so each item carries its entry ID.
+  static func cataloguePicker(_ entries:[[String:Any]])->NSPopUpButton{
+    let popup=NSPopUpButton(frame:NSRect(x:0,y:0,width:330,height:26));popup.setAccessibilityLabel("Catalogue entry to replace")
+    for entry in entries{let item=NSMenuItem(title:entry["name"] as? String ?? "Envelope",action:nil,keyEquivalent:"");item.representedObject=entry["id"];popup.menu?.addItem(item)}
+    return popup
+  }
   func publish(overwrite:Bool){guard !dirty,!isCatalogue,let id=selected?["id"] else{status.stringValue="Save and select a song template before publishing.";return};call("envelope.catalogue.list",[:]){[weak self] cat in guard let self else{return};let publish:(String?)->Void={ [weak self] catalogID in guard let self else{return};var p:[String:Any]=["template":id,"expectedCatalogueRevision":cat["revision"] ?? ""];if let catalogID{p["catalogueID"]=catalogID};self.call("envelope.catalogue.publish",p,write:true){[weak self] _ in self?.status.stringValue="Published. This catalogue copy has no live link to any song."}}
-      if !overwrite{publish(nil);return};guard let window=self.window else{return};let entries=cat["entries"] as? [[String:Any]] ?? [];guard !entries.isEmpty else{self.status.stringValue="The catalogue is empty. Publish a new copy first.";return};let alert=NSAlert();alert.messageText="Replace a catalogue entry";alert.informativeText="This explicitly overwrites the selected library copy. Existing songs keep their own templates.";alert.addButton(withTitle:"Replace");alert.addButton(withTitle:"Cancel");let popup=NSPopUpButton(frame:NSRect(x:0,y:0,width:330,height:26));popup.addItems(withTitles:entries.map{$0["name"] as? String ?? "Envelope"});alert.accessoryView=popup;alert.beginSheetModal(for:window){response in if response == .alertFirstButtonReturn{publish(entries[popup.indexOfSelectedItem]["id"] as? String)}}
+      if !overwrite{publish(nil);return};guard let window=self.window else{return};let entries=cat["entries"] as? [[String:Any]] ?? [];guard !entries.isEmpty else{self.status.stringValue="The catalogue is empty. Publish a new copy first.";return};let alert=NSAlert();alert.messageText="Replace a catalogue entry";alert.informativeText="This explicitly overwrites the selected library copy. Existing songs keep their own templates.";alert.addButton(withTitle:"Replace");alert.addButton(withTitle:"Cancel");let popup=Self.cataloguePicker(entries);alert.accessoryView=popup;alert.beginSheetModal(for:window){[weak self] response in guard response == .alertFirstButtonReturn else{return}
+        // Overwriting is not undoable: refuse rather than guess when the choice has no stable ID.
+        guard let chosen=popup.selectedItem?.representedObject as? String,!chosen.isEmpty else{self?.status.stringValue="Choose the catalogue entry to replace.";return};publish(chosen)}
     }
   }
 }

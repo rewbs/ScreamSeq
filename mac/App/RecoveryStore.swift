@@ -80,6 +80,59 @@ struct RecoveryStore {
     }
     return destination
   }
+  // Launch-time housekeeping across sessions. Recovery copies are the last line
+  // of defence, so this only removes what is clearly obsolete: abandoned staging
+  // files and older generations past the age limit. The newest generation of a
+  // song may be its only copy, so age alone never removes it: only the generous
+  // total cap can, oldest first. Nothing inside the age limit and nothing of a
+  // protected session is ever removed.
+  static let pendingAge: TimeInterval = 60 * 60
+  static let maximumAge: TimeInterval = 30 * 24 * 60 * 60
+  static let maximumCopies = 200
+  @discardableResult func prune(protecting: Set<String>, now: Date = Date(), pendingAge: TimeInterval = RecoveryStore.pendingAge,
+    maximumAge: TimeInterval = RecoveryStore.maximumAge, maximumCopies: Int = RecoveryStore.maximumCopies) -> [URL] {
+    let fm = FileManager.default
+    var removed = [URL]()
+    func modified(_ file: URL) -> Date? { try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
+    func regular(_ file: URL) -> Bool {
+      let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+      return values?.isRegularFile == true && values?.isSymbolicLink != true
+    }
+    func remove(_ file: URL, metadata: Bool) {
+      guard (try? fm.removeItem(at: file)) != nil else { return }
+      removed.append(file)
+      if metadata { try? fm.removeItem(at: metadataURL(file)) }
+    }
+    guard fm.fileExists(atPath: directory.path),
+      let all = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey, .isSymbolicLinkKey])
+    else { return [] }
+    // A file with an unreadable date is kept: unknown is never treated as old.
+    for file in all where regular(file) {
+      guard let date = modified(file), now.timeIntervalSince(date) > pendingAge else { continue }
+      let name = file.lastPathComponent
+      if name.hasPrefix(".pending-") { remove(file, metadata: false) }
+      // Metadata left behind when a write stopped before its copy was published.
+      else if !name.hasPrefix("."), file.pathExtension == "json", UUID(uuidString: String(name.prefix(36))) != nil,
+        !fm.fileExists(atPath: file.deletingPathExtension().path) { remove(file, metadata: false) }
+    }
+    guard let copies = try? candidates() else { return removed }  // newest first
+    var newest = Set<String>(), kept = [(file: URL, fixed: Bool)]()
+    for file in copies {
+      let name = file.lastPathComponent, id = String(name.prefix(36))
+      // Only files this store named are ever pruned.
+      guard UUID(uuidString: id) != nil, name.dropFirst(36).hasPrefix("-"), let date = modified(file) else { kept.append((file, true)); continue }
+      let first = newest.insert(id).inserted, recent = now.timeIntervalSince(date) <= maximumAge
+      if protecting.contains(id) || recent { kept.append((file, true)) }
+      else if first { kept.append((file, false)) }
+      else { remove(file, metadata: true); if fm.fileExists(atPath: file.path) { kept.append((file, true)) } }
+    }
+    var excess = kept.count - max(0, maximumCopies)
+    for entry in kept.reversed() where excess > 0 && !entry.fixed {
+      remove(entry.file, metadata: true)
+      if !fm.fileExists(atPath: entry.file.path) { excess -= 1 }
+    }
+    return removed
+  }
   func clear(id: String) throws {
     guard UUID(uuidString: id) != nil else { return }
     for file in try candidates() where file.lastPathComponent.hasPrefix(id + "-") {

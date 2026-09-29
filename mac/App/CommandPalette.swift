@@ -20,7 +20,7 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
     }
     if let menu = NSApp.mainMenu { visit(menu, "") }
     for entry in entries where defaults[entry.id] == nil { defaults[entry.id] = ["key":entry.item.keyEquivalent,"modifiers":entry.item.keyEquivalentModifierMask.rawValue] }
-    sequences.load();sequences.onRun = {[weak self] id in guard let entry=self?.entries.first(where:{$0.id==id}),entry.item.isEnabled,let action=entry.item.action else{return};NSApp.sendAction(action,to:entry.item.target,from:entry.item)}
+    sequences.load();sequences.onRun = {[weak self] id in guard let self,let entry=self.entries.first(where:{$0.id==id}),let action=entry.item.action else{return};guard self.isAvailable(entry.item,from:NSApp.keyWindow?.firstResponder ?? NSApp.keyWindow) else{NSSound.beep();return};NSApp.sendAction(action,to:entry.item.target,from:entry.item)}
     let bindings = UserDefaults.standard.dictionary(forKey:"workspaceShortcuts") as? [String:[String:Any]] ?? [:]
     for entry in entries { if let binding = bindings[entry.id],let key = binding["key"] as? String,let mods = binding["modifiers"] as? UInt { entry.item.keyEquivalent = key; entry.item.keyEquivalentModifierMask = .init(rawValue:mods) };if sequences.bindings[entry.id] != nil{entry.item.keyEquivalent=""} }
   }
@@ -40,7 +40,7 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
         guard let self,self.window?.isKeyWindow == true else{return event}
         if event.keyCode == 53 { if self.recording {self.recording=false;self.status.stringValue="Shortcut unchanged"} else {self.close()};return nil }
         if self.recording {if self.capturingSequence{self.recordSequence(event)}else{self.bind(event)};return nil}
-        if event.keyCode == 125 || event.keyCode == 126 {let row=max(0,min(self.filtered.count-1,self.table.selectedRow+(event.keyCode==125 ? 1 : -1)));self.table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);self.table.scrollRowToVisible(row);return nil}
+        if event.keyCode == 125 || event.keyCode == 126 {guard !self.filtered.isEmpty else{return nil};let row=max(0,min(self.filtered.count-1,self.table.selectedRow+(event.keyCode==125 ? 1 : -1)));self.table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);self.table.scrollRowToVisible(row);return nil}
         if event.keyCode == 36 {self.run();return nil};return event
       }
     }
@@ -55,7 +55,26 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
     let label=tableView.makeView(withIdentifier:.init("command"),owner:self) as? NSTextField ?? Theme.label("",size:12)
     let sequence=sequences.bindings[entry.id]?.map(\.encoded).joined(separator:" → ");label.identifier = .init("command");label.stringValue=entry.path+(sequence.map{"     "+$0} ?? (entry.item.keyEquivalent.isEmpty ? "" : "     "+shortcut));return label
   }
-  @objc func run(){guard filtered.indices.contains(table.selectedRow) else{return};let item=filtered[table.selectedRow].item;close();NSApp.sendAction(item.action!,to:item.target,from:item)}
+  // Menu items are only validated when their menu opens, so isEnabled can be
+  // stale. Ask the object that would receive the action, as the menu would.
+  func isAvailable(_ item:NSMenuItem,from responder:NSResponder?)->Bool {
+    guard let action=item.action else{return false}
+    var receiver:AnyObject?=item.target
+    if receiver == nil {
+      var next=responder
+      while let candidate=next,receiver == nil {if candidate.responds(to:action){receiver=candidate};next=candidate.nextResponder}
+      if receiver == nil,let window=(responder as? NSWindow) ?? (responder as? NSView)?.window,let delegate=window.delegate,delegate.responds(to:action){receiver=delegate}
+      if receiver == nil,NSApp.responds(to:action){receiver=NSApp}
+      if receiver == nil,let delegate=NSApp.delegate,delegate.responds(to:action){receiver=delegate}
+    }
+    guard let receiver,receiver.responds(to:action) else{return false}
+    if let validator=receiver as? NSMenuItemValidation{return validator.validateMenuItem(item)}
+    if let validator=receiver as? NSUserInterfaceValidations{return validator.validateUserInterfaceItem(item)}
+    return true
+  }
+  @objc func run(){guard filtered.indices.contains(table.selectedRow) else{return};let item=filtered[table.selectedRow].item
+    guard let action=item.action,isAvailable(item,from:previousResponder ?? previousWindow) else{NSSound.beep();status.stringValue="\(item.title) is not available right now";return}
+    close();NSApp.sendAction(action,to:item.target,from:item)}
   private func bind(_ event:NSEvent){
     guard filtered.indices.contains(table.selectedRow),let key=event.charactersIgnoringModifiers?.lowercased(),key.count==1 else{return}
     let mask=event.modifierFlags.intersection([.command,.control,.option,.shift]);guard !mask.intersection([.command,.control,.option]).isEmpty else{status.stringValue="Include ⌘, ⌃ or ⌥ so note entry stays available";return}
@@ -66,7 +85,7 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
   }
   private func reset(){guard filtered.indices.contains(table.selectedRow) else{return};let entry=filtered[table.selectedRow]
     guard let value=defaults[entry.id] else{return};let key=value["key"] as? String ?? "",flags=NSEvent.ModifierFlags(rawValue:value["modifiers"] as? UInt ?? 0)
-    if let error=setShortcut(entry.id,keys:key.isEmpty ? [] : [WorkspaceStrokeString(key,flags)]){status.stringValue=error;return}
+    if let error=setShortcut(entry.id,keys:key.isEmpty ? [] : [WorkspaceStrokeString(key,flags)],allowUnmodified:true){status.stringValue=error;return}
     var bindings=UserDefaults.standard.dictionary(forKey:"workspaceShortcuts") as? [String:[String:Any]] ?? [:];bindings.removeValue(forKey:entry.id);UserDefaults.standard.set(bindings,forKey:"workspaceShortcuts");status.stringValue="Default shortcut restored"
   }
   private func close(){recording=false;window?.orderOut(nil);previousWindow?.makeKeyAndOrderFront(nil);previousWindow?.makeFirstResponder(previousResponder)}

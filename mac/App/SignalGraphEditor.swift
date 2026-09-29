@@ -4,6 +4,26 @@ final class SignalGraphEditor: NSView, NSTextFieldDelegate {
   private var fieldDraft=false
   var hasDraft:Bool {get{fieldDraft || envelopeEditor.hasDraft} set{fieldDraft=newValue}}
   func controlTextDidChange(_ notification:Notification){hasDraft=true}
+  // The text last written into each inspector field and the node, bus or
+  // definition it described. A field whose text differs is an uncommitted edit:
+  // refreshes for that same target leave it alone.
+  private var shownFields=[ObjectIdentifier:(target:String,text:String)]()
+  private func show(_ field:NSTextField,_ text:String,target:String){
+    let key=ObjectIdentifier(field),edited=shownFields[key].map{$0.target==target && field.stringValue != $0.text} ?? false
+    shownFields[key]=(target,text);if !edited && field.stringValue != text{field.stringValue=text}
+  }
+  private func show(_ field:NSTextField,_ number:Double,target:String){show(field,String(format:"%.12g",number),target:target)}
+  private var hasUncommittedFields:Bool{[name,libraryName,libraryNumber,assignAmount,assignWet,rate,phase,attack,release,controller].contains{field in shownFields[ObjectIdentifier(field)].map{field.stringValue != $0.text} ?? false}}
+  // Node moves made while a request is running are sent when it finishes.
+  private var pendingMoves=[String:(x:Double,y:Double)](),pendingMoveGraph:String?
+  /// Reload and drop every uncommitted inspector edit.
+  func reload(){shownFields=[:];pendingMoves=[:];hasDraft=false;load()}
+  private struct EdgeKey:Equatable{var source:String,target:String,modulation:Bool,output:UInt32,input:UInt32,ordinal:Int}
+  private func edgeKey(_ index:Int,in edges:[SignalCanvasEdge])->EdgeKey?{
+    guard edges.indices.contains(index)else{return nil};let e=edges[index]
+    let ordinal=edges[..<index].filter{$0.source==e.source && $0.target==e.target && $0.modulation==e.modulation && $0.output==e.output && $0.input==e.input}.count
+    return EdgeKey(source:e.source,target:e.target,modulation:e.modulation,output:e.output,input:e.input,ordinal:ordinal)
+  }
   let canvas=SignalCanvas(frame:NSRect(x:0,y:0,width:1000,height:600)), scroll=NSScrollView()
   let library=NSPopUpButton(),filter=NSPopUpButton(),nodeList=NSPopUpButton(),source=NSPopUpButton(),destination=NSPopUpButton(),connection=NSPopUpButton()
   let instrumentPicker=NSPopUpButton(),assignmentHeading=Theme.label("ORDINARY CHANNEL GRAPH",size:10,color:Theme.muted)
@@ -98,7 +118,7 @@ final class SignalGraphEditor: NSView, NSTextFieldDelegate {
     NSLayoutConstraint.activate([inspector.leadingAnchor.constraint(equalTo:inspectorScroll.contentView.leadingAnchor),inspector.topAnchor.constraint(equalTo:inspectorScroll.contentView.topAnchor),inspector.widthAnchor.constraint(equalTo:inspectorScroll.contentView.widthAnchor)])
     let drawing=stack(.vertical,[scroll,envelopeEditor],spacing:2);drawing.stretchAcrossAxis()
     let body=stack(.horizontal,[drawing,inspectorScroll],spacing:2);body.stretchAcrossAxis()
-    let toolbar=stack(.horizontal,[enableRouting,library,ActionButton("New"){[weak self] in self?.mutate("graph.create",["name":"New subgraph"])},ActionButton("Clone"){[weak self] in if let id=self?.graphID{self?.mutate("graph.clone",["graph":id])}},filter,ActionButton("−"){[weak self] in self?.zoom(1/1.2)},ActionButton("+"){[weak self] in self?.zoom(1.2)},ActionButton("Fit"){[weak self] in self?.fit()},ActionButton("Arrange"){[weak self] in self?.arrange()},ActionButton("Reload"){[weak self] in self?.load()}],spacing:4)
+    let toolbar=stack(.horizontal,[enableRouting,library,ActionButton("New"){[weak self] in self?.mutate("graph.create",["name":"New subgraph"])},ActionButton("Clone"){[weak self] in if let id=self?.graphID{self?.mutate("graph.clone",["graph":id])}},filter,ActionButton("−"){[weak self] in self?.zoom(1/1.2)},ActionButton("+"){[weak self] in self?.zoom(1.2)},ActionButton("Fit"){[weak self] in self?.fit()},ActionButton("Arrange"){[weak self] in self?.arrange()},ActionButton("Reload"){[weak self] in self?.reload()}],spacing:4)
     instrumentPicker.setAccessibilityLabel("Sample instrument graph target");instrumentPicker.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     let add=stack(.horizontal,[ActionButton("Add effect…", prominent: true){[weak self] in self?.choosePlugin()},nodeKind,ActionButton("Add source"){[weak self] in self?.addSource()},instrumentPicker,ActionButton("Instrument graph"){[weak self] in self?.inspectSampleInstrument()},NSView(),Theme.label("Row → persistent → ordinary → output",size:10,color:Theme.muted)],spacing:5)
     let content=stack(.vertical,[toolbar,add,body,status],spacing:5);content.stretchAcrossAxis();content.fill(self,inset:6)
@@ -116,22 +136,31 @@ final class SignalGraphEditor: NSView, NSTextFieldDelegate {
     else { name.scrollToVisible(name.bounds); window?.makeFirstResponder(name) }
   }
   func load(){guard !loading,let onRequest else{return};loading=true;onRequest("graph.get",["includeState":false]){[weak self] response in guard let self else{return};self.loading=false;if let result=response["result"] as? [String:Any],let data=result["data"] as? [String:Any]{self.revision=result["revision"] as? String ?? "";self.update(data)}else{self.error(response)}}}
-  func update(_ value:[String:Any]){data=value;hasDraft=false
+  func update(_ value:[String:Any]){data=value
     if graphID != nil && definition==nil{graphID=nil}
     picker(library,[("Song graph","")]+definitions.map{("\($0["number"] as? Int ?? 0) · \($0["name"] as? String ?? "Subgraph")",$0["id"] as? String ?? "")},select:graphID)
     picker(filter,[("All channels","")]+buses.map{($0["name"] as? String ?? "Bus",$0["id"] as? String ?? "")},select:filterID)
+    assignmentChoice=assignment.numberOfItems>0 ? assignment.selectedItem?.representedObject as? String : nil;assignmentRebuilt=true
     picker(assignment,[("Dry","")]+definitions.map{($0["name"] as? String ?? "Subgraph",$0["id"] as? String ?? "")},select:nil)
     picker(instrumentPicker,sampleInstruments.map{("I\($0["index"] ?? 0) · \($0["name"] as? String ?? "Instrument")",$0["id"] as? String ?? "")},select:chosen(instrumentPicker))
-    rebuild();inspect()
+    rebuild();inspect();hasDraft=hasUncommittedFields;flushMoves()
+  }
+  private func flushMoves(){
+    guard !loading,!pendingMoves.isEmpty else{return};let moves=pendingMoves,scope=pendingMoveGraph;pendingMoves=[:]
+    guard scope==graphID else{return}
+    if graphID != nil{updateDefinition{d in var n=d["nodes"] as? [[String:Any]] ?? [];for i in n.indices{if let id=n[i]["id"] as? String,let p=moves[id]{n[i]["x"]=p.x;n[i]["y"]=p.y}};d["nodes"]=n}}
+    else{mutate("graph.layout.set",["positions":moves.map{["node":$0.key,"x":$0.value.x,"y":$0.value.y] as [String:Any]}])}
   }
   func picker(_ picker:NSPopUpButton,_ values:[(String,String)],select:String?){picker.removeAllItems();for (title,id) in values{let item=NSMenuItem(title:title,action:nil,keyEquivalent:"");item.representedObject=id;picker.menu?.addItem(item)};if let index=values.firstIndex(where:{$0.1==(select ?? "")}){picker.selectItem(at:index)}}
   func chosen(_ picker:NSPopUpButton)->String?{guard let id=picker.selectedItem?.representedObject as? String,!id.isEmpty else{return nil};return id}
-  @objc func changeLibrary(){hasDraft=false;graphID=chosen(library);selectedID=nil;rebuild();inspect();fit()}
+  @objc func changeLibrary(){canvas.commitNudge();hasDraft=false;shownFields=[:];graphID=chosen(library);selectedID=nil;canvas.selectedEdge=nil;rebuild();inspect();fit()}
   @objc func changeFilter(){filterID=chosen(filter);rebuild()}
   @objc func changeNode(){selectedID=chosen(nodeList);canvas.selected=selectedID;inspect()}
   func showBus(_ id:String,filter:Bool=false){graphID=nil;selectedID=id;if filter{filterID=id};update(data)}
   func rebuild(){
-    let previousSource=chosen(source),previousTarget=chosen(destination),previousConnection=chosen(connection)
+    let previousSource=chosen(source),previousTarget=chosen(destination)
+    // A wire selection is an identity, not a position: the list may have been reordered.
+    let previousEdge=canvas.selectedEdge.flatMap{edgeKey($0,in:canvas.edges)}
     enableRouting.isHidden = !buses.isEmpty
     canvas.emptyMessage = buses.isEmpty && graphID==nil ? "Enable routing to connect channels, instruments and effects." : "Create a subgraph to start connecting sound."
     let scope=graphID != nil
@@ -144,10 +173,14 @@ final class SignalGraphEditor: NSView, NSTextFieldDelegate {
       for e in definition["audio"] as? [[String:Any]] ?? []{edges.append(SignalCanvasEdge(source:e["source"] as? String ?? "",target:e["target"] as? String ?? "",label:"\(e["output"] as? Int ?? 0) → \(e["input"] as? Int ?? 0) · ×\(e["gain"] ?? 1)",output:(e["output"] as? NSNumber)?.uint32Value ?? 0,input:(e["input"] as? NSNumber)?.uint32Value ?? 0))}
       for e in definition["modulation"] as? [[String:Any]] ?? []{edges.append(SignalCanvasEdge(source:e["source"] as? String ?? "",target:e["target"] as? String ?? "",label:"Param \(e["parameter"] as? Int ?? 0)",modulation:true,input:(e["parameter"] as? NSNumber)?.uint32Value ?? 0,enabled:e["enabled"] as? Bool ?? true))}
     }else{(display,edges)=buildSongOverview()}
+    if pendingMoveGraph==graphID{for i in display.indices{if let p=pendingMoves[display[i].id]{display[i].x=p.x;display[i].y=p.y}}}
     canvas.update(display,edges:edges);canvas.selected=selectedID
+    let resolved=previousEdge.flatMap{key in edges.indices.first{edgeKey($0,in:edges)==key}}
+    if canvas.selectedEdge != resolved{canvas.selectedEdge=resolved}
     showActivity(playbackActivity,playing:playbackRunning)
     let list=display.map{($0.title,$0.id)};picker(nodeList,list,select:selectedID);picker(source,list,select:previousSource ?? selectedID);picker(destination,list,select:previousTarget)
-    var connections=[(String,String)]();for (i,e) in edges.enumerated(){let a=display.first{$0.id==e.source}?.title ?? "?",b=display.first{$0.id==e.target}?.title ?? "?";connections.append(("\(a) → \(b) \(e.label)",String(i)))};picker(connection,connections,select:previousConnection)
+    var connections=[(String,String)]();for (i,e) in edges.enumerated(){let a=display.first{$0.id==e.source}?.title ?? "?",b=display.first{$0.id==e.target}?.title ?? "?";connections.append(("\(a) → \(b) \(e.label)",String(i)))};picker(connection,connections,select:resolved.map(String.init))
+    if resolved==nil{connection.select(nil)}
     status.stringValue=graphID==nil ? "Configured routes · live stack order appears on playing copies" : "Each channel gets its own copy · drag nodes and ports to edit"
   }
   func inspect(){
@@ -158,29 +191,44 @@ final class SignalGraphEditor: NSView, NSTextFieldDelegate {
     let kind=selectedNode?["kind"] as? String ?? ""
     sourceSection.isHidden=graphID==nil || !["lfo","follower","random","note-envelope","midi","amount"].contains(kind)
     pluginControls.isHidden=kind != "plugin";pluginControls.context(graph:graphID,node:kind=="plugin" ? selectedID : nil)
-    libraryName.stringValue=definition?["name"] as? String ?? "";libraryNumber.integerValue=definition?["number"] as? Int ?? 1
+    let libraryTarget="library:\(graphID ?? "")",context="\(graphID ?? "song"):\(selectedID ?? "")"
+    show(libraryName,definition?["name"] as? String ?? "",target:libraryTarget);show(libraryNumber,String(definition?["number"] as? Int ?? 1),target:libraryTarget)
 
     if graphID==nil,let instrument=selectedInstrument{
-      detail.stringValue="Instrument \(instrument["index"] ?? 0) · before channel";name.stringValue=instrument["name"] as? String ?? "Instrument"
+      detail.stringValue="Instrument \(instrument["index"] ?? 0) · before channel";show(name,instrument["name"] as? String ?? "Instrument",target:context)
       let entry=(data["instrumentAssignments"] as? [[String:Any]] ?? []).first{$0["target"] as? String==instrument["id"] as? String}
-      assignAmount.doubleValue=entry?["amount"] as? Double ?? 1;assignWet.doubleValue=entry?["wet"] as? Double ?? 1
-      for (i,item) in assignment.itemArray.enumerated() where item.representedObject as? String==(entry?["graph"] as? String ?? ""){assignment.selectItem(at:i)}
-    }else if graphID==nil,let bus=buses.first(where:{$0["id"] as? String==busID}){detail.stringValue=bus["name"] as? String ?? "Bus";name.stringValue=detail.stringValue
+      show(assignAmount,entry?["amount"] as? Double ?? 1,target:context);show(assignWet,entry?["wet"] as? Double ?? 1,target:context)
+      showAssignment(entry?["graph"] as? String ?? "",target:context)
+    }else if graphID==nil,let bus=buses.first(where:{$0["id"] as? String==busID}){detail.stringValue=bus["name"] as? String ?? "Bus";show(name,detail.stringValue,target:context)
       let entry=(data["assignments"] as? [[String:Any]] ?? []).first{$0["target"] as? String==busID}
-      assignAmount.doubleValue=entry?["amount"] as? Double ?? 1;assignWet.doubleValue=entry?["wet"] as? Double ?? 1
-      let assigned=entry?["graph"] as? String
-      for (i,item) in assignment.itemArray.enumerated() where item.representedObject as? String==(assigned ?? ""){assignment.selectItem(at:i)}
-    }else if let node=selectedNode{detail.stringValue=node["kind"] as? String ?? "Node";name.stringValue=node["name"] as? String ?? "";for (field,key) in [(rate,"rate"),(phase,"phase"),(attack,"attack"),(release,"release"),(controller,"controller")]{field.stringValue="\(node[key] ?? 0)"}}
-    else if graphID==nil,let selectedID,let display=canvas.nodes.first(where:{$0.id==selectedID}){detail.stringValue=display.title;name.stringValue=display.title}
-    else{detail.stringValue="Select a node";name.stringValue=""}
+      show(assignAmount,entry?["amount"] as? Double ?? 1,target:context);show(assignWet,entry?["wet"] as? Double ?? 1,target:context)
+      showAssignment(entry?["graph"] as? String ?? "",target:context)
+    }else if let node=selectedNode{detail.stringValue=node["kind"] as? String ?? "Node";show(name,node["name"] as? String ?? "",target:context);for (field,key) in [(rate,"rate"),(phase,"phase"),(attack,"attack"),(release,"release"),(controller,"controller")]{show(field,"\(node[key] ?? 0)",target:context)}}
+    else if graphID==nil,let selectedID,let display=canvas.nodes.first(where:{$0.id==selectedID}){detail.stringValue=display.title;show(name,display.title,target:context)}
+    else{detail.stringValue="Select a node";show(name,"",target:context)}
     if let index=nodeList.itemArray.firstIndex(where:{$0.representedObject as? String==selectedID}){nodeList.selectItem(at:index)}
+  }
+  // The assignment popup is rebuilt on every refresh. A choice that has not
+  // been assigned yet is kept while the same bus or instrument stays selected.
+  private var shownAssignment:(target:String,graph:String)?
+  private var assignmentChoice:String?,assignmentRebuilt=false
+  private func showAssignment(_ graph:String,target:String){
+    let picked=assignmentRebuilt ? assignmentChoice : assignment.selectedItem?.representedObject as? String;assignmentRebuilt=false
+    let kept=shownAssignment.map{$0.target==target && picked != nil && picked != $0.graph} ?? false
+    shownAssignment=(target,graph)
+    let wanted=kept ? picked ?? graph : graph
+    if let index=assignment.itemArray.firstIndex(where:{($0.representedObject as? String ?? "")==wanted}){assignment.selectItem(at:index)}
+    else if let index=assignment.itemArray.firstIndex(where:{($0.representedObject as? String ?? "")==graph}){assignment.selectItem(at:index)}
   }
   func fit(){let content=canvas.nodes.reduce(NSRect.zero){$0.union($1.rect)};guard content.width>0 else{return};scroll.magnification=max(scroll.minMagnification,min(1,min((scroll.contentSize.width-30)/max(1,content.maxX+20),(scroll.contentSize.height-30)/max(1,content.maxY+20))));canvas.scroll(.zero)}
   func zoom(_ factor:Double){scroll.magnification=max(scroll.minMagnification,min(scroll.maxMagnification,scroll.magnification*factor))}
   private func error(_ response:[String:Any]){status.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Graph operation failed"}
-  func mutate(_ method:String,_ params:[String:Any]){guard !loading,let onRequest else{return};loading=true;var p=params;p["expectedRevision"]=revision;onRequest(method,p){[weak self] response in guard let self else{return};self.loading=false;guard let result=response["result"] as? [String:Any]else{self.rebuild();self.error(response);return};if ["graph.create","graph.clone"].contains(method){self.graphID=(result["data"] as? [String:Any])?["graph"] as? String};self.hasDraft=false;self.load()}}
+  func mutate(_ method:String,_ params:[String:Any]){guard !loading,let onRequest else{return};loading=true;var p=params;p["expectedRevision"]=revision;onRequest(method,p){[weak self] response in guard let self else{return};self.loading=false;guard let result=response["result"] as? [String:Any]else{self.rebuild();self.error(response);return};if ["graph.create","graph.clone"].contains(method){self.graphID=(result["data"] as? [String:Any])?["graph"] as? String};self.load()}}
   func updateDefinition(_ change:(inout [String:Any])->Void){guard var d=definition else{return};change(&d);mutate("graph.update",["definition":d])}
-  private func move(_ id:String,x:Double,y:Double){guard !loading else{rebuild();return};guard graphID != nil else{mutate("graph.layout.set",["positions":[["node":id,"x":x,"y":y]]]);return};updateDefinition{d in var n=d["nodes"] as? [[String:Any]] ?? [];if let i=n.firstIndex(where:{$0["id"] as? String==id}){n[i]["x"]=x;n[i]["y"]=y};d["nodes"]=n}}
+  private func move(_ id:String,x:Double,y:Double){
+    // Busy: keep the node where it was dropped and send the move afterwards.
+    guard !loading else{if pendingMoveGraph != graphID{pendingMoves=[:]};pendingMoveGraph=graphID;pendingMoves[id]=(x,y);status.stringValue="Node position will be saved when the current request finishes";return}
+    guard graphID != nil else{mutate("graph.layout.set",["positions":[["node":id,"x":x,"y":y]]]);return};updateDefinition{d in var n=d["nodes"] as? [[String:Any]] ?? [];if let i=n.firstIndex(where:{$0["id"] as? String==id}){n[i]["x"]=x;n[i]["y"]=y};d["nodes"]=n}}
   private func rename(){guard let id=selectedID else{return};if graphID==nil{guard songNodeBus[id]==id else{status.stringValue="Open this processor to edit its definition";return};mutate("mixer.bus.set",["bus":id,"name":name.stringValue])}else{updateDefinition{d in var n=d["nodes"] as? [[String:Any]] ?? [];if let i=n.firstIndex(where:{$0["id"] as? String==id}){n[i]["name"]=name.stringValue};d["nodes"]=n}}}
   private func removeNode(){if let graphID,let selectedID{mutate("graph.node.remove",["graph":graphID,"node":selectedID])}}
   private func assign(){if graphID==nil,let instrument=selectedInstrument{assignSampleInstrument(instrument);return};guard graphID==nil,let selectedID,let bus=songNodeBus[selectedID],let amount=Double(assignAmount.stringValue),let wet=Double(assignWet.stringValue) else{return};mutate("graph.assign",["target":bus,"graph":chosen(assignment) as Any? ?? NSNull(),"amount":amount,"wet":wet])}
@@ -204,5 +252,9 @@ final class SignalGraphEditor: NSView, NSTextFieldDelegate {
     if connectionKind.indexOfSelectedItem==0{guard let input=Int(inputPort.stringValue),let output=Int(outputPort.stringValue),let gain=Double(connectionGain.stringValue),gain.isFinite else{status.stringValue="Enter valid port numbers and gain";return};updateDefinition{d in var edges=d["audio"] as? [[String:Any]] ?? [];edges.append(["source":a,"target":b,"input":input,"output":output,"gain":gain]);d["audio"]=edges}}
     else{guard let parameter=UInt32(parameter.stringValue),let lo=Double(minimum.stringValue),let hi=Double(maximum.stringValue),let base=Double(base.stringValue)else{return};updateDefinition{d in var edges=d["modulation"] as? [[String:Any]] ?? [];edges.append(["source":a,"target":b,"parameter":parameter,"minimum":lo,"maximum":hi,"base":base,"enabled":connectionEnabled.state == .on]);d["modulation"]=edges}}
   }
-  func disconnect(){guard let index=canvas.selectedEdge ?? chosen(connection).flatMap(Int.init),canvas.edges.indices.contains(index)else{return};guard graphID != nil else{disconnectSong(index);return};updateDefinition{d in var audio=d["audio"] as? [[String:Any]] ?? [],mod=d["modulation"] as? [[String:Any]] ?? [];if index<audio.count{audio.remove(at:index)}else if mod.indices.contains(index-audio.count){mod.remove(at:index-audio.count)};d["audio"]=audio;d["modulation"]=mod}}
+  func disconnect(){
+    // The Connections popup always shows some item. Only a wire the musician
+    // actually chose, on the canvas or in the popup, may be removed.
+    guard let index=canvas.selectedEdge,canvas.edges.indices.contains(index)else{status.stringValue="Select a wire first";return}
+    guard graphID != nil else{disconnectSong(index);return};updateDefinition{d in var audio=d["audio"] as? [[String:Any]] ?? [],mod=d["modulation"] as? [[String:Any]] ?? [];if index<audio.count{audio.remove(at:index)}else if mod.indices.contains(index-audio.count){mod.remove(at:index-audio.count)};d["audio"]=audio;d["modulation"]=mod}}
 }

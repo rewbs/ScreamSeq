@@ -187,10 +187,15 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     if effects.indices.contains(effect.indexOfSelectedItem) {let e=effects[effect.indexOfSelectedItem];parameter.stringValue=String(format:"%02X",e.suggested);effectHint.stringValue=e.hint}
   }
   private func setEffects(_ items:[[String:Any]]) {
+    let previous=effects.indices.contains(effect.indexOfSelectedItem) ? effects[effect.indexOfSelectedItem]:nil
     effects=items.map(PatternCommand.init)
     effectValues=items.map{($0["allowedParameters"] as? [Int]).map(Set.init)}
     if !effects.contains(where:{$0.command==0}) {effects.insert(PatternCommand(["command":0,"name":"None","label":"—","maximum":0,"description":"No continuing effect for this hit. Ends the previous hit's effect; ordinary row effects stay active until a hit overrides them."]),at:0);effectValues.insert(Set([0]),at:0)}
-    effect.removeAllItems();for e in effects {effect.addItem(withTitle:e.command==0 ? "None":"\(e.label) · \(e.name)")};effect.selectItem(at:0);changeEffect()
+    // One menu item per effect, in order: addItem(withTitle:) would drop an
+    // earlier effect with the same label and shift every later index.
+    effect.removeAllItems();for (index,e) in effects.enumerated() {let item=NSMenuItem(title:e.command==0 ? "None":"\(e.label) · \(e.name)",action:nil,keyEquivalent:"");item.tag=index;effect.menu?.addItem(item)}
+    if let previous,let kept=effects.firstIndex(where:{$0.command==previous.command && $0.mask==previous.mask && $0.value==previous.value}) {effect.selectItem(at:kept);effectHint.stringValue=effects[kept].hint}
+    else {effect.selectItem(at:0);changeEffect()}
   }
   func capture() {
     guard !pending,let context=onContext?(),let request=onRequest else{return}
