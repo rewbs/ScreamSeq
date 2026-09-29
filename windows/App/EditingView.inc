@@ -179,24 +179,31 @@
         choice.lpstrFile=path.data();choice.nMaxFile=DWORD(path.size());choice.lpstrDefExt=L"screamseq";
         choice.lpstrFilter=save ? L"ScreamSeq project\0*.screamseq;*.resonance\0\0" : L"Projects and tracker modules\0*.screamseq;*.resonance;*.mod;*.xm;*.s3m;*.it;*.mptm\0All files\0*.*\0\0";
         choice.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_DONTADDTORECENT|OFN_PATHMUSTEXIST|(save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+        ModalScope modal(modalDepth);
         bool selected=save ? GetSaveFileNameW(&choice)!=FALSE : GetOpenFileNameW(&choice)!=FALSE;
         return selected ? std::filesystem::path(path.data()) : std::filesystem::path{};
     }
     bool saveFile(bool saveAs=false) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        pluginEditorWarning.clear();
         documentOperation("flushPluginEditors",{{"force",true}});
         auto revision=view->session.revision;auto path=view->path;
         auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),towlower);
         if(saveAs || path.empty() || (ext!=L".screamseq" && ext!=L".resonance")) path=chooseFile(true);
         if(path.empty()) return false;
         documentOperation("document.save",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}});
-        status=L"Native project saved atomically";return true;
+        status=L"Native project saved atomically";
+        if(!pluginEditorWarning.empty()) {status+=L" / "+pluginEditorWarning;pluginEditorWarning.clear();}
+        return true;
     }
+    bool unsavedChecked=false; // The last protectUnsaved() got as far as knowing whether the song is dirty.
     bool protectUnsaved() {
+        unsavedChecked=false;
         documentOperation("flushPluginEditors",{{"force",true}});
+        unsavedChecked=true;
         if(!view->dirty) return true;
         auto revision=view->session.revision;
-        int choice=MessageBoxW(window,L"Save changes before leaving this document?\nYes: Save    No: Discard    Cancel: Keep editing",L"Unsaved ScreamSeq project",MB_YESNOCANCEL|MB_ICONWARNING|MB_DEFBUTTON3);
+        int choice=modalMessage(L"Save changes before leaving this document?\nYes: Save    No: Discard    Cancel: Keep editing",L"Unsaved ScreamSeq project",MB_YESNOCANCEL|MB_ICONWARNING|MB_DEFBUTTON3);
         if(choice==IDCANCEL) return false;
         if(view->session.revision!=revision) throw ScreamSeq::Api::ApiError(-32001,"Document changed during the prompt; review changes again");
         return choice==IDNO || saveFile();

@@ -7,6 +7,8 @@
 #include <map>
 #include <set>
 #include <chrono>
+#include <string>
+#include <utility>
 namespace ScreamSeq {
 // Serial document-worker owner. Baseline/editor instances never receive song
 // automation. Rendering uses the independent prepared HostedProjectPlayback.
@@ -35,6 +37,10 @@ class PluginOperations {
     std::span<const Tracker::ParameterChange> changes={});
   size_t slot(const Json &) const;
   Tracker::NativePlugin &editor(size_t);
+  // A failed or unflushable editor instance is closed and dropped. The rack
+  // keeps the last state captured from it; the warning is reported once.
+  std::string editorWarning_;
+  void dropEditor(const std::string &instance,const std::string &reason) noexcept;
 public:
   PluginOperations(Tracker::Document &,Project::ProjectState &,std::function<void()> stop,
     std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={},
@@ -48,6 +54,8 @@ public:
   Json invokePath(const std::string &,const Json &);
   Json invokeGraph(const std::string &,const Json &,unsigned sampleRate);
   bool flushEditors(bool force=false); // Debounce gestures; save/close forces capture.
+  void editorWarning(std::string text){editorWarning_=std::move(text);}
+  std::string takeEditorWarning(){return std::exchange(editorWarning_,std::string{});}
   std::vector<GraphRackRecord> graphRack() const;
   GraphRackClone cloneRackSlot(uint32_t);
   std::vector<Tracker::PluginAudioBus> audioBuses(size_t,bool required=false);

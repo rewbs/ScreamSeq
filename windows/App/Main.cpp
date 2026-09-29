@@ -339,6 +339,22 @@ public:
     unsigned patternRows() const {return view->pattern(patternIndex).rows;}
 
     bool busy=false;
+    // Nested modal loops (message boxes, file choosers) dispatch this window's
+    // messages. Close/shutdown must not prompt again or destroy the window
+    // underneath them.
+    unsigned modalDepth=0;
+    struct ModalScope {unsigned &depth;explicit ModalScope(unsigned &value):depth(value){++depth;}~ModalScope(){--depth;}ModalScope(const ModalScope &)=delete;ModalScope &operator=(const ModalScope &)=delete;};
+    int modalMessage(const wchar_t *text,const wchar_t *title,UINT flags) {ModalScope modal(modalDepth);return MessageBoxW(window,text,title,flags);}
+    static BOOL CALLBACK disabledWindow(HWND candidate,LPARAM found) {
+        if(IsWindowVisible(candidate)&&!IsWindowEnabled(candidate)) {*reinterpret_cast<bool *>(found)=true;return FALSE;}
+        return TRUE;
+    }
+    // Also detects choosers owned by tool windows: a modal dialog disables its owner.
+    bool modalActive() const {
+        if(modalDepth)return true;
+        bool found=false;EnumThreadWindows(GetCurrentThreadId(),disabledWindow,reinterpret_cast<LPARAM>(&found));
+        return found;
+    }
     uint64_t stopGeneration=0;
     template<class T> T await(std::future<T> future) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy");
@@ -351,7 +367,7 @@ public:
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
                 if(message.message==WM_QUIT) {PostQuitMessage(int(message.wParam));break;}
                 if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
-                if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&releaseAuditionKey(message.wParam))continue;
+                if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&handleKeyUp(message.wParam))continue;
                 TranslateMessage(&message);DispatchMessageW(&message);
             }
             // Complete the owned task even if presentation is lost; unwinding
@@ -382,9 +398,17 @@ public:
     Json documentOperation(const std::string &method,const Json &params) override {
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
-        try {auto result=await(controller->invoke(method,params));refreshDocument();return result;}
+        try {
+            auto result=await(controller->invoke(method,params));refreshDocument();
+            // A dropped vendor editor never blocks the operation; say what happened.
+            if(result.is_object()&&result.contains("pluginEditorWarning")&&result.at("pluginEditorWarning").is_string()) {
+                pluginEditorWarning=wide(result.at("pluginEditorWarning").get<std::string>());status=pluginEditorWarning;frameRequested=true;
+            }
+            return result;
+        }
         catch(...) {refreshDocument();throw;}
     }
+    std::wstring pluginEditorWarning;
     #include "SampleLibrary.inc"
     #include "AudioSettings.inc"
     explicit Application(const std::filesystem::path &input={},bool inspectionMode=false,std::optional<std::filesystem::path> catalogue={},std::optional<std::filesystem::path> library={}) : inspection(inspectionMode) {
@@ -480,6 +504,18 @@ public:
         auditionWindow->openAt(sample,std::move(identity));
     }
     bool releaseAuditionKey(WPARAM key){const bool typed=releaseTypedKey(key);return (auditionWindow&&auditionWindow->releaseKey(key))||typed;}
+    // Message pumps call this outside any handler: a full audition queue must
+    // become a status message, never an exception that unwinds the pump.
+    bool handleKeyUp(WPARAM key) noexcept {
+        bool handled=false;
+        try {handled=releaseTypedKey(key);}
+        catch(const std::exception &e) {handled=true;frameRequested=true;try {status=wide(e.what());} catch(...) {}}
+        catch(...) {handled=true;}
+        try {if(auditionWindow&&auditionWindow->releaseKey(key))handled=true;}
+        catch(const std::exception &e) {handled=true;frameRequested=true;try {status=wide(e.what());} catch(...) {}}
+        catch(...) {handled=true;}
+        return handled;
+    }
     std::unique_ptr<ScreamSeq::SampleDetailWindow> sampleDetailWindow;
     void openSampleDetail(){
         if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);});
@@ -506,6 +542,47 @@ public:
         parameterAutomationWindow->openAt(plugin,parameter);
     }
 	#include "WorkspaceDraw.inc"
+	// The one close decision for WM_CLOSE and WM_QUERYENDSESSION. It never
+	// throws. A failed save keeps the song open and says why; when unsaved
+	// work cannot even be checked, the user decides whether to close anyway,
+	// so a broken document worker cannot make the window unclosable.
+	bool canClose() noexcept {
+		std::wstring reason=L"unexpected error";
+		unsavedChecked=false;
+		try {
+			// A prompt or chooser is already showing: do not stack another.
+			if(modalActive()) return false;
+			if(busy||libraryWaits) {stop();++samplePreviewGeneration;samplePreview.stop();return false;}
+			return protectUnsaved();
+		} catch(const std::exception &e) {
+			try {reason=wide(e.what());} catch(...) {}
+		} catch(...) {}
+		frameRequested=true;
+		try {
+			status=L"Not closed / "+reason;
+			// The song is known to be dirty and its save (or prompt) failed:
+			// keep it. Closing again offers Save/Discard/Cancel once more.
+			if(unsavedChecked) return false;
+			const auto text=L"Could not check for unsaved changes: "+reason+L".\nClose anyway? Unsaved changes will be lost.";
+			return modalMessage(text.c_str(),L"ScreamSeq",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)==IDYES;
+		} catch(...) {}
+		return false;
+	}
+	// A persistent presentation failure must not cost the song: report it and
+	// offer Save while the document worker is still healthy.
+	void presentationFailure() noexcept {
+		try {
+			releaseTypedNotes();
+			if(busy||!view->dirty) {
+				modalMessage(L"ScreamSeq cannot draw its window and keeps retrying.\nThe song in memory is unchanged.",L"ScreamSeq display unavailable",MB_OK|MB_ICONWARNING);
+				return;
+			}
+			if(modalMessage(L"ScreamSeq cannot draw its window and keeps retrying.\nSave the unsaved song now?",L"ScreamSeq display unavailable",MB_YESNO|MB_ICONWARNING)!=IDYES) return;
+			if(saveFile()) modalMessage(L"The song was saved.",L"ScreamSeq display unavailable",MB_OK|MB_ICONINFORMATION);
+		} catch(const std::exception &e) {
+			try {status=wide(e.what());modalMessage(status.c_str(),L"ScreamSeq could not save the song",MB_OK|MB_ICONERROR);} catch(...) {}
+		} catch(...) {}
+	}
 	void draw() {
         frameRequested=false;
         auditionWasAnimating=auditionOnly&&auditionAnimating();
@@ -529,10 +606,17 @@ public:
         }
 		if(follow && device.running() && !auditionOnly && playback.pattern==patternIndex) firstRow = playback.row > visibleRows()/2 ? playback.row - visibleRows()/2 : 0;
 		surface->begin();
-		drawWorkspace(playback);
-		surface->finishDrawing();
+		// A failed frame must still end the D2D draw and pop its clips.
+		try {drawWorkspace(playback);} catch(...) {surface->abandon();throw;}
+		const bool drawn=surface->finishDrawing();
 		if(cpuDraw.size() < 120000) cpuDraw.push_back((ScreamSeq::ticks() - begin) * 1e6 / frequency);
-		auto result = surface->present(); ScreamSeq::check(result, "Present application");
+		auto result = drawn ? surface->present() : S_FALSE; ScreamSeq::check(result, "Present application");
+		if(surface->lost()) {
+			// Device removed/reset: resources were discarded and the next frame
+			// recreates them. The caller sees lost() and counts the failure.
+			frameRequested=true;
+			return;
+		}
 		if(result == DXGI_STATUS_OCCLUDED) ++occluded;
 		auto now = ScreamSeq::ticks();
 		if(previousSubmit && submitIntervals.size() < 120000) submitIntervals.push_back((now - previousSubmit) * 1000 / frequency);
@@ -575,8 +659,20 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		switch(message) {
 		case ScreamSeq::ApiDispatch::message: if(app->api && !app->refreshingPlugins) app->api->drain(); return 0;
         case deferredViewsMessage: app->drainViews();return 0;
-		case WM_CLOSE: if(app->busy||app->libraryWaits) {app->stop();++app->samplePreviewGeneration;app->samplePreview.stop();return 0;} if(!app->protectUnsaved()) return 0;break;
+		case WM_CLOSE: if(!app->canClose()) return 0;break;
+		// Logoff/shutdown asks the same question; FALSE blocks the session end.
+		case WM_QUERYENDSESSION: return app->canClose() ? TRUE : FALSE;
+		case WM_ENDSESSION:
+			if(wp) {
+				// The process may end as soon as this returns: silence audio
+				// first, then take the normal shutdown path. Never destroy the
+				// window underneath a worker wait or a nested modal loop.
+				app->releaseTypedNotes();app->stop();++app->samplePreviewGeneration;app->samplePreview.stop();
+				if(!app->busy&&!app->libraryWaits&&!app->modalActive()) DestroyWindow(window);
+			}
+			return 0;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
+		case WM_NCDESTROY: SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
         case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==5)app->graphCurveTimer();return 0;
 		case WM_DPICHANGED: {
 			auto rect = reinterpret_cast<RECT *>(lp);
@@ -618,7 +714,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             if(LOWORD(wp)==sampleCommandBase && HIWORD(wp)!=LBN_SELCHANGE && HIWORD(wp)!=LBN_DBLCLK) return 0;
             app->command(LOWORD(wp));return 0;
 		case WM_KEYDOWN:case WM_SYSKEYDOWN: if(app->key(wp,(lp&(1LL<<30))!=0)) return 0;break;
-        case WM_KEYUP:case WM_SYSKEYUP:if(app->releaseAuditionKey(wp))return 0;break;
+        case WM_KEYUP:case WM_SYSKEYUP:if(app->handleKeyUp(wp))return 0;break;
         case WM_KILLFOCUS:if(!app->liveKeyboard)app->releaseTypedNotes(window);break;
         case WM_ACTIVATEAPP:if(!wp)app->releaseTypedNotes();break;
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
@@ -634,11 +730,33 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 			break;
 		}
 		}
-	} catch(const std::exception &error) { app->status = wide(error.what()); }
+	} catch(const std::exception &error) {
+		try { app->status = wide(error.what()); } catch(...) {}
+		// Never let a failed close fall through to the default handler, which
+		// would destroy the window and discard the unsaved song.
+		if(message==WM_CLOSE || message==WM_QUERYENDSESSION || message==WM_ENDSESSION) return 0;
+	} catch(...) {
+		if(message==WM_CLOSE || message==WM_QUERYENDSESSION || message==WM_ENDSESSION) return 0;
+	}
 	return DefWindowProcW(window, message, wp, lp);
 }
+// The UI thread hosts shell dialogs (IFileOpenDialog), so it owns an STA.
+struct ComApartment {
+	HRESULT result = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	ComApartment() = default;
+	ComApartment(const ComApartment &) = delete;
+	ComApartment &operator=(const ComApartment &) = delete;
+	~ComApartment() { if(SUCCEEDED(result)) CoUninitialize(); }
+};
+// Declared after the Application: on every exit path, including unwinding, the
+// window is detached from it and destroyed while the Application still exists.
+struct WindowOwner {
+	HWND &window;
+	~WindowOwner() { if(window) { SetWindowLongPtrW(window, GWLP_USERDATA, 0); DestroyWindow(window); window = nullptr; } }
+};
 }
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+	ComApartment apartment; // Outlives the Application and every COM user below.
 	HWND window{};
 	try {
 		int argc = 0; auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -697,6 +815,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             try{library=std::filesystem::path(local)/L"org.resonance.tracker"/L"plugin-library-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
         }
 		Application app(projectPath,inspection,std::move(catalogue),std::move(library));app.silentOutput=silentOutput;
+		WindowOwner windowOwner{window};
         app.allowSamplePreview=!inspection&&!audioTest;
         if(!sampleLibraryOverride.empty()){
             if(!(inspection||audioTest)||!sampleLibraryOverride.is_absolute())throw std::runtime_error("An absolute private sample library requires inspection or audio qualification mode");
@@ -722,25 +841,48 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		ShowWindow(window, SW_SHOWNOACTIVATE);
 		if(audioTest) { app.play(); if(!app.device.running()) throw std::runtime_error("Audio test could not start endpoint"); }
 		bool closed = false; double start = ScreamSeq::ticks();
+		// Qualification runs keep their non-modal failure exit code.
+		const bool unattended=inspection||audioTest||automation||seconds>0;
+		unsigned drawFailures=0;double drawRetry=0;bool drawFailureShown=false;
 		while(!closed) {
 			HANDLE event = app.surface->ready();
-            const bool renderPending=!IsIconic(window) && app.presentationNeeded();
+            const bool renderPending=!IsIconic(window) && app.presentationNeeded() && ScreamSeq::ticks()>=drawRetry;
             if(!renderPending) ++app.idleWaits;
             // A ready swapchain stays signaled without Present. Exclude it while
             // stopped/unchanged, otherwise the idle loop spins at full CPU.
-			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, 1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, drawFailures?100:1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 			MSG message{};
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }
 				if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && app.handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
-				if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&app.releaseAuditionKey(message.wParam))continue;
+				if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&app.handleKeyUp(message.wParam))continue;
 				TranslateMessage(&message); DispatchMessageW(&message);
 			}
 			if(closed) break;
             app.drainViews();
             app.samplePreview.service();
 			if(result == WAIT_FAILED) throw std::runtime_error("Frame wait failed");
-			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) app.draw();
+			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) {
+				// A frame counts only when it was really presented: draw() returns
+				// normally after a device loss, with the surface still lost.
+				bool presented=false; std::wstring reason=L"display device lost";
+				try { app.draw(); presented=!app.surface->lost(); }
+				catch(const std::exception &error) {
+					if(unattended) throw;
+					try { reason=wide(error.what()); } catch(...) {}
+				}
+				if(presented) { drawFailures=0; drawFailureShown=false; drawRetry=0; }
+				else {
+					++drawFailures;
+					if(unattended && drawFailures>=3) throw std::runtime_error("The display device keeps resetting");
+					// Keep the session and its unsaved song. The first retry is
+					// immediate (one device reset); later ones back off to 2 s.
+					drawRetry=ScreamSeq::ticks()+app.frequency*0.25*std::min(drawFailures-1,8u);
+					app.frameRequested=true;
+					try { app.status=L"Display unavailable / retrying / "+reason; } catch(...) {}
+					if(drawFailures>=3 && !drawFailureShown) { drawFailureShown=true; app.presentationFailure(); }
+				}
+			}
 			if(seconds && (ScreamSeq::ticks() - start) / app.frequency >= seconds) break;
             if(audioTest && !audioTestAllowStop && !app.device.running()) throw std::runtime_error("Audio device stopped during test");
 		}
@@ -752,7 +894,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 	} catch(const std::exception &error) {
 		OutputDebugStringA(error.what());
 		// Test failures remain non-modal. Normal startup errors are also observable via exit code.
-		if(window) DestroyWindow(window);
+		if(window) { SetWindowLongPtrW(window, GWLP_USERDATA, 0); DestroyWindow(window); }
 		return 1;
 	}
 }

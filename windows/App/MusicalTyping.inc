@@ -12,11 +12,18 @@
     bool liveKeyboard=false,typingSample=true;
     std::string typingSoundId,typingDocument;
     unsigned typingSound=0;
+    // The rows are physical key positions (US letters shown). Held notes stay
+    // keyed by the message's own virtual key, which key-up repeats unchanged.
     static int musicalOffset(WPARAM key) {
-        if(key>127)return -1;
+        const auto physical=ScreamSeq::physicalMusicalKey(key);
+        if(!physical||physical>127)return -1;
         const std::string_view lower="ZSXDCVGBHNJM",upper="Q2W3ER5T6Y7UI";
-        const auto low=lower.find(char(key)),high=upper.find(char(key));
+        const auto low=lower.find(char(physical)),high=upper.find(char(physical));
         return low!=lower.npos?int(low):high!=upper.npos?12+int(high):-1;
+    }
+    static bool typingButtonControl(HWND focus) {
+        wchar_t name[64]{};GetClassNameW(focus,name,64);
+        return _wcsicmp(name,L"Button")==0;
     }
     static bool typingTextControl(HWND focus) {
         wchar_t name[64]{};GetClassNameW(focus,name,64);
@@ -97,6 +104,8 @@
         const auto owner=tool.window();
         tool.musicalTyping([this,owner,target=std::move(target)](HWND focus,WPARAM key,bool repeat){
             if(GetKeyState(VK_CONTROL)&0x8000||GetKeyState(VK_MENU)&0x8000||typingTextControl(focus))return false;
+            // Space presses a focused button or checkbox; elsewhere it is transport.
+            if(key==VK_SPACE&&typingButtonControl(focus))return false;
             if(key==VK_SPACE){if(!repeat){if(device.running()&&!auditionOnly)stop();else play();}return true;}
             const auto offset=musicalOffset(key);if(offset<0)return false;
             if(repeat||typedNotes.contains(key))return true;

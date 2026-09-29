@@ -21,7 +21,7 @@
         choice.lpstrTitle=save?L"Save plugin preset":L"Load plugin preset";
         choice.lpstrFilter=L"ScreamSeq plugin preset\0*.screamseq-preset;*.resonance-preset\0\0";
         choice.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_DONTADDTORECENT|OFN_PATHMUSTEXIST|(save?OFN_OVERWRITEPROMPT:OFN_FILEMUSTEXIST);
-        const bool chosen=save?GetSaveFileNameW(&choice)!=FALSE:GetOpenFileNameW(&choice)!=FALSE;
+        bool chosen=false;{ModalScope modal(modalDepth);chosen=save?GetSaveFileNameW(&choice)!=FALSE:GetOpenFileNameW(&choice)!=FALSE;}
         if(!chosen){if(CommDlgExtendedError())throw std::runtime_error("Could not open the preset file dialog");return;}
         const auto check=[&]{if(documentId!=document||view->session.revision!=revision)throw ScreamSeq::Api::ApiError(-32001,"Document changed while choosing a preset; choose the preset again");};
         check();const std::filesystem::path path(file.data());

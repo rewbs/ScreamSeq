@@ -68,7 +68,7 @@
         const auto revision=view->session.revision,document=documentId;
         const bool createInstruments=instruments.value_or(view->instruments!=0);
         sampleImportPending=true;struct Guard{bool &pending;~Guard(){pending=false;}} guard{sampleImportPending};
-        const auto paths=ScreamSeq::chooseSampleFiles(window,createInstruments?L"Import samples as instruments":L"Import samples",true);
+        std::vector<std::filesystem::path> paths;{ModalScope modal(modalDepth);paths=ScreamSeq::chooseSampleFiles(window,createInstruments?L"Import samples as instruments":L"Import samples",true);}
         if(paths.empty())return;
         if(documentId!=document||view->session.revision!=revision)throw std::runtime_error("Song changed while choosing samples / reopen Import to use the current song");
         Json files=Json::array();for(const auto &path:paths)files.push_back(utf8Path(path));

@@ -17,6 +17,7 @@
 #include "pluginterfaces/vst/ivstunits.h"
 #include <atomic>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <map>
@@ -385,6 +386,8 @@ struct NativeBackend::Impl {
   };
   Callbacks *callbacks=new Callbacks(this);
   tresult performEdit(ParamID id, ParamValue value) {
+    // A failed instance is about to be dropped: discard, never queue.
+    if (failed.load(std::memory_order_acquire)) return kResultFalse;
     auto w = editWrite.load(std::memory_order_relaxed), r = editRead.load(std::memory_order_acquire);
     auto aw = audioWrite.load(std::memory_order_relaxed), ar = audioRead.load(std::memory_order_acquire);
     if (w - r >= edits.size() || aw - ar >= audioEdits.size()) {
@@ -552,11 +555,30 @@ struct NativeBackend::Impl {
     if(msg==WM_NCCREATE){self=static_cast<Impl*>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams);SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}
     try{
       if(self && msg==WM_CLOSE){pluginMainCall([&]{self->close();});return 0;}
-      if(self && msg==WM_TIMER){pluginMainCall([&]{if(!self->resizeBusy)self->syncController();});return 0;}
+      if(self && msg==WM_TIMER){pluginMainCall([&]{if(!self->resizeBusy)self->syncController();self->drainEditorEdits();});return 0;}
       if(self && msg==WM_SIZE){if(w!=SIZE_MINIMIZED)pluginMainCall([&]{self->userSized();});return 0;}
       if(self && msg==WM_SIZING && l){pluginMainCall([&]{self->userSizing(*reinterpret_cast<RECT*>(l),w);});return TRUE;}
     }catch(...){if(self)self->fail(Failure::EditorException);return 0;}
     return DefWindowProcW(hwnd,msg,w,l);
+  }
+  // An instance with an editor window is never rendered, so nothing else
+  // consumes its audible edit queue between state captures. Deliver it from the
+  // editor timer (owner thread) so a long gesture cannot overflow the queue.
+  // The back-pointer is cleared by ~NativeBackend before an Impl is leaked.
+  // drainingEdits is raised BEFORE the pointer is read and the destructor
+  // clears the pointer BEFORE it reads the flag, so either this call sees
+  // null or the destructor waits for it to finish.
+  std::atomic<NativeBackend *> backend{nullptr};
+  std::atomic<bool> drainingEdits{false};
+  void drainEditorEdits() noexcept {
+    if(!window||failed.load(std::memory_order_acquire))return;
+    if(drainingEdits.exchange(true))return;
+    if(auto *owner=backend.load())
+      for(int n=0;n<64&&(changes->count||audioRead.load()!=audioWrite.load());++n){
+        std::array<float,2> empty{};
+        if(!owner->process(empty.data(),0,0,nullptr,0,transport))break;
+      }
+    drainingEdits.store(false);
   }
   void syncController(){
     if(!controller||failed)return;
@@ -760,7 +782,7 @@ struct NativeBackend::Impl {
 };
 NativeBackend::NativeBackend(const PluginState &s, double rate, bool offline,const std::string &hash) {
   pluginMainCall([&] {
-    impl_ = std::make_unique<Impl>();impl_->hash=hash;
+    impl_ = std::make_unique<Impl>();impl_->hash=hash;impl_->backend.store(this);
     try {
       impl_->create(s, rate, offline);
     } catch (...) {
@@ -770,7 +792,23 @@ NativeBackend::NativeBackend(const PluginState &s, double rate, bool offline,con
   });
 }
 NativeBackend::~NativeBackend() {
-  pluginMainCall([&] { impl_.reset(); });
+  // Never throw from a destructor. Once the UI owner is stopping, the vendor
+  // objects cannot be released on their own apartment any more: leak them
+  // deliberately instead of releasing them on a foreign thread.
+  // A busy owner is transient: retry briefly before giving up.
+  for (int attempt = 0; attempt < 20; ++attempt) {
+    try { pluginMainCall([&] { impl_.reset(); }); return; }
+    catch (const UiOwnerBusy &) { Sleep(10); }
+    catch (...) { break; }
+  }
+  if (!impl_) return;
+  // The leaked Impl may still own an editor window whose timer runs on the
+  // owner thread. Detach it from this object first, wait for a drain that is
+  // already inside process(), and stop the timer where the system allows it.
+  impl_->backend.store(nullptr);
+  for (int wait = 0; wait < 200 && impl_->drainingEdits.load(); ++wait) Sleep(5);
+  if (impl_->window) KillTimer(impl_->window, 1); // Best effort from a foreign thread.
+  (void)impl_.release();
 }
 PluginFailure NativeBackend::failure() const noexcept {
   const auto value=impl_->firstFailure.load(std::memory_order_acquire);

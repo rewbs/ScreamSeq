@@ -1,5 +1,7 @@
 #include "WindowsVST3.hpp"
 #include "ScanProtocol.hpp"
+#include <atomic>
+#include <chrono>
 #include <fstream>
 #include <set>
 namespace Tracker::WindowsVST3 {
@@ -14,22 +16,53 @@ std::vector<Scan> decodeCache(const JSON &v){
  for(const auto &j:v){auto s=decodeScan(j);if(!paths.insert(s.file.path).second)throw std::runtime_error("Ambiguous VST3 cache path");next.push_back(std::move(s));}
  return next;
 }
-void load(){if(loaded)return;defaults();std::vector<Scan> next;auto p=nativePath(cache);if(std::filesystem::exists(p)){if(std::filesystem::file_size(p)>maxCacheBytes)throw std::runtime_error("VST3 cache exceeds 4 MiB");std::ifstream f(p,std::ios::binary);auto v=JSON::parse(f,[](int depth,JSON::parse_event_t,JSON&){if(depth>16)throw std::runtime_error("VST3 cache nesting exceeds limit");return true;});next=decodeCache(v);}records=std::move(next);loaded=true;}
+// Best effort: keep the unreadable cache for diagnosis under another name.
+void quarantine(const std::filesystem::path &p) noexcept {
+ try{
+  const auto stamp=std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  auto target=p;target+=L".corrupt-"+std::to_wstring(stamp);
+  (void)renameReplacing(p,target); // See ScanProtocol.hpp: never the test's interposed rename.
+ }catch(...){}
+}
+// Cache-only readers (discover/create) keep failing closed on a malformed
+// cache. An explicit rescan passes repair=true: the unreadable file is
+// quarantined and the registry restarts from an empty record set, so a corrupt
+// cache can be repaired from inside the application.
+void load(bool repair=false){
+ if(loaded)return;defaults();std::vector<Scan> next;auto p=nativePath(cache);
+ try{
+  if(std::filesystem::exists(p)){if(std::filesystem::file_size(p)>maxCacheBytes)throw std::runtime_error("VST3 cache exceeds 4 MiB");std::ifstream f(p,std::ios::binary);auto v=JSON::parse(f,[](int depth,JSON::parse_event_t,JSON&){if(depth>16)throw std::runtime_error("VST3 cache nesting exceeds limit");return true;});next=decodeCache(v);}
+ }catch(const std::exception &){
+  if(!repair)throw;
+  next.clear();quarantine(p);
+ }
+ records=std::move(next);loaded=true;
+}
 void save(const std::vector<Scan> &next){
  // Validate the entire prospective wire cache under the reader's invariants
  // before creating a staging file or replacing the last readable cache.
  if(next.size()>maxCacheRecords)throw std::runtime_error("VST3 cache count exceeds limit");
  JSON v=JSON::array();for(auto &r:next)v.push_back(encodeScan(r));auto text=v.dump();if(text.size()>maxCacheBytes)throw std::runtime_error("VST3 cache full");(void)decodeCache(v);
- auto p=nativePath(cache);std::filesystem::create_directories(p.parent_path());auto temp=p;temp+=L"."+std::to_wstring(GetCurrentProcessId())+L".tmp";
+ auto p=nativePath(cache);std::filesystem::create_directories(p.parent_path());
+ // The staging name is unique per attempt (as in Project/ProjectIO.hpp): a
+ // leftover or foreign staging file cannot block publication.
+ static std::atomic<uint64_t> serial{0};std::filesystem::path temp;
  // Declare cleanup before the exclusive handle: unwinding closes the handle
  // before deletion. Do not remove an existing staging file we did not create.
  struct Remove{const std::filesystem::path &p;bool owned=false;~Remove(){if(owned)DeleteFileW(p.c_str());}}remove{temp};
- Handle file(CreateFileW(temp.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr));if(file.h==INVALID_HANDLE_VALUE)throw std::runtime_error("Cannot stage VST3 cache");remove.owned=true;
+ Handle file(INVALID_HANDLE_VALUE);
+ for(unsigned attempt=0;attempt<64;++attempt){
+  temp=p;temp+=L"."+std::to_wstring(GetCurrentProcessId())+L"."+std::to_wstring(GetTickCount64())+L"."+std::to_wstring(serial.fetch_add(1))+L".tmp";
+  file.h=CreateFileW(temp.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
+  if(file.h!=INVALID_HANDLE_VALUE)break;
+  if(GetLastError()!=ERROR_FILE_EXISTS&&GetLastError()!=ERROR_ALREADY_EXISTS)throw std::runtime_error("Cannot stage VST3 cache");
+ }
+ if(file.h==INVALID_HANDLE_VALUE)throw std::runtime_error("Cannot stage VST3 cache");remove.owned=true;
  DWORD n=0;if(!WriteFile(file.h,text.data(),DWORD(text.size()),&n,nullptr)||n!=text.size()||!FlushFileBuffers(file.h))throw std::runtime_error("Cannot write VST3 cache");CloseHandle(file.h);file.h=nullptr;if(!MoveFileExW(temp.c_str(),p.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))throw std::runtime_error("Cannot publish VST3 cache");
 }
 }
 void configure(std::string exe,std::string file){if(!nativePath(exe).is_absolute()||!nativePath(file).is_absolute())throw std::runtime_error("VST3 scanner/cache paths must be absolute");scanner=std::move(exe);cache=std::move(file);loaded=false;records.clear();}
-std::vector<PluginDescriptor> rescan(const std::string &p,uint32_t timeout){load();auto s=scanChild(scanner,p,timeout);auto next=records;std::erase_if(next,[&](auto &x){return x.file.path==s.file.path;});next.push_back(s);save(next);records=std::move(next);return s.classes;}
+std::vector<PluginDescriptor> rescan(const std::string &p,uint32_t timeout){load(true);auto s=scanChild(scanner,p,timeout);auto next=records;std::erase_if(next,[&](auto &x){return x.file.path==s.file.path;});next.push_back(s);save(next);records=std::move(next);return s.classes;}
 std::vector<ScannedPlugin> scannedPlugins(const std::string &classID,bool instrument){
  if(!validClassID(classID))throw std::runtime_error("VST3 class ID must be exactly 32 hexadecimal characters");
  load();Steinberg::FUID uid;uid.fromString(classID.c_str());char canonical[33]{};uid.toString(canonical);

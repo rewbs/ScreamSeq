@@ -1,5 +1,6 @@
 # Requires Visual Studio 2022 C++ Build Tools and a Windows 10/11 SDK.
 # Examples: .\windows\build.ps1 -Test
+#           .\windows\build.ps1 -Target worker-tests -Test
 #           .\windows\build.ps1 -Architecture ARM64 -Target portable-tests -Test
 #           .\windows\build.ps1 -Target renderer-probe
 [CmdletBinding()]
@@ -100,4 +101,13 @@ if ($Test) {
     & $ctest --test-dir $BuildDirectory -C $Configuration --output-on-failure --no-tests=error -L portable
     if ($LASTEXITCODE -ne 0) { throw "Portable tests failed ($LASTEXITCODE)." }
     Write-Host 'Portable functional tests passed. Realtime allocation/lock auditing and sanitizers were not run.'
+    # The worker tests (document worker, native project, save; no desktop and
+    # no audio device) exist only when everything or worker-tests was built.
+    if ($targets.Count -eq 0 -or $targets -contains 'worker-tests') {
+        & $ctest --test-dir $BuildDirectory -C $Configuration --output-on-failure --no-tests=error -L worker
+        if ($LASTEXITCODE -ne 0) { throw "Worker tests failed ($LASTEXITCODE)." }
+        Write-Host 'Worker functional tests passed. Desktop, audio-device and plugin-fixture tests were not run.'
+    } else {
+        Write-Host 'Worker tests were not built by this -Target selection; add -Target worker-tests to run them.'
+    }
 }

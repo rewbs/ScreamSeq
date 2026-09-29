@@ -331,10 +331,22 @@ Json DocumentController::operation(const std::string &method,Json params) {
   // editors, require a document revision, or allocate musical history here.
   if(method=="plugin.library.get"||method=="plugin.library.set")return plugins_->invokeLibrary(method,params);
   if(method=="synchronizeView") return Json::object();
-  if(method=="flushPluginEditors") {keys(params,{"force"});const auto count=plugins_->openEditorCount();if(plugins_->flushEditors(flag(params,"force")) || count!=plugins_->openEditorCount())publish();return Json::object();}
+  // A vendor editor that cannot be flushed must not block saving or any other
+  // operation: the rack keeps its last captured state and a warning is kept
+  // for the next flush/save reply.
+  const auto flushEditors=[&](bool force){
+    const auto count=plugins_->openEditorCount();bool changed=false;
+    try{changed=plugins_->flushEditors(force);}
+    catch(const std::exception &e){plugins_->editorWarning(std::string("Plugin editor state was not captured / ")+e.what());changed=true;}
+    if(changed || count!=plugins_->openEditorCount())publish();
+  };
+  if(method=="flushPluginEditors") {
+    keys(params,{"force"});flushEditors(flag(params,"force"));
+    Json reply=Json::object();if(auto warning=plugins_->takeEditorWarning();!warning.empty())reply["pluginEditorWarning"]=std::move(warning);
+    return reply;
+  }
   if(method=="document.save" || method=="document.open" || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane") {
-    const auto count=plugins_->openEditorCount();
-    if(plugins_->flushEditors(true) || count!=plugins_->openEditorCount())publish();
+    flushEditors(true);
   }
   auto writes=DocumentOperations::writes();auto timelineWrites=TimelineOperations::writes();writes.insert(writes.end(),timelineWrites.begin(),timelineWrites.end());
   const auto assetWrites=AssetOperations::writes();writes.insert(writes.end(),assetWrites.begin(),assetWrites.end());
@@ -378,6 +390,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
       if(!std::filesystem::is_directory(path.parent_path()) || std::filesystem::is_directory(path)) throw Api::ApiError(-32602,"Save destination must be a file in an existing directory");
       if(dry) (void)Project::serializeNativeProject(*document_,project_);else Project::saveNativeProject(*document_,project_,path,overwrite);
       result={{"path",utf8(path)},{"format",ext==L".screamseq" ? "screamseq" : "resonance"},{"written",!dry},{"projectVersion",6}};
+      if(auto warning=plugins_->takeEditorWarning();!warning.empty())result["pluginEditorWarning"]=std::move(warning);
     }
   } else if(pluginMethod) {
     result=method.starts_with("graph.plugin.")?plugins_->invokeGraph(method,params,playbackFeedback().sampleRate):plugins_->invoke(method,params);

@@ -10,7 +10,9 @@ This supplements the discovery/identity section of `README.md`.
   Appending another module rejects without changing the previous readable cache
   bytes or the owner's in-memory records. Missing/retired modules are not silently
   dropped to make room. Discovery remains cache-only; malformed caches are errors,
-  not permission to scan or execute plugins.
+  not permission to scan or execute plugins. An explicit rescan is the repair
+  path: it renames an unreadable cache to `<cache>.corrupt-<unix seconds>` (best
+  effort) and rebuilds the registry from an empty record set plus the scan.
 - Cache/scanner class IDs must be exactly the representation produced by SDK
   `FUID::toString`. Validate exactly 32 hexadecimal characters before SDK parsing,
   then reject noncanonical spellings and duplicate identities. Do not silently
@@ -19,8 +21,9 @@ This supplements the discovery/identity section of `README.md`.
   validation, creation compares the SDK canonical identity to the canonical cache.
   A lowercase source spelling can match without rewriting the source descriptor.
   No name fallback, path retargeting or recipe mutation is introduced.
-- Cache writes exclusively create a same-directory staging file, write and flush
-  it, close it, then atomically replace the target. On write/short-write/flush
+- Cache writes exclusively create a same-directory staging file with a name
+  unique to the attempt (`<cache>.<pid>.<tick>.<serial>.tmp`, up to 64 tries),
+  write and flush it, close it, then atomically replace the target. On write/short-write/flush
   failure, close the exclusive handle **before** deleting the staging file. A
   pre-existing staging file is not owned and must not be removed. Publication
   failure retains the loaded records and permits a subsequent retry.
