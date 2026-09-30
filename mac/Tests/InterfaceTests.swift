@@ -787,6 +787,7 @@ struct InterfaceFailure: Error { let message: String }
     ]
     UserDefaults.standard.setVolatileDomain(defaults, forName: UserDefaults.argumentDomain)
     do {
+      try editorDraftChecks()
       try automationToolsChecks()
       try automationTargetChecks()
       try parameterActivityChecks()
@@ -804,6 +805,7 @@ struct InterfaceFailure: Error { let message: String }
       try instrumentEnvelopeChecks()
       try envelopeBankChecks()
       try navigationChecks()
+      try patternGridChecks()
       try noteTrackChecks()
       try pluginBrowserChecks()
       let grid = PatternView()

@@ -112,9 +112,9 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     }
   }
   func showBank(){
-    if let bankWindow,bankWindow.window?.isVisible==true{bankWindow.window?.makeKeyAndOrderFront(nil);return}
     guard !loading,let graph,let node,let onRequest else{return};let points=canvas.points,pattern=patternIndex
     let target:[String:Any]=["kind":"graph","graph":graph,"node":node,"pattern":patternIndex]
+    if EnvelopeBankWindow.reuse(bankWindow,for:target,refused:{[weak self] in self?.status.stringValue=$0}){return}
     let shape:[String:Any]=["span":canvas.rows*256,"rowsPerBeat":rowsPerBeat,"points":canvas.points.map(\.dictionary)]
     bankWindow?.close();bankWindow=EnvelopeBankWindow(title:heading.stringValue,target:target,shape:canvas.points.isEmpty ? nil:shape,revision:revision,request:onRequest,canReplace:{[weak self] in (self?.hasDraft==false || self?.canvas.points==points) && self?.graph==graph && self?.node==node && self?.patternIndex==pattern},applied:{[weak self] in self?.hasDraft=false;self?.load();self?.onChanged?()})
   }

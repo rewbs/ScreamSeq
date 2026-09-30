@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioExport.hpp"
 #import "../Bridge/TrackerSession.h"
 #include "editor/TrackerDocument.hpp"
@@ -37,7 +38,7 @@ static std::vector<float> render(Document &doc, uint32_t rate, uint32_t block, b
 static double difference(const std::vector<float> &a, const std::vector<float> &b) {
   double error = 0; for (size_t i = 0; i < a.size(); ++i) error = std::max(error, std::abs(double(a[i]) - b[i])); return error;
 }
-int main(int argc, char **argv) { @autoreleasepool { try {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleasepool { try {
   check(argc == 2, "Fixture bundle path required");
   const std::array<uint16_t, 3> columns{0, 1, 2};
   auto doc = Document::demo(); const auto original = doc->native();

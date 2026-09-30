@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/hosted/RenderOnce.hpp"
 #include "soundlib/ModInstrument.h"
@@ -163,7 +164,7 @@ static void graphSidechains(PluginState effect, PluginState synth, uint32_t rate
   check(energy > 1 && maximum < 2e-7, "Actual hosted sidechain gain matches an independently scaled automation envelope");
   std::cout << "Hosted " << effect.descriptor.format << " sidechain at " << rate << " Hz, reference difference " << maximum << '\n';
 }
-int main(int argc, char **argv) {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool { try {
     check(argc == 2, "Fixture bundle path required");
     auto descriptors = NativePlugin::discoverVST3(argv[1]);

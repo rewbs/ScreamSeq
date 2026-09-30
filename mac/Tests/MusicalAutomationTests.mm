@@ -1,4 +1,5 @@
 #import "../Bridge/TrackerSession.h"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioUnitHost.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/ArrangementTools.hpp"
@@ -48,7 +49,7 @@ static void liveAutomation(PluginState state) {
     check(renderer.telemetry().frames==6*block,"Editing automation does not restart or pause the transport");
   }
 }
-int main(int argc, char **argv) {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool {
     try {
       check(argc == 2, "Fixture path required");

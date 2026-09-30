@@ -13,6 +13,17 @@ final class AssetFieldDraft {
   }
   private var current: [String: String] { controls.mapValues(value) }
   var hasDraft: Bool { !baseline.isEmpty && current != baseline }
+  // Fields whose displayed value differs from what was last loaded or applied.
+  // Only these express intent: the engine treats a key's presence as an edit.
+  var changedKeys: Set<String> { Set(current.filter { baseline[$0.key] != $0.value }.keys) }
+  // Whole numbers only: "44.1k" is a mistake to report, not 44.
+  static func integer(_ field: NSTextField, _ label: String) throws -> Int {
+    guard let value = Int(field.stringValue.trimmingCharacters(in: .whitespaces)) else {
+      throw NSError(domain: "ScreamSeq", code: 1, userInfo: [NSLocalizedDescriptionKey:
+        "\(label) needs a whole number; “\(field.stringValue)” was not applied."])
+    }
+    return value
+  }
   func reset() { baseline = [:]; index = nil }
   func accept(_ keys: Dictionary<String, Any>.Keys) { for key in keys { if let control = controls[key] { baseline[key] = value(control) } } }
   func accept(_ keys: [String]) { for key in keys { if let control = controls[key] { baseline[key] = value(control) } } }
@@ -131,6 +142,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
   var index = 1 {
     didSet { if index != oldValue { sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil;loopDraftRevision=nil;loopPreviewSignature=nil;loopPreviewRevision=nil;savedLoopInfo=[:]; retireWaveform(); waveform.setViewport(nil, notify: false); waveform.selection = nil; previewSignature = nil; previewRevision = nil; resetPastePreview();crossfadePreviewSignature=nil;crossfadePreviewRevision=nil } }
   }
+  var onMessage: ((String) -> Void)?
   var onSelect: ((Int) -> Void)?, onImport: (() -> Void)?, onReplace: (() -> Void)?,
     onPreview: ((Int) -> Void)?,
     onSettings: (([String: Any]) -> Void)?,
@@ -360,11 +372,21 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     updateViewportStatus()
     waveform.needsDisplay = true
   }
+  // Only the fields the musician changed: sending an untouched pan would switch
+  // on the sample's panning override, and an untouched rate would retune MOD/XM.
+  func changedSettings() throws -> [String: Any] {
+    let changed = settingsDraft.changedKeys
+    var values = [String: Any]()
+    if changed.contains("name") { values["name"] = name.stringValue }
+    for (key, field, label) in [("rate", rate, "Sample rate"), ("volume", volume, "Sample volume"), ("pan", pan, "Sample pan")]
+    where changed.contains(key) { values[key] = try AssetFieldDraft.integer(field, label) }
+    return values
+  }
   func apply() {
-    onSettings?([
-      "name": name.stringValue, "rate": rate.integerValue, "volume": volume.integerValue,
-      "pan": pan.integerValue,
-    ])
+    do {
+      let values = try changedSettings()
+      if values.isEmpty { onMessage?("No sample settings have changed.") } else { onSettings?(values) }
+    } catch { onMessage?(error.localizedDescription); NSSound.beep() }
   }
 }
 
@@ -373,9 +395,13 @@ final class EnvelopeView: NSView {
   var points: [[Int]] = [] {
     didSet {
       if let selectedNode, selectedNode >= points.count { self.selectedNode = points.indices.last }
+      // Points replaced from outside during a drag (a reload, Undo, an API
+      // edit) end that drag: its index no longer names the node being held.
+      if !movingDragged || dragged.map({ !points.indices.contains($0) }) == true { dragged = nil }
       needsDisplay = true
     }
   }
+  private var movingDragged = false
   var onChange: (([[Int]]) -> Void)?
   var onRemove: ((Int, [[Int]]) -> Void)?
   var onSelect: ((Int?) -> Void)?
@@ -458,9 +484,10 @@ final class EnvelopeView: NSView {
     }
   }
   override func mouseDragged(with event: NSEvent) {
-    guard let i = dragged, canEdit() else { return }
+    guard let i = dragged, points.indices.contains(i), canEdit() else { return }
     let p = convert(event.locationInWindow, from: nil)
     let tick = max(0, Int((p.x - 16) / max(1, bounds.width - 32) * CGFloat(maxTick)))
+    movingDragged = true; defer { movingDragged = false }
     points[i] = [
       boundedTick(tick, at: i),
       min(64, max(0, Int((1 - (p.y - 16) / max(1, bounds.height - 32)) * 64))),
@@ -552,6 +579,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     nodeValue = numberField(64, label: "Selected envelope node value")
   private var envelopeData = [[String: Any]]()
   private var displayedEnvelope: Int?
+  private var loadedPoints = [[Int]]()
   let envelope = EnvelopeView(frame: .zero), mapping = NSTextField(wrappingLabelWithString: ""),
     mapFrom = numberField(0, label: "Keymap first note"),
     mapTo = numberField(119, label: "Keymap last note"), mapSample = NSPopUpButton()
@@ -564,6 +592,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
   var envelopeToolsButton: ActionButton!
   var onSelect: ((Int) -> Void)?, onApply: (([String: Any]) -> Void)?, onCreate: (() -> Void)?,
     onImport: (() -> Void)?
+  var onMessage: ((String) -> Void)?
   override init(frame: NSRect) {
     super.init(frame: frame)
     picker.target = self
@@ -773,6 +802,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     let kind = max(0, envelopeType.indexOfSelectedItem)
     let info: [String: Any] = kind < envelopeData.count ? envelopeData[kind] : [:]
     envelope.points = info["points"] as? [[Int]] ?? []
+    loadedPoints = envelope.points
     nodePicker.removeAllItems()
     for index in envelope.points.indices { nodePicker.addItem(withTitle: String(index)) }
     if envelope.selectedNode == nil { envelope.selectedNode = envelope.points.indices.first }
@@ -813,16 +843,30 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     nodeTick.integerValue = envelope.points[index][0]
     nodeValue.integerValue = envelope.points[index][1]
   }
+  // Only the fields the musician changed: sending an untouched pan would switch
+  // on the instrument's panning override. The envelope selector is not an edit.
+  func changedSettings() throws -> [String: Any] {
+    var changed = settingsDraft.changedKeys
+    // The engine reads each node pair together; a lone start would move its end.
+    for pair in [["sustainPoint", "sustainEnd"], ["loopStart", "loopEnd"]] where !changed.isDisjoint(with: pair) { changed.formUnion(pair) }
+    var values = [String: Any]()
+    if changed.contains("name") { values["name"] = name.stringValue }
+    let numbers: [(String, NSTextField, String)] = [("volume", volume, "Instrument volume"), ("pan", pan, "Instrument pan"), ("fadeout", fade, "Fade out"),
+      ("sustainPoint", sustainPoint, "Sustain start node"), ("sustainEnd", sustainEnd, "Sustain end node"),
+      ("loopStart", loopStart, "Envelope loop start node"), ("loopEnd", loopEnd, "Envelope loop end node")]
+    for (key, field, label) in numbers where changed.contains(key) { values[key] = try AssetFieldDraft.integer(field, label) }
+    for (key, picker) in [("nna", nna), ("dct", dct), ("dna", dna)] where changed.contains(key) { values[key] = picker.indexOfSelectedItem }
+    for (key, box) in [("enabled", enabled), ("sustain", sustain), ("loop", looping), ("filter", filter)] where changed.contains(key) { values[key] = box.state == .on }
+    // Node edits are applied as they happen; resend them only if that did not reach the song.
+    if envelope.points != loadedPoints { values["points"] = envelope.points }
+    return values
+  }
   func apply() {
-    onApply?([
-      "name": name.stringValue, "volume": volume.integerValue, "pan": pan.integerValue,
-      "fadeout": fade.integerValue, "nna": nna.indexOfSelectedItem, "dct": dct.indexOfSelectedItem,
-      "dna": dna.indexOfSelectedItem, "enabled": enabled.state == .on,
-      "envelope": envelopeType.indexOfSelectedItem, "sustain": sustain.state == .on,
-      "sustainPoint": sustainPoint.integerValue, "sustainEnd": sustainEnd.integerValue,
-      "loop": looping.state == .on, "loopStart": loopStart.integerValue,
-      "loopEnd": loopEnd.integerValue,
-      "filter": filter.state == .on, "points": envelope.points,
-    ])
+    do {
+      var values = try changedSettings()
+      if values.isEmpty { onMessage?("No instrument settings have changed."); return }
+      values["envelope"] = envelopeType.indexOfSelectedItem
+      onApply?(values)
+    } catch { onMessage?(error.localizedDescription); NSSound.beep() }
   }
 }

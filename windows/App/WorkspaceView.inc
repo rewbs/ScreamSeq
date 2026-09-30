@@ -268,18 +268,31 @@
             if(!(id>=curvePattern&&id<=curveReference) && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouting) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginReconnect) && !(id>=effectsCommand&&id<=effectSearch)) SetFocus(window);
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
+    // True when right Alt is held on a layout that uses it as AltGr.
+    static bool altGraphActive() {
+        if(!(GetKeyState(VK_RMENU)&0x8000)) return false;
+        const auto layout=GetKeyboardLayout(0);
+        const auto graph=[&](wchar_t c){const SHORT s=VkKeyScanExW(c,layout);return s!=-1&&(HIBYTE(s)&6)==6;};
+        if(graph(L'\u20ac')) return true;
+        for(wchar_t c=0x20;c<0x250;++c) if(graph(c)) return true;
+        return false;
+    }
     bool handleKey(WPARAM code,bool repeat=false) {
         try {return key(code,repeat);} catch(const std::exception &e) {status=wide(e.what());return true;}
     }
 	bool key(WPARAM key,bool repeat=false) {
         frameRequested=true;
 		const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,alt=(GetKeyState(VK_MENU)&0x8000)!=0,shift=(GetKeyState(VK_SHIFT)&0x8000)!=0;
-        if(ctrl&&alt&&key=='L'){if(!repeat)command(liveKeysCommand);return true;}
+        // AltGr reports Ctrl+Alt: it types a character (e.g. "ł"), it is not the
+        // shortcut. A text control keeps the chord as well.
+        if(ctrl&&alt&&key=='L'&&!textOwnsKeyboard()&&!altGraphActive()){if(!repeat)command(liveKeysCommand);return true;}
         if(workspaceMusicalKey(key,repeat))return true;
         if(GetFocus()!=window && IsChild(window,GetFocus())) {
             if(key==VK_TAB) {auto next=GetNextDlgTabItem(window,GetFocus(),shift);if(next) SetFocus(next);return true;}
             wchar_t klass[32]{};GetClassNameW(GetFocus(),klass,32);
             if(key==VK_RETURN && _wcsicmp(klass,L"Button")==0) {command(GetDlgCtrlID(GetFocus()));return true;}
+            // Space presses the focused button; it is not the transport key here.
+            if(key==VK_SPACE && !ctrl && !alt && _wcsicmp(klass,L"Button")==0) return false;
         }
         if(GetFocus()==controls.at(sampleStartField) || GetFocus()==controls.at(sampleEndField)) {
             if(key==VK_RETURN) {command(sampleRangeCommand);return true;}

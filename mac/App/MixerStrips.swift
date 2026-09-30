@@ -29,6 +29,13 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
   let counts = Theme.label("", size: 10, color: Theme.muted)
   var onControl: ((String, String, Any, Bool) -> Void)?
   var onFinish: ((String) -> Void)?, onInspect: ((String) -> Void)?
+  // The text each gain field last displayed. Ending an edit without typing
+  // must not commit that rounded display as a new value.
+  private var shownText = [ObjectIdentifier: String]()
+  private func show(_ field: NSTextField, _ text: String) {
+    shownText[ObjectIdentifier(field)] = text
+    if field.stringValue != text { field.stringValue = text }
+  }
   var isTracking: Bool { fader.trackingGesture || pan.trackingGesture || width.trackingGesture || prePan.trackingGesture || gain.currentEditor() != nil || preGain.currentEditor() != nil }
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -69,11 +76,11 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
     prePan.setAccessibilityLabel("\(name) balance before effects")
     mute.setAccessibilityLabel("Mute \(name)"); solo.setAccessibilityLabel("Solo \(name)")
     if !fader.trackingGesture { fader.doubleValue = (bus["gainDB"] as? NSNumber)?.doubleValue ?? 0 }
-    if gain.currentEditor() == nil && !fader.trackingGesture { gain.stringValue = String(format: "%.1f", fader.doubleValue) }
+    if gain.currentEditor() == nil && !fader.trackingGesture { show(gain, String(format: "%.1f", fader.doubleValue)) }
     if !pan.trackingGesture { pan.doubleValue = (bus["pan"] as? NSNumber)?.doubleValue ?? 0 }
     if !width.trackingGesture { width.doubleValue = (bus["width"] as? NSNumber)?.doubleValue ?? 1 }
     if !prePan.trackingGesture { prePan.doubleValue = (bus["prePan"] as? NSNumber)?.doubleValue ?? 0 }
-    if preGain.currentEditor() == nil { preGain.stringValue = String(format: "%.1f", (bus["preGainDB"] as? NSNumber)?.doubleValue ?? 0) }
+    if preGain.currentEditor() == nil { show(preGain, String(format: "%.1f", (bus["preGainDB"] as? NSNumber)?.doubleValue ?? 0)) }
     mute.state = bus["mute"] as? Bool == true ? .on : .off; solo.state = bus["solo"] as? Bool == true ? .on : .off
     counts.stringValue = "\((bus["inserts"] as? [String] ?? []).count) effects · \((bus["sends"] as? [[String: Any]] ?? []).count) sends"
   }
@@ -86,12 +93,14 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
   }
   @objc func slide(_ sender: MixerSlider) {
     let key = sender === fader ? "gainDB" : sender === pan ? "pan" : sender === prePan ? "prePan" : "width"
-    if sender === fader { gain.stringValue = String(format: "%.1f", sender.doubleValue) }
+    if sender === fader { show(gain, String(format: "%.1f", sender.doubleValue)) }
     onControl?(busID, key, sender.doubleValue, !sender.trackingGesture)
   }
   private func enter(_ field: NSTextField, key: String) {
+    guard field.stringValue != shownText[ObjectIdentifier(field)] else { return }
     guard let value = Double(field.stringValue), value.isFinite, (-96...24).contains(value) else { return }
     if key == "gainDB" { fader.doubleValue = value }
+    shownText[ObjectIdentifier(field)] = field.stringValue
     onControl?(busID, key, value, true)
   }
   func controlTextDidEndEditing(_ notification: Notification) {

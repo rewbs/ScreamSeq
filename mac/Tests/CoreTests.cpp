@@ -42,6 +42,8 @@ static void moduleExportGuards(const std::filesystem::path &directory) {
             "checked export rejects pattern loss explicitly");
   };
   auto mod = Document::demo(MOD_TYPE_MOD);
+  // Exercise lossy native data explicitly; the demo now uses valid MOD FX.
+  mod->transaction([](auto &song){auto &cell=*song.Patterns[0].GetpModCommand(0,0);cell.volcmd=VOLCMD_VOLUME;cell.vol=cell.param;cell.command=CMD_NONE;cell.param=0;});
   Document converted(mod->serialize()), exact(mod->snapshotData());
   require(mod->cell(0, 0, 0).volumeCommand == VOLCMD_VOLUME &&
               converted.cell(0, 0, 0).volumeCommand == VOLCMD_NONE &&

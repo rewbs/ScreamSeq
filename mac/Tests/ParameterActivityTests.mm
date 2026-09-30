@@ -3,6 +3,7 @@
 #include "../Audio/NativeSignalGraph.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "GraphRealtimeAudit.hpp"
+#include "FixtureTrust.hpp"
 #include <iostream>
 using namespace Tracker;
 static void check(bool b,const char *message){if(!b)throw std::runtime_error(message);}
@@ -68,4 +69,4 @@ static void sessionAPI() {
   invalid=[edit mutableCopy];invalid[@"expectedRevision"]=@"stale";check(![session automationMethod:@"automation.recorded.edit" params:invalid error:&error],"Stale recorded write accepted");
   NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];check([session savePath:path error:&error]&&[session openPath:path error:&error]&&[lane() count]==1,"Recorded edit failed project roundtrip");[[NSFileManager defaultManager]removeItemAtPath:path error:nil];
 }
-int main(int argc,char **argv){@autoreleasepool{try{check(argc==2,"Fixture path required");auto descriptor=NativePlugin::discoverVST3(argv[1]).front();scheduler(descriptor);musical(descriptor);graphCopies(descriptor);bounded();sessionAPI();std::cout<<"Parameter activity: audio values, provenance, copies, timing, bounded realtime capture, API and persistence passed\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}
+int main(int argc,char **argv){@autoreleasepool{try{trustFixtureArguments(argc,argv);check(argc==2,"Fixture path required");auto descriptor=NativePlugin::discoverVST3(argv[1]).front();scheduler(descriptor);musical(descriptor);graphCopies(descriptor);bounded();sessionAPI();std::cout<<"Parameter activity: audio values, provenance, copies, timing, bounded realtime capture, API and persistence passed\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}

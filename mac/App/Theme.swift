@@ -223,12 +223,13 @@ struct PatternModel {
     format = dictionary["format"] as? String ?? format
     noteMin = dictionary["noteMin"] as? Int ?? 1
     noteMax = dictionary["noteMax"] as? Int ?? 120
-    channels = dictionary["channels"] as? Int ?? channels
-    rows = dictionary["rows"] as? Int ?? rows
+    // Bridge values are untrusted: negative counts would trap every range below.
+    channels = max(0, dictionary["channels"] as? Int ?? channels)
+    rows = max(0, dictionary["rows"] as? Int ?? rows)
     effectBindings=dictionary["effectBindings"] as? [[String:Any]] ?? []
     effectColumns = (dictionary["effectColumns"] as? [Int] ?? []).map { max(1,min(8,$0)) }
     var x: Float = 0
-    for channel in 0..<channels { channelOffsets.append(x); x += channelWidth(channel) }
+    for channel in 0..<max(0, channels) { channelOffsets.append(x); x += channelWidth(channel) }
     channelOffsets.append(x)
     for raw in dictionary["performanceCommands"] as? [[String: Any]] ?? [] {
       let command = NativePatternCommand(raw)
@@ -248,7 +249,7 @@ struct PatternModel {
     rowsPerMeasure = max(rowsPerBeat, measure > 0 ? measure : 16)
     speed = dictionary["speed"] as? Int ?? speed
     if let data = dictionary["cells"] as? Data { cells = Array(data) }
-    for row in 0..<rows {for channel in 0..<channels {let key=(row*channels+channel)*8,c=drawCell(row,channel)
+    for row in 0..<max(0, rows) {for channel in 0..<max(0, channels) {let key=(row*channels+channel)*8,c=drawCell(row,channel)
       if performanceCommands[key]==nil && (c.effect != 0 || c.parameter != 0) {performanceCommands[key]=NativePatternCommand(["channel":channel,"position":row*65536,"column":0,"kind":"tracker","effect":Int(c.effect),"parameter":Int(c.parameter)])}
     }}
     orders = dictionary["orders"] as? [Int] ?? [0]

@@ -41,15 +41,16 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
   });
   size_t midiRead=0;
   uint32_t consumed = 0;
-  size_t events = 0;
   while (consumed < frames) {
     while(midiRead<musicalMIDICount_&&(*musicalMIDI_)[midiRead].frame<=position+consumed) {
       const auto &event=(*musicalMIDI_)[midiRead++];
       if(!midi(event.status,event.a,event.b))return false;
     }
     while (automationPosition_ < automation_.size() && automation_[automationPosition_].frame <= position + consumed) {
+      // No per-call event limit: it made dense automation fail, and fail
+      // differently for each callback size. The prepared list bounds the work.
       auto p = automation_[automationPosition_++];
-      if (++events > 256 || !appliedParameter(p.id,p.value,p.frame,{ParameterOrigin::Recorded}))
+      if (!appliedParameter(p.id,p.value,p.frame,{ParameterOrigin::Recorded}))
         return false;
     }
     while (musicalRead < musicalCount_ && (*musicalEvents_)[musicalRead].frame <= position + consumed) {
@@ -57,7 +58,9 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
       auto ramp = std::find_if(parameterRamps_.begin(), parameterRamps_.end(), [&](const auto &r) { return r.active && r.id == point.id; });
       if (point.duration) {
         if (ramp == parameterRamps_.end()) ramp = std::find_if(parameterRamps_.begin(), parameterRamps_.end(), [](const auto &r) { return !r.active; });
-        if (ramp == parameterRamps_.end()) return false;
+        // Every ramp slot is busy: jump to the target instead of failing. The
+        // choice depends on the event timeline only, never on the partition.
+        if (ramp == parameterRamps_.end()) { if (!appliedParameter(point.id, float(point.target),point.frame,point.source)) return false; continue; }
         *ramp = {point.id, true, {point.frame, point.duration, point.value, point.target},point.source};
       } else {
         if (ramp != parameterRamps_.end()) ramp->active = false;

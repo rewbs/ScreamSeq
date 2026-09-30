@@ -33,8 +33,22 @@ extension AppController {
       recoveryStatusButton?.toolTip = "Recovery copies every 10 seconds after changes. Click to recover a song."
     }
   }
+  // Runs once at launch, before the recovery list is read. The store keeps the
+  // current session, everything recent and the newest copy of each song.
+  func pruneRecovery() {
+    let store = RecoveryStore(directory: recoveryDirectory), id = recoveryID
+    recoveryWriter.async { store.prune(protecting: [id]) }
+  }
   func autosave(force: Bool = false, reply: AutomationServer.Reply? = nil) {
-    guard !busy, !recoverySaving else { reply?(AutomationServer.error(-32002, "The document is busy; retry shortly")); return }
+    // A timed copy waits for an application-modal dialog, as it always has:
+    // the dialog's own action must not find the document busy.
+    if reply == nil && NSApp.modalWindow != nil { return }
+    if sessionReading, !busy, let reply {
+      deferUntilIdle({ [weak self] in self?.autosave(force: force, reply: reply) },
+        cancel: { reply(AutomationServer.error(-32002, "The application is shutting down")) })
+      return
+    }
+    guard !busy, !recoverySaving, !sessionReading else { reply?(AutomationServer.error(-32002, "The document is busy; retry shortly")); return }
     if let error = collectRecoveryEdits() {
       recoveryError = error.localizedDescription; updateRecoveryStatus()
       reply?(AutomationServer.error(-32003, error.localizedDescription)); return
@@ -132,6 +146,11 @@ extension AppController {
     }
   }
   func restoreRecovery(id: String, reply: @escaping AutomationServer.Reply) {
+    if sessionReading, !busy {
+      deferUntilIdle({ [weak self] in self?.restoreRecovery(id: id, reply: reply) },
+        cancel: { reply(AutomationServer.error(-32002, "The application is shutting down")) })
+      return
+    }
     guard !busy, !recoverySaving, window.attachedSheet == nil, NSApp.modalWindow == nil else {
       reply(AutomationServer.error(-32002, "The document is busy; retry shortly")); return
     }

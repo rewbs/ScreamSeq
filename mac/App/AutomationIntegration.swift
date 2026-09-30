@@ -33,6 +33,12 @@ extension AppController {
     }
     if handleWorkspaceAutomation(method, params: params, reply: reply) { return }
     if handleSampleLibraryAutomation(method, params: params, reply: reply) { return }
+    if sessionReading, !busy {
+      // An inspector read is using the unlocked session; run the request right after it.
+      deferUntilIdle({ [weak self] in self?.handleAutomation(method, params: params, reply: reply) },
+        cancel: { reply(AutomationServer.error(-32002, "The application is shutting down")) })
+      return
+    }
     let ownMultisampleReview = method == "instrument.importMultisample" && NSApp.modalWindow?.contentView is MultisampleImportView
     guard !busy, window.attachedSheet == nil, NSApp.modalWindow == nil || ownMultisampleReview else {
       reply(AutomationServer.error(-32002, "The document is busy; retry shortly"))

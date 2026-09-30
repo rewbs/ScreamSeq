@@ -1,11 +1,12 @@
 #include "../Audio/AudioDevice.hpp"
+#include "FixtureTrust.hpp"
 #include "soundlib/ModInstrument.h"
 #include <chrono>
 #include <iostream>
 #include <thread>
 using namespace Tracker;
 using namespace OpenMPT;
-int main(int argc, char **argv) {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool { try {
     if (argc < 2) throw std::runtime_error("Provide fixture plugin path, optionally followed by test seconds");
     const int seconds = argc > 2 ? std::stoi(argv[2]) : 60;

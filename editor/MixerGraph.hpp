@@ -50,6 +50,9 @@ struct MixerGraph {
   // fresh song identities. Returns a deterministic processing order.
   std::vector<size_t> validate(const std::vector<uint64_t> &tracks) const;
 };
+// Longest tail one processor (a plugin or a whole bus graph) may report. Hosts
+// clamp to this before describing a processor; compileMixer rejects more.
+inline constexpr double mixerMaximumTailSeconds = 120;
 struct MixerProcessorInfo {
   std::string instance;
   uint32_t latency = 0;

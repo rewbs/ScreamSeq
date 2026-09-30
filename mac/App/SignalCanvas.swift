@@ -79,6 +79,14 @@ final class SignalCanvas: NSView {
   var describeCable: ((String,String,UInt32,UInt32,Bool)->String)?
   private struct Wire {var path:NSBezierPath;var samples:[NSPoint];var from:NSPoint;var to:NSPoint;var bounds:NSRect}
   private var wires=[Wire]()
+  private var nudges=[(String,Double,Double)](),nudgeWork:DispatchWorkItem?
+  var nudgeDelay=0.35
+  var hasPendingNudge:Bool {!nudges.isEmpty}
+  func commitNudge(){
+    nudgeWork?.cancel();nudgeWork=nil
+    let saved=nudges;nudges=[];guard !saved.isEmpty else{return}
+    if let onMoveNodes{onMoveNodes(saved)}else{for(id,x,y) in saved{onMove?(id,x,y)}}
+  }
   private var dragging: String?, origin = NSPoint.zero
   private var originals=[String:NSPoint]()
   private var marquee:NSRect?,marqueeStart:NSPoint?,marqueeBase=Set<String>()
@@ -143,7 +151,7 @@ final class SignalCanvas: NSView {
     let node=point.flatMap{p in nodes.last{$0.rect.contains(p)}?.id} ?? selected
     return node.flatMap{signalReadings.primaryPort($0,output:true)?.key}
   }
-  override func keyUp(with event:NSEvent) {if scopeHeld,event.charactersIgnoringModifiers?.lowercased()=="q"{scopeHeld=false;onScope?(nil,false)}else{super.keyUp(with:event)}}
+  override func keyUp(with event:NSEvent) {if [123,124,125,126].contains(event.keyCode){commitNudge();return};if scopeHeld,event.charactersIgnoringModifiers?.lowercased()=="q"{scopeHeld=false;onScope?(nil,false)}else{super.keyUp(with:event)}}
   func cancelGesture() {
     amountDrag=nil
     for i in nodes.indices {if let p=originals[nodes[i].id]{nodes[i].x=p.x;nodes[i].y=p.y}}
@@ -151,7 +159,7 @@ final class SignalCanvas: NSView {
     marquee=nil;marqueeStart=nil;originals=[:];selectedEdge=nil
     cutStroke=[];cutEdges=[];cutTool=false;detachDragging=false;needsDisplay=true
   }
-  override func resignFirstResponder()->Bool {if scopeHeld{scopeHeld=false;onScope?(nil,false)};return super.resignFirstResponder()}
+  override func resignFirstResponder()->Bool {commitNudge();if scopeHeld{scopeHeld=false;onScope?(nil,false)};return super.resignFirstResponder()}
   func update(_ nodes:[SignalCanvasNode],edges:[SignalCanvasEdge]) {
     self.nodes=nodes;self.edges=edges
     if let selectedEdge,!edges.indices.contains(selectedEdge){self.selectedEdge=nil}
@@ -164,7 +172,13 @@ final class SignalCanvas: NSView {
   private func geometry(_ from:NSPoint,_ to:NSPoint)->Wire {
     let distance=max(50,abs(to.x-from.x)*0.5),a=NSPoint(x:from.x+distance,y:from.y),b=NSPoint(x:to.x-distance,y:to.y)
     let path=NSBezierPath();path.move(to:from);path.curve(to:to,controlPoint1:a,controlPoint2:b)
-    let samples=(0...32).map{i -> NSPoint in let t=Double(i)/32,u=1-t;return NSPoint(x:u*u*u*from.x+3*u*u*t*a.x+3*u*t*t*b.x+t*t*t*to.x,y:u*u*u*from.y+3*u*u*t*a.y+3*u*t*t*b.y+t*t*t*to.y)}
+    let samples:[NSPoint]=(0...32).map { i in
+      let t=CGFloat(i)/32,u=1-t
+      let w0=u*u*u,w1=3*u*u*t,w2=3*u*t*t,w3=t*t*t
+      let x=w0*from.x+w1*a.x+w2*b.x+w3*to.x
+      let y=w0*from.y+w1*a.y+w2*b.y+w3*to.y
+      return NSPoint(x:x,y:y)
+    }
     return Wire(path:path,samples:samples,from:from,to:to,bounds:path.bounds.insetBy(dx:-12,dy:-24))
   }
   private func rebuildGeometry(){
@@ -301,6 +315,7 @@ final class SignalCanvas: NSView {
   }
   private func listenBadge(_ node:SignalCanvasNode)->NSRect {NSRect(x:node.rect.maxX-24,y:node.y+7,width:18,height:18)}
   override func mouseDown(with event:NSEvent){
+    commitNudge()
     window?.makeFirstResponder(self);let point=convert(event.locationInWindow,from:nil);pointer=point
     if cutTool {cutStroke=[point];cutEdges=[];return}
     if let node=nodes.reversed().first(where:{$0.rect.contains(point)}),!signalReadings.nodePorts(node.id,output:true).isEmpty,
@@ -403,6 +418,7 @@ final class SignalCanvas: NSView {
     if let cable=addCable {onAddConnected?(cable.node,cable.port,cable.output,point)}
   }
   override func keyDown(with event:NSEvent){
+    if ![123,124,125,126].contains(event.keyCode){commitNudge()}
     if !isEditing {
       let flags=event.modifierFlags.intersection([.command,.control,.option,.shift])
       if (flags == .control || flags == [.control,.option]),event.charactersIgnoringModifiers?.lowercased()=="g",(flags == .control ? GraphCommand.groupSelection:GraphCommand.ungroup).usesCanvasDefault(){onGroup?(flags.contains(.option));return}
@@ -429,7 +445,10 @@ final class SignalCanvas: NSView {
     if flags.isEmpty,event.characters=="-",GraphCommand.zoomOut.usesCanvasDefault(){onZoom?(1/1.2);return}
     if event.keyCode==48{
       if event.modifierFlags.contains(.option){guard !edges.isEmpty else{return};let current=selectedEdge ?? (event.modifierFlags.contains(.shift) ? 0 : -1);selectedEdge=(current+(event.modifierFlags.contains(.shift) ? edges.count-1 : 1)+edges.count)%edges.count;selected=nil;onSelectEdge?(selectedEdge!);scrollToVisible(wires[selectedEdge!].bounds);return}
-      guard !nodes.isEmpty else{return};let current=nodes.firstIndex(where:{$0.id==selected}) ?? (event.modifierFlags.contains(.shift) ? 0 : -1);let next=(current+(event.modifierFlags.contains(.shift) ? nodes.count-1 : 1)+nodes.count)%nodes.count;selected=nodes[next].id;selectedEdge=nil;onSelect?(nodes[next].id);scrollToVisible(nodes[next].rect.insetBy(dx:-20,dy:-20));return
+      let reverse=event.modifierFlags.contains(.shift)
+      let next=(nodes.firstIndex(where:{$0.id==selected}) ?? (reverse ? nodes.count:-1))+(reverse ? -1:1)
+      guard nodes.indices.contains(next)else{if reverse{window?.selectPreviousKeyView(self)}else{window?.selectNextKeyView(self)};return}
+      selected=nodes[next].id;selectedEdge=nil;onSelect?(nodes[next].id);scrollToVisible(nodes[next].rect.insetBy(dx:-20,dy:-20));return
     }
     if event.keyCode==36,let selectedEdge {onEditEdge?(selectedEdge);return}
     guard let selected,nodes.contains(where:{$0.id==selected})else{super.keyDown(with:event);return}
@@ -440,7 +459,9 @@ final class SignalCanvas: NSView {
     switch event.keyCode{case 123:dx = -step;dy=0;case 124:dx=step;dy=0;case 125:dx=0;dy=step;case 126:dx=0;dy = -step;default:super.keyDown(with:event);return}
     let chosen=nodes.filter{selection.contains($0.id)},x=max(8-(chosen.map(\.x).min() ?? 8),dx),y=max(8-(chosen.map(\.y).min() ?? 8),dy)
     for i in nodes.indices where selection.contains(nodes[i].id){nodes[i].x+=x;nodes[i].y+=y}
-    rebuildGeometry();resizeCanvas();notifyMove()
+    rebuildGeometry();resizeCanvas();nudges=positions();nudgeWork?.cancel()
+    let work=DispatchWorkItem{[weak self] in self?.commitNudge()};nudgeWork=work
+    DispatchQueue.main.asyncAfter(deadline:.now()+nudgeDelay,execute:work)
   }
   func crossedEdges(from a:NSPoint,to b:NSPoint)->[Int] {
     func crossing(_ c:NSPoint,_ d:NSPoint)->Bool {

@@ -330,6 +330,33 @@ std::vector<float> interruptedBalance(uint32_t block) {
   return out;
 }
 }
+// Bus meters hold the block peak and release with a 200 ms time constant.
+void meterDecay(uint32_t rate, uint32_t block) {
+  MixerGraph g; g.buses = {{1, 2, MixerBusKind::Track, "Track"}, {2, 0, MixerBusKind::Master, "Master"}};
+  auto mixer = std::make_unique<MixerRuntime>(g, compileMixer(g, {1}, {}, rate), rate);
+  std::array<float, 4096> l{}, r{};
+  auto run = [&](uint64_t position) {
+    mixer->begin(block, position); mixer->process(0, l.data(), r.data(), nullptr, nullptr);
+    mixer->process(1, nullptr, nullptr, nullptr, nullptr); mixer->complete();
+  };
+  auto bounded = [&](float left, float right) {
+    for (const auto &meter : mixer->meters())
+      check(std::isfinite(meter.left) && std::isfinite(meter.right) && meter.left >= 0 && meter.right >= 0 &&
+            meter.left <= left + 1e-6f && meter.right <= right + 1e-6f, "Meters are finite and never exceed the actual peak");
+  };
+  l.fill(.5f); r.fill(.25f); run(0); bounded(.5f, .25f); run(block); bounded(.5f, .25f);
+  check(std::abs(mixer->meters()[0].left - .5f) < 1e-6f && std::abs(mixer->meters()[1].right - .25f) < 1e-6f, "Meters report the block peak");
+  l.fill(0); r.fill(0);
+  uint64_t position = block * 2; float previous = mixer->meters()[1].left; uint32_t silent = 0;
+  while (silent < rate / 5) {
+    run(position); position += block; silent += block; bounded(.5f, .25f);
+    check(mixer->meters()[1].left < previous, "Meters fall during silence"); previous = mixer->meters()[1].left;
+  }
+  const float expected = .5f * float(std::exp(-double(silent) / (rate * .2)));
+  check(std::abs(mixer->meters()[1].left - expected) < 1e-4f && std::abs(mixer->meters()[0].right - expected * .5f) < 1e-4f,
+        "Meter release follows its 200 ms time constant");
+  check(!mixer->failed(), "Meter rendering completes without a fault");
+}
 static void patchingAudio(uint32_t rate,uint32_t block) {
   MixerGraph g;g.buses={{1,0,MixerBusKind::Track,"A"},{2,0,MixerBusKind::Track,"B"},{3,0,MixerBusKind::Track,"C"},{4,5,MixerBusKind::Return,"Return"},{5,0,MixerBusKind::Master,"Master"}};
   g.buses[0].inserts={"double"};g.buses[0].output=5;
@@ -348,6 +375,7 @@ static void patchingAudio(uint32_t rate,uint32_t block) {
 }
 int main() {
   try {
+    for (uint32_t rate : {44100, 48000, 96000}) for (uint32_t block : {1, 17, 128, 4096}) meterDecay(rate, block);
     for (uint32_t rate : {44100, 48000, 96000}) {
       for(uint32_t block:{1u,17u,128u,512u})patchingAudio(rate,block);
       for (double balance : {-1., -.4, 0., .7, 1.}) for (bool live : {false, true}) {

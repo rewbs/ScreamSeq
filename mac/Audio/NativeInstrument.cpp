@@ -170,7 +170,11 @@ void PluginChain::attachMusicalAutomation(Renderer &renderer, const NativeSong &
   auto &song = renderer.song();
   song.nativeMixObserver = nullptr; song.nativeMixContext = nullptr;
   hasMusicalControls_=!native.performance.commands.empty()||std::any_of(native.automation.begin(),native.automation.end(),[](const auto &lane){return lane.enabled;});
-  const std::vector<bool> processing(plugins_.size(),false);
+  // With a mixer, an unassigned instrument has no adapter and no tail stage:
+  // nothing renders it, so nothing would ever consume its musical events and
+  // the bounded event store would fill and stop playback. Schedule nothing.
+  std::vector<bool> processing(plugins_.size(),false);
+  for(size_t i=0;i<plugins_.size();++i)if(mixer_&&plugins_[i]->isInstrument()&&!instruments_[i])processing[i]=true;
   commandRuntime_=std::make_shared<PatternCommandRuntime>(native,plugins_,instances_,processing,automation_);
   musicalSong_=&song;song.nativePitchRatios.fill(nullptr);
   pitchRuntime_=std::make_shared<PatternPitchRuntime>(native,song,plugins_,processing);
@@ -216,6 +220,7 @@ std::unique_ptr<PluginChain::MusicalPlan> PluginChain::prepareMusicalPlan(const 
     auto pattern=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &p){return p.second.id==lane.pattern;});
     if(instance==instances_.end()||pattern==native.patterns.end())continue;
     const size_t slot=size_t(instance-instances_.begin());
+    if(mixer_ && plugins_[slot]->isInstrument() && !instruments_[slot])continue;
     const auto &parameters=musicalCatalog_.at(slot);
     auto p=std::find_if(parameters.begin(),parameters.end(),[&](const auto &v){return v.id==lane.parameter;});
     if(p==parameters.end()||!p->writable||!std::isfinite(p->min)||!std::isfinite(p->max)||p->max<=p->min)continue;

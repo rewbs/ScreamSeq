@@ -70,6 +70,8 @@ extension InterfaceTests {
     strip.width.doubleValue = 1.7; strip.slide(strip.width)
     replies.removeFirst()(["error": ["message": "Song changed; reload"]])
     try require(strip.width.doubleValue == 1 && strip.fader.doubleValue == -6 && editor.status.stringValue.contains("Song changed"), "Rejected gesture restores saved controls without losing prior commits")
+    try require(calls.last?.1["preview"] as? Bool == true && calls.last?.1["width"] as? Double == 1, "Rejected gesture previews the saved value so the engine matches the document")
+    answer("song:3")
     editor.load(); let count = calls.count
     strip.pan.doubleValue = 0.9; strip.slide(strip.pan)
     try require(calls.count == count && strip.pan.doubleValue == -0.5, "A pending graph reload rejects control changes and restores displayed values")
@@ -78,6 +80,10 @@ extension InterfaceTests {
     strip.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: strip.preGain))
     try require(calls.last?.1["preGainDB"] as? Double == -9.5 && calls.last?.1["bus"] as? String == "bus0", "Typed strip gain reaches the same revision-checked API")
     answer("song:5")
+    let beforeUntouched = calls.count
+    strip.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: strip.preGain))
+    strip.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: strip.gain))
+    try require(calls.count == beforeUntouched, "Ending a strip gain edit without typing commits nothing and adds no Undo step")
     strip.preGain.stringValue = "NaN"; let beforeInvalid = calls.count
     strip.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: strip.preGain))
     try require(calls.count == beforeInvalid && strip.preGain.stringValue == "-9.5", "Invalid numeric input restores the saved gain")

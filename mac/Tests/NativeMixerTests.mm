@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #include "../Audio/NativeSignalGraph.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "soundlib/ModInstrument.h"
@@ -210,7 +211,7 @@ static void monitorWhileRendering(bool testBypass=false) {
     check(different&&signal&&!observed.listen.pending(),"Channel listen isolates real rendered audio and restores the original mix");
   }
 }
-int main(int argc, char **argv) {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool { try {
     check(argc == 2, "Fixture bundle path required");
     auto descriptions = NativePlugin::discoverVST3(argv[1]);

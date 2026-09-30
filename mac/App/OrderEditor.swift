@@ -15,6 +15,10 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   var onMatrix: (() -> Void)?
   var onAnnotate: (([String: Any]) -> Void)?
   let sectionName = NSTextField(), patternName = NSTextField(), patternNotes = NSTextField()
+  // The value last written into each detail field and the order/pattern it
+  // belonged to. Text that differs from it is an uncommitted edit and survives
+  // refreshes for that same target.
+  private var shownDetails = [ObjectIdentifier: (target: String, text: String)]()
   override init(frame: NSRect) {
     super.init(frame: frame)
     for (id, title, width) in [
@@ -94,20 +98,30 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     self.model = model
     self.selected = max(0, min(selected, model.orders.count - 1))
     count.stringValue = "\(model.orders.count) orders"
+    // Sequences may share a name, and addItem(withTitle:) would drop the
+    // earlier one. Each item carries its own sequence index instead.
     sequencePicker.removeAllItems()
     for (index, sequence) in model.sequences.enumerated() {
       let name = sequence["name"] as? String ?? ""
-      sequencePicker.addItem(withTitle: name.isEmpty ? "Sequence \(index + 1)" : name)
+      let item = NSMenuItem(title: name.isEmpty ? "Sequence \(index + 1)" : name, action: nil, keyEquivalent: "")
+      item.tag = index; sequencePicker.menu?.addItem(item)
     }
-    if model.sequence < model.sequences.count { sequencePicker.selectItem(at: model.sequence) }
+    if model.sequence < model.sequences.count { sequencePicker.selectItem(withTag: model.sequence) }
     sequencePicker.isHidden = model.sequences.count <= 1
+    let assigned = self.selected < model.orders.count ? model.orders[self.selected] : nil
+    let samePattern = assigned != nil && assigned == shownAssignment
+    let chosenPattern = picker.selectedItem?.tag
     picker.removeAllItems()
     for pattern in model.patterns {
       let index = pattern["index"] as? Int ?? 0
-      picker.addItem(withTitle: "Pattern \(index) · \(pattern["rows"] ?? 0) rows")
-      picker.lastItem?.tag = index
+      let item = NSMenuItem(title: "Pattern \(index) · \(pattern["rows"] ?? 0) rows", action: nil, keyEquivalent: "")
+      item.tag = index; picker.menu?.addItem(item)
     }
-    if !model.orders.isEmpty { picker.selectItem(withTag: model.orders[self.selected]) }
+    // A pattern chosen for "Assign to order" but not yet assigned is kept
+    // while the same order still holds the same pattern.
+    if let chosenPattern, samePattern, picker.selectItem(withTag: chosenPattern) {
+    } else if let assigned { picker.selectItem(withTag: assigned) }
+    shownAssignment = assigned
     table.reloadData()
     table.selectRowIndexes(IndexSet(integer: self.selected), byExtendingSelection: false)
     table.scrollRowToVisible(self.selected)
@@ -140,15 +154,28 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   func tableViewSelectionDidChange(_ notification: Notification) {
     guard !updating, table.selectedRow >= 0 else { return }
     selected = table.selectedRow
-    picker.selectItem(withTag: model.orders[selected])
+    picker.selectItem(withTag: model.orders[selected]); shownAssignment = model.orders[selected]
     updateDetails()
     onSelect?(selected)
   }
+  private var shownAssignment: Int?
+  private func show(_ field: NSTextField, _ text: String, target: String) {
+    let key = ObjectIdentifier(field)
+    let edited = shownDetails[key].map { $0.target == target && field.stringValue != $0.text } ?? false
+    shownDetails[key] = (target, text)
+    if !edited && field.stringValue != text { field.stringValue = text }
+  }
+  /// True while a detail field holds text that has not been saved for its target.
+  var hasUncommittedDetails: Bool {
+    [sectionName, patternName, patternNotes].contains { field in shownDetails[ObjectIdentifier(field)].map { field.stringValue != $0.text } ?? false }
+  }
   private func updateDetails() {
-    sectionName.stringValue = selected < model.orderMetadata.count ? model.orderMetadata[selected]["name"] as? String ?? "" : ""
+    let section = selected < model.orderMetadata.count ? model.orderMetadata[selected] : nil
+    show(sectionName, section?["name"] as? String ?? "", target: section?["id"] as? String ?? "order \(selected)")
     let pattern = selected < model.orders.count ? model.patterns.first { $0["index"] as? Int == model.orders[selected] } : nil
-    patternName.stringValue = pattern?["name"] as? String ?? ""
-    patternNotes.stringValue = pattern?["annotation"] as? String ?? ""
+    let identity = pattern?["id"] as? String ?? "pattern \(pattern?["index"] as? Int ?? -1)"
+    show(patternName, pattern?["name"] as? String ?? "", target: identity)
+    show(patternNotes, pattern?["annotation"] as? String ?? "", target: identity)
     patternName.isEnabled = pattern != nil
     patternNotes.isEnabled = pattern != nil
   }
@@ -201,5 +228,5 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
       patternName.stringValue != pattern["name"] as? String ?? "" || patternNotes.stringValue != pattern["annotation"] as? String ?? "" { savePatternDetails() }
   }
   func controlTextDidEndEditing(_ notification: Notification) { if let field = notification.object as? NSTextField { commitDetails(field) } }
-  @objc private func selectSequence() { onSequence?(sequencePicker.indexOfSelectedItem) }
+  @objc private func selectSequence() { guard let item = sequencePicker.selectedItem else { return }; onSequence?(item.tag) }
 }

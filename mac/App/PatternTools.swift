@@ -186,19 +186,28 @@ final class PatternToolsPanel: NSView, NSTextFieldDelegate {
       guard let self else { return }
       self.requestInFlight = false
       self.previewButton.isEnabled = true
-      guard token == self.generation else { return }
+      // A stale preview is dropped, but an Apply changed (or failed to change)
+      // the song: always report it. Settings edited meanwhile stay as typed and
+      // were already invalidated, so they need their own preview.
+      let current = token == self.generation
+      guard applying || current else { return }
+      let newer = current ? "" : " Settings edited meanwhile are unchanged; preview them before applying."
       if let error = reply["error"] as? [String: Any] {
-        self.prepared = nil
-        self.summary.stringValue = error["message"] as? String ?? "Could not prepare this change."
+        if current { self.prepared = nil }
+        self.summary.stringValue = (error["message"] as? String ?? (applying ? "Could not apply this change." : "Could not prepare this change.")) + newer
         return
       }
       guard let result = reply["result"] as? [String: Any], let data = result["data"] as? [String: Any],
-        let revision = result["revision"] as? String else { return }
+        let revision = result["revision"] as? String else {
+        if applying { self.summary.stringValue = "The change returned no result; check the pattern before applying again." + newer }
+        return
+      }
       let count = data["changedCells"] as? Int ?? 0
       if applying {
-        self.prepared = nil
+        if current { self.prepared = nil }
         self.summary.stringValue = "Applied \(count) cell changes. Undo restores the whole operation."
         if result["playbackStopped"] as? Bool == true { self.summary.stringValue += " Playback stopped for this edit." }
+        self.summary.stringValue += newer
       } else {
         var prepared = p
         prepared["expectedRevision"] = revision

@@ -96,30 +96,57 @@ Tracker::NativePlugin &PluginOperations::editor(size_t index) {
   auto state=projectPluginStates(project_).at(index);auto &p=editors_[state.instanceID];
   if(!p)p=std::make_unique<NativePlugin>(state,48000);return *p;
 }
+void PluginOperations::dropEditor(const std::string &instance,const std::string &reason) noexcept {
+  try {
+    const std::string key=instance; // The caller's reference may point into the erased entry.
+    auto found=editors_.find(key);
+    if(found!=editors_.end()){try{found->second->closeEditor();}catch(...){}editors_.erase(found);}
+    openEditors_.erase(key);pendingParameters_.erase(key);
+    editorWarning_="Plugin editor closed after a failure / its last captured state was kept / "+reason;
+  }catch(...){}
+}
 bool PluginOperations::flushEditors(bool force) {
-  const bool graphClosed=graphEditorWindowOpen_&&graphEditor_&&!graphEditor_->editorOpen();
+  // A vendor editor must never block saving or any other document operation.
+  // A busy UI owner is transient: keep every editor and try again next round.
+  bool graphOpen=false;
+  if(graphEditorWindowOpen_&&graphEditor_)try{graphOpen=graphEditor_->editorOpen();}catch(const WindowsVST3::UiOwnerBusy &){graphOpen=true;}catch(const std::exception &){graphOpen=false;}
+  const bool graphClosed=graphEditorWindowOpen_&&graphEditor_&&!graphOpen;
   if(graphClosed)graphEditorWindowOpen_=false;
   if(openEditors_.empty())return graphClosed;
   const auto &rack=project_.preserved.at("plugins");
   const auto now=std::chrono::steady_clock::now();
   std::vector<ParameterChange> liveChanges;
+  std::vector<std::pair<std::string,std::string>> unusable;
+  std::set<std::string> postponed;
   for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key))continue;
     std::map<uint32_t,float> edits;
     uint32_t id=0;float value=0;while(found->second->popEdit(id,value)){edits[id]=value;pendingParameters_[key][id]=value;lastTouched_={{"plugin",p.at("instanceID")},{"parameter",id},{"source","editor"}};++touchSequence_;}
     for(auto [parameter,v]:edits)liveChanges.push_back({uint32_t(slot),parameter,v,0});
     if(!edits.empty())lastEditorChange_=now;
-    if(!found->second->editorOpen())force=true;
+    try{if(!found->second->editorOpen())force=true;}
+    catch(const WindowsVST3::UiOwnerBusy &){postponed.insert(key);}
+    catch(const std::exception &e){unusable.emplace_back(key,e.what());force=true;}
   }
   if(!liveChanges.empty() && liveParameters_)liveParameters_(liveChanges);
+  if(!unusable.empty()){
+    for(const auto &[key,reason]:unusable)dropEditor(key,reason);
+    unusable.clear();
+    if(openEditors_.empty()){pendingParameters_.clear();return true;}
+  }
+  const auto forget=[&]{std::erase_if(pendingParameters_,[&](const auto &entry){return !postponed.contains(entry.first);});};
   // Fast gesture delivery does not serialize vendor state or copy the rack.
   // Capture after the gesture settles, or immediately for save/close/read.
   // Periodic idle captures also retain opaque preset/IR changes without edits.
   if(!force && (now-lastEditorChange_<std::chrono::milliseconds(400) || now-lastStateCapture_<std::chrono::milliseconds(400)))return graphClosed;
   lastStateCapture_=now;Json next;bool changed=false;std::vector<std::string> closed;
   for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key))continue;
-    const auto state=blob(found->second->state().state);
+    if(postponed.contains(key))continue;
+    Json state;bool open=true;
+    try{state=blob(found->second->state().state);open=found->second->editorOpen();}
+    catch(const WindowsVST3::UiOwnerBusy &){postponed.insert(key);continue;} // Capture this editor next round.
+    catch(const std::exception &e){unusable.emplace_back(key,e.what());continue;}
     if(state!=p.at("state")){if(!changed)next=rack;next[slot]["state"]=state;changed=true;}
-    if(!found->second->editorOpen())closed.push_back(key);
+    if(!open)closed.push_back(key);
   }
   if(changed){
     // Presets and IR loads can emit parameter edits AND change opaque state.
@@ -136,7 +163,10 @@ bool PluginOperations::flushEditors(bool force) {
     commit(std::move(next),project_.preserved.at("automation"),true,parameterOnly);
   }
   for(const auto &key:closed)openEditors_.erase(key);
-  pendingParameters_.clear();return changed||graphClosed;
+  const bool dropped=!unusable.empty();
+  for(const auto &[key,reason]:unusable)dropEditor(key,reason);
+  // Edits of a postponed editor stay pending for its next capture.
+  forget();return changed||graphClosed||dropped;
 }
 #include "PluginLibraryOperations.inc"
 #include "PluginPathOperations.inc"

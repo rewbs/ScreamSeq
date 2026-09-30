@@ -1,4 +1,5 @@
 #pragma once
+#include "WindowsVST3.hpp"
 #include <windows.h>
 #include <thread>
 #include <future>
@@ -58,8 +59,7 @@ class UiOwner {
    window_=CreateWindowExW(0,cls.lpszClassName,L"",0,0,0,0,0,HWND_MESSAGE,nullptr,cls.hInstance,this);
    if(!window_)throw std::runtime_error("Cannot create VST3 UI dispatcher");
    ready.set_value();
-   bool quit=false;
-   while(!quit){
+   for(;;){
     const auto wait=MsgWaitForMultipleObjectsEx(1,&stopEvent_,INFINITE,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
     if(wait!=WAIT_OBJECT_0+1)break;
     // PeekMessage can itself deliver sent messages. Guard it as well as
@@ -67,8 +67,9 @@ class UiOwner {
     call([&]{
      MSG m{};
      if(PeekMessageW(&m,nullptr,0,0,PM_REMOVE)){
-      if(m.message==WM_QUIT)quit=true;
-      else {TranslateMessage(&m);DispatchMessageW(&m);}
+      // Only stopEvent_ ends this owner. A vendor editor that posts WM_QUIT
+      // (PostQuitMessage on close) must not shut down plugin hosting.
+      if(m.message!=WM_QUIT){TranslateMessage(&m);DispatchMessageW(&m);}
      }
     });
    }
@@ -102,7 +103,8 @@ public:
    std::lock_guard lock(mutex_);
    if(stopping_)throw std::runtime_error("VST3 UI owner unavailable");
    pending_.push_back(std::move(work));
-   if(!PostMessageW(window_,wake_,0,0))cancelLocked();
+   // A full message queue is transient: fail this call only, not the owner.
+   if(!PostMessageW(window_,wake_,0,0)){pending_.pop_back();throw UiOwnerBusy("VST3 UI owner is busy");}
   }
   result.get();
  }

@@ -110,6 +110,9 @@ final class DockWorkspace: NSView, NSWindowDelegate {
   private(set) var panels = [String: WorkspacePanel](), locations = [String: String]()
   private var floating = [String: NSWindow]()
   private(set) var focusLayout = false
+  // Invalidates a preset's deferred default divider positions once a later
+  // preset or restored layout has replaced it.
+  private var layoutGeneration = 0
   var onSelection: ((String) -> Void)?, onLayout: (() -> Void)?
   init(patternView: NSView) {
     super.init(frame: .zero)
@@ -207,8 +210,9 @@ final class DockWorkspace: NSView, NSWindowDelegate {
     if name == "Sound design" { show("samples"); show("automation") }
     if name == "Compose" { show("notes"); lower.isHidden = true }
     vertical.adjustSubviews(); upper.adjustSubviews(); lower.adjustSubviews()
+    layoutGeneration += 1; let generation = layoutGeneration
     DispatchQueue.main.async { [weak self] in
-      guard let self, !self.focusLayout else { return }
+      guard let self, !self.focusLayout, generation == self.layoutGeneration else { return }
       if name != "Compose" { self.vertical.setPosition(self.bounds.height * 0.60, ofDividerAt: 0) }
       self.upper.setPosition(max(400,self.bounds.width * (name == "Compose" ? 0.68 : 0.55)),ofDividerAt: 0); self.lower.setPosition(self.bounds.width * 0.55,ofDividerAt: 0)
     }
@@ -218,6 +222,7 @@ final class DockWorkspace: NSView, NSWindowDelegate {
     "pins":panels.mapValues(\.pinned),"focusLayout":focusLayout,"bottomHidden":lower.isHidden,
     "vertical":upper.frame.height/max(1,vertical.bounds.height),"upper":pattern.frame.width/max(1,upper.bounds.width),"lower":bottom.frame.width/max(1,lower.bounds.width)] }
   func restore(_ state: [String: Any]) {
+    layoutGeneration += 1
     if let places = state["locations"] as? [String:String] { for (id,place) in places where ["right","bottom","secondary","float","hide"].contains(place) { self.place(id,at:place,select:false) } }
     for (id,pin) in state["pins"] as? [String:Bool] ?? [:] { panels[id]?.pinned = pin }
     for (tabs,key) in [(right,"right"),(bottom,"bottom"),(secondary,"secondary")] { tabs.selected = state[key] as? String; tabs.reload() }

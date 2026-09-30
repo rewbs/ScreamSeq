@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioExport.hpp"
 #import "../Bridge/TrackerSession.h"
 #include "editor/TrackerDocument.hpp"
@@ -49,6 +50,30 @@ static void voiceIsolationTest() {
   check(song.ReadNote(),"Prepare a whole tick for loop-entry test");song.m_PlayState.m_nTickCount=0;song.m_PlayState.m_nMusicSpeed=1;
   runtime.prepare(song,960);song.m_PlayState.Chn[0].nLastNote=99;runtime.prepare(song,960);
   check(song.m_PlayState.Chn[0].nLastNote==61,"Single-block row loops replay their opening precise note");
+}
+static void forwardJumpTest() {
+  // A position jump or wrapping pattern break can land on a later row of the
+  // same pattern and order. Events in the skipped rows must stay silent.
+  auto doc=Document::demo();configure(*doc,false);
+  doc->transaction([](CSoundFile &s){check(s.Patterns[0].Resize(16),"Resize");s.Order().assign(1,0);});
+  doc->annotate([](NativeSong &n){const auto p=n.patterns.at(0).id,t=n.tracks.at(0).id;
+    n.preciseNotes={{p,t,65536+100,1,61,127},{p,t,2*65536,1,62,127},{p,t,5*65536+10,1,70,127},{p,t,6*65536+10,1,72,127}};});
+  Renderer renderer(doc->snapshotData(),48000);auto &song=renderer.song();PreciseNoteRuntime runtime(doc->native());
+  auto &state=song.m_PlayState;state.m_nPattern=0;state.m_nCurrentOrder=0;state.m_nRow=0;
+  check(song.ReadNote(),"Prepare a whole tick for the jump test");
+  auto place=[&](ROWINDEX row,uint32_t tick){state.m_nPattern=0;state.m_nCurrentOrder=0;state.m_nRow=row;state.m_nTickCount=tick;};
+  place(0,0);auto &channel=state.Chn[0];channel.nLastNote=99;
+  check(runtime.prepare(song,64)==64&&channel.nLastNote==99,"No precise event precedes its position");
+  place(0,1);runtime.prepare(song,64);place(0,5);runtime.prepare(song,64);
+  check(channel.nLastNote==99,"Later ticks on one row are not jumps");
+  place(1,1);runtime.prepare(song,64);check(channel.nLastNote==61,"Ordinary advance to the next row plays its events");channel.nLastNote=99;
+  place(5,0);const auto count=runtime.prepare(song,4096);
+  check(channel.nLastNote==99,"A forward jump inside one pattern does not fire the skipped precise notes");
+  check(count>=1&&count<4096,"The next event after a forward jump still bounds the render chunk");
+  place(5,1);runtime.prepare(song,64);check(channel.nLastNote==70,"Events after the jump target still play");
+  place(6,1);runtime.prepare(song,64);check(channel.nLastNote==72,"Ordinary advance to the next row keeps late events");
+  place(3,0);channel.nLastNote=99;runtime.prepare(song,64);place(3,1);runtime.prepare(song,64);
+  check(channel.nLastNote==99,"A backward jump does not replay earlier events");
 }
 static void recordingTest() {
   Document doc;configure(doc,true);
@@ -313,7 +338,7 @@ static void cutAndInstrumentAPITest(const PluginDescriptor &descriptor) {
   check(![session openPath:path error:&error],"An NC command cannot masquerade as older metadata");
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
 }
-int main(int argc,char **argv){@autoreleasepool{try{
+int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Local fixture required");const auto vst=NativePlugin::discoverVST3(argv[1]),au=registerFixtureAUs();
   for(const auto &descriptor:{vst[1],au[1]})for(uint32_t rate:{44100u,48000u,96000u}) {
     Document doc;configure(doc,true);PluginState plugin{descriptor};plugin.instanceID="precise-synth";plugin.instrument=1;
@@ -355,5 +380,5 @@ int main(int argc,char **argv){@autoreleasepool{try{
     for(auto block:{17u,128u,4096u})check(render(block)==reference,"Precise sample audio is callback independent");
   }
   cutCommandTest(vst[1]);cutCommandTest(au[1]);cutAndInstrumentAPITest(vst[1]);
-  voiceIsolationTest();recordingTest();apiTest();offsetWorkflowTest();beatAndEffectTest();std::cout<<"PASS sample/AU/VST3 precise note timing, same-row releases, repeat, tempo/groove, callback partitions, timestamp capture, realtime audit, beat offsets, per-hit effects and project recall\n";return 0;
+  voiceIsolationTest();forwardJumpTest();recordingTest();apiTest();offsetWorkflowTest();beatAndEffectTest();std::cout<<"PASS sample/AU/VST3 precise note timing, same-row releases, repeat, tempo/groove, callback partitions, timestamp capture, realtime audit, beat offsets, per-hit effects and project recall\n";return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}}

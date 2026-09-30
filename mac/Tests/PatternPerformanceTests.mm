@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #import "../Bridge/TrackerSession.h"
 #include "editor/TrackerDocument.hpp"
 #include "editor/SongTiming.hpp"
@@ -63,7 +64,7 @@ static void sessionTest(const PluginDescriptor &descriptor) {
   check([expected isEqual:call(@"pattern.performance.get",@{@"pattern":@0})[@"data"]],"Plugin Undo reconnects only original identity");
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
 }
-int main(int argc,char **argv){@autoreleasepool{try{
+int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Local plugin fixture required");
   PluginState gain{NativePlugin::discoverVST3(argv[1]).at(0)};gain.instanceID="stable-gain";
   Document doc;

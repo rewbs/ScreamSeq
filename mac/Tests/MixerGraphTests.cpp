@@ -75,6 +75,15 @@ int main() {
     check(plan.nodes[1].directDelay == 8 && plan.instruments[0].delay == 0, "Sample input aligns with a plugin sharing its track");
     check(plan.nodes[4].processors == std::vector<size_t>{3}, "Unrouted effects retain their master-rack behavior");
     check(std::abs(plan.tail - 2.1) < 1e-12, "Tail follows the longest effect path");
+    {
+      auto longTail = processors; longTail[1].tail = mixerMaximumTailSeconds;
+      check(compileMixer(graph, {1, 2}, longTail, 48000).tail == 60, "The largest host tail compiles and the render tail stays bounded");
+      longTail[1].tail = mixerMaximumTailSeconds + .001;
+      std::string message;
+      try { compileMixer(graph, {1, 2}, longTail, 48000); } catch (const std::invalid_argument &e) { message = e.what(); }
+      check(message.find("Invalid mixer processor description") == 0 && message.find("reverb") != std::string::npos,
+            "A rejected processor description names its instance");
+    }
     auto busToGroup = plan.connections[plan.nodes[1].outputs[0]];
     check(busToGroup.delay == 24, "Shorter bus receives exact edge compensation");
     graph.buses[0].timingMS = -10; graph.buses[1].timingMS = 20;

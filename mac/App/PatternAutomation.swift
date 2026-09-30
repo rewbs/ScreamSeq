@@ -186,8 +186,14 @@ final class AutomationCanvas: NSView {
   override func keyDown(with event: NSEvent) {
     if event.keyCode == 51 || event.keyCode == 117 { removeSelected(); return }
     if event.keyCode == 48 {
-      guard !points.isEmpty else{return};let reverse=event.modifierFlags.contains(.shift)
-      selected=((selected ?? (reverse ? 0 : -1))+(reverse ? points.count-1 : 1))%points.count
+      // Tab walks the points and then leaves the canvas, so keyboard focus is
+      // never trapped here. Option-Tab wraps around inside the curve instead.
+      let reverse=event.modifierFlags.contains(.shift),wrap=event.modifierFlags.contains(.option)
+      let next=(selected ?? (reverse ? points.count : -1))+(reverse ? -1 : 1)
+      guard !points.isEmpty,wrap || points.indices.contains(next) else{
+        if reverse{window?.selectPreviousKeyView(self)}else{window?.selectNextKeyView(self)};return
+      }
+      selected=(next+points.count)%points.count
       if let selected{let p=Double(points[selected].position);if p<visibleStart || p>horizontalEnd{setViewport(start:p-horizontalSpan/2,span:horizontalSpan)}}
       needsDisplay=true;onSelect?();return
     }
@@ -294,9 +300,9 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
   }
   required init?(coder: NSCoder) { fatalError() }
   func showBank(){
-    if let bankWindow,bankWindow.window?.isVisible==true{bankWindow.window?.makeKeyAndOrderFront(nil);return}
     guard !loading,let parameterID,model.nativePlugins.indices.contains(pluginIndex),let plugin=model.nativePlugins[pluginIndex]["instanceID"] as? String,let onRequest else{return}
     let target:[String:Any]=["kind":"parameter","pattern":model.pattern,"plugin":plugin,"parameter":parameterID]
+    if EnvelopeBankWindow.reuse(bankWindow,for:target,refused:{[weak self] in self?.status.stringValue=$0}){return}
     let shape:[String:Any] = ["span":canvas.rows*256,"rowsPerBeat":model.rowsPerBeat,"points":canvas.points.map(\.dictionary)]
     let points=canvas.points,pattern=model.pattern;bankWindow?.close();bankWindow=EnvelopeBankWindow(title:"Pattern \(model.pattern)",target:target,shape:canvas.points.isEmpty ? nil:shape,revision:revision,request:onRequest,canReplace:{[weak self] in (self?.hasDraft==false || self?.canvas.points==points) && self?.model.pattern==pattern && self?.parameterID==parameterID && self?.pluginIndex==self?.model.nativePlugins.firstIndex(where:{$0["instanceID"] as? String==plugin})},applied:{[weak self] in self?.hasDraft=false;self?.load()})
   }
@@ -328,6 +334,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
 
   func load() {
     guard !loading, let context = onContext?() else { return }
+    canvas.allowsEditing=false
     requestGeneration += 1;autoSaveWork?.cancel();autoSaveWork=nil
     draftGeneration += 1
     let samePattern = context.pattern == model.pattern

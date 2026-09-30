@@ -1,4 +1,5 @@
 #include "../Audio/AudioDevice.hpp"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioExport.hpp"
 #include "../Audio/AudioUnitHost.hpp"
 #import "../Bridge/TrackerSession.h"
@@ -56,7 +57,7 @@ static NSDictionary *dictionary(const PluginDescriptor &d) {
     @"isInstrument" : @(d.instrument)
   };
 }
-int main(int argc, char **argv) {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool {
     try {
       check(argc >= 2, "fixture bundle argument");

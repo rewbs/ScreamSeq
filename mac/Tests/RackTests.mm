@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "soundlib/ModInstrument.h"
 #import "../Bridge/TrackerSession.h"
@@ -116,7 +117,7 @@ static void capacityAPI(Document &doc, std::vector<PluginState> states) {
         "Redo restores the smaller graph before its instrument assignment within joint capacity");
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
 }
-int main(int argc, char **argv) { @autoreleasepool { try {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleasepool { try {
   check(argc == 2, "Fixture VST3 path required"); auto doc = fixture();
   PluginState source{NativePlugin::discoverVST3(argv[1]).at(1)};
   NativePlugin quiet(source, 48000, true); quiet.parameter(7, .05); source = quiet.state();

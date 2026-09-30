@@ -162,6 +162,12 @@ MacPluginBackend::MacPluginBackend(const PluginState &state, double rate, bool o
         CFRelease(data);
         if (!value)
           throw std::runtime_error("Invalid Audio Unit state");
+        // Project data is untrusted: ClassInfo must be a dictionary, and an
+        // Audio Unit is entitled to assume so without checking.
+        if (CFGetTypeID(value) != CFDictionaryGetTypeID()) {
+          CFRelease(value);
+          throw std::runtime_error("Invalid Audio Unit state");
+        }
         auto result =
             AudioUnitSetProperty(unit_, kAudioUnitProperty_ClassInfo, kAudioUnitScope_Global, 0, &value, sizeof(value));
         CFRelease(value);

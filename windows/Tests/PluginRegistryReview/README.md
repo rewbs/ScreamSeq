@@ -41,9 +41,11 @@ harness needs no stale `TrackerHosted` or editor/core archives.
   injection confined to this test translation unit's included `Registry.cpp`.
   The write probes actually write partial staging bytes. There is no production
   fault-injection API, build switch or environment variable.
-- `locked`, `stage`: actual sharing-denied replacement and exclusive staging
-  collision; preserve old data, do not remove another owner's stage, clean owned
+- `locked`: actual sharing-denied replacement; preserve old data, clean owned
   temporary files, and retry successfully in the same process.
+- `stage`: a foreign staging file with the former fixed name coexists with
+  publication: staging names are unique per attempt, the foreign file is neither
+  reused nor removed, and the rescan publishes.
 - `concurrent`: pause immediately before local rename; a distinct bounded OS
   process atomically replaces the cache. Test subsequent local success and
   failure, exact disk readback, unchanged loaded snapshots and fresh readers.

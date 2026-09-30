@@ -20,6 +20,9 @@ final class PatternView: MTKView, MTKViewDelegate {
   var model = PatternModel([:]) {
     didSet {
       if oldValue.revisionToken != model.revisionToken { clearEffectPrefix() }
+      if oldValue.pattern != model.pattern || oldValue.rows != model.rows || oldValue.channels != model.channels
+        || oldValue.revisionToken.split(separator: ":").first != model.revisionToken.split(separator: ":").first
+      { discardDeferredKeys() }
       rebuildPositionLabels()
       muted = model.mutedColumns
       if oldValue.pattern != model.pattern || oldValue.rows != model.rows
@@ -43,7 +46,7 @@ final class PatternView: MTKView, MTKViewDelegate {
   var gutterWidth:Float { positionMode.width }
   func cyclePositionMode() { let all=PatternPositionMode.allCases;positionMode=all[(all.firstIndex(of:positionMode)!+1)%all.count] }
   private func rebuildPositionLabels() {
-    positionLabels=(0..<model.rows).map { row in
+    positionLabels=(0..<max(0,model.rows)).map { row in
       switch positionMode {
       case .rows:return String(format:"%03d",row)
       case .beats:return String(format:"%.3f",Double(row)/Double(max(1,model.rowsPerBeat)))
@@ -70,7 +73,11 @@ final class PatternView: MTKView, MTKViewDelegate {
   }
   func navigate(_ state: EditorNavigation, clearSelection: Bool) {
     if clearSelection { selectionStart = nil; selectionEnd = nil }
-    cursorRow = state.row; cursorChannel = state.channel; column = state.column
+    // Stored positions can outlive a pattern that has since shrunk.
+    discardDeferredKeys()
+    cursorRow = max(0, min(model.rows - 1, state.row))
+    cursorChannel = max(0, min(model.channels - 1, state.channel))
+    column = max(0, min(model.lastField(cursorChannel), state.column))
     isFollowing = state.following; revealCursor()
   }
   typealias Edits = [(Int, Int, [UInt8])]
@@ -87,15 +94,37 @@ final class PatternView: MTKView, MTKViewDelegate {
   var nudgeEditor: PatternNudgeEditor?
   var onNudgeRequest: (([String:Any], @escaping ([String:Any])->Void)->Void)?
   var onTrackerEffect: ((Int,Int,Int,Int,Int)->Void)?
-  // Preserve rapid typing while an FX transaction refreshes the displayed model.
-  // Replay in order so the second value digit sees the first digit's result.
+  // Preserve rapid typing while an FX transaction refreshes the displayed model,
+  // or while an editable document is briefly busy (read-only request, recovery
+  // autosave). Replay in order so each key sees the previous key's result.
   var deferringEffectKeys = false
-  private var deferredEffectKeys = [NSEvent]()
+  static let deferredKeyLimit = 64
+  private struct DeferredKey { let event: NSEvent; var released = false }
+  private var deferredKeys = [DeferredKey]()
+  private var replayingReleasedKey = false
+  var deferredKeyCount: Int { deferredKeys.count }
+  func discardDeferredKeys() { deferredKeys.removeAll() }
+  // Editable but temporarily unable to accept edits: typing waits instead of being lost.
+  private var waitingForDocument: Bool { model.editable && model.rows > 0 && model.channels > 0 && !canEdit() }
+  private func deferKey(_ event: NSEvent) {
+    if event.keyCode == 53 { discardDeferredKeys(); clearEffectPrefix(); return }
+    if deferredKeys.count < Self.deferredKeyLimit { deferredKeys.append(DeferredKey(event: event)) } else { NSSound.beep() }
+  }
   func finishEffectKeys(success:Bool) {
     deferringEffectKeys=false
-    if !success {deferredEffectKeys.removeAll();return}
-    while !deferringEffectKeys && !deferredEffectKeys.isEmpty {
-      keyDown(with:deferredEffectKeys.removeFirst())
+    if !success {discardDeferredKeys();return}
+    replayDeferredKeys()
+  }
+  // Called on the main thread when the document stops being busy.
+  func replayDeferredKeys() {
+    dispatchPrecondition(condition: .onQueue(.main))
+    while !deferringEffectKeys && !deferredKeys.isEmpty && !waitingForDocument {
+      let key=deferredKeys.removeFirst()
+      // The key-up of a replayed key may already have happened: never start
+      // an audition that nothing would release.
+      replayingReleasedKey=key.released
+      keyDown(with:key.event)
+      replayingReleasedKey=false
     }
   }
   var onTypedNativeEffect: ((String) -> Void)?
@@ -108,7 +137,7 @@ final class PatternView: MTKView, MTKViewDelegate {
     let fx=max(0,(target.column-3)/2),existing=model.nativeCommand(target.row,target.channel,max(0,(target.column-3)/2));onTrackerEffect?(target.row,target.channel,fx,index,existing?.kind=="tracker" ? existing!.parameter : 0)
   }
   private func typeEffectCode(_ event:NSEvent) -> Bool {
-    guard column>=3 && column%2==1,event.modifierFlags.intersection([.command,.control,.option]).isEmpty else { finishEffectPrefix();return false }
+    guard column>=3 && column%2==1,KeyboardSettings.isDataTyping(event) else { finishEffectPrefix();return false }
     if !effectPrefix.isEmpty && effectPrefixTarget != navigation {clearEffectPrefix()}
     if event.keyCode==53 {clearEffectPrefix();return true}
     let key=(event.charactersIgnoringModifiers ?? "").uppercased()
@@ -134,6 +163,7 @@ final class PatternView: MTKView, MTKViewDelegate {
   var cursorRect: NSRect { NSRect(x:CGFloat(channelX(cursorChannel)+fieldOffset(column)), y:CGFloat(headerHeight+Float(cursorRow-firstRow)*rowHeight),width:CGFloat(fieldWidth(column)),height:CGFloat(rowHeight)) }
   override func rightMouseDown(with event: NSEvent) {
     let p=convert(event.locationInWindow,from:nil), (r,c)=position(event)
+    discardDeferredKeys()
     if !selected(r,c) {selectionStart=nil;selectionEnd=nil;cursorRow=r;cursorChannel=c
       let x=Float(p.x)-channelX(c)
       column=fieldAt(x,c)
@@ -556,11 +586,12 @@ final class PatternView: MTKView, MTKViewDelegate {
     let p = convert(event.locationInWindow, from: nil)
     var channel=firstChannel
     while channel < model.channels-1 && Float(p.x) >= channelX(channel+1) { channel += 1 }
-    return (min(model.rows-1,max(0,firstRow+Int((p.y-CGFloat(headerHeight))/CGFloat(rowHeight)))),channel)
+    return (max(0,min(model.rows-1,firstRow+Int((p.y-CGFloat(headerHeight))/CGFloat(rowHeight)))),max(0,channel))
   }
   override func mouseDown(with event: NSEvent) {
     if let nudgeEditor {nudgeEditor.commit(advance:false);return}
     finishEffectPrefix()
+    discardDeferredKeys()
     window?.makeFirstResponder(self)
     let p = convert(event.locationInWindow, from: nil)
     let (r, c) = position(event)
@@ -624,10 +655,7 @@ final class PatternView: MTKView, MTKViewDelegate {
     onCursor?()
   }
   override func keyDown(with event: NSEvent) {
-    if deferringEffectKeys {
-      if deferredEffectKeys.count<128 {deferredEffectKeys.append(event)} else {NSSound.beep()}
-      return
-    }
+    if deferringEffectKeys { deferKey(event); return }
     let ch = event.charactersIgnoringModifiers?.lowercased() ?? ""
     if event.modifierFlags.intersection([.command,.control,.option,.shift]) == .option {
       switch event.keyCode {
@@ -645,13 +673,14 @@ final class PatternView: MTKView, MTKViewDelegate {
       if event.keyCode==67 {nextInputOctave(nil);return}
       if (event.keyCode==36 || event.keyCode==76) && column==1 {useCursorInstrument(nil);return}
     }
+    let typing = KeyboardSettings.isDataTyping(event)
+    // Busy is short-lived: keep typed and navigation keys in order rather than
+    // dropping them. Transport and modified shortcuts are never queued.
+    if typing, event.keyCode != KeyboardSettings.transportKey, waitingForDocument { deferKey(event); return }
     if canEdit(), typeEffectCode(event) { return }
     // Moving away can commit a pending one-letter tracker command. Preserve
     // that navigation key until the resulting transaction has completed too.
-    if deferringEffectKeys {
-      if deferredEffectKeys.count<128 {deferredEffectKeys.append(event)} else {NSSound.beep()}
-      return
-    }
+    if deferringEffectKeys { deferKey(event); return }
     if event.characters == "?" || (ch=="/" && event.modifierFlags.contains(.shift)),column>=2,!event.modifierFlags.contains(.command) {onEffectPicker?();return}
     if event.keyCode == KeyboardSettings.transportKey && !event.modifierFlags.contains(.command) {
       if !event.isARepeat { onTransport?() }
@@ -672,10 +701,17 @@ final class PatternView: MTKView, MTKViewDelegate {
         return
       }
       if ch == "a" {
+        guard model.rows > 0, model.channels > 0 else { return }
         selectionStart = (0, 0)
         selectionEnd = (model.rows - 1, model.channels - 1)
         return
       }
+      super.keyDown(with: event)
+      return
+    }
+    // Control/Option chords are shortcuts, never note or value entry. Cursor
+    // and delete keys keep their existing meaning with any modifier.
+    if !typing && ![126, 125, 123, 124, 48, 115, 119, 51, 117].contains(Int(event.keyCode)) {
       super.keyDown(with: event)
       return
     }
@@ -748,7 +784,10 @@ final class PatternView: MTKView, MTKViewDelegate {
       }
       var cell = model.cell(cursorRow, cursorChannel)
       if column == 0 {
-        if let n = KeyboardSettings.note(for: ch), !event.isARepeat {
+        if let n = KeyboardSettings.note(for: ch) {
+          // Auto-repeat of a held note key is consumed; it must never reach
+          // the note-off key below when a custom map assigns "1" to a note.
+          if event.isARepeat { return }
           guard (0...255).contains(instrument) else {
             onMessage?(
               "Map this sample to an instrument before entering notes; pattern slots range from 0 to 255."
@@ -758,9 +797,11 @@ final class PatternView: MTKView, MTKViewDelegate {
           cell[0] = UInt8(max(model.noteMin, min(model.noteMax, octave * 12 + n + 1)))
           cell[1] = UInt8(instrument)
           let held=(note:Int(cell[0]),instrument:instrument,channel:cursorChannel)
-          heldKeys[event.keyCode] = held
           commit(cell)
-          onAudition?(held.note, held.instrument, held.channel, true)
+          if !replayingReleasedKey {
+            if let previous=heldKeys.updateValue(held,forKey:event.keyCode){onAudition?(previous.note,previous.instrument,previous.channel,false)}
+            onAudition?(held.note, held.instrument, held.channel, true)
+          }
         } else if ch == "1" {
           cell[0] = 255
           commit(cell)
@@ -791,6 +832,7 @@ final class PatternView: MTKView, MTKViewDelegate {
     revealCursor()
   }
   override func keyUp(with event: NSEvent) {
+    for index in deferredKeys.indices where deferredKeys[index].event.keyCode == event.keyCode { deferredKeys[index].released = true }
     if let note = heldKeys.removeValue(forKey: event.keyCode) {
       onAudition?(note.note, note.instrument, note.channel, false)
     } else {
@@ -799,6 +841,7 @@ final class PatternView: MTKView, MTKViewDelegate {
   }
   override func resignFirstResponder() -> Bool {
     finishEffectPrefix()
+    discardDeferredKeys()
     for note in heldKeys.values { onAudition?(note.note, note.instrument, note.channel, false) }
     heldKeys.removeAll()
     return super.resignFirstResponder()
@@ -887,7 +930,11 @@ final class PatternView: MTKView, MTKViewDelegate {
     }
   }
   func pasteSelection(mode: String = "overwrite") {
-    guard !copying, canEdit(), let s = NSPasteboard.general.string(forType: .string),
+    guard let s = NSPasteboard.general.string(forType: .string) else { return }
+    pasteText(s, mode: mode)
+  }
+  func pasteText(_ s: String, mode: String = "overwrite") {
+    guard !copying, canEdit(),
       (s.hasPrefix("Resonance Pattern 1\n") || s.hasPrefix("ScreamSeq Pattern 2\n"))
     else { return }
     guard s.utf8.count <= 16 * 1024 * 1024 else {
@@ -897,9 +944,25 @@ final class PatternView: MTKView, MTKViewDelegate {
     let row = cursorRow
     let channel = cursorChannel
     if s.hasPrefix("ScreamSeq Pattern 2\n") {
-      guard let data=s.dropFirst("ScreamSeq Pattern 2\n".count).data(using:.utf8),var request=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],Set(request.keys).isSubset(of:["rows","channels","cells","effects","bindings","notes"]) else {onMessage?("Invalid pattern clipboard.");return}
-      request["pattern"]=model.pattern;request["startRow"]=row;request["startChannel"]=channel;request["mode"]=mode;request["clip"]=true;request["expectedRevision"]=commandRevision?() ?? model.revisionToken
-      onPaste?(request);return
+      // Up to 16 MB of JSON: parse off the main thread, then apply only if the
+      // pattern and revision captured with the cursor are still current.
+      let pattern=model.pattern,revision=commandRevision?() ?? model.revisionToken
+      copying=true
+      clipboardWorker.async {
+        var parsed:[String:Any]?
+        if let data=s.dropFirst("ScreamSeq Pattern 2\n".count).data(using:.utf8),let request=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],Set(request.keys).isSubset(of:["rows","channels","cells","effects","bindings","notes"]) {parsed=request}
+        DispatchQueue.main.async {
+          self.copying=false
+          guard var request=parsed else {self.onMessage?("Invalid pattern clipboard.");return}
+          guard self.canEdit(),self.model.pattern==pattern,(self.commandRevision?() ?? self.model.revisionToken)==revision else {
+            self.onMessage?("Paste cancelled: the pattern changed while the clipboard was being read.")
+            return
+          }
+          request["pattern"]=pattern;request["startRow"]=row;request["startChannel"]=channel;request["mode"]=mode;request["clip"]=true;request["expectedRevision"]=revision
+          self.onPaste?(request)
+        }
+      }
+      return
     }
     if let onPaste {
       let pattern = model.pattern
@@ -941,10 +1004,10 @@ final class PatternView: MTKView, MTKViewDelegate {
     }
     onTransform? { model in
       var edits = Edits()
-      for (r, line) in s.components(separatedBy: "\n").dropFirst().prefix(model.rows - row)
+      for (r, line) in s.components(separatedBy: "\n").dropFirst().prefix(max(0, model.rows - row))
         .enumerated()
       {
-        for (c, text) in line.components(separatedBy: "\t").prefix(model.channels - channel)
+        for (c, text) in line.components(separatedBy: "\t").prefix(max(0, model.channels - channel))
           .enumerated()
         {
           let values = text.components(separatedBy: ",").compactMap { UInt8($0, radix: 16) }

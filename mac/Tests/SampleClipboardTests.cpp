@@ -215,6 +215,43 @@ int main() {
       d.undo();
       check(pcm(d) == inserted, "Undo entire sample deletion");
     }
+    for (auto mode : {SamplePasteMode::Overwrite, SamplePasteMode::Mix}) {
+      // Writing past the end rewrites existing audio in place and appends the rest.
+      Document d;
+      auto original = clip(16, 2, 1000);
+      install(d, original);
+      auto &s = d.song().GetSample(1);
+      s.nLoopStart = 800;
+      s.nLoopEnd = 1000;
+      s.nSustainStart = 750;
+      s.nSustainEnd = 900;
+      s.uFlags.set(CHN_LOOP | CHN_SUSTAINLOOP);
+      s.cues = {0, 699, 700, 701, 850, 999, MAX_SAMPLE_LENGTH, MAX_SAMPLE_LENGTH, MAX_SAMPLE_LENGTH};
+      s.PrecomputeLoops(d.song(), false);
+      const auto cues = s.cues;
+      const auto flags = s.uFlags;
+      SamplePasteOptions o;
+      o.at = 700;
+      o.mode = mode;
+      o.rateMode = SampleRateMode::KeepFrames;
+      d.applySampleEdit(d.prepareSamplePaste(1, clip(16, 2, 500, 5), o));
+      check(s.nLength == 1200 && s.nLoopStart == 800 && s.nLoopEnd == 1000 && s.nSustainStart == 750 &&
+                s.nSustainEnd == 900 && s.cues == cues && s.uFlags == flags,
+            "Overwrite/Mix past the end extends the sample and keeps loop, sustain and cue positions");
+      const auto extended = pcm(d);
+      check(std::equal(original.data.begin(), original.data.begin() + 700 * 4, extended.begin()),
+            "Overwrite/Mix past the end keeps the audio before the paste");
+      d.undo();
+      check(pcm(d) == original.data && s.nLength == 1000 && s.nLoopEnd == 1000 && s.cues == cues && s.uFlags == flags,
+            "Exact extending overwrite undo");
+      d.redo();
+      check(pcm(d) == extended && s.nLength == 1200 && s.nLoopStart == 800 && s.nLoopEnd == 1000, "Exact extending overwrite redo");
+      o.mode = SamplePasteMode::Replace;
+      o.end = 1200;
+      d.applySampleEdit(d.prepareSamplePaste(1, clip(16, 2, 600, 6), o));
+      check(s.nLength == 1300 && !s.uFlags[CHN_LOOP] && !s.uFlags[CHN_SUSTAINLOOP],
+            "Replace still collapses loops inside the replaced audio");
+    }
     Document big;
     auto million = clip(16, 2, 1048576);
     install(big, million);

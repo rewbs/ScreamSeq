@@ -17,6 +17,7 @@
 #include "pluginterfaces/vst/ivstunits.h"
 #include <atomic>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <map>
@@ -385,6 +386,8 @@ struct NativeBackend::Impl {
   };
   Callbacks *callbacks=new Callbacks(this);
   tresult performEdit(ParamID id, ParamValue value) {
+    // A failed instance is about to be dropped: discard, never queue.
+    if (failed.load(std::memory_order_acquire)) return kResultFalse;
     auto w = editWrite.load(std::memory_order_relaxed), r = editRead.load(std::memory_order_acquire);
     auto aw = audioWrite.load(std::memory_order_relaxed), ar = audioRead.load(std::memory_order_acquire);
     if (w - r >= edits.size() || aw - ar >= audioEdits.size()) {
@@ -552,11 +555,25 @@ struct NativeBackend::Impl {
     if(msg==WM_NCCREATE){self=static_cast<Impl*>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams);SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}
     try{
       if(self && msg==WM_CLOSE){pluginMainCall([&]{self->close();});return 0;}
-      if(self && msg==WM_TIMER){pluginMainCall([&]{if(!self->resizeBusy)self->syncController();});return 0;}
+      if(self && msg==WM_TIMER){pluginMainCall([&]{if(!self->resizeBusy)self->syncController();self->drainEditorEdits();});return 0;}
       if(self && msg==WM_SIZE){if(w!=SIZE_MINIMIZED)pluginMainCall([&]{self->userSized();});return 0;}
       if(self && msg==WM_SIZING && l){pluginMainCall([&]{self->userSizing(*reinterpret_cast<RECT*>(l),w);});return TRUE;}
     }catch(...){if(self)self->fail(Failure::EditorException);return 0;}
     return DefWindowProcW(hwnd,msg,w,l);
+  }
+  // Editor-only processing owns Impl directly. If shutdown must retain this
+  // state because its apartment is unavailable, a timer already in progress
+  // cannot call back through the destroyed NativeBackend facade.
+  bool process(float *,uint32_t,uint64_t,const float *const *,uint32_t,const PluginTransport &) noexcept;
+  bool drainingEdits=false; // UI owner only; guards vendor reentrancy.
+  void drainEditorEdits() noexcept {
+    if(!window||failed.load(std::memory_order_acquire)||drainingEdits)return;
+    drainingEdits=true;
+    for(int n=0;n<64&&(changes->count||audioRead.load()!=audioWrite.load());++n){
+      std::array<float,2> empty{};
+      if(!process(empty.data(),0,0,nullptr,0,transport))break;
+    }
+    drainingEdits=false;
   }
   void syncController(){
     if(!controller||failed)return;
@@ -770,7 +787,20 @@ NativeBackend::NativeBackend(const PluginState &s, double rate, bool offline,con
   });
 }
 NativeBackend::~NativeBackend() {
-  pluginMainCall([&] { impl_.reset(); });
+  // Never throw from a destructor. Once the UI owner is stopping, the vendor
+  // objects cannot be released on their own apartment any more: leak them
+  // deliberately instead of releasing them on a foreign thread.
+  // A busy owner is transient: retry briefly before giving up.
+  for (int attempt = 0; attempt < 20; ++attempt) {
+    try { pluginMainCall([&] { impl_.reset(); }); return; }
+    catch (const UiOwnerBusy &) { Sleep(10); }
+    catch (...) { break; }
+  }
+  if (!impl_) return;
+  // No new editor drains are accepted. An in-flight drain only references
+  // this intentionally retained Impl and can finish safely on its owner.
+  impl_->failed.store(true,std::memory_order_release);
+  (void)impl_.release();
 }
 PluginFailure NativeBackend::failure() const noexcept {
   const auto value=impl_->firstFailure.load(std::memory_order_acquire);
@@ -841,7 +871,10 @@ bool NativeBackend::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
   if(s.events->addEvent(e)!=kResultOk)return s.fail(Impl::Failure::InputEventCapacity,a);return true;
 }
 bool NativeBackend::process(float *buffer, uint32_t frames, uint64_t position, const float *const *inputs, uint32_t offset,const PluginTransport &time) noexcept {
-  auto &s = *impl_;
+  return impl_->process(buffer,frames,position,inputs,offset,time);
+}
+bool NativeBackend::Impl::process(float *buffer, uint32_t frames, uint64_t position, const float *const *inputs, uint32_t offset,const PluginTransport &time) noexcept {
+  auto &s = *this;
   s.transport=time;
   bool success=false;
   struct Finish{Impl &s;float *buffer;uint32_t frames;bool &success;~Finish(){

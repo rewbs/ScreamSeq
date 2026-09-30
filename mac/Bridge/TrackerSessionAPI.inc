@@ -11,7 +11,27 @@
                                     unsigned(_document->song().Order.GetCurrentSequenceIndex())];
 }
 
+// API boundary. A vendor plugin or Foundation can raise an Objective-C
+// exception (for example nil from a non-UTF-8 name inside a literal), and
+// foreign code can throw other C++ types; both become ordinary API errors.
 - (NSDictionary *)automationMethod:(NSString *)method params:(NSDictionary *)p error:(NSError **)error {
+  NSString *reason = nil;
+  @try {
+    return [self dispatchAutomationMethod:method params:p error:error];
+  } @catch (NSException *exception) {
+    reason = [NSString stringWithFormat:@"Internal error: %@", exception.reason ?: exception.name ?: @"Objective-C exception"];
+  } @catch (...) {
+    reason = @"Internal error: unexpected exception";
+  }
+  if (error) {
+    NSString *revision = @"";
+    @try { revision = self.automationRevision ?: @""; } @catch (...) {}
+    *error = [NSError errorWithDomain:@"ResonanceAPI" code:-32003
+                             userInfo:@{NSLocalizedDescriptionKey : reason, @"revision" : revision}];
+  }
+  return nil;
+}
+- (NSDictionary *)dispatchAutomationMethod:(NSString *)method params:(NSDictionary *)p error:(NSError **)error {
   using namespace Automation;
   try {
     string(method, 80);
@@ -20,7 +40,7 @@
       @"parameter.activity.targets", @"parameter.activity.parameters", @"parameter.activity.get", @"parameter.activity.sources", @"automation.recorded.get", @"envelope.bank.list", @"envelope.catalogue.list", @"transport.get", @"automation.formula.preview", @"automation.formula.reference", @"graph.get", @"graph.signal.get", @"graph.scope.get", @"graph.listen.get", @"graph.automation.get", @"graph.plugin.get",
       @"recording.get", @"pattern.notes.get", @"pattern.performance.get", @"pattern.effects.get", @"instrument.envelope.get", @"instrument.envelope.copy",
       @"plugin.programs.get", @"plugin.instruments.get", @"document.timing.get", @"track.get", @"api.describe", @"document.get", @"pattern.get", @"pattern.timeline.get", @"pattern.commands", @"sample.get", @"sample.waveform.get", @"sample.snap.get", @"sample.pcm.get", @"sample.clipboard.get", @"instrument.get",
-      @"plugin.preset.inspect", @"plugin.library.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
+      @"plugin.preset.inspect", @"plugin.library.get", @"plugin.locations.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
     ];
     NSArray *writes = @[
       @"parameter.activity.watch", @"automation.recorded.edit", @"envelope.bank.save", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.routes.set", @"graph.controller", @"graph.signal.clear", @"graph.scope.watch", @"graph.listen.set", @"graph.song.group.create", @"graph.song.group.update", @"graph.song.group.remove", @"graph.song.group.export", @"graph.group.create", @"graph.group.update", @"graph.group.remove", @"graph.group.export", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.nodes.insert", @"graph.nodes.detach", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
@@ -28,7 +48,7 @@
       @"instrument.plugin.set", @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule",
       @"sequence.select", @"sample.patch",          @"sample.process",    @"sample.import", @"sample.importMany", @"sample.clipboard.copy", @"sample.clipboard.set", @"sample.cut", @"sample.delete", @"sample.paste",
       @"sample.pcm.set", @"sample.copyToNew", @"sample.draw", @"sample.crossfade", @"sample.loops.set", @"instrument.create",     @"instrument.import", @"instrument.importMultisample", @"instrument.patch",
-      @"plugin.preset.save", @"plugin.preset.load", @"plugin.library.set", @"plugin.add",      @"plugin.remove",         @"plugin.move",       @"plugin.bypass",
+      @"plugin.preset.save", @"plugin.preset.load", @"plugin.library.set", @"plugin.locations.trust", @"plugin.add",      @"plugin.remove",         @"plugin.move",       @"plugin.bypass",
       @"plugin.assign",   @"plugin.parameters.set", @"plugin.state.set", @"plugin.buses.set", @"automation.replaceLane",
       @"history.undo",    @"history.redo", @"pattern.transform", @"pattern.paste", @"song.annotate", @"arrangement.copyBlock",
       @"automation.pattern.set", @"automation.pattern.remove", @"automation.pattern.transform", @"mixer.enable", @"mixer.bus.add", @"mixer.bus.set", @"mixer.bus.remove", @"mixer.inserts.move", @"mixer.sends.set", @"mixer.instrument.route", @"mixer.plugin.route", @"mixer.sidechains.set"
@@ -266,9 +286,13 @@
         close(fd);
         try {
           succeeded([self savePath:@(temporary.c_str()) error:&problem], problem);
-          if (::link(temporary.c_str(), path.fileSystemRepresentation) != 0)
+          if (::link(temporary.c_str(), path.fileSystemRepresentation) == 0)
+            unlink(temporary.c_str());
+          // exFAT and some network volumes have no hard links. An exclusive
+          // rename keeps the same guarantee: it fails if the name now exists.
+          else if (const int reason = errno; (reason != ENOTSUP && reason != EPERM && reason != EXDEV && reason != EINVAL && reason != ENOSYS && reason != EMLINK) ||
+                   ::renamex_np(temporary.c_str(), path.fileSystemRepresentation, RENAME_EXCL) != 0)
             throw std::runtime_error("Cannot publish save without replacing an existing file");
-          unlink(temporary.c_str());
         } catch (...) {
           unlink(temporary.c_str());
           throw;
@@ -1006,6 +1030,17 @@
       }
       succeeded([self instrumentSettings:index values:v error:&problem], problem);
 #include "PluginLibraryAPI.inc"
+    } else if ([method isEqual:@"plugin.locations.get"]) {
+      allowed(@[]);
+      result = @{@"unresolved": [self unresolvedPluginLocations]};
+    } else if ([method isEqual:@"plugin.locations.trust"]) {
+      // Explicit consent only: the caller names each canonical bundle path.
+      allowed(@[ @"canonicalPaths" ]);
+      NSArray *paths = array(p[@"canonicalPaths"], 128);
+      require(paths.count > 0, "Name the canonical plugin locations to trust");
+      for (id path in paths) require(string(path, 4096).isAbsolutePath, "Plugin locations must be absolute canonical paths");
+      succeeded([self trustPluginLocations:paths error:&problem], problem);
+      result = @{@"trusted": paths, @"unresolved": [self unresolvedPluginLocations], @"pluginError": @(_pluginError.c_str())};
     } else if ([method isEqual:@"plugin.discover"]) {
       allowed(@[ @"rescan", @"format" ]);
       NSString *format = p[@"format"] ? string(p[@"format"]) : nil;

@@ -1,4 +1,5 @@
 #import "../Bridge/TrackerSession.h"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioUnitHost.hpp"
 #include <cmath>
 #include <dlfcn.h>
@@ -7,7 +8,7 @@ using namespace Tracker;
 std::vector<PluginDescriptor> registerFixtureAUs();
 static void check(bool value,const char *message){if(!value)throw std::runtime_error(message);}
 static NSDictionary *dictionary(const PluginDescriptor &d){return @{@"type":@(d.type),@"subtype":@(d.subtype),@"manufacturer":@(d.manufacturer),@"name":@(d.name.c_str()),@"format":@(d.format.c_str()),@"path":@(d.path.c_str()),@"classID":@(d.classID.c_str()),@"isInstrument":@(d.instrument)};}
-int main(int argc,char **argv){@autoreleasepool{
+int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{
  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".resonance"]];
  try {
   check(argc==2,"Local fixture path required");auto vst=NativePlugin::discoverVST3(argv[1]);auto au=registerFixtureAUs();

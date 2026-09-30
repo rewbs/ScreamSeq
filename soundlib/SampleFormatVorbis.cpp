@@ -301,16 +301,16 @@ bool CSoundFile::ReadVorbisSample(SAMPLEINDEX sample, FileReader &file)
 		int decodedSamples = 0;
 		float **output = nullptr;
 		consumed = stb_vorbis_decode_frame_pushdata(vorb.get(), mpt::byte_cast<const unsigned char*>(data), mpt::saturate_cast<int>(dataLeft), &frame_channels, &output, &decodedSamples);
-		// The entire file is pinned: need_more_data without progress is truncated,
-		// not an invitation to retry the same bytes forever.
+		// The entire file is pinned: need_more_data without progress is truncated
+		// or trailing non-Vorbis data, not an invitation to retry the same bytes
+		// forever. Keep what was decoded; an empty result fails below.
 		if(consumed <= 0 || static_cast<std::size_t>(consumed) > dataLeft)
-			return false;
+			break;
 		file.Skip(consumed);
 		data += consumed;
 		dataLeft -= consumed;
-		if(decodedSamples > 0 && (frame_channels != channels || !output))
-			return false;
-		if(decodedSamples > 0)
+		// Skip a frame that cannot be copied as the stream's declared layout.
+		if(decodedSamples > 0 && frame_channels == channels && output)
 		{
 			raw_sample_data.resize(raw_sample_data.size() + (channels * decodedSamples));
 			CopyAudio(mpt::audio_span_interleaved(raw_sample_data.data() + (offset * channels), channels, decodedSamples), mpt::audio_span_planar(output, channels, decodedSamples));

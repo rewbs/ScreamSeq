@@ -31,7 +31,7 @@ class CommandPalette {
 		}
 		return DefSubclassProc(h,m,w,l);
 	}
-	void close() { ShowWindow(window_,SW_HIDE); SetFocus(owner_); }
+	void close() { if(window_) ShowWindow(window_,SW_HIDE); SetFocus(owner_); }
 	void execute() {
 		auto at=SendMessageW(list_,LB_GETCURSEL,0,0);
 		if(at<0 || static_cast<size_t>(at)>=matches_.size()) return;
@@ -65,6 +65,8 @@ class CommandPalette {
 		if(!p) return DefWindowProcW(h,m,w,l);
 		switch(m) {
 		case WM_CLOSE:p->close();return 0;
+		// Destroyed with its owner: the destructor must not reuse the handles.
+		case WM_NCDESTROY:p->window_=nullptr;p->edit_=nullptr;p->list_=nullptr;SetWindowLongPtrW(h,GWLP_USERDATA,0);break;
 		case WM_SIZE:if(p->edit_) p->layout();return 0;
 		case WM_COMMAND:
 			if(reinterpret_cast<HWND>(l)==p->edit_ && HIWORD(w)==EN_CHANGE) p->filter();
@@ -79,9 +81,9 @@ class CommandPalette {
 	}
 public:
 	CommandPalette(HWND owner,std::vector<WorkspaceCommand> commands,std::function<void(int)> run):owner_(owner),commands_(std::move(commands)),run_(std::move(run)) {}
-	~CommandPalette() { if(window_) DestroyWindow(window_);if(font_) DeleteObject(font_);DeleteObject(background_); }
+	~CommandPalette() { if(window_ && IsWindow(window_)) DestroyWindow(window_);if(font_) DeleteObject(font_);DeleteObject(background_); }
 	void show() {
-		if(!window_) {
+		if(!window_ || !IsWindow(window_)) {
 			auto instance=GetModuleHandleW(nullptr); WNDCLASSW wc{};wc.lpfnWndProc=proc;wc.hInstance=instance;wc.lpszClassName=L"ScreamSeqCommands";wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
 			RegisterClassW(&wc); RECT owner{};GetWindowRect(owner_,&owner);float s=GetDpiForWindow(owner_)/96.0f;
 			window_=CreateWindowExW(WS_EX_TOOLWINDOW,wc.lpszClassName,L"Commands - Enter runs / Up-Down choose / Esc closes",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_THICKFRAME,

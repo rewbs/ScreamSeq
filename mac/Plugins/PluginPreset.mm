@@ -1,4 +1,5 @@
 #include "PluginPreset.hpp"
+#include <cstdio>
 #include "../Bridge/AutomationValidation.hpp"
 #include <CommonCrypto/CommonDigest.h>
 #include <cerrno>
@@ -110,7 +111,12 @@ NSDictionary *PluginPreset::write(NSString *path, NSDictionary *plugin, NSData *
       if (count <= 0) throw std::runtime_error("Cannot write complete preset"); position += size_t(count);
     }
     if (fsync(file.fd) != 0) throw std::runtime_error("Cannot flush preset data");
-    const int published = overwrite ? rename(temporary.c_str(), path.fileSystemRepresentation) : link(temporary.c_str(), path.fileSystemRepresentation);
+    int published = overwrite ? rename(temporary.c_str(), path.fileSystemRepresentation) : link(temporary.c_str(), path.fileSystemRepresentation);
+    // exFAT and some network volumes have no hard links. An exclusive rename
+    // keeps the no-replace guarantee: it fails if the destination now exists.
+    if (published != 0 && !overwrite)
+      if (const int reason = errno; reason == ENOTSUP || reason == EPERM || reason == EXDEV || reason == EINVAL || reason == ENOSYS || reason == EMLINK)
+        published = renamex_np(temporary.c_str(), path.fileSystemRepresentation, RENAME_EXCL);
     if (published != 0) throw std::runtime_error("Cannot publish preset; existing destination was retained");
     unlink(temporary.c_str());
   } catch (...) { unlink(temporary.c_str()); throw; }

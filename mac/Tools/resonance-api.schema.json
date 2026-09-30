@@ -2228,6 +2228,84 @@
       "additionalProperties": false
     },
     {
+      "description": "List missing VST3 plugins of the open document whose stored bundle exists outside the trusted plugin locations: name, classID, storedPath, canonicalPath, kind and isInstrument. Loads and trusts nothing.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "plugin.locations.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Explicit consent to load plugin code from outside the standard plug-in folders. Every path must be the exact canonicalPath of an entry from plugin.locations.get. Bundles are validated in the isolated scanner, trusted, remembered for later launches, and the waiting rack and graph plugins resolve in place with their saved state. Call only after the user agreed.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "plugin.locations.trust"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "canonicalPaths": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "canonicalPaths"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
       "description": "Read built-in effects and cached native AU/VST3 plugins. Use format Built-in for immediate scan-free discovery; AU/VST3 filter the installed inventory. Rescan refreshes external plugins only.",
       "type": "object",
       "properties": {

@@ -43,6 +43,9 @@ int main(){@autoreleasepool{try{
   root[@"recoveryTake"][@"events"]=@[@{@"pattern":pattern,@"track":track,@"position":@1234,@"note":@200,@"instrument":@1,@"velocity":@93}];write();
   revision=recovered.automationRevision;
   check(![recovered openPath:path error:&error]&&[recovered.automationRevision isEqual:revision],"Malformed recovery is rejected without replacing the current document");
+  // A replaced document must not inherit the previous song's take.
+  check(source.recordingTakeID!=nil,"Source still owns its take");[source newSong:NO];
+  check(!source.recordingActive&&source.recordingTakeID==nil&&[source savePath:path error:&error],"New song discards the take and can be saved");
   [[NSFileManager defaultManager]removeItemAtPath:directory error:nil];
   std::cout<<"PASS recovery snapshot: active take isolation, exact recall, stopped restore, commit/undo, incompatible and malformed takes\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<"\n";return 1;}}}

@@ -1,4 +1,5 @@
 #import "../Bridge/TrackerSession.h"
+#include "FixtureTrust.hpp"
 #include "editor/TrackerDocument.hpp"
 #include <filesystem>
 #include <iostream>
@@ -7,7 +8,7 @@ static void check(bool value, const char *message) {
   if (!value)
     throw std::runtime_error(message);
 }
-int main(int argc, char **argv) {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool {
     try {
       TrackerSession *session = [TrackerSession new];

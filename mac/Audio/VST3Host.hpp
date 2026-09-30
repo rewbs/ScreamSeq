@@ -28,6 +28,12 @@ public:
   void closeEditor();
   bool editorOpen() const;
   bool popEdit(uint32_t &, float &) noexcept;
+  // Editor values ignored as invalid/unknown, plus UI notifications lost to a
+  // full queue. Diagnostic only: neither stops rendering.
+  uint64_t droppedEdits() const noexcept;
+  // Note-ons discarded because the releases owed to the same channel and pitch
+  // by an earlier all-notes-off did not fit ahead of them. Diagnostic only.
+  uint64_t droppedNotes() const noexcept;
   static std::vector<PluginDescriptor> discover(const std::string &bundle);
 };
 } // namespace Tracker

@@ -54,6 +54,10 @@ int main(int argc,char **argv){try{
   bool cancelled=false;rejects([&]{LibraryIndex::scan({text(root)},[&]{cancelled=true;return true;});},"cancelled scan published");check(cancelled,"scan did not check cancellation");
   auto unavailable=LibraryIndex::scan({text(root/L"Missing")});check(unavailable->count()==0&&unavailable->warnings().size()==1,"unavailable root warning");
   auto again=LibraryIndex::scan({text(root)});check(again->multisample(text(root/L"Keys/048 Piano C3.wav"))["id"]==group["id"],"family identity changed on rescan");
+  // One unrepresentable name is skipped with a warning; the scan continues.
+  const auto lone=root/L"Drums"/(std::wstring(L"Lone ")+wchar_t(0xD800)+L" Kick.wav");file(lone);
+  auto tolerant=LibraryIndex::scan({text(root)});check(tolerant->count()==11&&tolerant->warnings().size()==1,"unrepresentable file name aborted or polluted the scan");
+  {std::error_code error;fs::remove(lone,error);}
   std::cout<<"PASS native sample index filtering, overlap deduplication, Unicode search/tags, pagination, note-family detection, octave conventions, cache validation and cancellation\n";
   return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

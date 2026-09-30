@@ -1,4 +1,5 @@
 #include "../Audio/NativeSignalGraph.hpp"
+#include "FixtureTrust.hpp"
 #include "editor/NativeEffects.hpp"
 #include <iostream>
 #include <cmath>
@@ -14,7 +15,7 @@ static SignalDefinition definition(uint64_t id,const PluginDescriptor &p,bool am
   if(amount){d.nodes.push_back({id+4,SignalNodeKind::Amount,"Amount"});d.modulation={{id+4,id+2,7}};}
   return d;
 }
-int main(int argc,char **argv){@autoreleasepool{try{
+int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Pass VST3 fixture");auto plugins=NativePlugin::discoverVST3(argv[1]);
   auto gain=definition(100,plugins[0],true);
   auto builtin=NativePlugin::builtins();auto dc=std::find_if(builtin.begin(),builtin.end(),[](const auto &p){return p.classID=="resonance.dc-offset.v1";});check(dc!=builtin.end(),"DC fixture available");

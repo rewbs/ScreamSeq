@@ -33,7 +33,12 @@ extension SignalGraphEditor {
     mutate("plugin.parameters.set",["slot":slot,"values":[["id":9,"value":2]]])
   }
   func moveNodes(_ positions:[(String,Double,Double)]) {
-    guard !loading else{rebuild();return}
+    guard !loading else{
+      let context=[projectionDocument]+viewContext
+      if pendingMoveContext != context {pendingMoves=[:]};pendingMoveContext=context
+      for(id,x,y)in positions{pendingMoves[id]=(x,y)}
+      return
+    }
     if graphID==nil{
       let groupIDs=Set(processingGroups.compactMap{$0["id"] as? String})
       let valid=positions.filter{p in canvas.nodes.first{$0.id==p.0}?.kind != "boundary"}

@@ -1,4 +1,5 @@
 #import "../Bridge/TrackerSession.h"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioUnitHost.hpp"
 #import <AppKit/AppKit.h>
 #include <dlfcn.h>
@@ -8,7 +9,7 @@ using namespace Tracker;
 static void check(bool value, const char *message) {
   if (!value) throw std::runtime_error(message);
 }
-int main(int argc, char **argv) {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool {
     try {
       check(argc >= 2, "Fixture bundle required");

@@ -182,6 +182,14 @@ std::unique_ptr<Document> Document::demo(MODTYPE type)
 		s.m_szNames[index] = names[index];
 	}
 	const int notes[] = {49, 56, 61, 56, 46, 53, 58, 53, 44, 51, 56, 51, 48, 55, 60, 55};
+	// Formats without a volume column (MOD) store volume as effect Cxx. Writing
+	// it there directly keeps the demo identical after a module save/reopen.
+	const bool volumeColumn = s.GetModSpecifications().HasVolCommand(VOLCMD_VOLUME);
+	auto setVolume = [&](ModCommand &m, uint8_t volume)
+	{
+		if(volumeColumn) { m.volcmd = VOLCMD_VOLUME; m.vol = volume; }
+		else { m.command = CMD_VOLUME; m.param = volume; }
+	};
 	for(int r = 0; r < 64; ++r)
 	{
 		auto &p = s.Patterns[0];
@@ -190,16 +198,14 @@ std::unique_ptr<Document> Document::demo(MODTYPE type)
 			auto &m = *p.GetpModCommand(r, 0);
 			m.note = notes[r / 4];
 			m.instr = 1;
-			m.volcmd = VOLCMD_VOLUME;
-			m.vol = 38;
+			setVolume(m, 38);
 		}
 		if(r % 16 == 0)
 		{
 			auto &m = *p.GetpModCommand(r, 1);
 			m.note = notes[r / 4] - 12;
 			m.instr = 2;
-			m.volcmd = VOLCMD_VOLUME;
-			m.vol = 42;
+			setVolume(m, 42);
 		}
 		if(r % 8 == 0)
 		{
@@ -690,9 +696,10 @@ int Document::addPattern(int rows, bool duplicate, int source)
 		if(!s.Patterns.Insert(index, rows)) throw std::runtime_error("Could not allocate pattern.");
 		if(duplicate && s.Patterns.IsValidPat(source))
 		{
-			auto &from = s.Patterns[source];
-			for(int r = 0; r < std::min(rows, int(from.GetNumRows())); ++r)
-				for(int c = 0; c < s.GetNumChannels(); ++c) *s.Patterns[index].GetpModCommand(r, c) = *from.GetpModCommand(r, c);
+			// Pattern assignment also copies name, colour, signature and tempo swing.
+			auto &copy = s.Patterns[index];
+			copy = s.Patterns[source];
+			if(copy.GetNumRows() != ROWINDEX(rows) && !copy.Resize(ROWINDEX(rows))) throw std::runtime_error("Could not allocate pattern.");
 			auto entity = native.patterns.at(source);
 			entity.id = native.makeEntity().id;
 			native.clonePatternAutomation(native.patterns.at(source).id, entity.id);

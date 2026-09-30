@@ -7,6 +7,7 @@
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstevents.h"
+#include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstmidicontrollers.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstunits.h"
@@ -15,6 +16,8 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <algorithm>
+#include <string>
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 namespace Steinberg {
@@ -65,6 +68,22 @@ extern "C" __attribute__((visibility("default"))) int ResonanceFixtureGesture(do
   }
   return count;
 }
+// Host-robustness hooks: arbitrary editor reports, latency announced during
+// setup, self-connection counting and completely filled factory strings.
+extern "C" __attribute__((visibility("default"))) int ResonanceFixtureEdit(uint32_t id, double value) {
+  int count = 0;
+  for (auto *handler : fixtureHandlers) if (handler && handler->performEdit(id, value) == kResultOk) ++count;
+  return count;
+}
+static bool fixtureAnnounceLatency=false,fixtureUnterminated=false;
+// One voice per channel and pitch, as in most synthesizers: any note-off ends
+// it. Makes the ORDER of note-on and note-off events observable.
+static bool fixtureSingleVoice=false;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureSingleVoice(bool enabled){fixtureSingleVoice=enabled;}
+static int fixtureConnections=0;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureAnnounceLatency(bool enabled){fixtureAnnounceLatency=enabled;}
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureUnterminated(bool enabled){fixtureUnterminated=enabled;}
+extern "C" __attribute__((visibility("default"))) int ResonanceFixtureConnections(){return fixtureConnections;}
 static bool same(const TUID a, const FUID &b) {
   return FUnknownPrivate::iidEqual(a, b);
 }
@@ -157,7 +176,7 @@ public:
   tresult PLUGIN_API canResize() override { return kResultFalse; }
   tresult PLUGIN_API checkSizeConstraint(ViewRect *r) override { return getSize(r); }
 };
-class Fixture final : public IComponent, public IAudioProcessor, public IEditController, public IUnitInfo, public IMidiMapping {
+class Fixture final : public IComponent, public IAudioProcessor, public IEditController, public IUnitInfo, public IMidiMapping, public IConnectionPoint {
   std::atomic<uint32> refs{1};
   bool instrument, delayed, programs;
   bool initialized = false, active = false, processing = false;
@@ -190,6 +209,7 @@ public:
       *out = static_cast<IEditController *>(this);
     else if (instrument && fixturePitchMode && same(id, IMidiMapping::iid)) *out = static_cast<IMidiMapping *>(this);
     else if (programs && same(id, IUnitInfo::iid)) *out = static_cast<IUnitInfo *>(this);
+    else if (same(id, IConnectionPoint::iid)) *out = static_cast<IConnectionPoint *>(this);
     if (*out) {
       addRef();
       return kResultOk;
@@ -235,7 +255,11 @@ public:
     if (type == kAudio && dir == kInput) inputsActive[index] = active;
     return kResultOk;
   }
+  tresult PLUGIN_API connect(IConnectionPoint *) override { ++fixtureConnections; return kResultOk; }
+  tresult PLUGIN_API disconnect(IConnectionPoint *) override { return kResultOk; }
+  tresult PLUGIN_API notify(IMessage *) override { return kResultOk; }
   tresult PLUGIN_API setActive(TBool value) override {
+    if (value && fixtureAnnounceLatency && handler) handler->restartComponent(kLatencyChanged);
     if (value && appliedLatency != fixtureLatency.load()) {
       appliedLatency = fixtureLatency.load(); dynamicDelay.fill(0); dynamicPosition = 0;
     }
@@ -312,7 +336,9 @@ public:
       for (int32 i = 0; i < d.inputEvents->getEventCount(); ++i) {
         Event e{};
         d.inputEvents->getEvent(i, e);
-        if (e.type == Event::kNoteOnEvent)
+        if (fixtureSingleVoice && e.type == Event::kNoteOnEvent) notes[(e.noteOn.channel & 15) * 128 + (e.noteOn.pitch & 127)] = 1;
+        else if (fixtureSingleVoice && e.type == Event::kNoteOffEvent) notes[(e.noteOff.channel & 15) * 128 + (e.noteOff.pitch & 127)] = 0;
+        else if (e.type == Event::kNoteOnEvent)
           ++notes[(e.noteOn.channel & 15) * 128 + (e.noteOn.pitch & 127)];
         else if (e.type == Event::kNoteOffEvent) {
           if (notes[(e.noteOff.channel & 15) * 128 + (e.noteOff.pitch & 127)])
@@ -438,6 +464,7 @@ public:
                            : effectID,
                     PClassInfo::kManyInstances, kVstAudioEffectClass,
                     i == 3 ? "Resonance Test Programs" : i ? "Resonance Test Instrument" : "Resonance Test Gain");
+    if (fixtureUnterminated) std::memset(p->name, 'N', sizeof(p->name));
     return kResultOk;
   }
   tresult PLUGIN_API getClassInfo2(int32 i, PClassInfo2 *p) override {
@@ -449,6 +476,10 @@ public:
     std::strcpy(p->category, kVstAudioEffectClass);
     std::strcpy(p->name, i == 3 ? "Resonance Test Programs" : i ? "Resonance Test Instrument" : "Resonance Test Gain");
     std::strcpy(p->subCategories, i && i != 3 ? "Instrument|Synth" : "Fx");
+    if (fixtureUnterminated) {
+      std::memset(p->subCategories, 'x', sizeof(p->subCategories));
+      if (i && i != 3) std::memcpy(p->subCategories + sizeof(p->subCategories) - 10, "Instrument", 10);
+    }
     return kResultOk;
   }
   tresult PLUGIN_API createInstance(FIDString cid, FIDString iid, void **out) override {

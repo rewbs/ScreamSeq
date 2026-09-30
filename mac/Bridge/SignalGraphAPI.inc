@@ -61,6 +61,7 @@
       allowed(@[@"controller",@"value"]);result=@{@"delivered":@(_audio->graphController(uint8_t(integer(p[@"controller"],0,127)),uint8_t(integer(p[@"value"],0,127))))};
     } else if ([method hasPrefix:@"graph."]) {
       NativeSong next=_document->native();auto &graph=next.signal;
+      decltype(_pluginPathHints.graph) clonedPathHints;
       const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
       uint64_t affected=0,nodeID=0,groupID=0;
       auto definition=[&](id raw)->SignalDefinition &{auto id=decodeNativeID(raw);auto found=std::find_if(graph.library.begin(),graph.library.end(),[&](const auto &d){return d.id==id;});require(found!=graph.library.end(),"Subgraph does not exist");return *found;};
@@ -107,8 +108,8 @@
         const bool exporting=[method isEqual:@"graph.group.export"];
         allowed(exporting?@[@"graph",@"group",@"name",@"number",@"dryRun"]:@[@"graph",@"name",@"number",@"dryRun"]);auto copy=definition(p[@"graph"]);
         if(exporting){const auto input=next.makeEntity().id,output=next.makeEntity().id;try{copy=extractSignalGroup(copy,decodeNativeID(p[@"group"]),input,output);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}}
-        copy.id=next.makeEntity().id;affected=copy.id;copy.number=p[@"number"]?uint16_t(integer(p[@"number"],1,999)):newNumber();copy.name=string(p[@"name"]?:@(copy.name.c_str()),256).UTF8String;
-        std::map<uint64_t,uint64_t> mapping;for(auto &node:copy.nodes){const auto id=next.makeEntity().id;mapping[node.id]=id;node.id=id;}
+        const auto sourceGraph=copy.id;copy.id=next.makeEntity().id;affected=copy.id;copy.number=p[@"number"]?uint16_t(integer(p[@"number"],1,999)):newNumber();copy.name=string(p[@"name"]?:@(copy.name.c_str()),256).UTF8String;
+        std::map<uint64_t,uint64_t> mapping;for(auto &node:copy.nodes){const auto id=next.makeEntity().id;mapping[node.id]=id;if(const auto hint=_pluginPathHints.graph.find({sourceGraph,node.id});hint!=_pluginPathHints.graph.end()){const auto stored=hint->second;clonedPathHints[{copy.id,id}]=stored;}node.id=id;}
         for(auto &group:copy.groups){const auto id=next.makeEntity().id;mapping[group.id]=id;group.id=id;}
         for(auto &group:copy.groups){if(group.parent)group.parent=mapping.at(group.parent);for(auto &member:group.nodes)member=mapping.at(member);}
         for(const auto &l:std::vector<EnvelopeLink>(next.envelopeLinks))if(l.target.kind==EnvelopeTargetKind::Graph&&mapping.contains(l.target.owner)){auto link=l;link.target.owner=mapping.at(l.target.owner);next.envelopeLinks.push_back(link);}
@@ -120,6 +121,8 @@
         auto updated=decodeSignalDefinition(replacement);affected=updated.id;
         // New identities are allocated by graph.node.add, never supplied by a client.
         for(const auto &node:updated.nodes)require(std::any_of(previous.nodes.begin(),previous.nodes.end(),[&](const auto &n){return n.id==node.id&&n.kind==node.kind;}),"Add nodes using graph.node.add; node identities and kinds cannot be replaced");
+        // A changed bundle location is a hint to resolve, exactly as when opening a project.
+        for(auto &node:updated.nodes)if(node.kind==SignalNodeKind::Plugin){auto existing=std::find_if(previous.nodes.begin(),previous.nodes.end(),[&](const auto &n){return n.id==node.id;});if(existing==previous.nodes.end()||existing->plugin.path!=node.plugin.path||existing->plugin.classID!=node.plugin.classID||existing->plugin.format!=node.plugin.format)[self resolveGraphRecipe:node.plugin];}
         for(const auto &group:updated.groups)require(std::any_of(previous.groups.begin(),previous.groups.end(),[&](const auto &g){return g.id==group.id;}),"Allocate group identities using graph.group.create");
         previous=std::move(updated);
       } else if([method isEqual:@"graph.group.create"]) {
@@ -156,7 +159,7 @@
           if(p[@"slot"]){const auto slot=pluginSlot();auto source=_plugins[slot];if(!_audio->active()&&_pluginError.empty()&&!_audio->hasAutomatedState())source=_audio->pluginStates().at(slot);require(!source.descriptor.instrument&&source.descriptor.type!=kAudioUnitType_MusicDevice,"Subgraph inserts require an effect plugin");const auto &s=source.descriptor;
             n.plugin={s.format,s.name,s.path,s.classID,s.type,s.subtype,s.manufacturer,source.state,source.auxiliaryInputs,source.auxiliaryOutputs};
             n.name=string(p[@"name"]?:@(s.name.c_str()),256).UTF8String;
-          }else n.plugin=decodeSignalRecipe(p[@"plugin"]);
+          }else {n.plugin=decodeSignalRecipe(p[@"plugin"]);[self resolveGraphRecipe:n.plugin];}
         } else require(!p[@"slot"]&&!p[@"plugin"],"Only plugin nodes accept plugin recipes");
         require(!p[@"insertAfter"]||!p[@"insertEdge"],"Choose insertAfter or insertEdge, not both");
         if(p[@"insertEdge"]) {
@@ -240,4 +243,5 @@
         if(processing&&(!controls||(_audio->active()&&!plan)))_audio->stop();
         _document->annotate([&](NativeSong &native){native=next;},[&]{if(plan)require(_audio->publishGraphControls(std::move(plan)),"Graph parameter queue is busy; retry the edit");});
       }
+      if(changed&&!dry)_pluginPathHints.graph.merge(clonedPathHints);
       result=@{@"dryRun":@(dry),@"wouldChange":@(changed),@"graph":affected?nativeID(affected):@"",@"node":nodeID?nativeID(nodeID):@"",@"group":groupID?nativeID(groupID):@""};
