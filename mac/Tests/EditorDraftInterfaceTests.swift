@@ -164,6 +164,7 @@ extension InterfaceTests {
       "assignments": [], "commands": [], "lanes": []]
     var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
     editor.onRequest = { method, params, reply in calls.append((method, params)); replies.append(reply) }
+    editor.load(); replies.removeFirst()(["result": ["revision": "g:0", "data": data]]); calls = []
     editor.graphID = "n100"; editor.update(data)
     editor.disconnect()
     try require(calls.isEmpty && editor.status.stringValue.contains("Select a wire"), "Remove connection needs a wire the musician selected")
@@ -191,12 +192,12 @@ extension InterfaceTests {
     editor.load()
     editor.moveNodes([("n101",99,77)])
     try require(calls.count == 1, "A move made while loading is not dropped into a second request")
-    replies.removeFirst()(["result": ["revision": "g1", "data": data]])
+    replies.removeFirst()(["result": ["revision": "g:1", "data": data]])
     try require(editor.name.stringValue == "Typed" && editor.hasDraft, "A reload keeps a typed node name")
     let queued = ((calls.last?.1["definition"] as? [String: Any])?["nodes"] as? [[String: Any]])?.first { $0["id"] as? String == "n101" }
     try require(calls.count == 2 && queued?["x"] as? Double == 99, "The queued move is sent after the load and the node stays where it was dropped")
     replies.removeFirst()(["error": ["message": "captured"]])
-    editor.reload(); replies.removeFirst()(["result": ["revision": "g1", "data": data]])
+    editor.reload(); replies.removeFirst()(["result": ["revision": "g:1", "data": data]])
     try require(editor.name.stringValue == "Slow sweep" && !editor.hasDraft, "Reload discards typed inspector text")
 
     let last = editor.canvas.nodes.last!.id
@@ -211,7 +212,7 @@ extension InterfaceTests {
     editor.selectConnection(output)
     editor.picker(editor.source, editor.canvas.nodes.map { ($0.title, $0.id) }, select: "n3")
     editor.updateConnection()
-    try require(calls.isEmpty && editor.status.stringValue.contains("Remove and reconnect"), "Update wire cannot reroute a different bus through the Source popup")
+    try require(calls.isEmpty && editor.status.stringValue.contains("source bus"), "Update wire cannot reroute a different bus through the Source popup")
     editor.selectConnection(output); editor.updateConnection()
     try require(calls.last?.0 == "mixer.bus.set" && calls.last?.1["bus"] as? String == "n1", "Update wire still edits the selected wire's own bus")
     replies.removeAll()
