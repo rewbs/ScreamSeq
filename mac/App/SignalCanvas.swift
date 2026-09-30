@@ -172,7 +172,13 @@ final class SignalCanvas: NSView {
   private func geometry(_ from:NSPoint,_ to:NSPoint)->Wire {
     let distance=max(50,abs(to.x-from.x)*0.5),a=NSPoint(x:from.x+distance,y:from.y),b=NSPoint(x:to.x-distance,y:to.y)
     let path=NSBezierPath();path.move(to:from);path.curve(to:to,controlPoint1:a,controlPoint2:b)
-    let samples=(0...32).map{i -> NSPoint in let t=Double(i)/32,u=1-t;return NSPoint(x:u*u*u*from.x+3*u*u*t*a.x+3*u*t*t*b.x+t*t*t*to.x,y:u*u*u*from.y+3*u*u*t*a.y+3*u*t*t*b.y+t*t*t*to.y)}
+    let samples:[NSPoint]=(0...32).map { i in
+      let t=CGFloat(i)/32,u=1-t
+      let w0=u*u*u,w1=3*u*u*t,w2=3*u*t*t,w3=t*t*t
+      let x=w0*from.x+w1*a.x+w2*b.x+w3*to.x
+      let y=w0*from.y+w1*a.y+w2*b.y+w3*to.y
+      return NSPoint(x:x,y:y)
+    }
     return Wire(path:path,samples:samples,from:from,to:to,bounds:path.bounds.insetBy(dx:-12,dy:-24))
   }
   private func rebuildGeometry(){

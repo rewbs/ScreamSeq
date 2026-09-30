@@ -10,6 +10,8 @@
 
 #include "stdafx.h"
 #include "SampleEdit.h"
+#include "../common/mptCPU.h"
+#include "mpt/arch/feature_fence.hpp"
 #include "../soundlib/AudioCriticalSection.h"
 #include "../soundlib/MixFuncTable.h"
 #include "../soundlib/mod_specifications.h"
