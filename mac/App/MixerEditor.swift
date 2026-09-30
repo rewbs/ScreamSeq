@@ -11,11 +11,12 @@ final class MixerSlider: NSSlider {
   }
 }
 
-final class MixerControl: NSView {
+final class MixerControl: NSView, NSTextFieldDelegate {
   let slider = MixerSlider(), value = NSTextField(string: "0")
   let key: String, scale: Double
   var onChange: ((String, Double, Bool) -> Void)?
   var onFinish: (() -> Void)?
+  private(set) var editingValue=false
   init(_ title: String, key: String, min: Double, max: Double, scale: Double = 1) {
     self.key = key; self.scale = scale
     super.init(frame: .zero)
@@ -23,7 +24,7 @@ final class MixerControl: NSView {
     slider.target = self; slider.action = #selector(changed)
     slider.onFinish = { [weak self] in self?.onFinish?() }
     slider.setAccessibilityLabel(title)
-    value.target = self; value.action = #selector(entered); value.fixed(width: 68)
+    value.target = self; value.action = #selector(entered); value.delegate = self; value.fixed(width: 68)
     value.setAccessibilityLabel("\(title) value")
     let label = Theme.label(title, size: 12); label.fixed(width: 90)
     stack(.horizontal, [label, slider, value]).fill(self)
@@ -38,10 +39,14 @@ final class MixerControl: NSView {
     onChange?(key, slider.doubleValue / scale, !slider.trackingGesture)
   }
   @objc private func entered() {
+    editingValue=false
     guard let number = Double(value.stringValue), number.isFinite,
       number >= slider.minValue, number <= slider.maxValue else { set(slider.doubleValue / scale); return }
+    guard number != slider.doubleValue else { return }
     slider.doubleValue = number; onChange?(key, number / scale, true)
   }
+  func controlTextDidEndEditing(_ notification: Notification) { entered() }
+  func controlTextDidChange(_ notification: Notification) {editingValue=true}
 }
 
 final class MixerMeterView: NSView {
@@ -57,13 +62,14 @@ final class MixerMeterView: NSView {
   }
 }
 
-final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
+final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
   let table = NSTableView(), status = Theme.label("", size: 12, color: Theme.muted)
   let heading = Theme.label("Mixer", size: 20, weight: .semibold)
   let strips = MixerStrips(frame: .zero)
   let viewMode = NSSegmentedControl(labels: ["Strips", "Routing"], trackingMode: .selectOne, target: nil, action: nil)
   let name = NSTextField(string: ""), color = NSTextField(string: "000000"), timing = NSTextField(string: "0")
   let output = NSPopUpButton(), insert = NSPopUpButton(), effect = NSPopUpButton()
+  let rack = PluginRack(frame: .zero)
   let send = NSPopUpButton(), sendTarget = NSPopUpButton(), sendGain = NSTextField(string: "-12")
   let preSend = NSButton(checkboxWithTitle: "Pre-fader", target: nil, action: nil)
   let sendEnabled = NSButton(checkboxWithTitle: "Enabled", target: nil, action: nil)
@@ -77,11 +83,13 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     MixerControl("Balance · %", key: "pan", min: -1, max: 1, scale: 100),
     MixerControl("Width · %", key: "width", min: 0, max: 2, scale: 100)]
   var buses = [[String: Any]](), plugins = [[String: Any]](), sources = [[String: Any]]()
-  var selectedID: String?, revision = "", active = false, loading = false
+  var selectedID: String?, revision = "", active = false, loading = false, implicit = false
+  private var pendingNavigation: String?
   var onRequest: ((String, [String: Any], @escaping ([String: Any]) -> Void) -> Void)?
   var onSidechains: (() -> Void)?
   var onConfigurePlugin: ((Int) -> Void)?
   var onOpenPlugin: ((String) -> Void)?, onPluginControls: ((String) -> Void)?
+  var onAddPlugin: ((String) -> Void)?
   private var destinations = [[String: Any]](), effects = [[String: Any]](), instruments = [[String: Any]]()
   private var draft = [String: Any](), commitWanted = false
   private var controlRequestInFlight = false
@@ -104,6 +112,20 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     table.setAccessibilityLabel("Mixer tracks, groups and returns")
     let list = verticalScrollView(); list.documentView = table; list.fixed(width: 230)
     name.setAccessibilityLabel("Bus name"); color.setAccessibilityLabel("Bus color in hexadecimal")
+    for field in [name, color, timing] { field.delegate = self; field.target = self; field.action = #selector(fieldChanged(_:)) }
+    output.target = self; output.action = #selector(route)
+    rack.onSelect = { [weak self] id in self?.selectInsert(id) }
+    rack.onOpen = { [weak self] id in self?.onOpenPlugin?(id) }
+    rack.onRemove = { [weak self] id in guard let self, let slot = self.plugins.first(where: { $0["id"] as? String == id })?["slot"] as? Int else { return }; self.mutate("plugin.remove", ["slot": slot]) }
+    rack.onBypass = { [weak self] id, bypass in
+      guard let self, let slot = self.plugins.first(where: { $0["id"] as? String == id })?["slot"] as? Int else { return }
+      self.mutate("plugin.bypass", ["slot": slot, "bypass": bypass])
+    }
+    rack.onDrop = { [weak self] id, before, _ in
+      guard let self, let selectedID = self.selectedID else { return }
+      self.mutate("mixer.inserts.move", ["plugins": [id], "target": selectedID, "before": before as Any? ?? NSNull()])
+    }
+    rack.menuForItem = { [weak self] id in self?.insertMenu(id) ?? NSMenu() }
     color.fixed(width: 80); timing.fixed(width: 65); timing.setAccessibilityLabel("Track timing offset in milliseconds")
     for (picker, label) in [(output, "Bus output"), (insert, "Insert chain"), (effect, "Available effect"),
       (send, "Existing send"), (sendTarget, "Send destination"), (source, "Plugin instrument source")] {
@@ -119,18 +141,14 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     meter.fixed(height: 20); peak.fixed(width: 90)
     let controlStack = stack(.vertical, controls); controlStack.stretchAcrossAxis()
     let inspectorContent = stack(.vertical, [
-      stack(.horizontal, [name, Theme.label("Color", size: 11), color,
-        ActionButton("Rename") { [weak self] in self?.rename() }]),
+      stack(.horizontal, [name, Theme.label("Color", size: 11), color]),
       stack(.horizontal, [meter, peak, mute, solo]),
       controlStack,
-      stack(.horizontal, [Theme.label("Output", size: 12), output,
-        ActionButton("Route") { [weak self] in self?.route() }, Theme.label("Timing · ms", size: 11), timing,
-        ActionButton("Set") { [weak self] in self?.setTiming() }]),
+      stack(.horizontal, [Theme.label("Output", size: 12), output, Theme.label("Timing · ms", size: 11), timing]),
       stack(.horizontal, [Theme.label("INSERT EFFECTS", size: 10, color: Theme.muted, weight: .semibold), NSView(), ActionButton("Sidechains…") { [weak self] in self?.onSidechains?() }]),
-      stack(.horizontal, [insert, ActionButton("Controls") { [weak self] in self?.openInsert(controls: true) },
-        ActionButton("Open UI") { [weak self] in self?.openInsert() }, ActionButton("↑") { [weak self] in self?.moveInsert(-1) },
-        ActionButton("↓") { [weak self] in self?.moveInsert(1) }, ActionButton("Remove") { [weak self] in self?.removeInsert() }]),
-      stack(.horizontal, [effect, ActionButton("Add effect") { [weak self] in self?.addInsert() }]),
+      rack,
+      stack(.horizontal, [ActionButton("Add effect…", symbol: "plus", prominent: true) { [weak self] in guard let self, let id = self.selectedID else { return }; self.onAddPlugin?(id) },
+        ActionMenuButton("Insert actions…") { [weak self] in self?.insertMenu(self?.rack.selectedID) ?? NSMenu() }, NSView()]),
       Theme.label("SENDS", size: 10, color: Theme.muted, weight: .semibold),
       stack(.horizontal, [send, ActionButton("Remove send") { [weak self] in self?.removeSend() }]),
       stack(.horizontal, [sendTarget, sendGain, Theme.label("dB", size: 11), preSend, sendEnabled,
@@ -158,13 +176,9 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     let body = NSView(); contentRow.fill(body); strips.fill(body)
     enableButton = ActionButton("Enable mixer") { [weak self] in self?.mutate("mixer.enable", [:]) }
     let content = stack(.vertical, [
-      stack(.horizontal, [heading, NSView(), viewMode, enableButton,
-        ActionButton("Add group") { [weak self] in self?.mutate("mixer.bus.add", ["kind": "group"]) },
-        ActionButton("Add return") { [weak self] in self?.mutate("mixer.bus.add", ["kind": "return"]) },
-        ActionButton("Remove bus") { [weak self] in self?.removeBus() },
-        ActionButton("Reload") { [weak self] in self?.load() }]),
+      stack(.horizontal, [heading, NSView(), viewMode, ActionMenuButton { [weak self] in self?.busMenu() ?? NSMenu() }]),
       body, status,
-      Theme.label("Faders audition smoothly and save one Undo per gesture. Routing and insert changes stop playback.", size: 11, color: Theme.muted)
+      Theme.label("Faders audition smoothly · one Undo per gesture. Edit connections in Graph.", size: 11, color: Theme.muted)
     ], spacing: 14)
     content.stretchAcrossAxis(); content.fill(self, inset: 20)
     changeViewMode()
@@ -185,6 +199,13 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     }
     return true
   }
+  // Panel bridges may arrive before the asynchronous mixer snapshot. Keep the
+  // stable destination until that snapshot lands; never retarget a fader edit.
+  func navigate(to id: String) {
+    pendingNavigation = id
+    if !draft.isEmpty { finishGesture() }
+    if !loading { load() }
+  }
   func stripControl(_ id: String, key: String, value: Any, final: Bool) {
     guard selectBus(id) else { refreshStrips(); return }
     control(key, value: value, final: final)
@@ -199,15 +220,22 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
   }
   func load() {
     guard !loading, draft.isEmpty else { return }
-    request("mixer.get", [:]) { self.update($0) }
+    request("mixer.get", ["includeImplicit": true]) { self.update($0) }
   }
   func synchronize(_ token: String) {
     if token != revision && !loading && draft.isEmpty { load() }
   }
   func update(_ data: [String: Any]) {
-    active = data["active"] as? Bool ?? false; buses = data["buses"] as? [[String: Any]] ?? []
+    implicit = data["implicit"] as? Bool ?? false
+    active = (data["active"] as? Bool ?? false) || implicit; buses = data["buses"] as? [[String: Any]] ?? []
     plugins = data["plugins"] as? [[String: Any]] ?? []; sources = data["instruments"] as? [[String: Any]] ?? []
-    enableButton.isEnabled = !active; inspector.isHidden = !active
+    enableButton.isHidden = true; inspector.isHidden = !active
+    if let target = pendingNavigation {
+      pendingNavigation = nil
+      if buses.contains(where: { $0["id"] as? String == target }) {
+        selectedID = target; viewMode.selectedSegment = 1; changeViewMode()
+      }
+    }
     if !buses.contains(where: { $0["id"] as? String == selectedID }) { selectedID = buses.first?["id"] as? String }
     table.reloadData()
     if let index = buses.firstIndex(where: { $0["id"] as? String == selectedID }) {
@@ -243,7 +271,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     guard !loading || controlRequestInFlight else {
       status.stringValue = "Wait for the mixer to finish loading before adjusting controls."; showSelected(); refreshStrips(); return
     }
-    draft[key] = value; commitWanted = commitWanted || final; refreshStrips(); sendControls()
+    draft[key] = value; commitWanted = commitWanted || final || implicit; refreshStrips(); sendControls()
   }
   func finishGesture() { guard !draft.isEmpty else { return }; commitWanted = true; sendControls() }
   private func sendControls() {
@@ -259,8 +287,10 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
         }
         self.table.reloadData()
         self.refreshStrips()
-        self.status.stringValue = "Mixer controls saved · one document Undo"
-        if !self.draft.isEmpty { self.sendControls() } else { self.showSelected() }
+        self.status.stringValue = "Mixer controls saved · ⌘Z to undo"
+        if !self.draft.isEmpty { self.sendControls() }
+        else if self.pendingNavigation != nil { self.load() }
+        else { self.showSelected() }
       } else if self.commitWanted || !NSDictionary(dictionary: values).isEqual(to: self.draft) { self.sendControls() }
     }
   }
@@ -278,7 +308,13 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     if let index = destinations.firstIndex(where: { $0["id"] as? String == bus["output"] as? String }) { output.selectItem(at: index+1) }
     output.isEnabled = bus["kind"] as? String != "master"
     let inserts = bus["inserts"] as? [String] ?? []
+    let previousInsert = rack.selectedID
     insert.removeAllItems(); insert.addItems(withTitles: inserts.map { id in plugins.first { $0["id"] as? String == id }?["name"] as? String ?? "Unavailable plugin" })
+    rack.update(inserts.compactMap { id in
+      guard var item = plugins.first(where: { $0["id"] as? String == id }) else { return nil }
+      item["instanceID"] = id; item["ownerID"] = selectedID; return item
+    }, selected: previousInsert)
+    if let previousInsert { selectInsert(previousInsert) }
     effects = plugins.filter { $0["instrument"] as? Bool != true }
     effect.removeAllItems(); effect.addItems(withTitles: effects.map { $0["name"] as? String ?? "Effect" })
     instruments = plugins.filter { $0["instrument"] as? Bool == true }.flatMap { plugin -> [[String: Any]] in
@@ -323,11 +359,51 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
   }
   @objc private func changeMute() { control("mute", value: mute.state == .on, final: true) }
   @objc private func changeSolo() { control("solo", value: solo.state == .on, final: true) }
+  func selectInsert(_ id: String) {
+    if let index = (selected?["inserts"] as? [String] ?? []).firstIndex(of: id) { insert.selectItem(at: index) }
+  }
+  func insertMenu(_ id: String?) -> NSMenu {
+    let menu = NSMenu(title: "Mixer inserts"); menu.autoenablesItems = false
+    if let id, let slot = plugins.first(where: { $0["id"] as? String == id })?["slot"] as? Int {
+      menu.addItem(ContextAction("Open interface / controls") { [weak self] in self?.onOpenPlugin?(id) })
+      menu.addItem(ContextAction("Plugin controls and presets…") { [weak self] in self?.onPluginControls?(id) })
+      for (title, direction) in [("Move earlier", -1), ("Move later", 1)] {
+        menu.addItem(ContextAction(title) { [weak self] in self?.selectInsert(id); self?.moveInsert(direction) })
+      }
+      menu.addItem(ContextAction("Remove plugin") { [weak self] in self?.mutate("plugin.remove", ["slot": slot]) })
+    }
+    let existing = NSMenu(title: "Move existing effect here"); existing.autoenablesItems = false
+    for entry in effects {
+      guard let id = entry["id"] as? String, let target = selectedID else { continue }
+      existing.addItem(ContextAction(entry["name"] as? String ?? "Effect") { [weak self] in
+        self?.mutate("mixer.inserts.move", ["plugins": [id], "target": target])
+      })
+    }
+    ContextActions.appendMenu(existing, to: menu); return menu
+  }
+  func busMenu() -> NSMenu {
+    let menu = NSMenu(title: "Mixer"); menu.autoenablesItems = false
+    menu.addItem(ContextAction("Add group") { [weak self] in self?.mutate("mixer.bus.add", ["kind": "group"]) })
+    menu.addItem(ContextAction("Add return") { [weak self] in self?.mutate("mixer.bus.add", ["kind": "return"]) })
+    menu.addItem(ContextAction("Remove bus", enabled: selected?["kind"] as? String == "group" || selected?["kind"] as? String == "return") { [weak self] in self?.removeBus() })
+    menu.addItem(ContextAction("Reload") { [weak self] in self?.load() })
+    return menu
+  }
+  @objc private func fieldChanged(_ sender: NSTextField) {
+    guard let selectedID, let selected else { return }
+    if sender === name {
+      if name.stringValue != selected["name"] as? String { mutate("mixer.bus.set", ["bus": selectedID, "name": name.stringValue]) }
+    } else if sender === color {
+      guard let value = Int(color.stringValue, radix: 16), (0...0xffffff).contains(value) else { status.stringValue = "Use a six-digit hexadecimal color."; return }
+      if value != selected["color"] as? Int { mutate("mixer.bus.set", ["bus": selectedID, "color": value]) }
+    } else if sender === timing, timing.doubleValue != ((selected["timingMS"] as? NSNumber)?.doubleValue ?? 0) { setTiming() }
+  }
+  func controlTextDidEndEditing(_ notification: Notification) { if let field = notification.object as? NSTextField { fieldChanged(field) } }
   private func rename() {
     guard let selectedID, let color = Int(color.stringValue, radix: 16), (0...0xffffff).contains(color) else { status.stringValue = "Use a six-digit hexadecimal color."; return }
     mutate("mixer.bus.set", ["bus": selectedID, "name": name.stringValue, "color": color])
   }
-  private func route() {
+  @objc private func route() {
     guard let selectedID, selected?["kind"] as? String != "master" else { return }
     let index=output.indexOfSelectedItem-1
     guard index == -1 || destinations.indices.contains(index) else{return}

@@ -14,8 +14,9 @@ final class GraphLaneStrip:NSView {
   var onEdit:((String,Int,Int)->Void)?,onClear:((String,Int,Int)->Void)?
   private var state=""
   override var isFlipped:Bool{true}
+  override var isOpaque:Bool{true}
   override var acceptsFirstResponder:Bool{true}
-  override init(frame:NSRect){super.init(frame:frame);setAccessibilityRole(.group);setAccessibilityLabel("Pattern graph command lanes");setAccessibilityHelp("Graph commands aligned to pattern rows. Arrow keys select row and lane. Return edits, Delete removes the command.")}
+  override init(frame:NSRect){super.init(frame:frame);wantsLayer=true;setAccessibilityRole(.group);setAccessibilityLabel("Pattern graph command lanes");setAccessibilityHelp("Graph commands aligned to pattern rows. Arrow keys select row and lane. Return edits, Delete removes the command.")}
   required init?(coder:NSCoder){fatalError()}
   static func key(_ row:Int,_ target:String,_ column:Int)->String{"\(row):\(target):\(column)"}
   func refresh(){guard let pattern else{return};let newState="\(pattern.model.revisionToken):\(pattern.model.pattern):\(pattern.firstRow):\(pattern.cursorRow):\(pattern.playRow):\(pattern.headerHeight):\(pattern.rowHeight):\(firstLane):\(selected)";guard newState != state else{return};state=newState;lanes=pattern.model.graphLanes;commands=pattern.model.graphCommands;selected=min(selected,max(0,lanes.count-1));firstLane=min(firstLane,max(0,lanes.count-1));needsDisplay=true}

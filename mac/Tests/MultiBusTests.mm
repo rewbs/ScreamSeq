@@ -1,5 +1,6 @@
 #include "../Audio/AudioUnitHost.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "editor/hosted/RenderOnce.hpp"
 #include "soundlib/ModInstrument.h"
 #import "../Bridge/TrackerSession.h"
 #include <iostream>
@@ -22,18 +23,23 @@ static NSDictionary *dictionary(const PluginDescriptor &d) {
   return @{@"type": @(d.type), @"subtype": @(d.subtype), @"manufacturer": @(d.manufacturer), @"name": @(d.name.c_str()),
     @"format": @(d.format.c_str()), @"path": @(d.path.c_str()), @"classID": @(d.classID.c_str()), @"isInstrument": @(d.instrument)};
 }
-static void hostOutputs(PluginState source, uint32_t rate, uint32_t block) {
+static void hostOutputs(PluginState source, uint32_t rate, uint32_t block, bool sharedPlans=false) {
   source.auxiliaryOutputs = {1, 2, 31};
-  NativePlugin plugin(source, rate, true);
+  auto owner=std::make_shared<NativePlugin>(source,rate,true);
+  auto &plugin=*owner;RenderOnce<NativePlugin> shared(owner);
   check(plugin.buses().size() == 32, "All 32 instrument buses are described without renumbering");
   check(plugin.buses()[1].channels == 1 && plugin.buses()[2].channels == 2 && !plugin.buses()[3].active, "Mono/stereo and disabled bus metadata");
   check(plugin.state().auxiliaryOutputs == source.auxiliaryOutputs, "Opaque plugin state capture retains bus configuration");
   plugin.prepareMusicalAutomation(); plugin.schedule(7, .25f, 37); plugin.schedule(7, .8f, 113); plugin.schedule(7, .1f, 4097);
   plugin.midi(0x90, 60, 127);
-  std::array<float, 8192> main{};
+  std::array<float, 8192> main{},copy{};
   for (uint32_t pos = 0; pos < 8192; pos += block) {
     const auto frames = std::min(block, 8192 - pos);
-    tracker_audit_begin(); const bool ok = plugin.process(main.data(), frames, pos); auditEnd(ok);
+    tracker_audit_begin();
+    bool ok=sharedPlans ? shared.process(main.data(),frames,pos):plugin.process(main.data(),frames,pos);
+    if(sharedPlans)ok=shared.process(copy.data(),frames,pos) && ok;
+    auditEnd(ok);
+    if(sharedPlans)check(std::equal(main.begin(),main.begin()+frames*2,copy.begin()),"Sharing an instrument copies its current output without rescheduling MIDI or automation");
     for (uint32_t i = 0; i < frames; ++i) {
       const uint32_t at = pos + i; const float gain = at < 37 ? .5f : at < 113 ? .25f : at < 4097 ? .8f : .1f;
       check(std::abs(main[i * 2] - .2f * gain) < 1e-7, "Main bus parameter boundary");
@@ -47,10 +53,11 @@ static void hostOutputs(PluginState source, uint32_t rate, uint32_t block) {
   }
   check(!plugin.auxiliaryOutput(3) && !plugin.auxiliaryOutput(64), "Disabled and invalid outputs have no audio buffer");
 }
-static void hostInputs(PluginState effect, uint32_t rate, uint32_t block) {
-  effect.auxiliaryInputs = {1}; NativePlugin plugin(effect, rate, true);
+static void hostInputs(PluginState effect, uint32_t rate, uint32_t block, bool sharedPlans=false) {
+  effect.auxiliaryInputs = {1}; auto owner=std::make_shared<NativePlugin>(effect,rate,true);
+  auto &plugin=*owner;RenderOnce<NativePlugin> shared(owner);
   plugin.prepareMusicalAutomation(); plugin.schedule(7, .25f, 37); plugin.schedule(7, .8f, 113);
-  std::array<float, 8192> main{}, side{};
+  std::array<float, 8192> main{}, side{},copy{};
   const PluginAudioInput input{1, side.data()};
   for (uint32_t pos = 0; pos < 8192; pos += block) {
     const auto frames = std::min(block, 8192 - pos);
@@ -58,7 +65,11 @@ static void hostInputs(PluginState effect, uint32_t rate, uint32_t block) {
       main[i * 2] = .2; main[i * 2 + 1] = -.1;
       side[i * 2] = float((pos + i) % 97) / 97; side[i * 2 + 1] = .1;
     }
-    tracker_audit_begin(); const bool ok = plugin.process(main.data(), frames, pos, {&input, 1}); auditEnd(ok);
+    tracker_audit_begin();
+    bool ok=sharedPlans ? shared.process(main.data(),frames,pos,{&input,1}):plugin.process(main.data(),frames,pos,{&input,1});
+    if(sharedPlans)ok=shared.process(copy.data(),frames,pos,{&input,1}) && ok;
+    auditEnd(ok);
+    if(sharedPlans)check(std::equal(main.begin(),main.begin()+frames*2,copy.begin()),"Both plans receive identical detector-driven output without advancing the effect twice");
     for (uint32_t i = 0; i < frames; ++i) {
       const auto at = pos + i; const float gain = at < 37 ? .5f : at < 113 ? .25f : .8f;
       const float sideValue = (side[i * 2] + side[i * 2 + 1]) * .5f;
@@ -98,6 +109,7 @@ static void graphOutputs(PluginState synth, uint32_t rate) {
   });
   synth.instanceID = "synth"; synth.instrument = 1; synth.auxiliaryOutputs = {1, 2};
   auto reference = graphRender(*doc, synth, rate, 128, false);
+  synth.auxiliaryOutputs.clear(); // The routes alone activate these native ports.
   for (auto block : {17u, 512u, 4096u}) {
     auto rendered = graphRender(*doc, synth, rate, block, true);
     check(reference == rendered, "Multi-output native graph and musical automation are exact across live/offline callback sizes");
@@ -141,6 +153,7 @@ static void graphSidechains(PluginState effect, PluginState synth, uint32_t rate
     return out;
   };
   auto actual = render(128, false);
+  effect.auxiliaryInputs.clear();synth.auxiliaryOutputs.clear();
   for (auto block : {17u, 512u, 4096u}) check(actual == render(block, true), "AU/VST3 sidechain and parameter envelopes are callback-independent live/offline");
   doc->annotate([](NativeSong &n) {
     n.mixer.sidechains.clear(); for (auto &point : n.automation[0].points) point.value *= 1.2;
@@ -155,13 +168,13 @@ int main(int argc, char **argv) {
     check(argc == 2, "Fixture bundle path required");
     auto descriptors = NativePlugin::discoverVST3(argv[1]);
     for (uint32_t rate : {44100, 48000, 96000}) {
-      for (auto block : {17u, 128u, 512u, 4096u}) { hostOutputs({descriptors[1]}, rate, block); hostInputs({descriptors[0]}, rate, block); }
+      for (auto block : {17u, 128u, 512u, 4096u}) for(bool shared:{false,true}) { hostOutputs({descriptors[1]}, rate, block,shared); hostInputs({descriptors[0]}, rate, block,shared); }
       graphOutputs({descriptors[1]}, rate);
       graphSidechains({descriptors[0]}, {descriptors[1]}, rate);
     }
     auto au = registerFixtureAUs();
     for (uint32_t rate : {44100, 48000, 96000}) {
-      for (auto block : {17u, 128u, 512u, 4096u}) { hostOutputs({au[1]}, rate, block); hostInputs({au[0]}, rate, block); }
+      for (auto block : {17u, 128u, 512u, 4096u}) for(bool shared:{false,true}) { hostOutputs({au[1]}, rate, block,shared); hostInputs({au[0]}, rate, block,shared); }
       graphOutputs({au[1]}, rate);
       graphSidechains({au[0]}, {au[1]}, rate);
     }
@@ -194,7 +207,7 @@ int main(int argc, char **argv) {
     call(@"history.redo", @{@"domain": @"plugins"}, true);
     call(@"mixer.enable", @{}, true);
     auto graph = call(@"mixer.get", @{})[@"data"]; auto bus = graph[@"buses"][1][@"id"];
-    rejects(@"mixer.instrument.route", @{@"plugin": id, @"target": bus, @"output": @2});
+    rejects(@"mixer.instrument.route", @{@"plugin": id, @"target": bus, @"output": @32});
     call(@"mixer.instrument.route", @{@"plugin": id, @"target": bus, @"output": @31}, true);
     NSData *project = [session serializedData];
     NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".resonance"]];
@@ -205,7 +218,7 @@ int main(int argc, char **argv) {
     reply = [reopened automationMethod:@"mixer.get" params:@{} error:&problem];
     check([reply[@"data"][@"instruments"][0][@"output"] intValue] == 31, "Native output identity persists without renumbering");
     call(@"plugin.buses.set", @{@"slot": @0, @"outputs": @[]}, true);
-    check([call(@"mixer.get", @{})[@"data"][@"instruments"] count] == 1, "Disabling retains a dormant route for reactivation");
+    check([call(@"mixer.get", @{})[@"data"][@"instruments"] count] == 1, "Manual disable retains the route; connected ports enable on playback");
     call(@"mixer.instrument.route", @{@"plugin": id, @"target": NSNull.null, @"output": @31}, true);
     check([call(@"mixer.get", @{})[@"data"][@"instruments"] count] == 0, "API can remove an auxiliary route");
     call(@"plugin.add", @{@"descriptor": dictionary(descriptors[0])}, true);
@@ -213,9 +226,9 @@ int main(int argc, char **argv) {
     NSString *effectID = mixer[@"plugins"][1][@"id"], *programBus = mixer[@"buses"][0][@"id"];
     call(@"mixer.bus.set", @{@"bus": programBus, @"inserts": @[effectID]}, true);
     NSDictionary *side = @{@"plugin": effectID, @"input": @1, @"sources": @[@{@"source": bus, @"preFader": @YES}]};
-    rejects(@"mixer.sidechains.set", side);
+    auto inactivePreview=[side mutableCopy];inactivePreview[@"dryRun"]=@YES;check([call(@"mixer.sidechains.set",inactivePreview,true)[@"data"][@"wouldChange"] boolValue],"Supported inactive detector is directly routable");
     call(@"plugin.buses.set", @{@"slot": @1, @"inputs": @[@1]}, true);
-    rejects(@"mixer.sidechains.set", @{@"plugin": effectID, @"input": @0, @"sources": @[]});
+    rejects(@"mixer.sidechains.set", @{@"plugin": effectID, @"input": @64, @"sources": @[]});
     rejects(@"mixer.sidechains.set", @{@"plugin": effectID, @"input": @1, @"sources": @[@{@"source": programBus}]});
     rejects(@"mixer.sidechains.set", @{@"plugin": effectID, @"input": @1, @"sources": @[@{@"source": bus}, @{@"source": bus}]});
     NSMutableDictionary *preview = [side mutableCopy]; preview[@"dryRun"] = @YES;

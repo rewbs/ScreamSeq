@@ -25,5 +25,7 @@ std::vector<Edit> preparePatternPaste(const Document &, uint16_t pattern, uint16
 	uint16_t rows, uint16_t channels, const std::vector<Cell> &, uint8_t fields, const std::string &mode, bool clip);
 } // namespace Tracker
 namespace Tracker {
+struct ClipboardNote { uint16_t channel=0; PreciseNote event; };
+void preparePreciseNotePaste(const Document &, NativeSong &, const PatternRegion &, const std::vector<ClipboardNote> &, uint8_t fields, const std::string &mode, bool clip);
 NativeSong prepareEffectTransform(const Document &, const std::vector<PatternRegion> &, const PatternTransform &);
 }

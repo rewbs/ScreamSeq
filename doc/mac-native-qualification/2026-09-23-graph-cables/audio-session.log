@@ -1,0 +1,9 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-rewire
+    Start 69: signal-graph-session
+    Start 52: native-mixer
+1/2 Test #69: signal-graph-session .............   Passed    2.28 sec
+2/2 Test #52: native-mixer .....................   Passed    8.93 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   8.95 sec

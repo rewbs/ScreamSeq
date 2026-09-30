@@ -14,6 +14,8 @@ extension AppController {
     }
     ContextActions.appendMenu(columns,to:menu)
     menu.addItem(.separator())
+    menu.addItem(ContextAction("Cut selection",key:"x",modifiers:.command,enabled:!busy){[weak self] in self?.patternView.cut(nil)})
+    menu.addItem(ContextAction("Use instrument from cursor",key:"\r",enabled:!busy){[weak self] in self?.patternView.useCursorInstrument(nil)})
     menu.addItem(ContextAction("Copy selection",key:"c",modifiers:.command){[weak self] in self?.patternView.copy(nil)})
     menu.addItem(ContextAction("Paste",key:"v",modifiers:.command,enabled:!busy){[weak self] in self?.patternView.paste(nil)})
     menu.addItem(ContextAction("Mute / unmute channel"){[weak self] in self?.patternView.onMute?(channel)})
@@ -32,6 +34,8 @@ extension AppController {
       if hit===self.patternView || hit.isDescendant(of:self.patternView){return event}
       // Preserve native text editing/spelling and popup-control menus.
       if hit is NSTextView || (hit as? NSTextField)?.isEditable==true || hit is NSPopUpButton {return event}
+      var object: NSView? = hit
+      while let view = object { if view is DirectActionTable { return event }; object = view.superview }
       var ancestor:NSView?=hit,panel:WorkspacePanel?
       while let view=ancestor {if let found=view as? WorkspacePanel {panel=found;break};ancestor=view.superview}
       guard let root=panel?.content ?? (window===self.window ? nil : content) else{return event}
@@ -41,13 +45,28 @@ extension AppController {
         if self.pluginEditor.filteredValues.indices.contains(row),self.model.nativePlugins.indices.contains(self.pluginEditor.selected) {
           let parameter=self.pluginEditor.filteredValues[row],plugin=self.model.nativePlugins[self.pluginEditor.selected]
           if let id=parameter["id"] as? Int,let identity=plugin["instanceID"] as? String {
+            menu.addItem(ContextAction("Automate this parameter…"){[weak self] in self?.automateParameter(plugin:identity,parameter:id)})
+            menu.addItem(ContextAction("Inspect parameter activity…"){[weak self] in self?.showParameterActivity(plugin:identity,parameter:id)})
             for (label,kind) in [("PS · Set this parameter in pattern…","parameter-set"),("PL · Slide this parameter in pattern…","parameter-slide")] {
               menu.addItem(ContextAction(label,enabled:!self.busy && parameter["writable"] as? Bool != false && (kind=="parameter-set" || parameter["canSlide"] as? Bool==true)){[weak self] in self?.openPatternPerformance(kind:kind,target:(identity,id))})
             }
           }
         }
       }
-      if let canvas=hit as? SignalCanvas {canvas.selectForContext(event)}
+      if let canvas=hit as? SignalCanvas {
+        if event.modifierFlags.contains(.control){return event}
+        canvas.selectForContext(event)
+        if let node=canvas.selected,self.signalGraphEditor.songNodePlugin[node] != nil {
+          menu.addItem(GraphCommand.openPlugin.item("Open plugin interface",key:"\r"){[weak canvas] in canvas?.onOpen?(node)})
+          menu.addItem(GraphCommand.bypass.item("Toggle bypass",key:"m"){[weak canvas] in canvas?.onBypass?()})
+          menu.addItem(.separator())
+        }
+        if let edge=canvas.selectedEdge {
+          menu.addItem(ContextAction("Edit connection…",key:"\r"){[weak canvas] in canvas?.onEditEdge?(edge)})
+          menu.addItem(ContextAction("Remove connection",key:"\u{7f}",enabled:self.signalGraphEditor.selectedConnectionIsEditable){[weak canvas] in canvas?.onDelete?()})
+          menu.addItem(.separator())
+        }
+      }
       let title=panel.map{$0.title+" actions"} ?? "Editor actions"
       ContextActions.appendMenu(ContextActions.controls(in:root,title:title),to:menu)
       if let panel {

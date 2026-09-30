@@ -4,6 +4,13 @@
 #include <fstream>
 #include <iostream>
 using namespace Tracker;
+#ifdef TRACKER_SANITIZER
+static void tracker_audit_begin() {}
+static void tracker_audit_end(uint64_t *a,uint64_t *f,uint64_t *l){*a=*f=*l=0;}
+#else
+extern "C" void tracker_audit_begin();
+extern "C" void tracker_audit_end(uint64_t *,uint64_t *,uint64_t *);
+#endif
 static void check(bool ok, const char *why) { if (!ok) throw std::runtime_error(why); }
 template<class F> static void rejects(F f) { bool caught=false; try { f(); } catch(const std::exception &) { caught=true; } check(caught,"Expected loop rejection"); }
 static auto geometry(const ModSample &s) { return SampleEditGeometry{s.nLength,s.nLoopStart,s.nLoopEnd,s.nSustainStart,s.nSustainEnd,s.uFlags.GetRaw(),s.cues,s.nativeReverseLoops}; }
@@ -27,6 +34,23 @@ static void independent(ModSample &s,int normal,int sustain) {
   s.uFlags.set(CHN_SUSTAINLOOP,sustain>0);s.uFlags.set(CHN_PINGPONGSUSTAIN,sustain==2);
 }
 int main() { @autoreleasepool { try {
+  for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u}) {
+    auto doc=Document::demo();Renderer renderer(doc->snapshotData(),rate,0,true);
+    renderer.preview({61,0,100,true,1});std::array<float,8192> audio{};renderer.render(audio.data(),block);
+    for(auto mode:{0,1,2,3}) {
+      auto g=geometry(doc->song().GetSample(1));g.loopStart=32;g.loopEnd=128;g.sustainStart=48;g.sustainEnd=96;
+      g.flags|=uint16_t(CHN_LOOP);g.flags=mode==2 ? g.flags|uint16_t(CHN_PINGPONGLOOP):g.flags&~uint16_t(CHN_PINGPONGLOOP);
+      if(mode==1)g.flags|=uint16_t(CHN_SUSTAINLOOP);g.reverseLoops=mode==3?1:0;
+      check(renderer.updateSampleLoops(1,g),"Live loop edit is accepted");
+      uint64_t allocations,frees,locks;tracker_audit_begin();renderer.render(audio.data(),block);tracker_audit_end(&allocations,&frees,&locks);
+      check(allocations+frees+locks==0,"Live loop adoption is allocation/free/lock free");
+      const auto &sample=renderer.song().GetSample(1);check(sample.nLoopStart==32&&sample.nLoopEnd==128,"Loop edit reaches the playback-owned sample");
+      for(const auto &voice:renderer.song().m_PlayState.Chn)if(voice.isPreviewNote&&voice.pModSample==&sample&&voice.nLength)
+        check(voice.nLoopStart==(mode==1?48:32)&&voice.nLoopEnd==(mode==1?96:128),"Loop edits reach an already sounding voice");
+      check(!renderer.faulted()&&std::all_of(audio.begin(),audio.begin()+block*2,[](float x){return std::isfinite(x);}),"Live loop modes remain finite");
+    }
+    check(renderer.telemetry().frames==5*block,"Loop edits retain transport position");
+  }
   size_t cases=0;
   for(auto type:{MOD_TYPE_MOD,MOD_TYPE_S3M,MOD_TYPE_XM,MOD_TYPE_IT,MOD_TYPE_MPT})for(int bits:{8,16})for(int channels:{1,2})
     for(int normal=0;normal<4;++normal)for(int sustain=0;sustain<4;++sustain) {

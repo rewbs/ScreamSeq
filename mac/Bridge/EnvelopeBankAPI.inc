@@ -32,7 +32,13 @@
         // Instrument data is prepared separately so dryRun never touches live voices.
         auto checked=next;std::erase_if(checked.envelopeLinks,[&](const auto &l){return std::any_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.first==l.target;});});checked.validate(song);
         bool changed=next!=_document->native();for(const auto &[t,e]:instruments){auto before=captureEnvelope(_document->native(),song,t);changed|=before!=captureInstrumentEnvelope(e);}
-        if(changed&&!dry){_audio->stop();if(instruments.empty())_document->annotate([&](NativeSong &n){n=next;});else _document->transaction([&](CSoundFile &s,NativeSong &n){n=next;for(const auto &[t,e]:instruments)for(const auto &[slot,i]:n.instruments)if(i.id==t.owner)instrumentEnvelope(*s.Instruments[slot],@[@"volume",@"pan",@"pitch"][uint8_t(t.kind)-2])=e;});}
+        if(changed&&!dry){
+          if(instruments.empty())_document->annotate([&](NativeSong &n){n=next;},[&]{
+            if(!sameSignalProcessing(next.signal,_document->native().signal))_audio->stop();
+            else if(next.automation!=_document->native().automation)_audio->updateMusicalAutomation(next);
+          });
+          else {_audio->stop();_document->transaction([&](CSoundFile &s,NativeSong &n){n=next;for(const auto &[t,e]:instruments)for(const auto &[slot,i]:n.instruments)if(i.id==t.owner)instrumentEnvelope(*s.Instruments[slot],@[@"volume",@"pan",@"pitch"][uint8_t(t.kind)-2])=e;});}
+        }
         result=@{@"id":affected,@"dryRun":@(dry),@"wouldChange":@(changed)};
       }
       } catch(const std::invalid_argument &e) { throw Error(-32602,e.what()); }

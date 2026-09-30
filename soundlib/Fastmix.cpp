@@ -44,7 +44,76 @@ struct MixLoopState
 	alignas(16) std::array<int16, (NativeFrames + 2 * InterpolationLookaheadBufferSize) * 2> nativeScratch;
 	SamplePosition nativeRebase;
 	bool nativeScratchActive = false;
+	bool recordNudgeScratch = false;
 	bool nativeCrossedEnd = false;
+
+	// Scratching crosses zero speed and either loop boundary. Build physical-order
+	// interpolation taps on the stack, retaining fractional phase even in reverse.
+	// The ordinary mixer (and every unextended module) stays on its existing path.
+	uint32 RecordNudgeSampleCount(ModChannel &chn, int &nominalDirection)
+	{
+		if(!samplePointer || !chn.pModSample || !chn.nLength) return 0;
+		auto raw = chn.position.GetRaw();
+		const auto first = SamplePosition(chn.nLoopStart, 0).GetRaw();
+		const auto end = SamplePosition(chn.nLength, 0).GetRaw();
+		const bool loop = chn.dwFlags[CHN_LOOP] && end > first;
+		const bool pingpong = loop && chn.dwFlags[CHN_PINGPONGLOOP];
+		if(loop && (raw >= end || (raw < first && chn.increment.IsNegative())))
+		{
+			if(pingpong)
+			{
+				const auto length = end - first - (int64(ITPingPongDiff) << 32);
+				if(length <= 0) { raw = first; chn.increment.Set(0); }
+				else {
+					const auto phase = ((raw-first) % (2*length) + 2*length) % (2*length);
+					const bool reflect = phase >= length;
+					raw = std::min(end-1, first + (reflect ? 2*length-phase : phase));
+					if(reflect) { chn.increment.Negate(); nominalDirection = -nominalDirection; }
+					chn.dwFlags.set(CHN_PINGPONGFLAG, nominalDirection < 0);
+				}
+			} else {
+				const auto length = end-first;
+				raw = first + ((raw-first) % length + length) % length;
+			}
+			chn.dwFlags.set(CHN_WRAPPED_LOOP);
+			chn.position = SamplePosition(raw);
+		}
+		if(raw < 0 || raw >= end) return 0;
+		const auto integer = chn.position.GetInt();
+		// Most frames need no boundary mapping: let the resampler read the
+		// original PCM directly. Gather taps only near a turn, wrap or endpoint.
+		const int64 left = int64(integer) - InterpolationLookaheadBufferSize;
+		const int64 right = int64(integer) + InterpolationLookaheadBufferSize;
+		if(left >= 0 && right < chn.nLength &&
+			(!loop || left >= chn.nLoopStart || (!chn.dwFlags[CHN_WRAPPED_LOOP] && !chn.increment.IsNegative())))
+		{
+			chn.pCurrentSample = samplePointer;
+			return 1;
+		}
+		const auto stride = chn.pModSample->GetBytesPerSample();
+		auto *out = reinterpret_cast<std::byte *>(nativeScratch.data());
+		const auto *in = chn.pModSample->sampleb();
+		for(int i=0; i<2*InterpolationLookaheadBufferSize+1; ++i)
+		{
+			int64 source = int64(integer) + i - InterpolationLookaheadBufferSize;
+			if(loop && (source >= chn.nLength || (source < chn.nLoopStart && (chn.dwFlags[CHN_WRAPPED_LOOP] || chn.increment.IsNegative()))))
+			{
+				const int64 length = chn.nLength - chn.nLoopStart;
+				if(pingpong) {
+					const int64 span = std::max<int64>(1, length - ITPingPongDiff);
+					const auto phase = ((source-chn.nLoopStart)%(2*span)+2*span)%(2*span);
+					source = chn.nLoopStart + (phase>=span ? 2*span-phase : phase);
+				} else source = chn.nLoopStart + ((source-chn.nLoopStart)%length+length)%length;
+			}
+			source = std::clamp<int64>(source,0,chn.pModSample->nLength-1);
+			std::memcpy(out + size_t(i)*stride, in + size_t(source)*stride, stride);
+		}
+		nativeRebase = SamplePosition(integer - InterpolationLookaheadBufferSize, 0);
+		chn.position -= nativeRebase;
+		chn.pCurrentSample = nativeScratch.data();
+		nativeScratchActive = recordNudgeScratch = true;
+		return 1;
+	}
 
 	uint32 NativeSampleCount(ModChannel &chn, uint32 count)
 	{
@@ -76,7 +145,8 @@ struct MixLoopState
 		if(!nativeScratchActive) return;
 		chn.position += nativeRebase;
 		nativeCrossedEnd = chn.position >= SamplePosition(chn.nLoopEnd, 0);
-		chn.position = chn.nativeReverseLoop.Advance(chn.position);
+		if(!recordNudgeScratch) chn.position = chn.nativeReverseLoop.Advance(chn.position);
+		recordNudgeScratch = false;
 		chn.pCurrentSample = samplePointer;
 		nativeScratchActive = false;
 	}
@@ -411,18 +481,22 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 #ifdef OPENMPT_EDITOR_CORE
 	const CHANNELINDEX nativeParent = chn.nMasterChn ? chn.nMasterChn - 1 : channel;
 	const double *nativeRatios = nativeParent < nativePitchRatios.size() && !chn.isPreviewNote ? nativePitchRatios[nativeParent] : nullptr;
+	const double *nudgeForces = nativeParent < nativeNudgeForces.size() && !chn.isPreviewNote ? nativeNudgeForces[nativeParent] : nullptr;
 	const auto unpitchedIncrement = chn.increment;
+	int nudgeDirection = chn.increment.IsNegative() ? -1 : 1;
 	struct RestoreNativeIncrement
 	{
 		ModChannel &channel;
 		SamplePosition original;
 		bool active;
+		const double *nudges;
+		int &direction;
 		~RestoreNativeIncrement()
 		{
-			if(active && !channel.increment.IsZero())
-				channel.increment = SamplePosition((channel.increment.IsNegative() ? -1 : 1) * std::abs(original.GetRaw()));
+			if(active && (nudges || !channel.increment.IsZero()))
+				channel.increment = SamplePosition((nudges ? direction : (channel.increment.IsNegative() ? -1 : 1)) * std::abs(original.GetRaw()));
 		}
-	} restoreIncrement{chn, unpitchedIncrement, nativeRatios != nullptr};
+	} restoreIncrement{chn, unpitchedIncrement, nativeRatios != nullptr || nudgeForces != nullptr, nudgeForces, nudgeDirection};
 #endif
 	if(chn.pCurrentSample || chn.nLOfs || chn.nROfs)
 	{
@@ -430,7 +504,7 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 
 		uint32 functionNdx = MixFuncTable::ResamplingModeToMixFlags(static_cast<ResamplingMode>(chn.resamplingMode));
 #ifdef OPENMPT_EDITOR_CORE
-		if(nativeRatios) functionNdx = MixFuncTable::ResamplingModeToMixFlags(m_Resampler.m_Settings.SrcMode);
+		if(nativeRatios || chn.nativeNudgeInterpolating) functionNdx = MixFuncTable::ResamplingModeToMixFlags(m_Resampler.m_Settings.SrcMode);
 #endif
 		if(chn.dwFlags[CHN_16BIT]) functionNdx |= MixFuncTable::ndx16Bit;
 		if(chn.dwFlags[CHN_STEREO]) functionNdx |= MixFuncTable::ndxStereo;
@@ -491,10 +565,21 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 		{
 			uint32 nrampsamples = nsamples;
 #ifdef OPENMPT_EDITOR_CORE
-			if(nativeRatios && !unpitchedIncrement.IsZero())
+			const double nudge = nudgeForces ? nudgeForces[count-nsamples] : 0;
+			if(nudge) {
+				chn.nativeNudgeInterpolating = true;
+				functionNdx = (functionNdx & 0x0f) | MixFuncTable::ResamplingModeToMixFlags(m_Resampler.m_Settings.SrcMode);
+			}
+			if((nativeRatios || nudgeForces) && !unpitchedIncrement.IsZero())
 			{
-				const auto raw = std::clamp(std::abs(double(unpitchedIncrement.GetRaw())) * nativeRatios[count - nsamples], 1., double(uint64(1) << 60));
-				chn.increment = SamplePosition(static_cast<int64>(raw) * (chn.increment.IsNegative() ? -1 : 1));
+				if(nudge && chn.nativeReverseLoop.sample) {
+					if(chn.nativeReverseLoop.reversed) { nudgeDirection = -1; chn.dwFlags.set(CHN_PINGPONGFLAG); }
+					chn.ExitNativeReverseLoop();
+				}
+				const double ratio = nativeRatios ? nativeRatios[count-nsamples] : 1;
+				const double direction = nudgeForces ? nudgeDirection : (chn.increment.IsNegative() ? -1 : 1);
+				const auto raw = std::clamp(std::abs(double(unpitchedIncrement.GetRaw())) * ratio * (direction+nudge), -double(uint64(1)<<60), double(uint64(1)<<60));
+				chn.increment = SamplePosition(static_cast<int64>(raw));
 				nrampsamples = 1;
 			}
 #endif
@@ -504,7 +589,13 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 				if (nrampsamples > chn.nRampLength) nrampsamples = chn.nRampLength;
 			}
 
-			if((nSmpCount = mixLoopState.GetSampleCount(chn, nrampsamples)) <= 0)
+#ifdef OPENMPT_EDITOR_CORE
+			nSmpCount = nudge ? mixLoopState.RecordNudgeSampleCount(chn, nudgeDirection) : mixLoopState.GetSampleCount(chn, nrampsamples);
+			if(nudgeForces && !nudge && !chn.increment.IsZero()) nudgeDirection = chn.increment.IsNegative() ? -1 : 1;
+#else
+			nSmpCount = mixLoopState.GetSampleCount(chn, nrampsamples);
+#endif
+			if(nSmpCount <= 0)
 			{
 				// Stopping the channel
 				chn.pCurrentSample = nullptr;

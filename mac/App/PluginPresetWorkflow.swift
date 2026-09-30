@@ -30,7 +30,7 @@ final class PluginPresetWorkflow {
         guard let result = reply["result"] as? [String: Any], let loaded = result["data"] as? [String: Any], loaded["loaded"] as? Bool == true else {
           self.fail(reply); return
         }
-        self.finish(true, "Loaded preset · \(data["name"] as? String ?? "Preset") · Undo effect change to restore")
+        self.finish(true, "Loaded preset · \(data["name"] as? String ?? "Preset") · Undo to restore")
       }
     }
   }

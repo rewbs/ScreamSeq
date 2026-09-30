@@ -25,17 +25,18 @@ std::vector<std::byte> decodeBase64(const Json &v) {
   }
   need(data.size() <= 8*1024*1024,"Graph plugin state exceeds 8 MiB"); return data;
 }
-Json recipe(const GraphPluginRecipe &p) { return {{"format",p.format},{"name",p.name},{"path",p.path},{"classID",p.classID},{"type",p.type},{"subtype",p.subtype},{"manufacturer",p.manufacturer},{"state",base64(p.state)},{"inputs",p.inputs},{"outputs",p.outputs}}; }
+Json recipe(const GraphPluginRecipe &p) { Json parameters=Json::array();for(const auto &[id,value]:p.parameters)parameters.push_back({{"id",id},{"value",value}});return {{"parameters",parameters},{"format",p.format},{"name",p.name},{"path",p.path},{"classID",p.classID},{"type",p.type},{"subtype",p.subtype},{"manufacturer",p.manufacturer},{"state",base64(p.state)},{"inputs",p.inputs},{"outputs",p.outputs}}; }
 GraphPluginRecipe decodeRecipe(const Json &v) {
   GraphPluginRecipe r; r.format = text(field(v,"format"),16); r.name = text(optional(v,"name",""),256); r.path = text(optional(v,"path",""),4096); r.classID = text(optional(v,"classID",""),256);
   r.type = uint32_t(integer(optional(v,"type",0),0,UINT32_MAX)); r.subtype = uint32_t(integer(optional(v,"subtype",0),0,UINT32_MAX)); r.manufacturer = uint32_t(integer(optional(v,"manufacturer",0),0,UINT32_MAX)); r.state = decodeBase64(optional(v,"state",""));
+  for(const auto &p:items(v,"parameters",4096,true))need(r.parameters.emplace(uint32_t(integer(field(p,"id"),0,UINT32_MAX)),number(field(p,"value"),-std::numeric_limits<float>::max(),std::numeric_limits<float>::max())).second,"Duplicate graph parameter baseline");
   for (const auto &p : items(v,"inputs",63,true)) r.inputs.push_back(uint32_t(integer(p,1,63)));
   for (const auto &p : items(v,"outputs",63,true)) r.outputs.push_back(uint32_t(integer(p,1,63))); return r;
 }
 #define NODE_NAMES {"input","output","plugin","lfo","follower","random","note-envelope","midi","amount","automation"}
 #define SIGNAL_COMMAND_NAMES {"row","start","stop","clear","amount","wet"}
 Json definition(const SignalDefinition &d) {
-  Json nodes = Json::array(), audio = Json::array(), modulation = Json::array();
+  Json nodes = Json::array(), audio = Json::array(), modulation = Json::array(), groups=Json::array();
   for (const auto &n : d.nodes) {
     Json j{{"id",nativeID(n.id)},{"kind",enumName(size_t(n.kind),NODE_NAMES)},{"name",n.name},{"x",n.x},{"y",n.y},{"rate",n.rate},{"phase",n.phase},{"attack",n.attack},{"release",n.release},{"controller",n.controller}};
     if (n.kind == SignalNodeKind::Plugin) j["plugin"] = recipe(n.plugin);
@@ -44,7 +45,8 @@ Json definition(const SignalDefinition &d) {
   }
   for (const auto &e : d.audio) audio.push_back({{"source",nativeID(e.source)},{"target",nativeID(e.target)},{"output",e.output},{"input",e.input},{"gain",e.gain}});
   for (const auto &e : d.modulation) modulation.push_back({{"source",nativeID(e.source)},{"target",nativeID(e.target)},{"parameter",e.parameter},{"minimum",e.minimum},{"maximum",e.maximum},{"base",e.base},{"enabled",e.enabled}});
-  return {{"id",nativeID(d.id)},{"number",d.number},{"name",d.name},{"nodes",nodes},{"audio",audio},{"modulation",modulation}};
+  for(const auto &g:d.groups){Json members=Json::array();for(auto id:g.nodes)members.push_back(nativeID(id));groups.push_back({{"id",nativeID(g.id)},{"parent",g.parent?nativeID(g.parent):""},{"name",g.name},{"x",g.x},{"y",g.y},{"nodes",members}});}
+  return {{"id",nativeID(d.id)},{"number",d.number},{"name",d.name},{"nodes",nodes},{"audio",audio},{"modulation",modulation},{"groups",groups}};
 }
 SignalDefinition decodeDefinition(const Json &v, unsigned version) {
   SignalDefinition d; d.id = decodeID(field(v,"id")); d.number = uint16_t(u32(v,"number",1,999)); d.name = text(field(v,"name"),256);
@@ -63,10 +65,16 @@ SignalDefinition decodeDefinition(const Json &v, unsigned version) {
   }
   for (const auto &e : items(v,"audio",256)) d.audio.push_back({decodeID(field(e,"source")),decodeID(field(e,"target")),uint32_t(integer(optional(e,"output",0),0,63)),uint32_t(integer(optional(e,"input",0),0,63)),number(optional(e,"gain",1),-16,16)});
   for (const auto &e : items(v,"modulation",256)) d.modulation.push_back({decodeID(field(e,"source")),decodeID(field(e,"target")),u32(e,"parameter"),number(optional(e,"minimum",0),-1,1),number(optional(e,"maximum",1),-1,1),number(optional(e,"base",0),0,1),boolean(optional(e,"enabled",true))});
+  for(const auto &g:items(v,"groups",64,true)) {
+    SignalGroup group;group.id=decodeID(field(g,"id"));const auto parent=optional(g,"parent","");group.parent=parent==""?0:decodeID(parent);
+    group.name=text(field(g,"name"),256);group.x=number(optional(g,"x",0),-100000,100000);group.y=number(optional(g,"y",0),-100000,100000);
+    for(const auto &member:items(g,"nodes",64))group.nodes.push_back(decodeID(member));d.groups.push_back(std::move(group));
+  }
   compileSignal(d); return d;
 }
 Json signal(const SignalGraph &g) {
-  Json library = Json::array(), assignments = Json::array(), instrumentAssignments = Json::array(), commands = Json::array(), lanes = Json::array(), inputs = Json::array(), outputs = Json::array(), layout = Json::array();
+  Json library = Json::array(), assignments = Json::array(), instrumentAssignments = Json::array(), commands = Json::array(), lanes = Json::array(), inputs = Json::array(), outputs = Json::array(), layout = Json::array(), groups = Json::array();
+  for(const auto &v:g.groups)groups.push_back({{"id",nativeID(v.id)},{"parent",v.parent?nativeID(v.parent):""},{"name",v.name},{"x",v.x},{"y",v.y},{"nodes",v.nodes}});
   for (const auto &d : g.library) library.push_back(definition(d));
   auto encodeAssignments = [](const auto &source, Json &out) { for (const auto &a : source) out.push_back({{"target",nativeID(a.target)},{"graph",nativeID(a.graph)},{"amount",a.amount},{"wet",a.wet}}); };
   encodeAssignments(g.assignments,assignments); encodeAssignments(g.instrumentAssignments,instrumentAssignments);
@@ -75,10 +83,11 @@ Json signal(const SignalGraph &g) {
   for (const auto &r : g.inputs) inputs.push_back({{"source",nativeID(r.source)},{"target",nativeID(r.target)},{"input",r.input},{"gainDB",r.gainDB},{"preFader",r.preFader}});
   for (const auto &r : g.outputs) outputs.push_back({{"source",nativeID(r.source)},{"target",nativeID(r.target)},{"output",r.output}});
   for (const auto &[key,p] : g.layout) layout.push_back({{"node",key},{"x",p[0]},{"y",p[1]}});
-  return {{"library",library},{"assignments",assignments},{"instrumentAssignments",instrumentAssignments},{"commands",commands},{"lanes",lanes},{"inputs",inputs},{"outputs",outputs},{"layout",layout}};
+  return {{"library",library},{"assignments",assignments},{"instrumentAssignments",instrumentAssignments},{"commands",commands},{"lanes",lanes},{"inputs",inputs},{"outputs",outputs},{"layout",layout},{"groups",groups}};
 }
 SignalGraph decodeSignal(const Json &v, unsigned version) {
   SignalGraph g;
+  for(const auto &entry:items(v,"groups",128,true)) {SignalSongGroup group;group.id=decodeID(field(entry,"id"));group.parent=optional(entry,"parent","")==""?0:decodeID(entry.at("parent"));group.name=text(field(entry,"name"),256);group.x=real(entry,"x",0,100000);group.y=real(entry,"y",0,100000);for(const auto &key:items(entry,"nodes",240))group.nodes.push_back(text(key,256));g.groups.push_back(std::move(group));}
   for (const auto &d : items(v,"library",128)) g.library.push_back(decodeDefinition(d,version));
   auto assignments = [&](const char *key, auto &out, size_t maximum, bool optionalField) { for (const auto &a : items(v,key,maximum,optionalField)) out.push_back({decodeID(field(a,"target")),decodeID(field(a,"graph")),number(optional(a,"amount",1),0,1),number(optional(a,"wet",1),0,1)}); };
   assignments("assignments",g.assignments,240,false); assignments("instrumentAssignments",g.instrumentAssignments,128,true);

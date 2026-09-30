@@ -1,0 +1,33 @@
+{
+  "description": "Scoped live-reroute checkpoint; not the complete ten-journey result",
+  "bundleID": "org.screamseq.qa.graph.liverouter.20260930",
+  "pid": 94492,
+  "actions": [
+    "Open Graph via Cmd-K search audio graph, Return",
+    "Panel menu \u2192 Float",
+    "Canvas click, Home \u2192 Fit",
+    "Click Track 1 \u2192 Master wire",
+    "Drag destination endpoint handle to Track 2 input",
+    "Cmd-Z",
+    "Cmd-Shift-Z",
+    "Save via revision-guarded document.save",
+    "Attempt Track 2 \u2192 Track 1 feedback, reject atomically",
+    "Space stops the QA fixture intentionally",
+    "Cmd-O, Go to path, Open saved fixture",
+    "Verify persisted Track 1 \u2192 Track 2 routing",
+    "Open dense fixture, play on explicit BlackHole 2ch 48 kHz / 512",
+    "Channel filter Track 4, Home \u2192 Fit"
+  ],
+  "routingGesture": {
+    "clicks": 1,
+    "drags": 1,
+    "confirms": 0,
+    "panelSwitches": 0
+  },
+  "undoRedo": {
+    "shortcuts": 2,
+    "confirms": 0,
+    "panelSwitches": 0
+  },
+  "result": "Live reroute, Undo, Redo and Save kept playback advancing; no observed overruns. Reopen preserved the route. Dense fixture has 16 audible channels. General affected-processor live edits and strict presentation gate are unfinished."
+}

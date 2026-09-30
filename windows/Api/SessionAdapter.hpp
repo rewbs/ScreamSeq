@@ -148,7 +148,7 @@ class SessionAdapter {
         {"graph.plugin.path.get/scan/set","The same Windows VST3 location workflow for a graph/node target, using document Undo and preserving the graph recipe's state, ports and routing."}};
       result["patternEffects"]={{"columns","1–8 FX columns per channel. Code/value cursor fields are 3+2*column and 4+2*column."},
         {"methods","pattern.effects.get/set and pattern.performance.get/set merge ordinary FX 1 with all native commands. pattern.effect.set edits one cell; null clears it."},
-        {"commands","tracker, parameter-set, parameter-slide, pitch-set, pitch-slide, note-cut. Use pattern.commands for source-format IDs and two-character displayCode."},
+        {"commands","tracker, parameter-set, parameter-slide, pitch-set, pitch-slide, note-cut, nudge-forward (NF), nudge-reverse (NR). Nudges: strength value 0..1, duration >0 in 65536 units/row; sample-only, reversal above 0.5 opposing strength. Use pattern.commands for source-format IDs and two-character displayCode."},
         {"timing","65536 units per row; tracker commands require row boundaries. Bindings use stable plugin instance and parameter IDs."},
         {"transforms","pattern.transform uses shared selection/channel/note-track/pattern/song transforms; field effect includes all FX columns. Precise notes remain independent."}};
     }

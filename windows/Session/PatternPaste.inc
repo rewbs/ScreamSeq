@@ -2,7 +2,7 @@ namespace {
 Json pastePattern(Tracker::Document &document,const Json &p,
     const std::function<void()> &stop,const PatternHostHooks &host) {
     using namespace Tracker;
-    keys(p,{"pattern","startRow","startChannel","rows","channels","cells","fields","mode","clip","dryRun","effects","bindings"});
+    keys(p,{"pattern","startRow","startChannel","rows","channels","cells","fields","mode","clip","dryRun","effects","bindings","notes"});
     need(document.editable(),"Document is not editable");
     const auto pattern=uint16_t(integer(field(p,"pattern"),0,UINT16_MAX));
     const auto row=uint16_t(integer(field(p,"startRow"),0,UINT16_MAX)),channel=uint16_t(integer(field(p,"startChannel"),0,UINT16_MAX));
@@ -28,6 +28,14 @@ Json pastePattern(Tracker::Document &document,const Json &p,
     std::vector<Edit> edits;auto metadata=document.native();
     try {
         edits=preparePatternPaste(document,pattern,row,channel,rows,channels,source,fields,mode,clip);
+        if(p.contains("notes")) {
+            std::vector<ClipboardNote> notes;
+            for(const auto &e:array(p.at("notes"),maximumPreciseNotes)) {
+                keys(e,{"channel","position","note","instrument","velocity","effect","parameter"});
+                notes.push_back({uint16_t(integer(field(e,"channel"),0,channels-1)),{0,0,uint32_t(integer(field(e,"position"),0,uint64_t(rows)*performanceUnitsPerRow-1)),uint16_t(integer(e.value("instrument",Json(0)),0,255)),uint8_t(integer(field(e,"note"),1,255)),uint8_t(integer(e.value("velocity",Json(127)),1,127)),uint8_t(integer(e.value("effect",Json(0)),0,255)),uint8_t(integer(e.value("parameter",Json(0)),0,255))}});
+            }
+            preparePreciseNotePaste(document,metadata,{pattern,row,rows,channel,channels},notes,fields,mode,clip);
+        }
         const auto &song=document.song();const auto patternID=metadata.patterns.at(pattern).id;
         using Key=std::tuple<uint64_t,uint64_t,uint32_t,uint8_t>;
         std::map<Key,PatternCommand> effects;

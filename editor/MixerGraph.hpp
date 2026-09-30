@@ -94,6 +94,32 @@ struct MixerPlan {
   uint32_t latency = 0;
   double tail = 0;
 };
+// Move an ordered, contiguous insert segment as one edit. Unowned rack effects
+// are resolved on Master exactly as in compileMixer. No processor is recreated.
+void moveMixerInserts(MixerGraph &, const std::vector<std::string> &effectRack,
+                      const std::vector<std::string> &plugins, uint64_t target,
+                      const std::string &before = {});
 MixerPlan compileMixer(const MixerGraph &, const std::vector<uint64_t> &tracks,
                        const std::vector<MixerProcessorInfo> &, uint32_t sampleRate);
+// Control-thread dependency comparison for a prepared live transition. Each
+// destination processor maps to an old processor slot only if every main and
+// auxiliary input has the same expression, including gain, summing order and
+// delay compensation. SIZE_MAX requires a separate prepared processor copy.
+// This proves signal equivalence, not mutable runtime-state transfer: a render
+// executor must also retain delay/fader histories and cache shared DSP output.
+// Explicitly reset identities cover changed recipes/state/assignment semantics.
+std::vector<size_t> reusableMixerProcessors(
+    const MixerGraph &before, const MixerPlan &beforePlan, const std::vector<MixerProcessorInfo> &beforeProcessors,
+    const MixerGraph &after, const MixerPlan &afterPlan, const std::vector<MixerProcessorInfo> &afterProcessors,
+    const std::vector<std::string> &reset = {});
+// Destination-to-source indices for histories whose complete input expression
+// is unchanged. Delay gain is intentionally excluded: it is applied on read,
+// after the stored samples. Controls include all smoothed bus values.
+struct MixerTransitionReuse {
+  std::vector<size_t> processors, direct, connections, instruments, sidechains, controls;
+};
+MixerTransitionReuse mixerTransitionReuse(
+    const MixerGraph &before, const MixerPlan &beforePlan, const std::vector<MixerProcessorInfo> &beforeProcessors,
+    const MixerGraph &after, const MixerPlan &afterPlan, const std::vector<MixerProcessorInfo> &afterProcessors,
+    const std::vector<std::string> &reset = {});
 } // namespace Tracker

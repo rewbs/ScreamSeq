@@ -275,6 +275,14 @@ static void spectralAndWarm() {
   std::cout<<"Compressor steady 1 kHz non-fundamental ratio "<<distortion<<'\n';
 }
 int main() { @autoreleasepool { try {
+  for(const char *id:{Compressor,Gate,Bus}) for(uint32_t rate:{44100u,48000u,96000u}) {
+    NativeEffect automatic(id,rate),external(id,rate),internal(id,rate),dryAuto(id,rate);
+    check(automatic.value(9)==2,"New dynamics choose Auto detector");external.parameter(9,1);internal.parameter(9,0);
+    for(uint32_t n=0;n<4096;++n){float a[]{.2f,.3f},b[]{.2f,.3f},c[]{.2f,.3f},d[]{.2f,.3f},key[]{float(.8*std::sin(n*.1)),.5f};
+      tracker_audit_begin();bool okay=automatic.process(a,1,key)&&external.process(b,1,key)&&internal.process(c,1)&&dryAuto.process(d,1);audited(okay);
+      check(a[0]==b[0]&&a[1]==b[1]&&c[0]==d[0]&&c[1]==d[1],"Auto follows a connected detector and exactly matches internal processing when unconnected");
+    }
+  }
   curvesAndTime();rmsAndLink();gates();filteredAndBypass();hostingAndMeters();extremesAndTail();apiAndExport();graphSidechains();spectralAndWarm();
   std::cout<<"PASS Compressor/Gate/Bus shared integration and Compressor/Gate independent curves, envelope timing, RMS, stereo linking, hysteresis/hold/duck, detector filters, native sidechains/offsets, meters, extremes/tails and realtime audit\n";return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;} } }

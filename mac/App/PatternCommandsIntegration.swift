@@ -13,7 +13,12 @@ extension AppController {
     picker.onNativeCommand = {[weak self,weak picker] kind,model,row,channel,column in
       guard let self else{return}
       guard self.session.automationRevision==model.revisionToken else{picker?.status.stringValue="The song changed. Close and reopen this list to choose a new target.";return}
-      self.commandPickerWindow?.close();self.openPatternPerformance(context:(model,row,channel,column),kind:kind)
+      self.commandPickerWindow?.close()
+      if kind.hasPrefix("nudge-") {
+        self.window.makeKeyAndOrderFront(nil)
+        self.patternView.cursorRow=row;self.patternView.cursorChannel=channel;self.patternView.column=max(3,column)
+        _=self.patternView.beginNudgeEdit(kind:kind)
+      } else {self.openPatternPerformance(context:(model,row,channel,column),kind:kind)}
     }
     let panel=EffectFinderPanel(picker:picker);commandPickerWindow=panel;picker.capture()
     window.makeKeyAndOrderFront(nil);patternView.revealCursor()
@@ -27,6 +32,16 @@ extension AppController {
       panel.setFrameOrigin(NSPoint(x:max(screen.minX,min(anchor.minX,screen.maxX-size.width)),y:max(screen.minY,y)))
       panel.makeKeyAndOrderFront(nil);picker.focusSearch()
     }
+  }
+  func updateInputContext() {
+    octavePicker.selectItem(at:patternView.octave)
+    let assets=model.instruments.isEmpty ? model.samples:model.instruments
+    let name=assets.first{($0["index"] as? Int)==patternView.instrument}?["name"] as? String ?? ""
+    inputLabel.stringValue=String(format:"INS %02d",patternView.instrument)+" \(name) · OCT \(patternView.octave)"
+    inputLabel.toolTip="New notes use this instrument and octave. Return on an instrument cell selects it. Option–Up/Down changes instrument; Option–Left/Right or keypad ÷/× changes octave."
+    inputLabel.lineBreakMode = .byTruncatingTail
+    inputLabel.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    updateCommandHelp()
   }
   func updateCommandHelp() {
     cursorLabel.stringValue = String(format: "EDIT P%02d · R%03d · CH%02d", model.pattern, patternView.cursorRow, patternView.cursorChannel + 1)

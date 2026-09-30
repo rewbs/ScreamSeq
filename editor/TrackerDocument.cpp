@@ -418,7 +418,7 @@ std::vector<Edit> Document::edit(const std::vector<Edit> &input)
 	if(!edits.empty())
 	{
 		undo_.push_back(std::move(entry));
-		redo_.clear();
+		committedHistory();
 		++revision;
 		trimHistory();
 	}
@@ -439,7 +439,7 @@ bool Document::editNative(NativeSong metadata, const std::vector<Edit> &input)
 	entry.nativeBefore=native_;entry.nativeAfter=metadata;
 	undo_.reserve(undo_.size()+1);
 	for(const auto &edit:entry.cells)put(*song_,edit);
-	native_=std::move(metadata);undo_.push_back(std::move(entry));redo_.clear();++revision;trimHistory();
+	native_=std::move(metadata);undo_.push_back(std::move(entry));committedHistory();++revision;trimHistory();
 	return true;
 }
 std::vector<Edit> Document::undo()
@@ -511,6 +511,11 @@ std::vector<Edit> Document::redo()
 	++revision;
 	return cells;
 }
+void Document::committedHistory() noexcept
+{
+	undo_.back().sequence = ++historySequence_;
+	redo_.clear();
+}
 void Document::trimHistory()
 {
 	size_t bytes = 0;
@@ -530,13 +535,25 @@ void Document::annotate(const std::function<void(NativeSong &)> &change)
 {
     annotate(change,{});
 }
-void Document::annotate(const std::function<void(NativeSong &)> &change,const std::function<void()> &beforeCommit)
+void Document::annotate(const std::function<void(NativeSong &)> &change,const std::function<void()> &beforeCommit,uint64_t mergeSequence)
 {
 	if(!editable()) throw std::runtime_error("This document is read-only.");
 	auto next = native_;
 	change(next);
 	next.validate(*song_);
 	if(next == native_) return;
+	if(mergeSequence && mergeSequence==historySequence_ && !undo_.empty() && redo_.empty()) {
+		auto &last=undo_.back();
+		if(last.sequence==mergeSequence && last.nativeBefore && last.nativeAfter && last.cells.empty() && last.before.empty() && last.after.empty() && !last.sample && !last.splice && !last.slot) {
+			// Allocate the replacement before publishing the realtime plan. The
+			// old Undo entry survives validation or publication failure intact.
+			auto after=next;
+			if(beforeCommit)beforeCommit();
+			static_assert(std::is_nothrow_move_assignable_v<NativeSong>);
+			*last.nativeAfter=std::move(after);native_=std::move(next);
+			++revision;trimHistory();return;
+		}
+	}
 	UndoEntry entry;
 	entry.nativeBefore = native_;
 	entry.nativeAfter = next;
@@ -548,7 +565,7 @@ void Document::annotate(const std::function<void(NativeSong &)> &change,const st
     try { if(beforeCommit)beforeCommit(); }
     catch(...) { undo_.pop_back();throw; }
 	native_ = std::move(next);
-	redo_.clear();
+	committedHistory();
 	++revision;
 	trimHistory();
 }
@@ -577,7 +594,7 @@ void Document::transaction(const std::function<void(CSoundFile &, NativeSong &)>
 		entry.sequenceBefore = sequenceBefore;
 		entry.sequenceAfter = song_->Order.GetCurrentSequenceIndex();
 		undo_.push_back(std::move(entry));
-		redo_.clear();
+		committedHistory();
 		++revision;
 		trimHistory();
 	} catch(...)
@@ -705,6 +722,15 @@ void Document::editOrder(int index, int pattern, const std::string &operation)
 				if(sequence.insert(ORDERINDEX(position), 1, PATTERNINDEX(pattern)) != 1) throw std::runtime_error("Could not insert order.");
 				slots.insert(slots.begin() + position, std::move(entity));
 			}
+		} else if(operation == "move")
+		{
+			const auto target = pattern; // Destination index, not a pattern number.
+			if(target < 0 || target >= sequence.size()) throw std::invalid_argument("Select a valid destination order.");
+			const int step = target > index ? 1 : -1;
+			for(int at = index; at != target; at += step) {
+				std::swap(sequence[at], sequence[at + step]);
+				std::swap(slots[at], slots[at + step]);
+			}
 		} else if(operation == "up" || operation == "down")
 		{
 			const auto target = index + (operation == "up" ? -1 : 1);
@@ -828,6 +854,7 @@ Renderer::Renderer(const std::vector<std::byte> &bytes, uint32_t rate, uint32_t 
 	song_->nativePrepareMix=[](void *context,uint32_t count) noexcept {
 		auto &renderer=*static_cast<Renderer *>(context);auto &song=*renderer.song_;
 		if(renderer.preciseNotes_)count=renderer.preciseNotes_->prepare(song,count);
+		if(renderer.recordNudges_)renderer.recordNudges_->prepare(song,count);
 		const auto &state=song.m_PlayState;
 		if(renderer.renderHostTime_&&renderer.hostTicksPerSample_>0&&!state.m_flags[SONG_PAUSED|SONG_FADINGSONG]&&state.m_nSamplesPerTick&&state.TicksOnRow()) {
 			const double units=double(performanceUnitsPerRow)/(double(state.TicksOnRow())*state.m_nSamplesPerTick);
@@ -855,8 +882,36 @@ bool Renderer::enqueue(const std::vector<Edit> &edits)
 	write_.store(w, std::memory_order_release);
 	return true;
 }
+bool Renderer::updateSampleLoops(uint16_t sample,const SampleEditGeometry &geometry) noexcept {
+ const auto w=loopWritten_.load(std::memory_order_relaxed),r=loopRead_.load(std::memory_order_acquire);
+ if(w-r>=loopUpdates_.size()||!sample||sample>song_->GetNumSamples())return false;
+ loopUpdates_[w%loopUpdates_.size()]={sample,geometry};loopWritten_.store(w+1,std::memory_order_release);return true;
+}
+void Renderer::applySampleLoops() noexcept {
+ auto r=loopRead_.load(std::memory_order_relaxed);const auto w=loopWritten_.load(std::memory_order_acquire);
+ for(;r!=w;++r) {
+  const auto &edit=loopUpdates_[r%loopUpdates_.size()];auto &s=song_->GetSample(edit.sample);const auto &g=edit.geometry;
+  if(s.nLength!=g.frames)continue;
+  for(auto &c:song_->m_PlayState.Chn)if(c.pModSample==&s)c.ExitNativeReverseLoop();
+  s.nLoopStart=g.loopStart;s.nLoopEnd=g.loopEnd;s.nSustainStart=g.sustainStart;s.nSustainEnd=g.sustainEnd;
+  const auto flags=CHN_LOOP|CHN_PINGPONGLOOP|CHN_SUSTAINLOOP|CHN_PINGPONGSUSTAIN;
+  s.uFlags=(s.uFlags&~flags)|(SampleFlags(static_cast<ChannelFlags>(g.flags))&flags);s.nativeReverseLoops=g.reverseLoops;
+  // Rebuild only the bounded interpolation lookahead, on the buffer's audio owner.
+  s.PrecomputeLoops(*song_,false);
+  for(auto &c:song_->m_PlayState.Chn)if(c.pModSample==&s&&c.nLength) {
+   const bool sustain=s.uFlags[CHN_SUSTAINLOOP]&&!c.dwFlags[CHN_KEYOFF],loop=sustain||s.uFlags[CHN_LOOP];
+   c.nLoopStart=sustain?s.nSustainStart:s.nLoopStart;c.nLoopEnd=sustain?s.nSustainEnd:s.nLoopEnd;
+   c.nLength=loop?c.nLoopEnd:s.nLength;
+   c.dwFlags.set(CHN_LOOP,loop);c.dwFlags.set(CHN_PINGPONGLOOP,loop&&s.uFlags[sustain?CHN_PINGPONGSUSTAIN:CHN_PINGPONGLOOP]);
+   if(!c.dwFlags[CHN_PINGPONGLOOP]) {c.dwFlags.reset(CHN_PINGPONGFLAG);if(c.increment.IsNegative())c.increment.Negate();}
+   if(c.position.GetUInt()>=c.nLength)c.position.Set(loop?c.nLoopStart:0);
+  }
+ }
+ loopRead_.store(r,std::memory_order_release);
+}
 bool Renderer::preview(PreviewNote note) noexcept
 {
+	if(note.channel != UINT16_MAX && (note.channel >= song_->GetNumChannels() || note.channel >= 192)) return false;
 	auto w = noteWrite_.load(std::memory_order_relaxed), r = noteRead_.load(std::memory_order_acquire);
 	if(w - r >= notes_.size())
 	{
@@ -877,6 +932,7 @@ void Renderer::applyColumnMutes(const NativeSong &native, const CSoundFile &sour
 }
 uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 {
+ applySampleLoops();
 	std::fill(out, out + frames * 2, 0.0f);
 	auto pluginNote = [&](CHANNELINDEX channel, uint16 note, uint16 volume) {
 		const auto *instrument = song_->m_PlayState.Chn[channel].pModInstrument;
@@ -924,27 +980,28 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 		++consumed; // At most 32 active events; at most 128 total queue slots.
 		const auto event = queued.note;
 		if(event.note < 1 || event.note > 120) continue;
+		const auto key = uint16_t(event.note + 128 * (event.channel == UINT16_MAX ? 0 : event.channel + 1));
 		if(!event.on || !event.velocity)
 		{
-			auto channel = noteChannels_[event.note];
+			auto channel = noteChannels_[key];
 			if(channel < MAX_CHANNELS)
 			{
 				pluginNote(channel, NOTE_KEYOFF, 0);
 				releasePreview(song_->m_PlayState.Chn[channel], event.sample != 0);
-				noteChannels_[event.note] = CHANNELINDEX_INVALID;
+				noteChannels_[key] = CHANNELINDEX_INVALID;
 			}
 			continue;
 		}
-		if(noteChannels_[event.note] < MAX_CHANNELS) {
-			auto &previous = song_->m_PlayState.Chn[noteChannels_[event.note]];
-			pluginNote(noteChannels_[event.note], NOTE_KEYOFF, 0);
+		if(noteChannels_[key] < MAX_CHANNELS) {
+			auto &previous = song_->m_PlayState.Chn[noteChannels_[key]];
+			pluginNote(noteChannels_[key], NOTE_KEYOFF, 0);
 			releasePreview(previous, previous.pModInstrument == nullptr);
 		}
 		CHANNELINDEX channel = nextPreviewChannel_++;
 		pluginNote(channel, NOTE_KEYOFF, 0);
 		if(nextPreviewChannel_ >= MAX_CHANNELS) nextPreviewChannel_ = song_->GetNumChannels();
-		for(auto &mapped : noteChannels_)
-			if(mapped == channel) mapped = CHANNELINDEX_INVALID;
+		if(noteChannels_[previewKeys_[channel]] == channel) noteChannels_[previewKeys_[channel]] = CHANNELINDEX_INVALID;
+		previewKeys_[channel] = key;
 		auto &chn = song_->m_PlayState.Chn[channel];
 		chn.Reset(ModChannel::resetTotal, *song_, CHANNELINDEX_INVALID, CHN_MUTE);
 		chn.nNewNote = chn.nLastNote = event.note;
@@ -962,11 +1019,11 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 		} else song_->InstrumentChange(song_->m_PlayState, channel, event.instrument);
 		chn.nFadeOutVol = 0x10000;
 		chn.isPreviewNote = true;
-		chn.nMasterChn = 0;
+		chn.nMasterChn = event.channel == UINT16_MAX ? 0 : event.channel + 1;
 		song_->NoteChange(chn, event.note, false, true, true, channel);
 		chn.nVolume = event.velocity * 256 / 127;
 		pluginNote(channel, event.note, static_cast<uint16>(chn.nVolume));
-		noteChannels_[event.note] = channel;
+		noteChannels_[key] = channel;
 		auto begin = std::begin(song_->m_PlayState.ChnMix);
 		auto end = std::remove(begin, begin + song_->m_nMixChannels, channel);
 		song_->m_nMixChannels = CHANNELINDEX(std::distance(begin, end));
@@ -1031,6 +1088,9 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 	left_.store(left, std::memory_order_relaxed);
 	right_.store(right, std::memory_order_relaxed);
 	frames_.fetch_add(count, std::memory_order_relaxed);
+ const auto &position=song_->m_PlayState;
+ const auto ticks=std::max(1u,uint32_t(position.TicksOnRow())),samples=std::max(1u,position.m_nSamplesPerTick);
+ patternPosition_.store(position.m_nRow*256.0+(position.m_nTickCount+double(position.SamplesIntoTick())/samples)*256.0/ticks,std::memory_order_relaxed);
  publishVoices();
 	return count;
 }
@@ -1087,6 +1147,6 @@ std::vector<VoicePosition> Renderer::voicePositions() const {
 }
 Telemetry Renderer::telemetry() const noexcept
 {
-	return {order_.load(), pattern_.load(), row_.load(), voices_.load(), left_.load(), right_.load(), frames_.load()};
+	auto result=Telemetry{order_.load(), pattern_.load(), row_.load(), voices_.load(), left_.load(), right_.load(), frames_.load()};result.patternPosition=patternPosition_.load(std::memory_order_relaxed);return result;
 }
 }  // namespace Tracker

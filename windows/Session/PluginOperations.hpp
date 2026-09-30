@@ -15,6 +15,8 @@ class PluginOperations {
   Project::ProjectState &project_;
   std::function<void()> stop_;
   std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters_;
+  std::function<void(size_t,bool)> liveBypass_;
+  std::optional<std::pair<size_t,bool>> bypassOnly(const Json &,const Json &) const;
   struct History {Json plugins,automation;size_t bytes=0;};
   std::deque<History> undo_,redo_;
   std::map<std::string,std::unique_ptr<Tracker::NativePlugin>> editors_;
@@ -40,6 +42,7 @@ public:
     std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={},
     std::optional<std::filesystem::path> libraryPath={});
   ~PluginOperations();
+  void liveBypass(std::function<void(size_t,bool)> callback) {liveBypass_=std::move(callback);}
   static std::vector<std::string> reads();
   static std::vector<std::string> writes();
   Json invoke(const std::string &,const Json &);

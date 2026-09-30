@@ -56,6 +56,8 @@ std::unique_ptr<Document> richDocument() {
   for (uint8_t kind = 0; kind < 4; ++kind) n.performance.commands.push_back({pattern,track,uint32_t(kind)*65536+17,kind%2 ? 1234u : 0u,kind,PatternCommandKind(kind),uint16_t(kind < 2 ? 255 : 0),kind < 2 ? .75 : -12,uint8_t(kind < 2 ? 2 : 48)});
   n.performance.commands.push_back({pattern,track,8*performanceUnitsPerRow+123,0,0,PatternCommandKind::NoteCut});
   n.performance.commands.push_back({pattern,track,8*performanceUnitsPerRow,0,7,PatternCommandKind::TrackerEffect,0,0,2,OpenMPT::CMD_VIBRATO,0x34});
+  n.performance.commands.push_back({pattern,track,9*performanceUnitsPerRow+8192,65536,0,PatternCommandKind::NudgeForward,0,.25});
+  n.performance.commands.push_back({pattern,track,10*performanceUnitsPerRow+1234,90001,0,PatternCommandKind::NudgeReverse,0,.875});
   n.mixer.buses[2].output=0; // A disconnected track still retains its other routes.
   n.mixer.instruments[1].target=0;
   n.preciseNotes = {{pattern,track,77,1,60,91,uint8_t(OpenMPT::CMD_VIBRATO),0x34},{pattern,track,999,0,254,127},{pattern,track,2000,0,255,127}};
@@ -156,6 +158,7 @@ void negativeTests(const Json &j) {
   rejectAt(j,"/performance/columns/0/1",0); rejectAt(j,"/performance/bindings/0/id",256); rejectAt(j,"/performance/commands/0/binding",2); rejectAt(j,"/performance/commands/0/value",2); rejectAt(j,"/performance/commands/1/duration",0); rejectAt(j,"/performance/commands/2/pitchRange",97); rejectAt(j,"/performance/commands/0/track","n999999");
   rejectAt(j,"/performance/commands/4/value",1); rejectAt(j,"/performance/commands/4/duration",1); rejectAt(j,"/performance/commands/4/binding",255);
   rejectAt(j,"/performance/commands/5/column",0); rejectAt(j,"/performance/commands/5/position",8*performanceUnitsPerRow+1); rejectAt(j,"/performance/commands/5/effect",255);
+  rejectAt(j,"/performance/commands/6/value",-0.1); rejectAt(j,"/performance/commands/7/value",1.1); rejectAt(j,"/performance/commands/6/duration",0);
   rejectAt(j,"/performance/commands/0/effect",OpenMPT::CMD_VIBRATO); rejectAt(j,"/performance/commands/4/parameter",1);
   rejectAt(j,"/preciseNotes/0/position",4294967296ULL); rejectAt(j,"/preciseNotes/0/note",121); rejectAt(j,"/preciseNotes/0/velocity",0); rejectAt(j,"/preciseNotes/0/effect",255); rejectAt(j,"/preciseNotes/1/instrument",1); rejectAt(j,"/preciseNotes/0/pattern","n999999");
   rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","A==="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA=A"); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AB=="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA==AA=="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA\n=");

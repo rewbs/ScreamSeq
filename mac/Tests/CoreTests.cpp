@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 using namespace Tracker;
 static void require(bool b, const char *m) {
   if (!b)
@@ -31,6 +32,52 @@ static void equalSongs(const CSoundFile &a, const CSoundFile &b) {
     require(x.GetBytesPerSample() == y.GetBytesPerSample(), "sample format roundtrip");
     require(std::memcmp(x.samplev(), y.samplev(), x.GetSampleSizeInBytes()) == 0, "sample PCM roundtrip");
     require(x.nLoopStart == y.nLoopStart && x.nLoopEnd == y.nLoopEnd, "loop boundaries roundtrip");
+  }
+}
+static void moduleExportGuards(const std::filesystem::path &directory) {
+  auto rejectsPatternLoss = [](auto action) {
+    std::string error;
+    try { action(); } catch (const std::runtime_error &e) { error = e.what(); }
+    require(error.find("Module export would change pattern") != std::string::npos,
+            "checked export rejects pattern loss explicitly");
+  };
+  auto mod = Document::demo(MOD_TYPE_MOD);
+  Document converted(mod->serialize()), exact(mod->snapshotData());
+  require(mod->cell(0, 0, 0).volumeCommand == VOLCMD_VOLUME &&
+              converted.cell(0, 0, 0).volumeCommand == VOLCMD_NONE &&
+              converted.cell(0, 0, 0).effect == CMD_VOLUME &&
+              converted.cell(0, 0, 0).parameter == mod->cell(0, 0, 0).volume,
+          "MOD import fixture explicitly converts volume-column data into FX");
+  require(exact.cell(0, 0, 0) == mod->cell(0, 0, 0), "native snapshot retains the original MOD cell");
+  rejectsPatternLoss([&] { mod->validateModuleSampleExport(); });
+
+  for (auto type : {MOD_TYPE_MOD, MOD_TYPE_XM, MOD_TYPE_S3M, MOD_TYPE_IT, MOD_TYPE_MPT}) {
+    Document imported(Document::demo(type)->serialize());
+    imported.validateModuleSampleExport();
+    const auto destination = directory / ("guard-" + std::to_string(uint32_t(type)) + ".module");
+    imported.save(destination.string(), true);
+    const auto read = [&] {
+      std::ifstream file(destination, std::ios::binary);
+      require(bool(file), "checked module export exists");
+      return std::string(std::istreambuf_iterator<char>(file), {});
+    };
+    const auto saved = read();
+    const Cell dormant{0, 0, 0, 31, 0, 55};
+    imported.edit({{0, 1, 0, imported.cell(0, 1, 0), dormant}});
+    const auto before = imported.snapshotData();
+    const auto revision = imported.revision;
+    Document restored(before);
+    require(restored.cell(0, 1, 0) == dormant, "native snapshot keeps dormant cell bytes");
+    rejectsPatternLoss([&] { imported.validateModuleSampleExport(); });
+    for (bool preserveSamples : {false, true}) {
+      rejectsPatternLoss([&] { imported.save(destination.string(), preserveSamples); });
+      require(read() == saved && imported.revision == revision && imported.snapshotData() == before,
+              "rejected pattern export preserves destination, document and revision");
+    }
+    imported.undo();
+    imported.validateModuleSampleExport();
+    imported.redo();
+    require(imported.cell(0, 1, 0) == dormant, "Undo/Redo retains exact cell data after rejected export");
   }
 }
 int main(int argc, char **argv) {
@@ -170,6 +217,7 @@ int main(int argc, char **argv) {
     require(queue.enqueue(batch), "queue recovers after consume");
     std::filesystem::path dir = std::filesystem::temp_directory_path() / "resonance-tests";
     std::filesystem::create_directories(dir);
+    moduleExportGuards(dir);
     auto path = dir / "demo.mptm";
     doc->save(path.string());
     auto saved = Document::open(path.string());

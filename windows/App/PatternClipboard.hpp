@@ -19,7 +19,7 @@ inline std::string patternClipboardText(const DocumentView &view,unsigned patter
     for(unsigned row=firstRow;row<=lastRow;++row)for(unsigned channel=firstChannel;channel<=lastChannel;++channel) {
         const auto c=view.cell(pattern,row,channel);cells.push_back({c.note,c.instrument,c.volumeCommand,c.volume,c.effect,c.parameter});
     }
-    const std::array<const char *,6> names={"parameter-set","parameter-slide","pitch-set","pitch-slide","note-cut","tracker"};
+    const std::array<const char *,8> names={"parameter-set","parameter-slide","pitch-set","pitch-slide","note-cut","tracker","nudge-forward","nudge-reverse"};
     std::set<uint16_t> used;
     for(const auto &entry:view.nativePattern->effects) {
         const auto &c=entry.command;const auto row=c.position/Tracker::performanceUnitsPerRow;

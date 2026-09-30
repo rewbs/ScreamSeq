@@ -9,7 +9,10 @@ import AppKit
     let root = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
     var navigation = EditorNavigation(pattern:0,row:7,channel:2,column:0,following:true)
     let server = try AutomationServer(discoveryDirectory: root) { method, params, reply in
-      if method == "context.get" || method == "context.set" {
+      if method == "test.nonfinite" {
+        // Test-host-only fault injection. Never advertised or dispatched by the app.
+        reply(["result":["nested":[["positive":Double.infinity,"negative":-Double.infinity,"nan":Double.nan]]]])
+      } else if method == "context.get" || method == "context.set" {
         let previous = navigation
         do {
           if method == "context.get" && !params.isEmpty { throw EditorNavigation.Failure(code:-32602,message:"context.get accepts no parameters") }

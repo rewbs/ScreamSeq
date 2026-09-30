@@ -1,0 +1,47 @@
+{
+  "target": {
+    "bypass": false,
+    "channel": 65535,
+    "graph": "n0",
+    "instrument": "n0",
+    "key": "D0B2EF37-247F-43D9-97B1-84CA1DAEB360/rack/2804EBEE-734F-4E25-B7C7-B565FC64D61F",
+    "name": "Gainer",
+    "node": "n0",
+    "parameterCount": 5,
+    "plugin": "2804EBEE-734F-4E25-B7C7-B565FC64D61F",
+    "role": 2,
+    "target": "n0"
+  },
+  "token": "3:1",
+  "count": 11605,
+  "envelopeCount": 11605,
+  "minimum": -21.599999290310382,
+  "maximum": 2.3999997317220245,
+  "telemetry": {
+    "audioActive": false,
+    "audition": false,
+    "callbacks": 2935,
+    "fault": false,
+    "frames": 371328,
+    "graphActivity": [],
+    "left": 0,
+    "loop": false,
+    "maxMicros": 1629.458,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 60,
+    "pattern": 0,
+    "patternPosition": 298.6666666666667,
+    "playing": false,
+    "pluginFailure": false,
+    "pluginLatency": 0,
+    "region": {
+      "loop": false,
+      "pattern": 0
+    },
+    "right": 0,
+    "row": 0,
+    "voicePositions": [],
+    "voices": 0
+  }
+}

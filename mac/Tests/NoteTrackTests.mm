@@ -3,6 +3,7 @@
 #import "../Bridge/TrackerSession.h"
 #include "editor/TrackerDocument.hpp"
 #include "editor/TrackLayout.hpp"
+#include "ModuleFixture.hpp"
 #include "soundlib/ModInstrument.h"
 #include "soundlib/plugins/PlugInterface.h"
 #include <iostream>
@@ -159,7 +160,7 @@ int main(int argc, char **argv) { @autoreleasepool { try {
     check(bool(file) && difference(expected,actual) < 2e-7,"Actual offline WAV export applies shared grouping and persistent column mutes");
   }
   for (auto type : {MOD_TYPE_MOD, MOD_TYPE_XM, MOD_TYPE_S3M, MOD_TYPE_IT, MOD_TYPE_MPT}) {
-    auto source = Document::demo(type); NSString *module = [folder stringByAppendingPathComponent:@"source.module"]; source->save(module.UTF8String);
+    NSString *module = [folder stringByAppendingPathComponent:@"source.module"]; Test::writeDemoModule(type, module.UTF8String);
     auto session = [TrackerSession new]; NSError *error = nil;
     check([session openPath:module error:&error], "Open fixture module");
     auto call = [&](NSString *method, NSDictionary *params) -> NSDictionary * {

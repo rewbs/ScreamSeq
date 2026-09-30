@@ -11,7 +11,7 @@ extension PatternAutomationEditor {
     for field in toolValues { field.fixed(width: 72) }
     toolValueGroups = zip(toolLabels, toolValues).map { label, field in stack(.horizontal, [label, field]) }
     let range = stack(.horizontal, [Theme.label("Range (rows)", size: 12), toolStart, Theme.label("to", size: 12), toolEnd,
-      toolOperation, ActionButton("Preview tool") { [weak self] in self?.previewTool() },
+      toolOperation, ActionButton("Apply tool") { [weak self] in self?.previewTool() },
       ActionButton("Copy range") { [weak self] in self?.copyRange() }, NSView()])
     let settings = stack(.horizontal, toolValueGroups + [NSView()])
     changeTool()
@@ -37,7 +37,7 @@ extension PatternAutomationEditor {
   }
   func copyRange() {
     guard !loading, !hasDraft, let laneID, let (start, end) = toolRange() else {
-      if hasDraft || laneID == nil { status.stringValue = "Apply the envelope before copying or transforming its saved points." }; return
+      if hasDraft || laneID == nil { status.stringValue = "Wait for pending envelope changes to save before using this tool." }; return
     }
     request("automation.pattern.copy", ["lane": laneID, "start": start, "end": end]) { data in
       self.envelopeClipboard = data
@@ -46,7 +46,7 @@ extension PatternAutomationEditor {
   }
   func previewTool() {
     guard !loading, !hasDraft, let laneID, let (start, end) = toolRange() else {
-      if hasDraft || laneID == nil { status.stringValue = "Apply the envelope before copying or transforming its saved points." }; return
+      if hasDraft || laneID == nil { status.stringValue = "Wait for pending envelope changes to save before using this tool." }; return
     }
     let operation = ["flip-time", "flip-values", "shift", "scale", "ramp", "sine", "humanize", "paste", "insert"][max(0, toolOperation.indexOfSelectedItem)]
     var numbers = [Double]()
@@ -80,7 +80,7 @@ extension PatternAutomationEditor {
       }
       self.canvas.selected = nil; self.markDraft()
       let clipped = data["clippedValues"] as? Int ?? 0
-      self.status.stringValue = "Preview: \(self.canvas.points.count) points, \(clipped) values clipped. Apply saves one Undo step; Reload discards."
+      self.status.stringValue = "Saving \(self.canvas.points.count) points · \(clipped) values clipped."
     }
   }
   var toolSignature: NSDictionary {

@@ -1,0 +1,182 @@
+[
+  {
+    "phase": "after",
+    "journey": "G01",
+    "kind": "key",
+    "value": "shift+a"
+  },
+  {
+    "phase": "after",
+    "journey": "G01",
+    "kind": "type",
+    "value": "AUReverb2"
+  },
+  {
+    "phase": "after",
+    "journey": "G01",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "after",
+    "journey": "G03",
+    "kind": "drag",
+    "value": [
+      [
+        138,
+        441
+      ],
+      [
+        171,
+        368
+      ]
+    ]
+  },
+  {
+    "phase": "after",
+    "journey": "G02",
+    "kind": "click",
+    "value": [
+      502,
+      662
+    ]
+  },
+  {
+    "phase": "after",
+    "journey": "G02",
+    "kind": "key",
+    "value": "shift+a"
+  },
+  {
+    "phase": "after",
+    "journey": "G02",
+    "kind": "type",
+    "value": "EQ5"
+  },
+  {
+    "phase": "after",
+    "journey": "G02",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "after",
+    "journey": "G04",
+    "kind": "click",
+    "value": 197
+  },
+  {
+    "phase": "after",
+    "journey": "G04",
+    "kind": "drag",
+    "value": [
+      [
+        515,
+        605
+      ],
+      [
+        630,
+        920
+      ]
+    ]
+  },
+  {
+    "phase": "after",
+    "journey": "G04",
+    "kind": "type",
+    "value": "LFO"
+  },
+  {
+    "phase": "after",
+    "journey": "G04",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "after",
+    "journey": "G04",
+    "kind": "type",
+    "value": "0.25"
+  },
+  {
+    "phase": "after",
+    "journey": "G04",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "after",
+    "journey": "G04",
+    "kind": "click",
+    "value": 171
+  },
+  {
+    "phase": "after",
+    "journey": "G04",
+    "kind": "key",
+    "value": "super+a"
+  },
+  {
+    "phase": "after",
+    "journey": "G04",
+    "kind": "type",
+    "value": "0.25"
+  },
+  {
+    "phase": "after",
+    "journey": "G04",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "after",
+    "journey": "G05",
+    "kind": "drag",
+    "value": [
+      [
+        229,
+        662
+      ],
+      [
+        930,
+        905
+      ]
+    ]
+  },
+  {
+    "phase": "after",
+    "journey": "G05",
+    "kind": "type",
+    "value": "return"
+  },
+  {
+    "phase": "after",
+    "journey": "G05",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "after",
+    "journey": "G05",
+    "kind": "click",
+    "value": 167
+  },
+  {
+    "phase": "after",
+    "journey": "G05",
+    "kind": "key",
+    "value": "super+a"
+  },
+  {
+    "phase": "after",
+    "journey": "G05",
+    "kind": "type",
+    "value": "-12"
+  },
+  {
+    "phase": "after",
+    "journey": "G05",
+    "kind": "key",
+    "value": "Return"
+  }
+]

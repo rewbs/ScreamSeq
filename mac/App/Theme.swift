@@ -8,6 +8,11 @@ enum Theme {
   static let text = NSColor(srgbRed: 0.86, green: 0.89, blue: 0.92, alpha: 1)
   static let muted = NSColor(srgbRed: 0.46, green: 0.52, blue: 0.59, alpha: 1)
   static let accent = NSColor(srgbRed: 0.37, green: 0.88, blue: 0.72, alpha: 1)
+  // Actions and selected destinations have different visual roles.
+  static let actionFill = NSColor(srgbRed: 0.13, green: 0.25, blue: 0.24, alpha: 1)
+  static let actionText = NSColor(srgbRed: 0.77, green: 0.88, blue: 0.85, alpha: 1)
+  static let selectionFill = NSColor(srgbRed: 0.19, green: 0.23, blue: 0.29, alpha: 1)
+  static let selectionMark = NSColor(srgbRed: 0.61, green: 0.70, blue: 0.83, alpha: 1)
   static let gold = NSColor(srgbRed: 0.93, green: 0.72, blue: 0.39, alpha: 1)
   static func label(
     _ text: String, size: CGFloat = 12, color: NSColor = Theme.text,
@@ -57,14 +62,18 @@ extension NSStackView {
 }
 final class ActionButton: NSButton {
   var handler: (() -> Void)?
+  var selectionIndicator = false { didSet { if oldValue != selectionIndicator { needsDisplay = true } } }
   init(_ title: String, symbol: String? = nil, prominent: Bool = false, action: @escaping () -> Void) {
     super.init(frame: .zero)
+    // Cache the native bezel separately from neighbouring transport labels and
+    // meters. Their display invalidations must not rerasterize every button.
+    wantsLayer = true
     self.title = title
     handler = action
     target = self
     self.action = #selector(invoke)
     bezelStyle = .rounded
-    if prominent { bezelColor = Theme.accent; contentTintColor = Theme.bg }
+    if prominent { bezelColor = Theme.actionFill; contentTintColor = Theme.actionText }
     font = .systemFont(ofSize: 12, weight: .medium)
     if let symbol {
       image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
@@ -73,6 +82,13 @@ final class ActionButton: NSButton {
   }
   required init?(coder: NSCoder) { fatalError() }
   @objc func invoke() { handler?() }
+  override func draw(_ dirtyRect: NSRect) {
+    super.draw(dirtyRect)
+    if selectionIndicator {
+      Theme.selectionMark.setFill()
+      NSBezierPath(roundedRect:NSRect(x:8,y:isFlipped ? bounds.height-3 : 1,width:max(0,bounds.width-16),height:2),xRadius:1,yRadius:1).fill()
+    }
+  }
 }
 // Keep tools mounted when collapsed so selection, previews and uncommitted fields survive.
 final class ToolSection: NSView {
@@ -165,8 +181,9 @@ struct PatternModel {
   func lastField(_ channel:Int) -> Int { 2 + effectCount(channel)*2 }
   var effectBindings=[[String:Any]]()
   func nativeCommand(_ row:Int,_ channel:Int,_ column:Int)->NativePatternCommand? {performanceCommands[(row*channels+channel)*8+column]}
-  func channelOffset(_ channel: Int) -> Float { channelOffsets.indices.contains(channel) ? channelOffsets[channel] : Float(channel) * 210 }
-  func channelWidth(_ channel: Int) -> Float { 104 + Float(effectCount(channel)) * 106 }
+  func channelOffset(_ channel: Int) -> Float { channelOffsets.indices.contains(channel) ? channelOffsets[channel] : Float(channel) * (104+Self.effectWidth) }
+  static let effectWidth:Float = 160
+  func channelWidth(_ channel: Int) -> Float { 104 + Float(effectCount(channel)) * Self.effectWidth }
   var revisionToken = ""
   var sequence = 0, sequences = [[String: Any]]()
   var cells = [UInt8](repeating: 0, count: 64 * 8 * 6)
@@ -261,5 +278,26 @@ struct PatternModel {
       performanceCommands[key]=(values[4]==0 && values[5]==0) ? nil : NativePatternCommand(["channel":channel,"position":row*65536,"column":0,"kind":"tracker","effect":Int(values[4]),"parameter":Int(values[5])])
     }
     cells.replaceSubrange(index..<index + 6, with: values)
+  }
+}
+
+// Keep a tempo draft intact through transport/model refreshes. Native field editing
+// supplies selection, copy/paste, Return and focus-loss commit without a dialog.
+final class TempoField:NSTextField,NSTextFieldDelegate {
+  var onBegin:(()->Void)?,onCommit:((String)->Void)?
+  private(set) var editing=false
+  private var original=""
+  init() {
+    super.init(frame:.zero);stringValue="124";font = .monospacedDigitSystemFont(ofSize:20,weight:.regular)
+    textColor=Theme.text;backgroundColor = .clear;isBordered=false;isBezeled=false;focusRingType = .default
+    delegate=self;setAccessibilityLabel("Tempo in BPM");toolTip="Click to edit tempo (32–512 BPM). Return saves; Escape cancels."
+  }
+  required init?(coder:NSCoder){fatalError()}
+  func controlTextDidBeginEditing(_ obj:Notification) {editing=true;original=stringValue;onBegin?()}
+  func controlTextDidEndEditing(_ obj:Notification) {guard editing else{return};editing=false;if stringValue != original {onCommit?(stringValue)}}
+  func control(_ control:NSControl,textView:NSTextView,doCommandBy selector:Selector)->Bool {
+    if selector == #selector(NSResponder.cancelOperation(_:)) {stringValue=original;editing=false;window?.makeFirstResponder(nil);return true}
+    if selector == #selector(NSResponder.insertNewline(_:)) {window?.makeFirstResponder(nil);return true}
+    return false
   }
 }

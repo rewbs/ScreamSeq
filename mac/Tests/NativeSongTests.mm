@@ -2,6 +2,7 @@
 #include "editor/TrackerDocument.hpp"
 #include "editor/SampleArchive.hpp"
 #include "editor/ArrangementTools.hpp"
+#include "ModuleFixture.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace Tracker;
@@ -70,9 +71,8 @@ int main() {
       auto folder = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
       [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
       for (auto type : {MOD_TYPE_MOD, MOD_TYPE_XM, MOD_TYPE_S3M, MOD_TYPE_IT, MOD_TYPE_MPT}) {
-        auto source = Document::demo(type);
         NSString *input = [folder stringByAppendingPathComponent:@"source.module"];
-        source->save(input.UTF8String);
+        Test::writeDemoModule(type, input.UTF8String);
         TrackerSession *session = [TrackerSession new];
         NSError *error = nil;
         check([session openPath:input error:&error], "Open supported module");

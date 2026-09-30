@@ -1,10 +1,14 @@
     } else if ([method isEqual:@"mixer.meters"]) {
       allowed(@[]); result = @{@"meters": [self mixerMeters], @"playing": @(_audio->playing())};
     } else if ([method isEqual:@"mixer.get"]) {
-      allowed(@[]);
+      allowed(@[@"includeImplicit"]);
       const auto &native = _document->native();
-      NSMutableDictionary *data = [encodeMixer(native.mixer) mutableCopy];
+      NativeSong implicit;
+      const bool showImplicit = p[@"includeImplicit"] && boolean(p[@"includeImplicit"]) && !native.mixer.active();
+      if (showImplicit) { implicit.tracks = native.tracks; implicit.nextID = native.nextID; implicit.ensureMixer(); }
+      NSMutableDictionary *data = [encodeMixer(showImplicit ? implicit.mixer : native.mixer) mutableCopy];
       data[@"active"] = @(native.mixer.active());
+      data[@"implicit"] = @(showImplicit);
       NSMutableArray *available = [NSMutableArray array];
       for (size_t i = 0; i < _plugins.size(); ++i) {
         const auto &plugin = _plugins[i];
@@ -27,6 +31,7 @@
       else candidate = _document->native();
       auto &graph = candidate.mixer;
       const auto &original = _document->native().mixer;
+      if (![method isEqual:@"mixer.enable"] && !preview) candidate.ensureMixer();
       auto findBus = [&](id identifier) -> MixerBus & {
         auto id = decodeNativeID(identifier);
         auto found = std::find_if(graph.buses.begin(), graph.buses.end(), [&](const auto &bus) { return bus.id == id; });
@@ -48,19 +53,17 @@
       if ([method isEqual:@"mixer.enable"]) {
         allowed(@[@"enabled", @"dryRun"]);
         bool enabled = p[@"enabled"] ? boolean(p[@"enabled"]) : true;
-        if (enabled && !graph.active()) {
-          const auto master = candidate.makeEntity().id;
-          for (const auto &[channel, track] : candidate.tracks)
-            graph.buses.push_back({track.id, master, MixerBusKind::Track, track.name.empty() ? "Track " + std::to_string(channel + 1) : track.name, track.color});
-          graph.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
-        } else if (!enabled) { graph = {}; candidate.noteTracks.clear(); candidate.signal.assignments.clear(); candidate.signal.commands.clear(); candidate.signal.lanes.clear();candidate.signal.inputs.clear();candidate.signal.outputs.clear(); }
+        if (enabled) candidate.ensureMixer();
+        else { graph = {}; candidate.noteTracks.clear(); candidate.signal.assignments.clear(); candidate.signal.commands.clear(); candidate.signal.lanes.clear();candidate.signal.inputs.clear();candidate.signal.outputs.clear(); }
       } else if ([method isEqual:@"mixer.bus.add"]) {
-        allowed(@[@"kind", @"name", @"output", @"dryRun"]);
+        allowed(@[@"kind", @"name", @"output", @"sendFrom", @"position", @"dryRun"]);
         const auto kind = decodeMixerKind(p[@"kind"]);
         require(kind == MixerBusKind::Group || kind == MixerBusKind::Return, "Add a group or a return; track buses follow song tracks");
         const auto output = p[@"output"] ? decodeNativeID(p[@"output"]) : masterID();
         affected = candidate.makeEntity().id;
         graph.buses.push_back({affected, output, kind, string(p[@"name"] ?: (kind == MixerBusKind::Group ? @"Group" : @"Return"), 256).UTF8String});
+        if(p[@"sendFrom"]) {require(kind==MixerBusKind::Return,"An automatic send requires a return bus");auto &source=findBus(p[@"sendFrom"]);require(source.kind!=MixerBusKind::Master,"Master cannot send upstream");source.sends.push_back({affected,-96,false,false});}
+        if(p[@"position"]) {auto position=object(p[@"position"]);keys(position,@[@"x",@"y"]);candidate.signal.layout[std::string(nativeID(affected).UTF8String)]={number(position[@"x"],0,100000),number(position[@"y"],0,100000)};}
       } else if ([method isEqual:@"mixer.bus.set"]) {
         allowed(@[@"bus", @"name", @"color", @"output", @"preGainDB", @"prePan", @"gainDB", @"pan", @"width", @"timingMS", @"mute", @"solo", @"inserts", @"dryRun", @"preview"]);
         auto &bus = findBus(p[@"bus"]); affected = bus.id;
@@ -79,6 +82,17 @@
           bus.inserts.clear();
           for (id insert in array(p[@"inserts"], 32)) bus.inserts.push_back(plugin(insert, false));
         }
+      } else if ([method isEqual:@"mixer.inserts.move"]) {
+        allowed(@[@"plugins", @"target", @"before", @"positions", @"dryRun"]);
+        std::vector<std::string> rack, moving;
+        for(const auto &item : _plugins) if(!item.descriptor.instrument && item.descriptor.type != kAudioUnitType_MusicDevice) rack.push_back(item.instanceID);
+        for(id raw : array(p[@"plugins"],32)) moving.push_back(plugin(raw,false));
+        affected = findBus(p[@"target"]).id;
+        const std::string before = p[@"before"] && p[@"before"] != NSNull.null ? string(p[@"before"],128).UTF8String : "";
+        try { moveMixerInserts(graph,rack,moving,affected,before); }
+        catch(const std::invalid_argument &e) { throw Error(-32602,e.what()); }
+        for(id raw:array(p[@"positions"]?:@[],32)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);const std::string key=string(v[@"node"],256).UTF8String;require(std::any_of(moving.begin(),moving.end(),[&](const auto &id){return key=="plugin:"+id;}),"Position must belong to a moved insert");candidate.signal.layout[key]={number(v[@"x"],0,100000),number(v[@"y"],0,100000)};}
+
       } else if ([method isEqual:@"mixer.bus.remove"]) {
         allowed(@[@"bus", @"dryRun"]);
         const auto bus = findBus(p[@"bus"]); affected = bus.id;
@@ -109,14 +123,14 @@
       } else if ([method isEqual:@"mixer.sidechains.set"]) {
         allowed(@[@"plugin", @"input", @"sources", @"dryRun"]);
         std::string targetPlugin = string(p[@"plugin"], 128).UTF8String;
-        const auto input = uint32_t(integer(p[@"input"], 1, 63));
+        const auto input = uint32_t(integer(p[@"input"], 0, 63));
         const auto sources = array(p[@"sources"], 128);
         if (sources.count) {
           targetPlugin = plugin(p[@"plugin"], false);
           auto found = std::find_if(_plugins.begin(), _plugins.end(), [&](const auto &p) { return p.instanceID == targetPlugin; });
           const auto available = _audio->pluginBuses(size_t(found - _plugins.begin()));
-          require(std::any_of(available.begin(), available.end(), [&](const auto &b) { return b.input && b.index == input && b.active && b.supported; }),
-                  "Enable an available auxiliary effect input before routing a sidechain");
+          require(std::any_of(available.begin(), available.end(), [&](const auto &b) { return b.input && b.index == input && b.supported; }),
+                  "Select an available plugin input; connected auxiliary ports enable on playback");
         }
         std::erase_if(graph.sidechains, [&](const auto &side) { return side.plugin == targetPlugin && side.input == input; });
         for (id raw : sources) {
@@ -125,26 +139,31 @@
             side[@"preFader"] ? boolean(side[@"preFader"]) : false, side[@"enabled"] ? boolean(side[@"enabled"]) : true});
         }
       } else if ([method isEqual:@"mixer.instrument.route"] || [method isEqual:@"mixer.plugin.route"]) {
-        allowed(@[@"plugin", @"output", @"target", @"disconnected", @"dryRun"]);
+        allowed(@[@"plugin", @"output", @"target", @"targets", @"disconnected", @"dryRun"]);
         std::string id = string(p[@"plugin"], 128).UTF8String;
         const auto output = uint32_t(integer(p[@"output"] ?: @0, 0, 63));
         const bool disconnected = p[@"disconnected"] ? boolean(p[@"disconnected"]) : false;
         require(!disconnected || p[@"target"] == NSNull.null,"A disconnected output requires a null target");
+        require(bool(p[@"targets"]) != bool(p[@"target"]), "Supply target or targets, not both");
+        require(!p[@"targets"] || !p[@"disconnected"], "Use an empty targets array to disconnect");
+        std::vector<uint64_t> targets;
+        if(p[@"targets"])for(auto raw:array(p[@"targets"],128)){auto id=findBus(raw).id;require(std::find(targets.begin(),targets.end(),id)==targets.end(),"Duplicate output destination");targets.push_back(id);}
         const bool remove = p[@"target"] == NSNull.null && !disconnected;
-        const auto target = remove || disconnected ? 0 : findBus(p[@"target"]).id; affected = target;
+        const auto target = remove || disconnected || p[@"targets"] ? 0 : findBus(p[@"target"]).id; affected = target;
         if (!remove) {
           auto descriptor=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==id;});require(descriptor!=_plugins.end(),"Plugin instance does not exist");
           const bool instrument=descriptor->descriptor.instrument||descriptor->descriptor.type==kAudioUnitType_MusicDevice;
           id = plugin(p[@"plugin"], instrument);
-          require(instrument||output>0,"Effect main output follows its insert chain; select an auxiliary output");
+
           if(!instrument)require(std::any_of(graph.buses.begin(),graph.buses.end(),[&](const auto &b){return std::find(b.inserts.begin(),b.inserts.end(),id)!=b.inserts.end();}),"Assign the effect to a bus before routing its auxiliary output");
           auto found = std::find_if(_plugins.begin(), _plugins.end(), [&](const auto &p) { return p.instanceID == id; });
           const auto available = _audio->pluginBuses(size_t(found - _plugins.begin()));
-          require(std::any_of(available.begin(), available.end(), [&](const auto &b) { return !b.input && b.index == output && b.active && b.supported; }),
-                  "Enable an available plugin output before routing it");
+          require(std::any_of(available.begin(), available.end(), [&](const auto &b) { return !b.input && b.index == output && b.supported; }),
+                  "Select an available plugin output; connected auxiliary ports enable on playback");
         }
         std::erase_if(graph.instruments, [&](const auto &source) { return source.plugin == id && source.output == output; });
-        if (!remove) graph.instruments.push_back({std::move(id), target, output});
+        if(p[@"targets"]&&!targets.empty())for(auto bus:targets)graph.instruments.push_back({id,bus,output});
+        else if (!remove) graph.instruments.push_back({std::move(id), target, output});
       } else throw Error(-32601, "Unknown mixer method");
       std::vector<uint64_t> tracks; for (const auto &[index, track] : _document->native().tracks) tracks.push_back(track.id);
       std::vector<MixerProcessorInfo> processors;
@@ -152,6 +171,8 @@
         const auto &p = _plugins[slot]; uint32_t count = 1; uint64_t enabled = 1, inputs = 0;
         for (const auto &b : _audio->pluginBuses(slot)) if (!b.input) { count = std::max(count, b.index + 1); if (b.active) enabled |= uint64_t(1) << b.index; }
         for (const auto &b : _audio->pluginBuses(slot)) if (b.input && b.index && b.active) inputs |= uint64_t(1) << b.index;
+        for(const auto &r:graph.sidechains)if(r.plugin==p.instanceID&&r.enabled)inputs|=uint64_t(1)<<r.input;
+        for(const auto &r:graph.instruments)if(r.plugin==p.instanceID&&r.target)enabled|=uint64_t(1)<<r.output;
         processors.push_back({p.instanceID, 0, 0, p.descriptor.instrument || p.descriptor.type == kAudioUnitType_MusicDevice, p.bypass, count, enabled, inputs});
       }
       MixerPlan plan;
@@ -169,16 +190,25 @@
       const bool controlsOnly = structural == original;
       const bool dryRun = p[@"dryRun"] ? boolean(p[@"dryRun"]) : false;
       require(!preview || (controlsOnly && graph.active()), "Only mixer gain, balance, width, mute and solo can be previewed live");
-      const bool different = graph != original;
+      const bool different = graph != original || (!preview && candidate.signal.layout != _document->native().signal.layout);
       if (!dryRun && (different || preview || ([method isEqual:@"mixer.bus.set"] && graph.active()))) {
+        std::unique_ptr<MixerTransition::Plan> routing;
         if (controlsOnly && graph.active()) {
           std::vector<MixerControls> controls;
           for (size_t i = 0; i < graph.buses.size(); ++i) {
             const auto &bus = graph.buses[i]; controls.push_back({bus.preGainDB, bus.gainDB, bus.pan, bus.width, plan.nodes[i].audible, bus.prePan});
           }
           if (!_audio->mixerControls(controls)) throw Error(-32002, "Mixer control queue is busy; retry the same revision");
-        } else _audio->stop();
+        } else {
+          if(!_audio->mixerRoutingReady())throw Error(-32002,"Routing transition is busy; retry the same revision");
+          routing=_audio->prepareMixerRouting(candidate);
+          if(!routing)_audio->stop();
+        }
         if (!preview) _document->annotate([&](NativeSong &n) { n = candidate; });
+        // Preparation is complete before the Undo/model transaction; publication
+        // cannot allocate. With this sole document producer no newer plan can
+        // supersede the validated source between prepare and publish.
+        if(routing && !_audio->publishMixerRouting(routing))_audio->stop();
       }
       result = @{@"mixer": encodeMixer(graph), @"wouldChange": @(different), @"preview": @(preview),
         @"bus": affected ? (id)nativeID(affected) : (id)NSNull.null, @"controlsOnly": @(controlsOnly)};

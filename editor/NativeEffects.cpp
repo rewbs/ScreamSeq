@@ -117,7 +117,7 @@ constexpr auto cabinet = [] {
   return p;
 }();
 constexpr std::string_view detectorKinds[]{"Peak", "RMS"};
-constexpr std::string_view detectorSources[]{"Internal", "External sidechain"};
+constexpr std::string_view detectorSources[]{"Internal", "External sidechain", "Auto (use connected sidechain)"};
 constexpr std::string_view gateKinds[]{"Gate", "Duck"};
 constexpr EffectParameter compressor[]{
   {0,"Enabled",0,1,1,EffectUnit::Boolean,onOff},
@@ -129,7 +129,7 @@ constexpr EffectParameter compressor[]{
   {6,"Knee",0,24,6,EffectUnit::Decibels},
   {7,"Detector",0,1,0,EffectUnit::Choice,detectorKinds},
   {8,"Stereo link",0,100,100,EffectUnit::Percent},
-  {9,"Detector source",0,1,0,EffectUnit::Choice,detectorSources},
+  {9,"Detector source",0,2,2,EffectUnit::Choice,detectorSources},
   {10,"Detector high-pass",20,20000,20,EffectUnit::Hertz},
   {11,"Detector low-pass",20,20000,20000,EffectUnit::Hertz},
   {12,"Detector filters",0,1,0,EffectUnit::Boolean,onOff},
@@ -345,7 +345,7 @@ void NativeEffect::update(uint32_t id) noexcept {
     return;
   }
   if (dynamics_) {
-    for (const auto &p : definition_.parameters) if (id == UINT32_MAX || p.id == id) dynamics_->parameter(p.id, value(p.id), rendered_);
+    for (const auto &p : definition_.parameters) if (id == UINT32_MAX || p.id == id) dynamics_->parameter(p.id, p.id==9 && value(9)==2 ? (sidechainPresent_ ? 1.f:0.f) : value(p.id), rendered_);
     return;
   }
   if (cabinet_) {
@@ -400,6 +400,7 @@ std::optional<EffectMeters> NativeEffect::meters() const noexcept {
 }
 bool NativeEffect::process(float *buffer, uint32_t frames, const float *sidechain) noexcept {
   if (frames > 4096 || (!buffer && frames)) return false;
+  if(dynamics_ && frames && sidechainPresent_ != (sidechain!=nullptr)){sidechainPresent_=sidechain!=nullptr;if(value(9)==2)update(9);}
   rendered_ = rendered_ || frames != 0;
   for (uint32_t i = 0; i < frames; ++i) {
     const double left = buffer[2 * i], right = buffer[2 * i + 1];

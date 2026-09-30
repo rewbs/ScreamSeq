@@ -23,10 +23,11 @@ final class PreciseNoteTimeline:NSView {
   var onSelect:((Int)->Bool)?,onMove:((Int,Int,Int,Bool)->Void)?,onInsert:((Int)->Void)?,onDelete:(()->Void)?,onDuplicate:(()->Void)?
   private var dragging:Int?,dragVolume=127
   override var isFlipped:Bool {true}
+  override var isOpaque:Bool {true}
   override var acceptsFirstResponder:Bool {true}
   var plot:NSRect {NSRect(x:32,y:76,width:max(1,bounds.width-52),height:max(30,bounds.height-111))}
   override init(frame:NSRect) {
-    super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel("Precise note timeline")
+    super.init(frame:frame);wantsLayer=true;setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel("Precise note timeline")
     setAccessibilityHelp("Drag a hit left or right for timing, up or down for volume. Shift keeps its volume. Option bypasses snap. Double-click to add a hit. Arrow keys adjust the selected hit; Delete removes it.")
   }
   required init?(coder:NSCoder){fatalError()}
@@ -102,10 +103,55 @@ final class PreciseNoteTimeline:NSView {
   }
 }
 
+// A compact tracker: arrows select a cell; typing replaces its value. Native
+// text editing takes over for fractions and numbers, with Tab moving between cells.
+final class PreciseNoteCell:NSTextField {
+  var onChoose:(()->Bool)?
+  override func mouseDown(with event:NSEvent) {
+    guard onChoose?() != false else{return}
+    if event.clickCount>1 {super.mouseDown(with:event)}
+  }
+}
+final class PreciseNoteTable:NSTableView {
+  var activeColumn=0
+  var onType:((Int,Int,NSEvent)->Bool)?,onBeginEdit:((Int,Int,String?)->Void)?,onRemove:(()->Void)?
+  override func mouseDown(with event:NSEvent) {
+    let p=convert(event.locationInWindow,from:nil),col=column(at:p),r=row(at:p)
+    if col>=0 {activeColumn=col};super.mouseDown(with:event)
+    if event.clickCount==2,r>=0 {onBeginEdit?(r,activeColumn,nil)}
+    needsDisplay=true
+  }
+  override func draw(_ rect:NSRect) {
+    super.draw(rect)
+    if selectedRow>=0,activeColumn<numberOfColumns,window?.firstResponder===self {
+      Theme.selectionMark.setStroke();let path=NSBezierPath(rect:frameOfCell(atColumn:activeColumn,row:selectedRow).insetBy(dx:1,dy:1));path.lineWidth=1;path.stroke()
+    }
+  }
+  func moveCell(_ delta:Int) {
+    guard numberOfRows>0 else{return}
+    let next=max(0,min(numberOfRows*numberOfColumns-1,max(0,selectedRow)*numberOfColumns+activeColumn+delta))
+    activeColumn=next%numberOfColumns;selectRowIndexes(IndexSet(integer:next/numberOfColumns),byExtendingSelection:false)
+    scrollRowToVisible(selectedRow);scrollColumnToVisible(activeColumn);window?.makeFirstResponder(self);needsDisplay=true
+  }
+  override func keyDown(with event:NSEvent) {
+    guard event.modifierFlags.intersection([.command,.control,.option]).isEmpty else {super.keyDown(with:event);return}
+    if event.keyCode==48 {moveCell(event.modifierFlags.contains(.shift) ? -1:1);return}
+    if event.keyCode==123 || event.keyCode==124 {moveCell(event.keyCode==123 ? -1:1);return}
+    if event.keyCode==125 || event.keyCode==126 {moveCell(event.keyCode==125 ? numberOfColumns:-numberOfColumns);return}
+    if event.keyCode==51 || event.keyCode==117 {onRemove?();return}
+    guard selectedRow>=0 else{super.keyDown(with:event);return}
+    if event.keyCode==36 || event.keyCode==76 {onBeginEdit?(selectedRow,activeColumn,nil);return}
+    if onType?(selectedRow,activeColumn,event)==true {return}
+    if let text=event.characters,!text.isEmpty {onBeginEdit?(selectedRow,activeColumn,text);return}
+    super.keyDown(with:event)
+  }
+}
+
 final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,NSTextFieldDelegate {
   var onContext:(()->(PatternModel,Int,Int,Int))?
+  var inputOctave:(()->Int)?
   var onRequest:((String,[String:Any],@escaping([String:Any])->Void)->Void)?
-  let location=Theme.label("",size:12),status=Theme.label("",size:12,color:Theme.muted),table=NSTableView(),timeline=PreciseNoteTimeline()
+  let location=Theme.label("",size:12),status=Theme.label("",size:12,color:Theme.muted),table=PreciseNoteTable(),timeline=PreciseNoteTimeline()
   let note=NSPopUpButton(),instrument=NSTextField(string:"1"),velocity=NSTextField(string:"127"),offset=NSTextField(string:"0"),units=NSPopUpButton(),snap=NSPopUpButton()
   let effect=NSPopUpButton(),parameter=NSTextField(string:"00"),effectHint=Theme.label("",size:11,color:Theme.muted),offsetHint=Theme.label("",size:11,color:Theme.muted)
   let repeatCount=NSTextField(string:"4"),endVolume=NSTextField(string:"127")
@@ -114,9 +160,12 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
   private(set) var revision:String?,events=[[String:Any]](),draft=[[String:Any]](),pending=false,capturedPattern=0,capturedRow=0,capturedChannel=0,rowsPerBeat=4
   private var editingRow:Int?,updatingTable=false,effects=[PatternCommand](),displayBeats=true,moveLegacyEffect=false
   private var effectValues=[Set<Int>?]()
+  private var effectCatalog:NSArray?
   private var originalDraft = [[String:Any]](), originalFields = [String]()
   private var fieldValues:[String] { [offset.stringValue,String(note.selectedTag()),instrument.stringValue,velocity.stringValue,String(effect.indexOfSelectedItem),parameter.stringValue] }
-  var hasDraft:Bool { !NSArray(array:draft).isEqual(to:originalDraft) || (!originalFields.isEmpty && fieldValues != originalFields) }
+  private var autoSave:DispatchWorkItem?,inlineInvalid=false
+  private var canEdit:Bool {revision != nil}
+  var hasDraft:Bool { inlineInvalid || !NSArray(array:draft).isEqual(to:originalDraft) || (!originalFields.isEmpty && fieldValues != originalFields) }
 
   override init(frame:NSRect) {
     super.init(frame:frame)
@@ -126,12 +175,20 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     units.addItems(withTitles:["Beats","Rows"]);units.target=self;units.action=#selector(changeUnits)
     snap.addItems(withTitles:["Free","1/16 beat","1/32 beat","1/64 beat"]);snap.target=self;snap.action=#selector(changeSnap)
     effect.target=self;effect.action=#selector(changeEffect);setEffects([])
-    for (id,title,width) in [("beats","Beat offset",85.0),("offset","Row offset",85.0),("note","Note",65.0),("instrument","Ins",45.0),("velocity","Vol",45.0),("effect","Effect",110.0)] {
+    for (id,title,width) in [("beats","Beat offset",85.0),("offset","Row offset",85.0),("note","Note",65.0),("instrument","Ins",45.0),("velocity","Vol",45.0),("effect","FX",55.0),("parameter","Value",60.0)] {
       let column=NSTableColumn(identifier:NSUserInterfaceItemIdentifier(id));column.title=title;column.width=width;table.addTableColumn(column)
     }
     table.dataSource=self;table.delegate=self;table.rowHeight=25;table.allowsMultipleSelection=false
     table.setAccessibilityLabel("Precise notes in this row")
-    let scroll=NSScrollView();scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true;scroll.heightAnchor.constraint(equalToConstant:130).isActive=true
+    table.toolTip="Arrows select cells. Type to edit; Tab moves to the next cell. In Note, use normal note keys (1 = off). Return or double-click edits text. Delete removes the hit. Changes save automatically."
+    table.onBeginEdit = {[weak self] row,column,text in self?.beginCellEdit(row,column,text)}
+    table.onRemove = {[weak self] in self?.remove()}
+    table.onType = {[weak self] row,column,event in
+      guard let self,self.table.tableColumns[column].identifier.rawValue=="note",let key=event.charactersIgnoringModifiers?.lowercased() else{return false}
+      let n=key=="1" ? 255 : KeyboardSettings.note(for:key).map{max(1,min(120,(self.inputOctave?() ?? 4)*12+$0+1))}
+      guard let n else{return false};_ = self.editCell(row,"note",PreciseNote.name(n));self.refreshDraft(selecting:row);return true
+    }
+    let scroll=NSScrollView();scroll.documentView=table;scroll.hasVerticalScroller=true;scroll.hasHorizontalScroller=true;scroll.heightAnchor.constraint(equalToConstant:170).isActive=true
     timeline.heightAnchor.constraint(equalToConstant:205).isActive=true
     timeline.onSelect = {[weak self] index in self?.selectEvent(index) ?? false}
     timeline.onMove = {[weak self] index,offset,volume,finished in self?.moveEvent(index,offset:offset,volume:volume,finished:finished)}
@@ -146,18 +203,21 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     units.setAccessibilityLabel("Offset units");snap.setAccessibilityLabel("Timeline snap");effect.setAccessibilityLabel("Selected hit effect")
     for field in [instrument,velocity,repeatCount,endVolume,parameter] {field.fixed(width:56)}
     offset.fixed(width:104);units.fixed(width:88);note.fixed(width:100)
-    offset.delegate=self;velocity.delegate=self
+    for field in [offset,instrument,velocity,parameter] {field.delegate=self}
+    replaceLegacy.target=self;replaceLegacy.action=#selector(noteChanged)
     effectHint.maximumNumberOfLines=2;effectHint.lineBreakMode = .byWordWrapping;effectHint.preferredMaxLayoutWidth=500
     status.maximumNumberOfLines=3;status.lineBreakMode = .byWordWrapping;status.preferredMaxLayoutWidth=510
     func label(_ s:String)->NSTextField {Theme.label(s,size:12,color:Theme.muted)}
-    let body=stack(.vertical,[stack(.horizontal,[Theme.label("Precise notes",size:20,weight:.semibold),NSView(),reloadButton!]),location,
-      stack(.horizontal,[label("Snap"),snap,NSView(),label("Drag: timing + volume · Shift: timing")]),timeline,scroll,
+    let details=ToolSection("Selected hit details",id:"precise-note-details",views:[
       stack(.horizontal,[label("Offset"),offset,units,NSView(),offsetHint]),
       stack(.horizontal,[label("Note"),note,label("Ins"),instrument,label("Volume"),velocity,NSView()]),
-      stack(.horizontal,[label("Effect"),effect,parameter]),effectHint,
-      stack(.horizontal,[addButton!,updateButton!,removeButton!,NSView()]),
-      stack(.horizontal,[label("Retriggers"),repeatCount,label("End volume"),endVolume,repeatButton!,NSView()]),
-      replaceLegacy,stack(.horizontal,[status,NSView(),previewButton!,applyButton!])],spacing:10)
+      stack(.horizontal,[label("Effect"),effect,parameter]),effectHint,replaceLegacy])
+    let body=stack(.vertical,[stack(.horizontal,[Theme.label("Precise notes",size:20,weight:.semibold),NSView(),reloadButton!]),location,
+      stack(.horizontal,[label("Snap"),snap,NSView(),label("Drag timing / volume")]),timeline,
+      label("Type in cells · Z–M notes · Tab / arrows navigate · edits save automatically"),scroll,
+      stack(.horizontal,[addButton!,removeButton!,NSView()]),details,
+      stack(.horizontal,[label("Retriggers"),repeatCount,label("End volume"),endVolume,repeatButton!,NSView()]),status,NSView()],spacing:10)
+    for row in body.arrangedSubviews.dropLast() { row.setContentHuggingPriority(.required,for:.vertical) }
     body.stretchAcrossAxis();body.fill(self,inset:16);controls()
   }
   required init?(coder:NSCoder){fatalError()}
@@ -177,16 +237,101 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     if clean {originalFields=fieldValues};showOffsetHint()
   }
   @objc func changeSnap() {timeline.snapBeats=[0,1.0/16,1.0/32,1.0/64][max(0,snap.indexOfSelectedItem)]}
-  @objc func noteChanged() {controls()}
+  @objc func noteChanged() {if canEdit,saveSelectedFields(){refreshDraft(selecting:editingRow);scheduleSave()};controls()}
   func controlTextDidChange(_ notification:Notification) {
-    guard !pending,let index=editingRow,saveSelectedFields() else{return}
+    guard canEdit,let field=notification.object as? NSTextField else{return}
+    if field.tag>=1000 {
+      let row=(field.tag-1000)/10,column=(field.tag-1000)%10
+      inlineInvalid = !editCell(row,table.tableColumns[column].identifier.rawValue,field.stringValue)
+      field.textColor=inlineInvalid ? Theme.gold:Theme.text
+      return
+    }
+    guard let index=editingRow,saveSelectedFields() else{autoSave?.cancel();return}
     table.reloadData(forRowIndexes:IndexSet(integer:index),columnIndexes:IndexSet(integersIn:0..<table.numberOfColumns))
-    syncTimeline();showOffsetHint();status.stringValue="Draft · Apply saves the visible timing and volume."
+    syncTimeline();showOffsetHint();scheduleSave()
+  }
+  func control(_ control:NSControl,textView:NSTextView,doCommandBy selector:Selector)->Bool {
+    guard let field=control as? NSTextField,field.tag>=1000 else{return false}
+    if selector == #selector(NSResponder.cancelOperation(_:)) {
+      inlineInvalid=false;window?.makeFirstResponder(table);refreshDraft(selecting:editingRow);scheduleSave();return true
+    }
+    if selector == #selector(NSResponder.insertTab(_:)) || selector == #selector(NSResponder.insertBacktab(_:)) || selector == #selector(NSResponder.insertNewline(_:)) {
+      guard !inlineInvalid else{return true}
+      window?.makeFirstResponder(table);sortDraft(selecting:editingRow.map{draft[$0]})
+      if selector != #selector(NSResponder.insertNewline(_:)) {table.moveCell(selector == #selector(NSResponder.insertBacktab(_:)) ? -1:1)}
+      return true
+    }
+    return false
+  }
+  func controlTextDidEndEditing(_ notification:Notification) {
+    guard let field=notification.object as? NSTextField,field.tag>=1000,!inlineInvalid else{return}
+    // Do not reload here: Tab may already be moving to a new field editor.
+    scheduleSave()
+  }
+  private func beginCellEdit(_ row:Int,_ column:Int,_ text:String?) {
+    guard canEdit,!inlineInvalid,draft.indices.contains(row),let field=table.view(atColumn:column,row:row,makeIfNecessary:true) as? NSTextField else{return}
+    table.activeColumn=column;table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)
+    window?.makeFirstResponder(field);field.selectText(nil)
+    if let text {field.stringValue=text;field.currentEditor()?.string=text;controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:field));field.currentEditor()?.selectedRange=NSRange(location:text.utf16.count,length:0)}
+  }
+  @discardableResult func editCell(_ row:Int,_ column:String,_ text:String)->Bool {
+    guard canEdit,draft.indices.contains(row) else{return false}
+    var item=draft[row];let value=text.trimmingCharacters(in:.whitespacesAndNewlines),e=PreciseNote(item)
+    func invalid(_ message:String)->Bool {status.stringValue=message;autoSave?.cancel();return false}
+    switch column {
+    case "beats","offset":
+      guard let number=Self.number(value) else{return invalid("Enter a number or fraction, e.g. 1/16.")}
+      let offset=number*(column=="beats" ? Double(rowsPerBeat):1)
+      guard offset>=0,offset<1 else{return invalid("The hit must remain inside this row.")}
+      item["position"]=capturedRow*65536+min(65535,Int((offset*65536).rounded()))
+    case "note":
+      let n=(1...120).first{PreciseNote.name($0).lowercased()==value.lowercased() || PreciseNote.name($0).replacingOccurrences(of:"-",with:"").lowercased()==value.lowercased()} ?? (["off","note off"].contains(value.lowercased()) ? 255:value.lowercased()=="cut" ? 254:0)
+      guard n>0 else{return invalid("Use C-4, C#4, Off or Cut; normal note keys work when the cell is selected.")}
+      item["note"]=n
+      if n>=128 {item["instrument"]=0;item["velocity"]=127;item.removeValue(forKey:"effect");item.removeValue(forKey:"parameter")}
+    case "instrument","velocity":
+      guard e.note<128,let n=Int(value),(column=="instrument" ? 0...255:1...127).contains(n) else{return invalid(column=="instrument" ? "Instrument: 0–255 (notes only).":"Volume: 1–127 (notes only).")}
+      item[column]=n
+    case "effect":
+      guard e.note<128 else{return invalid("Release events do not have effects.")}
+      if ["","..","—","0"].contains(value) {item.removeValue(forKey:"effect");item.removeValue(forKey:"parameter")}
+      else {guard let fx=effects.first(where:{$0.command != 0 && ($0.displayCode.lowercased()==value.lowercased() || ($0.mask==0 && String($0.label.prefix(1)).lowercased()==value.lowercased()))}) else{return invalid("Enter a supported hit effect; Selected hit details lists the available effects.")};item["effect"]=fx.command;item["parameter"]=fx.suggested}
+    case "parameter":
+      guard let index=effects.firstIndex(where:{$0.command==e.effect && e.parameter&$0.mask==$0.value}),let n=Int(value,radix:16),(0...255).contains(n) else{return invalid("Enter a hexadecimal effect value.")}
+      let fx=effects[index],amount=fx.mask==0 ? n:fx.value|(n & ~fx.mask)
+      guard (fx.minimum...fx.maximum).contains(amount),effectValues[index]?.contains(amount) != false else{return invalid("Value is not supported by this effect.")}
+      if e.effect != 0 {item["parameter"]=amount}
+    default:return false
+    }
+    guard !collision(item,excluding:row) else{return invalid("Another event of this kind is already at that offset.")}
+    draft[row]=item;inlineInvalid=false
+    if row==editingRow {loadSelectedFields()}
+    for (index,c) in table.tableColumns.enumerated() where c.identifier.rawValue != column {
+      if let field=table.view(atColumn:index,row:row,makeIfNecessary:false) as? NSTextField {field.stringValue=cellText(PreciseNote(item),c.identifier.rawValue)}
+    }
+    syncTimeline();scheduleSave();return true
+  }
+  private func scheduleSave() {
+    autoSave?.cancel();guard canEdit,!inlineInvalid else{return}
+    guard hasDraft || pending else{status.stringValue="Saved · Undo restores the previous notes.";return}
+    status.stringValue="Saving…"
+    let work=DispatchWorkItem{[weak self] in guard let self,!self.pending,!self.inlineInvalid,self.hasDraft else{return};self.apply(dryRun:false)}
+    autoSave=work;DispatchQueue.main.asyncAfter(deadline:.now()+0.18,execute:work)
   }
   @objc func changeEffect() {
     if effects.indices.contains(effect.indexOfSelectedItem) {let e=effects[effect.indexOfSelectedItem];parameter.stringValue=String(format:"%02X",e.suggested);effectHint.stringValue=e.hint}
+    if canEdit,saveSelectedFields(){refreshDraft(selecting:editingRow);scheduleSave()}
   }
   private func setEffects(_ items:[[String:Any]]) {
+    // Moving the pattern cursor changes the note, not the command catalogue.
+    // Rebuilding every native menu item here also invalidates the inspector.
+    let catalog=items as NSArray
+    if effectCatalog?.isEqual(catalog)==true {
+      // A blank row must not inherit the previously inspected hit's effect.
+      if effect.indexOfSelectedItem != 0 {effect.selectItem(at:0)}
+      changeEffect();return
+    }
+    effectCatalog=catalog
     effects=items.map(PatternCommand.init)
     effectValues=items.map{($0["allowedParameters"] as? [Int]).map(Set.init)}
     if !effects.contains(where:{$0.command==0}) {effects.insert(PatternCommand(["command":0,"name":"None","label":"—","maximum":0,"description":"No continuing effect for this hit. Ends the previous hit's effect; ordinary row effects stay active until a hit overrides them."]),at:0);effectValues.insert(Set([0]),at:0)}
@@ -196,13 +341,14 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     guard !pending,let context=onContext?(),let request=onRequest else{return}
     let sameTarget=revision != nil && capturedPattern==context.0.pattern && capturedRow==context.1 && capturedChannel==context.2
     let previousSelection=sameTarget ? editingRow.flatMap{draft.indices.contains($0) ? PreciseNote(draft[$0]):nil}:nil
+    autoSave?.cancel();inlineInvalid=false
     capturedPattern=context.0.pattern;capturedRow=context.1;capturedChannel=context.2;rowsPerBeat=max(1,context.0.rowsPerBeat);instrument.stringValue=String(context.3);moveLegacyEffect=false
     location.stringValue="Pattern \(capturedPattern) · Row \(capturedRow) · Channel \(capturedChannel+1) · \(rowsPerBeat) rows/beat"
-    pending=true;revision=nil;controls()
+    pending=true;revision=nil
     request("pattern.notes.get",["pattern":capturedPattern]){[weak self] reply in
       guard let self else{return};self.pending=false
       guard let result=reply["result"] as? [String:Any],let revision=result["revision"] as? String,let data=result["data"] as? [String:Any],data["pattern"] as? Int==self.capturedPattern else{self.failure(reply);return}
-      self.rowsPerBeat=max(1,data["rowsPerBeat"] as? Int ?? self.rowsPerBeat);self.setEffects(data["effects"] as? [[String:Any]] ?? context.0.preciseNoteEffects)
+      self.revision=nil;self.rowsPerBeat=max(1,data["rowsPerBeat"] as? Int ?? self.rowsPerBeat);self.setEffects(data["effects"] as? [[String:Any]] ?? context.0.preciseNoteEffects)
       self.revision=revision;self.events=data["events"] as? [[String:Any]] ?? [];self.draft=self.events.filter{self.belongs($0)}
       if self.draft.isEmpty {
         let cell=context.0.cell(context.1,context.2).map(Int.init)
@@ -216,8 +362,12 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
       self.refreshDraft(selecting:retained ?? (self.draft.isEmpty ? nil:0))
       if self.draft.isEmpty {self.offset.stringValue="0";self.velocity.stringValue="127";self.note.selectItem(withTag:61)}
       if !sameTarget {self.endVolume.stringValue=self.velocity.stringValue};self.originalDraft=self.draft;self.originalFields=self.fieldValues
-      self.status.stringValue=self.moveLegacyEffect ? "Draft · the ordinary note and its effect move together on Apply." : self.events.contains(where:self.belongs) ? "\(self.draft.count) saved hits · edits use one Undo." : "Draft · Apply saves all hits as one Undo.";self.controls()
+      self.status.stringValue=self.moveLegacyEffect ? "Editing will move the ordinary note and its effect together." : "\(self.draft.count) hits · changes save automatically · Undo restores each edit.";self.controls()
     }
+    // The dock reads the current pattern synchronously from its snapshot.
+    // Disable controls only if a remote read actually remains outstanding;
+    // toggling every button off/on in one stack still triggers native redraws.
+    if pending {controls()}
   }
   private func belongs(_ e:[String:Any])->Bool {e["channel"] as? Int==capturedChannel && (e["position"] as? Int ?? 0)/65536==capturedRow}
   private func collision(_ item:[String:Any],excluding:Int?)->Bool {
@@ -255,23 +405,23 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     refreshDraft(selecting:item.flatMap {item in draft.firstIndex {NSDictionary(dictionary:$0).isEqual(to:item)}})
   }
   func selectEvent(_ index:Int)->Bool {
-    guard !pending,draft.indices.contains(index),saveSelectedFields() else{return false};refreshDraft(selecting:index);return true
+    guard canEdit,!inlineInvalid,draft.indices.contains(index),saveSelectedFields() else{return false};refreshDraft(selecting:index);return true
   }
   func moveEvent(_ index:Int,offset:Int,volume:Int,finished:Bool) {
-    guard !pending,draft.indices.contains(index) else{return}
+    guard canEdit,!inlineInvalid,draft.indices.contains(index) else{return}
     var item=draft[index];item["position"]=capturedRow*65536+max(0,min(65535,offset));if (item["note"] as? Int ?? 0)<128 {item["velocity"]=max(1,min(127,volume))}
     guard !collision(item,excluding:index) else{status.stringValue="That position already has a hit. Drag to a different offset.";return}
     draft[index]=item
     if finished {sortDraft(selecting:item)} else {refreshDraft(selecting:index)}
-    status.stringValue="Draft · Apply saves the timeline."
+    if finished {scheduleSave()}
   }
   func insertAt(_ position:Int) {
-    guard !pending,saveSelectedFields() else{return}
+    guard canEdit,!inlineInvalid,saveSelectedFields() else{return}
     var item: [String:Any]
     if let index=editingRow,draft.indices.contains(index) {item=draft[index]} else {let n=note.selectedTag();item=["channel":capturedChannel,"note":n,"instrument":n<128 ? (Int(instrument.stringValue) ?? 1):0,"velocity":n<128 ? (Int(velocity.stringValue) ?? 127):127]}
     item["position"]=capturedRow*65536+max(0,min(65535,position))
     guard !collision(item,excluding:nil) else{status.stringValue="A hit already exists at this position.";return}
-    draft.append(item);sortDraft(selecting:item);status.stringValue="Hit added to draft."
+    draft.append(item);sortDraft(selecting:item);scheduleSave()
   }
   func duplicate() {
     guard let index=editingRow,saveSelectedFields() else{return}
@@ -282,7 +432,7 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     if let next=later ?? earlier {insertAt(next)} else {status.stringValue="Move the selected hit earlier to leave room for another hit."}
   }
   func makeRetriggers() {
-    guard !pending,let index=editingRow,saveSelectedFields(),draft.indices.contains(index),
+    guard canEdit,!inlineInvalid,let index=editingRow,saveSelectedFields(),draft.indices.contains(index),
       let count=Int(repeatCount.stringValue),(2...64).contains(count),let last=Int(endVolume.stringValue),(1...127).contains(last) else {status.stringValue="Select a hit; use 2–64 retriggers and end volume 1–127.";return}
     let original=draft[index],event=PreciseNote(original);guard event.note<128 else{status.stringValue="Choose a note onset to retrigger.";return}
     let start=event.position%65536,remaining=65536-start;guard remaining>=count else{status.stringValue="Move the first hit earlier to fit this many retriggers.";return}
@@ -292,45 +442,63 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
       item["velocity"]=Int((Double(event.velocity)+Double(last-event.velocity)*Double(n)/Double(count-1)).rounded())
       guard !collision(item,excluding:index) else{status.stringValue="Retriggers overlap an existing hit. Remove it or choose a different count/start.";return};copies.append(item)
     }
-    draft.remove(at:index);draft.append(contentsOf:copies);sortDraft(selecting:copies.first);status.stringValue="\(count) hits in draft · drag or select any hit to refine it."
+    draft.remove(at:index);draft.append(contentsOf:copies);sortDraft(selecting:copies.first);scheduleSave()
   }
   func put(replacing:Bool) {
-    guard !pending,!replacing || editingRow != nil,let item=editedEvent(replacing:replacing ? editingRow:nil) else{return}
+    guard canEdit,!inlineInvalid,!replacing || editingRow != nil,let item=editedEvent(replacing:replacing ? editingRow:nil) else{return}
     if replacing,let index=editingRow {draft[index]=item} else {draft.append(item)}
-    sortDraft(selecting:item);status.stringValue="Draft updated. Apply saves it to the song.";controls()
+    sortDraft(selecting:item);scheduleSave();controls()
   }
   func remove() {
-    guard !pending,let index=editingRow,draft.indices.contains(index) else{return}
-    draft.remove(at:index);refreshDraft(selecting:draft.isEmpty ? nil:min(index,draft.count-1));status.stringValue="Event removed from the draft.";controls()
+    guard canEdit,!inlineInvalid,let index=editingRow,draft.indices.contains(index) else{return}
+    draft.remove(at:index);refreshDraft(selecting:draft.isEmpty ? nil:min(index,draft.count-1));scheduleSave();controls()
   }
   func apply(dryRun:Bool) {
-    guard !pending,let revision,let request=onRequest,saveSelectedFields() else{return}
-    sortDraft(selecting:editingRow.map{draft[$0]});let replacement=events.filter{!belongs($0)}+draft
+    guard !pending,!inlineInvalid,let revision,let request=onRequest,saveSelectedFields() else{return}
+    autoSave?.cancel()
+    if !(window?.firstResponder is NSTextView) {sortDraft(selecting:editingRow.map{draft[$0]})}
+    let submittedDraft=draft,submittedFields=fieldValues
+    let replacement=events.filter{!belongs($0)}+draft
     pending=true;controls()
     request("pattern.notes.set",["pattern":capturedPattern,"events":replacement,"clearRows":replaceLegacy.state == .on ? [["row":capturedRow,"channel":capturedChannel]]:[],"clearRowEffects":moveLegacyEffect && replaceLegacy.state == .on,"expectedRevision":revision,"dryRun":dryRun]){[weak self] reply in
       guard let self else{return};self.pending=false
       guard let result=reply["result"] as? [String:Any],let next=result["revision"] as? String else{self.failure(reply);return}
-      self.revision=next;if !dryRun {self.events=replacement;self.originalDraft=self.draft;self.originalFields=self.fieldValues;self.moveLegacyEffect=false}
-      self.status.stringValue=dryRun ? "Edit is valid. Apply saves this draft; Check edit does not play audio.":"Precise notes saved. Undo restores the previous notes.";self.controls()
+      self.revision=next;if !dryRun {self.events=replacement;self.originalDraft=submittedDraft;if self.fieldValues==submittedFields {self.originalFields=submittedFields};self.moveLegacyEffect=false}
+      self.status.stringValue=dryRun ? "Edit is valid.":"Saved · Undo restores the previous notes.";self.controls()
+      if !dryRun,self.hasDraft,!self.inlineInvalid {self.scheduleSave()}
     }
   }
   func numberOfRows(in tableView:NSTableView)->Int {draft.count}
+  private func cellText(_ event:PreciseNote,_ column:String)->String {
+    switch column {
+    case "beats":return String(format:"%.7g",Double(event.position%65536)/65536/Double(rowsPerBeat))
+    case "offset":return String(format:"%.7g",Double(event.position%65536)/65536)
+    case "note":return event.name
+    case "instrument":return event.note<128 ? String(event.instrument):"—"
+    case "effect":return event.effect==0 ? "..":(effects.first{$0.command==event.effect && event.parameter&$0.mask==$0.value}?.displayCode ?? "?")
+    case "parameter":return String(format:"%02X",event.parameter & ~(effects.first{$0.command==event.effect && event.parameter&$0.mask==$0.value}?.mask ?? 0))
+    default:return event.note<128 ? String(event.velocity):"—"
+    }
+  }
   func tableView(_ tableView:NSTableView,viewFor column:NSTableColumn?,row:Int)->NSView? {
-    guard draft.indices.contains(row) else{return nil};let event=PreciseNote(draft[row]);let text:String
-    switch column?.identifier.rawValue {
-    case "beats":text=String(format:"%.7g",Double(event.position%65536)/65536/Double(rowsPerBeat))
-    case "offset":text=String(format:"%.7g",Double(event.position%65536)/65536)
-    case "note":text=event.name
-    case "instrument":text=event.note<128 ? String(event.instrument):"—"
-    case "effect":text=event.effect==0 ? "—":(effects.first{$0.command==event.effect && event.parameter&$0.mask==$0.value}?.label ?? "?")+String(format:" %02X",event.parameter)
-    default:text=event.note<128 ? String(event.velocity):"—"
-    };return Theme.label(text,size:12)
+    guard draft.indices.contains(row),let column else{return nil}
+    let text=cellText(PreciseNote(draft[row]),column.identifier.rawValue)
+    let field=PreciseNoteCell(string:text);field.font = .monospacedSystemFont(ofSize:12,weight:.regular);field.textColor=Theme.text
+    field.isBordered=false;field.drawsBackground=false;field.delegate=self;field.tag=1000+row*10+(table.tableColumns.firstIndex(of:column) ?? 0)
+    field.onChoose = {[weak self] in
+      guard let self,!self.inlineInvalid,self.draft.indices.contains(row) else{return false}
+      self.table.activeColumn=self.table.tableColumns.firstIndex(of:column) ?? 0
+      self.table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)
+      self.window?.makeFirstResponder(self.table);self.table.needsDisplay=true;return true
+    }
+    field.setAccessibilityLabel("Hit \(row+1) \(column.title)");return field
   }
   func tableViewSelectionDidChange(_ notification:Notification) {
     guard !updatingTable else{return}
+    if inlineInvalid {updatingTable=true;if let editingRow {table.selectRowIndexes(IndexSet(integer:editingRow),byExtendingSelection:false)};updatingTable=false;return}
     if !saveSelectedFields() {updatingTable=true;if let editingRow {table.selectRowIndexes(IndexSet(integer:editingRow),byExtendingSelection:false)};updatingTable=false;return}
     if let editingRow {table.reloadData(forRowIndexes:IndexSet(integer:editingRow),columnIndexes:IndexSet(integersIn:0..<table.numberOfColumns))}
-    loadSelectedFields();syncTimeline()
+    loadSelectedFields();syncTimeline();if hasDraft {scheduleSave()}
   }
   private func loadSelectedFields() {
     editingRow=draft.indices.contains(table.selectedRow) ? table.selectedRow:nil
@@ -343,14 +511,15 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
   private func showOffsetHint() {
     if let value=rowOffset() {offsetHint.stringValue=displayBeats ? String(format:"= %.6g row",value):String(format:"= %.6g beat",value/Double(rowsPerBeat))}
   }
-  private func failure(_ reply:[String:Any]) {status.stringValue=(reply["error"] as? [String:Any])?["message"] as? String ?? "The song changed. Use current cursor to reload.";controls()}
+  private func failure(_ reply:[String:Any]) {autoSave?.cancel();status.stringValue=((reply["error"] as? [String:Any])?["message"] as? String ?? "The song changed.")+" Edits retained; use current cursor to reload.";controls()}
   private func controls() {
-    table.isEnabled = !pending;timeline.enabled = !pending && revision != nil
-    for view in [note,instrument,velocity,offset,units,snap,replaceLegacy,repeatCount,endVolume] as [NSControl] {view.isEnabled = !pending}
-    effect.isEnabled = !pending && note.selectedTag()<128;parameter.isEnabled=effect.isEnabled
-    reloadButton?.isEnabled = !pending;addButton?.isEnabled = !pending && revision != nil
-    updateButton?.isEnabled = !pending && draft.indices.contains(table.selectedRow);removeButton?.isEnabled=updateButton?.isEnabled ?? false
-    repeatButton?.isEnabled = !pending && editingRow != nil && note.selectedTag()<128
-    previewButton?.isEnabled = !pending && revision != nil;applyButton?.isEnabled=previewButton?.isEnabled ?? false
+    table.isEnabled = canEdit;timeline.enabled = canEdit
+    func enable(_ control:NSControl?,_ value:Bool) {if let control,control.isEnabled != value{control.isEnabled=value}}
+    for view in [note,instrument,velocity,offset,units,snap,replaceLegacy,repeatCount,endVolume] as [NSControl] {enable(view,canEdit)}
+    enable(effect,canEdit && note.selectedTag()<128);enable(parameter,effect.isEnabled)
+    enable(reloadButton,!pending);enable(addButton,canEdit)
+    enable(updateButton,canEdit && draft.indices.contains(table.selectedRow));enable(removeButton,updateButton?.isEnabled ?? false)
+    enable(repeatButton,canEdit && editingRow != nil && note.selectedTag()<128)
+    enable(previewButton,!pending && revision != nil);enable(applyButton,previewButton?.isEnabled ?? false)
   }
 }

@@ -60,7 +60,7 @@
           auto transformed = transformAutomationPoints(beforePoints, length, tool);
           lane->points = transformed.points; next.validate(song);
           const bool changed = next != _document->native();
-          if (!dryRun && changed) { _audio->stop(); _document->annotate([&](NativeSong &native) { native = next; }); }
+          if (!dryRun && changed) { _document->annotate([&](NativeSong &native) { native = next; },[&]{_audio->updateMusicalAutomation(next);}); }
           result = @{@"lane": nativeID(identifier), @"dryRun": @(dryRun), @"wouldChange": @(changed),
                      @"before": encode(beforePoints), @"after": encode(transformed.points), @"clippedValues": @(transformed.clipped)};
         }

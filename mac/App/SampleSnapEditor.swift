@@ -66,7 +66,8 @@ extension SampleEditor {
       let matched=positions.filter { $0["matched"] as? Bool == true }.count
       if loop {
         self.loopStart.stringValue=String(start);self.loopEnd.stringValue=String(end)
-        self.snapStatus.stringValue="Matched \(matched)/2 boundaries · \(start) → \(end). Apply to save the loop."
+        self.syncLoopMarkers();self.saveLoopsSoon()
+        self.snapStatus.stringValue="Matched \(matched)/2 boundaries · \(start) → \(end). Saving loop…"
       } else {
         self.waveform.selection=start...end
         self.snapStatus.stringValue="Matched \(matched)/2 boundaries · selected \(start) → \(end)."

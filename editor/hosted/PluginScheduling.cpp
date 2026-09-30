@@ -19,12 +19,13 @@ void NativePlugin::automate(const std::vector<ParameterChange> &points, size_t s
   std::stable_sort(automation_.begin(), automation_.end(), [](auto &a, auto &b) { return a.frame < b.frame; });
   while (automationPosition_ < automation_.size() && automation_[automationPosition_].frame < start) {
     auto p = automation_[automationPosition_++];
-    if (!parameter(p.id, p.value))
+    if (!appliedParameter(p.id,p.value,p.frame,{ParameterOrigin::Recorded}))
       throw std::runtime_error("Plugin rejected automation");
   }
 }
 bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, std::span<const PluginAudioInput> inputs) noexcept {
   if (frames > maximumFrames || position > UINT64_MAX - frames) return false;
+  bypassControl_.begin(buffer,frames);
   inputSources_.fill(nullptr);
   for (const auto &input : inputs) {
     if (!input.bus || input.bus >= 64 || !input.samples || inputSources_[input.bus] ||
@@ -48,7 +49,7 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
     }
     while (automationPosition_ < automation_.size() && automation_[automationPosition_].frame <= position + consumed) {
       auto p = automation_[automationPosition_++];
-      if (++events > 256 || !parameter(p.id, p.value))
+      if (++events > 256 || !appliedParameter(p.id,p.value,p.frame,{ParameterOrigin::Recorded}))
         return false;
     }
     while (musicalRead < musicalCount_ && (*musicalEvents_)[musicalRead].frame <= position + consumed) {
@@ -57,17 +58,17 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
       if (point.duration) {
         if (ramp == parameterRamps_.end()) ramp = std::find_if(parameterRamps_.begin(), parameterRamps_.end(), [](const auto &r) { return !r.active; });
         if (ramp == parameterRamps_.end()) return false;
-        *ramp = {point.id, true, {point.frame, point.duration, point.value, point.target}};
+        *ramp = {point.id, true, {point.frame, point.duration, point.value, point.target},point.source};
       } else {
         if (ramp != parameterRamps_.end()) ramp->active = false;
-        if (!parameter(point.id, float(point.value))) return false;
+        if (!appliedParameter(point.id,point.value,position+consumed,point.source)) return false;
       }
     }
     uint32_t count = frames - consumed;
     for (auto &ramp : parameterRamps_) if (ramp.active) {
       const auto at = position + consumed;
       const double value=ramp.ramp.value(at);
-      if (!(backend_ && backend_->supportsSampleOffsetParameters() ? backend_->parameter(ramp.id,value,0) : parameter(ramp.id,float(value)))) return false;
+      if (!appliedParameter(ramp.id,value,at,ramp.source)) return false;
       if (ramp.ramp.finished(at)) ramp.active = false;
       else if(backend_ && backend_->supportsSampleOffsetParameters()){const auto remaining=ramp.ramp.duration-(at-ramp.ramp.start);if(remaining<count)count=uint32_t(remaining+1);}
       else count = 1;
@@ -80,7 +81,7 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
     // VST3 queues carry both endpoints of a linear segment inside the audio
     // buffer. Split only at musical events or ramp endings, not every sample.
     if(backend_ && backend_->supportsSampleOffsetParameters() && count>1)for(const auto &ramp:parameterRamps_)if(ramp.active)
-      if(!backend_->parameter(ramp.id,ramp.ramp.value(position+consumed+count-1),count-1))return false;
+      if(!appliedParameter(ramp.id,ramp.ramp.value(position+consumed+count-1),position+consumed+count-1,ramp.source,count-1))return false;
     if (!count || !processBlock(buffer + consumed * 2, count, position + consumed, consumed))
       return false;
     consumed += count;
@@ -96,23 +97,33 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
     std::move(musicalMIDI_->begin()+midiRead,musicalMIDI_->begin()+musicalMIDICount_,musicalMIDI_->begin());
     musicalMIDICount_-=midiRead;
   }
+  bypassControl_.finish(buffer,frames);
+  for(auto bus:auxiliaryOutputs_)bypassControl_.finish(auxiliaryOutputBuffers_[bus]->interleaved.data(),frames,true);
   if (!outputDelay_.empty())
     for (uint32_t n = 0; n < frames * 2; ++n) {
       std::swap(buffer[n], outputDelay_[outputDelayPosition_]);
       outputDelayPosition_ = (outputDelayPosition_ + 1) % outputDelay_.size();
     }
   renderedThrough_ = position + frames;
+  if(activity_)activity_->held(activityProcessor_,renderedThrough_-1,activityAudible_&&!bypassed());
   return true;
 }
-bool NativePlugin::schedule(uint32_t id, float value, uint64_t frame) noexcept {
+void NativePlugin::cancelScheduledParameter(uint32_t id) noexcept {
+  if(musicalEvents_) {
+    auto end=std::remove_if(musicalEvents_->begin(),musicalEvents_->begin()+musicalCount_,[&](const auto &p){return p.id==id;});
+    musicalCount_=size_t(end-musicalEvents_->begin());
+  }
+  for(auto &r:parameterRamps_)if(r.id==id)r.active=false;
+}
+bool NativePlugin::schedule(uint32_t id, float value, uint64_t frame, ParameterSource source) noexcept {
   if (!musicalEvents_ || musicalCount_ == musicalEvents_->size() || !std::isfinite(value)) return false;
-  (*musicalEvents_)[musicalCount_++] = {id, value, frame, musicalSequence_++};
+  (*musicalEvents_)[musicalCount_++] = {id, value, frame, musicalSequence_++,0,0,source};
   return true;
 }
-bool NativePlugin::scheduleRamp(uint32_t id, double from, double to, uint64_t frame, uint64_t duration) noexcept {
+bool NativePlugin::scheduleRamp(uint32_t id, double from, double to, uint64_t frame, uint64_t duration, ParameterSource source) noexcept {
   if (!musicalEvents_ || musicalCount_ == musicalEvents_->size() || !SampleRamp{frame,duration,from,to}.valid()) return false;
-  if (!duration || from == to) return schedule(id, float(to), frame);
-  (*musicalEvents_)[musicalCount_++] = {id, duration ? from : to, frame, musicalSequence_++, duration, to};
+  if (!duration || from == to) return schedule(id, float(to), frame, source);
+  (*musicalEvents_)[musicalCount_++] = {id, duration ? from : to, frame, musicalSequence_++, duration, to,source};
   return true;
 }
 bool NativePlugin::scheduleMIDI(uint8_t status,uint8_t a,uint8_t b,uint64_t frame) noexcept {

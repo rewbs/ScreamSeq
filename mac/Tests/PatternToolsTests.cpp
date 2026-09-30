@@ -82,9 +82,26 @@ void rowSplices() {
 	std::cout << "PASS " << cases << " five-format masked row splice references, range/loss guards, exact history and separate envelope preservation\n";
 }
 }
+void preciseClipboard() {
+  Document doc(MOD_TYPE_MPT,4);
+  auto original=doc.native();const auto pattern=original.patterns.at(0).id,track=original.tracks.at(0).id;
+  original.preciseNotes={{pattern,track,1234,1,49,100,0,0},{pattern,original.tracks.at(1).id,8192,2,61,90,0,0}};
+  doc.editNative(original,{});
+  PatternTransform clear;clear.operation="clear";const std::vector<PatternRegion> regions{{0,0,1,0,1}};
+  auto next=prepareEffectTransform(doc,regions,clear);
+  check(next.preciseNotes.size()==1&&next.preciseNotes[0].track!=track,"Cut clears only selected precise events");
+  doc.editNative(next,preparePatternTransform(doc,regions,clear));doc.undo();check(doc.native()==original,"One Undo restores precise cut");doc.redo();
+  next=doc.native();const ClipboardNote note{0,{0,0,1234,1,49,100,0,0}};
+  preparePreciseNotePaste(doc,next,{0,2,1,2,1},{note},PatternAll,"overwrite",false);
+  check(next.preciseNotes.size()==2&&next.preciseNotes.back().position==2*65536+1234&&next.preciseNotes.back().track==next.tracks.at(2).id,"Paste translates precise channel and fractional timing");
+  doc.editNative(next,{});doc.undo();check(doc.native().preciseNotes.size()==1,"Undo removes pasted precise hits");doc.redo();check(doc.native()==next,"Redo restores pasted precise hits");
+  auto invalid=doc.native();rejects([&]{preparePreciseNotePaste(doc,invalid,{0,2,1,2,1},{note,note},PatternAll,"overwrite",false);});check(doc.native()==next,"Duplicate note paste rejection never changes document");
+  auto clean=doc.native();preparePreciseNotePaste(doc,clean,{0,2,1,2,1},{},PatternAll,"overwrite",false);check(clean.preciseNotes.size()==1,"Empty source clears destination precise hits");
+  clear.fields=PatternEffect;check(prepareEffectTransform(doc,regions,clear).preciseNotes==next.preciseNotes,"Effect-only clear preserves precise notes");
+}
 int main() {
 	try {
-		rowSplices();
+		rowSplices();preciseClipboard();
 		Document doc;
 		put(doc, 0, 0, {49, 1, VOLCMD_VOLUME, 4, CMD_VIBRATO, 0x34});
 		put(doc, 2, 0, {51, 2, VOLCMD_VOLUME, 12, 0, 0});

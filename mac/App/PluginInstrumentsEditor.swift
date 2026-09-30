@@ -50,7 +50,7 @@ final class PluginInstrumentsEditor: NSView,NSTableViewDataSource,NSTableViewDel
     onRequest("plugin.instruments.get",["plugin":plugin]){[weak self] reply in
       guard let self else{return};self.pending=false
       guard let result=reply["result"] as? [String:Any],let data=result["data"] as? [String:Any],let revision=result["revision"] as? String,self.accepts(data) else {self.failure(reply);return}
-      self.revision=revision;self.show(data);self.status.stringValue="Add existing tracker instruments, then Apply. Changes stop playback and use Undo effect change.";self.updateControls()
+      self.revision=revision;self.show(data);self.status.stringValue="Add existing tracker instruments, then Apply. Changes stop playback and use Undo.";self.updateControls()
     }
   }
   private func accepts(_ data:[String:Any])->Bool { data["plugin"] as? String==plugin && data["isInstrument"] as? Bool==true }
@@ -90,7 +90,7 @@ final class PluginInstrumentsEditor: NSView,NSTableViewDataSource,NSTableViewDel
       guard let self else{return};self.pending=false
       guard let result=reply["result"] as? [String:Any],let data=result["data"] as? [String:Any],let routing=data["routing"] as? [String:Any],self.accepts(routing),let revision=result["revision"] as? String else {self.failure(reply);return}
       self.revision=revision;if !dryRun {self.show(routing)}
-      self.status.stringValue=(data["wouldChange"] as? Bool==true) ? (dryRun ? "Assignments are valid. Apply saves them and stops playback." : "Assignments saved. Undo effect change restores the previous routing.") : "These assignments are already saved.";self.updateControls()
+      self.status.stringValue=(data["wouldChange"] as? Bool==true) ? (dryRun ? "Assignments are valid. Apply saves them and stops playback." : "Assignments saved. Undo restores the previous routing.") : "These assignments are already saved.";self.updateControls()
     }
   }
   private func failure(_ reply:[String:Any]){status.stringValue=(reply["error"] as? [String:Any])?["message"] as? String ?? "Could not read this instrument plugin. Reopen the panel from the plugin you want.";updateControls()}

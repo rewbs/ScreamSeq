@@ -20,12 +20,41 @@ static NSDictionary *descriptor(const PluginDescriptor &d) {
     @"name": @(d.name.c_str()), @"format": @(d.format.c_str()), @"path": @(d.path.c_str()),
     @"classID": @(d.classID.c_str()), @"isInstrument": @(d.instrument)};
 }
+static void liveAutomation(PluginState state) {
+  for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u}) {
+    Document doc;doc.transaction([](auto &s){s.Order().assign(8,0);});
+    NativePlugin baseline(state,rate,true);baseline.parameter(7,.6f);state=baseline.state();state.instanceID="live-A";
+    auto other=state;other.instanceID="live-B";
+    PluginChain chain({other,state},rate,true);Renderer renderer(doc.snapshotData(),rate);
+    chain.attachInstruments(renderer);chain.attachMusicalAutomation(renderer,doc.native());
+    auto native=doc.native();auto pattern=native.patterns.at(0).id;
+    native.automation={{native.makeEntity().id,pattern,"live-A",7,true,{{0,.2,AutomationCurve::Step}}},
+                       {native.makeEntity().id,pattern,"live-B",7,true,{{0,.5,AutomationCurve::Step}}}};
+    std::array<float,8192> audio{},silent{};
+    auto render=[&](double expected){
+      std::fill_n(audio.data(),2*block,.25f);uint64_t a,f,l;
+      tracker_audit_begin();chain.beginRenderBlock();renderer.render(silent.data(),block);bool okay=chain.process(audio.data(),block);tracker_audit_end(&a,&f,&l);
+      check(okay&&!renderer.faulted()&&a+f+l==0,"Live plan adoption is allocation/free/lock free");
+      for(size_t i=0;i<2*block;++i)check(std::abs(audio[i]-expected)<2e-6,"Live envelope affects the correct stable plugin on the next buffer");
+    };
+    render(.25*.6*.6);
+    chain.updateMusicalAutomation(native);render(.25*.2*.5);
+    for(double value:{.3,.7,.8}){native.automation[0].points[0].value=value;chain.updateMusicalAutomation(native);}
+    render(.25*.8*.5); // Several edits between callbacks: latest full plan wins.
+    native.automation[0].points={{0,.4,AutomationCurve::Scripted,CurveFormula("start")}};
+    chain.updateMusicalAutomation(native);render(.25*.4*.5);
+    native.automation[0].enabled=false;chain.updateMusicalAutomation(native);render(.25*.6*.5);
+    native.automation.clear();chain.updateMusicalAutomation(native);render(.25*.6*.6);
+    check(renderer.telemetry().frames==6*block,"Editing automation does not restart or pause the transport");
+  }
+}
 int main(int argc, char **argv) {
   @autoreleasepool {
     try {
       check(argc == 2, "Fixture path required");
       auto discovered = NativePlugin::discoverVST3(argv[1]);
       PluginState gain{discovered.at(0)}, synth{discovered.at(1)};
+      liveAutomation(gain);
       gain.instanceID = "gain"; synth.instanceID = "synth"; synth.instrument = 1;
       Document doc;
       doc.transaction([](CSoundFile &song) {

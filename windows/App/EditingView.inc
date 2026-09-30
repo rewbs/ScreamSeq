@@ -17,6 +17,8 @@
             wcscpy_s(code,c.kind==K::ParameterSet?L"PS":L"PL");swprintf_s(value,L"%02X:%04X",unsigned(c.binding),unsigned(std::lround(c.value*65535)));break;
         case K::PitchSet:case K::PitchSlide:
             wcscpy_s(code,c.kind==K::PitchSet?L"BS":L"BL");swprintf_s(value,L"%+.3f",c.value);break;
+        case K::NudgeForward:case K::NudgeReverse:
+            wcscpy_s(code,c.kind==K::NudgeForward?L"NF":L"NR");swprintf_s(value,L"%.2f%%",100*c.value);break;
         case K::NoteCut:wcscpy_s(code,L"NC");swprintf_s(value,L"%04X",c.position%Tracker::performanceUnitsPerRow);break;
         }
         return {code,value};
@@ -75,7 +77,7 @@
             effectPrefix.clear();setTrackerEffect(entry.at("command"),mask?(old&~mask)|value:old);
             auto n=position();n["column"]=column+1;navigate(n);return true;
         }
-        for(auto code:{"PS","PL","BS","BL","NC"})if(candidate==code){effectPrefix.clear();openEffectEditor(candidate);return true;}
+        for(auto code:{"PS","PL","BS","BL","NC","NF","NR"})if(candidate==code){effectPrefix.clear();openEffectEditor(candidate);return true;}
         const bool prefix=std::any_of(view->commands.at("effect").begin(),view->commands.at("effect").end(),[&](const auto &entry){return entry.at("displayCode").template get<std::string>().starts_with(candidate);}) || candidate=="P" || candidate=="B" || candidate=="N";
         if(candidate.size()==1&&prefix){effectPrefix=candidate;effectPrefixRevision=view->session.revision;status=L"Effect "+wide(candidate)+L"_ / type the second character";return true;}
         effectPrefix.clear();

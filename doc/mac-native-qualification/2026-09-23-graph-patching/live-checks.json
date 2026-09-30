@@ -1,0 +1,17 @@
+{
+  "verified": [
+    "Real socket drag: Track 1 main into compressor",
+    "Real socket drag: Track 2 into named inactive detector",
+    "Existing Track 2 normal output retained",
+    "Marquee selected two processors; group drag retained 220-pixel separation",
+    "Chain drop replaced dry Input-to-Output route",
+    "Keyboard Cmd-Z restored exact pre-insert graph JSON, including positions",
+    "Keyboard Cmd-Shift-Z restored insertion; saved disposable project"
+  ],
+  "userProcessPreserved": 47040,
+  "finalBundleChecks": [
+    "Final bundle real drag confirmed Track 2 / Compressor / Detector sidechain [1] in the connection form",
+    "Switching to library visibly restored Gain \u00d7 1 and library-specific patching help",
+    "Arrange and Fit produced Input \u2192 Distortion \u2192 Compressor \u2192 Output"
+  ]
+}

@@ -1,6 +1,7 @@
 #include "../Audio/AudioUnitHost.hpp"
 #include "../Audio/NativeSignalGraph.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "editor/hosted/RenderOnce.hpp"
 #include "soundlib/ModInstrument.h"
 #import <AppKit/AppKit.h>
 #include <dlfcn.h>
@@ -37,6 +38,49 @@ int main(int argc, char **argv) { @autoreleasepool { try {
       std::array<float,256> audio{};audio[0]=audio[1]=1;
       tracker_audit_begin();const bool ok=p.process(audio.data(),128,0);uint64_t a,f,l;tracker_audit_end(&a,&f,&l);
       check(ok && a+f+l==0 && audio[0]==0 && audio[14]==.75f, "Updated processor produces delayed audio without callback allocation/free/lock");
+    }
+    for(uint32_t block:{17u,512u,4096u}) {
+      latency(13);NativePlugin plugin(effect,rate,true);check(plugin.parameter(7,.5),"Set bypass comparison gain");
+      std::array<float,8192> audio{};
+      for(uint32_t position=0;position<6000;) {
+        auto frames=std::min(block,6000-position);for(auto boundary:{1000u,1100u,3000u})if(position<boundary)frames=std::min(frames,boundary-position);
+        if(position==1000)plugin.bypass(true);if(position==1100)plugin.bypass(false);if(position==3000)plugin.bypass(true);
+        audio.fill(1);uint64_t a,f,l;tracker_audit_begin();const auto ok=plugin.process(audio.data(),frames,position);tracker_audit_end(&a,&f,&l);
+        check(ok&&a+f+l==0,"VST3 bypass continues processing without callback allocation/free/lock");
+        const double fade=std::round(rate*.005),reverse=1-100/fade;
+        for(uint32_t i=0;i<frames;++i){const auto frame=position+i;
+          const double wet=frame<1000?1:frame<1100?1-(frame-1000)/fade:frame<3000?std::min(1.,reverse+(1-reverse)*(frame-1100)/fade):std::max(0.,1-(frame-3000)/fade);
+          const double expected=frame<13?0:1-.5*wet;
+          check(std::abs(audio[i*2]-expected)<1e-6&&std::abs(audio[i*2+1]-expected)<1e-6,"VST3 delayed wet/dry and interrupted fade have exact continuous gain");
+        }
+        position+=frames;
+      }
+      check(std::llround(plugin.latency()*rate)==13,"Bypass retains vendor latency");
+    }
+    for(uint32_t block:{17u,512u,4096u}) {
+      latency(13);
+      NativePlugin reference(effect,rate,true);
+      auto processor=std::make_shared<NativePlugin>(effect,rate,true);
+      auto shared=std::make_shared<RenderOnce<NativePlugin>>(processor);
+      // These represent two prepared plans owning the same unchanged stage.
+      auto incoming=shared;
+      check(reference.parameter(7,.5) && processor->parameter(7,.5),"Set shared processor reference gain");
+      std::array<float,8192> expected{},outgoing{},next{};
+      for(uint32_t position=0;position<9000;) {
+        const auto frames=std::min(block,9000-position);
+        for(uint32_t i=0;i<frames*2;++i) expected[i]=outgoing[i]=next[i]=float(std::sin((position+i/2)*.027)*.5);
+        uint64_t a,f,l;tracker_audit_begin();
+        bool okay=reference.process(expected.data(),frames,position);
+        okay=shared->process(outgoing.data(),frames,position) && okay;
+        if(position<6000)okay=incoming->process(next.data(),frames,position) && okay;
+        tracker_audit_end(&a,&f,&l);
+        check(okay && a+f+l==0,"Shared VST3 output reuse has no callback allocation/free/lock");
+        check(std::equal(expected.begin(),expected.begin()+frames*2,outgoing.begin()),"An unchanged latency-bearing processor retains exact state across shared and single-plan rendering");
+        if(position<6000)check(std::equal(expected.begin(),expected.begin()+frames*2,next.begin()),"Both plans receive the same current audio without advancing the processor twice");
+        if(frames>1)check(!incoming->process(next.data(),frames-1,position),"Mismatched plan chunk boundaries are rejected without reprocessing");
+        if(position)check(!incoming->process(next.data(),frames,position-1),"An expired render chunk cannot be replayed from an unrelated cache interval");
+        position+=frames;
+      }
     }
     for (bool mixer : {false,true}) {
       latency(0);

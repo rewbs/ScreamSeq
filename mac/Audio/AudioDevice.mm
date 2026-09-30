@@ -132,7 +132,7 @@ void AudioDevice::removeListeners() {
   listening_ = false;
 }
 void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool preview, const std::string &sourcePath,
-                       uint32_t sequence, const NativeSong *native, PlaybackRegion region) {
+                       uint32_t sequence, const NativeSong *native, PlaybackRegion region, bool isolatedSample) {
   stop();
   auto editors = plugins_ ? plugins_->openEditors() : std::vector<size_t>{};
   if (!pendingEditors_.empty()) {
@@ -143,17 +143,21 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
     pluginStates_ = plugins_->states();
   if (!unit_)
     configure();
-  renderer_ = std::make_unique<Renderer>(bytes, uint32_t(sampleRate_), order, preview, sourcePath, sequence, region, preview ? nullptr : native);
+  renderer_ = std::make_unique<Renderer>(bytes, uint32_t(sampleRate_), order, preview, sourcePath, sequence, region, native);
   if (native && !preview) {renderer_->applyColumnMutes(*native, renderer_->song());renderer_->preparePreciseNotes(*native);}
   previewing_ = preview;
-  plugins_ = pluginStates_.empty() && !(native && (native->mixer.active() || !native->performance.commands.empty()) && !preview)
+  // The sample inspector's finite Audition button uses a standalone sample
+  // document. Keep the saved rack for the next song preparation, without
+  // flattening its channel inserts onto this raw preview.
+  plugins_ = isolatedSample || (pluginStates_.empty() && !(native && (native->mixer.active() || !native->performance.commands.empty())))
                  ? nullptr
                  : std::make_unique<PluginChain>(pluginStates_, sampleRate_, false, automation_,
                                                  uint64_t(double(renderer_->telemetry().frames) * 48000 / sampleRate_));
   if (plugins_)
-    plugins_->attachInstruments(*renderer_, preview ? nullptr : native);
-  if (plugins_ && native && !preview)
+    plugins_->attachInstruments(*renderer_, native);
+  if (plugins_ && native)
     plugins_->attachMusicalAutomation(*renderer_, *native);
+  restoreParameterActivity();
   callbacks_ = 0;
   overruns_ = 0;
   maxNanos_ = 0;
@@ -176,6 +180,11 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
     throw;
   }
 }
+void AudioDevice::restoreParameterActivity() {
+  if(!plugins_||activityTarget_.empty())return;
+  auto &activity=plugins_->parameterActivity();
+  for(const auto &target:activity.processors)if(target.key==activityTarget_)for(const auto &p:target.parameters)if(p.id==activityParameter_){activity.watch(target.key,p.id,p.value);activity.begin(plugins_->position());return;}
+}
 void AudioDevice::setPlugins(const std::vector<PluginState> &states, const std::vector<ParameterChange> &automation,
                              bool preserveEditors) {
   pendingEditors_ = preserveEditors && plugins_ ? plugins_->openEditors() : std::vector<size_t>{};
@@ -183,6 +192,7 @@ void AudioDevice::setPlugins(const std::vector<PluginState> &states, const std::
   stop();
   renderer_.reset();
   plugins_ = std::move(next);
+  restoreParameterActivity();
   pluginStates_ = states;
   automation_ = automation;
 }

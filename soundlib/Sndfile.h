@@ -1063,6 +1063,8 @@ public:
 	// Prepared host pitch curves for this mix chunk. Only explicitly controlled
 	// channels use the per-sample path; legacy songs keep their normal mixer.
 	std::array<const double *, MAX_BASECHANNELS> nativePitchRatios{};
+	// Signed physical speed added to the nominal sample direction; never sent to plugins.
+	std::array<const double *, MAX_BASECHANNELS> nativeNudgeForces{};
 	void PrepareRealtime() { m_visitedRows.PrepareRealtime(); m_PlayState.m_midiMacroScratchSpace.reserve(65536); }
 	bool RealtimeCapacityExceeded() const noexcept { return m_visitedRows.RealtimeExhausted(); }
 #endif

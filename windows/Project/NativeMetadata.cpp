@@ -89,5 +89,6 @@ Json encodeNativeMetadata(const Tracker::NativeSong &n) {
   need(decodeNativeMetadata(encoded) == n,"Native model cannot roundtrip through metadata 17");
   return encoded;
 }
+std::string validatedNativeText(const Json &value,size_t maximum) {return text(value,maximum);}
 Json encodeMixerMetadata(const Tracker::MixerGraph &graph) {return mixer(graph);}
 } // namespace ScreamSeq::Project

@@ -1,0 +1,80 @@
+{
+  "changed": false,
+  "data": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 2331,
+    "fault": false,
+    "frames": 1193472,
+    "graphActivity": [
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n2"
+      }
+    ],
+    "left": 0.12502986192703247,
+    "loop": true,
+    "maxMicros": 2549.5,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 2450,
+    "pattern": 0,
+    "patternPosition": 3507.226473629783,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0.001875,
+    "region": {
+      "cursorRow": 0,
+      "loop": true,
+      "order": 0
+    },
+    "right": 0.12502406537532806,
+    "row": 13,
+    "voicePositions": [
+      {
+        "channel": 0,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 0,
+        "sample": 1,
+        "sampleFrame": 70
+      },
+      {
+        "channel": 1,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 13,
+        "instrument": 0,
+        "sample": 2,
+        "sampleFrame": 80
+      },
+      {
+        "channel": 3,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 51,
+        "instrument": 0,
+        "sample": 4,
+        "sampleFrame": 10734
+      }
+    ],
+    "voices": 3
+  },
+  "documentId": "E11EA667-47D0-4185-A892-09D0FE356C26",
+  "playbackStopped": false,
+  "revision": "E11EA667-47D0-4185-A892-09D0FE356C26:0:0:0"
+}

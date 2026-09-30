@@ -91,8 +91,9 @@ public:
       failed_ = true;
       return;
     }
+    chain_.routeInstrument(processor_, buffer_.data(),count,position_);
     position_ += count;
-    if (chain_.hasMixer()) { chain_.routeInstrument(processor_, buffer_.data()); return; }
+    if (chain_.hasMixer()) return;
     for (uint32 i = 0; i < count; ++i) {
       left[i] += buffer_[i * 2];
       right[i] += buffer_[i * 2 + 1];
@@ -125,7 +126,7 @@ public:
   int GetNumInputChannels() const override { return 2; }
   int GetNumOutputChannels() const override { return 2; }
   void Process(float *left, float *right, uint32 frames) override {
-    chain_.processSampleGraph(bus_,m_mixBuffer.GetInputBuffer(0),m_mixBuffer.GetInputBuffer(1),frames);
+    chain_.processSampleGraph(bus_,m_mixBuffer.GetInputBuffer(0),m_mixBuffer.GetInputBuffer(1),frames,left,right);
   }
 };
 class MixerAdapter final : public IMixPlugin {
@@ -154,7 +155,7 @@ public:
   int GetNumInputChannels() const override { return 2; }
   int GetNumOutputChannels() const override { return 2; }
   void Process(float *left, float *right, uint32 frames) override {
-    const auto *out = chain_.processMixerBus(bus_, m_mixBuffer.GetInputBuffer(0), m_mixBuffer.GetInputBuffer(1));
+    const auto *out = chain_.captureMixerBus(bus_, m_mixBuffer.GetInputBuffer(0), m_mixBuffer.GetInputBuffer(1), frames, master_);
     if (master_ && out) for (uint32_t i = 0; i < frames; ++i) { left[i] += out[i * 2]; right[i] += out[i * 2 + 1]; }
   }
 };
@@ -169,39 +170,29 @@ void PluginChain::attachMusicalAutomation(Renderer &renderer, const NativeSong &
   auto &song = renderer.song();
   song.nativeMixObserver = nullptr; song.nativeMixContext = nullptr;
   hasMusicalControls_=!native.performance.commands.empty()||std::any_of(native.automation.begin(),native.automation.end(),[](const auto &lane){return lane.enabled;});
-  commandRuntime_=std::make_shared<PatternCommandRuntime>(native,plugins_,instances_,bypass_,automation_);
+  const std::vector<bool> processing(plugins_.size(),false);
+  commandRuntime_=std::make_shared<PatternCommandRuntime>(native,plugins_,instances_,processing,automation_);
   musicalSong_=&song;song.nativePitchRatios.fill(nullptr);
-  pitchRuntime_=std::make_shared<PatternPitchRuntime>(native,song,plugins_,bypass_);
-  musicalPatterns_.clear();
-  musicalPatterns_.resize(song.Patterns.Size());
+  pitchRuntime_=std::make_shared<PatternPitchRuntime>(native,song,plugins_,processing);
+  musicalCatalog_.clear();musicalTargets_.clear();
+  for(auto &plugin:plugins_) {plugin->prepareMusicalAutomation();musicalCatalog_.push_back(plugin->parameters());}
+  initialMusicalPlan_=prepareMusicalPlan(native);musicalPlan_=initialMusicalPlan_.get();
+  for(const auto &lanes:musicalPlan_->patterns)for(const auto &lane:lanes) {
+    musicalTargets_.emplace_back(lane.slot,lane.parameter);
+    for(const auto &point:lane.points) {
+      const float target=float(lane.minimum+(lane.maximum-lane.minimum)*point.value);
+      plugins_[lane.slot]->includeParameterRange(lane.parameter,point.curve==AutomationCurve::Scripted?lane.minimum:target,point.curve==AutomationCurve::Scripted?lane.maximum:target);
+    }
+  }
   musicalPosition_ = position_;
   musicalPattern_ = UINT32_MAX;
-  for (const auto &lane : native.automation) {
-    if (!lane.enabled) continue;
-    auto instance = std::find(instances_.begin(), instances_.end(), lane.plugin);
-    auto pattern = std::find_if(native.patterns.begin(), native.patterns.end(), [&](const auto &p) { return p.second.id == lane.pattern; });
-    if (instance == instances_.end() || pattern == native.patterns.end()) continue;
-    size_t slot = size_t(instance - instances_.begin());
-    if (bypass_[slot]) continue;
-    auto parameters = plugins_[slot]->parameters();
-    auto parameter = std::find_if(parameters.begin(), parameters.end(), [&](const auto &p) { return p.id == lane.parameter; });
-    if (parameter == parameters.end()) continue; // Retain unavailable destinations without retargeting.
-    for (const auto &point : automation_)
-      if (point.slot == slot && point.id == lane.parameter)
-        throw std::invalid_argument("Remove absolute automation for a parameter before enabling its pattern automation");
-    auto &lanes = musicalPatterns_.at(pattern->first);
-    plugins_[slot]->prepareMusicalAutomation();
-    for (const auto &point : lane.points) {
-      const float target = float(parameter->min + (parameter->max - parameter->min) * point.value);
-      plugins_[slot]->includeParameterRange(lane.parameter, point.curve == AutomationCurve::Scripted ? parameter->min : target, point.curve == AutomationCurve::Scripted ? parameter->max : target);
-    }
-    lanes.push_back({slot, lane.parameter, parameter->min, parameter->max, lane.points,
-      std::any_of(lane.points.begin(), lane.points.end(), [](const auto &p) { return p.curve == AutomationCurve::StepNext; }), uint32_t(song.Patterns[pattern->first].GetNumRows())*256, parameter->continuous});
-  }
-  if (native.automation.empty() && native.performance.commands.empty() && !mixer_) return;
   song.nativeMixContext = this;
   song.nativeMixObserver = [](void *context, const PlayState &state, uint32 count) noexcept {
     auto &chain = *static_cast<PluginChain *>(context);
+    const bool advancing=!state.m_flags[SONG_PAUSED]&&!state.m_flags[SONG_FADINGSONG]&&state.m_nSamplesPerTick&&state.TicksOnRow();
+    const double step=advancing?256.0/(double(state.TicksOnRow())*state.m_nSamplesPerTick):0;
+    const double at=state.m_nRow*256.+(advancing?double(state.m_nTickCount)*256./state.TicksOnRow()+state.SamplesIntoTick()*step:0);
+    chain.activity_->clock(chain.musicalPosition_,state.m_nPattern,state.m_nCurrentOrder,at,step);
     chain.beginMixer(count);
     const auto rows=chain.musicalSong_->Patterns.IsValidPat(state.m_nPattern)?chain.musicalSong_->Patterns[state.m_nPattern].GetNumRows():64;
     if(chain.signalGraph_)chain.signalGraph_->begin(state,count,chain.musicalPosition_,transportFor(*chain.musicalSong_),rows);
@@ -216,13 +207,52 @@ void PluginChain::attachMusicalAutomation(Renderer &renderer, const NativeSong &
     chain.scheduleMusical(state.m_nPattern, position, unitsPerSample, state.SamplesIntoTick(), count, state.AtStartOfTick());
   };
 }
+std::unique_ptr<PluginChain::MusicalPlan> PluginChain::prepareMusicalPlan(const NativeSong &native) const {
+  auto plan=std::make_unique<MusicalPlan>();plan->patterns.resize(musicalSong_->Patterns.Size());
+  auto targets=musicalTargets_;
+  for(const auto &lane:native.automation) {
+    if(!lane.enabled)continue;
+    auto instance=std::find(instances_.begin(),instances_.end(),lane.plugin);
+    auto pattern=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &p){return p.second.id==lane.pattern;});
+    if(instance==instances_.end()||pattern==native.patterns.end())continue;
+    const size_t slot=size_t(instance-instances_.begin());
+    const auto &parameters=musicalCatalog_.at(slot);
+    auto p=std::find_if(parameters.begin(),parameters.end(),[&](const auto &v){return v.id==lane.parameter;});
+    if(p==parameters.end()||!p->writable||!std::isfinite(p->min)||!std::isfinite(p->max)||p->max<=p->min)continue;
+    for(const auto &absolute:automation_)if(absolute.slot==slot&&absolute.id==lane.parameter)
+      throw std::invalid_argument("Remove absolute automation for a parameter before enabling its pattern automation");
+    auto &lanes=plan->patterns.at(pattern->first);
+    lanes.push_back({slot,lane.parameter,p->min,p->max,lane.points,
+      std::any_of(lane.points.begin(),lane.points.end(),[](const auto &v){return v.curve==AutomationCurve::StepNext;}),
+      uint32_t(musicalSong_->Patterns[pattern->first].GetNumRows())*256,p->continuous,lane.id});
+    targets.emplace_back(slot,lane.parameter);
+  }
+  std::sort(targets.begin(),targets.end());targets.erase(std::unique(targets.begin(),targets.end()),targets.end());
+  for(auto [slot,id]:targets)for(const auto &p:musicalCatalog_.at(slot))if(p.id==id)plan->reset.push_back({uint32_t(slot),id,p.value,0});
+  return plan;
+}
+void PluginChain::updateMusicalAutomation(const NativeSong &native) {
+  if(!musicalSong_)throw std::runtime_error("Playback automation is not prepared");
+  if(!musicalUpdates_.available())throw std::runtime_error("Automation update queue is full; retry the edit");
+  auto plan=prepareMusicalPlan(native);
+  auto targets=musicalTargets_;for(const auto &p:plan->reset)targets.emplace_back(p.slot,p.id);
+  std::sort(targets.begin(),targets.end());targets.erase(std::unique(targets.begin(),targets.end()),targets.end());
+  if(!musicalUpdates_.publish(std::move(plan)))throw std::runtime_error("Automation update queue is full");
+  musicalTargets_=std::move(targets);hasMusicalControls_.store(true,std::memory_order_relaxed);
+}
+void PluginChain::consumeMusicalPlan() noexcept {
+  if(const auto *plan=musicalUpdates_.consume()) {
+    musicalPlan_=plan;musicalPattern_=UINT32_MAX;
+    for(const auto &p:plan->reset) {plugins_[p.slot]->cancelScheduledParameter(p.id);if(!plugins_[p.slot]->appliedParameter(p.id,p.value,position_,{ParameterOrigin::Reset}))failed_=true;}
+  }
+}
 void PluginChain::scheduleMusical(uint32_t pattern, double tickPosition, double unitsPerSample,
                                   uint32_t samplesIntoTick, uint32_t frames, bool tickStart) noexcept {
   const double position = tickPosition + samplesIntoTick * unitsPerSample;
   const bool entering = musicalPattern_ != pattern;
   musicalPattern_ = pattern;
-  if (pattern < musicalPatterns_.size()) {
-    for (const auto &lane : musicalPatterns_[pattern]) {
+  if (musicalPlan_ && pattern < musicalPlan_->patterns.size()) {
+    for (const auto &lane : musicalPlan_->patterns[pattern]) {
       auto emit = [&](uint32_t offset) {
         // Form the integer sample offset before converting, so rounding does
         // not depend on how the audio callback partitioned this tick.
@@ -242,8 +272,8 @@ void PluginChain::scheduleMusical(uint32_t pattern, double tickPosition, double 
             const auto until=std::ceil((next->position-tickPosition)/unitsPerSample-1e-9)-double(atSample);
             if(until>0) duration=std::min(duration,uint64_t(until-1)); // Keep an explicit knot discontinuity.
           }
-          if(!plugins_[lane.slot]->scheduleRamp(lane.parameter,valueAt(atSample),valueAt(atSample+duration),musicalPosition_+offset,duration)) failed_=true;
-        } else if(!plugins_[lane.slot]->schedule(lane.parameter,float(valueAt(atSample)),musicalPosition_+offset)) failed_=true;
+          if(!plugins_[lane.slot]->scheduleRamp(lane.parameter,valueAt(atSample),valueAt(atSample+duration),musicalPosition_+offset,duration,{ParameterOrigin::Envelope,lane.id,pattern})) failed_=true;
+        } else if(!plugins_[lane.slot]->schedule(lane.parameter,float(valueAt(atSample)),musicalPosition_+offset,{ParameterOrigin::Envelope,lane.id,pattern})) failed_=true;
       };
       if (tickStart || entering) emit(0);
       // A global 32-sample grid avoids changing curves with callback size.
@@ -282,8 +312,9 @@ void PluginChain::scheduleMusical(uint32_t pattern, double tickPosition, double 
 }
 void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native) {
   auto &song = renderer.song();
+  if(native)prepareRoutingPorts(native->mixer);
   song.nativeSamplePlugin=nullptr;song.nativeSampleContext=nullptr;sampleRoutes_.clear();sampleSignalGraph_.reset();
-  const auto sampleCopies=native?native->signal.instrumentAssignments.size()*song.GetNumChannels():0;
+  const auto sampleCopies=native?native->signal.instrumentAssignments.size()*(song.GetNumChannels()+1):0;
   const auto assigned = size_t(std::count_if(instruments_.begin(), instruments_.end(), [](auto index) { return index != 0; }));
   const auto buses = (native && native->mixer.active() ? native->mixer.buses.size() : 0)+sampleCopies;
   if (assigned > maximumNativeAdapters || buses > maximumNativeAdapters - assigned)
@@ -301,10 +332,13 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
       }
       processors.push_back({instances_[i], uint32_t(std::llround(p.latency() * sampleRate_)),
                             source ? std::max(2.0, p.tail()) : p.tail(), source,
-                            bypass_[i] || (source && !instruments_[i]), count, enabled, inputs});
+                            (source && !instruments_[i]), count, enabled, inputs});
     }
     auto graph=native->mixer;
-    signalGraph_=std::make_shared<NativeSignalGraph>(*native,sampleRate_,offline_);
+    const auto bypassBytes=bypassStorageBytes();
+    if(bypassBytes>256u*1024u*1024u)throw std::invalid_argument("Plugin bypass audio storage exceeds 256 MB");
+    preparedSignal_=native->signal;
+    signalGraph_=std::make_shared<NativeSignalGraph>(*native,sampleRate_,offline_,std::span<const SignalSampleSource>{},256*1024*1024-bypassBytes,256,activity_.get());
     signalGraph_->compile(graph,processors);
     if(sampleCopies){
       NativeSong prepared=*native;prepared.mixer={};prepared.signal={};prepared.signal.library=native->signal.library;
@@ -314,23 +348,59 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
         if(found==native->instruments.end()||!song.Instruments[found->first])throw std::invalid_argument("Instrument graph target is missing");
         for(const auto &p:plugins_)if(p->isInstrument())for(const auto &assignment:p->assignments())if(assignment.instrument==found->first)throw std::invalid_argument("Sample instrument graph cannot process a plugin instrument; route its output bus instead");
         const auto *instrument=song.Instruments[found->first];
-        for(uint16_t channel=0;channel<song.GetNumChannels();++channel){
-          const auto id=NativeSong::maximumID+1+sources.size();const auto target=native->tracks.at(channel).id;
+        for(uint16_t channel=0;channel<=song.GetNumChannels();++channel){
+          const bool inspector=channel==song.GetNumChannels();
+          const auto id=NativeSong::maximumID+1+sources.size();const auto target=inspector?0:native->tracks.at(channel).id;
+          const auto parent=inspector?UINT16_MAX:channel;
           prepared.mixer.buses.push_back({id,0,MixerBusKind::Group,"Instrument source"});prepared.signal.assignments.push_back({id,a.graph,a.amount,a.wet});
-          sources.push_back({id,instrument,channel,song.GetNumChannels()});sampleRoutes_.push_back({instrument,channel,0,0,a.target,target});
+          sources.push_back({id,instrument,uint16_t(parent),song.GetNumChannels(),a.target});sampleRoutes_.push_back({instrument,uint16_t(parent),0,0,a.target,target});
           graph.instruments.push_back({signalBusIdentity(id),target,0});
         }
       }
-      sampleSignalGraph_=std::make_shared<NativeSignalGraph>(prepared,sampleRate_,offline_,sources,256*1024*1024-signalGraph_->storageBytes(),256-signalGraph_->processors());
+      sampleSignalGraph_=std::make_shared<NativeSignalGraph>(prepared,sampleRate_,offline_,sources,256*1024*1024-bypassBytes-signalGraph_->storageBytes(),256-signalGraph_->processors(),activity_.get());
       MixerGraph unused;std::vector<MixerProcessorInfo> sampleInfo;sampleSignalGraph_->compile(unused,sampleInfo);
-      for(size_t i=0;i<sampleInfo.size();++i){sampleRoutes_[i].processor=processors.size();sampleInfo[i].instrument=true;processors.push_back(sampleInfo[i]);}
+      for(size_t i=0;i<sampleInfo.size();++i){sampleRoutes_[i].processor=processors.size();sampleRoutes_[i].previewTail=uint64_t((sampleInfo[i].tail+.02)*sampleRate_)+sampleInfo[i].latency;sampleInfo[i].instrument=true;processors.push_back(sampleInfo[i]);}
     }
     mixerTracks_ = tracks; mixerProcessors_ = processors;
     auto plan = compileMixer(graph, tracks, processors, uint32_t(sampleRate_));
     auto mixer = std::make_unique<MixerRuntime>(std::move(graph), std::move(plan), sampleRate_, position_);
+    busObservations_.clear();
+    for(size_t i=0;i<mixer->graph().buses.size();++i) {
+      const auto &bus=mixer->graph().buses[i];const auto node="n"+std::to_string(bus.id);
+      const auto &plan=mixer->plan().nodes[i];
+      const auto input=observation_->add({node+"/in/0",node,bus.name+" input",false,0,2,0,plan.directDelay});
+      const auto output=observation_->add({node+"/out/0",node,bus.name+" output",true,0,2,int64_t(plan.outputLatency)-plan.inputLatency,0});
+      busObservations_.push_back({input,output});
+    }
+    mixer->observer([](void *context,size_t bus,bool output,const float *samples,uint32_t frames,uint64_t position)noexcept{
+      auto &chain=*static_cast<PluginChain *>(context);
+      if(bus<chain.busObservations_.size())chain.observation_->observe(chain.busObservations_[bus][output?1:0],samples,frames,position);
+    },this);
     latency_ = mixer->plan().latency / sampleRate_; tail_ = mixer->plan().tail;
     captureTails();
-    mixer_ = std::move(mixer);
+    auto prepared=std::make_unique<MixerTransition::Plan>();prepared->runtime=std::move(mixer);prepared->catalog=processors;
+    auto hosted=std::make_shared<HostedMixerPlan>();hosted->owner=this;hosted->busObservations=busObservations_;
+    for(size_t i=0;i<processors.size();++i) {
+      auto processor=std::make_shared<MixerProcessor>();
+      if(i<plugins_.size()) {
+        processor->plugin=plugins_[i];
+        for(const auto &port:plugins_[i]->buses())if(!port.input&&port.index&&port.active)processor->outputs.push_back(port.index);
+      } else if(!processors[i].instrument) {
+        processor->graph=signalGraph_;processor->graphIndex=i-plugins_.size();
+        for(const auto port:signalGraph_->outputs(processor->graphIndex))processor->outputs.push_back(port);
+      }
+      hosted->processors.push_back(std::make_shared<RenderOnce<MixerProcessor>>(std::move(processor)));
+    }
+    prepared->processors=hosted;prepared->process=HostedMixerPlan::process;
+    prepared->runtime->observer(HostedMixerPlan::observe,prepared.get());
+    prepared->processorStorage=bypassBytes+signalGraph_->storageBytes()+(sampleSignalGraph_?sampleSignalGraph_->storageBytes():0)+
+      hosted->processors.size()*(sizeof(MixerProcessor)+RenderOnce<MixerProcessor>::storageBytes());
+    std::vector<uint64_t> directSources;for(const auto &bus:prepared->runtime->graph().buses)directSources.push_back(bus.id);
+    mixerTransition_=std::make_unique<MixerTransition>(std::move(prepared),std::move(directSources),tracks,uint32_t(sampleRate_));
+    mixer_=&mixerTransition_->renderRuntime();
+    mixerDirect_.clear();mixerDirect_.reserve(mixer_->plan().nodes.size());
+    for(size_t i=0;i<mixer_->plan().nodes.size();++i)mixerDirect_.push_back(std::make_unique<MixerDirectInput>());
+    mixerInputs_.resize(mixerDirect_.size());
     mixerRenderer_ = &renderer;
     dryDelay_.clear(); dryDelayPosition_ = 0;
     for (auto &plugin : plugins_) plugin->compensateLatency(0);
@@ -347,7 +417,7 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
   bool first = true;
   size_t slotIndex = 0;
   for (size_t i = 0; i < plugins_.size(); ++i) {
-    if (!plugins_[i]->isInstrument() || bypass_[i] || !instruments_[i])
+    if (!plugins_[i]->isInstrument() || !instruments_[i])
       continue;
     const auto assignments = plugins_[i]->assignments();
     for (const auto &assignment : assignments)
@@ -369,22 +439,29 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
     }
   }
   if (mixer_) {
-    for(size_t i=0;i<sampleRoutes_.size();++i){auto &slot=song.m_MixPlugins[slotIndex];slot.Info={};slot.fDryRatio=0;slot.pMixPlugin=new SampleGraphAdapter(song,slot,*this,i);sampleRoutes_[i].slot=uint16_t(++slotIndex);}
-    if(!sampleRoutes_.empty()){song.nativeSampleContext=this;song.nativeSamplePlugin=[](void *context,const ModChannel &voice,CHANNELINDEX channel) noexcept -> PLUGINDEX {
-      const auto &chain=*static_cast<PluginChain *>(context);const auto parent=voice.nMasterChn?voice.nMasterChn-1:channel;
-      for(const auto &route:chain.sampleRoutes_)if(route.channel==parent&&route.instrument==voice.pModInstrument)return PLUGINDEX(route.slot);return 0;
-    };}
+    for(size_t i=0;i<sampleRoutes_.size();++i)if(sampleRoutes_[i].target){auto &slot=song.m_MixPlugins[slotIndex];slot.Info={};slot.fDryRatio=0;slot.pMixPlugin=new SampleGraphAdapter(song,slot,*this,i);sampleRoutes_[i].slot=uint16_t(++slotIndex);}
     for (auto bus : mixer_->plan().order) {
       auto &slot = song.m_MixPlugins[slotIndex];
       slot.Info = {}; slot.fDryRatio = 0;
       const bool master = bus == mixer_->plan().master;
       slot.pMixPlugin = new MixerAdapter(song, slot, *this, bus, master);
-      if (master) slot.SetMasterEffect();
-      else if (native->mixer.buses[bus].kind == MixerBusKind::Track)
+      // Every song channel enters through its explicit mixer adapter. Keep
+      // the unassigned core output separate for independent inspector previews.
+      if (!master && native->mixer.buses[bus].kind == MixerBusKind::Track)
         for (const auto &[channel, track] : native->tracks)
           if (track.id == native->mixer.buses[bus].id) song.ChnSettings[channel].nMixPlugin = PLUGINDEX(slotIndex + 1);
       ++slotIndex;
     }
+    // Inspector audio enters after the final mixer bus, so it cannot inherit
+    // a channel, return or master graph. Its own instrument graph remains active.
+    for(size_t i=0;i<sampleRoutes_.size();++i)if(!sampleRoutes_[i].target){auto &slot=song.m_MixPlugins[slotIndex];slot.Info={};slot.fDryRatio=0;slot.pMixPlugin=new SampleGraphAdapter(song,slot,*this,i);sampleRoutes_[i].slot=uint16_t(++slotIndex);}
+    song.nativeSampleContext=this;song.nativeSamplePlugin=[](void *context,const ModChannel &voice,CHANNELINDEX channel) noexcept -> PLUGINDEX {
+      const auto &chain=*static_cast<PluginChain *>(context);
+      const bool inspector=voice.isPreviewNote&&!voice.nMasterChn;
+      const auto parent=inspector?UINT16_MAX:voice.nMasterChn?voice.nMasterChn-1:channel;
+      for(const auto &route:chain.sampleRoutes_)if(route.channel==parent&&route.instrument==voice.pModInstrument)return PLUGINDEX(route.slot);
+      return 0;
+    };
     // Installs the combined observer even for songs without automation lanes.
     attachMusicalAutomation(renderer, *native);
   }

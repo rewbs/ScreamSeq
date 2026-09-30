@@ -4,7 +4,7 @@
 namespace Tracker {
 // Prepared on the control thread. Rendering neither queries plugin metadata nor allocates.
 class PatternCommandRuntime {
-  struct Event {uint32_t position,duration;uint16_t channel;uint8_t column;double value;};
+  struct Event {uint32_t position,duration;uint16_t channel;uint8_t column;double value;uint16_t binding;bool slide;};
   struct Curve {
     double from=0,to=0,start=0,end=0;
     double at(double position) const noexcept {
@@ -23,6 +23,7 @@ class PatternCommandRuntime {
     Curve curve;
     uint16_t activeChannel=UINT16_MAX;
     bool used=false;
+    ParameterSource source;
   };
   std::vector<Target> targets_;
   uint32_t pattern_=UINT32_MAX,order_=UINT32_MAX;

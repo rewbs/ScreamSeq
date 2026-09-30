@@ -9,11 +9,16 @@ extension InterfaceTests {
     let request:EnvelopeRequest={method,params,reply in if method=="automation.formula.preview"{formulaReplies.append(reply)}}
     let workbench=FormulaWorkbench(source:"start",title:"Formula test",points:[point],selected:0,rows:64,rowsPerBeat:4,request:request){uses.append($0);return false}
     workbench.window?.orderOut(nil)
-    RunLoop.current.run(until:Date().addingTimeInterval(0.16))
+    func awaitPreviews(_ count:Int) throws {
+      let deadline=Date().addingTimeInterval(2)
+      while formulaReplies.count<count && Date()<deadline {RunLoop.current.run(until:Date().addingTimeInterval(0.01))}
+      try require(formulaReplies.count>=count,"Formula preview was dispatched")
+    }
+    try awaitPreviews(1)
     workbench.code.string="end";workbench.updatePreview()
     formulaReplies.first?(["result":["data":["values":[[0.0,0.5],[1.0,0.5]]]]])
     try require(workbench.validSource==nil,"Obsolete formula preview cannot authorize a newer draft")
-    RunLoop.current.run(until:Date().addingTimeInterval(0.16))
+    try awaitPreviews(2)
     formulaReplies.last?(["result":["data":["values":[[0.0,0.5],[1.0,0.5]]]]]);workbench.apply()
     try require(uses==["end"] && workbench.code.string=="end" && workbench.status.stringValue.contains("changed"),"Rejected stale use keeps formula text recoverable")
     workbench.close()

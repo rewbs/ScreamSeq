@@ -1,0 +1,64 @@
+{
+  "pid": 36431,
+  "passed": true,
+  "dryRunReadOnly": true,
+  "savedRoutingMatches": true,
+  "pluginStatesRetained": true,
+  "track": "n9",
+  "master": "n16",
+  "plugins": [
+    "80D01C5F-9F83-4AED-98BD-E4AF59D51E50",
+    "3F55E730-C6F0-401B-9C21-CF636904E86A"
+  ],
+  "rejections": [
+    {
+      "rejected": {
+        "expectedRevision": "E90B3FD5-8EE8-4DD5-AB48-DD2393ADB953:4:2:0",
+        "plugins": [
+          "3F55E730-C6F0-401B-9C21-CF636904E86A",
+          "80D01C5F-9F83-4AED-98BD-E4AF59D51E50"
+        ],
+        "target": "n16"
+      },
+      "code": -32602,
+      "message": "Move a consecutive chain in its existing order"
+    },
+    {
+      "rejected": {
+        "expectedRevision": "E90B3FD5-8EE8-4DD5-AB48-DD2393ADB953:4:2:0",
+        "plugins": [
+          "80D01C5F-9F83-4AED-98BD-E4AF59D51E50",
+          "3F55E730-C6F0-401B-9C21-CF636904E86A"
+        ],
+        "target": "n16",
+        "before": "missing"
+      },
+      "code": -32602,
+      "message": "Insertion point is not on the destination bus"
+    },
+    {
+      "rejected": {
+        "expectedRevision": "stale",
+        "plugins": [
+          "80D01C5F-9F83-4AED-98BD-E4AF59D51E50",
+          "3F55E730-C6F0-401B-9C21-CF636904E86A"
+        ],
+        "target": "n16"
+      },
+      "code": -32001,
+      "message": "Song changed; read its current revision and prepare the edit again"
+    },
+    {
+      "rejected": {
+        "expectedRevision": "E90B3FD5-8EE8-4DD5-AB48-DD2393ADB953:6:3:0",
+        "plugins": [
+          "80D01C5F-9F83-4AED-98BD-E4AF59D51E50",
+          "3F55E730-C6F0-401B-9C21-CF636904E86A"
+        ],
+        "target": "n9"
+      },
+      "code": -32602,
+      "message": "A sidechain cannot feed an effect on its own source bus"
+    }
+  ]
+}

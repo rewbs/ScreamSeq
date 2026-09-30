@@ -24,5 +24,11 @@
     const auto &[before, after] = *prepared.geometry();
     result = @{@"sample": @(index), @"dryRun": @(dry), @"before": encode(before), @"after": encode(after),
       @"loopsChanged": @(prepared.hasChanges()), @"patchBytes": @(prepared.result().historyBytes)};
-    if (!dry && prepared.hasChanges()) { _audio->stop(); _document->applySampleProcess(std::move(prepared)); }
+    if (!dry && prepared.hasChanges()) {
+      auto *renderer=_audio->active()&&(!_isolatedSamplePreview||_isolatedPreviewSample==index)?_audio->renderer():nullptr;
+      if(renderer&&!renderer->canUpdateSampleLoops())throw Error(-32002,"Sample loop update queue is full; retry the edit");
+      const auto geometry=after;
+      _document->applySampleProcess(std::move(prepared));
+      if(renderer)renderer->updateSampleLoops(_isolatedSamplePreview?1:uint16_t(index),geometry);
+    }
   } catch (const std::invalid_argument &e) { throw Error(-32602, e.what()); }

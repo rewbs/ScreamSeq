@@ -13,7 +13,7 @@ extension InterfaceTests {
     let a=WorkspacePanel(id:"notes",title:"Notes",view:notes),b=WorkspacePanel(id:"automation",title:"Automation",view:automation)
     workspace.register(a,location:"right");workspace.register(b,location:"secondary")
     workspace.layoutSubtreeIfNeeded()
-    try require(workspace.right.buttons.first?.title.contains("⌃⌥1")==true,"Inspector tabs expose a direct keyboard shortcut")
+    try require(workspace.right.buttons.first?.title.contains("⌃⌥1")==false && workspace.right.buttons.first?.toolTip?.contains("⌃⌥1")==true,"Inspector shortcuts are discoverable in tooltips without cluttering tabs")
     let plugin=WorkspacePanel(id:"plugins",title:"Plugin controls",view:NSView())
     workspace.register(plugin,location:"right");workspace.right.choose("plugins")
     try require(workspace.right.selected=="plugins" && workspace.right.host.subviews.first===plugin,"Tabs select retained inspectors directly")
@@ -28,6 +28,12 @@ extension InterfaceTests {
     workspace.place("notes",at:"hide");a.pinned=false
     workspace.restore(saved)
     try require(workspace.locations["notes"]=="bottom" && a.pinned && workspace.panels["notes"] === a,"Saved layouts restore targets by stable panel identity")
+    workspace.preset("Compose"); workspace.layoutSubtreeIfNeeded()
+    workspace.show("automation", focus:true); workspace.layoutSubtreeIfNeeded()
+    try require(workspace.visibleIDs.contains("automation") && workspace.lower.frame.height > 150, "A bridge from Compose must reveal an actual usable lower panel, not a zero-height tab")
+    workspace.preset("Compose");workspace.layoutSubtreeIfNeeded()
+    workspace.place("automation",at:"bottom");workspace.layoutSubtreeIfNeeded()
+    try require(!workspace.bottom.isHidden && workspace.visibleIDs.contains("automation") && workspace.lower.frame.height>150,"Dock below reveals a usable hidden destination instead of a selected zero-height panel")
     let before=notes.superview;workspace.show("notes");workspace.show("notes")
     try require(notes.superview === before,"Repeated focus does not rebuild editor controls")
     let compact=PatternAutomationEditor(frame:NSRect(x:0,y:0,width:1040,height:365));compact.configureDocked();compact.layoutSubtreeIfNeeded()
@@ -42,8 +48,26 @@ extension InterfaceTests {
     try require(shortcuts.conflict([WorkspaceStroke("ctrl+g")!],except:"other") && !shortcuts.conflict([WorkspaceStroke("ctrl+g")!,WorkspaceStroke("r")!],except:"other"),"Shortcut validation rejects ambiguous prefixes but permits distinct continuations")
     let palette=WorkspaceCommandPalette();let one=NSMenuItem(title:"One",action:#selector(NSObject.description),keyEquivalent:""),two=NSMenuItem(title:"Two",action:#selector(NSObject.description),keyEquivalent:"x");two.keyEquivalentModifierMask = .command
     palette.entries=[.init(item:one,path:"One"),.init(item:two,path:"Two")];let command=palette.entries[0].id
+    try require(palette.entries[0].id != palette.entries[1].id,"AppKit's automatic selector identifiers must not merge different legacy commands")
     try require(palette.setShortcut(command,keys:["cmd+x","m"],persist:false) != nil && palette.setShortcut(command,keys:["g","m"],persist:false) != nil,"Existing menu commands and plain note-entry prefixes are protected")
     try require(palette.setShortcut(command,keys:["ctrl+g","m"],persist:false)==nil && palette.shortcutCommands()[0]["keys"] as? [String]==["ctrl+g","m"],"Palette exposes configured sequences without changing the song")
+    let contextual=WorkspaceCommandPalette()
+    contextual.additionalMenus = {
+      let menu=NSMenu(title:"Sample panel")
+      menu.addItem(ContextAction("Select All",key:"a",modifiers:.command){ran="wrong panel"})
+      return [menu]
+    }
+    contextual.collect()
+    try require(!contextual.handleAdditionalShortcut(event("a",.command,code:0)), "Inferred context-menu shortcuts must not steal Select All from a text field")
+    let graphCatalog=WorkspaceCommandPalette()
+    graphCatalog.additionalMenus={
+      let menu=NSMenu(title:"Graph")
+      menu.addItem(GraphCommand.bypass.item("Toggle plugin bypass"){})
+      menu.addItem(GraphCommand.bypass.item("Bypass selected plugin"){})
+      return [menu]
+    }
+    graphCatalog.collect()
+    try require(graphCatalog.entries.filter{$0.id==GraphCommand.bypass.id}.count==1,"One graph command stays one configurable entry when exposed by multiple menus")
     print("PASS connected workspace: retained panels/pins, focus layout, placement, saved layout, compact automation")
   }
 }

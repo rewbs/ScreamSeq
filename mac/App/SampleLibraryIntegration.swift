@@ -17,7 +17,7 @@ extension AppController {
   }
   @objc func showSampleBrowser() {
     guard !busy else { return }; prepareSampleLibrary()
-    if let sampleBrowserWindow { if !automationTest && !inspectionTest { sampleBrowserWindow.makeKeyAndOrderFront(nil) }; return }
+    if let sampleBrowserWindow { sampleBrowserWindow.makeKeyAndOrderFront(nil); return }
     let browser = SampleBrowser(frame: .zero)
     browser.createInstruments.state = model.instruments.isEmpty ? .off : .on
     browser.onSearch = { [weak self] query, reply in self?.sampleLibrary.search(query) { result, _ in reply(result) } }
@@ -55,7 +55,7 @@ extension AppController {
     let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1140, height: 820), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
     win.title = "Sample library"; win.contentMinSize = NSSize(width: 980, height: 770); win.isReleasedWhenClosed = false; win.delegate = self; win.contentView = browser
     sampleBrowserWindow = win; browser.updateLibrary(sampleLibrary.status)
-    if !automationTest && !inspectionTest { win.center(); win.makeKeyAndOrderFront(nil); win.makeFirstResponder(browser.search) }
+    win.center(); win.makeKeyAndOrderFront(nil); win.makeFirstResponder(browser.search)
   }
   func showMultisampleImport(_ group: MultisampleGroup) {
     guard !busy, let parent = sampleBrowserWindow, parent.attachedSheet == nil else { return }

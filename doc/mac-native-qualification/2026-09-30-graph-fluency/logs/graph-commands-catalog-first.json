@@ -1,0 +1,2091 @@
+{
+  "changed": false,
+  "data": {
+    "commands": [
+      {
+        "id": "ScreamSeq / About ScreamSeq/about",
+        "keys": [],
+        "name": "ScreamSeq / About ScreamSeq"
+      },
+      {
+        "id": "ScreamSeq / Keyboard and Display\u2026/keyboardPreferences",
+        "keys": [
+          "cmd+,"
+        ],
+        "name": "ScreamSeq / Keyboard and Display\u2026"
+      },
+      {
+        "id": "ScreamSeq / Audio Settings\u2026/audioSettings",
+        "keys": [],
+        "name": "ScreamSeq / Audio Settings\u2026"
+      },
+      {
+        "id": "ScreamSeq / Quit ScreamSeq/terminate:",
+        "keys": [
+          "cmd+q"
+        ],
+        "name": "ScreamSeq / Quit ScreamSeq"
+      },
+      {
+        "id": "File / New/newFile",
+        "keys": [
+          "cmd+n"
+        ],
+        "name": "File / New"
+      },
+      {
+        "id": "File / Open\u2026/openFile",
+        "keys": [
+          "cmd+o"
+        ],
+        "name": "File / Open\u2026"
+      },
+      {
+        "id": "File / Open Demo/demoFile",
+        "keys": [],
+        "name": "File / Open Demo"
+      },
+      {
+        "id": "File / Browse Samples\u2026/showSampleBrowser",
+        "keys": [
+          "cmd+shift+l"
+        ],
+        "name": "File / Browse Samples\u2026"
+      },
+      {
+        "id": "File / Recover a Song\u2026/recoverDocument",
+        "keys": [],
+        "name": "File / Recover a Song\u2026"
+      },
+      {
+        "id": "File / Save/saveFile",
+        "keys": [
+          "cmd+s"
+        ],
+        "name": "File / Save"
+      },
+      {
+        "id": "File / Save As\u2026/saveAs",
+        "keys": [
+          "cmd+shift+s"
+        ],
+        "name": "File / Save As\u2026"
+      },
+      {
+        "id": "File / Export Module\u2026/exportModule",
+        "keys": [],
+        "name": "File / Export Module\u2026"
+      },
+      {
+        "id": "File / Export Audio\u2026/exportAudio",
+        "keys": [
+          "cmd+e"
+        ],
+        "name": "File / Export Audio\u2026"
+      },
+      {
+        "id": "File / Close Window/performClose:",
+        "keys": [
+          "cmd+w"
+        ],
+        "name": "File / Close Window"
+      },
+      {
+        "id": "Edit / Undo/undo",
+        "keys": [
+          "cmd+z"
+        ],
+        "name": "Edit / Undo"
+      },
+      {
+        "id": "Edit / Redo/redo",
+        "keys": [
+          "cmd+shift+z"
+        ],
+        "name": "Edit / Redo"
+      },
+      {
+        "id": "Edit / Cut/cut:",
+        "keys": [
+          "cmd+x"
+        ],
+        "name": "Edit / Cut"
+      },
+      {
+        "id": "Edit / Copy/copy:",
+        "keys": [
+          "cmd+c"
+        ],
+        "name": "Edit / Copy"
+      },
+      {
+        "id": "Edit / Paste/paste:",
+        "keys": [
+          "cmd+v"
+        ],
+        "name": "Edit / Paste"
+      },
+      {
+        "id": "Edit / Select All/selectAll:",
+        "keys": [
+          "cmd+a"
+        ],
+        "name": "Edit / Select All"
+      },
+      {
+        "id": "Automation / Pattern Automation\u2026/showPatternAutomation",
+        "keys": [],
+        "name": "Automation / Pattern Automation\u2026"
+      },
+      {
+        "id": "Automation / Enable Local API/toggleAutomation",
+        "keys": [],
+        "name": "Automation / Enable Local API"
+      },
+      {
+        "id": "Playback / Play / Stop/playOrStop",
+        "keys": [],
+        "name": "Playback / Play / Stop"
+      },
+      {
+        "id": "Playback / Play from Cursor \u21e7Space/playFromCursor",
+        "keys": [],
+        "name": "Playback / Play from Cursor \u21e7Space"
+      },
+      {
+        "id": "Playback / Play Selection or Pattern \u2303Space/playSelection",
+        "keys": [],
+        "name": "Playback / Play Selection or Pattern \u2303Space"
+      },
+      {
+        "id": "Playback / Play Selection or Pattern from Cursor \u2303\u21e7Space/playSelectionFromCursor",
+        "keys": [],
+        "name": "Playback / Play Selection or Pattern from Cursor \u2303\u21e7Space"
+      },
+      {
+        "id": "Playback / Toggle Playback Loop/togglePlaybackLoop",
+        "keys": [],
+        "name": "Playback / Toggle Playback Loop"
+      },
+      {
+        "id": "Pattern / Previous Instrument/previousInputInstrument:",
+        "keys": [
+          "opt+up"
+        ],
+        "name": "Pattern / Previous Instrument"
+      },
+      {
+        "id": "Pattern / Next Instrument/nextInputInstrument:",
+        "keys": [
+          "opt+down"
+        ],
+        "name": "Pattern / Next Instrument"
+      },
+      {
+        "id": "Pattern / Octave Down/previousInputOctave:",
+        "keys": [
+          "opt+left"
+        ],
+        "name": "Pattern / Octave Down"
+      },
+      {
+        "id": "Pattern / Octave Up/nextInputOctave:",
+        "keys": [
+          "opt+right"
+        ],
+        "name": "Pattern / Octave Up"
+      },
+      {
+        "id": "Pattern / Use Instrument from Cursor/useCursorInstrument:",
+        "keys": [],
+        "name": "Pattern / Use Instrument from Cursor"
+      },
+      {
+        "id": "Pattern / Tempo and Groove\u2026/showSongTiming",
+        "keys": [],
+        "name": "Pattern / Tempo and Groove\u2026"
+      },
+      {
+        "id": "Pattern / Precise Notes\u2026/showPreciseNotes",
+        "keys": [
+          "cmd+shift+n"
+        ],
+        "name": "Pattern / Precise Notes\u2026"
+      },
+      {
+        "id": "Pattern / Finish Recording Take/retryRecordingFinish",
+        "keys": [],
+        "name": "Pattern / Finish Recording Take"
+      },
+      {
+        "id": "Pattern / Discard Recording Take/discardLiveRecording",
+        "keys": [],
+        "name": "Pattern / Discard Recording Take"
+      },
+      {
+        "id": "Pattern / Extra Effects\u2026/showPatternPerformance",
+        "keys": [
+          "cmd+shift+e"
+        ],
+        "name": "Pattern / Extra Effects\u2026"
+      },
+      {
+        "id": "Pattern / Pattern Tools\u2026/showPatternTools",
+        "keys": [
+          "cmd+shift+t"
+        ],
+        "name": "Pattern / Pattern Tools\u2026"
+      },
+      {
+        "id": "Pattern / Command Picker\u2026/showPatternCommands",
+        "keys": [
+          "cmd+shift+k"
+        ],
+        "name": "Pattern / Command Picker\u2026"
+      },
+      {
+        "id": "Pattern / New Note Track\u2026/newNoteTrack",
+        "keys": [],
+        "name": "Pattern / New Note Track\u2026"
+      },
+      {
+        "id": "Pattern / Group Selected Columns\u2026/groupNoteColumns",
+        "keys": [],
+        "name": "Pattern / Group Selected Columns\u2026"
+      },
+      {
+        "id": "Pattern / Ungroup Current Track/ungroupNoteTrack",
+        "keys": [],
+        "name": "Pattern / Ungroup Current Track"
+      },
+      {
+        "id": "Pattern / Mix Paste (Fill Empty Fields)/mixPaste",
+        "keys": [],
+        "name": "Pattern / Mix Paste (Fill Empty Fields)"
+      },
+      {
+        "id": "Pattern / Merge Paste (Skip Empty Source Fields)/mergePaste",
+        "keys": [],
+        "name": "Pattern / Merge Paste (Skip Empty Source Fields)"
+      },
+      {
+        "id": "Pattern / Arrange Orders\u2026/arrangeOrders",
+        "keys": [],
+        "name": "Pattern / Arrange Orders\u2026"
+      },
+      {
+        "id": "Pattern / Arrangement Matrix\u2026/showArrangementMatrix",
+        "keys": [],
+        "name": "Pattern / Arrangement Matrix\u2026"
+      },
+      {
+        "id": "Pattern / New Pattern/newPattern",
+        "keys": [],
+        "name": "Pattern / New Pattern"
+      },
+      {
+        "id": "Pattern / Duplicate Pattern/duplicatePattern",
+        "keys": [],
+        "name": "Pattern / Duplicate Pattern"
+      },
+      {
+        "id": "Pattern / Transpose Up/transposeUp",
+        "keys": [],
+        "name": "Pattern / Transpose Up"
+      },
+      {
+        "id": "Pattern / Transpose Down/transposeDown",
+        "keys": [],
+        "name": "Pattern / Transpose Down"
+      },
+      {
+        "id": "Pattern / Insert Row/insertRow",
+        "keys": [],
+        "name": "Pattern / Insert Row"
+      },
+      {
+        "id": "Pattern / Delete Row/deleteRow",
+        "keys": [],
+        "name": "Pattern / Delete Row"
+      },
+      {
+        "id": "Workspace / Show Notes/focusInspector:",
+        "keys": [
+          "ctrl+opt+1"
+        ],
+        "name": "Workspace / Show Notes"
+      },
+      {
+        "id": "Workspace / Show Samples/focusInspector:",
+        "keys": [
+          "ctrl+opt+2"
+        ],
+        "name": "Workspace / Show Samples"
+      },
+      {
+        "id": "Workspace / Show Instruments/focusInspector:",
+        "keys": [
+          "ctrl+opt+3"
+        ],
+        "name": "Workspace / Show Instruments"
+      },
+      {
+        "id": "Workspace / Show Plugins/focusInspector:",
+        "keys": [
+          "ctrl+opt+4"
+        ],
+        "name": "Workspace / Show Plugins"
+      },
+      {
+        "id": "Workspace / Show Mixer/focusInspector:",
+        "keys": [
+          "ctrl+opt+5"
+        ],
+        "name": "Workspace / Show Mixer"
+      },
+      {
+        "id": "Workspace / Show Graph/focusInspector:",
+        "keys": [
+          "ctrl+opt+6"
+        ],
+        "name": "Workspace / Show Graph"
+      },
+      {
+        "id": "Workspace / Show FX library/focusInspector:",
+        "keys": [
+          "ctrl+opt+7"
+        ],
+        "name": "Workspace / Show FX library"
+      },
+      {
+        "id": "Workspace / Show Graph lanes/focusInspector:",
+        "keys": [
+          "ctrl+opt+8"
+        ],
+        "name": "Workspace / Show Graph lanes"
+      },
+      {
+        "id": "Workspace / Show Automation/focusInspector:",
+        "keys": [
+          "ctrl+opt+9"
+        ],
+        "name": "Workspace / Show Automation"
+      },
+      {
+        "id": "Workspace / Show Param activity/focusInspector:",
+        "keys": [
+          "ctrl+opt+0"
+        ],
+        "name": "Workspace / Show Param activity"
+      },
+      {
+        "id": "Workspace / Audio & Modulation Graph/showSignalGraph",
+        "keys": [
+          "cmd+opt+g"
+        ],
+        "name": "Workspace / Audio & Modulation Graph"
+      },
+      {
+        "id": "Workspace / Pattern Graph Commands/showGraphCommands",
+        "keys": [
+          "cmd+shift+g"
+        ],
+        "name": "Workspace / Pattern Graph Commands"
+      },
+      {
+        "id": "Workspace / Command Palette\u2026/showCommandPalette",
+        "keys": [
+          "cmd+k"
+        ],
+        "name": "Workspace / Command Palette\u2026"
+      },
+      {
+        "id": "Workspace / Focus Pattern/focusPattern",
+        "keys": [
+          "cmd+opt+1"
+        ],
+        "name": "Workspace / Focus Pattern"
+      },
+      {
+        "id": "Workspace / Next Panel/focusNextPanel",
+        "keys": [
+          "ctrl+tab"
+        ],
+        "name": "Workspace / Next Panel"
+      },
+      {
+        "id": "Workspace / Pin Focused Panel/pinFocusedPanel",
+        "keys": [
+          "cmd+opt+p"
+        ],
+        "name": "Workspace / Pin Focused Panel"
+      },
+      {
+        "id": "Workspace / Follow Cursor in Panel/followFocusedPanel",
+        "keys": [
+          "cmd+opt+f"
+        ],
+        "name": "Workspace / Follow Cursor in Panel"
+      },
+      {
+        "id": "Workspace / Return to Panel Opening Row/returnFocusedPanel",
+        "keys": [
+          "cmd+opt+r"
+        ],
+        "name": "Workspace / Return to Panel Opening Row"
+      },
+      {
+        "id": "Workspace / Float Focused Panel/floatFocusedPanel",
+        "keys": [
+          "cmd+opt+d"
+        ],
+        "name": "Workspace / Float Focused Panel"
+      },
+      {
+        "id": "Workspace / Dock Focused Panel/dockFocusedPanel",
+        "keys": [
+          "cmd+opt+shift+d"
+        ],
+        "name": "Workspace / Dock Focused Panel"
+      },
+      {
+        "id": "Workspace / Toggle Playback Follow/toggleFollow",
+        "keys": [
+          "ctrl+opt+f"
+        ],
+        "name": "Workspace / Toggle Playback Follow"
+      },
+      {
+        "id": "Workspace / Live Musical Keyboard/toggleLiveKeyboard",
+        "keys": [
+          "cmd+opt+l"
+        ],
+        "name": "Workspace / Live Musical Keyboard"
+      },
+      {
+        "id": "Workspace / Compose Layout/composeLayout",
+        "keys": [
+          "cmd+opt+2"
+        ],
+        "name": "Workspace / Compose Layout"
+      },
+      {
+        "id": "Workspace / Sound Design Layout/soundLayout",
+        "keys": [
+          "cmd+opt+3"
+        ],
+        "name": "Workspace / Sound Design Layout"
+      },
+      {
+        "id": "Workspace / Pattern Focus Layout/patternLayout",
+        "keys": [
+          "cmd+opt+4"
+        ],
+        "name": "Workspace / Pattern Focus Layout"
+      },
+      {
+        "id": "Workspace / Save Custom Layout/saveWorkspaceLayout",
+        "keys": [],
+        "name": "Workspace / Save Custom Layout"
+      },
+      {
+        "id": "Workspace / Restore Custom Layout/restoreWorkspaceLayout",
+        "keys": [],
+        "name": "Workspace / Restore Custom Layout"
+      },
+      {
+        "id": "Window / Fill/_zoomFill:",
+        "keys": [
+          "ctrl+f"
+        ],
+        "name": "Window / Fill"
+      },
+      {
+        "id": "Window / Center/_zoomCenter:",
+        "keys": [
+          "ctrl+c"
+        ],
+        "name": "Window / Center"
+      },
+      {
+        "id": "Window / Move & Resize / Left/_zoomLeft:",
+        "keys": [],
+        "name": "Window / Move & Resize / Left"
+      },
+      {
+        "id": "Window / Move & Resize / Right/_zoomRight:",
+        "keys": [],
+        "name": "Window / Move & Resize / Right"
+      },
+      {
+        "id": "Window / Move & Resize / Top/_zoomTop:",
+        "keys": [],
+        "name": "Window / Move & Resize / Top"
+      },
+      {
+        "id": "Window / Move & Resize / Bottom/_zoomBottom:",
+        "keys": [],
+        "name": "Window / Move & Resize / Bottom"
+      },
+      {
+        "id": "Window / Move & Resize / Top Left/_zoomTopLeft:",
+        "keys": [],
+        "name": "Window / Move & Resize / Top Left"
+      },
+      {
+        "id": "Window / Move & Resize / Top Right/_zoomTopRight:",
+        "keys": [],
+        "name": "Window / Move & Resize / Top Right"
+      },
+      {
+        "id": "Window / Move & Resize / Bottom Left/_zoomBottomLeft:",
+        "keys": [],
+        "name": "Window / Move & Resize / Bottom Left"
+      },
+      {
+        "id": "Window / Move & Resize / Bottom Right/_zoomBottomRight:",
+        "keys": [],
+        "name": "Window / Move & Resize / Bottom Right"
+      },
+      {
+        "id": "Window / Move & Resize / Left & Right/_zoomLeftAndRight:",
+        "keys": [],
+        "name": "Window / Move & Resize / Left & Right"
+      },
+      {
+        "id": "Window / Move & Resize / Left & Quarters/_zoomLeftThreeUp:",
+        "keys": [],
+        "name": "Window / Move & Resize / Left & Quarters"
+      },
+      {
+        "id": "Window / Move & Resize / Right & Left/_zoomRightAndLeft:",
+        "keys": [],
+        "name": "Window / Move & Resize / Right & Left"
+      },
+      {
+        "id": "Window / Move & Resize / Right & Quarters/_zoomRightThreeUp:",
+        "keys": [],
+        "name": "Window / Move & Resize / Right & Quarters"
+      },
+      {
+        "id": "Window / Move & Resize / Top & Bottom/_zoomTopAndBottom:",
+        "keys": [],
+        "name": "Window / Move & Resize / Top & Bottom"
+      },
+      {
+        "id": "Window / Move & Resize / Top & Quarters/_zoomTopThreeUp:",
+        "keys": [],
+        "name": "Window / Move & Resize / Top & Quarters"
+      },
+      {
+        "id": "Window / Move & Resize / Bottom & Top/_zoomBottomAndTop:",
+        "keys": [],
+        "name": "Window / Move & Resize / Bottom & Top"
+      },
+      {
+        "id": "Window / Move & Resize / Bottom & Quarters/_zoomBottomThreeUp:",
+        "keys": [],
+        "name": "Window / Move & Resize / Bottom & Quarters"
+      },
+      {
+        "id": "Window / Move & Resize / Quarters/_zoomQuarters:",
+        "keys": [],
+        "name": "Window / Move & Resize / Quarters"
+      },
+      {
+        "id": "Window / Move & Resize / Return to Previous Size/_zoomUntile:",
+        "keys": [
+          "ctrl+r"
+        ],
+        "name": "Window / Move & Resize / Return to Previous Size"
+      },
+      {
+        "id": "Window /  / Left of Screen/_tileLeft:",
+        "keys": [],
+        "name": "Window /  / Left of Screen"
+      },
+      {
+        "id": "Window /  / Right of Screen/_tileRight:",
+        "keys": [],
+        "name": "Window /  / Right of Screen"
+      },
+      {
+        "id": "Window / Remove Window from Set/_removeWindowFromStageManagerSet:",
+        "keys": [],
+        "name": "Window / Remove Window from Set"
+      },
+      {
+        "id": "Window / Move to HG560T34/_moveToDisplay:",
+        "keys": [],
+        "name": "Window / Move to HG560T34"
+      },
+      {
+        "id": "Window / Mixer\u2026/showMixer",
+        "keys": [
+          "cmd+shift+m"
+        ],
+        "name": "Window / Mixer\u2026"
+      },
+      {
+        "id": "Window / Minimize/performMiniaturize:",
+        "keys": [
+          "cmd+m"
+        ],
+        "name": "Window / Minimize"
+      },
+      {
+        "id": "Window / Minimize All/miniaturizeAll:",
+        "keys": [
+          "cmd+opt+m"
+        ],
+        "name": "Window / Minimize All"
+      },
+      {
+        "id": "Window / Midnight Circuit \u2014 ScreamSeq/makeKeyAndOrderFront:",
+        "keys": [],
+        "name": "Window / Midnight Circuit \u2014 ScreamSeq"
+      },
+      {
+        "id": "Note inspector / Use current cursor/invoke",
+        "keys": [],
+        "name": "Note inspector / Use current cursor"
+      },
+      {
+        "id": "Note inspector / Add hit/invoke",
+        "keys": [],
+        "name": "Note inspector / Add hit"
+      },
+      {
+        "id": "Note inspector / Remove/invoke",
+        "keys": [],
+        "name": "Note inspector / Remove"
+      },
+      {
+        "id": "Note inspector / Selected hit details / Replace the ordinary note in this row/invoke",
+        "keys": [],
+        "name": "Note inspector / Selected hit details / Replace the ordinary note in this row"
+      },
+      {
+        "id": "Note inspector / Fill to row end/invoke",
+        "keys": [],
+        "name": "Note inspector / Fill to row end"
+      },
+      {
+        "id": "Note inspector / Note inspector panel / Pin current target/invoke",
+        "keys": [],
+        "name": "Note inspector / Note inspector panel / Pin current target"
+      },
+      {
+        "id": "Note inspector / Note inspector panel / Inspect editing cursor/invoke",
+        "keys": [],
+        "name": "Note inspector / Note inspector panel / Inspect editing cursor"
+      },
+      {
+        "id": "Note inspector / Note inspector panel / Return to opening row/invoke",
+        "keys": [],
+        "name": "Note inspector / Note inspector panel / Return to opening row"
+      },
+      {
+        "id": "Note inspector / Note inspector panel / Dock right/invoke",
+        "keys": [],
+        "name": "Note inspector / Note inspector panel / Dock right"
+      },
+      {
+        "id": "Note inspector / Note inspector panel / Dock below/invoke",
+        "keys": [],
+        "name": "Note inspector / Note inspector panel / Dock below"
+      },
+      {
+        "id": "Note inspector / Note inspector panel / Float/invoke",
+        "keys": [],
+        "name": "Note inspector / Note inspector panel / Float"
+      },
+      {
+        "id": "Note inspector / Note inspector panel / Hide/invoke",
+        "keys": [],
+        "name": "Note inspector / Note inspector panel / Hide"
+      },
+      {
+        "id": "Sample & loops / Browse\u2026/invoke",
+        "keys": [],
+        "name": "Sample & loops / Browse\u2026"
+      },
+      {
+        "id": "Sample & loops / Replace\u2026/invoke",
+        "keys": [],
+        "name": "Sample & loops / Replace\u2026"
+      },
+      {
+        "id": "Sample & loops / Audition/invoke",
+        "keys": [],
+        "name": "Sample & loops / Audition"
+      },
+      {
+        "id": "Sample & loops / Whole/invoke",
+        "keys": [],
+        "name": "Sample & loops / Whole"
+      },
+      {
+        "id": "Sample & loops / Selection/invoke",
+        "keys": [],
+        "name": "Sample & loops / Selection"
+      },
+      {
+        "id": "Sample & loops / \u2212/invoke",
+        "keys": [],
+        "name": "Sample & loops / \u2212"
+      },
+      {
+        "id": "Sample & loops / +/invoke",
+        "keys": [],
+        "name": "Sample & loops / +"
+      },
+      {
+        "id": "Sample & loops / \u2190/invoke",
+        "keys": [],
+        "name": "Sample & loops / \u2190"
+      },
+      {
+        "id": "Sample & loops / \u2192/invoke",
+        "keys": [],
+        "name": "Sample & loops / \u2192"
+      },
+      {
+        "id": "Sample & loops / Draw/invoke",
+        "keys": [],
+        "name": "Sample & loops / Draw"
+      },
+      {
+        "id": "Sample & loops / Select all/invoke",
+        "keys": [
+          "cmd+a"
+        ],
+        "name": "Sample & loops / Select all"
+      },
+      {
+        "id": "Sample & loops / Loops / Normal/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loops / Normal"
+      },
+      {
+        "id": "Sample & loops / Loops / Ping-pong/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loops / Ping-pong"
+      },
+      {
+        "id": "Sample & loops / Loops / Reverse/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loops / Reverse"
+      },
+      {
+        "id": "Sample & loops / Loops / Use selection/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loops / Use selection"
+      },
+      {
+        "id": "Sample & loops / Loops / Sustain/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loops / Sustain"
+      },
+      {
+        "id": "Sample & loops / Loops / Ping-pong/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loops / Ping-pong"
+      },
+      {
+        "id": "Sample & loops / Loops / Reverse/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loops / Reverse"
+      },
+      {
+        "id": "Sample & loops / Loops / Use selection/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loops / Use selection"
+      },
+      {
+        "id": "Sample & loops / Loops / Reload loops/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loops / Reload loops"
+      },
+      {
+        "id": "Sample & loops / Edit audio / Preview edit/invoke",
+        "keys": [],
+        "name": "Sample & loops / Edit audio / Preview edit"
+      },
+      {
+        "id": "Sample & loops / Edit audio / Apply edit/invoke",
+        "keys": [],
+        "name": "Sample & loops / Edit audio / Apply edit"
+      },
+      {
+        "id": "Sample & loops / Selection snapping / Snap selection/invoke",
+        "keys": [],
+        "name": "Sample & loops / Selection snapping / Snap selection"
+      },
+      {
+        "id": "Sample & loops / Selection snapping / Snap loop/invoke",
+        "keys": [],
+        "name": "Sample & loops / Selection snapping / Snap loop"
+      },
+      {
+        "id": "Sample & loops / Selection snapping / Snap after selecting/invoke",
+        "keys": [],
+        "name": "Sample & loops / Selection snapping / Snap after selecting"
+      },
+      {
+        "id": "Sample & loops / Clipboard & mixing / Copy/invoke",
+        "keys": [
+          "cmd+c"
+        ],
+        "name": "Sample & loops / Clipboard & mixing / Copy"
+      },
+      {
+        "id": "Sample & loops / Clipboard & mixing / Cut/invoke",
+        "keys": [
+          "cmd+x"
+        ],
+        "name": "Sample & loops / Clipboard & mixing / Cut"
+      },
+      {
+        "id": "Sample & loops / Clipboard & mixing / Delete/invoke",
+        "keys": [],
+        "name": "Sample & loops / Clipboard & mixing / Delete"
+      },
+      {
+        "id": "Sample & loops / Clipboard & mixing / Copy to new/invoke",
+        "keys": [],
+        "name": "Sample & loops / Clipboard & mixing / Copy to new"
+      },
+      {
+        "id": "Sample & loops / Clipboard & mixing / Preview paste/invoke",
+        "keys": [],
+        "name": "Sample & loops / Clipboard & mixing / Preview paste"
+      },
+      {
+        "id": "Sample & loops / Clipboard & mixing / Paste/invoke",
+        "keys": [
+          "cmd+v"
+        ],
+        "name": "Sample & loops / Clipboard & mixing / Paste"
+      },
+      {
+        "id": "Sample & loops / Loop crossfade / Preview crossfade/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loop crossfade / Preview crossfade"
+      },
+      {
+        "id": "Sample & loops / Loop crossfade / Apply crossfade/invoke",
+        "keys": [],
+        "name": "Sample & loops / Loop crossfade / Apply crossfade"
+      },
+      {
+        "id": "Sample & loops / Sample settings / Create instrument/invoke",
+        "keys": [],
+        "name": "Sample & loops / Sample settings / Create instrument"
+      },
+      {
+        "id": "Sample & loops / Sample settings / Apply settings/invoke",
+        "keys": [],
+        "name": "Sample & loops / Sample settings / Apply settings"
+      },
+      {
+        "id": "Sample & loops / Sample & loops panel / Pin current target/invoke",
+        "keys": [],
+        "name": "Sample & loops / Sample & loops panel / Pin current target"
+      },
+      {
+        "id": "Sample & loops / Sample & loops panel / Inspect editing cursor/invoke",
+        "keys": [],
+        "name": "Sample & loops / Sample & loops panel / Inspect editing cursor"
+      },
+      {
+        "id": "Sample & loops / Sample & loops panel / Return to opening row/invoke",
+        "keys": [],
+        "name": "Sample & loops / Sample & loops panel / Return to opening row"
+      },
+      {
+        "id": "Sample & loops / Sample & loops panel / Dock right/invoke",
+        "keys": [],
+        "name": "Sample & loops / Sample & loops panel / Dock right"
+      },
+      {
+        "id": "Sample & loops / Sample & loops panel / Dock below/invoke",
+        "keys": [],
+        "name": "Sample & loops / Sample & loops panel / Dock below"
+      },
+      {
+        "id": "Sample & loops / Sample & loops panel / Float/invoke",
+        "keys": [],
+        "name": "Sample & loops / Sample & loops panel / Float"
+      },
+      {
+        "id": "Sample & loops / Sample & loops panel / Hide/invoke",
+        "keys": [],
+        "name": "Sample & loops / Sample & loops panel / Hide"
+      },
+      {
+        "id": "Instrument & envelopes / New sample instrument/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / New sample instrument"
+      },
+      {
+        "id": "Instrument & envelopes / New plugin instrument\u2026/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / New plugin instrument\u2026"
+      },
+      {
+        "id": "Instrument & envelopes / Import\u2026/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Import\u2026"
+      },
+      {
+        "id": "Instrument & envelopes / Play instrument with keys/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Play instrument with keys"
+      },
+      {
+        "id": "Instrument & envelopes / Assign instrument plugin\u2026/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Assign instrument plugin\u2026"
+      },
+      {
+        "id": "Instrument & envelopes / Envelope tools\u2026/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Envelope tools\u2026"
+      },
+      {
+        "id": "Instrument & envelopes / Envelope bank\u2026/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Envelope bank\u2026"
+      },
+      {
+        "id": "Instrument & envelopes / Filter envelope/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Filter envelope"
+      },
+      {
+        "id": "Instrument & envelopes / Delete node/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Delete node"
+      },
+      {
+        "id": "Instrument & envelopes / Enable envelope/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Enable envelope"
+      },
+      {
+        "id": "Instrument & envelopes / Sustain/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Sustain"
+      },
+      {
+        "id": "Instrument & envelopes / ADSR preset/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / ADSR preset"
+      },
+      {
+        "id": "Instrument & envelopes / Loop/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Loop"
+      },
+      {
+        "id": "Instrument & envelopes / Sample keymap / Assign range/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Sample keymap / Assign range"
+      },
+      {
+        "id": "Instrument & envelopes / Instrument & envelopes panel / Pin current target/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Instrument & envelopes panel / Pin current target"
+      },
+      {
+        "id": "Instrument & envelopes / Instrument & envelopes panel / Inspect editing cursor/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Instrument & envelopes panel / Inspect editing cursor"
+      },
+      {
+        "id": "Instrument & envelopes / Instrument & envelopes panel / Return to opening row/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Instrument & envelopes panel / Return to opening row"
+      },
+      {
+        "id": "Instrument & envelopes / Instrument & envelopes panel / Dock right/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Instrument & envelopes panel / Dock right"
+      },
+      {
+        "id": "Instrument & envelopes / Instrument & envelopes panel / Dock below/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Instrument & envelopes panel / Dock below"
+      },
+      {
+        "id": "Instrument & envelopes / Instrument & envelopes panel / Float/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Instrument & envelopes panel / Float"
+      },
+      {
+        "id": "Instrument & envelopes / Instrument & envelopes panel / Hide/invoke",
+        "keys": [],
+        "name": "Instrument & envelopes / Instrument & envelopes panel / Hide"
+      },
+      {
+        "id": "Plugin controls / Add plugin\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Add plugin\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / Add built-in effect\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Add built-in effect\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / Open interface / controls/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Open interface / controls"
+      },
+      {
+        "id": "Plugin controls / Plugin / Bypass / enable plugin/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Bypass / enable plugin"
+      },
+      {
+        "id": "Plugin controls / Plugin / Show in Graph\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Show in Graph\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / Audio buses\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Audio buses\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / Programs\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Programs\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / Save preset\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Save preset\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / Load preset\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Load preset\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / Automation envelopes\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Automation envelopes\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / Parameter activity\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Parameter activity\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / New trigger instrument\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / New trigger instrument\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / Assign tracker instruments\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Assign tracker instruments\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin / Move earlier/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Move earlier"
+      },
+      {
+        "id": "Plugin controls / Plugin / Move later/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Move later"
+      },
+      {
+        "id": "Plugin controls / Plugin / Remove plugin/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin / Remove plugin"
+      },
+      {
+        "id": "Plugin controls / New trigger instrument\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / New trigger instrument\u2026"
+      },
+      {
+        "id": "Plugin controls / Assign tracker instruments\u2026/invoke",
+        "keys": [],
+        "name": "Plugin controls / Assign tracker instruments\u2026"
+      },
+      {
+        "id": "Plugin controls / Plugin controls panel / Pin current target/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin controls panel / Pin current target"
+      },
+      {
+        "id": "Plugin controls / Plugin controls panel / Inspect editing cursor/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin controls panel / Inspect editing cursor"
+      },
+      {
+        "id": "Plugin controls / Plugin controls panel / Return to opening row/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin controls panel / Return to opening row"
+      },
+      {
+        "id": "Plugin controls / Plugin controls panel / Dock right/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin controls panel / Dock right"
+      },
+      {
+        "id": "Plugin controls / Plugin controls panel / Dock below/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin controls panel / Dock below"
+      },
+      {
+        "id": "Plugin controls / Plugin controls panel / Float/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin controls panel / Float"
+      },
+      {
+        "id": "Plugin controls / Plugin controls panel / Hide/invoke",
+        "keys": [],
+        "name": "Plugin controls / Plugin controls panel / Hide"
+      },
+      {
+        "id": "Mixer / Mixer / Add group/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer / Add group"
+      },
+      {
+        "id": "Mixer / Mixer / Add return/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer / Add return"
+      },
+      {
+        "id": "Mixer / Mixer / Remove bus/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer / Remove bus"
+      },
+      {
+        "id": "Mixer / Mixer / Reload/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer / Reload"
+      },
+      {
+        "id": "Mixer / Mute/invoke",
+        "keys": [],
+        "name": "Mixer / Mute"
+      },
+      {
+        "id": "Mixer / Solo/invoke",
+        "keys": [],
+        "name": "Mixer / Solo"
+      },
+      {
+        "id": "Mixer / Sidechains\u2026/invoke",
+        "keys": [],
+        "name": "Mixer / Sidechains\u2026"
+      },
+      {
+        "id": "Mixer / Add effect\u2026/invoke",
+        "keys": [],
+        "name": "Mixer / Add effect\u2026"
+      },
+      {
+        "id": "Mixer / Remove send/invoke",
+        "keys": [],
+        "name": "Mixer / Remove send"
+      },
+      {
+        "id": "Mixer / Pre-fader/invoke",
+        "keys": [],
+        "name": "Mixer / Pre-fader"
+      },
+      {
+        "id": "Mixer / Enabled/invoke",
+        "keys": [],
+        "name": "Mixer / Enabled"
+      },
+      {
+        "id": "Mixer / Set send/invoke",
+        "keys": [],
+        "name": "Mixer / Set send"
+      },
+      {
+        "id": "Mixer / Audio buses\u2026/invoke",
+        "keys": [],
+        "name": "Mixer / Audio buses\u2026"
+      },
+      {
+        "id": "Mixer / Route here/invoke",
+        "keys": [],
+        "name": "Mixer / Route here"
+      },
+      {
+        "id": "Mixer / Mixer panel / Pin current target/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer panel / Pin current target"
+      },
+      {
+        "id": "Mixer / Mixer panel / Inspect editing cursor/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer panel / Inspect editing cursor"
+      },
+      {
+        "id": "Mixer / Mixer panel / Return to opening row/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer panel / Return to opening row"
+      },
+      {
+        "id": "Mixer / Mixer panel / Dock right/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer panel / Dock right"
+      },
+      {
+        "id": "Mixer / Mixer panel / Dock below/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer panel / Dock below"
+      },
+      {
+        "id": "Mixer / Mixer panel / Float/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer panel / Float"
+      },
+      {
+        "id": "Mixer / Mixer panel / Hide/invoke",
+        "keys": [],
+        "name": "Mixer / Mixer panel / Hide"
+      },
+      {
+        "id": "Audio & modulation graph / Add\u2026/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Add\u2026"
+      },
+      {
+        "id": "graph.add",
+        "keys": [
+          "shift+a"
+        ],
+        "name": "Audio & modulation graph / Graph / Add node\u2026"
+      },
+      {
+        "id": "graph.parent",
+        "keys": [
+          "opt+up"
+        ],
+        "name": "Audio & modulation graph / Graph / Parent graph"
+      },
+      {
+        "id": "graph.fit",
+        "keys": [
+          "\uf729"
+        ],
+        "name": "Audio & modulation graph / Graph / Fit graph"
+      },
+      {
+        "id": "graph.traceSilence",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Trace silence"
+      },
+      {
+        "id": "graph.findOverload",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Find next overload"
+      },
+      {
+        "id": "graph.clearOverloads",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Clear overload indicators"
+      },
+      {
+        "id": "graph.scope",
+        "keys": [
+          "q"
+        ],
+        "name": "Audio & modulation graph / Graph / Scope selected signal"
+      },
+      {
+        "id": "graph.spectrum",
+        "keys": [
+          "shift+q"
+        ],
+        "name": "Audio & modulation graph / Graph / Spectrum of selected signal"
+      },
+      {
+        "id": "graph.openPlugin",
+        "keys": [
+          "return"
+        ],
+        "name": "Audio & modulation graph / Graph / Open plugin interface"
+      },
+      {
+        "id": "graph.bypass",
+        "keys": [
+          "m"
+        ],
+        "name": "Audio & modulation graph / Graph / Toggle plugin bypass"
+      },
+      {
+        "id": "graph.listen",
+        "keys": [
+          "l"
+        ],
+        "name": "Audio & modulation graph / Graph / Listen here"
+      },
+      {
+        "id": "graph.stopListening",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Stop listening"
+      },
+      {
+        "id": "graph.frameSelection",
+        "keys": [
+          "f"
+        ],
+        "name": "Audio & modulation graph / Graph / Frame selection"
+      },
+      {
+        "id": "graph.showPattern",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Show in pattern"
+      },
+      {
+        "id": "graph.newGroup",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / New subgraph\u2026"
+      },
+      {
+        "id": "graph.cloneGroup",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Clone subgraph"
+      },
+      {
+        "id": "graph.sourceAutomation",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Add modulation source / Pattern envelope"
+      },
+      {
+        "id": "graph.sourceLFO",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Add modulation source / LFO"
+      },
+      {
+        "id": "graph.sourceFollower",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Add modulation source / Audio follower"
+      },
+      {
+        "id": "graph.sourceRandom",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Add modulation source / Random"
+      },
+      {
+        "id": "graph.sourceNote",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Add modulation source / Note envelope"
+      },
+      {
+        "id": "graph.sourceMIDI",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Add modulation source / MIDI controller"
+      },
+      {
+        "id": "graph.sourceAmount",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Add modulation source / Amount"
+      },
+      {
+        "id": "graph.patch",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Patch by keyboard\u2026"
+      },
+      {
+        "id": "graph.cut",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Cut cables\u2026"
+      },
+      {
+        "id": "graph.detach",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Detach and reconnect"
+      },
+      {
+        "id": "graph.deleteHeal",
+        "keys": [
+          "ctrl+x"
+        ],
+        "name": "Audio & modulation graph / Graph / Delete and reconnect"
+      },
+      {
+        "id": "graph.arrange",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Arrange nodes"
+      },
+      {
+        "id": "graph.zoomIn",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Zoom in"
+      },
+      {
+        "id": "graph.zoomOut",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Zoom out"
+      },
+      {
+        "id": "graph.reload",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph / Reload graph"
+      },
+      {
+        "id": "Audio & modulation graph / Stop listening/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Stop listening"
+      },
+      {
+        "id": "Audio & modulation graph / Clear filters/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Clear filters"
+      },
+      {
+        "id": "Audio & modulation graph / Close/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Close"
+      },
+      {
+        "id": "Audio & modulation graph / Enabled/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Enabled"
+      },
+      {
+        "id": "Audio & modulation graph / \u2212/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / \u2212"
+      },
+      {
+        "id": "Audio & modulation graph / +/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / +"
+      },
+      {
+        "id": "Audio & modulation graph / Fit/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Fit"
+      },
+      {
+        "id": "Audio & modulation graph / Expand\u2026/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Expand\u2026"
+      },
+      {
+        "id": "Audio & modulation graph / Reference/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Reference"
+      },
+      {
+        "id": "Audio & modulation graph / Bank\u2026/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Bank\u2026"
+      },
+      {
+        "id": "Audio & modulation graph / Set point/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Set point"
+      },
+      {
+        "id": "Audio & modulation graph / Delete/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Delete"
+      },
+      {
+        "id": "Audio & modulation graph / Ramp/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Ramp"
+      },
+      {
+        "id": "Audio & modulation graph / Reload / discard/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Reload / discard"
+      },
+      {
+        "id": "Audio & modulation graph / Apply/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Apply"
+      },
+      {
+        "id": "Audio & modulation graph / New\u2026/invoke",
+        "keys": [
+          "cmd+n"
+        ],
+        "name": "Audio & modulation graph / New\u2026"
+      },
+      {
+        "id": "Audio & modulation graph / Connect/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Connect"
+      },
+      {
+        "id": "Audio & modulation graph / Update connection/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Update connection"
+      },
+      {
+        "id": "Audio & modulation graph / Remove/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Remove"
+      },
+      {
+        "id": "Audio & modulation graph / Edit chain\u2026/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Edit chain\u2026"
+      },
+      {
+        "id": "Audio & modulation graph / Enabled/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Enabled"
+      },
+      {
+        "id": "Audio & modulation graph / Delete unused/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Delete unused"
+      },
+      {
+        "id": "Audio & modulation graph / Remove node/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Remove node"
+      },
+      {
+        "id": "Audio & modulation graph / Open/invoke",
+        "keys": [
+          "cmd+o"
+        ],
+        "name": "Audio & modulation graph / Open"
+      },
+      {
+        "id": "Audio & modulation graph / Use connected detector (Auto)/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Use connected detector (Auto)"
+      },
+      {
+        "id": "Audio & modulation graph / Mute/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Mute"
+      },
+      {
+        "id": "Audio & modulation graph / Solo/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Solo"
+      },
+      {
+        "id": "Audio & modulation graph / Mixer controls/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Mixer controls"
+      },
+      {
+        "id": "Audio & modulation graph / Pattern graph commands\u2026/invoke",
+        "keys": [
+          "cmd+shift+g"
+        ],
+        "name": "Audio & modulation graph / Pattern graph commands\u2026"
+      },
+      {
+        "id": "Audio & modulation graph / Custom interface/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Custom interface"
+      },
+      {
+        "id": "Audio & modulation graph / Graph plugin / Reload controls/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph plugin / Reload controls"
+      },
+      {
+        "id": "Audio & modulation graph / Graph plugin / Parameter activity\u2026/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph plugin / Parameter activity\u2026"
+      },
+      {
+        "id": "Audio & modulation graph / Graph plugin / Update template from custom interface/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph plugin / Update template from custom interface"
+      },
+      {
+        "id": "Audio & modulation graph / Graph plugin / Close custom interface/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Graph plugin / Close custom interface"
+      },
+      {
+        "id": "Audio & modulation graph / Modulate/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Modulate"
+      },
+      {
+        "id": "Audio & modulation graph / Bypass/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Bypass"
+      },
+      {
+        "id": "Audio & modulation graph / Open interface/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Open interface"
+      },
+      {
+        "id": "Audio & modulation graph / Audio & modulation graph panel / Pin current target/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Audio & modulation graph panel / Pin current target"
+      },
+      {
+        "id": "Audio & modulation graph / Audio & modulation graph panel / Inspect editing cursor/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Audio & modulation graph panel / Inspect editing cursor"
+      },
+      {
+        "id": "Audio & modulation graph / Audio & modulation graph panel / Return to opening row/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Audio & modulation graph panel / Return to opening row"
+      },
+      {
+        "id": "Audio & modulation graph / Audio & modulation graph panel / Dock right/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Audio & modulation graph panel / Dock right"
+      },
+      {
+        "id": "Audio & modulation graph / Audio & modulation graph panel / Dock below/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Audio & modulation graph panel / Dock below"
+      },
+      {
+        "id": "Audio & modulation graph / Audio & modulation graph panel / Float/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Audio & modulation graph panel / Float"
+      },
+      {
+        "id": "Audio & modulation graph / Audio & modulation graph panel / Hide/invoke",
+        "keys": [],
+        "name": "Audio & modulation graph / Audio & modulation graph panel / Hide"
+      },
+      {
+        "id": "Graph effect browser / Reload list/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Reload list"
+      },
+      {
+        "id": "Graph effect browser / Rescan installed plugins/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Rescan installed plugins"
+      },
+      {
+        "id": "Graph effect browser / Favorites/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Favorites"
+      },
+      {
+        "id": "Graph effect browser / Show hidden/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Show hidden"
+      },
+      {
+        "id": "Graph effect browser / Favorite/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Favorite"
+      },
+      {
+        "id": "Graph effect browser / Hide from browser/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Hide from browser"
+      },
+      {
+        "id": "Graph effect browser / Add plugin/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Add plugin"
+      },
+      {
+        "id": "Graph effect browser / Graph effect browser panel / Pin current target/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Graph effect browser panel / Pin current target"
+      },
+      {
+        "id": "Graph effect browser / Graph effect browser panel / Inspect editing cursor/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Graph effect browser panel / Inspect editing cursor"
+      },
+      {
+        "id": "Graph effect browser / Graph effect browser panel / Return to opening row/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Graph effect browser panel / Return to opening row"
+      },
+      {
+        "id": "Graph effect browser / Graph effect browser panel / Dock right/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Graph effect browser panel / Dock right"
+      },
+      {
+        "id": "Graph effect browser / Graph effect browser panel / Dock below/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Graph effect browser panel / Dock below"
+      },
+      {
+        "id": "Graph effect browser / Graph effect browser panel / Float/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Graph effect browser panel / Float"
+      },
+      {
+        "id": "Graph effect browser / Graph effect browser panel / Hide/invoke",
+        "keys": [],
+        "name": "Graph effect browser / Graph effect browser panel / Hide"
+      },
+      {
+        "id": "Pattern graph commands / Let stopped effects finish their tails/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Let stopped effects finish their tails"
+      },
+      {
+        "id": "Pattern graph commands / Insert command/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Insert command"
+      },
+      {
+        "id": "Pattern graph commands / Remove/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Remove"
+      },
+      {
+        "id": "Pattern graph commands / Open graph/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Open graph"
+      },
+      {
+        "id": "Pattern graph commands / Graph commands / Show lane in pattern/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Graph commands / Show lane in pattern"
+      },
+      {
+        "id": "Pattern graph commands / Graph commands / Reload from cursor/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Graph commands / Reload from cursor"
+      },
+      {
+        "id": "Pattern graph commands / Pattern graph commands panel / Pin current target/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Pattern graph commands panel / Pin current target"
+      },
+      {
+        "id": "Pattern graph commands / Pattern graph commands panel / Inspect editing cursor/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Pattern graph commands panel / Inspect editing cursor"
+      },
+      {
+        "id": "Pattern graph commands / Pattern graph commands panel / Return to opening row/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Pattern graph commands panel / Return to opening row"
+      },
+      {
+        "id": "Pattern graph commands / Pattern graph commands panel / Dock right/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Pattern graph commands panel / Dock right"
+      },
+      {
+        "id": "Pattern graph commands / Pattern graph commands panel / Dock below/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Pattern graph commands panel / Dock below"
+      },
+      {
+        "id": "Pattern graph commands / Pattern graph commands panel / Float/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Pattern graph commands panel / Float"
+      },
+      {
+        "id": "Pattern graph commands / Pattern graph commands panel / Hide/invoke",
+        "keys": [],
+        "name": "Pattern graph commands / Pattern graph commands panel / Hide"
+      },
+      {
+        "id": "Pattern automation / Envelope bank\u2026/invoke",
+        "keys": [],
+        "name": "Pattern automation / Envelope bank\u2026"
+      },
+      {
+        "id": "Pattern automation / Automation / Use last touched parameter/invoke",
+        "keys": [],
+        "name": "Pattern automation / Automation / Use last touched parameter"
+      },
+      {
+        "id": "Pattern automation / Automation / Parameter activity\u2026/invoke",
+        "keys": [],
+        "name": "Pattern automation / Automation / Parameter activity\u2026"
+      },
+      {
+        "id": "Pattern automation / Automation / Range and transform tools\u2026/invoke",
+        "keys": [],
+        "name": "Pattern automation / Automation / Range and transform tools\u2026"
+      },
+      {
+        "id": "Pattern automation / Automation / Remove lane/invoke",
+        "keys": [],
+        "name": "Pattern automation / Automation / Remove lane"
+      },
+      {
+        "id": "Pattern automation / Automation / Clear all recorded automation/invoke",
+        "keys": [],
+        "name": "Pattern automation / Automation / Clear all recorded automation"
+      },
+      {
+        "id": "Pattern automation / Automation / Reload/invoke",
+        "keys": [],
+        "name": "Pattern automation / Automation / Reload"
+      },
+      {
+        "id": "Pattern automation / Record gestures/invoke",
+        "keys": [],
+        "name": "Pattern automation / Record gestures"
+      },
+      {
+        "id": "Pattern automation / Enabled/invoke",
+        "keys": [],
+        "name": "Pattern automation / Enabled"
+      },
+      {
+        "id": "Pattern automation / Expand\u2026/invoke",
+        "keys": [],
+        "name": "Pattern automation / Expand\u2026"
+      },
+      {
+        "id": "Pattern automation / Reference/invoke",
+        "keys": [],
+        "name": "Pattern automation / Reference"
+      },
+      {
+        "id": "Pattern automation / \u2212/invoke",
+        "keys": [],
+        "name": "Pattern automation / \u2212"
+      },
+      {
+        "id": "Pattern automation / +/invoke",
+        "keys": [],
+        "name": "Pattern automation / +"
+      },
+      {
+        "id": "Pattern automation / Fit/invoke",
+        "keys": [],
+        "name": "Pattern automation / Fit"
+      },
+      {
+        "id": "Pattern automation / Add at cursor/invoke",
+        "keys": [],
+        "name": "Pattern automation / Add at cursor"
+      },
+      {
+        "id": "Pattern automation / Delete point/invoke",
+        "keys": [],
+        "name": "Pattern automation / Delete point"
+      },
+      {
+        "id": "Pattern automation / Apply tool/invoke",
+        "keys": [],
+        "name": "Pattern automation / Apply tool"
+      },
+      {
+        "id": "Pattern automation / Copy range/invoke",
+        "keys": [],
+        "name": "Pattern automation / Copy range"
+      },
+      {
+        "id": "Pattern automation / Ramp up/invoke",
+        "keys": [],
+        "name": "Pattern automation / Ramp up"
+      },
+      {
+        "id": "Pattern automation / Ramp down/invoke",
+        "keys": [],
+        "name": "Pattern automation / Ramp down"
+      },
+      {
+        "id": "Pattern automation / Pattern automation panel / Pin current target/invoke",
+        "keys": [],
+        "name": "Pattern automation / Pattern automation panel / Pin current target"
+      },
+      {
+        "id": "Pattern automation / Pattern automation panel / Inspect editing cursor/invoke",
+        "keys": [],
+        "name": "Pattern automation / Pattern automation panel / Inspect editing cursor"
+      },
+      {
+        "id": "Pattern automation / Pattern automation panel / Return to opening row/invoke",
+        "keys": [],
+        "name": "Pattern automation / Pattern automation panel / Return to opening row"
+      },
+      {
+        "id": "Pattern automation / Pattern automation panel / Dock right/invoke",
+        "keys": [],
+        "name": "Pattern automation / Pattern automation panel / Dock right"
+      },
+      {
+        "id": "Pattern automation / Pattern automation panel / Dock below/invoke",
+        "keys": [],
+        "name": "Pattern automation / Pattern automation panel / Dock below"
+      },
+      {
+        "id": "Pattern automation / Pattern automation panel / Float/invoke",
+        "keys": [],
+        "name": "Pattern automation / Pattern automation panel / Float"
+      },
+      {
+        "id": "Pattern automation / Pattern automation panel / Hide/invoke",
+        "keys": [],
+        "name": "Pattern automation / Pattern automation panel / Hide"
+      },
+      {
+        "id": "Parameter activity / Last touched/invoke",
+        "keys": [],
+        "name": "Parameter activity / Last touched"
+      },
+      {
+        "id": "Parameter activity / Refresh copies/invoke",
+        "keys": [],
+        "name": "Parameter activity / Refresh copies"
+      },
+      {
+        "id": "Parameter activity / search/invoke",
+        "keys": [],
+        "name": "Parameter activity / search"
+      },
+      {
+        "id": "Parameter activity / Freeze view/invoke",
+        "keys": [],
+        "name": "Parameter activity / Freeze view"
+      },
+      {
+        "id": "Parameter activity / Clear capture/invoke",
+        "keys": [],
+        "name": "Parameter activity / Clear capture"
+      },
+      {
+        "id": "Parameter activity / Play / capture pattern/invoke",
+        "keys": [],
+        "name": "Parameter activity / Play / capture pattern"
+      },
+      {
+        "id": "Parameter activity / \u2212/invoke",
+        "keys": [],
+        "name": "Parameter activity / \u2212"
+      },
+      {
+        "id": "Parameter activity / +/invoke",
+        "keys": [],
+        "name": "Parameter activity / +"
+      },
+      {
+        "id": "Parameter activity / Fit/invoke",
+        "keys": [],
+        "name": "Parameter activity / Fit"
+      },
+      {
+        "id": "Parameter activity / Edit mapping\u2026/invoke",
+        "keys": [],
+        "name": "Parameter activity / Edit mapping\u2026"
+      },
+      {
+        "id": "Parameter activity / Open source\u2026/invoke",
+        "keys": [],
+        "name": "Parameter activity / Open source\u2026"
+      },
+      {
+        "id": "Parameter activity / Add / update/invoke",
+        "keys": [],
+        "name": "Parameter activity / Add / update"
+      },
+      {
+        "id": "Parameter activity / Delete point/invoke",
+        "keys": [],
+        "name": "Parameter activity / Delete point"
+      },
+      {
+        "id": "Parameter activity / Next page/invoke",
+        "keys": [],
+        "name": "Parameter activity / Next page"
+      },
+      {
+        "id": "Parameter activity / Parameter activity panel / Pin current target/invoke",
+        "keys": [],
+        "name": "Parameter activity / Parameter activity panel / Pin current target"
+      },
+      {
+        "id": "Parameter activity / Parameter activity panel / Inspect editing cursor/invoke",
+        "keys": [],
+        "name": "Parameter activity / Parameter activity panel / Inspect editing cursor"
+      },
+      {
+        "id": "Parameter activity / Parameter activity panel / Return to opening row/invoke",
+        "keys": [],
+        "name": "Parameter activity / Parameter activity panel / Return to opening row"
+      },
+      {
+        "id": "Parameter activity / Parameter activity panel / Dock right/invoke",
+        "keys": [],
+        "name": "Parameter activity / Parameter activity panel / Dock right"
+      },
+      {
+        "id": "Parameter activity / Parameter activity panel / Dock below/invoke",
+        "keys": [],
+        "name": "Parameter activity / Parameter activity panel / Dock below"
+      },
+      {
+        "id": "Parameter activity / Parameter activity panel / Float/invoke",
+        "keys": [],
+        "name": "Parameter activity / Parameter activity panel / Float"
+      },
+      {
+        "id": "Parameter activity / Parameter activity panel / Hide/invoke",
+        "keys": [],
+        "name": "Parameter activity / Parameter activity panel / Hide"
+      },
+      {
+        "id": "Arrangement / Matrix\u2026/invoke",
+        "keys": [],
+        "name": "Arrangement / Matrix\u2026"
+      },
+      {
+        "id": "Arrangement / Insert after/invoke",
+        "keys": [],
+        "name": "Arrangement / Insert after"
+      },
+      {
+        "id": "Arrangement / Orders / Insert before/invoke",
+        "keys": [],
+        "name": "Arrangement / Orders / Insert before"
+      },
+      {
+        "id": "Arrangement / Orders / Insert after/invoke",
+        "keys": [],
+        "name": "Arrangement / Orders / Insert after"
+      },
+      {
+        "id": "Arrangement / Orders / Move up/invoke",
+        "keys": [],
+        "name": "Arrangement / Orders / Move up"
+      },
+      {
+        "id": "Arrangement / Orders / Move down/invoke",
+        "keys": [],
+        "name": "Arrangement / Orders / Move down"
+      },
+      {
+        "id": "Arrangement / Orders / Remove order/invoke",
+        "keys": [],
+        "name": "Arrangement / Orders / Remove order"
+      },
+      {
+        "id": "Arrangement / Previous section/invoke",
+        "keys": [],
+        "name": "Arrangement / Previous section"
+      },
+      {
+        "id": "Arrangement / Next section/invoke",
+        "keys": [],
+        "name": "Arrangement / Next section"
+      }
+    ]
+  },
+  "playbackStopped": false,
+  "revision": "0E7970BB-2A09-4C2B-88C7-65B006EF33D2:0:0:0"
+}

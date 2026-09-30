@@ -308,9 +308,12 @@ struct InterfaceFailure: Error { let message: String }
     frequencyRow.reading.stringValue = "nan"; frequencyRow.reading.submit()
     frequencyRow.reading.stringValue = "25000"; frequencyRow.reading.submit()
     try require(frequencyEdits.count == count, "Repeated, invalid and out-of-range text does not create edits")
-    frequencyRow.reading.controlTextDidBeginEditing(Notification(name: NSControl.textDidBeginEditingNotification))
+    frequencyRow.reading.prepareEditing()
     try require(frequencyRow.reading.stringValue == "1234.56789", "Editing exposes full precision, without unit suffix")
     frequencyRow.reading.submit()
+    frequencyRow.reading.stringValue = "12"
+    frequencyRow.reading.controlTextDidBeginEditing(Notification(name: NSControl.textDidBeginEditingNotification))
+    try require(frequencyRow.reading.stringValue == "12", "Beginning an edit must not erase its first digit")
     try require(frequencyEdits.count == count, "Focusing and leaving a numeric field does not round its value")
     equalizer.filterParameters()
     frequencyRow.reading.stringValue = "1400"; frequencyRow.reading.submit()
@@ -786,6 +789,7 @@ struct InterfaceFailure: Error { let message: String }
     do {
       try automationToolsChecks()
       try automationTargetChecks()
+      try parameterActivityChecks()
       try mixerStripsChecks()
       try pluginPresetChecks()
       try songTimingChecks()
@@ -803,6 +807,10 @@ struct InterfaceFailure: Error { let message: String }
       try noteTrackChecks()
       try pluginBrowserChecks()
       let grid = PatternView()
+      grid.frame=NSRect(x:0,y:0,width:640,height:360);grid.layout()
+      try require(grid.drawableSize==grid.convertToBacking(grid.bounds).size,"Paused Metal view publishes a nonzero drawable size after initial layout")
+      grid.frame=NSRect(x:0,y:0,width:720,height:400);grid.layout()
+      try require(grid.drawableSize==grid.convertToBacking(grid.bounds).size,"Custom presenter follows drawable resize without MTKView draw callbacks")
       var changedModel = grid.model
       let originalNeighbor = changedModel.cell(0, 1)
       changedModel.replaceCell(0, 0, with: [49, 1, 1, 32, 0, 0])
@@ -813,11 +821,12 @@ struct InterfaceFailure: Error { let message: String }
       var redo = 0
       var messages = [String]()
       var auditions = [(Int, Bool)]()
+      var auditionTargets = [(Int,Int)]()
       grid.onTransport = { transports += 1 }
       grid.onUndo = { undo += 1 }
       grid.onRedo = { redo += 1 }
       grid.onMessage = { messages.append($0) }
-      grid.onAudition = { auditions.append(($0, $1)) }
+      grid.onAudition = { note,instrument,channel,on in auditions.append((note,on));auditionTargets.append((instrument,channel)) }
       grid.onEdit = { row, channel, values in
         var next = grid.model
         let start = (row * next.channels + channel) * 6
@@ -836,7 +845,11 @@ struct InterfaceFailure: Error { let message: String }
         grid.model.cell(0, 0)[0] == 49 && grid.cursorRow == 1, "C-4 entry and step advance")
       key(grid, 6, "z", repeatKey: true)
       try require(grid.cursorRow == 1, "Held notes do not repeat into the pattern")
+      let entryChannel=grid.cursorChannel,entryInstrument=grid.instrument
+      grid.cursorChannel=1;grid.instrument=2
       key(grid, 6, "z", up: true)
+      try require(auditionTargets.count==2 && auditionTargets[0].0==entryInstrument && auditionTargets[1].0==entryInstrument && auditionTargets[0].1==entryChannel && auditionTargets[1].1==entryChannel,"Held pattern note keeps its original instrument and routing channel across cursor changes")
+      grid.cursorChannel=entryChannel;grid.instrument=entryInstrument
       try require(
         auditions.count == 2 && auditions[0].0 == 49 && auditions[0].1 && !auditions[1].1,
         "Note-on and matching note-off are paired")

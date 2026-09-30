@@ -45,6 +45,8 @@ struct NativeSong {
   std::vector<EnvelopeTemplate> envelopeBank;
   std::vector<EnvelopeLink> envelopeLinks;
   NativeEntity makeEntity();
+  // Materialize the ordinary channel → master topology on the first edit.
+  void ensureMixer();
   void reconcile(const OpenMPT::CSoundFile &song);
   void clonePatternAutomation(uint64_t source, uint64_t destination);
   void validate(const OpenMPT::CSoundFile &song) const;

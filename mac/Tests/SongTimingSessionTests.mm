@@ -2,6 +2,7 @@
 #include "editor/TrackerDocument.hpp"
 #include "editor/SongTiming.hpp"
 #include "editor/SampleArchive.hpp"
+#include "ModuleFixture.hpp"
 #include <iostream>
 using namespace Tracker;
 using namespace OpenMPT;
@@ -10,7 +11,7 @@ int main(){@autoreleasepool{try{
   NSString *folder=[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
   [NSFileManager.defaultManager createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
   for(auto type:{MOD_TYPE_MOD,MOD_TYPE_XM,MOD_TYPE_S3M,MOD_TYPE_IT,MOD_TYPE_MPT}) {
-    auto doc=Document::demo(type);NSString *path=[folder stringByAppendingPathComponent:@"source.module"];doc->save(path.UTF8String);
+    NSString *path=[folder stringByAppendingPathComponent:@"source.module"];Test::writeDemoModule(type,path.UTF8String);
     TrackerSession *session=[TrackerSession new];NSError *error=nil;
     check([session openPath:path error:&error],"Open source module");
     auto call=[&](NSString *method,NSDictionary *p,bool mutation=false){auto params=[p mutableCopy];if(mutation)params[@"expectedRevision"]=session.automationRevision;

@@ -2,7 +2,11 @@ import AppKit
 
 extension SignalGraphEditor {
   var sampleInstruments:[[String:Any]]{(data["instruments"] as? [[String:Any]] ?? []).filter{$0["plugin"] as? Bool != true}}
-  var selectedInstrument:[String:Any]?{sampleInstruments.first{"instrument:\($0["id"] as? String ?? "")"==selectedID}}
+  func instrumentForSongNode(_ node:String?)->[String:Any]? {
+    guard let node else{return nil}
+    return sampleInstruments.first{guard let id=$0["id"] as? String else{return false};return node=="instrument:\(id)" || node.hasPrefix("instrument-graph:\(id):")}
+  }
+  var selectedInstrument:[String:Any]?{instrumentForSongNode(selectedID)}
   func inspectSampleInstrument(){
     guard let raw=chosen(instrumentPicker),let instrument=sampleInstruments.first(where:{$0["id"] as? String==raw})else{status.stringValue="Create a sample instrument first";return}
     graphID=nil;selectedID="instrument:\(instrument["id"] as? String ?? "")";update(data)
@@ -27,7 +31,8 @@ extension SignalGraphEditor {
       let definition=definitions.first{$0["id"] as? String==graph}
       for (i,bus) in buses.filter({$0["kind"] as? String=="track" && visible.contains($0["id"] as? String ?? "")}).enumerated(){guard let target=bus["id"] as? String else{continue};let copy="instrument-graph:\(id):\(target)"
         nodes.append(node(copy,"\(definition?["number"] ?? 0) · \(definition?["name"] as? String ?? "Subgraph")","I\(instrument["index"] ?? 0) → \(bus["name"] as? String ?? "channel")",265,y+Double(i)*90))
-        songNodeGraph[copy]=graph
+        nodes[nodes.count-1].role="Instrument I\(instrument["index"] ?? 0)"
+        songNodeGraph[copy]=graph;songNodeBus[copy]=target
         edges.append(SignalCanvasEdge(source:key,target:copy,label:"Independent copy"));edges.append(SignalCanvasEdge(source:copy,target:target,label:"Before channel"))
       }
     }

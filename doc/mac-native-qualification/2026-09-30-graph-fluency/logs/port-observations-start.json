@@ -1,0 +1,1097 @@
+{
+  "changed": false,
+  "data": {
+    "active": true,
+    "peakDecaySeconds": 0.2,
+    "playing": true,
+    "ports": [
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "plugin:2D9DE253-62C4-444A-A57D-66B12DE0C16D/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Input 1",
+        "node": "plugin:2D9DE253-62C4-444A-A57D-66B12DE0C16D",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "plugin:2D9DE253-62C4-444A-A57D-66B12DE0C16D/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Output 1",
+        "node": "plugin:2D9DE253-62C4-444A-A57D-66B12DE0C16D",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "plugin:5C7C53DF-146B-43C8-B916-E34797F24441/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Stereo input",
+        "node": "plugin:5C7C53DF-146B-43C8-B916-E34797F24441",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 90,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "plugin:5C7C53DF-146B-43C8-B916-E34797F24441/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Stereo output",
+        "node": "plugin:5C7C53DF-146B-43C8-B916-E34797F24441",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 90,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Stereo input",
+        "node": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Stereo output",
+        "node": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D/in/1",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Detector sidechain",
+        "node": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 1,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "plugin:F5DE4F80-361F-423A-9E11-ECA98A804903/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Stereo input",
+        "node": "plugin:F5DE4F80-361F-423A-9E11-ECA98A804903",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "plugin:F5DE4F80-361F-423A-9E11-ECA98A804903/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Stereo output",
+        "node": "plugin:F5DE4F80-361F-423A-9E11-ECA98A804903",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n2/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 1 input",
+        "node": "n2",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n2/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 1 output",
+        "node": "n2",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 90,
+        "direction": "input",
+        "key": "n3/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 2 input",
+        "node": "n3",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n3/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 2 output",
+        "node": "n3",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n4/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 3 input",
+        "node": "n4",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n4/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 3 output",
+        "node": "n4",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 90,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n5/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 4 input",
+        "node": "n5",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n5/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 4 output",
+        "node": "n5",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n6/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 5 input",
+        "node": "n6",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n6/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 5 output",
+        "node": "n6",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n7/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 6 input",
+        "node": "n7",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n7/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 6 output",
+        "node": "n7",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n8/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 7 input",
+        "node": "n8",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n8/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 7 output",
+        "node": "n8",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n9/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 8 input",
+        "node": "n9",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n9/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Track 8 output",
+        "node": "n9",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 90,
+        "direction": "input",
+        "key": "n16/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Master input",
+        "node": "n16",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n16/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Master output",
+        "node": "n16",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n17/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 9 input",
+        "node": "n17",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n17/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 9 output",
+        "node": "n17",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n18/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 10 input",
+        "node": "n18",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n18/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 10 output",
+        "node": "n18",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n19/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 11 input",
+        "node": "n19",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n19/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 11 output",
+        "node": "n19",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n20/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 12 input",
+        "node": "n20",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n20/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 12 output",
+        "node": "n20",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n21/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 13 input",
+        "node": "n21",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n21/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 13 output",
+        "node": "n21",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n22/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 14 input",
+        "node": "n22",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n22/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 14 output",
+        "node": "n22",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n23/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 15 input",
+        "node": "n23",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n23/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 15 output",
+        "node": "n23",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n24/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 16 input",
+        "node": "n24",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n24/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Column 16 output",
+        "node": "n24",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "input",
+        "key": "n25/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Layer input",
+        "node": "n25",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n25/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Layer output",
+        "node": "n25",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 90,
+        "direction": "input",
+        "key": "n31/in/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Return input",
+        "node": "n31",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      },
+      {
+        "channels": 2,
+        "clipped": false,
+        "compensation": 0,
+        "direction": "output",
+        "key": "n31/out/0",
+        "lastSignal": 0,
+        "measured": false,
+        "name": "Return output",
+        "node": "n31",
+        "nonFinite": false,
+        "peak": [
+          0,
+          0
+        ],
+        "port": 0,
+        "processorLatency": 0,
+        "rms": [
+          0,
+          0
+        ],
+        "through": 0
+      }
+    ],
+    "sampleRate": 48000,
+    "scope": "Host mixer and rack audio ports; reusable graph internals are not included",
+    "silenceThreshold": 1e-07
+  },
+  "documentId": "7EE47A1D-604F-43B4-BCD4-48B46378B52E",
+  "playbackStopped": false,
+  "revision": "7EE47A1D-604F-43B4-BCD4-48B46378B52E:1:0:0"
+}

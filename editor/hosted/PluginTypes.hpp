@@ -24,6 +24,7 @@ struct PluginDescriptor {
   std::string name;
   std::string format = "AU", path, classID;
   bool instrument = false;
+  bool operator==(const PluginDescriptor &) const = default;
 };
 struct PluginParameter {
   uint32_t id;
@@ -54,6 +55,7 @@ struct PluginState {
   std::vector<uint32_t> auxiliaryInputs, auxiliaryOutputs; // Native bus indices; main bus 0 is always enabled.
   uint32_t midiChannel = 1;
   std::vector<PluginInstrumentAlias> aliases;
+  bool operator==(const PluginState &) const = default;
 };
 std::vector<PluginInstrumentAlias> pluginAssignments(const PluginState &);
 void setPluginAssignments(PluginState &, const std::vector<PluginInstrumentAlias> &);
@@ -78,5 +80,6 @@ struct ParameterChange {
   uint32_t slot, id;
   float value;
   uint64_t frame;
+  bool operator==(const ParameterChange &) const = default;
 };
 } // namespace Tracker

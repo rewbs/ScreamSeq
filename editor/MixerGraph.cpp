@@ -1,5 +1,6 @@
 #include "MixerGraph.hpp"
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <map>
 #include <set>
@@ -12,6 +13,35 @@ void require(bool condition, const char *message) { if (!condition) throw std::i
 bool range(double value, double low, double high) { return std::isfinite(value) && value >= low && value <= high; }
 bool text(const std::string &value, size_t maximum) { return value.size() <= maximum && value.find('\0') == std::string::npos; }
 }
+void moveMixerInserts(MixerGraph &graph, const std::vector<std::string> &effectRack,
+                      const std::vector<std::string> &plugins, uint64_t target,
+                      const std::string &before) {
+  auto next = graph;
+  auto master = std::find_if(next.buses.begin(), next.buses.end(), [](const auto &b) { return b.kind == MixerBusKind::Master; });
+  require(master != next.buses.end(), "Enable the mixer first");
+  require(!plugins.empty() && plugins.size() <= 32, "Choose 1–32 consecutive effect plugins");
+  std::set<std::string> selected;
+  for(const auto &id : plugins) require(selected.insert(id).second && std::find(effectRack.begin(), effectRack.end(), id) != effectRack.end(), "Unknown or duplicate effect plugin");
+  std::set<std::string> owned;
+  for(const auto &bus : next.buses) for(const auto &id : bus.inserts) owned.insert(id);
+  for(const auto &id : effectRack) if(!owned.count(id)) master->inserts.push_back(id);
+  const auto original = next;
+  auto source = std::find_if(next.buses.begin(), next.buses.end(), [&](const auto &b) { return std::find(b.inserts.begin(), b.inserts.end(), plugins.front()) != b.inserts.end(); });
+  auto destination = std::find_if(next.buses.begin(), next.buses.end(), [&](const auto &b) { return b.id == target; });
+  require(source != next.buses.end() && destination != next.buses.end(), "Insert source or destination does not exist");
+  const auto start = std::find(source->inserts.begin(), source->inserts.end(), plugins.front());
+  require(size_t(source->inserts.end()-start) >= plugins.size() && std::equal(plugins.begin(), plugins.end(), start), "Move a consecutive chain in its existing order");
+  if(source == destination && before == plugins.front()) return;
+  require(before.empty() || !selected.count(before), "Insertion point cannot be inside the moving chain");
+  source->inserts.erase(start, start + plugins.size());
+  auto point = before.empty() ? destination->inserts.end() : std::find(destination->inserts.begin(), destination->inserts.end(), before);
+  require(before.empty() || point != destination->inserts.end(), "Insertion point is not on the destination bus");
+  require(destination->inserts.size() + plugins.size() <= 32, "Destination insert limit exceeded");
+  destination->inserts.insert(point, plugins.begin(), plugins.end());
+  // Do not turn an effective no-op into a metadata-only Undo entry.
+  if(next != original) graph = std::move(next);
+}
+
 size_t MixerGraph::bytes() const {
   size_t result = sizeof(*this);
   for (const auto &bus : buses) {
@@ -55,7 +85,7 @@ std::vector<size_t> MixerGraph::validate(const std::vector<uint64_t> &tracks) co
   auto edge = [&](size_t source, uint64_t destination) {
     auto found = indices.find(destination);
     require(found != indices.end() && found->second != source, "Invalid mixer routing destination");
-    require(buses[found->second].kind != MixerBusKind::Track, "Route buses to groups, returns or master");
+
     edges[source].push_back(found->second); ++indegree[found->second];
   };
   for (size_t i = 0; i < buses.size(); ++i) {
@@ -69,27 +99,32 @@ std::vector<size_t> MixerGraph::validate(const std::vector<uint64_t> &tracks) co
       edge(i, send.target);
     }
   }
-  std::set<std::pair<std::string, uint32_t>> sources;
+  std::set<std::tuple<std::string, uint32_t, uint64_t>> sources;
+  std::set<std::pair<std::string,uint32_t>> disconnected;
   require(instruments.size() <= 128, "Too many instrument output routes");
   for (const auto &source : instruments) {
     require(!source.plugin.empty() && text(source.plugin, 128) && source.output < 64 && (!source.target || indices.count(source.target)) &&
-            sources.emplace(source.plugin, source.output).second, "Invalid plugin output route");
+            sources.emplace(source.plugin, source.output, source.target).second, "Invalid plugin output route");
+    if(!source.target) disconnected.emplace(source.plugin,source.output);
     if(effects.count(source.plugin)) {
-      require(source.output>0,"Main effect output belongs to its insert chain; route an auxiliary output");
+
       if(!source.target) continue;
       const auto owner=owners.at(source.plugin),target=indices.at(source.target);
-      require(owner!=target,"An auxiliary effect output cannot return to its own bus");
-      require(buses[target].kind!=MixerBusKind::Track,"Route effect auxiliary outputs to groups, returns or master");
+      require(owner!=master,"Master is the final sink; move this effect to a channel or return before branching its output");
+      require(owner!=target,"An effect output cannot return to its own bus");
+
       edges[owner].push_back(target);++indegree[target];
     }
   }
+  for(const auto &source:instruments) require(!source.target || !disconnected.count({source.plugin,source.output}), "An output cannot be both connected and disconnected");
   require(sidechains.size() <= 128, "Use at most 128 sidechain routes");
   std::set<std::tuple<uint64_t, std::string, uint32_t>> sideSources;
   for (const auto &side : sidechains) {
-    require(indices.count(side.source) && !side.plugin.empty() && text(side.plugin, 128) && side.input > 0 && side.input < 64 &&
+    require(indices.count(side.source) && !side.plugin.empty() && text(side.plugin, 128) && side.input < 64 &&
             range(side.gainDB, -96, 12) && sideSources.emplace(side.source, side.plugin, side.input).second, "Invalid or duplicate sidechain route");
     require(owners.count(side.plugin)||std::none_of(instruments.begin(), instruments.end(), [&](const auto &s) { return s.plugin == side.plugin; }), "Sidechains target effect inserts");
     const auto source = indices.at(side.source), target = owners.count(side.plugin) ? owners.at(side.plugin) : master;
+    require(source!=master,"Master is the final sink and cannot feed another processor input");
     require(source != target, "A sidechain cannot feed an effect on its own source bus");
     // Include disabled and unavailable routes so restoring a plugin or enabling
     // a key input cannot introduce an unvalidated feedback path.
@@ -143,7 +178,7 @@ MixerPlan compileMixer(const MixerGraph &graph, const std::vector<uint64_t> &tra
     auto found = pluginIndices.find(side.plugin); if (found == pluginIndices.end()) continue;
     const auto processor = found->second; const auto &p = processors[processor];
     require(!p.instrument, "Sidechains target effect plugins");
-    if (!side.enabled || p.bypass || !(p.activeInputs & (uint64_t(1) << side.input))) continue;
+    if (!side.enabled || p.bypass || (side.input && !(p.activeInputs & (uint64_t(1) << side.input)))) continue;
     for (const auto &node : plan.nodes) {
       uint64_t prefix = 0;
       for (auto insert : node.processors) {
@@ -174,7 +209,7 @@ MixerPlan compileMixer(const MixerGraph &graph, const std::vector<uint64_t> &tra
     if (found == pluginIndices.end()) continue;
     const auto &p = processors[found->second];
     size_t owner=SIZE_MAX;uint32_t prefix=0;
-    if(!p.instrument){require(assigned.contains(found->second),"Assign an effect insert owner before routing its auxiliary output");require(source.output>0,"Effect main output belongs to its bus insert chain");
+    if(!p.instrument){require(assigned.contains(found->second),"Assign an effect insert owner before routing its auxiliary output");
       for(const auto &node:plan.nodes){uint64_t before=0;for(auto index:node.processors){before+=processors[index].latency;if(index==found->second){owner=node.bus;require(before<=uint64_t(rate)*30,"Auxiliary output latency exceeds 30 seconds");prefix=uint32_t(before);break;}}if(owner!=SIZE_MAX)break;}
       if(owner==SIZE_MAX)continue; // A bypassed or unresolved insert has no auxiliary output.
     }
@@ -238,12 +273,112 @@ MixerPlan compileMixer(const MixerGraph &graph, const std::vector<uint64_t> &tra
   plan.tail = std::min(60.0, tails[plan.master] + latestMS / 1000);
   // Bound delay-line memory before allocation (stereo float, including direct
   // sample inputs, edge compensation and separate instrument outputs).
-  uint64_t delays = 0;
-  for (const auto &node : plan.nodes) delays += node.directDelay;
-  for (const auto &edge : plan.connections) delays += edge.delay;
-  for (const auto &source : plan.instruments) delays += source.delay;
-  for (const auto &side : plan.sidechains) delays += side.delay;
-  require(delays * sizeof(float) * 2 <= 256 * 1024 * 1024, "Mixer compensation exceeds the 256 MB delay budget");
+  uint64_t delays = 0, cached = 0;
+  auto storage=[&](uint32_t frames){delays+=frames;if(frames)++cached;};
+  for (const auto &node : plan.nodes) storage(node.directDelay);
+  for (const auto &edge : plan.connections) storage(edge.delay);
+  for (const auto &source : plan.instruments) storage(source.delay);
+  for (const auto &side : plan.sidechains) storage(side.delay);
+  // Every nonzero delay retains one maximum-sized output chunk so two plans
+  // can read its history without advancing it twice during a transition.
+  require((delays + cached * 4096) * sizeof(float) * 2 <= 256 * 1024 * 1024, "Mixer compensation exceeds the 256 MB delay budget");
   return plan;
+}
+
+MixerTransitionReuse mixerTransitionReuse(
+    const MixerGraph &before, const MixerPlan &beforePlan, const std::vector<MixerProcessorInfo> &beforeProcessors,
+    const MixerGraph &after, const MixerPlan &afterPlan, const std::vector<MixerProcessorInfo> &afterProcessors,
+    const std::vector<std::string> &reset) {
+  // Intern whole expressions rather than hashes: collisions must never make
+  // two different audio inputs eligible to share a stateful processor.
+  std::map<std::vector<uint64_t>, uint64_t> expressions;
+  std::map<std::string, uint64_t> identities;
+  const std::set<std::string> changed(reset.begin(), reset.end());
+  auto identity = [&](const std::string &name) { return identities.try_emplace(name, identities.size()+1).first->second; };
+  auto intern = [&](std::vector<uint64_t> terms) { return expressions.try_emplace(std::move(terms), expressions.size()+1).first->second; };
+  auto bits = [](double value) { return std::bit_cast<uint64_t>(value == 0 ? 0. : value); };
+  enum : uint64_t { Direct = 1, Sum, Pre, Processor, Output, Audible, Fader, Route, History, Controls };
+  auto compile = [&](const MixerGraph &graph, const MixerPlan &plan, const std::vector<MixerProcessorInfo> &processors, bool next) {
+    require(graph.buses.size()==plan.nodes.size(), "Transition graph and plan do not match");
+    struct Expressions { std::vector<uint64_t> processors, direct, connections, instruments, sidechains, controls; } history;
+    history.processors.resize(processors.size());history.direct.resize(plan.nodes.size());history.controls.resize(plan.nodes.size());
+    history.connections.resize(plan.connections.size());history.instruments.resize(plan.instruments.size());history.sidechains.resize(plan.sidechains.size());
+    auto &result=history.processors;
+    auto routeExpression=[&](uint64_t source,uint32_t delay,double gain,uint64_t &storage) {
+      storage=intern({History,source,delay});return intern({Route,storage,bits(gain)});
+    };
+    std::vector<std::vector<uint64_t>> inputs(graph.buses.size());
+    std::vector<std::map<uint32_t, std::vector<uint64_t>>> auxiliary(processors.size());
+    auto sum = [&](const std::vector<uint64_t> &values) {
+      auto terms=values; terms.insert(terms.begin(),Sum); return intern(std::move(terms));
+    };
+    auto output = [&](size_t processor, uint32_t port) {
+      require(processor<result.size() && result[processor], "Transition processor dependency is not ready");
+      return intern({Output,result[processor],port});
+    };
+    auto description = [&](size_t index, uint64_t main) {
+      const auto &p=processors[index];
+      std::vector<uint64_t> terms{Processor,identity(p.instance),p.latency,p.instrument,p.bypass,
+        p.outputBuses,p.activeOutputs,p.activeInputs,next && changed.contains(p.instance),main};
+      for(const auto &[port,values]:auxiliary[index]) {terms.push_back(port);terms.push_back(sum(values));}
+      return intern(std::move(terms));
+    };
+    // Source instruments are clocked once before the bus DAG; changing their
+    // destination must not retrigger held notes or duplicate their DSP calls.
+    for(size_t i=0;i<processors.size();++i) if(processors[i].instrument && !processors[i].bypass) {
+      result[i]=description(i,0);
+      for(size_t index=0;index<plan.instruments.size();++index) {
+        const auto &route=plan.instruments[index];if(route.owner!=SIZE_MAX || route.processor!=i)continue;
+        inputs.at(route.target).push_back(routeExpression(output(i,route.output),route.delay,1,history.instruments[index]));
+      }
+    }
+    for(const auto bus:plan.order) {
+      const auto &node=plan.nodes.at(bus);const auto &control=graph.buses.at(bus);
+      history.direct[bus]=intern({History,intern({Direct,control.id,uint64_t(control.kind)}),node.directDelay});
+      history.controls[bus]=intern({Controls,control.id,bits(control.preGainDB),bits(control.prePan),bits(control.gainDB),bits(control.pan),bits(control.width),node.audible});
+      auto values=inputs[bus]; values.push_back(history.direct[bus]);
+      uint64_t signal=intern({Pre,sum(values),control.id,bits(control.preGainDB),bits(control.prePan)});
+      const auto audible=intern({Audible,control.id,node.audible});
+      for(const auto processor:node.processors) {
+        require(processor<processors.size(), "Invalid transition processor slot");
+        if(auto found=auxiliary[processor].find(0);found!=auxiliary[processor].end()) signal=sum({signal,sum(found->second)});
+        result[processor]=description(processor,signal);
+        signal=output(processor,0);
+        for(size_t index=0;index<plan.instruments.size();++index) {
+          const auto &route=plan.instruments[index];if(route.owner!=bus || route.processor!=processor)continue;
+          const auto source=intern({Audible,output(processor,route.output),audible});
+          inputs.at(route.target).push_back(routeExpression(source,route.delay,1,history.instruments[index]));
+        }
+      }
+      const auto pre=intern({Audible,signal,audible});
+      const auto post=intern({Fader,pre,control.id,bits(control.gainDB),bits(control.pan),bits(control.width)});
+      for(const auto index:node.outputs) {
+        const auto &edge=plan.connections.at(index);
+        inputs.at(edge.target).push_back(routeExpression(edge.preFader?pre:post,edge.delay,edge.gain,history.connections[index]));
+      }
+      for(const auto index:node.sidechains) {
+        const auto &edge=plan.sidechains.at(index);
+        auxiliary.at(edge.processor)[edge.input].push_back(routeExpression(edge.preFader?pre:post,edge.delay,edge.gain,history.sidechains[index]));
+      }
+    }
+    return history;
+  };
+  const auto old=compile(before,beforePlan,beforeProcessors,false);
+  const auto current=compile(after,afterPlan,afterProcessors,true);
+  auto match=[](const std::vector<uint64_t> &before,const std::vector<uint64_t> &after) {
+    std::map<uint64_t,size_t> previous;
+    for(size_t i=0;i<before.size();++i)if(before[i])previous.emplace(before[i],i);
+    std::vector<size_t> result(after.size(),SIZE_MAX);
+    for(size_t i=0;i<after.size();++i)if(after[i])if(auto found=previous.find(after[i]);found!=previous.end())result[i]=found->second;
+    return result;
+  };
+  return {match(old.processors,current.processors),match(old.direct,current.direct),match(old.connections,current.connections),
+          match(old.instruments,current.instruments),match(old.sidechains,current.sidechains),match(old.controls,current.controls)};
+}
+std::vector<size_t> reusableMixerProcessors(
+    const MixerGraph &before, const MixerPlan &beforePlan, const std::vector<MixerProcessorInfo> &beforeProcessors,
+    const MixerGraph &after, const MixerPlan &afterPlan, const std::vector<MixerProcessorInfo> &afterProcessors,
+    const std::vector<std::string> &reset) {
+  return mixerTransitionReuse(before,beforePlan,beforeProcessors,after,afterPlan,afterProcessors,reset).processors;
 }
 } // namespace Tracker

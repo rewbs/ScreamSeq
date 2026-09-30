@@ -1,0 +1,102 @@
+{
+  "monitor": {
+    "changed": false,
+    "data": {
+      "gainDB": 0,
+      "pending": false,
+      "port": null,
+      "transitionFrames": 240
+    },
+    "documentId": "3F907569-6188-4522-B24B-34EDD98C55DE",
+    "playbackStopped": false,
+    "revision": "3F907569-6188-4522-B24B-34EDD98C55DE:0:0:0"
+  },
+  "transport": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 5303,
+      "fault": false,
+      "frames": 2715136,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.12007773667573929,
+      "loop": true,
+      "maxMicros": 3114.75,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 3070,
+      "pattern": 0,
+      "patternPosition": 5111.175456739055,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {},
+      "right": 0.12007369846105576,
+      "row": 19,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 117,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 185
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 30,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 92
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 59,
+          "instrument": 0,
+          "sample": 3,
+          "sampleFrame": 11504
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 117,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 5702
+        }
+      ],
+      "voices": 4
+    },
+    "documentId": "3F907569-6188-4522-B24B-34EDD98C55DE",
+    "playbackStopped": false,
+    "revision": "3F907569-6188-4522-B24B-34EDD98C55DE:0:0:0"
+  }
+}

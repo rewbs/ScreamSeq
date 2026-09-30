@@ -1,0 +1,12 @@
+PASS createReadHistory
+PASS nodesAndCloning
+PASS automationAndBanks
+PASS assignmentsRoutesLayoutCommands
+PASS hostHooks
+PASS automationOrderAndRedo
+PASS cableInsertionAndDetachment
+PASS processingGroups
+PASS strictValidation
+PASS dryRunsAndRedo
+PASS callbackOrderingAndUnrelatedData
+Passed 11 scenario groups

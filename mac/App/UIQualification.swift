@@ -17,6 +17,8 @@ final class UIQualification {
   private var readyDeadline = CFAbsoluteTimeGetCurrent() + 60
   var requestedForeground = false
   var usesVST3 = false
+  let existingGraph = CommandLine.arguments.contains("--ui-test-existing-graph")
+  var soundingChannels = 0
   let duration: Double
   let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
     "resonance-ui-qualification-" + UUID().uuidString)
@@ -36,6 +38,11 @@ final class UIQualification {
     if !requestedForeground {
       requestedForeground = true
       priorWindowLevel = app.window.level
+      // Directly launched QA bundles may otherwise remain on an inactive Space,
+      // even after activation. Expose only this disposable test window across
+      // Spaces; the visible-frame gates below still require real presentation.
+      app.window.collectionBehavior.remove(.moveToActiveSpace)
+      app.window.collectionBehavior.formUnion([.canJoinAllSpaces,.fullScreenAuxiliary])
       app.window.level = .floating
       app.window.makeKeyAndOrderFront(nil)
       NSApp.activate(ignoringOtherApps:true)
@@ -68,12 +75,12 @@ final class UIQualification {
         try self.app.session.configureDevice(id,buffer:512)
       }
       // Extend the built-in demo if no long fixture was supplied.
-      if self.app.model.orders.count == 1 {
+      if !self.existingGraph && self.app.model.orders.count == 1 {
         for _ in 0..<Int(ceil(self.duration / 7)) {
           _ = try self.app.session.addPattern(64, duplicate: true, source: 0)
         }
       }
-      if let index = CommandLine.arguments.firstIndex(of: "--ui-test-vst3"),
+      if !self.existingGraph, let index = CommandLine.arguments.firstIndex(of: "--ui-test-vst3"),
         index + 1 < CommandLine.arguments.count
       {
         try self.app.session.addPlugin([
@@ -83,16 +90,29 @@ final class UIQualification {
         ])
         self.usesVST3 = true
       }
-      try self.app.session.addPlugin([
+      if !self.existingGraph {try self.app.session.addPlugin([
         "type": 0x6175_6678, "subtype": 0x6c70_6173,
         "manufacturer": 0x6170_706c, "name": "Apple: AULowpass",
-      ])
-      if CommandLine.arguments.contains("--ui-test-graph"){try self.prepareGraph()}
+      ])}
+      if self.existingGraph {
+        guard self.app.model.channels>=16 else{throw NSError(domain:"Qualification",code:3,userInfo:[NSLocalizedDescriptionKey:"Existing-graph qualification requires a supplied 16+ channel song"])}
+        self.app.session.setPlaybackLoop(true)
+      } else if CommandLine.arguments.contains("--ui-test-graph"){try self.prepareGraph()}
     }) {
       self.app.refreshAll()
       self.app.model.pattern = self.app.model.orders.first ?? 0
       self.app.refreshPattern()
       self.app.showEditor(0)
+      if self.existingGraph {
+        self.app.workspace?.place("graph",at:"bottom",select:true)
+        self.app.workspace?.layoutSubtreeIfNeeded()
+        if let workspace=self.app.workspace {workspace.vertical.setPosition(workspace.vertical.bounds.height*0.4,ofDividerAt:0)}
+      }
+      if CommandLine.arguments.contains("--ui-test-parameter-activity"),self.usesVST3,
+        let plugin=self.app.model.nativePlugins.first?["instanceID"] as? String {
+        self.app.workspace?.place("parameterActivity",at:"right",select:true)
+        self.app.showParameterActivity(plugin:plugin,parameter:7)
+      }
       self.beginMeasurementWhenVisible()
     }
   }
@@ -102,12 +122,12 @@ final class UIQualification {
     _ = try call("mixer.enable")
     let graph=try call("graph.create",["name":"Qualification motion"])["graph"] as! String
     var data=try call("graph.get",write:false)
-    let definition=(data["library"] as! [[String:Any]])[0],input=(definition["nodes"] as! [[String:Any]])[0]["id"] as! String
+    let definition=(data["library"] as! [[String:Any]]).first{$0["id"] as? String==graph}!,input=(definition["nodes"] as! [[String:Any]]).first{$0["kind"] as? String=="input"}!["id"] as! String
     let plugin=try call("graph.node.add",["graph":graph,"kind":"plugin","plugin":["format":"Built-in","classID":"resonance.gainer.v1"],"insertAfter":input])["node"] as! String
     let source=try call("graph.node.add",["graph":graph,"kind":"automation","name":"Pattern motion"])["node"] as! String
     data=try call("graph.get",write:false)
     for pattern in data["patterns"] as! [[String:Any]]{_ = try call("graph.automation.set",["graph":graph,"node":source,"pattern":pattern["index"]!,"points":[["position":0,"value":0.2,"curve":"smooth"],["position":8192,"value":0.8,"curve":"linear"]]])}
-    var changed=(try call("graph.get",write:false)["library"] as! [[String:Any]])[0]
+    var changed=(try call("graph.get",write:false)["library"] as! [[String:Any]]).first{$0["id"] as? String==graph}!
     changed["modulation"]=[["source":source,"target":plugin,"parameter":1,"minimum":0.7,"maximum":0.8]]
     _ = try call("graph.update",["definition":changed])
     _ = try call("graph.instrument.assign",["instrument":1,"graph":graph])
@@ -129,6 +149,16 @@ final class UIQualification {
     guard let visibleSince, now - visibleSince >= 2 else {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.beginMeasurementWhenVisible() }
       return
+    }
+    if existingGraph {
+      let graph=app.signalGraphEditor
+      guard !graph.loading,!graph.canvas.nodes.isEmpty else {
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.1){self.beginMeasurementWhenVisible()};return
+      }
+      app.workspace?.layoutSubtreeIfNeeded();graph.fit()
+      require(graph.scroll.contentSize.height>=180,"Dense graph viewport is too short to inspect")
+      require(graph.canvas.nodes.filter{$0.rect.intersects(graph.scroll.documentVisibleRect)}.count>=8,
+        "Dense graph must display at least eight actual cards")
     }
     operation({ try self.app.session.playOrder(0) }) {
       self.app.patternView.resetMetrics()
@@ -182,6 +212,7 @@ final class UIQualification {
       return
     }
     require(app.editorMode == 0, "Pattern view was hidden during measurement")
+    if existingGraph {require(app.workspace?.visibleIDs.contains("graph")==true,"Graph panel was hidden during the dense workload")}
     let grid = app.patternView
     let graphWidth = app.patternGraphHost.lanes.isHidden ? 0 : app.patternGraphHost.lanes.bounds.width
     require(grid.bounds.width > 100 && abs(grid.bounds.width + graphWidth - app.patternGraphHost.bounds.width) < 1,
@@ -243,6 +274,14 @@ final class UIQualification {
   // I/O stay off it; sorting the growing frame arrays is reserved for the final report.
   func writeProgress(_ elapsed: Double) {
     var progress = app.session.telemetry()
+    if existingGraph {
+      var error:NSError?
+      if let result=app.session.automationMethod("mixer.get",params:[:],error:&error),let data=result["data"] as? [String:Any] {
+        let tracks=Set((data["buses"] as? [[String:Any]] ?? []).filter{$0["kind"] as? String=="track"}.compactMap{$0["id"] as? String})
+        let sounding=(data["meters"] as? [[String:Any]] ?? []).filter{tracks.contains($0["bus"] as? String ?? "") && max($0["left"] as? Double ?? 0,$0["right"] as? Double ?? 0)>1e-7}.count
+        soundingChannels=max(soundingChannels,sounding);progress["soundingTrackMeters"]=sounding
+      }
+    }
     progress["processID"] = ProcessInfo.processInfo.processIdentifier
     progress["elapsedSeconds"] = elapsed
     progress["requestedSeconds"] = duration
@@ -285,6 +324,8 @@ final class UIQualification {
       require(
         (report["p99CPUFrameMS"] as? Double ?? 100) < 6, "CPU frame preparation p99 exceeded 6 ms")
       require((report["p99GPUFrameMS"] as? Double ?? 100) < 4, "GPU execution p99 exceeded 4 ms")
+      require((report["maxGeometrySnapshotAgeMS"] as? Double ?? 100) < 34,
+        "Presented pattern geometry became stale for more than two periods")
       require(
         (report["maxMainThreadDrawMS"] as? Double ?? 100) < 34,
         "Main-thread drawing or drawable acquisition stalled for more than two periods")
@@ -297,7 +338,13 @@ final class UIQualification {
       require((report["pluginFailure"] as? Bool ?? true) == false, "Audio Unit failure")
       require(edits > 0 && undos > 0 && saves > 0, "Edit/undo/save workload did not execute")
     }
-    report["usesGraph"] = CommandLine.arguments.contains("--ui-test-graph")
+    if existingGraph {require(soundingChannels>=16,"Fewer than 16 sounding track meters were observed")}
+    report["usesGraph"] = existingGraph || CommandLine.arguments.contains("--ui-test-graph")
+    report["usesExistingGraph"] = existingGraph
+    report["maximumSoundingTrackMeters"] = soundingChannels
+    report["graphVisible"] = app.workspace?.visibleIDs.contains("graph")==true
+    report["graphViewportHeight"] = app.signalGraphEditor.scroll.contentSize.height
+    report["graphVisibleNodes"] = app.signalGraphEditor.canvas.nodes.filter{$0.rect.intersects(app.signalGraphEditor.scroll.documentVisibleRect)}.count
     report["usesVST3"] = usesVST3
     report["requestedVST3"] = CommandLine.arguments.contains("--ui-test-vst3")
     report["automationPoints"] = app.session.snapshot(app.model.pattern)["automationPoints"]

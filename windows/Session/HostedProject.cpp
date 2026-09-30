@@ -74,9 +74,9 @@ HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const P
   require(rate>=8000 && rate<=384000,"Unsupported hosted playback sample rate");
   native_=document.native();native_.validate(document.song());auto states=projectPluginStates(project);
   Tracker::validatePluginCapacity(states,native_.mixer.buses.size());auto automation=projectAbsoluteAutomation(project);
-  // Match Mac's stopped audition: paused pattern clock, sample/instrument
-  // envelopes and the saved plugin rack, without song mixer/graph commands.
-  const auto *musical=settings.audition?nullptr:&native_;
+  // Audition pauses the pattern clock but retains prepared channel routing.
+  // Each PreviewNote explicitly chooses its channel or independent inspector path.
+  const auto *musical=&native_;
   renderer_=std::make_unique<Tracker::Renderer>(document.snapshotData(),rate,settings.order,settings.audition,document.sourcePath(),document.song().Order.GetCurrentSequenceIndex(),settings.region,musical);
   const auto start=uint64_t(double(renderer_->telemetry().frames)*48000/rate);
   chain_=std::make_unique<Tracker::PluginChain>(states,rate,offline,automation,start);
