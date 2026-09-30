@@ -41,7 +41,7 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
             throw ScreamSeq::Api::ApiError(-32602,"graph.scope.get accepts only an optional spectrum boolean");
         auto capture=observation?observation->scope.snapshot(p.value("spectrum",false)):Tracker::SignalScopeSnapshot{};
         Json waveform=Json::array(),bins=Json::array();
-        for(const auto &v:capture.waveform)waveform.push_back({{"first",v.first},{"last",v.last},{"minimum",{v.minimum[0],v.minimum[1]}},{"maximum",{v.maximum[0],v.maximum[1]}});
+        for(const auto &v:capture.waveform)waveform.push_back({{"first",v.first},{"last",v.last},{"minimum",{v.minimum[0],v.minimum[1]}},{"maximum",{v.maximum[0],v.maximum[1]}}});
         for(auto v:capture.spectrum)bins.push_back(v);
         return {{"port",observation&&capture.token&&capture.token<=observation->ports.size()?Json(observation->ports[capture.token-1].key):Json(nullptr)},
             {"active",device.running()},{"generation",capture.generation},{"sampleRate",lastRate?lastRate:48000},

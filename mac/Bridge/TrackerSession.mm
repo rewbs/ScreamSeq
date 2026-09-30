@@ -190,7 +190,7 @@ std::vector<PluginState> decodePlugins(NSDictionary *root) {
       throw std::runtime_error("Audio Unit state exceeds 16 MB");
     if (item[@"bypass"] && ![item[@"bypass"] isKindOfClass:NSNumber.class])
       throw std::runtime_error("Invalid Audio Unit bypass value");
-    PluginState state{descriptor(item), {}, [item[@"bypass"] boolValue]};
+    PluginState state{descriptor(item), {}, bool([item[@"bypass"] boolValue])};
     state.instanceID = Automation::string(item[@"instanceID"], 128).UTF8String;
     if (state.instanceID.empty() || !instanceIDs.insert(state.instanceID).second)
       throw std::runtime_error("Invalid or duplicate plugin instance identity");
