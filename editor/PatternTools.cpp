@@ -343,3 +343,33 @@ NativeSong prepareEffectTransform(const Document &doc,const std::vector<PatternR
   next.validate(doc.song());return next;
 }
 }
+
+namespace Tracker {
+void preparePreciseNotePaste(const Document &doc,NativeSong &next,const PatternRegion &r,const std::vector<ClipboardNote> &source,uint8_t fields,const std::string &mode,bool clip) {
+  require(fields==PatternAll,"Precise-note clipboard data requires all fields");
+  require(mode=="overwrite"||mode=="mix"||mode=="merge","Unknown paste mode");
+  const auto pattern=next.patterns.at(r.pattern).id;
+  const auto before=next.preciseNotes;
+  std::set<uint64_t> tracks;
+  for(unsigned ch=r.firstChannel;ch<std::min(unsigned(r.firstChannel)+r.channels,unsigned(doc.song().GetNumChannels()));++ch)tracks.insert(next.tracks.at(ch).id);
+  auto inside=[&](const PreciseNote &n){return n.pattern==pattern&&tracks.contains(n.track)&&n.position/performanceUnitsPerRow>=r.firstRow&&n.position/performanceUnitsPerRow<unsigned(r.firstRow)+r.rows;};
+  if(mode=="overwrite")std::erase_if(next.preciseNotes,inside);
+  std::set<std::tuple<uint16_t,uint32_t,bool>> occupied;
+  for(const auto &input:source) {
+    auto n=input.event;
+    require(input.channel<r.channels&&n.position<uint64_t(r.rows)*performanceUnitsPerRow,"Precise note outside clipboard region");
+    require(occupied.emplace(input.channel,n.position,n.note<128).second,"Duplicate clipboard precise note");
+    const auto ch=unsigned(r.firstChannel)+input.channel;
+    const auto position=uint64_t(r.firstRow)*performanceUnitsPerRow+n.position;
+    if(ch>=doc.song().GetNumChannels()||position>=uint64_t(doc.song().Patterns[r.pattern].GetNumRows())*performanceUnitsPerRow){require(clip,"Precise note outside destination pattern");continue;}
+    n.pattern=pattern;n.track=next.tracks.at(ch).id;n.position=uint32_t(position);
+    auto same=[&](const PreciseNote &e){return e.pattern==n.pattern&&e.track==n.track&&e.position==n.position&&(e.note<128)==(n.note<128);};
+    if(mode=="mix"&&(doc.cell(r.pattern,uint16_t(position/performanceUnitsPerRow),uint16_t(ch)).note||std::any_of(next.preciseNotes.begin(),next.preciseNotes.end(),same)))continue;
+    std::erase_if(next.preciseNotes,same);next.preciseNotes.push_back(n);
+  }
+  std::vector<PreciseNote> replacement;
+  for(const auto &n:next.preciseNotes)if(n.pattern==pattern)replacement.push_back(n);
+  next.preciseNotes=before;replacePreciseNotesForPattern(next.preciseNotes,pattern,std::move(replacement));
+  next.validate(doc.song());
+}
+}

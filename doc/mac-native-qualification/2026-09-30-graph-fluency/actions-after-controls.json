@@ -1,0 +1,44 @@
+[
+  {
+    "journey": "G07",
+    "kind": "click",
+    "value": 139
+  },
+  {
+    "journey": "G07",
+    "kind": "click",
+    "value": 170
+  },
+  {
+    "journey": "G07",
+    "kind": "drag",
+    "value": [
+      1920,
+      568
+    ],
+    "extra": [
+      1894,
+      568
+    ]
+  },
+  {
+    "journey": "G07",
+    "kind": "click",
+    "value": 174
+  },
+  {
+    "journey": "G07",
+    "kind": "key",
+    "value": "super+a"
+  },
+  {
+    "journey": "G07",
+    "kind": "type",
+    "value": "0"
+  },
+  {
+    "journey": "G07",
+    "kind": "key",
+    "value": "Return"
+  }
+]

@@ -163,6 +163,13 @@ final class AutomationServer {
           }
           guard ready.wait(timeout: .now() + 120) == .success else { return }
         }
+        // Foundation can raise an Objective-C exception for NaN/infinity; Swift
+        // try? does not catch it. Validate before serialization so a bad telemetry
+        // response cannot terminate the audio application.
+        if !JSONSerialization.isValidJSONObject(response) {
+          response = ["jsonrpc":"2.0", "id":response["id"] ?? NSNull(),
+            "error":["code":-32603,"message":"API produced a non-JSON response; inspect current state before retrying an edit"]]
+        }
         guard
           var output = try? JSONSerialization.data(
             withJSONObject: response, options: [.sortedKeys]), output.count < Self.maxBytes
@@ -231,7 +238,7 @@ final class AutomationServer {
       // no base64 or JSON encoding of plugin/sample data happens on the main thread.
       let count = requestBytes * 20 + 4096
       // Busy requests are retryable. Large results are not retained in memory.
-      if !method.hasSuffix(".get"), !["api.describe", "plugin.discover", "plugin.preset.inspect", "pattern.commands", "automation.pattern.copy", "arrangement.matrix", "plugin.meters", "mixer.meters", "sample.library.search", "sample.library.inspect"].contains(method),
+      if !method.hasSuffix(".get"), !["parameter.activity.targets", "parameter.activity.parameters", "parameter.activity.sources", "api.describe", "plugin.discover", "plugin.preset.inspect", "pattern.commands", "automation.pattern.copy", "arrangement.matrix", "plugin.meters", "mixer.meters", "sample.library.search", "sample.library.inspect"].contains(method),
         (body["error"] as? [String: Any])?["code"] as? Int != -32002, count <= 4 * 1024 * 1024
       {
         self.cache[id] = (digest, response, count)

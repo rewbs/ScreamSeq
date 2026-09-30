@@ -5,6 +5,18 @@
 #include <stdexcept>
 
 namespace Tracker {
+SignalControls::SignalControls(SignalDefinition d,double rate):definition(std::move(d)) {
+  for(auto &node:definition.nodes){
+    std::sort(node.envelopes.begin(),node.envelopes.end(),[](const auto &a,const auto &b){return a.pattern<b.pattern;});
+    envelopeCoefficients.push_back({std::exp(-1/(rate*node.attack)),std::exp(-1/(rate*node.release))});
+  }
+}
+void SignalRuntime::controls(const SignalControls &next) noexcept {
+  controls_=&next.definition;
+  for(size_t i=0;i<nodes_.size();++i){nodes_[i].attackCoefficient=next.envelopeCoefficients[i][0];nodes_[i].releaseCoefficient=next.envelopeCoefficients[i][1];}
+  for(size_t i=0;i<edges_.size();++i)edges_[i].spec=&controls_->audio[i];
+  for(auto &t:targets_)if(!t.sources.empty())t.base=controls_->modulation[t.sources.front().second].base;
+}
 SignalRuntime::Port *SignalRuntime::lookup(const std::vector<std::unique_ptr<Port>> &ports,uint32_t index) noexcept {
   for(const auto &p:ports)if(p->index==index)return p.get();return nullptr;
 }
@@ -42,17 +54,20 @@ void SignalRuntime::updateLatencyPlan(SignalPlan plan) {
   }
   plan_ = std::move(plan);
 }
+void SignalRuntime::parameterBase(uint64_t node,uint32_t parameter,double value) noexcept {
+  for(auto &target:targets_)if(definition_.nodes[target.node].id==node&&target.parameter==parameter)target.base=value;
+}
 void SignalRuntime::note(bool gate,bool retrigger) noexcept {
   gate_=gate;
-  if(retrigger)for(size_t i=0;i<nodes_.size();++i)if(definition_.nodes[i].kind==SignalNodeKind::NoteEnvelope)nodes_[i].envelope=0;
+  if(retrigger)for(size_t i=0;i<nodes_.size();++i)if(controls_->nodes[i].kind==SignalNodeKind::NoteEnvelope)nodes_[i].envelope=0;
 }
 const SignalPatternEnvelope *SignalRuntime::envelope(size_t index,uint64_t pattern) const noexcept {
-  const auto &lanes=definition_.nodes[index].envelopes;
+  const auto &lanes=controls_->nodes[index].envelopes;
   auto found=std::lower_bound(lanes.begin(),lanes.end(),pattern,[](const auto &lane,uint64_t p){return lane.pattern<p;});
   return found!=lanes.end()&&found->pattern==pattern&&found->enabled ? &*found : nullptr;
 }
 double SignalRuntime::source(size_t index,double beat,double position,const SignalClock &clock) const noexcept {
-  const auto &n=definition_.nodes[index];
+  const auto &n=controls_->nodes[index];
   switch(n.kind){
   case SignalNodeKind::LFO:return .5+.5*std::sin(2*std::numbers::pi*(beat*n.rate+n.phase));
   case SignalNodeKind::Random:{// Repeatable at a song position; independent instance history is unnecessary.
@@ -66,7 +81,7 @@ double SignalRuntime::source(size_t index,double beat,double position,const Sign
   }
 }
 double SignalRuntime::sampledSource(size_t index,uint64_t frame,double beat,double position,double beatsPerFrame,const SignalClock &clock) const noexcept {
-  const auto kind=definition_.nodes[index].kind;
+  const auto kind=controls_->nodes[index].kind;
   if(kind!=SignalNodeKind::Automation&&kind!=SignalNodeKind::LFO)return source(index,beat,position,clock);
   // The approximation grid belongs to the song sample clock, not the caller's
   // buffer. A callback ending partway through a quantum samples the same line
@@ -98,7 +113,7 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
   const double beatsPerFrame=clock.playing?clock.tempo/(60*sampleRate_):0;
   for(uint32_t offset=0;offset<frames;){auto count=std::min<uint32_t>(targets_.empty()?maximumFrames:uint32_t(quantum-(position+offset)%quantum),frames-offset);
     // Stop at point boundaries so step curves never become short ramps.
-    if(clock.playing&&clock.unitsPerFrame>0)for(size_t i=0;i<nodes_.size();++i)if(definition_.nodes[i].kind==SignalNodeKind::Automation){
+    if(clock.playing&&clock.unitsPerFrame>0)for(size_t i=0;i<nodes_.size();++i)if(controls_->nodes[i].kind==SignalNodeKind::Automation){
       if(const auto *lane=envelope(i,clock.pattern)){
         const double now=clock.position+offset*clock.unitsPerFrame;
         auto next=std::upper_bound(lane->points.begin(),lane->points.end(),now,[](double p,const auto &point){return p<point.position;});
@@ -107,7 +122,7 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
       }
     }
     for(auto &n:nodes_)for(auto &p:n.inputs)std::fill_n(p->samples.data(),count*2,0.f);
-    for(size_t index:plan_.order){auto &n=nodes_[index];const auto &spec=definition_.nodes[index];
+    for(size_t index:plan_.order){auto &n=nodes_[index];const auto &spec=controls_->nodes[index];
       // Every edge is evaluated exactly once, when its destination is ready.
       for(size_t e=0;e<edges_.size();++e)if(plan_.edges[e].target==index)edges_[e].add(count);
       auto *in=lookup(n.inputs,0)->samples.data();auto *out=lookup(n.outputs,0)->samples.data();
@@ -116,7 +131,10 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
       else if(spec.kind==SignalNodeKind::Output){for(auto &p:n.inputs)std::copy_n(p->samples.data(),count*2,lookup(result_,p->index)->samples.data()+offset*2);}
       else if(spec.kind==SignalNodeKind::Plugin){
         for(const auto &t:targets_)if(t.node==index){double first=t.base,last=t.base;
-          for(auto [sourceIndex,edge]:t.sources){const auto &m=definition_.modulation[edge];first+=m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].first;last+=m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].last;}
+          if(cb.contribution)cb.contribution(cb.context,spec.id,t.parameter,0,t.base,position+offset);
+          for(auto [sourceIndex,edge]:t.sources){const auto &m=controls_->modulation[edge];first+=m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].first;last+=m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].last;
+            if(cb.contribution)cb.contribution(cb.context,spec.id,t.parameter,edge+1,m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].first,position+offset);
+          }
           if(!cb.parameter||!cb.parameter(cb.context,spec.id,t.parameter,std::clamp(first,0.,1.),std::clamp(last,0.,1.),position+offset,count-1))return false;
         }
         std::copy_n(in,count*2,out);

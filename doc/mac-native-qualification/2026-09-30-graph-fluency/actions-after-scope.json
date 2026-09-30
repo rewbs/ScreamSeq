@@ -1,0 +1,27 @@
+[
+  {
+    "journey": "G06",
+    "kind": "click",
+    "value": 139
+  },
+  {
+    "journey": "G06",
+    "kind": "click",
+    "value": 192
+  },
+  {
+    "journey": "G06",
+    "kind": "click",
+    "value": 176
+  },
+  {
+    "journey": "scope",
+    "kind": "click",
+    "value": 139
+  },
+  {
+    "journey": "scope",
+    "kind": "click",
+    "value": 196
+  }
+]

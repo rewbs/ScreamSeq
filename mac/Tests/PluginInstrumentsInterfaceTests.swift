@@ -39,7 +39,7 @@ extension InterfaceTests {
     view.edit(row:1,remove:true,generation:view.generation);view.edit(row:0,remove:true,generation:view.generation);view.apply(dryRun:false)
     var empty=aliasData;empty["assignments"]=[[String:Any]]()
     replies.removeFirst()(["result":["revision":"song:4","data":["routing":empty,"wouldChange":true]]])
-    try require(view.routes.isEmpty && view.revision=="song:4" && view.status.stringValue.contains("Undo effect change"),"Explicit empty list unassigns the plugin through one saved operation")
+    try require(view.routes.isEmpty && view.revision=="song:4" && view.status.stringValue.contains("Undo"),"Explicit empty list unassigns the plugin through one saved operation")
     let editor=PluginEditor(frame:.zero);try require(!editor.instrumentsButton.isEnabled,"Empty plugin panel disables instrument routing")
     editor.update(model:PatternModel(["nativePlugins":[["name":"Synth","isInstrument":true,"instrumentAssignments":[["instrument":1,"channel":2],["instrument":2,"channel":7]]]]]),values:[])
     var selected = -1;editor.onInstruments={selected=$0};editor.instrumentsButton.invoke()

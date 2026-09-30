@@ -41,18 +41,23 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
     tail_ = builtin_->tail();
     buses_ = {{0, 2, "Stereo input", true, true, true}, {0, 2, "Stereo output", false, true, true}};
     if (sidechain) buses_.push_back({1,2,"Detector sidechain",true,!auxiliaryInputs_.empty(),true});
+    bypassControl_.prepare(rate,uint32_t(std::llround(latency_*rate)),false,state.bypass);
     return;
   }
   backend_ = platformPluginBackendFactory().create(state, rate, offline);
   if (!backend_) throw std::runtime_error("Platform plugin factory returned no processor");
   latency_ = backend_->latency(); tail_ = backend_->tail(); buses_ = backend_->buses();
   for (auto bus : auxiliaryOutputs_) auxiliaryOutputBuffers_[bus] = std::make_unique<PluginAudioStorage>();
+  if(!std::isfinite(latency_)||latency_<0||latency_>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
+  bypassControl_.prepare(rate,uint32_t(std::llround(latency_*rate)),isInstrument(),state.bypass);
 }
 NativePlugin::~NativePlugin() = default;
 bool NativePlugin::latencyChangePending() const noexcept { return backend_ && backend_->latencyChangePending(); }
 void NativePlugin::refreshLatency() {
   if (backend_ && backend_->latencyChangePending()) {
     backend_->refreshLatency(); latency_ = backend_->latency(); tail_ = backend_->tail();
+    if(!std::isfinite(latency_)||latency_<0||latency_>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
+    bypassControl_.latency(uint32_t(std::llround(latency_*rate_)));
   }
 }
 bool NativePlugin::processBlock(float *buffer, uint32_t frames, uint64_t position, uint32_t offset) noexcept {
@@ -66,7 +71,12 @@ bool NativePlugin::processBlock(float *buffer, uint32_t frames, uint64_t positio
   return true;
 }
 bool NativePlugin::parameter(uint32_t id, float value, uint32_t offset) noexcept {
-  return builtin_ ? !offset && builtin_->parameter(id, value) : backend_->parameter(id, value, offset);
+  return appliedParameter(id,value,renderedThrough_+offset,{},offset);
+}
+bool NativePlugin::appliedParameter(uint32_t id,double value,uint64_t frame,ParameterSource source,uint32_t offset) noexcept {
+  const bool accepted=builtin_ ? !offset && builtin_->parameter(id,float(value)) : backend_->parameter(id,value,offset);
+  if(accepted&&activity_)activity_->value(activityProcessor_,id,value,frame,source,activityAudible_&&!bypassed());
+  return accepted;
 }
 std::vector<PluginProgram> NativePlugin::programs() const { return builtin_ ? std::vector<PluginProgram>{} : backend_->programs(); }
 void NativePlugin::loadProgram(const std::string &id) {
@@ -98,9 +108,14 @@ std::vector<PluginParameter> NativePlugin::parameters() const {
   }
   return backend_->parameters();
 }
+void NativePlugin::observedBaseline(uint32_t id,double value) noexcept {
+  if(!activity_ || !activityProcessor_ || activityProcessor_>activity_->processors.size())return;
+  for(auto &p:activity_->processors[activityProcessor_-1].parameters)if(p.id==id){p.value=float(value);return;}
+}
 PluginState NativePlugin::state() const {
   auto state = backend_ ? backend_->state() : PluginState{descriptor_};
   state.instanceID = instanceID_;
+  state.bypass=bypassed();
   state.instrument = assignedInstrument_; state.midiChannel = midiChannel_; state.aliases = aliases_;
   state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;
   if (builtin_) state.state = builtin_->state();

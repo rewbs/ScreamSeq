@@ -3,7 +3,7 @@ import AppKit
 extension PatternAutomationEditor {
   func useLastTouched() {
     guard !hasDraft, !loading else {
-      status.stringValue = "Apply or reload the draft before learning a target."; return
+      status.stringValue = "Wait for changes to save, or reload before learning a target."; return
     }
     guard let send = onRequest, !revision.isEmpty,
       let patternID = model.patterns.first(where: { $0["index"] as? Int == model.pattern })?["id"] as? String else {
@@ -20,7 +20,7 @@ extension PatternAutomationEditor {
       send(method, params) { [weak self] reply in
         guard let self else { return }
         guard self.draftGeneration == generation, !self.hasDraft else {
-          fail("Your draft changed while learning. Apply or reload it first."); return
+          fail("The envelope changed while learning. Wait for it to save, then try again."); return
         }
         guard let result = reply["result"] as? [String: Any], let token = result["revision"] as? String,
           let data = result["data"] else {
@@ -58,7 +58,7 @@ extension PatternAutomationEditor {
             guard let parameters = raw as? [[String: Any]], parameters.contains(where: { $0["id"] as? Int == parameter }) else {
               fail("The plugin no longer exposes this parameter."); return
             }
-            self.model = next; self.revision = readRevision!; self.pluginIndex = slot
+            self.model = next; self.revision = readRevision!; self.pluginIndex = slot;self.selectedPluginID=instance;self.onPluginSelection?(instance)
             self.heading.stringValue = "Pattern \(pattern) · automation"
             self.plugin.removeAllItems()
             for (i, item) in next.nativePlugins.enumerated() { self.plugin.addItem(withTitle: "\(i + 1). \(item["name"] ?? "Plugin")") }
@@ -73,7 +73,7 @@ extension PatternAutomationEditor {
             self.table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
             self.table.scrollRowToVisible(row)
             self.status.stringValue = "Selected \(target["pluginName"] ?? "plugin") · \(target["name"] ?? "parameter"). "
-              + (self.laneID == nil ? "Create points, then Apply to save an envelope." : "Existing envelope loaded; changes still require Apply.")
+              + (self.laneID == nil ? "Create points to save an envelope immediately." : "Existing envelope loaded; changes save immediately.")
           }
         }
       }

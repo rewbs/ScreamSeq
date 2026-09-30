@@ -9,15 +9,16 @@ struct WorkspaceStroke: Equatable {
     // The stored format is unchanged, so existing saved bindings still load.
     let plus=text.hasSuffix("+");if plus{text.removeLast();guard text.isEmpty || text.hasSuffix("+") else{return nil};if !text.isEmpty{text.removeLast()}}
     var parts=text.isEmpty ? [] : text.split(separator:"+",omittingEmptySubsequences:false).map(String.init);if plus{parts.append("+")}
-    guard let last=parts.last else{return nil};let named=["space":" ","tab":"\t","return":"\r"]
+    guard let last=parts.last else{return nil};let named=["space":" ","tab":"\t","return":"\r","up":"\u{F700}","down":"\u{F701}","left":"\u{F702}","right":"\u{F703}"]
     key=named[last] ?? last;guard key.count==1 else{return nil};var flags:NSEvent.ModifierFlags=[]
     for name in parts.dropLast(){let flag:NSEvent.ModifierFlags;switch name{case "cmd":flag = .command;case "ctrl":flag = .control;case "opt":flag = .option;case "shift":flag = .shift;default:return nil};guard !flags.contains(flag)else{return nil};flags.insert(flag)};modifiers=flags
   }
-  var encoded:String{var parts=[String]();for (flag,name) in [(NSEvent.ModifierFlags.command,"cmd"),(.control,"ctrl"),(.option,"opt"),(.shift,"shift")] where modifiers.contains(flag){parts.append(name)};parts.append([" ":"space","\t":"tab","\r":"return"][key] ?? key);return parts.joined(separator:"+")}
+  var encoded:String{var parts=[String]();for (flag,name) in [(NSEvent.ModifierFlags.command,"cmd"),(.control,"ctrl"),(.option,"opt"),(.shift,"shift")] where modifiers.contains(flag){parts.append(name)};parts.append([" ":"space","\t":"tab","\r":"return","\u{F700}":"up","\u{F701}":"down","\u{F702}":"left","\u{F703}":"right"][key] ?? key);return parts.joined(separator:"+")}
 }
 final class WorkspaceSequences {
   var bindings=[String:[WorkspaceStroke]](),prefix=[WorkspaceStroke]()
   var onRun:((String)->Void)?,onHint:((String)->Void)?
+  var isAvailable:((String)->Bool)?
   private var timeout:DispatchWorkItem?
   func load(){let raw=UserDefaults.standard.dictionary(forKey:"workspaceSequences") as? [String:[String]] ?? [:];bindings=raw.compactMapValues{values in let strokes=values.compactMap(WorkspaceStroke.init);return strokes.count==values.count && (2...4).contains(strokes.count) ? strokes : nil}}
   func save(){UserDefaults.standard.set(bindings.mapValues{$0.map(\.encoded)},forKey:"workspaceSequences")}
@@ -26,7 +27,7 @@ final class WorkspaceSequences {
   func handle(_ event:NSEvent)->Bool {
     guard event.type == .keyDown,!event.isARepeat,let stroke=WorkspaceStroke(event)else{return false}
     if event.keyCode==53 && !prefix.isEmpty{cancel();return true}
-    let candidate=prefix+[stroke],matches=bindings.filter{$0.value.starts(with:candidate)}
+    let candidate=prefix+[stroke],matches=bindings.filter{(isAvailable?($0.key) ?? true) && $0.value.starts(with:candidate)}
     guard !matches.isEmpty else{if prefix.isEmpty{return false};cancel();NSSound.beep();return true}
     timeout?.cancel();prefix=candidate
     if let exact=matches.first(where:{$0.value.count==candidate.count}){cancel();onRun?(exact.key);return true}
@@ -61,5 +62,5 @@ extension WorkspaceCommandPalette {
   }
 }
 func WorkspaceStrokeString(_ key:String,_ flags:NSEvent.ModifierFlags)->String {
-  var parts=[String]();for (flag,name) in [(NSEvent.ModifierFlags.command,"cmd"),(.control,"ctrl"),(.option,"opt"),(.shift,"shift")] where flags.contains(flag){parts.append(name)};parts.append([" ":"space","\t":"tab","\r":"return"][key] ?? key);return parts.joined(separator:"+")
+  var parts=[String]();for (flag,name) in [(NSEvent.ModifierFlags.command,"cmd"),(.control,"ctrl"),(.option,"opt"),(.shift,"shift")] where flags.contains(flag){parts.append(name)};parts.append([" ":"space","\t":"tab","\r":"return","\u{F700}":"up","\u{F701}":"down","\u{F702}":"left","\u{F703}":"right"][key] ?? key);return parts.joined(separator:"+")
 }

@@ -1,0 +1,159 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-parameter-activity
+      Start 77: parameter-activity
+      Start  1: plugin-presets
+ 1/77 Test #77: parameter-activity ...............   Passed    0.08 sec
+      Start  2: precise-ramps
+ 2/77 Test  #1: plugin-presets ...................   Passed    0.46 sec
+      Start  3: precise-notes
+ 3/77 Test  #2: precise-ramps ....................   Passed    0.81 sec
+      Start  4: pattern-pitch
+ 4/77 Test  #3: precise-notes ....................   Passed    3.18 sec
+      Start  5: record-nudge
+ 5/77 Test  #4: pattern-pitch ....................   Passed    2.79 sec
+      Start  6: unified-effects
+ 6/77 Test  #5: record-nudge .....................   Passed    2.05 sec
+      Start  7: pattern-performance
+ 7/77 Test  #6: unified-effects ..................   Passed    2.16 sec
+      Start  8: plugin-programs
+ 8/77 Test  #8: plugin-programs ..................   Passed    0.89 sec
+      Start  9: plugin-preset-session
+ 9/77 Test  #7: pattern-performance ..............   Passed    1.17 sec
+      Start 10: recovery-session
+10/77 Test  #9: plugin-preset-session ............   Passed    0.65 sec
+      Start 11: instrument-envelopes
+11/77 Test #10: recovery-session .................   Passed    0.83 sec
+      Start 12: instrument-envelope-session
+12/77 Test #11: instrument-envelopes .............   Passed    0.71 sec
+      Start 13: plugin-aliases
+13/77 Test #12: instrument-envelope-session ......   Passed    0.99 sec
+      Start 14: song-timing-session
+14/77 Test #13: plugin-aliases ...................   Passed    1.51 sec
+      Start 15: song-timing
+15/77 Test #14: song-timing-session ..............   Passed    1.15 sec
+      Start 16: native-reverse-loops
+16/77 Test #15: song-timing ......................   Passed    0.91 sec
+      Start 17: sample-loops
+17/77 Test #16: native-reverse-loops .............   Passed    2.50 sec
+      Start 18: sample-crossfade-project
+18/77 Test #18: sample-crossfade-project .........   Passed    3.56 sec
+      Start 19: sample-crossfade
+19/77 Test #19: sample-crossfade .................   Passed    0.70 sec
+      Start 20: sample-snap
+20/77 Test #17: sample-loops .....................   Passed    6.36 sec
+      Start 21: sample-drawing
+21/77 Test #20: sample-snap ......................   Passed    0.47 sec
+      Start 22: sample-copy
+22/77 Test #21: sample-drawing ...................   Passed    0.57 sec
+      Start 23: sample-clipboard
+23/77 Test #22: sample-copy ......................   Passed    0.92 sec
+      Start 24: sample-archive
+24/77 Test #23: sample-clipboard .................   Passed    1.15 sec
+      Start 25: sample-processing
+25/77 Test #24: sample-archive ...................   Passed    0.95 sec
+      Start 26: sample-project
+26/77 Test #25: sample-processing ................   Passed    0.94 sec
+      Start 27: sample-session
+27/77 Test #27: sample-session ...................   Passed    0.79 sec
+      Start 28: sample-import
+28/77 Test #28: sample-import ....................   Passed    0.57 sec
+      Start 29: tracker-core
+29/77 Test #26: sample-project ...................   Passed    2.02 sec
+      Start 30: automation-tools
+30/77 Test #29: tracker-core .....................   Passed    0.65 sec
+      Start 31: pattern-tools
+31/77 Test #30: automation-tools .................   Passed    0.87 sec
+      Start 32: pattern-commands
+32/77 Test #31: pattern-tools ....................   Passed    0.90 sec
+      Start 33: plugins
+33/77 Test #32: pattern-commands .................   Passed    0.89 sec
+      Start 34: native-effects
+34/77 Test #33: plugins ..........................   Passed    0.74 sec
+      Start 35: eq-effects
+35/77 Test #35: eq-effects .......................   Passed    2.90 sec
+      Start 36: comb
+36/77 Test #36: comb .............................   Passed    0.92 sec
+      Start 37: filters
+37/77 Test #37: filters ..........................   Passed    0.50 sec
+      Start 38: oversampling
+38/77 Test #38: oversampling .....................   Passed    0.40 sec
+      Start 39: distortion
+39/77 Test #39: distortion .......................   Passed    2.41 sec
+      Start 40: lofi
+40/77 Test #40: lofi .............................   Passed    0.74 sec
+      Start 41: cabinet
+41/77 Test #34: native-effects ...................   Passed   10.63 sec
+      Start 42: dynamics
+42/77 Test #42: dynamics .........................   Passed    1.60 sec
+      Start 43: maximizer
+43/77 Test #43: maximizer ........................   Passed    2.04 sec
+      Start 44: bus-compressor
+44/77 Test #44: bus-compressor ...................   Passed    1.29 sec
+      Start 45: session
+45/77 Test #45: session ..........................   Passed    0.70 sec
+      Start 46: native-song
+46/77 Test #46: native-song ......................   Passed    0.63 sec
+      Start 47: midi
+47/77 Test #47: midi .............................   Passed    0.50 sec
+      Start 48: export
+48/77 Test #48: export ...........................   Passed    0.66 sec
+      Start 49: stress
+49/77 Test #49: stress ...........................   Passed    0.90 sec
+      Start 50: routing-prototype
+50/77 Test #50: routing-prototype ................   Passed    0.56 sec
+      Start 51: mixer-runtime
+51/77 Test #51: mixer-runtime ....................   Passed    0.39 sec
+      Start 52: native-mixer
+52/77 Test #52: native-mixer .....................   Passed    2.34 sec
+      Start 53: sidechains
+53/77 Test #53: sidechains .......................   Passed    0.40 sec
+      Start 54: multi-bus
+54/77 Test #54: multi-bus ........................   Passed    1.15 sec
+      Start 55: rack
+55/77 Test #55: rack .............................   Passed    0.87 sec
+      Start 56: mixer-graph
+56/77 Test #56: mixer-graph ......................   Passed    0.35 sec
+      Start 57: native-plugins
+57/77 Test #57: native-plugins ...................   Passed    0.57 sec
+      Start 58: plugin-latency
+58/77 Test #58: plugin-latency ...................   Passed    0.47 sec
+      Start 59: musical-automation
+59/77 Test #59: musical-automation ...............   Passed    1.34 sec
+      Start 60: automation
+60/77 Test #60: automation .......................   Passed    0.57 sec
+      Start 61: plugin-inventory
+61/77 Test #61: plugin-inventory .................   Passed    0.37 sec
+      Start 62: plugin-lifecycle
+62/77 Test #62: plugin-lifecycle .................   Passed    0.49 sec
+      Start 63: plugin-shutdown
+63/77 Test #63: plugin-shutdown ..................   Passed    0.78 sec
+      Start 64: note-track
+64/77 Test #64: note-track .......................   Passed    0.79 sec
+      Start 65: plugin-library
+65/77 Test #65: plugin-library ...................   Passed    0.38 sec
+      Start 66: automation-target
+66/77 Test #66: automation-target ................   Passed    0.53 sec
+      Start 67: signal-graph
+67/77 Test #67: signal-graph .....................   Passed    0.36 sec
+      Start 68: native-signal-graph
+68/77 Test #68: native-signal-graph ..............   Passed    0.49 sec
+      Start 69: signal-graph-session
+69/77 Test #69: signal-graph-session .............   Passed    0.47 sec
+      Start 70: effect-auxiliary
+70/77 Test #70: effect-auxiliary .................   Passed    0.36 sec
+      Start 71: signal-routing
+71/77 Test #71: signal-routing ...................   Passed    1.01 sec
+      Start 72: playback-regions
+72/77 Test #72: playback-regions .................   Passed    0.58 sec
+      Start 73: curve-formulas
+73/77 Test #73: curve-formulas ...................   Passed    0.35 sec
+      Start 74: curve-formula-session
+74/77 Test #74: curve-formula-session ............   Passed    0.56 sec
+      Start 75: envelope-bank
+75/77 Test #75: envelope-bank ....................   Passed    0.57 sec
+      Start 76: playback-display
+76/77 Test #76: playback-display .................   Passed    0.51 sec
+77/77 Test #41: cabinet ..........................   Passed   48.79 sec
+
+100% tests passed, 0 tests failed out of 77
+
+Total Test time (real) =  79.86 sec

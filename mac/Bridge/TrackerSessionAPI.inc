@@ -37,13 +37,13 @@
     string(method, 80);
     object(p);
     NSArray *reads = @[
-      @"envelope.bank.list", @"envelope.catalogue.list", @"transport.get", @"automation.formula.preview", @"automation.formula.reference", @"graph.get", @"graph.automation.get", @"graph.plugin.get",
+      @"parameter.activity.targets", @"parameter.activity.parameters", @"parameter.activity.get", @"parameter.activity.sources", @"automation.recorded.get", @"envelope.bank.list", @"envelope.catalogue.list", @"transport.get", @"automation.formula.preview", @"automation.formula.reference", @"graph.get", @"graph.signal.get", @"graph.scope.get", @"graph.listen.get", @"graph.automation.get", @"graph.plugin.get",
       @"recording.get", @"pattern.notes.get", @"pattern.performance.get", @"pattern.effects.get", @"instrument.envelope.get", @"instrument.envelope.copy",
       @"plugin.programs.get", @"plugin.instruments.get", @"document.timing.get", @"track.get", @"api.describe", @"document.get", @"pattern.get", @"pattern.timeline.get", @"pattern.commands", @"sample.get", @"sample.waveform.get", @"sample.snap.get", @"sample.pcm.get", @"sample.clipboard.get", @"instrument.get",
       @"plugin.preset.inspect", @"plugin.library.get", @"plugin.locations.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
     ];
     NSArray *writes = @[
-      @"envelope.bank.save", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.routes.set", @"graph.controller", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
+      @"parameter.activity.watch", @"automation.recorded.edit", @"envelope.bank.save", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.routes.set", @"graph.controller", @"graph.signal.clear", @"graph.scope.watch", @"graph.listen.set", @"graph.song.group.create", @"graph.song.group.update", @"graph.song.group.remove", @"graph.song.group.export", @"graph.group.create", @"graph.group.update", @"graph.group.remove", @"graph.group.export", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.nodes.insert", @"graph.nodes.detach", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
       @"recording.start", @"recording.capture", @"recording.stop", @"recording.commit", @"recording.discard", @"pattern.notes.set", @"pattern.performance.set", @"pattern.effects.set", @"pattern.effect.set", @"instrument.envelope.transform",
       @"instrument.plugin.set", @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule",
       @"sequence.select", @"sample.patch",          @"sample.process",    @"sample.import", @"sample.importMany", @"sample.clipboard.copy", @"sample.clipboard.set", @"sample.cut", @"sample.delete", @"sample.paste",
@@ -51,16 +51,16 @@
       @"plugin.preset.save", @"plugin.preset.load", @"plugin.library.set", @"plugin.locations.trust", @"plugin.add",      @"plugin.remove",         @"plugin.move",       @"plugin.bypass",
       @"plugin.assign",   @"plugin.parameters.set", @"plugin.state.set", @"plugin.buses.set", @"automation.replaceLane",
       @"history.undo",    @"history.redo", @"pattern.transform", @"pattern.paste", @"song.annotate", @"arrangement.copyBlock",
-      @"automation.pattern.set", @"automation.pattern.remove", @"automation.pattern.transform", @"mixer.enable", @"mixer.bus.add", @"mixer.bus.set", @"mixer.bus.remove", @"mixer.sends.set", @"mixer.instrument.route", @"mixer.plugin.route", @"mixer.sidechains.set"
+      @"automation.pattern.set", @"automation.pattern.remove", @"automation.pattern.transform", @"mixer.enable", @"mixer.bus.add", @"mixer.bus.set", @"mixer.bus.remove", @"mixer.inserts.move", @"mixer.sends.set", @"mixer.instrument.route", @"mixer.plugin.route", @"mixer.sidechains.set"
     ];
     const bool mutation = [writes containsObject:method];
-    const bool libraryMutation = [method isEqual:@"plugin.library.set"];
+    const bool libraryMutation = [method isEqual:@"plugin.library.set"] || [method isEqual:@"parameter.activity.watch"];
     if (!mutation && ![reads containsObject:method])
       throw Error(-32601, "Unknown method; call api.describe");
     NSString *before = self.automationRevision;
     if (mutation && !libraryMutation && ![string(p[@"expectedRevision"], 200) isEqual:before])
       throw Error(-32001, "Song changed; read its current revision and prepare the edit again");
-    if (mutation && !libraryMutation && ![method hasPrefix:@"sample.clipboard."] && ![method hasPrefix:@"transport."])
+    if (mutation && !libraryMutation && ![method isEqual:@"graph.signal.clear"] && ![method isEqual:@"graph.scope.watch"] && ![method isEqual:@"graph.listen.set"] && ![method hasPrefix:@"sample.clipboard."] && ![method hasPrefix:@"transport."])
       require(_document->editable(), "This document is read-only");
     const bool wasPlaying = self.playing;
     auto &song = _document->song();
@@ -75,6 +75,13 @@
     };
     auto pluginSlot = [&]() {
       require(!_plugins.empty(), "The plugin rack is empty");
+      require(bool(p[@"slot"]) != bool(p[@"plugin"]), "Specify exactly one plugin identity or slot");
+      if(p[@"plugin"]) {
+        const std::string identity=string(p[@"plugin"],128).UTF8String;
+        const auto found=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &plugin){return plugin.instanceID==identity;});
+        require(found!=_plugins.end(), "Plugin instance no longer exists");
+        return size_t(found-_plugins.begin());
+      }
       return size_t(integer(p[@"slot"], 0, _plugins.size() - 1));
     };
     auto instanceSlot = [&]() {
@@ -132,17 +139,19 @@
           @"targets":@"parameter: pattern index, persistent plugin identity and parameter ID; graph: graph/node stable IDs and pattern index; volume/pan/pitch: stable instrument ID.",
           @"conversion":@"Pattern templates fit the complete pattern. Instruments retain their tick duration when captured; automation shapes fit the existing instrument duration or explicit span in ticks. Curves bake to whole ticks and integer values 0..64, within half a value unit at every tick, or reject if the format point budget cannot represent them. Loops/sustain/carry/release are captured with instrument templates.",
           @"editing":@"Edit the master through bank.save, or unlink before changing a linked use directly. New targets become enabled; existing automation enabled state is retained. All musical edits require expectedRevision and support dryRun."},
+        @"previewRouting":@{@"channel":@"transport.note optional raw channel: sample-based pattern previews use that channel; omitted channel is independent inspector audition",@"release":@"Use the note-on destination again for note-off",@"pluginInstruments":@"Retain their explicit plugin output bus routes"},
         @"playbackDisplay":@{@"timeline":@"pattern.timeline.get: first row visits in the selected order occurrence, with tempo and flow commands; unreachable times are null",@"voicePositions":@"transport.get includes sample frames and envelope ticks for native voices, including audition",@"disconnectedMixerMetadataVersion":@15},
         @"automationRate" : @48000,
         @"maxPatternCells" : @4096,
         @"patternPerformance": @{@"unitsPerRow":@(performanceUnitsPerRow), @"maximumColumns":@(maximumEffectColumns),
           @"maximumCommands":@(maximumPatternCommands), @"maximumBindings":@255,
-          @"displayCodes":@{@"parameter-set":@"PS",@"parameter-slide":@"PL",@"pitch-set":@"BS",@"pitch-slide":@"BL",@"note-cut":@"NC"},
+          @"displayCodes":@{@"parameter-set":@"PS",@"parameter-slide":@"PL",@"pitch-set":@"BS",@"pitch-slide":@"BL",@"note-cut":@"NC",@"nudge-forward":@"NF",@"nudge-reverse":@"NR"},
           @"valuePrecision":@"IEEE-754 double. Parameter values are normalized 0..1; FX grid shows a rounded 16-bit overview for precise commands. Tracker parameters retain their musical byte ranges.",
-          @"kinds":@[@"parameter-set",@"parameter-slide",@"pitch-set",@"pitch-slide",@"note-cut",@"tracker"],
+          @"kinds":@[@"parameter-set",@"parameter-slide",@"pitch-set",@"pitch-slide",@"note-cut",@"tracker",@"nudge-forward",@"nudge-reverse"],
           @"noteCut":@"NC cuts the current sample voice and sends per-tracker-channel plugin note-offs at position; plugin release tails remain. Current native metadata is 17. Binding/value/duration must be zero.",
           @"pitch":@"Absolute semitone offsets -96..96. Native samples interpolate pitch every sample. Plugins use 14-bit MIDI pitch wheel and must have a matching pitchRange (default 2 semitones); MIDI-channel notes share that bend.",
           @"maximumPitchTracks":@16,
+          @"recordNudges":@"NF/NR use kind nudge-forward/nudge-reverse, value 0..1 strength and positive duration in 65536 units/row, ending within the pattern. Sample-only. Peak signed speed addition is +/-4*value^2: opposing strength below 0.5 slows, at 0.5 stops, above 0.5 reverses. An asymmetric smooth push/recovery curve updates every sample. New nudges add to current velocity (clamped to +/-16 additional speed) and replace the preceding curve continuously; pitch bends multiply the resulting speed. Binding must be zero, pitchRange 2. Starting playback mid-pattern skips earlier pushes; entering a pattern resets the nudge. No plugin MIDI is sent.",
           @"binding":@"Song-wide binding number targets persistent plugin instance ID and native parameter ID; rack order is irrelevant.",
           @"commands":@"pattern.effects.set replaces all FX columns in this pattern atomically; omitted collections are preserved. pattern.effect.set edits one cell. Columns are total counts 1..8; all support every command. Bindings are song-wide upserts.",
           @"timing":@"Positions and durations use 1/65536 row units. Events start at the next audio sample. Slides interpolate every audio sample and end at the target.",
@@ -202,6 +211,7 @@
           @"snapshot": @"Optional RSONGS2 timing payload preserves source-format losses; old builds reject it. Module export rejects timing loss."},
         @"saving" : @"document.save writes a native .screamseq project (legacy .resonance is also accepted); document.exportModule checks sample preservation before exporting the source module format. Both require an absolute path, expectedRevision, and overwrite:true to replace an existing file; dryRun:true validates without writing.",
         @"maxAutomationPoints" : @100000,
+        @"parameterActivity": @"parameter.activity.targets/parameters enumerate actual prepared processor copies. watch is a transient session selection without expectedRevision. get reports bounded 1ms host-delivered values, extrema, source links and normalized graph contributions; reset after cursor when token changes. sources lists potential controls including disabled envelopes and recorded points. Plugin-internal modulation is not exposed. automation.recorded.get/edit makes timed recordings editable by stable identity with plugin Undo; edits stop playback.",
         @"automationTarget": @"automation.target.get reports the last accepted native/plugin-editor/API parameter edit by stable plugin identity. Session-local, read-only; playback, state restore and Undo do not learn a target. Values describe the current parameter, not the earlier gesture.",
         @"scriptedCurves": @{@"curve":@"scripted", @"field":@"formula", @"maxCharacters":@2048, @"maxOperations":@128,
           @"variables":@[@"start",@"end",@"t",@"beatOffset",@"row",@"beat",@"beats",@"duration",@"startBeat",@"endBeat",@"L"],
@@ -223,11 +233,18 @@
           @"identity": @"Existing plugin instance ID; preset type must match. VST3 class identity is independent of installation path.",
           @"loading": @"Inspect the file, then load with expectedPresetRevision and expectedRevision. Loading stops playback and uses plugin Undo; saving preserves song history and transport. Load dry runs do not invoke the plugin's preset-state decoder."},
         @"musicalAutomation" : @{@"unitsPerRow": @256, @"maxLanes": @256, @"maxPointsPerLane": @4096,
-                                  @"maxPoints": @65536, @"controlIntervalSamples": @32},
+                                  @"maxPoints": @65536, @"controlIntervalSamples": @32,
+                                  @"liveEdits": @"Pattern lane changes, removals and automation-only Undo/Redo adopt a prepared plan at the next audio buffer without restarting playback. Removed/disabled lanes cancel pending ramps and restore the latest saved/manual parameter baseline. transport.get.patternPosition is fractional position in 1/256-row units."},
         @"mixer" : @{@"maxBuses": @240, @"maxInsertsPerBus": @32, @"maxSendsPerBus": @16, @"instrumentOutputBuses": @64,
+                     @"liveRouting": @"Mac equal-latency routing changes retaining processor inputs/source adapters use prepared 10ms transitions. Other topology edits still stop. graph.signal.get and Mac transport.get include routing:{available,active,requestedPlan,renderedPlan,failedPlan,state,latencyPending}. Plan counters belong to the prepared playback engine, not song revisions; they restart on preparation. Failed candidates leave the previous plan audible and require Undo to restore the displayed topology.",
+                     @"processingGroups": @"graph.group.create packages sibling nodes/groups within a reusable definition without changing DSP, bindings or real cable endpoints; parent selects nesting. graph.group.update renames/moves the boundary and all descendants; graph.group.export saves an independent library copy and rejects external modulation dependencies; graph.group.remove ungroups or explicitly deletes contents. Flat nodes/audio/modulation remain authoritative; groups are saved boundaries, distinct from mixer buses and reusable library instances. Song-rack equivalents graph.song.group.create/update/remove/export package plugin:<instanceID> members and nested group IDs without replacing processors; export copies one consecutive enabled chain to an independent library recipe. graph.layout.set groups moves complete song boundaries. All edits support dryRun, revision guards and one Undo.",
+                     @"patching": @"Socket connections add sources/destinations. mixer.sidechains.set input:0 sums into Main in; input:1..63 feeds separate auxiliary buses. mixer.plugin.route targets:[bus IDs] provides fan-out; [] disconnects. Supported connected auxiliary ports enable automatically on playback, without plugin history changes. graph.nodes.detach pulls a serial chain out and heals its main path; remove:true deletes it; layout shares one Undo. graph.nodes.insert moves a serial chain onto definition.audio[edge] and heals its old path atomically; optional positions share the Undo. Shift/Command selection and group layout use graph.update or graph.layout.set.",
+                     @"addConnected": @"graph.node.add connect:{node,port,output,modulation,base} creates and connects in one Undo. Modulation input drags create a source at zero depth and retain existing shared base. mixer.bus.add accepts sendFrom for an initially disabled return send, with optional position:{x,y}.",
+                     @"addAtCable": @"plugin.add accepts target and optional before (stable plugin ID) plus position:{x,y}; add/insert/layout form one Undo. graph.node.add accepts insertEdge (audio edge index) or insertAfter, preserving the exact route and gain.",
+                     @"insertMove": @"mixer.inserts.move moves an ordered contiguous plugins array to target bus, before an optional existing plugin (null/omitted appends). Preserves instance identity/state/automation, stops playback, one document Undo. Unassigned effects resolve on Master; dryRun validates without mutation.",
                      @"maxCombinedBusesAndAssignedInstruments": @(maximumNativeAdapters), @"controlRampMS": @5,
                      @"prePan": @"Stereo balance -1...1 before inserts; independent of post-fader pan. Nonzero values use native metadata v6."},
-        @"undo" : @"Pattern batches are one document undo step. Plugin mutations use the separate plugins history.",
+        @"undo" : @"One chronological history interleaves pattern, sample, instrument, routing and plugin edits. The optional domain field is a compatibility alias; it does not select a separate history.",
         @"dryRun" : @"pattern.apply, pattern.transform and pattern.paste accept dryRun:true. Tools return the first 512 exact changes and total changedCells; previewTruncated indicates a longer result. sample.process also accepts dryRun:true and returns up to 256 exact raw PCM changes (trim reports removedFrames).",
         @"transport" :
             @"transport.play accepts order, cursorRow, optional pattern/startRow/endRow (exclusive), loop. transport.loop changes the running region. All mutations require expectedRevision. Formulas are bounded mathematical expressions, not arbitrary code. Structural edits can stop playback."
@@ -528,7 +545,7 @@
       auto metadata=_document->native();
       try {
         if ([method isEqual:@"pattern.paste"]) {
-          allowed(@[ @"pattern", @"startRow", @"startChannel", @"rows", @"channels", @"cells", @"fields", @"mode", @"clip", @"dryRun", @"effects", @"bindings" ]);
+          allowed(@[ @"pattern", @"startRow", @"startChannel", @"rows", @"channels", @"cells", @"fields", @"mode", @"clip", @"dryRun", @"effects", @"bindings", @"notes" ]);
           auto pattern = integer(p[@"pattern"], 0, UINT16_MAX);
           auto row = integer(p[@"startRow"], 0, UINT16_MAX), channel = integer(p[@"startChannel"], 0, UINT16_MAX);
           auto rows = integer(p[@"rows"], 1, UINT16_MAX), channels = integer(p[@"channels"], 1, UINT16_MAX);
@@ -548,6 +565,14 @@
           }
           edits = preparePatternPaste(*_document, pattern, row, channel, rows, channels, cells, fields(),
               string(p[@"mode"] ?: @"overwrite", 20).UTF8String, p[@"clip"] ? boolean(p[@"clip"]) : false);
+          if(p[@"notes"]) {
+            std::vector<ClipboardNote> notes;
+            for(id raw:array(p[@"notes"],maximumPreciseNotes)) {
+              auto e=object(raw);keys(e,@[@"channel",@"position",@"note",@"instrument",@"velocity",@"effect",@"parameter"]);
+              notes.push_back({uint16_t(integer(e[@"channel"],0,channels-1)),{0,0,uint32_t(integer(e[@"position"],0,rows*performanceUnitsPerRow-1)),uint16_t(integer(e[@"instrument"]?:@0,0,255)),uint8_t(integer(e[@"note"],1,255)),uint8_t(integer(e[@"velocity"]?:@127,1,127)),uint8_t(integer(e[@"effect"]?:@0,0,255)),uint8_t(integer(e[@"parameter"]?:@0,0,255))}});
+            }
+            preparePreciseNotePaste(*_document,metadata,{uint16_t(pattern),uint16_t(row),uint16_t(rows),uint16_t(channel),uint16_t(channels)},notes,fields(),string(p[@"mode"]?:@"overwrite",20).UTF8String,p[@"clip"]?boolean(p[@"clip"]):false);
+          }
           if((fields() & PatternEffect) && [p[@"mode"] isEqual:@"mix"]) {
             for(auto &edit:edits) if(std::any_of(metadata.performance.commands.begin(),metadata.performance.commands.end(),[&](const auto &c){return c.pattern==metadata.patterns.at(pattern).id&&c.track==metadata.tracks.at(edit.channel).id&&c.position/performanceUnitsPerRow==edit.row&&c.column==0;})) {
               edit.after.effect=edit.before.effect;edit.after.parameter=edit.before.parameter;
@@ -739,15 +764,16 @@
       succeeded(index >= 0, problem);
       result = @{@"pattern" : @(index)};
     } else if ([method isEqual:@"order.edit"]) {
-      allowed(@[ @"order", @"pattern", @"operation" ]);
+      allowed(@[ @"order", @"pattern", @"operation", @"destination" ]);
       NSString *operation = string(p[@"operation"], 20);
-      require([@[ @"before", @"after", @"assign", @"up", @"down", @"remove" ] containsObject:operation],
+      require([@[ @"before", @"after", @"assign", @"up", @"down", @"remove", @"move" ] containsObject:operation],
               "Unknown order operation");
       auto order = integer(p[@"order"], 0, song.Order().size());
       if ([operation isEqual:@"remove"])
         succeeded([self removeOrder:order error:&problem], problem);
       else {
-        auto pattern = integer(p[@"pattern"] ?: @0, 0, UINT16_MAX);
+        require(!p[@"destination"] || [operation isEqual:@"move"], "Destination is only used by move");
+        auto pattern = [operation isEqual:@"move"] ? integer(p[@"destination"],0,song.Order().size()-1) : integer(p[@"pattern"] ?: @0, 0, UINT16_MAX);
         succeeded([self editOrder:order pattern:pattern operation:operation error:&problem], problem);
       }
     } else if ([method isEqual:@"sequence.select"]) {
@@ -1027,16 +1053,16 @@
       allowed(@[]);
       result = [self lastTouchedParameter];
     } else if ([method isEqual:@"plugin.parameters.get"]) {
-      allowed(@[ @"slot" ]);
+      allowed(@[ @"slot", @"plugin" ]);
       result = [self pluginParameters:pluginSlot()];
     } else if ([method isEqual:@"plugin.meters"]) {
-      allowed(@[@"slot"]); result = [self pluginMeters:pluginSlot()];
+      allowed(@[@"slot", @"plugin"]); result = [self pluginMeters:pluginSlot()];
     } else if ([method isEqual:@"plugin.buses.get"]) {
-      allowed(@[@"slot"]);
+      allowed(@[@"slot", @"plugin"]);
       auto slot = pluginSlot();
       result = @{@"plugin": @(_plugins[slot].instanceID.c_str()), @"buses": pluginBusDictionaries(_audio->pluginBuses(slot))};
     } else if ([method isEqual:@"plugin.buses.set"]) {
-      allowed(@[@"slot", @"inputs", @"outputs", @"dryRun"]);
+      allowed(@[@"slot", @"plugin", @"inputs", @"outputs", @"dryRun"]);
       const auto slot = pluginSlot();
       require(p[@"inputs"] || p[@"outputs"], "Specify auxiliary inputs or outputs");
       auto next = _plugins[slot];
@@ -1169,7 +1195,7 @@
         @"kind" : @"saved-baseline"
       };
     } else if ([method isEqual:@"plugin.add"]) {
-      allowed(@[ @"descriptor" ]);
+      allowed(@[ @"descriptor", @"target", @"before", @"position" ]);
       NSDictionary *d = object(p[@"descriptor"]);
       keys(d, @[ @"type", @"subtype", @"manufacturer", @"name", @"format", @"path", @"classID", @"isInstrument" ]);
       for (NSString *key in @[ @"type", @"subtype", @"manufacturer" ])
@@ -1183,18 +1209,21 @@
         try { (void)descriptor(d); }
         catch (const std::exception &e) { throw Automation::Error(-32602, e.what()); }
       }
-      succeeded([self addPlugin:d error:&problem], problem);
+      if(p[@"position"]) {auto v=object(p[@"position"]);keys(v,@[@"x",@"y"]);number(v[@"x"],0,100000);number(v[@"y"],0,100000);}
+      succeeded([self addPlugin:d target:p[@"target"] ? string(p[@"target"],128) : nil before:p[@"before"] ? string(p[@"before"],128) : nil position:p[@"position"] error:&problem], problem);
       result = @{@"slot" : @(_plugins.size() - 1)};
     } else if ([method isEqual:@"plugin.remove"]) {
       allowed(@[ @"slot" ]);
       succeeded([self removePlugin:pluginSlot() error:&problem], problem);
     } else if ([method isEqual:@"plugin.move"]) {
-      allowed(@[ @"slot", @"direction" ]);
-      auto direction = number(p[@"direction"], -1, 1);
-      require(direction == -1 || direction == 1, "Direction must be -1 or 1");
-      succeeded([self movePlugin:pluginSlot() direction:NSInteger(direction) error:&problem], problem);
+      allowed(@[ @"slot", @"direction", @"position" ]);
+      const auto slot = pluginSlot();
+      require(bool(p[@"direction"]) != bool(p[@"position"]), "Supply direction or position");
+      const auto direction = p[@"position"] ? NSInteger(integer(p[@"position"], 0, _plugins.size()-1)) - NSInteger(slot) : NSInteger(number(p[@"direction"], -1, 1));
+      if (!p[@"position"]) require(direction == -1 || direction == 1, "Direction must be -1 or 1");
+      succeeded([self movePlugin:slot direction:direction error:&problem], problem);
     } else if ([method isEqual:@"plugin.bypass"]) {
-      allowed(@[ @"slot", @"bypass" ]);
+      allowed(@[ @"slot", @"plugin", @"bypass" ]);
       succeeded([self bypassPlugin:pluginSlot() bypass:boolean(p[@"bypass"]) error:&problem], problem);
     } else if ([method isEqual:@"plugin.assign"]) {
       allowed(@[ @"slot", @"instrument" ]);
@@ -1205,7 +1234,7 @@
     } else if ([method isEqual:@"plugin.state.set"] || [method isEqual:@"plugin.parameters.set"] || [method isEqual:@"plugin.preset.load"]) {
       const bool preset = [method isEqual:@"plugin.preset.load"];
       const bool state = preset || [method isEqual:@"plugin.state.set"];
-      allowed(preset ? @[@"plugin", @"path", @"expectedPresetRevision", @"dryRun"] : state ? @[ @"slot", @"data" ] : @[ @"slot", @"values" ]);
+      allowed(preset ? @[@"plugin", @"path", @"expectedPresetRevision", @"dryRun"] : state ? @[ @"slot", @"data" ] : @[ @"slot", @"plugin", @"values" ]);
       const auto slot = preset ? instanceSlot() : pluginSlot();
       NSDictionary *loadedPreset = nil;
       const bool dry = preset && p[@"dryRun"] ? boolean(p[@"dryRun"]) : false;
@@ -1226,17 +1255,44 @@
           auto id = uint32_t(integer(v[@"id"], 0, UINT32_MAX));
           require(seen.insert(id).second, "Duplicate parameter");
           auto found = std::find_if(parameters.begin(), parameters.end(), [&](const auto &v) { return v.id == id; });
-          require(found != parameters.end(), "Plugin parameter does not exist or plugin is unavailable");
+          require(found != parameters.end() && found->writable, "Plugin parameter does not exist, is read-only or unavailable");
           values.emplace_back(id, float(number(v[@"value"], found->min, found->max)));
         }
         require(!values.empty(), "Parameter batch cannot be empty");
       }
       NSData *bytes = preset ? loadedPreset[@"state"] : state ? base64(p[@"data"], 16 * 1024 * 1024) : nil;
-      if (!dry) {
+      if (!state) {
+        // Publish the validated batch once. Rebuilding a rack for a numeric edit
+        // stopped transport, discarded processor history and cut held notes.
+        std::vector<ParameterChange> changes;
+        auto manual=_manualParameters;
+        const auto *activity=_audio->parameterActivity();
+        for(const auto &[id,value]:values) {
+          bool same=false;
+          if(activity && slot<activity->processors.size())
+            for(const auto &baseline:activity->processors[slot].parameters)
+              if(baseline.id==id){same=baseline.value==value;break;}
+          if(same)continue;
+          changes.push_back({uint32_t(slot),id,value,0});
+          const auto old=std::find_if(manual.begin(),manual.end(),[&](const auto &v){return v.slot==slot&&v.id==id;});
+          if(old==manual.end())manual.push_back(changes.back());else old->value=value;
+        }
+        if(!changes.empty()) {
+          [self synchronizeHistory];
+          const bool continued=changes.size()==1 && _parameterGesture && _parameterGestureSequence &&
+            _parameterGestureSequence==_document->historySequence() && _parameterGestureSlot==slot && _parameterGestureID==changes.front().id;
+          std::optional<EffectSnapshot> before;
+          if(!continued){before.emplace(EffectSnapshot{_plugins,_automation,_manualParameters});_effectUndo.reserve(_effectUndo.size()+1);}
+          if(!_audio->pluginParameterBatch(changes))throw Error(-32003,"Plugin parameter queue is full or unavailable; song unchanged");
+          _manualParameters.swap(manual);
+          if(before){before->sequence=_document->externalHistoryEdit();_knownHistorySequence=_parameterGestureSequence=before->sequence;_effectUndo.push_back(std::move(*before));_effectRedo.clear();trimEffectHistory(_effectUndo);}
+          _parameterGestureSlot=slot;_parameterGestureID=changes.size()==1?changes.front().id:-1;_lastParameterEdit=std::chrono::steady_clock::now();
+          ++_pluginRevision;[self rememberParameterTouch:slot identifier:changes.back().id source:@"api"];
+        }
+      } else if (!dry) {
         [self commitManualParameters];
         auto states = _plugins;
-        if (state)
-          states[slot].state = byteVector(bytes);
+        states[slot].state = byteVector(bytes);
         NativePlugin probe(states[slot], _audio->sampleRate());
         for (auto &value : values)
           require(probe.parameter(value.first, value.second), "Plugin rejected parameter value");
@@ -1254,7 +1310,8 @@
     } else if ([method isEqual:@"transport.get"]) {
       allowed(@[]); result = [self telemetry];
     } else if ([method isEqual:@"transport.note"]) {
-      allowed(@[@"note",@"sample",@"instrument",@"velocity",@"on"]);
+      allowed(@[@"note",@"sample",@"instrument",@"velocity",@"on",@"channel"]);
+      const NSInteger previewChannel=p[@"channel"]?integer(p[@"channel"],0,song.GetNumChannels()-1):-1;
       require(bool(p[@"sample"])!=bool(p[@"instrument"]),"Choose exactly one sample or instrument");
       const auto note=integer(p[@"note"],1,120),velocity=integer(p[@"velocity"]?:@100,0,127);const bool on=boolean(p[@"on"]);
       const auto sample=p[@"sample"]?sampleIndex():0,instrument=p[@"instrument"]?instrumentIndex():0;
@@ -1262,10 +1319,10 @@
       bool queued=false;
       if(on&&velocity) {
         if(![self prepareAudition:&problem])throw std::runtime_error(problem.localizedDescription.UTF8String);
-        queued=sample?[self sampleNote:note sample:sample velocity:velocity on:YES]:[self note:note instrument:instrument velocity:velocity on:YES];
+        queued=sample?[self sampleNote:note sample:sample velocity:velocity on:YES channel:previewChannel]:[self note:note instrument:instrument velocity:velocity on:YES channel:previewChannel];
         if(!queued)throw Error(-32003,"Audition queue full / preview voices released");
       } else if(_audio->active()&&!_isolatedSamplePreview) {
-        queued=sample?[self sampleNote:note sample:sample velocity:velocity on:NO]:[self note:note instrument:instrument velocity:velocity on:NO];
+        queued=sample?[self sampleNote:note sample:sample velocity:velocity on:NO channel:previewChannel]:[self note:note instrument:instrument velocity:velocity on:NO channel:previewChannel];
         if(!queued)throw Error(-32003,"Audition queue full / preview voices released");
       }
       result=@{@"queued":@(queued),@"audioActive":@(_audio->active()),@"playing":@(self.playing),@"audition":@(_audio->active()&&!self.playing)};
@@ -1368,11 +1425,11 @@
       try { next.validate(song); } catch (const std::invalid_argument &e) { throw Error(-32602, e.what()); }
       const bool changed = next != _document->native();
       if (!dryRun && changed) {
-        _audio->stop();
-        _document->annotate([&](NativeSong &native) { native = next; });
+        _document->annotate([&](NativeSong &native) { native = next; },[&]{_audio->updateMusicalAutomation(next);});
       }
       result = @{@"lane": nativeID(identifier), @"dryRun": @(dryRun), @"wouldChange": @(changed)};
 #include "AutomationToolsAPI.inc"
+#include "ParameterActivityAPI.inc"
     } else if ([method isEqual:@"automation.get"]) {
       allowed(@[ @"offset", @"limit" ]);
       auto offset = integer(p[@"offset"] ?: @0, 0, _automation.size());
@@ -1416,20 +1473,10 @@
       result = @{@"points" : @(points.size())};
     } else if ([method isEqual:@"history.undo"] || [method isEqual:@"history.redo"]) {
       allowed(@[ @"domain" ]);
-      NSString *domain = string(p[@"domain"], 20);
-      require([domain isEqual:@"document"] || [domain isEqual:@"plugins"],
-              "History domain must be document or plugins");
-      bool redo = [method isEqual:@"history.redo"];
-      if ([domain isEqual:@"document"]) {
-        try { validatePluginCapacity(_plugins, _document->historyNative(redo).mixer.buses.size()); }
-        catch (const std::invalid_argument &e) { throw Error(-32602, e.what()); }
-      }
-      if ([domain isEqual:@"plugins"])
-        succeeded(redo ? [self redoEffectChange:&problem] : [self undoEffectChange:&problem], problem);
-      else if (redo)
-        [self redo];
-      else
-        [self undo];
+      NSString *domain = p[@"domain"] ? string(p[@"domain"], 20) : @"all";
+      require([domain isEqual:@"all"] || [domain isEqual:@"document"] || [domain isEqual:@"plugins"],
+              "History domain must be all, document or plugins; all use chronological history");
+      succeeded([self historyUndo:[method isEqual:@"history.redo"] error:&problem], problem);
     }
     return @{
       @"revision" : self.automationRevision,

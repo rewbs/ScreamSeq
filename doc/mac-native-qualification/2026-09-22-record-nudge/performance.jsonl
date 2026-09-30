@@ -1,0 +1,2 @@
+{"rate":48000,"framesPerCallback":128,"seconds":30,"scratchTracks":16,"callbacks":11250,"meanMicros":2120.43,"p99Micros":33412.7,"maxMicros":154896,"deadlineMicros":2666.67,"overruns":1498,"meanCPUMicros":136.144,"p99CPUMicros":310.208,"maxCPUMicros":610.541}
+{"rate":96000,"framesPerCallback":128,"seconds":30,"scratchTracks":16,"callbacks":22500,"meanMicros":2336.82,"p99Micros":35007.5,"maxMicros":338020,"deadlineMicros":1333.33,"overruns":4324,"meanCPUMicros":129.496,"p99CPUMicros":346.084,"maxCPUMicros":672.583}

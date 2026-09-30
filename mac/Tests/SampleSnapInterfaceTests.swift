@@ -22,6 +22,7 @@ extension InterfaceTests {
     answer(8,72)
     try require(editor.loopStart.integerValue==8 && editor.loopEnd.integerValue==72 && editor.waveform.selection==11...99,
       "Loop snap changes pending loop controls without editing PCM or selection")
+    editor.loopSaveWork?.cancel();editor.loopSaveWork=nil
     editor.snapBoundaries(loop:true);answer(8,8)
     try require(editor.loopEnd.integerValue==72 && editor.snapStatus.stringValue.contains("collapse"),"Collapsed loops are rejected without changing controls")
     editor.snapBoundaries(loop:false);editor.waveform.selection=20...80;answer(8,72)

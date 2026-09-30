@@ -55,13 +55,13 @@ func labeled(_ label: String, _ control: NSView) -> NSStackView {
     spacing: 5)
 }
 
-final class SampleEditor: NSView {
+final class SampleEditor: NSView, NSTextFieldDelegate {
   override var acceptsFirstResponder: Bool { true }
   override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); super.mouseDown(with:event) }
 
   lazy var settingsDraft = AssetFieldDraft(["name":name,"rate":rate,"volume":volume,"pan":pan])
   var hasDraft: Bool { settingsDraft.hasDraft || (loopDraftBaseline != nil && loopDraftBaseline?.isEqual(rawLoopDraft) != true) }
-  func resetDocumentContext() { settingsDraft.reset(); sampleGeneration += 1; loopDraftBaseline=nil; loopDraftRevision=nil; loopPreviewSignature=nil; loopPreviewRevision=nil; savedLoopInfo=[:]; retireWaveform(); waveform.selection=nil; waveform.setViewport(nil,notify:false) }
+  func resetDocumentContext() { settingsDraft.reset(); sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil; loopDraftRevision=nil; loopPreviewSignature=nil; loopPreviewRevision=nil; savedLoopInfo=[:]; retireWaveform(); waveform.selection=nil; waveform.setViewport(nil,notify:false) }
   let waveform = WaveformView(frame: .zero),
     heading = Theme.label("Sample", size: 16, weight: .semibold),
     details = Theme.label("", size: 11, color: Theme.muted),
@@ -81,10 +81,9 @@ final class SampleEditor: NSView {
     sustainReverse = NSButton(checkboxWithTitle: "Reverse", target: nil, action: nil)
   let loopsStatus = Theme.label("Sustain loops repeat while a note is held; normal loops follow release.", size: 11, color: Theme.muted)
   var loopsBusy = false
+  var loopSaveWork: DispatchWorkItem?
   var loopDraftBaseline: NSDictionary?, loopDraftRevision: String?, loopPreviewSignature: NSDictionary?, loopPreviewRevision: String?
   var savedLoopInfo: [AnyHashable: Any] = [:]
-  lazy var loopsPreviewButton = ActionButton("Preview loops") { [weak self] in self?.setLoops(dryRun: true) }
-  lazy var loopsApplyButton = ActionButton("Apply loops") { [weak self] in self?.setLoops(dryRun: false) }
   let selectionStart = numberField(0, width: 108, label: "Selection start frame"),
     selectionEnd = numberField(0, width: 108, label: "Selection end frame, exclusive")
   let channelPicker = NSPopUpButton(), operationPicker = NSPopUpButton(), curvePicker = NSPopUpButton()
@@ -125,7 +124,7 @@ final class SampleEditor: NSView {
   let drawingStatus = Theme.label("Zoom to individual frames to draw.", size: 11, color: Theme.muted)
   let crossfadeLoop = NSPopUpButton(), crossfadeMode = NSPopUpButton(), crossfadeCurve = NSPopUpButton()
   let crossfadeFrames = numberField(64, width: 90, label: "Loop crossfade length in frames")
-  let crossfadeInfo = Theme.label("Uses saved loop settings; apply loop changes first.", size: 11, color: Theme.muted)
+  let crossfadeInfo = Theme.label("Uses the saved loop settings; loop edits save automatically.", size: 11, color: Theme.muted)
   let crossfadeStatus = Theme.label("Preview shows audio changes and the resulting loop period.", size: 11, color: Theme.muted)
   var crossfadeBusy = false
   var crossfadePreviewSignature: NSDictionary?, crossfadePreviewRevision: String?
@@ -141,7 +140,7 @@ final class SampleEditor: NSView {
   var pastePreviewSignature: NSDictionary?, pastePreviewRevision: String?, pastePreviewID: String?
   private var previewSignature: NSDictionary?, previewRevision: String?
   var index = 1 {
-    didSet { if index != oldValue { sampleGeneration += 1; loopDraftBaseline=nil;loopDraftRevision=nil;loopPreviewSignature=nil;loopPreviewRevision=nil;savedLoopInfo=[:]; retireWaveform(); waveform.setViewport(nil, notify: false); waveform.selection = nil; previewSignature = nil; previewRevision = nil; resetPastePreview();crossfadePreviewSignature=nil;crossfadePreviewRevision=nil } }
+    didSet { if index != oldValue { sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil;loopDraftRevision=nil;loopPreviewSignature=nil;loopPreviewRevision=nil;savedLoopInfo=[:]; retireWaveform(); waveform.setViewport(nil, notify: false); waveform.selection = nil; previewSignature = nil; previewRevision = nil; resetPastePreview();crossfadePreviewSignature=nil;crossfadePreviewRevision=nil } }
   }
   var onMessage: ((String) -> Void)?
   var onSelect: ((Int) -> Void)?, onImport: (() -> Void)?, onReplace: (() -> Void)?,
@@ -167,6 +166,11 @@ final class SampleEditor: NSView {
     heading.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     name.setAccessibilityLabel("Sample name")
     waveform.fixed(height: 180)
+    waveform.onLoopMarker = { [weak self] marker,frame,finished in
+      guard let self else{return}
+      [self.loopStart,self.loopEnd,self.sustainStart,self.sustainEnd][marker.rawValue].stringValue=String(frame)
+      self.saveLoopsSoon(immediate:finished)
+    }
     for field in [selectionStart, selectionEnd] { field.target = self; field.action = #selector(setRange) }
     channelPicker.addItems(withTitles: ["Both", "Left", "Right"])
     channelPicker.setAccessibilityLabel("Sample channels"); channelPicker.autoenablesItems = false
@@ -358,6 +362,7 @@ final class SampleEditor: NSView {
     volume.integerValue = info["volume"] as? Int ?? 64
     pan.integerValue = info["pan"] as? Int ?? 128
     updateLoopSettings(info, revision: revision)
+    syncLoopMarkers()
     updateCrossfadeInfo(info)
     if let selection = waveform.selection, selection.upperBound > frames {
       waveform.selection = nil
@@ -551,7 +556,7 @@ final class EnvelopeView: NSView {
   required init?(coder: NSCoder) { fatalError() }
 }
 
-final class InstrumentEditor: NSView {
+final class InstrumentEditor: NSView, NSTextFieldDelegate {
   override var acceptsFirstResponder: Bool { true }
   override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); super.mouseDown(with:event) }
 
@@ -677,11 +682,7 @@ final class InstrumentEditor: NSView {
           .horizontal,
           [
             labeled("NODE", nodePicker), labeled("TICK", nodeTick), labeled("VALUE", nodeValue),
-            ActionButton("Apply node") { [weak self] in
-              guard let self else { return }
-              self.envelope.updateNode(
-                tick: self.nodeTick.integerValue, value: self.nodeValue.integerValue)
-            }, ActionButton("Delete node") { [weak self] in self?.envelope.removeSelectedNode() },
+            ActionButton("Delete node") { [weak self] in self?.envelope.removeSelectedNode() },
             NSView(),
           ], spacing: 14),
         env,
@@ -689,7 +690,7 @@ final class InstrumentEditor: NSView {
           .horizontal,
           [
             looping, labeled("LOOP START NODE", loopStart), labeled("LOOP END NODE", loopEnd),
-            NSView(), ActionButton("Apply instrument") { [weak self] in self?.apply() },
+            NSView(),
           ], spacing: 14),
         Theme.label(
           "Drag nodes or use the node fields. Double-click to add; Delete removes the selected node. Note numbers: 0–119.",
@@ -721,6 +722,11 @@ final class InstrumentEditor: NSView {
         "loopEnd": shifted(self.loopEnd.integerValue),
       ])
     }
+    for field in [name, volume, pan, fade, nodeTick, nodeValue, sustainPoint, sustainEnd, loopStart, loopEnd] {
+      field.delegate = self; field.target = self; field.action = #selector(commitControl(_:))
+    }
+    for control in [nna, dct, dna] { control.target = self; control.action = #selector(commitControl(_:)) }
+    for control in [sustain, looping, filter] { control.target = self; control.action = #selector(commitControl(_:)) }
   }
   required init?(coder: NSCoder) { fatalError() }
   @objc func selectInstrument() {
@@ -730,6 +736,28 @@ final class InstrumentEditor: NSView {
   @objc func toggleEnvelopeEnabled() {
     guard envelope.canEdit() else { return }
     onApply?(["envelope": envelopeType.indexOfSelectedItem, "enabled": enabled.state == .on])
+  }
+  func controlTextDidEndEditing(_ notification: Notification) {
+    if let control = notification.object as? NSControl { commitControl(control) }
+  }
+  @objc private func commitControl(_ control: NSControl) {
+    guard envelope.canEdit() else { return }
+    if control === nodeTick || control === nodeValue {
+      guard let tick = Int(nodeTick.stringValue), let value = Int(nodeValue.stringValue) else { updateNodeFields(); return }
+      if let node = envelope.selectedNode, envelope.points.indices.contains(node), envelope.points[node] != [tick, value] {
+        envelope.updateNode(tick: tick, value: value)
+      }
+      return
+    }
+    var values = [String: Any]()
+    for (field, key) in [(name, "name"), (volume, "volume"), (pan, "pan"), (fade, "fadeout"), (sustainPoint, "sustainPoint"), (sustainEnd, "sustainEnd"), (loopStart, "loopStart"), (loopEnd, "loopEnd")] where control === field {
+      if key == "name" { values[key] = field.stringValue }
+      else if let number = Int(field.stringValue) { values[key] = number }
+    }
+    for (popup, key) in [(nna, "nna"), (dct, "dct"), (dna, "dna")] where control === popup { values[key] = popup.indexOfSelectedItem }
+    for (button, key) in [(sustain, "sustain"), (looping, "loop"), (filter, "filter")] where control === button { values[key] = button.state == .on }
+    guard !values.isEmpty else { return }
+    values["envelope"] = envelopeType.indexOfSelectedItem; onApply?(values)
   }
   func update(_ info: [AnyHashable: Any], model: PatternModel) {
     let restoreDraft = settingsDraft.begin(index: index); defer { restoreDraft() }

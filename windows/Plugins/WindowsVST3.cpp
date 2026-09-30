@@ -561,24 +561,19 @@ struct NativeBackend::Impl {
     }catch(...){if(self)self->fail(Failure::EditorException);return 0;}
     return DefWindowProcW(hwnd,msg,w,l);
   }
-  // An instance with an editor window is never rendered, so nothing else
-  // consumes its audible edit queue between state captures. Deliver it from the
-  // editor timer (owner thread) so a long gesture cannot overflow the queue.
-  // The back-pointer is cleared by ~NativeBackend before an Impl is leaked.
-  // drainingEdits is raised BEFORE the pointer is read and the destructor
-  // clears the pointer BEFORE it reads the flag, so either this call sees
-  // null or the destructor waits for it to finish.
-  std::atomic<NativeBackend *> backend{nullptr};
-  std::atomic<bool> drainingEdits{false};
+  // Editor-only processing owns Impl directly. If shutdown must retain this
+  // state because its apartment is unavailable, a timer already in progress
+  // cannot call back through the destroyed NativeBackend facade.
+  bool process(float *,uint32_t,uint64_t,const float *const *,uint32_t,const PluginTransport &) noexcept;
+  bool drainingEdits=false; // UI owner only; guards vendor reentrancy.
   void drainEditorEdits() noexcept {
-    if(!window||failed.load(std::memory_order_acquire))return;
-    if(drainingEdits.exchange(true))return;
-    if(auto *owner=backend.load())
-      for(int n=0;n<64&&(changes->count||audioRead.load()!=audioWrite.load());++n){
-        std::array<float,2> empty{};
-        if(!owner->process(empty.data(),0,0,nullptr,0,transport))break;
-      }
-    drainingEdits.store(false);
+    if(!window||failed.load(std::memory_order_acquire)||drainingEdits)return;
+    drainingEdits=true;
+    for(int n=0;n<64&&(changes->count||audioRead.load()!=audioWrite.load());++n){
+      std::array<float,2> empty{};
+      if(!process(empty.data(),0,0,nullptr,0,transport))break;
+    }
+    drainingEdits=false;
   }
   void syncController(){
     if(!controller||failed)return;
@@ -782,7 +777,7 @@ struct NativeBackend::Impl {
 };
 NativeBackend::NativeBackend(const PluginState &s, double rate, bool offline,const std::string &hash) {
   pluginMainCall([&] {
-    impl_ = std::make_unique<Impl>();impl_->hash=hash;impl_->backend.store(this);
+    impl_ = std::make_unique<Impl>();impl_->hash=hash;
     try {
       impl_->create(s, rate, offline);
     } catch (...) {
@@ -802,12 +797,9 @@ NativeBackend::~NativeBackend() {
     catch (...) { break; }
   }
   if (!impl_) return;
-  // The leaked Impl may still own an editor window whose timer runs on the
-  // owner thread. Detach it from this object first, wait for a drain that is
-  // already inside process(), and stop the timer where the system allows it.
-  impl_->backend.store(nullptr);
-  for (int wait = 0; wait < 200 && impl_->drainingEdits.load(); ++wait) Sleep(5);
-  if (impl_->window) KillTimer(impl_->window, 1); // Best effort from a foreign thread.
+  // No new editor drains are accepted. An in-flight drain only references
+  // this intentionally retained Impl and can finish safely on its owner.
+  impl_->failed.store(true,std::memory_order_release);
   (void)impl_.release();
 }
 PluginFailure NativeBackend::failure() const noexcept {
@@ -879,7 +871,10 @@ bool NativeBackend::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
   if(s.events->addEvent(e)!=kResultOk)return s.fail(Impl::Failure::InputEventCapacity,a);return true;
 }
 bool NativeBackend::process(float *buffer, uint32_t frames, uint64_t position, const float *const *inputs, uint32_t offset,const PluginTransport &time) noexcept {
-  auto &s = *impl_;
+  return impl_->process(buffer,frames,position,inputs,offset,time);
+}
+bool NativeBackend::Impl::process(float *buffer, uint32_t frames, uint64_t position, const float *const *inputs, uint32_t offset,const PluginTransport &time) noexcept {
+  auto &s = *this;
   s.transport=time;
   bool success=false;
   struct Finish{Impl &s;float *buffer;uint32_t frames;bool &success;~Finish(){

@@ -1,0 +1,25 @@
+{
+  "build": "0a188e60cf5453d7c4567bb38f78753e5950cac387d4d6e82240706711e3856f",
+  "interaction": "Double-clicked the first value cell, typed -25, pressed Return. The second point remained unchanged.",
+  "result": {
+    "changed": false,
+    "data": {
+      "offset": 0,
+      "points": [
+        {
+          "frame": 48000,
+          "value": -25
+        },
+        {
+          "frame": 96000,
+          "value": 40
+        }
+      ],
+      "sampleRate": 48000,
+      "total": 2
+    },
+    "documentId": "42D26A4F-7533-419E-B0E0-5CCBB808E757",
+    "playbackStopped": false,
+    "revision": "42D26A4F-7533-419E-B0E0-5CCBB808E757:0:1:0"
+  }
+}

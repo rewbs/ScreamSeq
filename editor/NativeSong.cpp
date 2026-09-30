@@ -15,6 +15,14 @@ NativeEntity NativeSong::makeEntity() {
   if (!nextID || nextID >= maximumID) throw std::runtime_error("Native song identity limit reached");
   return {nextID++, {}, {}, 0};
 }
+void NativeSong::ensureMixer() {
+  if (mixer.active()) return;
+  const auto master = makeEntity().id;
+  for (const auto &[channel, track] : tracks)
+    mixer.buses.push_back({track.id, master, MixerBusKind::Track,
+      track.name.empty() ? "Track " + std::to_string(channel + 1) : track.name, track.color});
+  mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
+}
 void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
   auto sync = [&](auto &items, int begin, int end, auto valid) {
     for (auto i = items.begin(); i != items.end();) {
@@ -217,15 +225,16 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   for(const auto &command:performance.commands){
     const auto columns=performance.columns.find(command.track);
     const bool parameter=command.kind==PatternCommandKind::ParameterSet||command.kind==PatternCommandKind::ParameterSlide;
-    const bool slide=command.kind==PatternCommandKind::ParameterSlide||command.kind==PatternCommandKind::PitchSlide;
+    const bool nudge=isNudge(command.kind);
+    const bool slide=command.kind==PatternCommandKind::ParameterSlide||command.kind==PatternCommandKind::PitchSlide||nudge;
     const bool cut=command.kind==PatternCommandKind::NoteCut;
     const bool tracker=command.kind==PatternCommandKind::TrackerEffect;
     if(!parameter&&!cut&&!tracker)pitchTracks.insert(command.track);
-    if(uint8_t(command.kind)>uint8_t(PatternCommandKind::TrackerEffect)||command.column>=(columns==performance.columns.end()?1:columns->second)||
+    if(uint8_t(command.kind)>uint8_t(PatternCommandKind::NudgeReverse)||command.column>=(columns==performance.columns.end()?1:columns->second)||
        !cells.emplace(command.pattern,command.track,command.position/performanceUnitsPerRow,command.column).second||
        !std::isfinite(command.value)||(parameter?(command.value<0||command.value>1||!performance.bindings.contains(command.binding)):
        (command.value< -96||command.value>96||command.binding!=0))||(slide?!command.duration:command.duration!=0)||
-       command.pitchRange<1||command.pitchRange>96||((parameter||cut)&&command.pitchRange!=2)||
+       command.pitchRange<1||command.pitchRange>96||((parameter||cut||nudge)&&command.pitchRange!=2)||(nudge&&(command.value<0||command.value>1))||
        ((cut||tracker)&&(command.value!=0||command.binding!=0)) ||
        (tracker && (!command.column || command.position%performanceUnitsPerRow || command.effect>=OpenMPT::MAX_EFFECTS || !s.GetModSpecifications().HasCommand(OpenMPT::EffectCommand(command.effect)))) ||
        (!tracker && (command.effect||command.parameter)))
@@ -249,8 +258,9 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   for(const auto &[index,pattern]:patterns)graphPatterns[pattern.id]=s.Patterns[index].GetNumRows();
   std::vector<uint64_t> graphInstruments;for(const auto &[index,instrument]:instruments)graphInstruments.push_back(instrument.id);
   signal.validate(graphTargets,graphPatterns,graphInstruments);
+  for(const auto &group:signal.groups)check({group.id,{},{},0});
   signalRoutingGraph(mixer,signal).validate(trackIDs);
-  for(const auto &definition:signal.library){check({definition.id,{},{},0});for(const auto &node:definition.nodes)check({node.id,{},{},0});}
+  for(const auto &definition:signal.library){check({definition.id,{},{},0});for(const auto &node:definition.nodes)check({node.id,{},{},0});for(const auto &group:definition.groups)check({group.id,{},{},0});}
   for(const auto &e:envelopeBank)check({e.id,e.name,{},0});
   validateEnvelopeBank(*this,s);
   if (bytes() > 16 * 1024 * 1024) throw std::invalid_argument("Native song metadata exceeds 16 MB");

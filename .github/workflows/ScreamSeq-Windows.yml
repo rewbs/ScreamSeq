@@ -1,0 +1,40 @@
+name: ScreamSeq Windows
+
+on:
+  push:
+    branches: [codex/screamseq, codex/windows-native]
+  pull_request:
+    branches: [codex/screamseq]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screamseq-windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-app:
+    name: Native app (Windows x64)
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Build native application and run portable and worker tests
+        shell: pwsh
+        run: |
+          ./windows/build.ps1 -Architecture x64 -BuildDirectory bin/windows-ci -Jobs 2 -Test *>&1 | Tee-Object screamseq-windows.log
+      - name: Preserve qualification logs
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: screamseq-windows-logs
+          path: |
+            screamseq-windows.log
+            bin/windows-ci/Testing/Temporary/*.log
+            bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: warn
+          retention-days: 14

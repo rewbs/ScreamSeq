@@ -103,6 +103,54 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
       tracker_audit_begin();graph.begin(clock,count,pos,{120,double(pos)/24000,0,4,true},1);const bool okay=graph.process(0,output.data()+pos*2,count,pos,{});uint64_t a,f,l;tracker_audit_end(&a,&f,&l);check(okay&&a+f+l==0,"Graph automation failed realtime audit");pos+=count;}
     for(uint32_t i=0;i<256;++i)check(std::abs(output[i*2]-automationValue(motion.nodes.back().envelopes[0].points,i,256,4))<2e-6,"Hosted graph automation onset, curve or step timing incorrect");
   }
+  // Baselines are independent of opaque preset serialization and reach all
+  // channel/role copies in one boundary, including currently inactive copies.
+  auto baseGain=definition(300,plugins[0],false);baseGain.nodes[1].plugin.parameters[7]=.3;
+  NativeSong controls;controls.patterns[0].id=3;controls.tracks[0].id=1;
+  controls.mixer.buses={{1,2,MixerBusKind::Track,"A"},{4,2,MixerBusKind::Track,"B"},{2,0,MixerBusKind::Master,"Master"}};
+  controls.signal.library={baseGain};controls.signal.assignments={{1,300,1,1},{4,300,1,1}};
+  controls.signal.commands={{3,1,300,65536,0,SignalCommandKind::Start,1,1}};
+  for(uint32_t block:{1u,17u,128u,256u}){
+    NativeSignalGraph graph(controls,48000,true);auto changed=controls;
+    changed.signal.library[0].nodes[1].plugin.parameters[7]=.7;
+    check(sameSignalParameterLayout(controls.signal,changed.signal)&&!sameSignalProcessing(controls.signal,changed.signal),"Live control classification preserves musical-change detection");
+    GraphControlPlan prepared;graph.prepareParameters(changed.signal,prepared);
+    check(std::count_if(prepared.updates.begin(),prepared.updates.end(),[](const auto &v){return v.plugin&&v.node==302&&v.parameter==7;})==3,"Baseline edit covers ordinary copies and inactive persistent copy");
+    FixturePlayState clock;clock.m_nMusicSpeed=1;clock.m_nSamplesPerTick=256;clock.m_nTickCount=0;clock.m_nPattern=0;clock.m_nCurrentOrder=0;
+    for(uint32_t pos=0;pos<512;){const auto count=std::min({block,256-pos%256,512-pos});clock.m_nRow=pos/256;clock.m_nBufferCount=256-pos%256;
+      std::array<float,512> a,b;a.fill(1);b.fill(1);
+      tracker_audit_begin();
+      if(pos==256)for(const auto &v:prepared.updates){if(v.runtime)v.runtime->parameterBase(v.node,v.parameter,v.value);else check(v.plugin->appliedParameter(v.parameter,v.value,pos,{}),"Live baseline was rejected");}
+      graph.begin(clock,count,pos,{120,double(pos)/24000,0,4,true});const bool okay=graph.process(0,a.data(),count,pos,{})&&graph.process(1,b.data(),count,pos,{});
+      uint64_t allocations,frees,locks;tracker_audit_end(&allocations,&frees,&locks);
+      check(okay&&allocations+frees+locks==0,"Live baseline applies and renders with no realtime allocation/free/lock");
+      for(uint32_t i=0;i<count*2;++i)check(std::abs(a[i]-(pos<256?.3:.49))<2e-6&&std::abs(b[i]-(pos<256?.3:.7))<2e-6,"Parameter edit misses a copy, leaks between roles or lands inside a block");pos+=count;
+    }
+    auto invalid=changed;invalid.signal.library[0].nodes[1].plugin.parameters[7]=2;bool rejected=false;try{GraphControlPlan p;graph.prepareParameters(invalid.signal,p);}catch(const std::invalid_argument &){rejected=true;}check(rejected,"Invalid live value must be rejected before publication");
+  }
+  // A base edit under active modulation changes the sum, not just a value
+  // immediately overwritten by the next modulation quantum.
+  auto modulated=gain;modulated.modulation[0].minimum=modulated.modulation[0].maximum=0;modulated.modulation[0].base=.2;
+  controls.signal.library={modulated};controls.signal.assignments={{1,100,1,1}};controls.signal.commands.clear();
+  NativeSignalGraph modulation(controls,48000,true);auto changed=controls;changed.signal.library[0].nodes[1].plugin.parameters[7]=.65;changed.signal.library[0].modulation[0].base=.65;
+  GraphControlPlan modulationPlan;modulation.prepareParameters(changed.signal,modulationPlan);
+  for(const auto &v:modulationPlan.updates){if(v.runtime)v.runtime->parameterBase(v.node,v.parameter,v.value);else check(v.plugin->appliedParameter(v.parameter,v.value,0,{}),"Modulated baseline application failed");}
+  state.m_nRow=0;state.m_nBufferCount=256;std::array<float,256> modulatedAudio;modulatedAudio.fill(1);modulation.begin(state,128,0,{120,0,0,4,true});check(modulation.process(0,modulatedAudio.data(),128,0,{}),"Modulated baseline processing failed");
+  for(auto v:modulatedAudio)check(std::abs(v-.65)<2e-6,"Modulation overwrote the edited baseline");
+  // Replace an envelope and cable gain while retaining running processor
+  // instances. Compiled scripts and their owners must survive later rendering.
+  controls.signal.library={motion};controls.signal.assignments={{1,100,1,1}};
+  NativeSignalGraph liveCurve(controls,48000,true);auto curveNext=controls;
+  curveNext.signal.library[0].nodes.back().envelopes[0].points={{0,.6,AutomationCurve::Scripted,CurveFormula("start + t * 0.1")}};
+  curveNext.signal.library[0].audio[0].gain=.5;
+  check(sameSignalControlLayout(controls.signal,curveNext.signal)&&!sameSignalParameterLayout(controls.signal,curveNext.signal),"Envelope and cable controls are recognized separately from plugin baselines");
+  GraphControlPlan curvePlan;liveCurve.prepareParameters(curveNext.signal,curvePlan);
+  for(const auto &[runtime,control]:curvePlan.runtimes)runtime->controls(*control);
+  for(const auto &v:curvePlan.updates){if(v.runtime)v.runtime->parameterBase(v.node,v.parameter,v.value);else v.plugin->appliedParameter(v.parameter,v.value,0,{});}
+  state.m_nRow=0;state.m_nBufferCount=256;state.m_nCurrentRowsPerBeat=4;std::array<float,512> curveAudio;curveAudio.fill(1);
+  tracker_audit_begin();liveCurve.begin(state,256,0,{120,0,0,4,true},1);const auto curveOkay=liveCurve.process(0,curveAudio.data(),256,0,{});uint64_t ca,cf,cl;tracker_audit_end(&ca,&cf,&cl);
+  check(curveOkay&&ca+cf+cl==0,"Updated scripted curve renders without realtime allocation/free/lock");
+  for(uint32_t f=0;f<256;++f)check(std::abs(curveAudio[f*2]-.5*automationValue(curveNext.signal.library[0].nodes.back().envelopes[0].points,f,256,4))<2e-6,"Edited scripted curve or cable gain did not take effect immediately");
   dlclose(bundle);
   std::cout<<"PASS hosted graph audio: row→persistent→ordinary ordering, half-row switching, update-in-place, expiry/stop/clear, independent target copies, bit-exact block partitions, delayed wet/dry cut and tails, inactive transport continuity, and zero realtime allocations/frees/locks\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}

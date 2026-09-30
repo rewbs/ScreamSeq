@@ -88,6 +88,7 @@ struct ModChannel
 	const ModSample *pModSample;  // Currently assigned sample slot (may already be stopped)
 #ifdef OPENMPT_EDITOR_CORE
 	NativeReverseLoopState nativeReverseLoop;
+	bool nativeNudgeInterpolating = false; // Retain fractional resampling after a record push.
 	uint64 nativeNoteGeneration = 0; // Accepted onsets for native modulation envelopes.
 	bool HasNativeReverseLoop() const noexcept;
 	void ExitNativeReverseLoop() noexcept;

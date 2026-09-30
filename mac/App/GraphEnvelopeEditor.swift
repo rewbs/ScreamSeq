@@ -9,8 +9,9 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
   let curves=["step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse","scripted"]
   var onRequest:((String,[String:Any],@escaping ([String:Any])->Void)->Void)?,onChanged:(()->Void)?
   private(set) var graph:String?,node:String?,patternIndex=0,revision="",hasDraft=false,loading=false
-  private var patterns=[[String:Any]](),rowsPerBeat=4,generation=0,previewGeneration=0
+  private var patterns=[[String:Any]](),rowsPerBeat=4,generation=0,previewGeneration=0,documentGeneration=0
   private var previewWork:DispatchWorkItem?
+  private var saveWork:DispatchWorkItem?,pointFieldsDirty=false
   var bankWindow:EnvelopeBankWindow?
   var formulaBox:NSStackView!,formulaWorkbench:FormulaWorkbench?
   override init(frame:NSRect){
@@ -22,11 +23,14 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     enabled.state = .on;enabled.target=self;enabled.action = #selector(markDraft)
     row.fixed(width:65);value.fixed(width:60);row.setAccessibilityLabel("Graph automation point row");value.setAccessibilityLabel("Graph automation point percent")
     formula.setAccessibilityLabel("Graph automation formula");formula.delegate=self;row.delegate=self;value.delegate=self
+    for field in [row,value]{field.target=self;field.action=#selector(commitPointField);field.toolTip="Commits on Return or leaving the field"}
     formula.font = .monospacedSystemFont(ofSize:11,weight:.regular);formula.isHidden=true
     canvas.onEdit = {[weak self] in self?.markDraft()};canvas.onSelect = {[weak self] in self?.showPoint()};canvas.onViewport = {[weak self] in self?.preview()}
+    canvas.onEditFinished = {[weak self] in self?.apply()}
     canvas.setAccessibilityLabel("Subgraph pattern automation curve");canvas.heightAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
     let controls=stack(.horizontal,[heading,pattern,curve,snap,enabled,NSView(),ActionButton("−"){[weak self] in self?.canvas.zoom(0.5)},ActionButton("+"){[weak self] in self?.canvas.zoom(2)},ActionButton("Fit"){[weak self] in self?.canvas.fit()}],spacing:4)
-    let footer=stack(.horizontal,[ActionButton("Bank…"){[weak self] in self?.showBank()},Theme.label("Row",size:11),row,Theme.label("%",size:11),value,ActionButton("Set point"){[weak self] in self?.setPoint()},ActionButton("Delete"){[weak self] in self?.canvas.removeSelected()},ActionButton("Ramp"){[weak self] in self?.ramp()},NSView(),ActionButton("Reload / discard"){[weak self] in self?.load()},ActionButton("Apply"){[weak self] in self?.apply()}],spacing:4)
+    let more=ActionMenuButton{[weak self] in let menu=NSMenu();menu.addItem(ContextAction("Delete selected point",key:"\u{7f}"){self?.canvas.removeSelected()});menu.addItem(ContextAction("Create rising ramp"){self?.ramp()});menu.addItem(ContextAction("Retry saving changes"){self?.apply()});menu.addItem(ContextAction("Reload / discard pending changes"){self?.load()});return menu}
+    let footer=stack(.horizontal,[ActionButton("Bank…"){[weak self] in self?.showBank()},Theme.label("Row",size:11),row,Theme.label("%",size:11),value,NSView(),more],spacing:4)
     formulaBox=stack(.horizontal,[formula,ActionButton("Expand…"){[weak self] in self?.expandFormula()},ActionButton("Reference"){[weak self] in FormulaWorkbench.showReference(self?.onRequest)}],spacing:4)
     formula.setContentHuggingPriority(.defaultLow,for:.horizontal);formulaBox.isHidden=true
     let body=stack(.vertical,[controls,formulaBox!,canvas,footer,status],spacing:4);body.stretchAcrossAxis();body.fill(self,inset:6)
@@ -34,6 +38,12 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     heading.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
   }
   required init?(coder:NSCoder){fatalError()}
+  func resetDocument() {
+    documentGeneration+=1;generation+=1;previewGeneration+=1;previewWork?.cancel();saveWork?.cancel();saveWork=nil;pointFieldsDirty=false
+    graph=nil;node=nil;revision="";hasDraft=false;loading=false
+    canvas.points=[];canvas.selected=nil;isHidden=true
+    bankWindow?.close();formulaWorkbench?.close()
+  }
   func context(graph:String?,node:[String:Any]?,patterns:[[String:Any]],revision:String){
     guard !hasDraft,!loading else{return}
     let id=node?["kind"] as? String=="automation" ? node?["id"] as? String : nil
@@ -47,38 +57,47 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     if changed || self.revision != revision{load()}
   }
   @objc func changePattern(){
-    guard !hasDraft,!loading else{if let i=patterns.firstIndex(where:{$0["index"] as? Int==patternIndex}){pattern.selectItem(at:i)};status.stringValue="Apply or discard this curve before changing pattern.";return}
+    guard !hasDraft,!loading else{if let i=patterns.firstIndex(where:{$0["index"] as? Int==patternIndex}){pattern.selectItem(at:i)};status.stringValue="Finish the pending edit before changing pattern; Retry or discard is in More.";return}
     patternIndex=pattern.selectedItem?.representedObject as? Int ?? 0;canvas.fit();load()
   }
   func load(){
     guard !loading,let graph,let node,let onRequest else{return}
-    loading=true;generation+=1;previewGeneration+=1;let token=generation
+    saveWork?.cancel();saveWork=nil;pointFieldsDirty=false
+    loading=true;generation+=1;previewGeneration+=1;let token=generation,document=documentGeneration
     onRequest("graph.automation.get",["graph":graph,"node":node,"pattern":patternIndex]){[weak self] response in
-      guard let self else{return};self.loading=false
+      guard let self,self.graph==graph,self.node==node,self.documentGeneration==document else{return};self.loading=false
       guard let result=response["result"] as? [String:Any],let data=result["data"] as? [String:Any]else{self.error(response);return}
       guard token==self.generation else{self.status.stringValue="The draft changed while loading. Reload to discard it.";return}
       self.revision=result["revision"] as? String ?? "";self.hasDraft=false
       self.canvas.rows=data["rows"] as? Int ?? 64;self.rowsPerBeat=data["rowsPerBeat"] as? Int ?? 4
       self.enabled.state=data["enabled"] as? Bool==false ? .off : .on
       self.canvas.points=(data["points"] as? [[String:Any]] ?? []).map{EnvelopePoint(position:$0["position"] as? Int ?? 0,value:$0["value"] as? Double ?? 0,curve:$0["curve"] as? String ?? "linear",formula:$0["formula"] as? String ?? "")}
-      self.canvas.selected=nil;self.showPoint();self.preview();self.status.stringValue="Pattern \(self.patternIndex) · drag points, then Apply. An absent curve outputs zero."
+      self.canvas.selected=nil;self.showPoint();self.preview();self.status.stringValue="Pattern \(self.patternIndex) · changes save automatically. An absent curve outputs zero."
     }
   }
-  @objc func markDraft(){hasDraft=true;generation+=1;status.stringValue="Draft for pattern \(patternIndex) · Apply saves one Undo step.";preview()}
+  @objc func markDraft(){hasDraft=true;generation+=1;status.stringValue=canvas.isDragging ? "Release to save this gesture · Undo restores it":"Saving changes…";preview();saveSoon()}
+  private func saveSoon(){
+    saveWork?.cancel();saveWork=nil
+    guard !canvas.isDragging,!pointFieldsDirty,!loading else{return}
+    let document=documentGeneration,token=generation
+    let work=DispatchWorkItem{[weak self] in guard let self,self.documentGeneration==document,self.generation==token else{return};self.saveWork=nil;self.apply()}
+    saveWork=work;DispatchQueue.main.asyncAfter(deadline:.now()+0.12,execute:work)
+  }
   @objc func changeSnap(){canvas.snap=[256,128,64,1][max(0,snap.indexOfSelectedItem)]}
   @objc func changeCurve(){canvas.curve=curves[max(0,curve.indexOfSelectedItem)];if let i=canvas.selected,canvas.points.indices.contains(i){let p=canvas.points[i];canvas.replaceSelected(position:p.position,value:p.value,curve:canvas.curve)}}
   func showPoint(){
+    let hasPoint=canvas.selected.map{canvas.points.indices.contains($0)} ?? false
+    row.isEnabled=hasPoint;value.isEnabled=hasPoint
     guard let i=canvas.selected,canvas.points.indices.contains(i)else{formula.isHidden=true;formulaBox.isHidden=true;return}
     let p=canvas.points[i];row.stringValue=String(format:"%.8g",Double(p.position)/256);value.stringValue=String(format:"%.6g",p.value*100)
     curve.selectItem(at:curves.firstIndex(of:p.curve) ?? 1);canvas.curve=p.curve;formula.isHidden=p.curve != "scripted";formula.stringValue=p.formula
     formulaBox.isHidden=formula.isHidden;if p.curve=="scripted"{FormulaCatalog.load(onRequest)}
   }
   func controlTextDidChange(_ notification:Notification){
-    // Row and Value are entry fields for "Set point": typing there changes no
-    // point, so it must not create a draft that blocks retargeting.
-    guard notification.object as? NSTextField === formula,let i=canvas.selected,canvas.points.indices.contains(i),canvas.points[i].formula != formula.stringValue else{return}
-    canvas.points[i].formula=formula.stringValue;FormulaCatalog.suggest(formula.currentEditor() as? NSTextView);markDraft()
+    if notification.object as? NSTextField === formula,let i=canvas.selected,canvas.points.indices.contains(i){canvas.points[i].formula=formula.stringValue;FormulaCatalog.suggest(formula.currentEditor() as? NSTextView)}else{pointFieldsDirty=true};markDraft()
   }
+  func controlTextDidEndEditing(_ notification:Notification){if notification.object as? NSTextField === row || notification.object as? NSTextField === value{commitPointField()}}
+  @objc private func commitPointField(){guard pointFieldsDirty else{return};setPoint()}
   func control(_ control:NSControl,textView:NSTextView,completions words:[String],forPartialWordRange range:NSRange,indexOfSelectedItem index:UnsafeMutablePointer<Int>)->[String]{
     guard control === formula else{return words};index.pointee = -1;return FormulaCatalog.completions(textView.string,range:range)
   }
@@ -101,18 +120,32 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
   }
   func setPoint(){
     guard let r=Double(row.stringValue),let v=Double(value.stringValue),r.isFinite,v.isFinite,r>=0,r<Double(canvas.rows),v>=0,v<=100 else{status.stringValue="Use a row inside the pattern and 0–100%.";return}
-    canvas.replaceSelected(position:Int((r*256).rounded()),value:v/100,curve:curves[max(0,curve.indexOfSelectedItem)])
+    guard let selected=canvas.selected,canvas.points.indices.contains(selected) else{return}
+    let position=min(canvas.rows*256-1,Int((r*256).rounded()))
+    guard !canvas.points.enumerated().contains(where:{$0.offset != selected && $0.element.position==position})else{status.stringValue="Another point already occupies that row position.";return}
+    pointFieldsDirty=false
+    canvas.replaceSelected(position:position,value:v/100,curve:curves[max(0,curve.indexOfSelectedItem)])
   }
-  func ramp(){canvas.points=[EnvelopePoint(position:0,value:0,curve:"linear"),EnvelopePoint(position:canvas.rows*256-1,value:1,curve:"linear")];canvas.selected=0;showPoint();markDraft()}
+  func ramp(){pointFieldsDirty=false;canvas.points=[EnvelopePoint(position:0,value:0,curve:"linear"),EnvelopePoint(position:canvas.rows*256-1,value:1,curve:"linear")];canvas.selected=0;showPoint();markDraft()}
   func apply(){
-    guard !loading,hasDraft,let graph,let node,let onRequest else{return}
-    loading=true;let token=generation
-    onRequest("graph.automation.set",["expectedRevision":revision,"graph":graph,"node":node,"pattern":patternIndex,"enabled":enabled.state == .on,"points":canvas.points.map(\.dictionary)]){[weak self] response in
-      guard let self else{return};self.loading=false
+    guard !loading,hasDraft,!pointFieldsDirty,!canvas.isDragging,let graph,let node,onRequest != nil else{return}
+    saveWork?.cancel();saveWork=nil
+    loading=true;let token=generation,document=documentGeneration
+    send(["expectedRevision":revision,"graph":graph,"node":node,"pattern":patternIndex,"enabled":enabled.state == .on,"points":canvas.points.map(\.dictionary)],document:document){[weak self] response in
+      guard let self,self.graph==graph,self.node==node,self.documentGeneration==document else{return};self.loading=false
       guard let result=response["result"] as? [String:Any]else{self.error(response);return}
       self.revision=result["revision"] as? String ?? self.revision
-      if self.generation==token{self.hasDraft=false;self.status.stringValue="Curve saved · playback uses this curve on the next start.";self.onChanged?()}
-      else{self.status.stringValue="Earlier draft saved; newer edits are still pending."}
+      if self.generation==token{self.hasDraft=false;self.status.stringValue="Saved · playback uses the current curve.";self.onChanged?()}
+      else{self.status.stringValue="Saving newer changes…";self.saveSoon()}
+    }
+  }
+  private func send(_ params:[String:Any],document:Int,attempt:Int=0,completion:@escaping ([String:Any])->Void){
+    guard document==documentGeneration,let onRequest else{return}
+    onRequest("graph.automation.set",params){[weak self] response in
+      guard let self,self.documentGeneration==document else{return}
+      if (response["error"] as? [String:Any])?["code"] as? Int == -32002,attempt<5 {
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.05*Double(attempt+1)){[weak self] in self?.send(params,document:document,attempt:attempt+1,completion:completion)}
+      }else{completion(response)}
     }
   }
   private func error(_ response:[String:Any]){status.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Curve operation failed"}

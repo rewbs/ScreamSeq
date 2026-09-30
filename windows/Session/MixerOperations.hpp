@@ -11,6 +11,7 @@ struct PlaybackFeedback {
 };
 // Application callbacks execute on its UI owner, never the audio callback.
 struct PlaybackHooks {
+  std::function<void(size_t,bool)> pluginBypass;
   std::function<PlaybackFeedback()> feedback;
   std::function<bool(const std::vector<Tracker::MixerControls> &)> controls;
 };

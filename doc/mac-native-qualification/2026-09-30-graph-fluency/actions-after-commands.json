@@ -1,0 +1,53 @@
+{
+  "bundle": "ScreamSeq Graph Commands Cold.app",
+  "pid": 80223,
+  "supplementalJourneys": [
+    {
+      "name": "Cold graph bypass target search then cancel",
+      "start": "Fresh application, pattern focused, graph never opened",
+      "actions": [
+        "Command-K",
+        "Type graph bypass",
+        "Return",
+        "Type distortion",
+        "Escape"
+      ],
+      "steps": 5,
+      "manualPanelSwitches": 0,
+      "redundantConfirms": 0,
+      "revisionAfter": "0:0:0",
+      "result": "Search focused, filtered target visible, Escape returned focus to pattern, no song change"
+    },
+    {
+      "name": "Configured graph bypass during playback and Undo",
+      "start": "Pattern focused; picker retained Distortion from prior canceled search; BlackHole 2ch 48 kHz / 512, looping",
+      "actions": [
+        "Command-Control-Option-B",
+        "Return chooses Distortion",
+        "Command-Z"
+      ],
+      "steps": 3,
+      "manualPanelSwitches": 0,
+      "redundantConfirms": 0,
+      "result": "Revision advanced twice, bypass restored false, continuous callbacks 789 to 2796, zero observed overruns/faults"
+    },
+    {
+      "name": "LFO group bridge then cancel",
+      "actions": [
+        "Command-K",
+        "Type graph lfo",
+        "Return",
+        "Escape"
+      ],
+      "steps": 4,
+      "manualPanelSwitches": 0,
+      "redundantConfirms": 0,
+      "result": "Existing shared group and New processing group offered with search focus; cancel retained revision and pattern focus"
+    }
+  ],
+  "limitations": [
+    "These supplemental checks do not replace the ten fixed journey measurements.",
+    "The fixture has 16 channels but only four audible demo channels.",
+    "No 60 fps presentation qualification is claimed from the HUD."
+  ]
+}

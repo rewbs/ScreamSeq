@@ -16,7 +16,7 @@ private final class PatternRulerAccessibility: NSAccessibilityElement {
   weak var owner:PatternView?
   override func accessibilityPerformPress()->Bool {owner?.cyclePositionMode();return owner != nil}
 }
-final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
+final class PatternView: MTKView, MTKViewDelegate {
   var model = PatternModel([:]) {
     didSet {
       if oldValue.revisionToken != model.revisionToken { clearEffectPrefix() }
@@ -57,7 +57,10 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
       }
     }
   }
-  var cursorRow = 0, cursorChannel = 0, column = 0, octave = 4, instrument = 1, step = 1
+  var cursorRow = 0, cursorChannel = 0, column = 0, step = 1
+  var octave = 4 { didSet { if octave != oldValue { onInputChanged?() } } }
+  var instrument = 1 { didSet { if instrument != oldValue { onInputChanged?() } } }
+  var onInputChanged:(()->Void)?
   var firstRow = 0, firstChannel = 0, playRow = -1, playPattern = -1
   var isFollowing = true { didSet { if oldValue != isFollowing { onFollowChanged?(isFollowing) } } }
   var onFollowChanged: ((Bool) -> Void)?
@@ -66,7 +69,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
   }
   var contextToken: String {
     let region = automationSelection
-    return navigation.token + ":" + ["startRow","endRow","startChannel","endChannel"].map { String(region[$0] ?? 0) }.joined(separator: ":")
+    return navigation.token + ":" + ["startRow","endRow","startChannel","endChannel"].map { String(region[$0] ?? 0) }.joined(separator: ":") + ":\(instrument):\(octave):\(step)"
   }
   func navigate(_ state: EditorNavigation, clearSelection: Bool) {
     if clearSelection { selectionStart = nil; selectionEnd = nil }
@@ -88,6 +91,8 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
   var onPreciseNotes: (() -> Void)?
   var onClearPreciseNotes: ((Int,Int)->Void)?
   var onNativeEffect: (() -> Void)?
+  var nudgeEditor: PatternNudgeEditor?
+  var onNudgeRequest: (([String:Any], @escaping ([String:Any])->Void)->Void)?
   var onTrackerEffect: ((Int,Int,Int,Int,Int)->Void)?
   // Preserve rapid typing while an FX transaction refreshes the displayed model,
   // or while an editable document is briefly busy (read-only request, recovery
@@ -140,7 +145,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     if !effectPrefix.isEmpty {
       if let entry=entries.first(where:{$0.displayCode==effectPrefix+key}) {
         clearEffectPrefix()
-        if let kind=entry.nativeKind {onTypedNativeEffect?(kind)}
+        if let kind=entry.nativeKind {if !beginNudgeEdit(kind:kind) {onTypedNativeEffect?(kind)}}
         else {let old=model.nativeCommand(cursorRow,cursorChannel,effectColumn);onTrackerEffect?(cursorRow,cursorChannel,effectColumn,entry.command,((old?.kind=="tracker" ? old!.parameter : 0) & ~entry.mask) | entry.value);column += 1;revealCursor()}
         return true
       }
@@ -168,21 +173,19 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
   var onTransport: (() -> Void)?
   var onCursor: (() -> Void)?
   var onUndo: (() -> Void)?, onRedo: (() -> Void)?
-  var onAudition: ((Int, Bool) -> Void)?
-  private var heldKeys = [UInt16: Int]()
+  var onAudition: ((Int, Int, Int, Bool) -> Void)?
+  private var heldKeys = [UInt16: (note:Int,instrument:Int,channel:Int)]()
   var onMute: ((Int) -> Void)?
   var muted = Set<Int>()
   var headerHeight: Float { model.noteTracks.isEmpty ? 36 : 58 }
-  private var metalDisplayLink: CAMetalDisplayLink?
+  private var metalPresenter: PatternMetalPresenter?
   var renderingPaused = false {
-    didSet { metalDisplayLink?.isPaused = renderingPaused }
+    didSet { metalPresenter?.setPaused(renderingPaused) }
   }
-  private let renderWorker = DispatchQueue(label: "org.resonance.metal", qos: .userInteractive)
   private var commandQueue: MTLCommandQueue!
   private var pipeline: MTLRenderPipelineState!
   private var atlas: MTLTexture!
-  private var buffers: [MTLBuffer] = []
-  private var availableBuffers = [0, 1, 2]
+  private let vertexBufferBytes=16*1024*1024
   private var vertices = [Vertex]()
   private var selectionStart: (Int, Int)?
   private var selectionEnd: (Int, Int)?
@@ -207,6 +210,9 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
   var presentationCallbacks = 0, unpresentedDrawables = 0, outOfOrderPresentations = 0
   var cpuTimes = [Double](), gpuTimes = [Double]()
   var mainThreadTimes = [Double](), drawableWaitTimes = [Double]()
+  var displayLinkLeadTimes=[Double](),renderQueueWaitTimes=[Double](),submissionLateness=[Double]()
+  var displayLinkIntervals=[Double](),snapshotAges=[Double](),displayLinkCallbacks=0,bufferStarvations=0
+  private var lastDisplayLinkTime=0.0
   private var metricsGeneration = 0
   private var lastPresentTime = 0.0
   var p99PresentMS: Double {
@@ -229,6 +235,8 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     gpuTimes.removeAll(keepingCapacity: true)
     mainThreadTimes.removeAll(keepingCapacity: true)
     drawableWaitTimes.removeAll(keepingCapacity: true)
+    displayLinkLeadTimes.removeAll(keepingCapacity:true);renderQueueWaitTimes.removeAll(keepingCapacity:true);submissionLateness.removeAll(keepingCapacity:true)
+    displayLinkIntervals.removeAll(keepingCapacity:true);snapshotAges.removeAll(keepingCapacity:true);displayLinkCallbacks=0;bufferStarvations=0;lastDisplayLinkTime=0
     maxFrameMS = 0
     maxGPUMS = 0
   }
@@ -236,7 +244,6 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
   var maxFrameMS: Double = 0
   var maxGPUMS: Double = 0
   var rowHeight: Float = KeyboardSettings.rowHeight
-  let channelWidth: Float = 210
   private var horizontalInset: Float = 0
   private var clipLeft: Float = 0
   func channelX(_ channel: Int) -> Float { gutterWidth + model.channelOffset(channel) - model.channelOffset(firstChannel) - horizontalInset }
@@ -251,9 +258,9 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     horizontalInset=max(0,min(horizontalInset,model.channelWidth(firstChannel)-1))
   }
   var effectColumn:Int {max(0,(column-3)/2)}
-  func fieldOffset(_ column:Int) -> Float { column < 3 ? [7,44,72][max(0,column)] : 109 + Float((column-3)/2)*106 + (column%2==0 ? 25 : 0) }
-  func fieldAt(_ x:Float,_ channel:Int)->Int {x<43 ? 0 : x<70 ? 1 : x<104 ? 2 : min(model.lastField(channel),3+Int((x-104)/106)*2+((x-104).truncatingRemainder(dividingBy:106)>=28 ? 1 : 0))}
-  func fieldWidth(_ column:Int) -> Float { column < 3 ? [32,24,28][max(0,column)] : column%2==0 ? 75 : 23 }
+  func fieldOffset(_ column:Int) -> Float { column < 3 ? [7,44,72][max(0,column)] : 109 + Float((column-3)/2)*PatternModel.effectWidth + (column%2==0 ? 25 : 0) }
+  func fieldAt(_ x:Float,_ channel:Int)->Int {x<43 ? 0 : x<70 ? 1 : x<104 ? 2 : min(model.lastField(channel),3+Int((x-104)/PatternModel.effectWidth)*2+((x-104).truncatingRemainder(dividingBy:PatternModel.effectWidth)>=28 ? 1 : 0))}
+  func fieldWidth(_ column:Int) -> Float { column < 3 ? [32,24,28][max(0,column)] : column%2==0 ? PatternModel.effectWidth-31 : 23 }
   private let notes = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
   private let normal = SIMD4<Float>(0.66, 0.72, 0.79, 1), faint = SIMD4<Float>(0.22, 0.28, 0.34, 1)
   override var acceptsFirstResponder: Bool { true }
@@ -266,6 +273,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     preferredFramesPerSecond = 60
     isPaused = true // CAMetalDisplayLink owns pacing and drawable presentation deadlines.
     enableSetNeedsDisplay = false
+    autoResizeDrawable = false // The custom presenter publishes backing-pixel dimensions.
     framebufferOnly = true
     delegate = self
     commandQueue = device.makeCommandQueue()
@@ -294,9 +302,6 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
       p.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
       pipeline = try device.makeRenderPipelineState(descriptor: p)
     } catch { fatalError("Metal pipeline: \(error)") }
-    for _ in 0..<3 {
-      buffers.append(device.makeBuffer(length: 16 * 1024 * 1024, options: .storageModeShared)!)
-    }
     vertices.reserveCapacity(200000)
     createAtlas()
     setAccessibilityElement(true)
@@ -307,20 +312,63 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     )
   }
   required init(coder: NSCoder) { fatalError() }
-  deinit { metalDisplayLink?.invalidate() }
+  deinit { metalPresenter?.stop() }
+  func refreshRenderSnapshot(){metalPresenter?.refreshSnapshot()}
+  func shutdownRendering(){metalPresenter?.stop();metalPresenter=nil}
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
-    if window == nil { metalDisplayLink?.isPaused = true; return }
-    wantsLayer = true
-    if metalDisplayLink == nil, let metalLayer = layer as? CAMetalLayer {
-      let link = CAMetalDisplayLink(metalLayer: metalLayer)
-      link.delegate = self
-      link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
-      link.preferredFrameLatency = 2
-      link.add(to: .main, forMode: .common)
-      metalDisplayLink = link
+    if window == nil {metalPresenter?.stop();metalPresenter=nil;return}
+    wantsLayer=true
+    if metalPresenter==nil,let metalLayer=layer as? CAMetalLayer {
+      metalLayer.presentsWithTransaction=false
+      metalPresenter=PatternMetalPresenter(layer:metalLayer,frameRate:60,bufferLength:vertexBufferBytes,queue:commandQueue,pipeline:pipeline,atlas:atlas,
+        snapshot:{[weak self] in self?.prepareRenderSnapshot()},
+        timing:{[weak self] value in
+          guard let self,value.generation==self.metricsGeneration else{return}
+          self.displayLinkCallbacks+=1;if value.starved{self.bufferStarvations+=1}
+          if self.frameCount>120,self.displayLinkLeadTimes.count<216000 {
+            self.displayLinkLeadTimes.append((value.deadline-value.timestamp)*1000)
+            self.snapshotAges.append(value.snapshotAgeMS)
+            if self.lastDisplayLinkTime>0{self.displayLinkIntervals.append((value.timestamp-self.lastDisplayLinkTime)*1000)}
+          }
+          self.lastDisplayLinkTime=value.timestamp
+        },submitted:{[weak self] generation,lateness in
+          guard let self,generation==self.metricsGeneration else{return};self.submittedFrames+=1
+          if self.frameCount>120,self.submissionLateness.count<216000{self.submissionLateness.append(lateness)}
+        },completed:{[weak self] generation,ms in
+          guard let self,generation==self.metricsGeneration else{return};self.maxGPUMS=max(self.maxGPUMS,ms)
+          if self.frameCount>120,self.gpuTimes.count<216000{self.gpuTimes.append(ms)}
+        },presented:{[weak self] generation,timestamp in
+          guard let self,generation==self.metricsGeneration else{return}
+          self.presentationCallbacks+=1
+          if timestamp<=0{self.unpresentedDrawables+=1;return}
+          if self.presentationTimestamps.count<216000{self.presentationTimestamps.append(timestamp)}
+          if timestamp<=self.lastPresentTime{self.outOfOrderPresentations+=1;return}
+          if self.lastPresentTime>0,self.frameCount>120,self.presentIntervals.count<216000{self.presentIntervals.append((timestamp-self.lastPresentTime)*1000)}
+          self.lastPresentTime=timestamp;self.frameCount+=1
+        })
     }
-    metalDisplayLink?.isPaused = renderingPaused
+    metalPresenter?.setPaused(renderingPaused)
+  }
+  override func setFrameSize(_ newSize:NSSize) {
+    super.setFrameSize(newSize);synchronizeDrawableSize()
+  }
+  override func layout() {
+    super.layout();synchronizeDrawableSize()
+  }
+  override func viewDidChangeBackingProperties() {
+    super.viewDidChangeBackingProperties();synchronizeDrawableSize()
+  }
+  private func synchronizeDrawableSize() {
+    // MTKView's own draw loop normally resizes its drawable. It is paused
+    // because our display link owns presentation, so publish backing pixels
+    // explicitly after layout (including the initial zero-sized attachment).
+    let size=convertToBacking(bounds).size
+    guard size.width>0,size.height>0 else{return}
+    if drawableSize != size {drawableSize=size}
+    // MTKView caches drawableSize even before publishing it to CAMetalLayer.
+    // With no draw(in:) callback, that deferred update must be explicit too.
+    if let metalLayer=layer as? CAMetalLayer,metalLayer.drawableSize != size {metalLayer.drawableSize=size}
   }
   private func createAtlas() {
     let width = 512
@@ -390,9 +438,6 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     return names[(note - 1) % 12] + String((note - 1) / 12)
   }
   func draw(in view: MTKView) {} // MTKView supplies sizing, not a second rendering timer.
-  func metalDisplayLink(_ link: CAMetalDisplayLink, needsUpdate update: CAMetalDisplayLink.Update) {
-    renderFrame(drawable: update.drawable)
-  }
   private func prepareGeometry() {
     vertices.removeAll(keepingCapacity: true)
     let width = Float(bounds.width)
@@ -420,7 +465,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
       text("+FX",x+model.channelWidth(ch)-30,headerHeight-28,SIMD4(0.43,0.88,0.76,1))
       quad(x, 0, 1, height, SIMD4(0.16, 0.19, 0.23, 1))
       for effect in 0..<model.effectCount(ch) {
-        let fx=x+104+Float(effect)*106
+        let fx=x+104+Float(effect)*PatternModel.effectWidth
         text("FX \(effect+1)",fx+7,headerHeight-28,SIMD4(0.59,0.63,0.78,1))
         quad(fx,headerHeight,1,height-headerHeight,SIMD4(0.13,0.16,0.21,1))
       }
@@ -479,7 +524,8 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
         for fx in 0..<model.effectCount(ch) {
           let command=model.nativeCommand(r,ch,fx)
           let entry=command.flatMap {model.commands.entry(command:$0.effect,parameter:$0.parameter)}
-          let code=command.map {$0.kind=="tracker" ? entry?.displayCode ?? "??" : $0.code} ?? ".."
+          let draft=nudgeEditor.flatMap{editor in editor.target.pattern==model.pattern && editor.target.row==r && editor.target.channel==ch && editor.fx==fx ? editor.kind : nil}
+          let code=draft.map{$0=="nudge-forward" ? "NF" : "NR"} ?? command.map {$0.kind=="tracker" ? entry?.displayCode ?? "??" : $0.code} ?? ".."
           let value=command?.valueText ?? "...."
           let color=command == nil ? faint : command?.kind=="tracker" ? entry?.rgba ?? SIMD4(0.77,0.57,0.86,1) : SIMD4(0.69,0.66,0.98,1)
           text(effectPrefixTarget==navigation && !effectPrefix.isEmpty && r==cursorRow && ch==cursorChannel && column==3+fx*2 ? effectPrefix+"_" : code,x+fieldOffset(3+fx*2),y+1,color)
@@ -502,7 +548,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     descriptor.storageMode = .private; descriptor.usage = [.renderTarget]
     guard let texture = device.makeTexture(descriptor: descriptor),
           let readback = device.makeBuffer(length: rowBytes * pixelHeight, options: .storageModeShared) else { return nil }
-    let count = min(vertices.count, buffers[0].length / MemoryLayout<Vertex>.stride)
+    let count = min(vertices.count, vertexBufferBytes / MemoryLayout<Vertex>.stride)
     guard let geometry = vertices.withUnsafeBytes({ device.makeBuffer(bytes: $0.baseAddress!, length: count * MemoryLayout<Vertex>.stride, options: .storageModeShared) }) else { return nil }
     let pass = MTLRenderPassDescriptor()
     pass.colorAttachments[0].texture = texture; pass.colorAttachments[0].loadAction = .clear
@@ -523,91 +569,16 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
       space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue).union(.byteOrder32Little),
       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
   }
-  private func renderFrame(drawable: CAMetalDrawable) {
-    let begin = CFAbsoluteTimeGetCurrent()
-    guard window?.occlusionState.contains(.visible) == true else { return }
-    guard let bufferIndex = availableBuffers.popLast() else { return }
-    let preparationStart = CFAbsoluteTimeGetCurrent()
-    prepareGeometry()
-    let width = Float(bounds.width), height = Float(bounds.height)
-    let buffer = buffers[bufferIndex]
-    let count = min(vertices.count, buffer.length / MemoryLayout<Vertex>.stride)
-    vertices.withUnsafeBytes { bytes in
-      buffer.contents().copyMemory(
-        from: bytes.baseAddress!, byteCount: count * MemoryLayout<Vertex>.stride)
-    }
-    let size = SIMD2(width, height)
-    let releaseBuffer = { [weak self] in
-      DispatchQueue.main.async { self?.availableBuffers.append(bufferIndex) }
-    }
-    let generation = metricsGeneration
-    let pipeline = self.pipeline!, atlas = self.atlas!, queue = self.commandQueue!
-    let clear = clearColor
-    // The display link supplies and schedules the drawable. Explicit timed
-    // presentation is invalid for these drawables; present() preserves its pacing.
-    // Encode immutable geometry off the event thread.
-    // At most three jobs exist. A buffer returns to the main-thread pool only
-    // after its own command completes, including out-of-order failures.
-    renderWorker.async { [weak self] in
-      autoreleasepool {
-        let waitMS = 0.0 // Display link hands us an already acquired drawable.
-        let pass = MTLRenderPassDescriptor()
-        pass.colorAttachments[0].texture = drawable.texture
-        pass.colorAttachments[0].loadAction = .clear
-        pass.colorAttachments[0].storeAction = .store
-        pass.colorAttachments[0].clearColor = clear
-        guard let command = queue.makeCommandBuffer(),
-          let encoder = command.makeRenderCommandEncoder(descriptor: pass) else {
-          releaseBuffer(); return
-        }
-        var frameSize = size
-        encoder.setRenderPipelineState(pipeline)
-        encoder.setVertexBuffer(buffer, offset: 0, index: 0)
-        encoder.setVertexBytes(&frameSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
-        encoder.setFragmentTexture(atlas, index: 0)
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: count)
-        encoder.endEncoding()
-        command.present(drawable)
-        command.addCompletedHandler { [weak self] command in
-          let ms = (command.gpuEndTime - command.gpuStartTime) * 1000
-          DispatchQueue.main.async {
-            guard let self, generation == self.metricsGeneration else { return }
-            self.maxGPUMS = max(self.maxGPUMS, ms)
-            if self.frameCount > 120 && self.gpuTimes.count < 216000 { self.gpuTimes.append(ms) }
-          }
-          releaseBuffer()
-        }
-        drawable.addPresentedHandler { [weak self] draw in
-          let timestamp = draw.presentedTime
-          DispatchQueue.main.async {
-            guard let self, generation == self.metricsGeneration else { return }
-            self.presentationCallbacks += 1
-            if timestamp <= 0 { self.unpresentedDrawables += 1; return }
-            if self.presentationTimestamps.count < 216000 { self.presentationTimestamps.append(timestamp) }
-            if timestamp <= self.lastPresentTime { self.outOfOrderPresentations += 1; return }
-            if self.lastPresentTime > 0 && self.frameCount > 120 {
-              let interval = (timestamp - self.lastPresentTime) * 1000
-              if interval > 0 && self.presentIntervals.count < 216000 { self.presentIntervals.append(interval) }
-            }
-            self.lastPresentTime = timestamp
-            self.frameCount += 1
-          }
-        }
-        command.commit()
-        DispatchQueue.main.async {
-          guard let self, generation == self.metricsGeneration else { return }
-          self.submittedFrames += 1
-          if self.frameCount > 120 && self.drawableWaitTimes.count < 216000 { self.drawableWaitTimes.append(waitMS) }
-        }
-      }
-    }
-    let end = CFAbsoluteTimeGetCurrent()
-    let cpuMS = (end - preparationStart) * 1000
-    maxFrameMS = max(maxFrameMS, cpuMS)
-    if frameCount > 120 && cpuTimes.count < 216000 {
-      cpuTimes.append(cpuMS)
-      mainThreadTimes.append((end - begin) * 1000)
-    }
+  private func prepareRenderSnapshot()->PatternRenderSnapshot? {
+    let begin=CFAbsoluteTimeGetCurrent()
+    guard window?.occlusionState.contains(.visible)==true,!renderingPaused else{return nil}
+    positionNudgeEditor();prepareGeometry()
+    let count=min(vertices.count,vertexBufferBytes/MemoryLayout<Vertex>.stride)
+    let bytes=vertices.withUnsafeBytes{Data($0.prefix(count*MemoryLayout<Vertex>.stride))}
+    let ms=(CFAbsoluteTimeGetCurrent()-begin)*1000
+    maxFrameMS=max(maxFrameMS,ms)
+    if frameCount>120,cpuTimes.count<216000{cpuTimes.append(ms);mainThreadTimes.append(ms)}
+    return PatternRenderSnapshot(bytes:bytes,count:count,size:SIMD2(Float(bounds.width),Float(bounds.height)),clear:clearColor,generation:metricsGeneration,preparedAt:CACurrentMediaTime())
   }
 
   func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
@@ -618,6 +589,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     return (max(0,min(model.rows-1,firstRow+Int((p.y-CGFloat(headerHeight))/CGFloat(rowHeight)))),max(0,channel))
   }
   override func mouseDown(with event: NSEvent) {
+    if let nudgeEditor {nudgeEditor.commit(advance:false);return}
     finishEffectPrefix()
     discardDeferredKeys()
     window?.makeFirstResponder(self)
@@ -634,6 +606,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     cursorChannel = c
     let x = Float(p.x)-channelX(c)
     column=fieldAt(x,c)
+    if event.clickCount >= 2 && beginNudgeEdit() {return}
     if event.clickCount >= 2 {if column>=3 && model.nativeCommand(cursorRow,cursorChannel,effectColumn)?.kind != "tracker" && model.nativeCommand(cursorRow,cursorChannel,effectColumn) != nil {onNativeEffect?()} else if column<=2 {onPreciseNotes?()} else {onEffectPicker?()}}
     selectionStart = (r, c)
     selectionEnd = nil
@@ -652,6 +625,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     selectionEnd = (max(0, min(model.rows - 1, end.0)), max(0, min(model.channels - 1, end.1)))
   }
   override func scrollWheel(with event: NSEvent) {
+    if nudgeEditor != nil {return}
     if abs(event.scrollingDeltaY) > 0.1 {
       firstRow = max(
         0,
@@ -683,6 +657,22 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
   override func keyDown(with event: NSEvent) {
     if deferringEffectKeys { deferKey(event); return }
     let ch = event.charactersIgnoringModifiers?.lowercased() ?? ""
+    if event.modifierFlags.intersection([.command,.control,.option,.shift]) == .option {
+      switch event.keyCode {
+      case 126: previousInputInstrument(nil);return
+      case 125: nextInputInstrument(nil);return
+      case 123: previousInputOctave(nil);return
+      case 124: nextInputOctave(nil);return
+      default:break
+      }
+    }
+    // OpenMPT's octave keys: keypad divide and multiply. Keep the ordinary
+    // slash available for effect entry and the laptop's musical keyboard.
+    if event.modifierFlags.intersection([.command,.control,.option,.shift]).isEmpty {
+      if event.keyCode==75 {previousInputOctave(nil);return}
+      if event.keyCode==67 {nextInputOctave(nil);return}
+      if (event.keyCode==36 || event.keyCode==76) && column==1 {useCursorInstrument(nil);return}
+    }
     let typing = KeyboardSettings.isDataTyping(event)
     // Busy is short-lived: keep typed and navigation keys in order rather than
     // dropping them. Transport and modified shortcuts are never queued.
@@ -705,6 +695,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
         copySelection()
         return
       }
+      if ch == "x" { cut(nil);return }
       if ch == "v" {
         pasteSelection()
         return
@@ -777,9 +768,11 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
       if column<=2 && (event.keyCode==36 || (!model.notes(cursorRow,cursorChannel).isEmpty && (KeyboardSettings.note(for:ch) != nil || Int(ch,radix:16) != nil))) {onPreciseNotes?();return}
       if column >= 3 {
         let command=model.nativeCommand(cursorRow,cursorChannel,effectColumn)
-        if event.keyCode==36 {if let command,command.kind != "tracker" {onNativeEffect?()} else {onEffectPicker?()};return}
+        if event.keyCode==36 {if beginNudgeEdit() {return};if let command,command.kind != "tracker" {onNativeEffect?()} else {onEffectPicker?()};return}
         if column%2==1 {
           if let index=model.effectLetters.firstIndex(where:{$0.lowercased()==ch && $0 != "?" && $0 != "."}) {onTrackerEffect?(cursorRow,cursorChannel,effectColumn,index,command?.kind=="tracker" ? command!.parameter : 0)}
+        } else if command?.kind.hasPrefix("nudge-")==true,Int(ch) != nil || ch=="." {
+          _=beginNudgeEdit(replacing:ch);return
         } else if let hex=Int(ch,radix:16) {
           if let command,command.kind != "tracker" {onNativeEffect?();return}
           let effect=command?.effect ?? 0,old=command?.parameter ?? 0
@@ -803,11 +796,11 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
           }
           cell[0] = UInt8(max(model.noteMin, min(model.noteMax, octave * 12 + n + 1)))
           cell[1] = UInt8(instrument)
-          let sounding = Int(cell[0])
+          let held=(note:Int(cell[0]),instrument:instrument,channel:cursorChannel)
           commit(cell)
           if !replayingReleasedKey {
-            if let previous = heldKeys.updateValue(sounding, forKey: event.keyCode) { onAudition?(previous, false) }
-            onAudition?(sounding, true)
+            if let previous=heldKeys.updateValue(held,forKey:event.keyCode){onAudition?(previous.note,previous.instrument,previous.channel,false)}
+            onAudition?(held.note, held.instrument, held.channel, true)
           }
         } else if ch == "1" {
           cell[0] = 255
@@ -841,7 +834,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
   override func keyUp(with event: NSEvent) {
     for index in deferredKeys.indices where deferredKeys[index].event.keyCode == event.keyCode { deferredKeys[index].released = true }
     if let note = heldKeys.removeValue(forKey: event.keyCode) {
-      onAudition?(note, false)
+      onAudition?(note.note, note.instrument, note.channel, false)
     } else {
       super.keyUp(with: event)
     }
@@ -849,7 +842,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
   override func resignFirstResponder() -> Bool {
     finishEffectPrefix()
     discardDeferredKeys()
-    for note in heldKeys.values { onAudition?(note, false) }
+    for note in heldKeys.values { onAudition?(note.note, note.instrument, note.channel, false) }
     heldKeys.removeAll()
     return super.resignFirstResponder()
   }
@@ -858,7 +851,23 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
     cursorRow = min(model.rows - 1, cursorRow + step)
   }
   @objc func copy(_ sender: Any?) { copySelection() }
+  @objc func cut(_ sender: Any?) { guard canEdit() else{return};copySelection(cutting:true) }
   @objc func paste(_ sender: Any?) { pasteSelection() }
+  @objc func previousInputInstrument(_ sender:Any?) { stepInputInstrument(-1) }
+  @objc func nextInputInstrument(_ sender:Any?) { stepInputInstrument(1) }
+  @objc func previousInputOctave(_ sender:Any?) { octave=max(0,octave-1) }
+  @objc func nextInputOctave(_ sender:Any?) { octave=min(8,octave+1) }
+  func stepInputInstrument(_ delta:Int) {
+    let slots=(model.instruments.isEmpty ? model.samples : model.instruments).compactMap{$0["index"] as? Int}.filter{(1...255).contains($0)}.sorted()
+    guard !slots.isEmpty else {onMessage?("Load a sample or create an instrument first.");return}
+    instrument=delta>0 ? (slots.first{$0>instrument} ?? slots.last!) : (slots.last{$0<instrument} ?? slots.first!)
+  }
+  @objc func useCursorInstrument(_ sender:Any?) {
+    let number=Int(model.cell(cursorRow,cursorChannel)[1])
+    let chosen=number>0 ? number : model.notes(cursorRow,cursorChannel).first(where:{$0.instrument>0})?.instrument ?? 0
+    guard chosen>0 else{onMessage?("This cell has no instrument number.");return}
+    instrument=chosen;onInputChanged?()
+  }
   func transpose(_ delta: Int) {
     guard canEdit() else { return }
     let a = selectionStart ?? (cursorRow, cursorChannel)
@@ -884,11 +893,12 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
       "startChannel": 0, "channelCount": model.channels, "amount": 1, "allowDataLoss": !insert,
       "expectedRevision": commandRevision?() ?? model.revisionToken])
   }
-  private func copySelection() {
+  private func copySelection(cutting:Bool=false) {
     guard !copying, model.rows > 0, model.channels > 0 else { return }
     let a = selectionStart ?? (cursorRow, cursorChannel)
     let b = selectionEnd ?? a
     let snapshot = model
+    let revision=commandRevision?() ?? model.revisionToken
     let changeCount = NSPasteboard.general.changeCount
     copying = true
     onMessage?("Preparing clipboard…")
@@ -901,15 +911,21 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
           var command=c.dictionary;command["channel"]=channel-firstChannel;command["position"]=c.position-firstRow*65536;effects.append(command);if c.binding>0 {usedBindings.insert(c.binding)}
         }}
       }}
-      let payload:[String:Any]=["rows":lastRow-firstRow+1,"channels":lastChannel-firstChannel+1,"cells":cells,"effects":effects,"bindings":snapshot.effectBindings.filter{usedBindings.contains($0["id"] as? Int ?? 0)}]
+      let notes=snapshot.preciseNotes.values.flatMap{$0}.filter{$0.row>=firstRow && $0.row<=lastRow && $0.channel>=firstChannel && $0.channel<=lastChannel}.map { event -> [String:Int] in
+        var note=event.dictionary;note["channel"]=event.channel-firstChannel;note["position"]=event.position-firstRow*65536;return note
+      }
+      let payload:[String:Any]=["notes":notes,"rows":lastRow-firstRow+1,"channels":lastChannel-firstChannel+1,"cells":cells,"effects":effects,"bindings":snapshot.effectBindings.filter{usedBindings.contains($0["id"] as? Int ?? 0)}]
       guard let data=try? JSONSerialization.data(withJSONObject:payload,options:[.sortedKeys]),data.count<=16*1024*1024,let json=String(data:data,encoding:.utf8) else {DispatchQueue.main.async {self.copying=false;self.onMessage?("Selection is too large to copy.")};return}
       let text="ScreamSeq Pattern 2\n"+json
       DispatchQueue.main.async {
         self.copying = false
         guard NSPasteboard.general.changeCount == changeCount else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        self.onMessage?("Pattern selection copied")
+        guard NSPasteboard.general.setString(text, forType: .string) else{self.onMessage?("Could not write the clipboard; pattern unchanged.");return}
+        if cutting {
+          guard self.canEdit(),(self.commandRevision?() ?? self.model.revisionToken)==revision,self.model.pattern==snapshot.pattern else{self.onMessage?("Copied, but cut cancelled because the song changed.");return}
+          self.onRowShift?(["operation":"clear","scope":"selection","pattern":snapshot.pattern,"startRow":firstRow,"rowCount":lastRow-firstRow+1,"startChannel":firstChannel,"channelCount":lastChannel-firstChannel+1,"expectedRevision":revision])
+        } else {self.onMessage?("Pattern selection copied")}
       }
     }
   }
@@ -934,7 +950,7 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
       copying=true
       clipboardWorker.async {
         var parsed:[String:Any]?
-        if let data=s.dropFirst("ScreamSeq Pattern 2\n".count).data(using:.utf8),let request=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],Set(request.keys).isSubset(of:["rows","channels","cells","effects","bindings"]) {parsed=request}
+        if let data=s.dropFirst("ScreamSeq Pattern 2\n".count).data(using:.utf8),let request=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],Set(request.keys).isSubset(of:["rows","channels","cells","effects","bindings","notes"]) {parsed=request}
         DispatchQueue.main.async {
           self.copying=false
           guard var request=parsed else {self.onMessage?("Invalid pattern clipboard.");return}
@@ -1032,7 +1048,9 @@ final class PatternView: MTKView, MTKViewDelegate, CAMetalDisplayLinkDelegate {
         elements.append(element)
       }
     }
-    return elements
+    var result:[Any]=elements
+    if let nudgeEditor {result.insert(contentsOf:[nudgeEditor.strength,nudgeEditor.duration],at:0)}
+    return result
   }
   override func accessibilityValue() -> Any? {
     "Row \(cursorRow), channel \(cursorChannel+1), column \(column+1)"

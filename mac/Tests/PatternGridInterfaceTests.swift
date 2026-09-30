@@ -25,7 +25,7 @@ extension InterfaceTests {
       edits += 1
       var next = grid.model; next.replaceCell(row, channel, with: values); grid.model = next
     }
-    grid.onAudition = { auditions.append(($0, $1)) }
+    grid.onAudition = { note, _, _, on in auditions.append((note, on)) }
     grid.canEdit = { !busy }
 
     // 1. Control/Option chords are never data entry in any field.
@@ -41,7 +41,7 @@ extension InterfaceTests {
     grid.onTrackerEffect = { _, _, _, _, _ in effects += 1 }
     try require(edits == 0 && effects == 0, "Control and Option chords do not enter instrument, volume or FX data")
     grid.column = 0
-    key(grid, 125, "", flags: .option)
+    key(grid, 125, "", flags: .control)
     try require(grid.cursorRow == 1, "Modified cursor keys keep navigating")
     grid.cursorRow = 0
 

@@ -5,6 +5,7 @@ extension AppController {
     let identity=slot.flatMap{model.nativePlugins.indices.contains($0) ? model.nativePlugins[$0]["instanceID"] as? String : nil}
     let editor=InstrumentPluginEditor(instrument:0,model:model,selectedPlugin:identity)
     editor.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
+    configureInstrumentPluginBridge(editor)
     editor.onSaved = {[weak self,weak editor] index in
       guard let self else{return}
       self.instrumentEditor.index=index;self.patternView.instrument=index
@@ -26,10 +27,27 @@ extension AppController {
     }
     let editor=InstrumentPluginEditor(instrument:instrumentEditor.index,model:model)
     editor.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
+    configureInstrumentPluginBridge(editor)
     editor.onSaved = {[weak self] _ in self?.refreshAll()}
     let win=NSWindow(contentRect:editor.frame,styleMask:[.titled,.closable],backing:.buffered,defer:false)
     win.title="Instrument sound source";win.isReleasedWhenClosed=false;win.contentView=editor
     instrumentPluginWindow?.close();instrumentPluginWindow=win;win.center();win.makeKeyAndOrderFront(nil)
+  }
+
+  func configureInstrumentPluginBridge(_ editor: InstrumentPluginEditor) {
+    editor.onAddPlugin = { [weak self, weak editor] in
+      self?.addPlugin(instrumentOnly: true, added: { [weak self, weak editor] id in
+        guard let self, let editor, let plugin = self.model.nativePlugins.first(where: { $0["instanceID"] as? String == id }) else { return }
+        editor.revision = self.model.revisionToken
+        editor.plugin.addItem(withTitle: plugin["name"] as? String ?? "Instrument plugin")
+        editor.plugin.lastItem?.representedObject = id
+        editor.plugin.selectItem(at: editor.plugin.numberOfItems - 1)
+        editor.applyButton.isEnabled = true
+        editor.status.stringValue = "Sound source ready. Create the tracker instrument, then enter its number beside a note."
+        editor.window?.makeKeyAndOrderFront(nil)
+        if !editor.isCreating { editor.apply() }
+      })
+    }
   }
 
   func showPluginInstruments(_ slot:Int) {

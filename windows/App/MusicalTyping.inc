@@ -6,6 +6,7 @@
         bool sample=true,started=false,pending=false;
         uint64_t epoch=0,voice=0,token=0;
         HWND owner{};
+        unsigned channel=UINT16_MAX;
     };
     std::map<WPARAM,TypedNote> typedNotes;
     uint64_t typingToken=0;
@@ -41,13 +42,14 @@
         return {documentId,found->at("id"),slot,pitch,sample,false,false,0,0,0,owner};
     }
     Json typedParameters(const TypedNote &held,bool on)const {
-        return {{"expectedRevision",view->session.revision},{"note",held.note},{"on",on},{"velocity",100},{held.sample?"sample":"instrument",held.slot}};
+        Json p={{"expectedRevision",view->session.revision},{"note",held.note},{"on",on},{"velocity",100},{held.sample?"sample":"instrument",held.slot}};
+        if(held.channel!=UINT16_MAX)p["channel"]=held.channel;return p;
     }
     bool releaseTypedKey(WPARAM key) {
         auto found=typedNotes.find(key);if(found==typedNotes.end())return false;
         const auto held=found->second;typedNotes.erase(found);frameRequested=true;
-        if(!held.started||!typingTargetExists(held)||held.voice!=auditionVoices[held.note]||(!held.pending&&held.epoch!=stopGeneration))return true;
-        const bool shared=std::any_of(typedNotes.begin(),typedNotes.end(),[&](const auto &v){return v.second.started&&v.second.note==held.note&&v.second.voice==held.voice;});
+        if(!held.started||!typingTargetExists(held)||held.voice!=auditionVoice(held.note,held.channel)||(!held.pending&&held.epoch!=stopGeneration))return true;
+        const bool shared=std::any_of(typedNotes.begin(),typedNotes.end(),[&](const auto &v){return v.second.started&&v.second.note==held.note&&v.second.channel==held.channel&&v.second.voice==held.voice;});
         if(!shared)auditionOperation("transport.note",typedParameters(held,false));
         return true;
     }
@@ -61,15 +63,15 @@
         if(!typingTargetExists(held)){typedNotes.erase(found);return;}
         // Inspection still exercises normal editing, without opening audio.
         if(inspection)return;
-        const auto shared=std::find_if(typedNotes.begin(),typedNotes.end(),[&](const auto &v){const auto &h=v.second;return h.started&&h.note==held.note&&h.sample==held.sample&&h.identity==held.identity&&h.voice==auditionVoices[held.note]&&(h.pending||h.epoch==stopGeneration);});
+        const auto shared=std::find_if(typedNotes.begin(),typedNotes.end(),[&](const auto &v){const auto &h=v.second;return h.started&&h.note==held.note&&h.sample==held.sample&&h.identity==held.identity&&h.channel==held.channel&&h.voice==auditionVoice(held.note,held.channel)&&(h.pending||h.epoch==stopGeneration);});
         if(shared!=typedNotes.end()){found->second.started=true;found->second.pending=shared->second.pending;found->second.epoch=shared->second.epoch;found->second.voice=shared->second.voice;return;}
-        found->second.started=true;found->second.pending=true;found->second.voice=auditionVoices[held.note]+1;
+        found->second.started=true;found->second.pending=true;found->second.voice=auditionVoice(held.note,held.channel)+1;
         const auto voice=found->second.voice;
         try {
             auditionOperation("transport.note",typedParameters(held,true));
             // A key-up or focus change may have retired this input during prepare.
-            for(auto &[k,h]:typedNotes)if(h.note==held.note&&h.voice==voice){h.pending=false;h.epoch=stopGeneration;}
-        }catch(...){std::erase_if(typedNotes,[&](const auto &v){return v.second.note==held.note&&v.second.voice==voice;});throw;}
+            for(auto &[k,h]:typedNotes)if(h.note==held.note&&h.channel==held.channel&&h.voice==voice){h.pending=false;h.epoch=stopGeneration;}
+        }catch(...){std::erase_if(typedNotes,[&](const auto &v){return v.second.note==held.note&&v.second.channel==held.channel&&v.second.voice==voice;});throw;}
     }
     void beginTypedNote(WPARAM key,TypedNote held) {
         if(typedNotes.contains(key))return;
@@ -81,7 +83,7 @@
         if(!view->notesAt(patternIndex,row,channel).empty()){openNoteEditor();return true;}
         if(typingSound>255)throw std::runtime_error("Map this sample to an instrument first / pattern slots range from 0 to 255");
         const auto pitch=std::clamp(1+octave*12+unsigned(offset),view->noteMin,view->noteMax);
-        auto held=typingTarget(typingSample,typingSound,pitch,window);held.token=++typingToken;
+        auto held=typingTarget(typingSample,typingSound,pitch,window);held.channel=channel;held.token=++typingToken;
         const auto token=held.token;const auto origin=position();const auto source=documentId;
         typedNotes.emplace(key,held);
         try {

@@ -1,6 +1,7 @@
 #import "../Bridge/TrackerSession.h"
 #include "editor/SampleArchive.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "ModuleFixture.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -20,9 +21,8 @@ int main() {
       NSString *folder = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
       std::filesystem::create_directories(folder.UTF8String);
       for (auto type : {MOD_TYPE_MOD, MOD_TYPE_XM, MOD_TYPE_S3M, MOD_TYPE_IT, MOD_TYPE_MPT}) {
-        auto source = Document::demo(type);
         NSString *input = [folder stringByAppendingPathComponent:@"import.module"];
-        source->save(input.UTF8String);
+        Test::writeDemoModule(type, input.UTF8String);
         TrackerSession *session = [TrackerSession new];
         NSError *error = nil;
         check([session openPath:input error:&error], "Open legacy fixture");
@@ -49,6 +49,10 @@ int main() {
               @"data" : [data base64EncodedStringWithOptions:0]
             },
             true);
+        NSDictionary *beforeLoopRoot = [NSPropertyListSerialization propertyListWithData:session.serializedData
+                                                                                options:0 format:nil error:nil];
+        Document beforeLoop(bytes(beforeLoopRoot[@"module"]));
+        const auto &beforeLoopSample = beforeLoop.song().GetSample(1);
         call(
             @"sample.patch",
             @{@"sample" : @1,
@@ -77,6 +81,11 @@ int main() {
         check([root[@"version"] isEqual:@6],
               "Export/recovery data uses native project without requiring annotations/plugins");
         Document native(bytes(root[@"module"]));
+        const auto &nativeSample = native.song().GetSample(1);
+        check(nativeSample.uFlags[CHN_PANNING] == beforeLoopSample.uFlags[CHN_PANNING] &&
+                  nativeSample.nPan == beforeLoopSample.nPan && nativeSample.nC5Speed == beforeLoopSample.nC5Speed &&
+                  nativeSample.RelativeTone == beforeLoopSample.RelativeTone && nativeSample.nFineTune == beforeLoopSample.nFineTune,
+              "Loop-only sample patch and trim preserve omitted pan and tuning");
         check(native.song().GetSample(1).nLength == 11 && native.song().GetSample(1).nLoopStart == 1 &&
                   native.song().GetSample(1).nLoopEnd == 11 &&
                   std::memcmp(native.song().GetSample(1).sampleb(), expected.bytes, expected.length) == 0,
@@ -117,8 +126,10 @@ int main() {
         sample.nLength = 11;
         sample.uFlags.set(CHN_16BIT, stride == 4);
         sample.uFlags.set(CHN_STEREO, stride == 4);
-        // A loop-only sample.patch keeps the module's own sample-panning state.
         sample.uFlags.set(CHN_LOOP);
+        // No pan was requested: the sample must retain its imported panning
+        // behavior, including channel/instrument panning when no override exists.
+        sample.uFlags.set(CHN_PANNING, beforeLoopSample.uFlags[CHN_PANNING]);
         sample.nLoopStart = 1;
         sample.nLoopEnd = 11;
         check(sample.AllocateSample() != 0, "Independent renderer PCM allocation");
@@ -194,6 +205,7 @@ int main() {
           target.uFlags.set(CHN_16BIT, stride == 4);
           target.uFlags.set(CHN_STEREO, stride == 4);
           target.uFlags.set(CHN_LOOP);
+          target.uFlags.set(CHN_PANNING, beforeLoopSample.uFlags[CHN_PANNING]);
           target.nLoopStart = 1;
           target.nLoopEnd = target.nLength;
           check(target.AllocateSample() != 0, "Independent clipboard render allocation");

@@ -151,6 +151,7 @@ int main(int argc, char **argv) {
         n.signal.commands={{pattern,track,d.id,0,0,Tracker::SignalCommandKind::Start,.4,1},{pattern,track,d.id,4*65536+32768,0,Tracker::SignalCommandKind::Amount,.7,1},{pattern,track,d.id,8*65536,0,Tracker::SignalCommandKind::Stop},{pattern,track,d.id,12*65536,0,Tracker::SignalCommandKind::Row,.2,1}};
         n.validate(document->song());
       }
+      for(size_t i=0;i<effects.size();++i)effects[i].instanceID="loopback-"+std::to_string(i);
       output.setPlugins(effects, automation);
       Tracker::PluginChain chain(effects, rate, false, automation);
       Tracker::Renderer reference(bytes, rate);
@@ -166,8 +167,11 @@ int main(int argc, char **argv) {
       Capture capture(id, rate,test==5?graphSeconds+2:10);
       capture.start();
       std::this_thread::sleep_for(std::chrono::milliseconds(150));
+      if(test==2||test==3)output.watchParameterActivity("rack/loopback-0",7,1,false);
       output.play(bytes,0,false,{},0,native ? &*native : nullptr);
-      std::this_thread::sleep_for(std::chrono::milliseconds(test==5?graphSeconds*1000+500:2500));
+      if(test==5){auto *activity=output.parameterActivity();require(activity!=nullptr,"Graph monitor is unavailable");const auto p=std::find_if(activity->processors.begin(),activity->processors.end(),[](const auto &p){return p.graph&&p.role==2&&!p.instrument;});require(p!=activity->processors.end(),"Ordinary graph copy missing");output.watchParameterActivity(p->key,7,1,false);}
+      const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(test==5?graphSeconds*1000+500:2500);
+      while(std::chrono::steady_clock::now()<deadline){std::this_thread::sleep_for(std::chrono::milliseconds(10));if(auto *activity=output.parameterActivity())activity->history();}
       output.stop();
       std::this_thread::sleep_for(std::chrono::milliseconds(150));
       capture.stop();
@@ -188,6 +192,7 @@ int main(int argc, char **argv) {
         squaredError += double(error) * error;
       }
       const auto telemetry = output.telemetry();
+      if(test==2||test==3||test==5){const auto *activity=output.parameterActivity();require(activity!=nullptr&&!activity->dropped(),"Parameter monitor dropped live capture");const auto &points=output.parameterActivity()->history();require(points.size()>100,"Live parameter monitor did not capture");const auto origin=test==5?Tracker::ParameterOrigin::Graph:Tracker::ParameterOrigin::Recorded;require(std::any_of(points.begin(),points.end(),[&](const auto &p){return p.source.kind==origin;}),"Live parameter provenance missing");}
       std::cout << std::array<const char *, 6>{"Dry", "AU effect", "VST3 effect + automation",
                                                "VST3 instrument + automation", "AU instrument", "Graph copies + fractional pattern commands"}[test]
                 << " virtual loopback: " << compareFrames << " stereo frames, " << rate << " Hz / " << frames

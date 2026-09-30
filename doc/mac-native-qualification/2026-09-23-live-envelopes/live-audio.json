@@ -1,0 +1,459 @@
+{
+  "before": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 77,
+    "fault": false,
+    "frames": 9856,
+    "graphActivity": [],
+    "left": 0.04432329162955284,
+    "loop": true,
+    "maxMicros": 333.916,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 340,
+    "pattern": 0,
+    "patternPosition": 434.873491899345,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0,
+    "region": {
+      "endRow": 64,
+      "loop": true,
+      "pattern": 0,
+      "startRow": 0
+    },
+    "right": 0.04432329162955284,
+    "row": 1,
+    "voicePositions": [
+      {
+        "channel": 0,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 1,
+        "sampleFrame": 220
+      },
+      {
+        "channel": 1,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 2,
+        "sampleFrame": 110
+      },
+      {
+        "channel": 2,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 3,
+        "sampleFrame": 4928
+      }
+    ],
+    "voices": 3
+  },
+  "muted": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 120,
+    "fault": false,
+    "frames": 15360,
+    "graphActivity": [],
+    "left": 0,
+    "loop": true,
+    "maxMicros": 333.916,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 340,
+    "pattern": 0,
+    "patternPosition": 677.7249224405377,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0,
+    "region": {
+      "endRow": 64,
+      "loop": true,
+      "pattern": 0,
+      "startRow": 0
+    },
+    "right": 0,
+    "row": 2,
+    "voicePositions": [
+      {
+        "channel": 0,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 1,
+        "sampleFrame": 220
+      },
+      {
+        "channel": 1,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 2,
+        "sampleFrame": 238
+      },
+      {
+        "channel": 2,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 3,
+        "sampleFrame": 7680
+      },
+      {
+        "channel": 3,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 4,
+        "sampleFrame": 1878
+      }
+    ],
+    "voices": 4
+  },
+  "audible": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 163,
+    "fault": false,
+    "frames": 20864,
+    "graphActivity": [],
+    "left": 0.07359838485717773,
+    "loop": true,
+    "maxMicros": 333.916,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 340,
+    "pattern": 0,
+    "patternPosition": 920.5763529817305,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0,
+    "region": {
+      "endRow": 64,
+      "loop": true,
+      "pattern": 0,
+      "startRow": 0
+    },
+    "right": 0.07359838485717773,
+    "row": 3,
+    "voicePositions": [
+      {
+        "channel": 0,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 1,
+        "sampleFrame": 220
+      },
+      {
+        "channel": 1,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 2,
+        "sampleFrame": 110
+      },
+      {
+        "channel": 2,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 3,
+        "sampleFrame": 10432
+      },
+      {
+        "channel": 3,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 4,
+        "sampleFrame": 4630
+      }
+    ],
+    "voices": 4
+  },
+  "undo": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 206,
+    "fault": false,
+    "frames": 26368,
+    "graphActivity": [],
+    "left": 0,
+    "loop": true,
+    "maxMicros": 333.916,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 340,
+    "pattern": 0,
+    "patternPosition": 1163.4277835229232,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0,
+    "region": {
+      "endRow": 64,
+      "loop": true,
+      "pattern": 0,
+      "startRow": 0
+    },
+    "right": 0,
+    "row": 4,
+    "voicePositions": [
+      {
+        "channel": 0,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 2,
+        "instrument": 0,
+        "sample": 1,
+        "sampleFrame": 231
+      },
+      {
+        "channel": 1,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 2,
+        "sampleFrame": 238
+      },
+      {
+        "channel": 3,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 4,
+        "sampleFrame": 7382
+      }
+    ],
+    "voices": 3
+  },
+  "redo": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 253,
+    "fault": false,
+    "frames": 32384,
+    "graphActivity": [],
+    "left": 0.0918281078338623,
+    "loop": true,
+    "maxMicros": 333.916,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 340,
+    "pattern": 0,
+    "patternPosition": 1428.8700448121338,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0,
+    "region": {
+      "endRow": 64,
+      "loop": true,
+      "pattern": 0,
+      "startRow": 0
+    },
+    "right": 0.0918281078338623,
+    "row": 5,
+    "voicePositions": [
+      {
+        "channel": 0,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 2,
+        "instrument": 0,
+        "sample": 1,
+        "sampleFrame": 119
+      },
+      {
+        "channel": 1,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 2,
+        "sampleFrame": 32
+      },
+      {
+        "channel": 3,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 4,
+        "sampleFrame": 10390
+      }
+    ],
+    "voices": 3
+  },
+  "after": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 319,
+    "fault": false,
+    "frames": 40832,
+    "graphActivity": [],
+    "left": 0.01925007626414299,
+    "loop": true,
+    "maxMicros": 333.916,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 340,
+    "pattern": 0,
+    "patternPosition": 1801.6187521544296,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0,
+    "region": {
+      "endRow": 64,
+      "loop": true,
+      "pattern": 0,
+      "startRow": 0
+    },
+    "right": 0.01925007626414299,
+    "row": 7,
+    "voicePositions": [
+      {
+        "channel": 0,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 2,
+        "instrument": 0,
+        "sample": 1,
+        "sampleFrame": 118
+      },
+      {
+        "channel": 1,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 1,
+        "instrument": 0,
+        "sample": 2,
+        "sampleFrame": 163
+      },
+      {
+        "channel": 3,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 2,
+        "instrument": 0,
+        "sample": 4,
+        "sampleFrame": 3010
+      }
+    ],
+    "voices": 3
+  },
+  "operations": [
+    {
+      "method": "transport.play",
+      "stopped": false,
+      "changed": false
+    },
+    {
+      "method": "automation.pattern.set",
+      "stopped": false,
+      "changed": true
+    },
+    {
+      "method": "automation.pattern.set",
+      "stopped": false,
+      "changed": true
+    },
+    {
+      "method": "history.undo",
+      "stopped": false,
+      "changed": true
+    },
+    {
+      "method": "history.redo",
+      "stopped": false,
+      "changed": true
+    },
+    {
+      "method": "automation.pattern.set",
+      "stopped": false,
+      "changed": true
+    },
+    {
+      "method": "sample.loops.set",
+      "stopped": false,
+      "changed": true
+    }
+  ]
+}

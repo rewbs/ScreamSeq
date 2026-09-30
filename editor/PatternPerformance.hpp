@@ -7,7 +7,8 @@ namespace Tracker {
 inline constexpr uint32_t performanceUnitsPerRow = 65536;
 inline constexpr uint8_t maximumEffectColumns = 8;
 inline constexpr size_t maximumPatternCommands = 65536;
-enum class PatternCommandKind : uint8_t { ParameterSet, ParameterSlide, PitchSet, PitchSlide, NoteCut, TrackerEffect };
+enum class PatternCommandKind : uint8_t { ParameterSet, ParameterSlide, PitchSet, PitchSlide, NoteCut, TrackerEffect, NudgeForward, NudgeReverse };
+inline bool isNudge(PatternCommandKind kind) { return kind == PatternCommandKind::NudgeForward || kind == PatternCommandKind::NudgeReverse; }
 struct ParameterBinding {
   std::string plugin; // Persistent plugin instance UUID, never a rack slot.
   uint32_t parameter = 0; // Native AU/VST3/built-in parameter identifier.
@@ -20,7 +21,7 @@ struct PatternCommand {
   uint8_t column = 0; // Zero-based FX column, identical capabilities in every column.
   PatternCommandKind kind = PatternCommandKind::ParameterSet;
   uint16_t binding = 0; // 1..255 for parameters; 0 for the current track's pitch.
-  double value = 0; // Normalized parameter [0,1], or semitones [-96,96].
+  double value = 0; // Normalized parameter [0,1], semitones [-96,96], or nudge strength [0,1].
   uint8_t pitchRange = 2; // Match a plugin instrument's configured MIDI wheel range.
   uint8_t effect = 0, parameter = 0; // Tracker command; its original musical range is preserved.
   bool operator==(const PatternCommand &) const = default;

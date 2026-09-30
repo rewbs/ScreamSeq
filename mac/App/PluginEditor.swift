@@ -12,6 +12,35 @@ private func midiNoteNumber(_ text: String) -> Double? {
 
 final class ParameterSlider: NSSlider {
   var changed: ((Double) -> Void)?
+  var gesture: ((Bool) -> Void)?
+  private var dragging=false,grabOffset:CGFloat=0,initialValue=0.0
+  override var acceptsFirstResponder:Bool {isEnabled}
+  override func mouseDown(with event: NSEvent) {
+    guard isEnabled else{return}
+    // NSSlider's cell uses a nested tracking loop. Keep the normal application
+    // event loop running so asynchronous parameter replies, playback displays
+    // and Undo grouping continue throughout a drag.
+    guard sliderType == .linear,!isVertical,let cell=cell as? NSSliderCell else{gesture?(true);defer{gesture?(false)};super.mouseDown(with:event);return}
+    window?.makeFirstResponder(self)
+    let point=convert(event.locationInWindow,from:nil),thumb=cell.knobRect(flipped:isFlipped)
+    grabOffset=thumb.contains(point) ? point.x-thumb.midX:0
+    initialValue=doubleValue;dragging=true;gesture?(true);track(event)
+  }
+  override func mouseDragged(with event:NSEvent){if dragging{track(event)}else{super.mouseDragged(with:event)}}
+  override func mouseUp(with event:NSEvent){guard dragging else{super.mouseUp(with:event);return};track(event);dragging=false;gesture?(false)}
+  override func keyDown(with event:NSEvent){
+    if dragging,event.keyCode==53 {doubleValue=initialValue;sendAction(action,to:target);dragging=false;gesture?(false);return}
+    super.keyDown(with:event)
+  }
+  private func track(_ event:NSEvent){
+    guard let cell=cell as? NSSliderCell,maxValue>minValue else{return}
+    let thumb=cell.knobRect(flipped:isFlipped),bar=cell.barRect(flipped:isFlipped)
+    let width=max(1,bar.width-thumb.width),x=convert(event.locationInWindow,from:nil).x-grabOffset
+    var fraction=Double(max(0,min(1,(x-bar.minX-thumb.width/2)/width)))
+    if allowsTickMarkValuesOnly,numberOfTickMarks>1{fraction=(fraction*Double(numberOfTickMarks-1)).rounded()/Double(numberOfTickMarks-1)}
+    let value=minValue+fraction*(maxValue-minValue)
+    if abs(value-doubleValue)>max(1,abs(value))*1e-12 {doubleValue=value;sendAction(action,to:target)}
+  }
   init(value: Double, min: Double, max: Double, changed: @escaping (Double) -> Void) {
     super.init(frame: .zero)
     minValue = min
@@ -43,18 +72,12 @@ final class ParameterValueField: NSTextField, NSTextFieldDelegate {
   }
   required init?(coder: NSCoder) { fatalError() }
   @objc func submit() { commit?(stringValue) }
-  /// Replaces the rounded display with the full-precision value. This happens
-  /// before the field editor exists: assigning during
-  /// controlTextDidBeginEditing, which runs inside the first keystroke,
-  /// discarded the character being typed.
-  func showEditingText() { if let text = editingText?() { displayed = stringValue; stringValue = text } }
-  override func becomeFirstResponder() -> Bool {
-    guard isEditable, currentEditor() == nil else { return super.becomeFirstResponder() }
-    let before = stringValue
-    showEditingText()
-    if super.becomeFirstResponder() { return true }
-    stringValue = before; displayed = nil; return false
-  }
+  func prepareEditing() { if currentEditor() == nil, let text = editingText?() { stringValue = text } }
+  override func becomeFirstResponder() -> Bool { prepareEditing(); return super.becomeFirstResponder() }
+  override func mouseDown(with event: NSEvent) { prepareEditing(); super.mouseDown(with: event) }
+  // This notification arrives after the first keystroke. Replacing stringValue
+  // here used to discard that digit (typing 12 became 2).
+  func controlTextDidBeginEditing(_ notification: Notification) {}
   func controlTextDidEndEditing(_ notification: Notification) { submit() }
 }
 final class PluginParameterRow: NSTableCellView {
@@ -62,14 +85,18 @@ final class PluginParameterRow: NSTableCellView {
   let reading = ParameterValueField()
   private(set) lazy var readingWidth = reading.widthAnchor.constraint(equalToConstant: 105)
   let slider = ParameterSlider(value: 0, min: 0, max: 1) { _ in }
+  let actions = ActionMenuButton("…") { NSMenu() }
   override init(frame: NSRect) {
     super.init(frame: frame)
-    name.fixed(width: 220)
+    name.widthAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive = true
+    name.widthAnchor.constraint(lessThanOrEqualToConstant: 180).isActive = true
+    name.setContentHuggingPriority(.defaultLow, for: .horizontal)
     name.lineBreakMode = .byTruncatingTail
     reading.translatesAutoresizingMaskIntoConstraints = false
     readingWidth.isActive = true
     slider.setContentHuggingPriority(.defaultLow, for: .horizontal)
-    stack(.horizontal, [name, slider, reading], spacing: 16).fill(self, inset: 5)
+    actions.fixed(width: 28)
+    stack(.horizontal, [name, slider, reading, actions], spacing: 8).fill(self, inset: 5)
   }
   required init?(coder: NSCoder) { fatalError() }
 }
@@ -156,103 +183,105 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   var programsButton: ActionButton!
   var onSavePreset: ((Int) -> Void)?, onLoadPreset: ((Int) -> Void)?
   var savePresetButton: ActionButton!, loadPresetButton: ActionButton!
+  var onActivity:(()->Void)?
   var onPatternAutomation: (() -> Void)?
+  let rack = PluginRack(frame: .zero)
+  var onGesture: ((Bool) -> Void)?, onGraph: ((String) -> Void)?
+  var refreshGeneration = 0
+  var onAutomate: ((String, Int) -> Void)?, onInspectParameter: ((String, Int) -> Void)?
+  var onReorder: ((String, String?, String?) -> Void)?
+  private var instrumentActions: NSStackView!
+  private var rackBuses = [[String: Any]]()
+  var selectedIdentity: String? { plugins.indices.contains(selected) ? plugins[selected]["instanceID"] as? String : nil }
   override init(frame: NSRect) {
     super.init(frame: frame)
-    picker.fixed(width: 300)
-    picker.target = self
-    picker.action = #selector(selectPlugin)
-    undoButton = ActionButton("Undo effect change") { [weak self] in self?.onUndo?() }
+    undoButton = ActionButton("Undo") { [weak self] in self?.onUndo?() }
     redoButton = ActionButton("Redo") { [weak self] in self?.onRedo?() }
-    let title = stack(
-      .horizontal,
-      [
-        Theme.label("Plugins", size: 20, weight: .semibold), NSView(),
-        ActionButton("Add built-in…", prominent: true) { [weak self] in self?.onAddBuiltIn?() },
-        ActionButton("Add plugin…", symbol: "plus", prominent: true) { [weak self] in self?.onAdd?() },
-      ], spacing: 14)
-    let controls = stack(
-      .horizontal,
-      [
-        picker,
-        ActionButton("↑") { [weak self] in
-          guard let self else { return }
-          self.onMove?(self.selected, -1)
-        },
-        ActionButton("↓") { [weak self] in
-          guard let self else { return }
-          self.onMove?(self.selected, 1)
-        },
-        ActionButton("Bypass") { [weak self] in
-          guard let self, self.selected < self.plugins.count else { return }
-          self.onBypass?(self.selected, !(self.plugins[self.selected]["bypass"] as? Bool ?? false))
-        },
-        ActionButton("Remove") { [weak self] in
-          guard let self else { return }
-          self.onRemove?(self.selected)
-        },
-        NSView(),
-      ], spacing: 10)
-    assignment.target = self
-    assignment.action = #selector(assignInstrument)
-    assignment.setAccessibilityLabel("Tracker instrument assignment")
-    openButton = ActionButton("Open interface…") { [weak self] in
-      guard let self else { return }; self.onOpen?(self.selected)
-    }
-    instrumentsButton = ActionButton("Assign tracker instruments…") { [weak self] in guard let self else { return }; self.onInstruments?(self.selected) }
-    instrumentsButton.isEnabled = false
-    createInstrumentButton=ActionButton("New trigger instrument…",prominent:true){[weak self] in guard let self else{return};self.onNewInstrument?(self.selected)}
-    createInstrumentButton.isEnabled=false
-    let routing = stack(
-      .horizontal,
-      [
-        openButton!,
-        ActionButton("Audio buses…") { [weak self] in guard let self else { return }; self.onPorts?(self.selected) },
-        NSView(),
-        ActionButton("Pattern automation…") { [weak self] in self?.onPatternAutomation?() },
-      ], spacing: 12)
-    let automation = stack(
-      .horizontal,
-      [
-        record, NSView(), undoButton!, redoButton!,
-        ActionButton("Clear automation") { [weak self] in self?.onClearAutomation?() },
-      ], spacing: 16)
-    search.placeholderString = "Find a parameter"
-    search.delegate = self
-    search.setAccessibilityLabel("Find plugin parameter")
+    picker.target = self; picker.action = #selector(selectPlugin)
+    assignment.target = self; assignment.action = #selector(assignInstrument)
+    openButton = ActionButton("Open interface…") { [weak self] in guard let self else { return }; self.onOpen?(self.selected) }
+    instrumentsButton = ActionButton("Assign instruments…") { [weak self] in guard let self else { return }; self.onInstruments?(self.selected) }
+    createInstrumentButton = ActionButton("New trigger instrument…", prominent: true) { [weak self] in guard let self else { return }; self.onNewInstrument?(self.selected) }
     programsButton = ActionButton("Programs…") { [weak self] in guard let self else { return }; self.onPrograms?(self.selected) }
-    programsButton.isEnabled = false
     savePresetButton = ActionButton("Save preset…") { [weak self] in guard let self else { return }; self.onSavePreset?(self.selected) }
     loadPresetButton = ActionButton("Load preset…") { [weak self] in guard let self else { return }; self.onLoadPreset?(self.selected) }
+    rack.onSelect = { [weak self] id in guard let self, let index = self.plugins.firstIndex(where: { $0["instanceID"] as? String == id }) else { return }; self.selected = index; self.onSelect?(index) }
     savePresetButton.isEnabled = false; loadPresetButton.isEnabled = false
-    parameters.headerView = nil
-    parameters.rowHeight = 44
-    parameters.backgroundColor = Theme.bg
-    parameters.selectionHighlightStyle = .none
-    parameters.dataSource = self
-    parameters.delegate = self
-    parameters.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-    parameters.setAccessibilityLabel("Plugin parameters")
-    let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("parameter"))
-    column.resizingMask = .autoresizingMask
-    parameters.addTableColumn(column)
-    let scroll = verticalScrollView()
-    scroll.documentView = parameters
-    parameters.autoresizingMask = [.width]
-    let content = stack(
-      .vertical,
-      [
-        title, note, controls, routing, stack(.horizontal,[createInstrumentButton!,instrumentsButton!,NSView()],spacing:12), automation, dynamicsMeter,
-        stack(.horizontal, [search, programsButton!, savePresetButton!, loadPresetButton!]), scroll,
-        Theme.label(
-          "Plugins, instrument assignments, and automation are saved in .screamseq projects.\nPlugins run inside this app; a faulty plug-in can interrupt playback or crash it.",
-          size: 11, color: Theme.muted),
-      ], spacing: 18)
-    content.alignment = .leading
-    content.fill(self, inset: 24)
-    for row in content.arrangedSubviews {
-      row.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+    rack.onOpen = { [weak self] id in self?.act(id) { self?.onOpen?($0) } }
+    rack.onBypass = { [weak self] id, bypass in self?.act(id) { self?.onBypass?($0, bypass) } }
+    rack.onRemove = { [weak self] id in self?.act(id) { self?.onRemove?($0) } }
+    rack.onDrop = { [weak self] id, before, owner in self?.onReorder?(id, before, owner) }
+    rack.menuForItem = { [weak self] id in self?.actionMenu(id) ?? NSMenu() }
+    search.placeholderString = "Find a parameter"; search.delegate = self; search.setAccessibilityLabel("Find plugin parameter")
+    parameters.headerView = nil; parameters.rowHeight = 40; parameters.backgroundColor = Theme.bg
+    parameters.selectionHighlightStyle = .none; parameters.dataSource = self; parameters.delegate = self
+    parameters.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle; parameters.setAccessibilityLabel("Plugin parameters")
+    let column = NSTableColumn(identifier: .init("parameter")); column.resizingMask = .autoresizingMask; parameters.addTableColumn(column)
+    let scroll = verticalScrollView(); scroll.documentView = parameters; parameters.autoresizingMask = [.width]
+    let more = ActionMenuButton { [weak self] in self?.actionMenu() ?? NSMenu() }
+    instrumentActions = stack(.horizontal, [createInstrumentButton!, instrumentsButton!, NSView()], spacing: 8)
+    let title = stack(.horizontal, [Theme.label("Plugins", size: 18, weight: .semibold), NSView(),
+      ActionButton("Add plugin…", symbol: "plus", prominent: true) { [weak self] in self?.onAdd?() }, more], spacing: 8)
+    let content = stack(.vertical, [title, note, rack, instrumentActions!, dynamicsMeter, search, scroll], spacing: 10)
+    content.stretchAcrossAxis(); content.fill(self, inset: 12)
+    update(model: PatternModel([:]), values: [])
+  }
+  private func act(_ identity: String, _ action: (Int) -> Void) {
+    guard let index = plugins.firstIndex(where: { $0["instanceID"] as? String == identity }) else { return }; action(index)
+  }
+  func actionMenu(_ identity: String? = nil) -> NSMenu {
+    let menu = NSMenu(title: "Plugin"); menu.autoenablesItems = false
+    menu.addItem(ContextAction("Add built-in effect…") { [weak self] in self?.onAddBuiltIn?() })
+    guard let id = identity ?? selectedIdentity, let slot = plugins.firstIndex(where: { $0["instanceID"] as? String == id }) else {
+      for title in ["Open interface / controls", "Bypass / enable plugin", "Show in Graph…", "Audio buses…", "Programs…", "Save preset…", "Load preset…", "Automation envelopes…", "Parameter activity…", "New trigger instrument…", "Assign tracker instruments…", "Move earlier", "Move later", "Remove plugin"] {
+        let item=ContextAction(title,enabled:false){};item.toolTip="Select a plugin in Plugin controls first";menu.addItem(item)
+      }
+      return menu
     }
+    func action(_ name: String, _ body: @escaping (Int) -> Void) { menu.addItem(ContextAction(name) { [weak self] in self?.act(id, body) }) }
+    menu.addItem(.separator())
+    action("Open interface / controls", { [weak self] in self?.onOpen?($0) })
+    action("Bypass / enable plugin", { [weak self] index in guard let self else { return }; self.onBypass?(index, !(self.plugins[index]["bypass"] as? Bool ?? false)) })
+    menu.addItem(ContextAction("Show in Graph…") { [weak self] in self?.onGraph?(id) })
+    action("Audio buses…", { [weak self] in self?.onPorts?($0) })
+    action("Programs…", { [weak self] in self?.onPrograms?($0) })
+    action("Save preset…", { [weak self] in self?.onSavePreset?($0) })
+    action("Load preset…", { [weak self] in self?.onLoadPreset?($0) })
+    menu.addItem(.separator())
+    menu.addItem(ContextAction("Automation envelopes…") { [weak self] in self?.selected = slot; self?.onPatternAutomation?() })
+    menu.addItem(ContextAction("Parameter activity…") { [weak self] in self?.selected = slot; self?.onActivity?() })
+    for (title, handler) in [("New trigger instrument…", onNewInstrument), ("Assign tracker instruments…", onInstruments)] {
+      menu.addItem(ContextAction(title,enabled:plugins[slot]["isInstrument"] as? Bool == true){[weak self] in self?.act(id){handler?($0)}})
+    }
+    menu.addItem(.separator())
+    action("Move earlier", { [weak self] in self?.moveRack($0, -1) })
+    action("Move later", { [weak self] in self?.moveRack($0, 1) })
+    action("Remove plugin", { [weak self] in self?.onRemove?($0) })
+    return menu
+  }
+  private func moveRack(_ slot: Int, _ direction: Int) {
+    guard plugins.indices.contains(slot), let id = plugins[slot]["instanceID"] as? String,
+      let index = rack.items.firstIndex(where: { $0["instanceID"] as? String == id }), rack.items.indices.contains(index + direction) else { return }
+    let target = index + direction, owner = rack.items[target]["ownerID"] as? String
+    let beforeIndex = direction > 0 ? target + 1 : target
+    let before = rack.items.indices.contains(beforeIndex) && rack.items[beforeIndex]["ownerID"] as? String == owner ? rack.items[beforeIndex]["instanceID"] as? String : nil
+    onReorder?(id, before, owner)
+  }
+  func updateRoutes(_ data: [String: Any]) { rackBuses = data["buses"] as? [[String: Any]] ?? []; updateRack() }
+  private func updateRack() {
+    let assigned = Set(rackBuses.flatMap { $0["inserts"] as? [String] ?? [] })
+    var rows = [[String: Any]]()
+    func append(_ plugin: [String: Any], bus: [String: Any]?) {
+      var row = plugin; row["ownerID"] = bus?["id"]
+      row["ownerName"] = plugin["isInstrument"] as? Bool == true ? "Instrument" : bus?["name"] as? String ?? "Master"
+      rows.append(row)
+    }
+    for bus in rackBuses {
+      for id in bus["inserts"] as? [String] ?? [] { if let plugin = plugins.first(where: { $0["instanceID"] as? String == id }) { append(plugin, bus: bus) } }
+      if bus["kind"] as? String == "master" { for plugin in plugins where !assigned.contains(plugin["instanceID"] as? String ?? "") { append(plugin, bus: bus) } }
+    }
+    if rackBuses.isEmpty { for plugin in plugins { append(plugin, bus: nil) } }
+    rack.update(rows, selected: selectedIdentity)
   }
   required init?(coder: NSCoder) { fatalError() }
   private var deferredEdits = [Int: Int](), editTicket = 0
@@ -278,13 +307,14 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     selectedPlugin = plugins.indices.contains(selected) ? plugins[selected]["instanceID"] as? String : nil
     onSelect?(selected)
   }
-  func update(model: PatternModel, values: [[AnyHashable: Any]]) {
+  func update(model: PatternModel, values: [[AnyHashable: Any]], selectedSlot: Int? = nil) {
     dynamicsMeter.isHidden = true
     plugins = model.nativePlugins
     undoButton.isEnabled = model.canUndoEffect
     redoButton.isEnabled = model.canRedoEffect
     updatingSelection = true
-    if let selectedPlugin, let moved = plugins.firstIndex(where: { $0["instanceID"] as? String == selectedPlugin }) { selected = moved }
+    if let selectedSlot { selected = selectedSlot }
+    else if let selectedPlugin, let moved = plugins.firstIndex(where: { $0["instanceID"] as? String == selectedPlugin }) { selected = moved }
     selected = max(0, min(selected, plugins.count - 1))
     updatingSelection = false
     selectedPlugin = plugins.indices.contains(selected) ? plugins[selected]["instanceID"] as? String : nil
@@ -315,6 +345,8 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     assignment.isEnabled = chosen["isInstrument"] as? Bool ?? false
     instrumentsButton.isEnabled = assignment.isEnabled
     createInstrumentButton.isEnabled=assignment.isEnabled
+    instrumentActions.isHidden = !assignment.isEnabled
+    updateRack()
     let count = (chosen["instrumentAssignments"] as? [[String: Any]])?.count ?? ((chosen["instrument"] as? Int ?? 0) > 0 ? 1 : 0)
     instrumentsButton.title = count > 0 ? "Assigned instruments (\(count))…" : "Assign tracker instruments…"
     if !assignment.isEnabled {
@@ -354,10 +386,19 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     let parameter = filteredValues[row]
     let generation = parameterGeneration, slot = selected
     let id = parameter["id"] as? Int ?? 0
+    let identity = selectedIdentity
     let name = parameter["name"] as? String ?? "Parameter"
     let value = parameter["value"] as? Double ?? 0
     view.name.stringValue = name
     view.name.toolTip = name
+    view.actions.setAccessibilityLabel(name + " actions")
+    view.actions.actions = { [weak self] in
+      let menu = NSMenu(title: name); menu.autoenablesItems = false
+      guard let self, let identity else { return menu }
+      menu.addItem(ContextAction("Automate this parameter…") { [weak self] in self?.onAutomate?(identity, id) })
+      menu.addItem(ContextAction("Inspect parameter activity…") { [weak self] in self?.onInspectParameter?(identity, id) })
+      return menu
+    }
     let minimum = parameter["min"] as? Double ?? 0
     let maximum = parameter["max"] as? Double ?? 1
     let choices = parameter["choices"] as? [String] ?? []
@@ -439,6 +480,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
         self.deferEdit(id, slot: slot, generation: generation, value: value, attempt: 0, accept: accept, revert: revert)
       } else { accept(value) }
     }
+    view.slider.gesture = { [weak self] in self?.onGesture?($0) }
     view.slider.changed = { if $0.isFinite { apply(fromSlider($0)) } }
     view.reading.editingText = { String(currentValue) }
     view.reading.commit = { [weak view] text in

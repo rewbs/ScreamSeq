@@ -1,0 +1,806 @@
+[
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "z"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "x"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "c"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "v"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "ctrl+space"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "space"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "alt+Down"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "z"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "space"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "z"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "Tab"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "Tab"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "key",
+    "value": "ctrl+alt+4"
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "click",
+    "value": 249
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "click",
+    "value": 312,
+    "options": {
+      "clickCount": 2
+    }
+  },
+  {
+    "phase": "before",
+    "journey": "J01",
+    "kind": "click",
+    "value": 371
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 43
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "super+a"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "type",
+    "value": "12"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 14
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "ctrl+alt+5"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 10
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 9
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 41
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 97
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 60
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 61
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 73
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "set",
+    "value": [
+      73,
+      "-6"
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 20
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "set",
+    "value": [
+      48,
+      "16"
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "set",
+    "value": [
+      50,
+      "20"
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 51
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "set",
+    "value": [
+      48,
+      "32"
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "set",
+    "value": [
+      50,
+      "80"
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 51
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": [
+      488,
+      692
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 53
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "set",
+    "value": [
+      48,
+      "16"
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "set",
+    "value": [
+      50,
+      "20"
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 51
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "shift+Tab"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "shift+Tab"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Tab"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "set",
+    "value": [
+      48,
+      "32"
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "set",
+    "value": [
+      50,
+      "80"
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 51
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 11
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 314,
+    "options": {
+      "clickCount": 2
+    }
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 110
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 359
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 355
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 37
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "super+alt+1"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "ctrl+alt+2"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 149
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "super+a"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "type",
+    "value": "8"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 123
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 61
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "ctrl+alt+1"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 77
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 60
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 77
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Right"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 84
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "super+alt+1"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Right"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Right"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Right"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "question"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "type",
+    "value": "panning"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Right"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "8"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "0"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "ctrl+alt+3"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 61
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 86
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 80
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 92
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 70
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 241
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "type",
+    "value": "Flow pluck"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 243
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 261
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 10
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 80
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "super+shift+g"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "type",
+    "value": "/tmp"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "type",
+    "value": "ScreamSeq-Flow-Distortion.screamseq-preset"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 48
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 4
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 51
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 3
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 65
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 3
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 44
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 17
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 7
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 16
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 3
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 18
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 56
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 4
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 63
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "super+a"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "type",
+    "value": "0.5"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 70
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "z"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "x"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "c"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "v"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "ctrl+space"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "z"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "x"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "c"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "v"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "ctrl+space"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "space"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "alt+Down"
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "click",
+    "value": 97
+  },
+  {
+    "phase": "before",
+    "journey": "J03",
+    "kind": "key",
+    "value": "z"
+  }
+]

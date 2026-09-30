@@ -1,9 +1,12 @@
 #include "editor/MixerRuntime.hpp"
+#include "editor/hosted/SignalObservation.hpp"
+#include "editor/hosted/ProcessorBypass.hpp"
 #include <algorithm>
 #include <cmath>
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <thread>
 using namespace Tracker;
 #ifdef TRACKER_SANITIZER
 static void tracker_audit_begin() {}
@@ -66,6 +69,161 @@ std::vector<float> render(MixerGraph graph, uint32_t block, uint32_t rate) {
   check(!effects.duplicate && mixer->through() == 6000, "Each insert executes exactly once per stream sample");
   check(mixer->meters().size() == 5 && mixer->meters()[4].left > 0, "Meters are independently readable after rendering");
   return output;
+}
+void liveMeterRegistration() {
+  auto observation=std::make_unique<SignalObservation>(48000);
+  const auto first=observation->add({"first","first","First",true});
+  std::atomic<bool> started{false},finished{false};std::atomic<uint32_t> latest{first};
+  bool identitiesValid=true;size_t enumerations=0;
+  std::thread telemetry([&]{
+    do {
+      size_t index=0;
+      for(const auto &port:observation->ports) {
+        const auto expected=index?"new/"+std::to_string(index-1):"first";
+        identitiesValid&=port.key==expected && port.node==expected && port.output && port.channels==2;
+        observation->read(uint32_t(++index));
+      }
+      ++enumerations;
+    }while(!finished.load(std::memory_order_acquire));
+  });
+  uint64_t allocations=0,frees=0,locks=0,iterations=0;
+  std::thread audio([&]{
+    std::array<float,2> sample{.25f,-.5f};
+    tracker_audit_begin();started.store(true,std::memory_order_release);
+    do {
+      observation->observe(first,sample.data(),1,iterations);
+      observation->observe(latest.load(std::memory_order_acquire),sample.data(),1,iterations);
+      ++iterations;
+    }while(!finished.load(std::memory_order_acquire));
+    tracker_audit_end(&allocations,&frees,&locks);
+  });
+  while(!started.load(std::memory_order_acquire))std::this_thread::yield();
+  for(size_t i=0;i<1024;++i) {
+    const auto key="new/"+std::to_string(i);
+    latest.store(observation->add({key,key,"New return",true}),std::memory_order_release);
+  }
+  finished.store(true,std::memory_order_release);audio.join();telemetry.join();
+  check(iterations>0 && allocations+frees+locks==0 && observation->read(first).measured && observation->ports.size()==1025,
+    "Registering new return meters during observation preserves stable slots and performs no audio-thread allocation/free/lock");
+  check(identitiesValid && enumerations>0,"Telemetry can enumerate immutable port identities while live bus registration publishes new meters");
+}
+void meterDecay() {
+  SignalObservation observation(48000);
+  auto port=observation.add({"track/in/0","track","Track input",false});
+  check(!observation.read(port).measured,"An unobserved port is distinct from measured silence");
+  std::array<float,1024> stereo{};for(size_t i=0;i<512;++i){stereo[i*2]=.5f;stereo[i*2+1]=-.25f;}
+  uint64_t alloc,free,locks;tracker_audit_begin();observation.observe(port,stereo.data(),512,1000);tracker_audit_end(&alloc,&free,&locks);
+  const auto known=observation.read(port);
+  check(alloc+free+locks==0 && known.measured && known.peakLeft==.5f && known.rmsLeft==.5f && known.peakRight==.25f && known.rmsRight==.25f && known.through==1512 && known.lastSignal==1512 && !known.clipped,"Known stereo port levels and audio clock have allocation-free observations");
+  stereo[0]=1.25f;stereo[1]=std::numeric_limits<float>::quiet_NaN();observation.observe(port,stereo.data(),512,1512);
+  check(observation.read(port).clipped && observation.read(port).nonFinite && std::isfinite(observation.read(port).rmsRight),"Overloads and invalid plugin output latch without contaminating telemetry");
+  observation.observe(port,nullptr,512,2024);check(observation.read(port).clipped && observation.read(port).rmsLeft==0 && observation.read(port).lastSignal==2024,"Silence is measured, preserves last signal clock and does not clear an overload");
+  observation.clear(port);observation.observe(port,nullptr,512,2536);check(!observation.read(port).clipped && !observation.read(port).nonFinite,"Explicit clear takes effect at the next observed block");
+  MixerGraph g;g.buses={{1,2,MixerBusKind::Track,"Track"},{2,0,MixerBusKind::Master,"Master"}};
+  auto mixer=std::make_unique<MixerRuntime>(g,compileMixer(g,{1},{},48000),48000);
+  std::array<float,512> samples{};samples.fill(.5f);
+  mixer->begin(512,0);mixer->process(0,samples.data(),samples.data(),nullptr,nullptr);mixer->process(1,nullptr,nullptr,nullptr,nullptr);mixer->complete();
+  check(mixer->meters()[0].left==.5f,"Peak captures a known level");
+  for(uint32_t frame=512;frame<=48000;frame+=512) {
+    uint64_t allocations,frees,locks;tracker_audit_begin();
+    mixer->begin(512,frame);mixer->process(0,nullptr,nullptr,nullptr,nullptr);mixer->process(1,nullptr,nullptr,nullptr,nullptr);mixer->complete();
+    tracker_audit_end(&allocations,&frees,&locks);
+    check(allocations+frees+locks==0,"Meter decay is bounded and realtime safe");
+    const double expected=.5*std::exp(-double(frame)/(48000*.2));
+    for(const auto &meter:mixer->meters())check(std::isfinite(meter.left)&&std::isfinite(meter.right)&&std::abs(meter.left-expected)<2e-6,"Meter peaks decay exponentially without unsigned-negation overflow or infinite JSON values");
+  }
+}
+void scopeCapture() {
+  auto observation=std::make_unique<SignalObservation>(48000);
+  const auto first=observation->add({"one/out/0","one","First",true}),second=observation->add({"two/out/0","two","Second",true});
+  std::array<float,8192> audio{};
+  for(size_t i=0;i<4096;++i){audio[2*i]=float(.5*std::sin(2*std::numbers::pi*64*i/4096));audio[2*i+1]=-audio[2*i];}
+  observation->scope.watch(first);
+  uint64_t a,f,l;tracker_audit_begin();observation->observe(second,audio.data(),4096,0);observation->observe(first,audio.data(),4096,0);tracker_audit_end(&a,&f,&l);
+  const auto known=observation->scope.snapshot(true);
+  check(a+f+l==0 && known.token==first && known.frames==4096 && known.waveform.size()==256 && known.through==4096,"Scope captures only the requested host tap at full rate without realtime allocation/free/lock");
+  check(known.fftFrames==4096 && std::abs(known.spectrum[64]-.5)<1e-5 && std::max_element(known.spectrum.begin(),known.spectrum.end())-known.spectrum.begin()==64,"Off-thread Hann spectrum reports known frequency/amplitude without cancelling opposite-polarity stereo");
+  observation->scope.watch(second);observation->observe(first,audio.data(),4096,4096);
+  check(observation->scope.snapshot().frames==0,"Changing scope tap cannot display an old source's samples");
+  observation->observe(second,nullptr,128,10000);const auto silent=observation->scope.snapshot();
+  check(silent.frames==128 && silent.waveform.front().first==10000 && silent.waveform.back().last==10128 && silent.waveform.front().maximum[0]==0,"Measured scope silence has explicit audio-clock coordinates");
+  observation->scope.watch(first);
+  for(uint64_t i=0;i<17;++i)observation->observe(first,audio.data(),4096,i*4096);
+  const auto full=observation->scope.snapshot();check(full.dropped==4096 && full.through==65536,"A stalled scope reader reports bounded drops without overwriting unread data");
+  observation->observe(first,audio.data(),128,17*4096);const auto gap=observation->scope.snapshot(true);
+  check(gap.frames==128 && gap.waveform.front().first==17*4096 && gap.fftFrames==128,"Scope history restarts across dropped samples rather than inventing continuity");
+  observation->scope.watch(0);observation->observe(first,audio.data(),512,70000);check(observation->scope.snapshot(true).frames==0,"Releasing the scope stops capture and clears the retained source");
+  SignalScope concurrent;
+  std::atomic<bool> done=false;
+  std::thread producer([&]{std::array<float,1024> one,two;one.fill(1);two.fill(2);for(uint64_t frame=0;frame<512*2000;frame+=512){concurrent.capture(1,one.data(),512,frame);concurrent.capture(2,two.data(),512,frame);}done.store(true,std::memory_order_release);});
+  bool coherent=true;uint32_t selected=1;
+  while(!done.load(std::memory_order_acquire)) {
+    concurrent.watch(selected);const auto state=concurrent.snapshot();
+    for(const auto &bucket:state.waveform)for(size_t c=0;c<2;++c)coherent&=bucket.minimum[c]==selected&&bucket.maximum[c]==selected;
+    selected=3-selected;
+  }
+  producer.join();check(coherent,"Concurrent scope selection and draining never attribute an old source to the new tap");
+}
+void listenCapture() {
+  auto render=[](uint32_t block,uint32_t rate) {
+    auto observation=std::make_unique<SignalObservation>(rate);
+    const auto tap=observation->add({"track/out/0","track","Track output",true});
+    std::array<float,8192> output{},source{};std::vector<float> result(4096*2);
+    observation->listen.select(tap);
+    for(uint32_t position=0;position<4096;position+=block) {
+      const auto frames=std::min(block,4096-position);
+      for(uint32_t i=0;i<frames;++i){source[2*i]=.25f;source[2*i+1]=-.5f;output[2*i]=.75f;output[2*i+1]=.125f;}
+      uint64_t a,f,l;tracker_audit_begin();observation->listen.begin(position);
+      // Render chunks may cross musical ticks inside a callback.
+      const auto first=frames/2;
+      observation->observe(tap,source.data(),first,position);
+      observation->observe(tap,source.data()+first*2,frames-first,position+first);
+      observation->listen.apply(output.data(),frames);tracker_audit_end(&a,&f,&l);
+      check(a+f+l==0,"Monitor tap capture and crossfade allocate/free/lock nothing");
+      std::copy_n(output.data(),frames*2,result.data()+position*2);
+    }
+    check(!observation->listen.pending() && observation->listen.settled().token==tap,"Monitor settles on requested source");
+    const auto fade=observation->listen.transitionFrames();
+    for(uint32_t i=0;i<4096;++i){const auto mix=std::min(1.,double(i)/fade);check(std::abs(result[2*i]-(.75-.5*mix))<1e-6 && std::abs(result[2*i+1]-(.125-.625*mix))<1e-6,"Listen fades linearly to the exact stereo host tap without downstream processing or gain overshoot");}
+    observation->listen.select(0);observation->listen.begin(4096);source.fill(.25f);output.fill(.75f);observation->observe(tap,source.data(),4096,4096);observation->listen.apply(output.data(),4096);
+    check(!observation->listen.pending() && observation->listen.settled().token==0 && output[0]==.25f && output[4095*2]==.75f,"Stop listening smoothly restores the current full mix");
+    observation->listen.begin(8192);output.fill(.137f);observation->listen.apply(output.data(),4096);check(output[0]==.137f && output.back()==.137f,"Disabled monitor leaves output unchanged");
+    return result;
+  };
+  for(auto rate:{44100u,48000u,96000u})check(render(64,rate)==render(511,rate)&&render(511,rate)==render(4096,rate),"Monitor ramp is independent of callback and tick partition");
+  SignalListen listen(48000);std::array<float,8192> a{},b{},mix{};a.fill(.25f);b.fill(.5f);mix.fill(.75f);
+  listen.select(1);listen.begin(0);listen.capture(1,a.data(),64,0);listen.apply(mix.data(),64);
+  listen.select(2,.5f);listen.begin(64);listen.capture(1,a.data(),256,64);listen.capture(2,b.data(),256,64);mix.fill(.75f);listen.apply(mix.data(),256);
+  check(listen.settled().token==1&&listen.pending(),"Rapid target changes finish the in-flight ramp without discontinuity or unbounded capture");
+  listen.begin(320);listen.capture(1,a.data(),512,320);listen.capture(2,b.data(),512,320);mix.fill(.75f);listen.apply(mix.data(),512);
+  check(listen.settled().token==2&&!listen.pending()&&mix[0]==.25f&&mix[1000]==.25f,"Correlated taps at matching gain produce no equal-power bump");
+  listen.select(2,1);listen.begin(832);listen.capture(2,b.data(),512,832);mix.fill(.75f);listen.apply(mix.data(),512);check(mix[0]==.25f&&mix[1000]==.5f,"Monitor gain changes are smoothed independently of document faders");
+  listen.begin(1344);mix.fill(.75f);listen.apply(mix.data(),512);check(mix[0]==0&&mix[1000]==0,"An unobserved/muted tap is silence, never stale samples or the normal mix");
+}
+void processorBypass() {
+  auto render=[](uint32_t block,uint32_t rate) {
+    ProcessorBypass bypass;bypass.prepare(rate,13,false,false);
+    std::array<float,8192> audio{};std::array<float,26> delay{};size_t cursor=0;
+    std::vector<float> result(4000*2);
+    for(uint32_t position=0;position<4000;) {
+      uint32_t count=std::min(block,4000-position);if(position<1000)count=std::min(count,1000-position);if(position<2500)count=std::min(count,2500-position);
+      if(position==1000)bypass.set(true);if(position==2500)bypass.set(false);
+      for(uint32_t i=0;i<count*2;++i)audio[i]=float(.2*std::sin((position*2+i)*.017));
+      uint64_t a,f,l;tracker_audit_begin();bypass.begin(audio.data(),count);
+      for(uint32_t i=0;i<count*2;++i){std::swap(audio[i],delay[cursor]);cursor=(cursor+1)%delay.size();audio[i]*=2;}
+      bypass.finish(audio.data(),count);tracker_audit_end(&a,&f,&l);check(a+f+l==0,"Latency-preserving bypass is allocation/free/lock safe");
+      std::copy_n(audio.data(),count*2,result.data()+position*2);position+=count;
+    }
+    const auto fade=std::round(rate*.005);
+    for(uint32_t i=26;i<result.size();++i) {
+      const double frame=i/2,wet=frame<1000?1:frame<2500?std::max(0.,1-(frame-1000)/fade):std::min(1.,(frame-2500)/fade);
+      const auto dry=float(.2*std::sin((i-26)*.017));check(std::abs(result[i]-dry*(1+wet))<1e-7,"Dry and wet share latency, preserving phase while bypass ramps");
+    }
+    return result;
+  };
+  for(auto rate:{44100u,48000u,96000u})check(render(17,rate)==render(512,rate)&&render(512,rate)==render(4096,rate),"Bypass fade is callback-partition invariant");
+  ProcessorBypass source;source.prepare(48000,0,true,true);std::array<float,1024> audio{};audio.fill(.5f);source.begin(audio.data(),512);source.finish(audio.data(),512);check(audio[0]==0&&audio.back()==0,"An initially bypassed instrument is silent, not dry sample pass-through");
+  source.set(false);source.begin(audio.data(),512);audio.fill(.5f);source.finish(audio.data(),512);check(audio[0]==0&&audio[480]==.5f,"An instrument fades back to its continuously running processor output");
 }
 void impulse(const std::vector<float> &out, std::vector<std::pair<size_t, float>> expected) {
   for (size_t i = 0; i < out.size() / 2; ++i) {
@@ -199,10 +357,27 @@ void meterDecay(uint32_t rate, uint32_t block) {
         "Meter release follows its 200 ms time constant");
   check(!mixer->failed(), "Meter rendering completes without a fault");
 }
+static void patchingAudio(uint32_t rate,uint32_t block) {
+  MixerGraph g;g.buses={{1,0,MixerBusKind::Track,"A"},{2,0,MixerBusKind::Track,"B"},{3,0,MixerBusKind::Track,"C"},{4,5,MixerBusKind::Return,"Return"},{5,0,MixerBusKind::Master,"Master"}};
+  g.buses[0].inserts={"double"};g.buses[0].output=5;
+  g.sidechains={{2,"double",0,0,false,true},{3,"double",0,0,false,true}};
+  // One processed signal travels down its serial path and two extra branches.
+  g.instruments={{"double",4,0},{"double",5,0}};
+  auto mixer=std::make_unique<MixerRuntime>(g,compileMixer(g,{1,2,3},{{"double",0,0}},rate),rate);
+  std::array<float,4096> one{},two{},three{};one.fill(.1f);two.fill(.2f);three.fill(.3f);
+  struct Count{uint32_t calls=0;};Count count;
+  auto process=[](void *p,size_t,float *audio,uint32_t n,uint64_t)noexcept{++static_cast<Count *>(p)->calls;for(uint32_t i=0;i<n*2;++i)audio[i]*=2;return true;};
+  for(uint32_t position=0;position<2000;position+=block){auto frames=std::min(block,2000-position);uint64_t a,f,l;tracker_audit_begin();mixer->begin(frames,position);
+    for(auto bus:mixer->plan().order){auto input=bus==0?one.data():bus==1?two.data():bus==2?three.data():nullptr;auto out=mixer->process(bus,input,input,process,&count);if(bus==4)for(uint32_t i=0;i<frames*2;++i)if(std::abs(out[i]-3.6f)>1e-6f)throw std::runtime_error("Main fan-in/fan-out sample reference differs");}
+    mixer->complete();tracker_audit_end(&a,&f,&l);check(!mixer->failed()&&a+f+l==0,"Fan-in/fan-out has no callback allocations, frees, locks or faults");
+  }
+  check(count.calls==(2000+block-1)/block,"Fan-out must never run an effect twice");
+}
 int main() {
   try {
     for (uint32_t rate : {44100, 48000, 96000}) for (uint32_t block : {1, 17, 128, 4096}) meterDecay(rate, block);
     for (uint32_t rate : {44100, 48000, 96000}) {
+      for(uint32_t block:{1u,17u,128u,512u})patchingAudio(rate,block);
       for (double balance : {-1., -.4, 0., .7, 1.}) for (bool live : {false, true}) {
         const auto reference = inputBalance(rate, 128, balance, live);
         for (uint32_t block : {1, 17, 512, 4096}) {
@@ -251,6 +426,11 @@ int main() {
       [](void *, size_t, float *data, uint32_t frames, uint64_t) noexcept { std::fill_n(data, frames * 2, std::numeric_limits<float>::max()); return true; }, nullptr);
     guard->complete();
     check(guard->failed() && silenced[0] == 0 && silenced[1] == 0, "Post-fader overflow is silenced before reaching the integer output mixer");
+    liveMeterRegistration();
+    meterDecay();
+    scopeCapture();
+    listenCapture();
+    processorBypass();
     std::cout << "PASS mixer runtime: exact routing/PDC, instrument and preview inputs, timing offsets, pre/post sends, mute/solo, smooth controls, meters and realtime audit\n";
     return 0;
   } catch (const std::exception &e) { std::cerr << "FAIL " << e.what() << '\n'; return 1; }

@@ -17,8 +17,9 @@ final class GraphLaneStrip:NSView {
   private struct State:Equatable{var revision="",pattern = -1,firstRow=0,cursorRow=0,playRow = -1,playPattern = -1,header:Float=0,row:Float=0,firstLane=0,selected=0,lanes=0}
   private var state:State?
   override var isFlipped:Bool{true}
+  override var isOpaque:Bool{true}
   override var acceptsFirstResponder:Bool{true}
-  override init(frame:NSRect){super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel("Pattern graph command lanes");setAccessibilityHelp("Graph commands aligned to pattern rows. Arrow keys select row and lane. Return edits, Delete removes the command.")}
+  override init(frame:NSRect){super.init(frame:frame);wantsLayer=true;setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel("Pattern graph command lanes");setAccessibilityHelp("Graph commands aligned to pattern rows. Arrow keys select row and lane. Return edits, Delete removes the command.")}
   required init?(coder:NSCoder){fatalError()}
   static func key(_ row:Int,_ target:String,_ column:Int)->String{"\(row):\(target):\(column)"}
   func refresh(){guard let pattern else{return}

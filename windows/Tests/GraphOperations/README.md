@@ -57,6 +57,7 @@ from the actual pattern override or song default.
 `GraphOperations::writes()` (all accept `dryRun`):
 
 - `graph.create`, `graph.clone`, `graph.update`, `graph.remove`
+- `graph.group.create`, `graph.group.update`, `graph.group.remove`, `graph.group.export`
 - `graph.node.add`, `graph.node.remove`
 - `graph.assign`, `graph.instrument.assign`
 - `graph.routes.set`, `graph.layout.set`, `graph.commands.set`
@@ -143,3 +144,5 @@ Pending outside this component: app/session routing and advertised schema subset
 real host hook wiring, prepared renderer publication, plugin/controller/editor
 methods, actual NativeProject container integration/save/reopen and Mac-app
 interchange. The metadata/model roundtrip here does not claim those integrations.
+
+Processing boundaries preserve flat DSP identities and do not stop playback. Movement translates all descendants. Export allocates independent node/group identities and remaps envelope-bank uses; references outside the boundary are validated before commit. Unused library edits do not invalidate active processing.

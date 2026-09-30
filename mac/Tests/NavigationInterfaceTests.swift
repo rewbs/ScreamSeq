@@ -1,6 +1,29 @@
 import AppKit
 extension InterfaceTests {
   static func navigationChecks() throws {
+    let input=PatternView();input.model=PatternModel(["rows":64,"channels":1,"samples":[["index":1],["index":2],["index":3]]]);input.model.cells=[49,3,0,0,0,0];input.column=1
+    let inputToken=input.contextToken
+    key(input,36,"\r");try require(input.instrument==3 && input.contextToken != inputToken,"Return uses the instrument under the cursor and invalidates input context")
+    key(input,126,"",flags:.option);try require(input.instrument==2,"Option Up selects previous instrument")
+    key(input,125,"",flags:.option);try require(input.instrument==3,"Option Down selects next instrument")
+    key(input,75,"/");try require(input.octave==3,"Keypad divide lowers octave using OpenMPT convention")
+    key(input,67,"*");try require(input.octave==4,"Keypad multiply raises octave")
+    key(input,124,"",flags:.option);try require(input.octave==5,"Laptop octave shortcut")
+    // Cut must reach the view through the responder chain and first place a
+    // complete clipboard payload on the pasteboard, including precise hits.
+    input.model.preciseNotes = PatternModel(["preciseNotes":[["channel":0,"position":8192,"note":49,"instrument":3,"velocity":90]]]).preciseNotes
+    let savedClipboard=(NSPasteboard.general.pasteboardItems ?? []).map { item in item.types.reduce(into:[NSPasteboard.PasteboardType:Data]()) {if let data=item.data(forType:$1) {$0[$1]=data}} }
+    var clipboardCount = -1
+    defer {if NSPasteboard.general.changeCount==clipboardCount {
+      let items=savedClipboard.map { values -> NSPasteboardItem in let item=NSPasteboardItem();for (type,data) in values {item.setData(data,forType:type)};return item }
+      NSPasteboard.general.clearContents();NSPasteboard.general.writeObjects(items)
+    }}
+    var cut=[String:Any]();input.onRowShift={cut=$0};input.cut(nil)
+    let deadline=Date().addingTimeInterval(2)
+    while cut.isEmpty && Date()<deadline {RunLoop.current.run(until:Date().addingTimeInterval(0.01))}
+    clipboardCount=NSPasteboard.general.changeCount
+    let clipboard=NSPasteboard.general.string(forType:.string) ?? ""
+    try require(cut["operation"] as? String=="clear" && clipboard.contains("notes") && clipboard.contains("8192"),"Cut copies precise events before requesting guarded clear")
     let grid = PatternView()
     grid.model = PatternModel(["patterns":[["index":0,"rows":64],["index":2,"rows":8]],"channels":8])
     grid.cursorRow=31;grid.cursorChannel=3;grid.column=4;grid.playPattern=0;grid.playRow=48

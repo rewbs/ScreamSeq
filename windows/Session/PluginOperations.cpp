@@ -63,18 +63,30 @@ std::vector<std::string> PluginOperations::writes(){return {"automation.replaceL
 #include "GraphPluginOperations.inc"
 size_t PluginOperations::slot(const Json &p) const {
   const auto &rack=project_.preserved.at("plugins");
+  need(p.contains("slot") != p.contains("plugin"),"Specify exactly one plugin identity or slot");
   if(p.contains("plugin")){auto id=text(p.at("plugin"),128);for(size_t i=0;i<rack.size();++i)if(rack[i].at("instanceID")==id)return i;throw Api::ApiError(-32602,"Plugin instance no longer exists");}
   need(!rack.empty(),"Plugin rack is empty");return size_t(integer(field(p,"slot"),0,rack.size()-1));
 }
 PluginOperations::History PluginOperations::snapshot() const {auto &p=project_.preserved;return {p.at("plugins"),p.at("automation"),stateBytes(p.at("plugins"),p.at("automation"))};}
+std::optional<std::pair<size_t,bool>> PluginOperations::bypassOnly(const Json &plugins,const Json &automation) const {
+  const auto &current=project_.preserved.at("plugins");
+  if(!liveBypass_||current.size()!=plugins.size()||automation!=project_.preserved.at("automation"))return {};
+  std::optional<std::pair<size_t,bool>> changed;
+  for(size_t i=0;i<plugins.size();++i)if(current[i]!=plugins[i]){
+    if(changed)return {};auto comparable=current[i];comparable["bypass"]=plugins[i].at("bypass");
+    if(comparable!=plugins[i])return {};changed=std::pair{i,plugins[i].at("bypass").get<bool>()};
+  }
+  return changed;
+}
 void PluginOperations::commit(Json plugins,Json automation,bool keepEditors,bool parameterOnly,std::span<const ParameterChange> changes) {
   if(plugins==project_.preserved.at("plugins")&&automation==project_.preserved.at("automation"))return;
   auto candidate=project_;candidate.preserved["plugins"]=plugins;candidate.preserved["automation"]=automation;
   validatePluginCapacity(projectPluginStates(candidate),document_.native().mixer.buses.size());(void)projectAbsoluteAutomation(candidate);
   auto before=snapshot();need(before.bytes<=128u*1024u*1024u,"Plugin Undo state exceeds 128 MiB");
+  const auto bypass=bypassOnly(plugins,automation);
   undo_.push_back(std::move(before)); // Allocate history before stopping or publishing.
-  try {if(parameterOnly && liveParameters_) {if(!changes.empty())liveParameters_(changes);}else if(stop_)stop_();}catch(...){undo_.pop_back();throw;}
-  if(!keepEditors){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
+  try {if(bypass)liveBypass_(bypass->first,bypass->second);else if(parameterOnly && liveParameters_) {if(!changes.empty())liveParameters_(changes);}else if(stop_)stop_();}catch(...){undo_.pop_back();throw;}
+  if(!keepEditors&&!bypass){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
   project_.preserved["plugins"].swap(plugins);project_.preserved["automation"].swap(automation);
   ++project_.pluginRevision;Project::invalidateRecoveryTake(project_);redo_.clear();
   size_t bytes=0;for(const auto &h:undo_)bytes+=h.bytes;
@@ -181,8 +193,9 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
   if(method=="history.undo"||method=="history.redo") {
     keys(p,{"domain"});need(field(p,"domain")=="plugins","Wrong plugin history domain");auto &from=method=="history.undo"?undo_:redo_;auto &to=method=="history.undo"?redo_:undo_;
     if(from.empty())return Json::object();auto candidate=project_;candidate.preserved["plugins"]=from.back().plugins;candidate.preserved["automation"]=from.back().automation;
-    validatePluginCapacity(projectPluginStates(candidate),document_.native().mixer.buses.size());auto before=snapshot();to.push_back(std::move(before));
-    try{if(stop_)stop_();}catch(...){to.pop_back();throw;}editors_.clear();openEditors_.clear();pendingParameters_.clear();project_.preserved["plugins"].swap(from.back().plugins);project_.preserved["automation"].swap(from.back().automation);from.pop_back();++project_.pluginRevision;Project::invalidateRecoveryTake(project_);return Json::object();
+    validatePluginCapacity(projectPluginStates(candidate),document_.native().mixer.buses.size());auto before=snapshot();const auto bypass=bypassOnly(from.back().plugins,from.back().automation);to.push_back(std::move(before));
+    try{if(bypass)liveBypass_(bypass->first,bypass->second);else if(stop_)stop_();}catch(...){to.pop_back();throw;}
+    if(!bypass){editors_.clear();openEditors_.clear();pendingParameters_.clear();}project_.preserved["plugins"].swap(from.back().plugins);project_.preserved["automation"].swap(from.back().automation);from.pop_back();++project_.pluginRevision;Project::invalidateRecoveryTake(project_);return Json::object();
   }
   if(method=="plugin.add") {
     keys(p,{"descriptor","dryRun"});need(rack.size()<maximumNativePlugins,"Plugin rack is full");PluginState state{descriptor(field(p,"descriptor"))};state.instanceID=identity();
@@ -221,9 +234,9 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     NativePlugin probe(candidate,48000);rack[index]["state"]=blob(probe.state().state);
     commit(std::move(rack),std::move(automation));return result;
   }
-  if(method=="plugin.parameters.get"){keys(p,{"slot"});return parameters(editor(index));}
+  if(method=="plugin.parameters.get"){keys(p,{"slot","plugin"});return parameters(editor(index));}
   if(method=="plugin.state.get"){keys(p,{"slot"});return {{"descriptor",descriptor(state.descriptor)},{"data",base64(state.state)},{"kind","saved-baseline"}};}
-  if(method=="plugin.buses.get"){keys(p,{"slot"});return {{"plugin",state.instanceID},{"buses",buses(editor(index))}};}
+  if(method=="plugin.buses.get"){keys(p,{"slot","plugin"});return {{"plugin",state.instanceID},{"buses",buses(editor(index))}};}
   if(method=="plugin.editor.open"||method=="plugin.editor.close") {
     keys(p,{"slot"});auto &plugin=editor(index);if(method=="plugin.editor.open"){plugin.showEditor();openEditors_.insert(state.instanceID);}else {flushEditors(true);plugin.closeEditor();openEditors_.erase(state.instanceID);}return {{"open",plugin.editorOpen()},{"plugin",state.instanceID}};
   }
@@ -263,11 +276,11 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
   }
   if(method=="plugin.remove") {keys(p,{"slot","dryRun"});rack.erase(rack.begin()+index);Json remaining=Json::array();for(auto point:automation){auto s=point.at(0).get<size_t>();if(s==index)continue;if(s>index)point[0]=s-1;remaining.push_back(std::move(point));}automation=std::move(remaining);}
   else if(method=="plugin.move") {keys(p,{"slot","direction","dryRun"});const auto direction=number(field(p,"direction"),-1,1);need(direction==-1||direction==1,"Direction must be -1 or 1");const auto target=int(index)+int(direction);if(target<0||target>=rack.size())return Json::object();std::swap(rack[index],rack[target]);for(auto &point:automation){if(point[0]==index)point[0]=target;else if(point[0]==target)point[0]=index;}}
-  else if(method=="plugin.bypass") {keys(p,{"slot","bypass","dryRun"});need(p.contains("bypass"),"bypass is required");rack[index]["bypass"]=flag(p,"bypass");}
+  else if(method=="plugin.bypass") {keys(p,{"slot","plugin","bypass","dryRun"});need(p.contains("bypass"),"bypass is required");rack[index]["bypass"]=flag(p,"bypass");}
   else if(method=="plugin.state.set"||method=="plugin.parameters.set") {
     auto next=state;
     if(method=="plugin.state.set"){keys(p,{"slot","data","dryRun"});next.state=unbase64(field(p,"data"));}
-    else keys(p,{"slot","values","dryRun"});
+    else keys(p,{"slot","plugin","values","dryRun"});
     NativePlugin probe(next,48000);
     if(method=="plugin.parameters.set") {auto available=probe.parameters();const auto &values=field(p,"values");need(values.is_array()&&!values.empty()&&values.size()<=4096,"Invalid parameter batch");std::set<uint32_t> seen;std::vector<std::pair<uint32_t,float>> prepared;
       for(const auto &v:values){keys(v,{"id","value"});const auto id=uint32_t(integer(field(v,"id"),0,UINT32_MAX));need(seen.insert(id).second,"Duplicate plugin parameter");auto found=std::find_if(available.begin(),available.end(),[&](const auto &x){return x.id==id;});need(found!=available.end()&&found->writable,"Plugin parameter is not writable");prepared.emplace_back(id,float(number(field(v,"value"),found->min,found->max)));}
@@ -275,7 +288,7 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     }
     rack[index]["state"]=blob(probe.state().state);
   } else if(method=="plugin.buses.set") {
-    keys(p,{"slot","inputs","outputs","dryRun"});need(p.contains("inputs")||p.contains("outputs"),"Specify auxiliary ports");auto available=editor(index).buses();
+    keys(p,{"slot","plugin","inputs","outputs","dryRun"});need(p.contains("inputs")||p.contains("outputs"),"Specify auxiliary ports");auto available=editor(index).buses();
     for(const auto *direction:{"inputs","outputs"})if(p.contains(direction)){const bool input=std::string(direction)=="inputs";const auto &values=p.at(direction);need(values.is_array()&&values.size()<=63,"Invalid auxiliary ports");std::set<uint32_t> ports;for(const auto &v:values){auto i=uint32_t(integer(v,1,63));need(ports.insert(i).second,"Duplicate auxiliary port");need(std::any_of(available.begin(),available.end(),[&](const auto &b){return b.input==input&&b.index==i&&b.supported;}),"Unsupported auxiliary port");}rack[index][input?"auxiliaryInputs":"auxiliaryOutputs"]=ports;}
     if(!dry && rack!=project_.preserved.at("plugins")){auto candidate=project_;candidate.preserved["plugins"]=rack;NativePlugin probe(projectPluginStates(candidate).at(index),48000);}
   } else if(method=="plugin.programs.get"||method=="plugin.programs.load") {

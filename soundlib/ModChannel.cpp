@@ -71,6 +71,7 @@ void ModChannel::Reset(ResetFlags resetMask, const CSoundFile &sndFile, CHANNELI
 	{
 #ifdef OPENMPT_EDITOR_CORE
 		nativeReverseLoop.Reset();
+		nativeNudgeInterpolating = false;
 #endif
 		increment = SamplePosition(0);
 		nPeriod = 0;

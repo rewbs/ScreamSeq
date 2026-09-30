@@ -60,6 +60,7 @@ int main(int argc, char **argv) {
       require([reopened bypassPlugin:0 bypass:YES error:&error], "bypass effect");
       require([reopened savePath:[folder stringByAppendingPathComponent:@"bypassed.resonance"] error:&error],
               "save bypass");
+      require([reopened openPath:[folder stringByAppendingPathComponent:@"bypassed.resonance"] error:&error] && [[reopened snapshot:0][@"nativePlugins"][0][@"bypass"] boolValue], "bypass survives project recall");
       require([reopened removePlugin:0 error:&error], "remove effect");
       require([[reopened snapshot:0][@"nativePlugins"] count] == 0, "empty graph after removal");
       // Reject malformed project properties before replacing the existing document.
@@ -168,13 +169,15 @@ int main(int argc, char **argv) {
       require([history undoEffectChange:&error] && ![[history snapshot:0][@"nativePlugins"][1][@"bypass"] boolValue],
               "undo bypass");
       require([history removePlugin:1 error:&error] && ![[history snapshot:0][@"canRedoEffect"] boolValue],
-              "new chain change clears only effect redo");
+              "new chain change clears redo");
       [history undo];
-      require(![[history snapshot:0][@"cells"] isEqual:editedCells] &&
-                  [[history snapshot:0][@"nativePlugins"] count] == 1,
-              "module undo preserves the native effect graph");
-      require([history undoEffectChange:&error] && [[history snapshot:0][@"nativePlugins"] count] == 2,
-              "undo removal restores both effects");
+      require([[history snapshot:0][@"cells"] isEqual:editedCells] &&
+                  [[history snapshot:0][@"nativePlugins"] count] == 2,
+              "Global Undo restores the most recent plugin removal before older pattern edits");
+      require([history undoEffectChange:&error] && [lowpassID isEqual:[history snapshot:0][@"nativePlugins"][0][@"instanceID"]],
+              "Historical effect Undo alias undoes the next chronological reorder");
+      require([history undoEffectChange:&error] && ![[history snapshot:0][@"cells"] isEqual:editedCells] && [[history snapshot:0][@"nativePlugins"] count] == 2,
+              "The same Undo path reaches the preceding pattern edit without changing processors");
       require([reopened songTitle:@"Channel test" tempo:125 speed:6 channels:12 error:&error], "resize channel count");
       require([[reopened snapshot:0][@"channels"] integerValue] == 12, "channel count changed");
       [reopened undo];

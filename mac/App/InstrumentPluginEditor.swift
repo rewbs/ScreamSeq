@@ -10,6 +10,7 @@ final class InstrumentPluginEditor: NSView {
   var revision:String
   var onRequest:((String,[String:Any],@escaping([String:Any])->Void)->Void)?
   var onSaved:((Int)->Void)?
+  var onAddPlugin: (() -> Void)?
   var pending=false
   var applyButton:ActionButton!
   init(instrument:Int,model:PatternModel,selectedPlugin:String?=nil) {
@@ -29,15 +30,19 @@ final class InstrumentPluginEditor: NSView {
     name.setAccessibilityLabel("New plugin instrument name")
     if isCreating {name.stringValue=plugin.titleOfSelectedItem ?? "Plugin instrument"}
     applyButton=ActionButton(isCreating ? "Create & assign instrument" : "Apply assignment", prominent:true){[weak self] in self?.apply()}
-    status.stringValue=isCreating ? "Creates an empty tracker instrument and connects it to this synth. No sample needed. Enter its number beside a pattern note. Undo effect change restores assignment; document Undo removes the new instrument." : "Other instruments sharing a plugin keep their assignments. Undo effect change restores this routing."
-    if isCreating && plugin.numberOfItems==0 {status.stringValue="First add a VST3 or AU instrument in Plugins → Add plugin…, then reopen New plugin instrument.";applyButton.isEnabled=false}
+    status.stringValue=isCreating ? "Creates an empty tracker instrument and connects it to this synth. No sample needed. Enter its number beside a pattern note. Use ⌘Z to undo changes." : "Other instruments sharing a plugin keep their assignments. Use ⌘Z to restore this routing."
+    if isCreating && plugin.numberOfItems==0 {status.stringValue="Add an instrument plugin here, then create its tracker instrument. The browser returns to this assignment.";applyButton.isEnabled=false}
     status.maximumNumberOfLines=5;status.lineBreakMode = .byWordWrapping;status.preferredMaxLayoutWidth=530;status.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    plugin.target=self;plugin.action=#selector(assignmentChanged);channel.target=self;channel.action=#selector(assignmentChanged)
+    applyButton.isHidden = !isCreating
+    let add = ActionButton("Add instrument plugin…", symbol:"plus") { [weak self] in self?.onAddPlugin?() }
     let body=stack(.vertical,[Theme.label(isCreating ? "New plugin trigger instrument" : "Instrument \(instrument) · Sound source",size:18,weight:.semibold),
-      name,plugin,channel,status,stack(.horizontal,[NSView(),applyButton!])],spacing:12)
+      name,stack(.horizontal,[plugin,add]),channel,status,stack(.horizontal,[NSView(),applyButton!])],spacing:12)
     name.isHidden = !isCreating
     body.stretchAcrossAxis();body.fill(self,inset:20)
   }
   required init?(coder:NSCoder){fatalError()}
+  @objc private func assignmentChanged() { if !isCreating { apply() } }
   func apply(){
     guard !pending,let id=plugin.selectedItem?.representedObject as? String,let onRequest else{return}
     guard window?.makeFirstResponder(nil) != false else{return}

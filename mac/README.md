@@ -23,12 +23,12 @@ MIDI-device and sustained display/audio checks still need a separate session.
 
 ## Working with songs
 
-- **Patterns:** enter notes with Z–M and Q–U; choose octave and step above the grid. Arrow keys move between fields, Tab changes channel, Space plays/stops. Effects use the source format's command letters. Volume values are decimal; instrument and effect parameters are hexadecimal.
-- **Command help:** Pattern → Command Picker… (Shift-Command-K) searches the current format's effect and volume commands, including extended subcommands. Choose a command, enter its value and apply to the displayed cell. **Use cursor** explicitly refreshes the target; stale edits reject. Pitch, volume, panning, timing and sound commands have distinct colors, and the grid footer explains the command at the edit cursor. Agents read the same catalog with `pattern.commands` and apply it with `pattern.apply`.
+- **Patterns:** enter notes with Z–M and Q–U; choose octave and step above the grid. Return on an instrument number selects it for new notes; Option–Up/Down steps through instruments. Keypad ÷/× or Option–Left/Right lowers/raises the input octave. Arrow keys move between fields, Tab changes channel, Space plays/stops. Effects use the source format's command letters. Volume values are decimal; instrument and effect parameters are hexadecimal.
+- **Command help:** Pattern → Command Picker… (Shift-Command-K) searches the current format's effect and volume commands, including extended subcommands. Choose a command, enter its value and apply to the displayed cell. **Use cursor** explicitly refreshes the target; stale edits reject. Pitch, volume, panning, timing and sound commands have distinct colors, and the bottom status bar explains the command at the edit cursor. Agents read the same catalog with `pattern.commands` and apply it with `pattern.apply`.
 - **Independent editing:** turn Follow off to browse and edit while another pattern plays. Scrolling also turns it off, and the button immediately reflects that state. The footer labels the edit pattern/row/channel separately from the playback position above. Agents can read both through `context.get` and use `context.set` to navigate or toggle following with a check against concurrent cursor/selection changes; navigation leaves the song and transport intact.
-- **Selection:** drag or use Shift with arrows. Command-C/V copies/pastes rectangular cells. Delete clears a selection. The Pattern menu provides transpose and row operations. Command-Z / Shift-Command-Z undo and redo module edits.
+- **Selection:** drag or use Shift with arrows. Command-X/C/V cuts/copies/pastes rectangular cells, including precise-note hits and extra FX. Delete clears a selection. The Pattern menu provides transpose and row operations. Command-Z / Shift-Command-Z undo and redo module edits.
 - **Pattern tools:** Pattern → Pattern Tools… (Shift-Command-T) provides interpolation, humanization, seeded randomization, scaling/fill, transpose, instrument remapping, reverse/rotate, expand/shrink and masked clearing. Choose selection/channel/pattern/all-pattern scope, preview the exact changes, then apply in one undo step. Expand/shrink and row insertion/deletion reject discarded data unless explicitly allowed. Row tools shift masked fields within the selected bounds and keep pattern length and separate plugin envelopes unchanged. Pattern → Insert Row protects nonempty data at the end; Delete Row explicitly removes the cursor row across all columns. Pattern → Mix Paste fills empty destination fields; Merge Paste skips empty source fields. The same commands are available to agents through `pattern.transform` and `pattern.paste`.
-- **Orders:** use Arrange to see the complete order list, assign/reuse patterns, insert before/after, move or remove orders, and select a song sequence. The main strip shows a window around the selected order. Song Settings changes title, tempo, speed and channel count.
+- **Orders:** use Arrange to see the complete order list, assign/reuse patterns, insert before/after, move or remove orders, and select a song sequence. The main strip shows a window around the selected order. Click the BPM value in the header to edit tempo directly (Return saves, Escape cancels). Song Settings changes title, tempo, speed and channel count.
 - **Samples:** import or replace WAV, AIFF, MP3, FLAC and formats supported by the embedded engine. Drag the waveform or enter exact frame bounds; click to place a paste cursor. Zoom to a selection or use +/−, Option-scroll or pinch; pan with arrows or horizontal/Shift-scroll. At individual-frame zoom, enable **Draw** and drag a waveform stroke; release applies one Undo step and Escape cancels. **Snap selection** and **Snap loop** find zero crossings or exact frame-grid boundaries; **Snap after selecting** applies this to each completed selection. Copy/Cut/Paste (Command-C/X/V with waveform focus) use the session's sample clipboard. Paste offers Insert, Overwrite, Mix and Replace, rate conversion, independent mix levels and a clipping preview. Deletion and structural paste adjust loops/cues with exact Undo/Redo. **Copy to new** creates a separate sample from the range and selected channels, retaining source settings and adjusted loops, then selects its new slot. Range/channel processing includes reverse, normalize, curved fades, gain, phase inversion, silence, trim, DC removal, smoothing and stereo operations. Loop crossfades offer linear/equal-power curves, preserved duration using pre-loop audio, or overlap with an explicit shorter loop period. PCM and loop geometry undo together. All these edits, drawing, crossfades and clipboard controls share the agent API. Edit rate, volume and pan; preview/apply normal and sustain forward/ping-pong/reverse loops together with compact undo through the native controls or `sample.loops.set`; native projects preserve exact sample data and settings.
 - **Instruments:** create instruments from samples, import ITI/XI instruments, edit volume/pan/pitch/filter envelopes, sustain/loop ranges and the note-to-sample map, and set new-note/duplicate-note behavior. Double-click the envelope to add a node; drag nodes or edit their tick/value fields. Arrow keys adjust a selected node (Shift moves by four); Delete removes it. Sustain/loop node references adjust when a node is removed. Format-specific point limits are enforced. **Envelope tools…** opens copy/paste, repeated insertion, shift, flip, scale, ramp, sine and seeded humanization with exact previews. Loop/sustain/release markers follow moved nodes; replacement reattachments and integer rounding are reported. The clipboard works across instrument envelope windows; Apply saves one document Undo step.
 - **MIDI:** select a CoreMIDI input or send from another app to `ScreamSeq MIDI In`. Arm recording in MIDI settings. Stopped transport records notes in steps; running transport records to the current row. MIDI timing is quantized to tracker rows.
@@ -208,14 +208,22 @@ to qualify the real timer, abrupt process death, restart, recovery, and error
 handling without visible windows, hardware audio or real user recovery files.
 
 **Pattern → Precise Notes…** (Command–Shift–N, or Return on a note) delays notes
-within the selected row. Select the note, enter **Row offset**, and click **Apply**;
-the visible fields are saved directly. `0` means row start, `0.5` halfway through
-the row, and `0.75` three quarters. For example, at 125 BPM with six ticks per row
-in classic timing, `0.5` delays the note by 60 ms. It changes when the note starts,
-not where playback starts inside the sample. **Add** creates another event;
-**Check edit** validates the draft without playing audio. Leave **Replace the
-ordinary note in this row** enabled when moving an existing note. The `~` marker
-identifies precise events, including ones at offset zero.
+within the selected row. Edit **Beat offset** or **Row offset** directly in the
+hit table, or drag its timeline marker. Values save automatically after a short
+typing pause; completed drags save as one Undo step. `0` means row start, `0.5`
+rows means halfway through the row; with four rows per beat, `1/8` beat is the
+same offset. Timing changes when the note starts, not the playback position
+inside its sample.
+
+Single-click a cell and type. Note cells use the normal musical keyboard;
+Return or double-click allows a note name such as `C#4`, `Off`, or `Cut`.
+Tab and arrows navigate the mini-grid. Instrument and volume values are decimal;
+FX values are hexadecimal. **Add hit** duplicates a selected occurrence;
+**Fill to row end** creates evenly spaced retriggers with a volume ramp.
+**Selected hit details** exposes additional effect help and the option to replace
+the ordinary row note. The `~` marker identifies precise events, including
+ones at offset zero. No Apply button is needed. Inspector shortcuts are in the
+tab tooltips; selected tabs use an underline and a different colour from actions.
 
 Agents use the same `pattern.notes.get` / `pattern.notes.set` commands. Positions
 are absolute within the pattern, in 65,536 units per row: halfway through row 3
@@ -226,3 +234,25 @@ recovery and audio export retain precise timing; legacy module export cannot.
 
 The connected workspace, reusable audio/modulation graphs, dedicated pattern graph
 lanes and their agent API are described in [GRAPH_WORKFLOW.md](GRAPH_WORKFLOW.md).
+
+Record scratching: type **NF** or **NR** in any FX command column (or search
+“nudge” with `?`). Set **Nudge strength (%)**, **Offset** and **Duration (rows)**.
+Try NR at 25% for a slowdown and 75% for a reverse scratch, with duration 1 row;
+NF pushes forward. The duration includes the return to normal speed. These are
+sample-playback effects; they do not reverse a plugin instrument's output.
+
+### In-pattern scratch values
+
+Type `NF` or `NR` in any FX command field to enter strength (%) and duration
+(rows) on that pattern row. Tab or Shift-Tab switches between the two numbers;
+Return saves both in one Undo step and advances by the edit step. Escape cancels.
+The grid shows `strength/duration`, e.g. `75/0.5` means 75% strength for half a
+row, including recovery. Return or double-click edits an existing command;
+typing a number in its value field replaces the strength directly. Fractional
+values retain 1/65536-row timing, and editing preserves the command's onset.
+The detailed effect editor remains available for changing onset and other effects.
+
+The graph's selected connection inspector is at the top of its sidebar. Click a
+wire or its label; double-click or Return focuses its values. Update connection
+saves, Delete removes, and New… creates another route. Fixed insert-order wires
+link to their subgraph or mixer instead of showing ineffective routing fields.

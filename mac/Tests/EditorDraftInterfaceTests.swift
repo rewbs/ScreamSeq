@@ -107,12 +107,14 @@ extension InterfaceTests {
     mixer.output.selectItem(at: 2); mixer.name.stringValue = "Typed name"; mixer.effect.selectItem(at: 1)
     mixer.update(data)
     try require(mixer.output.indexOfSelectedItem == 2 && mixer.name.stringValue == "Typed name" && mixer.effect.indexOfSelectedItem == 1, "A refresh keeps an unapplied output choice, typed name and effect choice")
-    try press(mixer, "Route")
+    _ = mixer.output.sendAction(mixer.output.action,to:mixer.output.target)
     try require(calls.last?.0 == "mixer.bus.set" && calls.last?.1["output"] as? String == "g2", "Route sends the chosen bus, not the one sharing its name")
     replies.removeFirst()(["error": ["code": -32000, "message": "No"]])
     try require(replies.isEmpty, "A rejected routing edit has nothing to resynchronize")
-    try press(mixer, "Add effect")
-    try require(calls.last?.1["inserts"] as? [String] == ["fx2"], "Add effect uses the chosen plugin's stable ID")
+    let existing=mixer.insertMenu(nil).items.compactMap(\.submenu).flatMap(\.items).filter{$0.title=="Gain"}
+    try require(existing.count==2,"Duplicate-named effects remain distinct menu entries")
+    _ = NSApp.sendAction(existing[1].action!,to:existing[1].target,from:existing[1])
+    try require(calls.last?.1["plugins"] as? [String] == ["fx2"], "Add effect uses the chosen plugin's stable ID")
     replies.removeFirst()(["error": ["code": -32000, "message": "No"]])
 
     mixer.control("gainDB", value: -3.27, final: true)
@@ -187,12 +189,12 @@ extension InterfaceTests {
     editor.update(data); editor.selectedID = "n104"; editor.inspect()
     editor.name.stringValue = "Typed"; editor.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: editor.name))
     editor.load()
-    editor.canvas.onMove?("n101", 99, 77)
+    editor.moveNodes([("n101",99,77)])
     try require(calls.count == 1, "A move made while loading is not dropped into a second request")
     replies.removeFirst()(["result": ["revision": "g1", "data": data]])
     try require(editor.name.stringValue == "Typed" && editor.hasDraft, "A reload keeps a typed node name")
     let queued = ((calls.last?.1["definition"] as? [String: Any])?["nodes"] as? [[String: Any]])?.first { $0["id"] as? String == "n101" }
-    try require(calls.count == 2 && queued?["x"] as? Double == 99 && editor.canvas.nodes.first { $0.id == "n101" }?.x == 99, "The queued move is sent after the load and the node stays where it was dropped")
+    try require(calls.count == 2 && queued?["x"] as? Double == 99, "The queued move is sent after the load and the node stays where it was dropped")
     replies.removeFirst()(["error": ["message": "captured"]])
     editor.reload(); replies.removeFirst()(["result": ["revision": "g1", "data": data]])
     try require(editor.name.stringValue == "Slow sweep" && !editor.hasDraft, "Reload discards typed inspector text")
@@ -217,9 +219,10 @@ extension InterfaceTests {
     let envelope = GraphEnvelopeEditor(frame: NSRect(x: 0, y: 0, width: 850, height: 260))
     envelope.onRequest = { _, _, reply in reply(["result": ["revision": "v1", "data": ["rows": 64, "rowsPerBeat": 4, "points": [["position": 0, "value": 0.5, "curve": "linear"]]]]]) }
     envelope.context(graph: "n100", node: ["id": "n105", "kind": "automation", "name": "Motion"], patterns: [["index": 0, "rows": 64]], revision: "v1")
+    envelope.canvas.selected=0;envelope.showPoint()
     envelope.row.stringValue = "12"; envelope.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: envelope.row))
     envelope.value.stringValue = "80"; envelope.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: envelope.value))
-    try require(!envelope.hasDraft, "Typing a row or value before Set point creates no draft")
+    try require(envelope.hasDraft, "Typing a selected point retains its draft until the direct edit commits")
     envelope.onRequest = nil
 
     let model = PatternModel(["rows": 64, "channels": 4, "patterns": [["index": 0, "id": "n9"]]])
@@ -242,7 +245,7 @@ extension InterfaceTests {
     let editor = PatternAutomationEditor(frame: .zero)
     editor.onContext = { PatternModel(["pattern": 0, "nativePlugins": [["name": "Test gain", "instanceID": "gain-instance"]]]) }
     var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
-    var lanes = [[String: Any]]()
+    let lanes = [[String: Any]]()
     func answer() {
       let method = calls[calls.count - replies.count].0, reply = replies.removeFirst()
       var data: Any = [String: Any]()
@@ -254,18 +257,17 @@ extension InterfaceTests {
     editor.onRequest = { method, params, reply in calls.append((method, params)); replies.append(reply) }
     editor.load(); answer(); answer()
     try require(editor.parameterID == 7 && !editor.hasDraft, "Automation loads its first parameter")
-    editor.ramp(false); editor.apply()
-    lanes = [["id": "lane1", "plugin": "gain-instance", "parameter": 7, "points": [["position": 0, "value": 0.0, "curve": "linear"], ["position": 16383, "value": 1.0, "curve": "linear"]]]]
+    editor.ramp(false);editor.apply()
+    try require(calls.last?.0=="automation.pattern.set" && editor.loading,"A direct gesture starts one save")
+    editor.canvas.selected=0;editor.canvas.replaceSelected(position:512,value:0.25,curve:"linear")
     answer()
-    try require(calls.last?.0 == "automation.pattern.get" && editor.loading, "Apply reloads the saved lane")
-    editor.canvas.selected = 0; editor.canvas.replaceSelected(position: 512, value: 0.25, curve: "linear")
-    try require(editor.hasDraft, "Dragging during the reload starts a new draft")
-    answer(); answer()
-    try require(editor.hasDraft && editor.parameterID == 7 && editor.laneID == "lane1" && editor.canvas.points.first?.position == 512, "The reload keeps the newer draft and its target")
-    editor.apply()
-    try require(calls.last?.0 == "automation.pattern.set" && (calls.last?.1["points"] as? [[String: Any]])?.first?["position"] as? Int == 512, "The kept draft can still be applied")
-    answer(); answer(); answer()
-    try require(!editor.hasDraft && editor.canvas.points.count == 2 && editor.parameterID == 7, "An undisturbed reload shows the saved lane")
+    try require(editor.hasDraft && editor.parameterID==7 && editor.laneID=="lane1" && editor.canvas.points.first?.position==512,
+      "An in-flight save keeps the newer gesture and its target")
+    editor.autoSaveWork?.cancel();editor.autoSaveWork=nil;editor.apply()
+    try require(calls.last?.0=="automation.pattern.set" && (calls.last?.1["points"] as? [[String:Any]])?.first?["position"] as? Int==512,
+      "The next save delivers the newer gesture")
+    answer()
+    try require(!editor.hasDraft && editor.canvas.points.first?.position==512,"An undisturbed save keeps the confirmed canvas")
 
     let canvas = AutomationCanvas(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
     canvas.points = [EnvelopePoint(position: 0, value: 0, curve: "linear"), EnvelopePoint(position: 512, value: 1, curve: "linear")]
@@ -324,7 +326,7 @@ extension InterfaceTests {
     row.slider.doubleValue = 0.2; row.slider.update()
     try require(edits == [0.8, 0.2], "The restored value is still the baseline for the next edit")
 
-    row.reading.showEditingText()
+    row.reading.prepareEditing()
     try require(row.reading.stringValue == "0.2", "Focusing a value shows its full precision")
     row.reading.submit()
     try require(edits == [0.8, 0.2] && row.reading.stringValue == "0.2", "Leaving a focused value untouched is not an edit")

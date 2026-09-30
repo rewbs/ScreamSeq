@@ -15,6 +15,13 @@ extension InterfaceTests {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 650), styleMask: [.titled], backing: .buffered, defer: false)
     window.contentView = editor; window.setContentSize(NSSize(width: 1040, height: 650))
     editor.revision = "song:0"; editor.update(["active": true, "buses": buses]); editor.layoutSubtreeIfNeeded()
+    var navigationReply:(([String:Any])->Void)?
+    editor.onRequest={_,_,reply in navigationReply=reply}
+    editor.load();editor.navigate(to:"bus3")
+    try require(editor.loading && editor.selectedID=="bus0","Navigation waits for the requested mixer snapshot")
+    navigationReply?(["result":["revision":"song:0","data":["active":true,"buses":buses]]])
+    try require(editor.selectedID=="bus3" && editor.viewMode.selectedSegment==1,"Graph-to-mixer bridge selects its stable bus after load")
+    _=editor.selectBus("bus0");editor.viewMode.selectedSegment=0;editor.changeViewMode();editor.onRequest=nil
     let strips = editor.strips
     try require(editor.bounds.width == 1040 && strips.visible[0]?.busID == "bus0", "Mixer uses a real constrained compact viewport")
     try require(strips.visible.count >= 6 && strips.visible.count <= 9 && strips.createdCount <= 9, "Maximum graph only allocates visible controls and neighboring strips")

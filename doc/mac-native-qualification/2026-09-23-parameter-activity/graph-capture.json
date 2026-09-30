@@ -1,0 +1,62 @@
+{
+  "target": {
+    "bypass": false,
+    "channel": 65535,
+    "graph": "n18",
+    "instrument": "n0",
+    "key": "D0B2EF37-247F-43D9-97B1-84CA1DAEB360/graph/18/21/2/2/0/65535",
+    "name": "Track 1 \u00b7 Pumping gain \u00b7 plugin",
+    "node": "n21",
+    "parameterCount": 5,
+    "plugin": "",
+    "role": 2,
+    "target": "n2"
+  },
+  "sources": {
+    "omitted": 0,
+    "rule": "Each graph copy has independent state. Modulation adds contributions to a base, then clamps to 0\u20261. Inactive copies still process silence; wet and activity affect audibility, not the parameter value.",
+    "sources": [
+      {
+        "enabled": true,
+        "graph": "n18",
+        "kind": "baseline",
+        "node": "n21",
+        "plugin": "",
+        "title": "Saved / manual parameter value"
+      },
+      {
+        "connection": 0,
+        "enabled": true,
+        "graph": "n18",
+        "id": "n0",
+        "kind": "graph-source",
+        "node": "n21",
+        "title": "Modulation base \u00b7 0.6500",
+        "value": 0.65
+      },
+      {
+        "connection": 0,
+        "enabled": true,
+        "graph": "n18",
+        "id": "n1",
+        "kind": "graph-source",
+        "node": "n22",
+        "sourceKind": 8,
+        "title": "Pattern amount \u00b7 contribution 0.0000 \u2026 0.0500"
+      },
+      {
+        "connection": 1,
+        "enabled": true,
+        "graph": "n18",
+        "id": "n2",
+        "kind": "graph-source",
+        "node": "n23",
+        "sourceKind": 3,
+        "title": "Slow pulse \u00b7 contribution -0.0600 \u2026 0.0600"
+      }
+    ]
+  },
+  "count": 41134,
+  "finalCount": 23812,
+  "contributionCount": 17322
+}

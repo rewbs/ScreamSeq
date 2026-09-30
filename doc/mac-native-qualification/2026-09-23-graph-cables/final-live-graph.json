@@ -1,0 +1,371 @@
+{
+  "changed": false,
+  "data": {
+    "activity": [],
+    "assignments": [],
+    "commands": [],
+    "inputs": [],
+    "instrumentAssignments": [],
+    "instruments": [],
+    "lanes": [],
+    "layout": [],
+    "library": [
+      {
+        "audio": [
+          {
+            "gain": 1,
+            "input": 0,
+            "output": 0,
+            "source": "n20",
+            "target": "n19"
+          },
+          {
+            "gain": 1,
+            "input": 0,
+            "output": 0,
+            "source": "n18",
+            "target": "n20"
+          }
+        ],
+        "id": "n17",
+        "modulation": [
+          {
+            "base": 0.4,
+            "enabled": true,
+            "maximum": 0.8,
+            "minimum": 0.2,
+            "parameter": 1,
+            "source": "n22",
+            "target": "n20"
+          }
+        ],
+        "name": "Cable handle test",
+        "nodes": [
+          {
+            "attack": 0.01,
+            "controller": 1,
+            "id": "n18",
+            "kind": "input",
+            "name": "Input",
+            "phase": 0,
+            "rate": 1,
+            "release": 0.1,
+            "x": 30,
+            "y": 60
+          },
+          {
+            "attack": 0.01,
+            "controller": 1,
+            "id": "n19",
+            "kind": "output",
+            "name": "Output",
+            "phase": 0,
+            "rate": 1,
+            "release": 0.1,
+            "x": 600,
+            "y": 60
+          },
+          {
+            "attack": 0.01,
+            "controller": 1,
+            "id": "n20",
+            "kind": "plugin",
+            "name": "Gain",
+            "phase": 0,
+            "plugin": {
+              "classID": "resonance.gainer.v1",
+              "format": "Built-in",
+              "inputs": [],
+              "manufacturer": 0,
+              "name": "",
+              "outputs": [],
+              "path": "",
+              "state": "",
+              "subtype": 0,
+              "type": 0
+            },
+            "rate": 1,
+            "release": 0.1,
+            "x": 300,
+            "y": 60
+          },
+          {
+            "attack": 0.01,
+            "controller": 1,
+            "id": "n21",
+            "kind": "lfo",
+            "name": "Source A",
+            "phase": 0,
+            "rate": 1,
+            "release": 0.1,
+            "x": 30,
+            "y": 220
+          },
+          {
+            "attack": 0.01,
+            "controller": 1,
+            "id": "n22",
+            "kind": "lfo",
+            "name": "Source B",
+            "phase": 0,
+            "rate": 1,
+            "release": 0.1,
+            "x": 30,
+            "y": 360
+          }
+        ],
+        "number": 1
+      }
+    ],
+    "mixer": {
+      "buses": [
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n2",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 1",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n3",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 2",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n4",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 3",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n5",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 4",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n6",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 5",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n7",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 6",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n8",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 7",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n9",
+          "inserts": [
+            "80D01C5F-9F83-4AED-98BD-E4AF59D51E50",
+            "3F55E730-C6F0-401B-9C21-CF636904E86A"
+          ],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 8",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n16",
+          "inserts": [],
+          "kind": "master",
+          "mute": false,
+          "name": "Master",
+          "output": "",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        }
+      ],
+      "instruments": [],
+      "sidechains": []
+    },
+    "outputs": [],
+    "patterns": [
+      {
+        "id": "n1",
+        "index": 0,
+        "name": "",
+        "rows": 64,
+        "rowsPerBeat": 4
+      }
+    ],
+    "plugins": [
+      {
+        "audioBuses": [
+          {
+            "active": true,
+            "channels": 2,
+            "direction": "input",
+            "index": 0,
+            "name": "Stereo input",
+            "supported": true
+          },
+          {
+            "active": true,
+            "channels": 2,
+            "direction": "output",
+            "index": 0,
+            "name": "Stereo output",
+            "supported": true
+          }
+        ],
+        "bypass": false,
+        "classID": "resonance.distortion.v1",
+        "format": "Built-in",
+        "id": "80D01C5F-9F83-4AED-98BD-E4AF59D51E50",
+        "instruments": [],
+        "isInstrument": false,
+        "manufacturer": 0,
+        "name": "Distortion",
+        "path": "",
+        "slot": 0,
+        "subtype": 0,
+        "type": 0
+      },
+      {
+        "audioBuses": [
+          {
+            "active": true,
+            "channels": 2,
+            "direction": "input",
+            "index": 0,
+            "name": "Stereo input",
+            "supported": true
+          },
+          {
+            "active": true,
+            "channels": 2,
+            "direction": "output",
+            "index": 0,
+            "name": "Stereo output",
+            "supported": true
+          },
+          {
+            "active": false,
+            "channels": 2,
+            "direction": "input",
+            "index": 1,
+            "name": "Detector sidechain",
+            "supported": true
+          }
+        ],
+        "bypass": false,
+        "classID": "resonance.compressor.v1",
+        "format": "Built-in",
+        "id": "3F55E730-C6F0-401B-9C21-CF636904E86A",
+        "instruments": [],
+        "isInstrument": false,
+        "manufacturer": 0,
+        "name": "Compressor",
+        "path": "",
+        "slot": 1,
+        "subtype": 0,
+        "type": 0
+      }
+    ],
+    "unitsPerRow": 65536
+  },
+  "documentId": "F7378C1D-9646-4A69-A11F-E38E0F4FF9E6",
+  "playbackStopped": false,
+  "revision": "F7378C1D-9646-4A69-A11F-E38E0F4FF9E6:7:0:0"
+}

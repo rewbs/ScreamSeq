@@ -1,0 +1,29 @@
+{
+  "transport.get": {
+    "playing": true,
+    "routing": {
+      "active": true,
+      "available": true,
+      "failedPlan": 0,
+      "latencyPending": false,
+      "renderedPlan": 1,
+      "requestedPlan": 1,
+      "state": "stable"
+    },
+    "voices": 16
+  },
+  "graph.signal.get": {
+    "active": true,
+    "playing": true,
+    "routing": {
+      "active": true,
+      "available": true,
+      "failedPlan": 0,
+      "latencyPending": false,
+      "renderedPlan": 1,
+      "requestedPlan": 1,
+      "state": "stable"
+    },
+    "sampleRate": 48000
+  }
+}

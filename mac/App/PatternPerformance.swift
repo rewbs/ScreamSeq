@@ -11,12 +11,13 @@ struct NativePatternCommand {
     position=raw["position"] as? Int ?? 0; duration=raw["duration"] as? Int ?? 0; binding=raw["binding"] as? Int ?? 0
     effect=raw["effect"] as? Int ?? 0;parameter=raw["parameter"] as? Int ?? 0;pitchRange=raw["pitchRange"] as? Int ?? 2
     kind=raw["kind"] as? String ?? ""; value=(raw["value"] as? NSNumber)?.doubleValue ?? 0
-    code=kind=="note-cut" ? "NC" : kind=="pitch-slide" ? "BL" : kind=="pitch-set" ? "BS" : kind=="parameter-slide" ? "PL" : "PS"
-    valueText=kind=="tracker" ? String(format:"%04X",parameter) : kind=="note-cut" ? String(format:"%04X",position%65536) : kind.hasPrefix("pitch-") ? String(format:"%+.3f",value) : String(format:"%02X:%04X",binding,Int((max(0,min(1,value))*65535).rounded()))
-    text=kind=="note-cut" ? String(format:"NC   %04X",position % 65536) : kind.hasPrefix("pitch-") ? String(format:"%@ %+.2f",kind=="pitch-slide" ? "BL" : "BS",value) : String(format: "%@%02X %04X",kind=="parameter-slide" ? "PL" : "PS",binding,Int((max(0,min(1,value))*65535).rounded()))
+    code=kind=="nudge-forward" ? "NF" : kind=="nudge-reverse" ? "NR" : kind=="note-cut" ? "NC" : kind=="pitch-slide" ? "BL" : kind=="pitch-set" ? "BS" : kind=="parameter-slide" ? "PL" : "PS"
+    valueText=kind.hasPrefix("nudge-") ? String(format:"%.3g/%.3g",value*100,Double(duration)/65536) : kind=="tracker" ? String(format:"%04X",parameter) : kind=="note-cut" ? String(format:"%04X",position%65536) : kind.hasPrefix("pitch-") ? String(format:"%+.3f",value) : String(format:"%02X:%04X",binding,Int((max(0,min(1,value))*65535).rounded()))
+    text=kind.hasPrefix("nudge-") ? String(format:"%@ %.2f%%",code,value*100) : kind=="note-cut" ? String(format:"NC   %04X",position % 65536) : kind.hasPrefix("pitch-") ? String(format:"%@ %+.2f",kind=="pitch-slide" ? "BL" : "BS",value) : String(format: "%@%02X %04X",kind=="parameter-slide" ? "PL" : "PS",binding,Int((max(0,min(1,value))*65535).rounded()))
   }
   var dictionary:[String:Any] {["channel":channel,"column":column,"position":position,"duration":duration,"binding":binding,"kind":kind,"value":value,"pitchRange":pitchRange,"effect":effect,"parameter":parameter]}
   var description: String {
+    if kind.hasPrefix("nudge-") {return "Nudge record \(kind=="nudge-forward" ? "forward" : "reverse") · \(String(format:"%.2f",value*100))% strength · \(String(format:"%.5f",Double(duration)/65536)) rows including recovery · samples only · Return edits strength / rows in the pattern"}
     if kind=="note-cut" {return "Cut sample / release plugin notes at \(String(format:"%.7f",Double(position % 65536)/65536)) rows · 1/65536-row timing"}
     if kind.hasPrefix("pitch-") {return "\(kind=="pitch-slide" ? "Bend" : "Set pitch") to \(String(format:"%+.5f",value)) semitones · \(String(format:"%.5f",Double(duration)/65536)) rows"}
     return "\(kind == "parameter-slide" ? "Slide" : "Set") binding \(binding) to \(String(format:"%.4f",value * 100))% · offset \(String(format:"%.5f",Double(position % 65536)/65536)) rows" +
@@ -51,7 +52,7 @@ final class PatternPerformanceEditor: NSView {
     super.init(frame:frame)
     for count in 1...8 { columns.addItem(withTitle:"\(count) FX columns"); columns.lastItem?.tag=count }
     for column in 0..<8 { effectColumn.addItem(withTitle:"FX \(column + 1)");effectColumn.lastItem?.tag=column }
-    kind.addItems(withTitles:["PS · Set plugin parameter","PL · Slide plugin parameter","BS · Set pitch bend","BL · Slide pitch bend","NC · Precise note cut / plugin note-off","Clear command"])
+    kind.addItems(withTitles:["PS · Set plugin parameter","PL · Slide plugin parameter","BS · Set pitch bend","BL · Slide pitch bend","NC · Precise note cut / plugin note-off","NF · Nudge record forward","NR · Nudge record reverse","Clear command"])
     offsetUnits.addItems(withTitles:["Rows","Beats"]);offsetUnits.target=self;offsetUnits.action=#selector(changedOffsetUnit)
     offsetUnits.setAccessibilityLabel("Offset units");offset.setAccessibilityLabel("Row or beat offset")
     kind.target=self;kind.action=#selector(changedKind)
@@ -62,9 +63,9 @@ final class PatternPerformanceEditor: NSView {
     reloadButton=ActionButton("Use current cursor"){[weak self] in self?.capture()}
     applyButton=ActionButton("Apply", prominent: true){[weak self] in self?.apply(dryRun:false)}
     checkButton=ActionButton("Preview"){[weak self] in self?.apply(dryRun:true)}
-    let explanation=Theme.label("PS sets a value immediately; PL glides from the current value to the target over Duration. BS/BL do the same for pitch. NC cuts the sample or sends plugin note-offs at Offset; plugin release tails remain. Timing uses 1/65536 row. Match the plugin wheel range to its instrument.",size:12,color:Theme.muted)
+    let explanation=Theme.label("PS sets a value immediately; PL glides from the current value to the target over Duration. BS/BL do the same for pitch. NC cuts the sample or sends plugin note-offs at Offset; plugin release tails remain. NF/NR scratch samples forward/backward: below 50% an opposing push slows, above 50% it reverses. Duration includes recovery. Timing uses 1/65536 row. Match the plugin wheel range to its instrument.",size:12,color:Theme.muted)
     let history=Theme.label("Columns and numbered bindings belong to the song. A binding follows its plugin through rack reordering. Apply stops playback and makes one Undo step.",size:12,color:Theme.muted)
-    for label in [explanation,history,status] {label.maximumNumberOfLines=3;label.lineBreakMode = .byWordWrapping;label.preferredMaxLayoutWidth=600;label.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
+    for label in [explanation,history,status,targetSummary] {label.maximumNumberOfLines=5;label.lineBreakMode = .byWordWrapping;label.preferredMaxLayoutWidth=600;label.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
     func field(_ title:String,_ control:NSView)->NSView {
       control.setAccessibilityLabel(title)
       let label=title=="Target value (%)" ? valueLabel : Theme.label(title,size:12,color:Theme.muted);label.widthAnchor.constraint(equalToConstant:135).isActive=true
@@ -118,7 +119,7 @@ final class PatternPerformanceEditor: NSView {
   }
   @objc func changedColumns(){controls()}
   @objc func changedKind(){
-    if [1,3].contains(kind.indexOfSelectedItem),Double(duration.stringValue)==0 {
+    if [1,3,5,6].contains(kind.indexOfSelectedItem),Double(duration.stringValue)==0 {
       duration.stringValue=String(min(1,max(1.0/65536,Double(rows-capturedRow)-(Double(offset.stringValue) ?? 0)*(offsetUnits.indexOfSelectedItem==1 ? Double(rowsPerBeat) : 1))))
     }
     controls()
@@ -128,15 +129,16 @@ final class PatternPerformanceEditor: NSView {
     let existing=commands.first{($0["channel"] as? Int)==capturedChannel && ($0["position"] as? Int ?? 0)/65536==capturedRow && ($0["column"] as? Int)==col}
     let commandKind=requestedKind ?? existing?["kind"] as? String ?? "parameter-set"
     requestedKind=nil
-    kind.selectItem(at:["parameter-set","parameter-slide","pitch-set","pitch-slide","note-cut"].firstIndex(of:commandKind) ?? 0)
+    kind.selectItem(at:["parameter-set","parameter-slide","pitch-set","pitch-slide","note-cut","nudge-forward","nudge-reverse"].firstIndex(of:commandKind) ?? 0)
     let pitch=commandKind.hasPrefix("pitch-")
     pitchRange.stringValue=String(existing?["pitchRange"] as? Int ?? 2)
-    value.stringValue=String(format:"%.17g",((existing?["value"] as? NSNumber)?.doubleValue ?? (pitch ? 0 : 0.5))*(pitch ? 1 : 100))
+    let storedValue=commandKind.hasPrefix("nudge-") && !(existing?["kind"] as? String ?? "").hasPrefix("nudge-") ? nil : (existing?["value"] as? NSNumber)?.doubleValue
+    value.stringValue=String(format:"%.17g",(storedValue ?? (pitch ? 0 : commandKind.hasPrefix("nudge-") ? 0.75 : 0.5))*(pitch ? 1 : 100))
     offset.stringValue=String(format:"%.10g",Double((existing?["position"] as? Int ?? (commandKind=="note-cut" ? 32768 : 0))%65536)/65536 / (offsetUnits.indexOfSelectedItem==1 ? Double(rowsPerBeat) : 1))
     duration.stringValue=String(format:"%.10g",Double(existing?["duration"] as? Int ?? 65536)/65536)
     changedKind()
     if let number=existing?["binding"] as? Int {binding.selectItem(withTag:number)} else {binding.selectItem(at:0)}
-    if commandKind=="note-cut" {targetSummary.stringValue="NC stops this tracker channel at the chosen offset, including notes started on earlier rows.";controls()} else {selectBinding()}
+    if commandKind.hasPrefix("nudge-") || pitch {controls()} else if commandKind=="note-cut" {targetSummary.stringValue="NC stops this tracker channel at the chosen offset, including notes started on earlier rows.";controls()} else {selectBinding()}
   }
   @objc func selectBinding() {
     guard !pending else{return}
@@ -171,8 +173,9 @@ final class PatternPerformanceEditor: NSView {
   }
   func apply(dryRun:Bool) {
     guard !pending,let revision,let onRequest else{return}
-    let col=effectColumn.selectedTag(),clearing=kind.indexOfSelectedItem==5
-    let pitch=kind.indexOfSelectedItem==2 || kind.indexOfSelectedItem==3,slide=kind.indexOfSelectedItem==1 || kind.indexOfSelectedItem==3
+    let col=effectColumn.selectedTag(),clearing=kind.indexOfSelectedItem==7
+    let nudge=[5,6].contains(kind.indexOfSelectedItem)
+    let pitch=kind.indexOfSelectedItem==2 || kind.indexOfSelectedItem==3,slide=kind.indexOfSelectedItem==1 || kind.indexOfSelectedItem==3 || nudge
     var replacement=commands.filter{!($0["channel"] as? Int==capturedChannel && ($0["position"] as? Int ?? 0)/65536==capturedRow && $0["column"] as? Int==col)}
       .map{raw in raw.filter{$0.key != "track"}}
     var request:[String:Any]=["pattern":capturedPattern,"expectedRevision":revision,"dryRun":dryRun,
@@ -186,10 +189,10 @@ final class PatternPerformanceEditor: NSView {
       }
       let start=enteredOffset * (offsetUnits.indexOfSelectedItem==1 ? Double(rowsPerBeat) : 1)
       let position=capturedRow*65536+min(65535,Int((start*65536).rounded())),ticks=slide ? Int((length*65536).rounded()) : 0
-      guard (!slide || ticks>0),position+ticks<=rows*65536 else {status.stringValue="Slides need a positive duration and must end within this pattern.";return}
+      guard (!slide || ticks>0),position+ticks<=rows*65536 else {status.stringValue="Slides and nudges need a positive duration and must end within this pattern.";return}
       var command:[String:Any]=["channel":capturedChannel,"position":position,"duration":ticks,"column":col,
-        "kind":cut ? "note-cut" : pitch ? (slide ? "pitch-slide" : "pitch-set") : (slide ? "parameter-slide" : "parameter-set"),"value":pitch ? target : target/100]
-      if cut {command["binding"]=0;command["value"]=0} else if pitch {
+        "kind":nudge ? (kind.indexOfSelectedItem==5 ? "nudge-forward" : "nudge-reverse") : cut ? "note-cut" : pitch ? (slide ? "pitch-slide" : "pitch-set") : (slide ? "parameter-slide" : "parameter-set"),"value":pitch ? target : target/100]
+      if nudge {command["binding"]=0} else if cut {command["binding"]=0;command["value"]=0} else if pitch {
         guard let range=Int(pitchRange.stringValue),(1...96).contains(range) else{status.stringValue="Plugin wheel range must be 1–96 semitones, matching the instrument's setting.";return}
         command["binding"]=0;command["pitchRange"]=range
       } else {
@@ -227,14 +230,17 @@ final class PatternPerformanceEditor: NSView {
   private func failure(_ reply:[String:Any]) {status.stringValue=(reply["error"] as? [String:Any])?["message"] as? String ?? "The song changed or this reply is unavailable. Use current cursor to reload.";controls()}
   private func controls() {
     for control in [columns,effectColumn,kind,binding,plugin,parameter] {control.isEnabled = !pending}
-    let pitch=kind.indexOfSelectedItem==2 || kind.indexOfSelectedItem==3,clearing=kind.indexOfSelectedItem==5,cut=kind.indexOfSelectedItem==4
+    let nudge=[5,6].contains(kind.indexOfSelectedItem)
+    let pitch=kind.indexOfSelectedItem==2 || kind.indexOfSelectedItem==3,clearing=kind.indexOfSelectedItem==7,cut=kind.indexOfSelectedItem==4
     for control in [value,offset,duration,bindingNumber,bindingName,pitchRange] {control.isEnabled = !pending}
-    for control in [binding,plugin,parameter] {control.isEnabled = !pending && !pitch && !clearing && !cut}
-    bindingNumber.isEnabled = !pending && !pitch && !clearing && !cut;bindingName.isEnabled=bindingNumber.isEnabled
+    for control in [binding,plugin,parameter] {control.isEnabled = !pending && !pitch && !clearing && !cut && !nudge}
+    bindingNumber.isEnabled = !pending && !pitch && !clearing && !cut && !nudge;bindingName.isEnabled=bindingNumber.isEnabled
     pitchRange.isEnabled = !pending && pitch
-    duration.isEnabled = !pending && (kind.indexOfSelectedItem==1 || kind.indexOfSelectedItem==3)
+    duration.isEnabled = !pending && (kind.indexOfSelectedItem==1 || kind.indexOfSelectedItem==3 || nudge)
     value.isEnabled = !pending && !clearing && !cut;offset.isEnabled = !pending && !clearing;offsetUnits.isEnabled=offset.isEnabled
-    valueLabel.stringValue=pitch ? "Pitch (semitones)" : "Target value (%)"
+    if nudge {targetSummary.stringValue="Samples only · 50% reaches a stop against the normal direction; stronger pushes reverse. Returns to normal speed. A new nudge smoothly replaces the previous push."}
+    else if pitch {targetSummary.stringValue="Sample pitch and plugin MIDI pitch wheel · match the plugin wheel range."}
+    valueLabel.stringValue=nudge ? "Nudge strength (%)" : pitch ? "Pitch (semitones)" : "Target value (%)"
     value.setAccessibilityLabel(valueLabel.stringValue)
     reloadButton?.isEnabled = !pending;applyButton?.isEnabled = !pending && revision != nil;checkButton?.isEnabled=applyButton?.isEnabled ?? false
   }

@@ -51,7 +51,7 @@ class NativeEffect {
   EffectKind kind_;
   double rate_, dcPole_, phaseCoefficient_;
   uint32_t smoothingFrames_;
-  bool rendered_ = false;
+  bool rendered_ = false, sidechainPresent_ = false;
   std::array<std::atomic<float>, 64> values_{};
   std::array<Ramp, 12> ramps_{};
   double dcInput_[2]{}, dcOutput_[2]{}, phaseMemory_ = 0;

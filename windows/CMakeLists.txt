@@ -53,8 +53,8 @@ target_link_libraries(OpenMPTCore PUBLIC TrackerFLAC ScreamSeqBuildOptions
 
 set(EDITOR_SOURCES
   TrackLayout PatternCommands AutomationTools TrackerDocument PatternTools NativeSong
-  ArrangementTools MixerGraph MixerRuntime NativeEffects SampleImport SongTiming
-  PreciseNoteRuntime NoteRecording InstrumentEnvelopeTools EnvelopeBank
+  ArrangementTools MixerGraph MixerRuntime MixerTransition NativeEffects SampleImport SongTiming
+  PreciseNoteRuntime RecordNudgeRuntime NoteRecording InstrumentEnvelopeTools EnvelopeBank
   StateVariableFilter FractionalDelay Distortion LofiMat CabinetVoicing CabinetSimulator
   Dynamics Maximizer SampleProcessing SampleWaveform SampleDocument SampleArchive
   SampleClipboard SampleSplice SampleCopy SampleDrawing SampleSnap SampleLoopCrossfade

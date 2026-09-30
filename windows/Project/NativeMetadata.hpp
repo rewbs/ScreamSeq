@@ -13,5 +13,7 @@ Tracker::NativeSong decodeNativeMetadata(const Json &metadata);
 // Canonical metadata 17, including all mandatory containers. Callers must retain
 // unknown plist fields separately. No module/plugin host or audio is invoked.
 Json encodeNativeMetadata(const Tracker::NativeSong &song);
+// Same UTF-8 validation and UTF-16 length limit for document API strings.
+std::string validatedNativeText(const Json &, size_t maximum);
 Json encodeMixerMetadata(const Tracker::MixerGraph &);
 } // namespace ScreamSeq::Project

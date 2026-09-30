@@ -1,0 +1,44 @@
+[
+  {
+    "phase": "after-meters",
+    "journey": "G07",
+    "kind": "click",
+    "value": 139
+  },
+  {
+    "phase": "after-meters",
+    "journey": "G07",
+    "kind": "click",
+    "value": 171
+  },
+  {
+    "phase": "after-meters",
+    "journey": "G07",
+    "kind": "click",
+    "value": 39
+  },
+  {
+    "phase": "after-meters",
+    "journey": "G07",
+    "kind": "click",
+    "value": 245
+  },
+  {
+    "phase": "after-meters",
+    "journey": "G07",
+    "kind": "key",
+    "value": "super+a"
+  },
+  {
+    "phase": "after-meters",
+    "journey": "G07",
+    "kind": "type",
+    "value": "0"
+  },
+  {
+    "phase": "after-meters",
+    "journey": "G07",
+    "kind": "key",
+    "value": "Return"
+  }
+]

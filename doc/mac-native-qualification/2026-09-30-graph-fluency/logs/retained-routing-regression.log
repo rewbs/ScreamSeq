@@ -1,0 +1,15 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 52: mixer-transition
+1/5 Test #52: mixer-transition .................   Passed    0.94 sec
+    Start 53: mixer-publication
+2/5 Test #53: mixer-publication ................   Passed    0.45 sec
+    Start 54: realtime-transition
+3/5 Test #54: realtime-transition ..............   Passed    0.03 sec
+    Start 71: native-signal-graph
+4/5 Test #71: native-signal-graph ..............   Passed    0.41 sec
+    Start 74: signal-routing
+5/5 Test #74: signal-routing ...................   Passed    1.06 sec
+
+100% tests passed, 0 tests failed out of 5
+
+Total Test time (real) =   2.90 sec

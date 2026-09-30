@@ -35,7 +35,7 @@ extension InterfaceTests {
       "Preview sends exact native timing, binding and captured revision without duplicate submission")
     replies.removeFirst()(["error":["message":"Song changed"]])
     try require(editor.revision=="song:1" && editor.value.stringValue=="90","Stale rejection retains the user's draft and old revision")
-    editor.kind.selectItem(at:5);editor.apply(dryRun:false)
+    editor.kind.selectItem(at:7);editor.apply(dryRun:false)
     try require((calls.last!.1["commands"] as? [[String:Any]])?.isEmpty==true && calls.last!.1["bindings"]==nil,"Clear removes only selected cell without modifying bindings")
     replies.removeFirst()(["result":["revision":"song:2","data":[:]]])
     try require(editor.commands.isEmpty && editor.revision=="song:2","Saved clear updates captured command data")
@@ -84,6 +84,45 @@ extension InterfaceTests {
     try require(cutCommand["kind"] as? String=="note-cut" && cutCommand["position"] as? Int==2*65536+8192 && cutCommand["duration"] as? Int==0 && cutRequests.last!.1["bindings"]==nil,"NC preserves precise beat offset and needs no binding")
     cut.offset.stringValue="0.25";let beforeCut=cutRequests.count;cut.apply(dryRun:false)
     try require(cutRequests.count==beforeCut,"NC cannot escape the row in beat mode")
+    let nudge=PatternPerformanceEditor(frame:.zero);nudge.requestedKind="nudge-reverse"
+    nudge.onContext={(performanceModel(),3,0,3)}
+    var nudgeCalls=[(String,[String:Any])]()
+    nudge.onRequest={method,params,reply in nudgeCalls.append((method,params));reply(["result":["revision":"nudge:1","data":performanceData]])}
+    nudge.capture()
+    try require(nudge.kind.indexOfSelectedItem==6 && nudgeCalls.count==1 && !nudge.plugin.isEnabled && nudge.duration.isEnabled && nudge.valueLabel.stringValue=="Nudge strength (%)","Nudge editor has strength and duration without plugin reads")
+    nudge.value.stringValue="83.125";nudge.duration.stringValue="0.75";nudge.offset.stringValue="0.125";nudge.apply(dryRun:true)
+    let push=(nudgeCalls.last!.1["commands"] as! [[String:Any]]).last!
+    try require(push["kind"] as? String=="nudge-reverse" && push["value"] as? Double==0.83125 && push["duration"] as? Int==49152 && push["binding"] as? Int==0 && nudgeCalls.last!.1["bindings"]==nil,"Nudge saves exact strength and sub-row timing with no plugin binding")
+    let displayed=NativePatternCommand(push)
+    try require(displayed.code=="NR" && displayed.valueText=="83.1/0.75" && displayed.description.contains("reverse"),"Scratch commands have readable grid text and contextual help")
+    let inlineGrid=PatternView();inlineGrid.frame=NSRect(x:0,y:0,width:800,height:400)
+    inlineGrid.model=PatternModel(["revisionToken":"inline:1","channels":1,"rows":64,"effectColumns":[8],"performanceCommands":[push]])
+    inlineGrid.cursorRow=3;inlineGrid.column=3
+    // The saved fixture has a fractional onset. In-cell entry must retain it.
+    try require(inlineGrid.beginNudgeEdit() && inlineGrid.nudgeEditor?.strength.stringValue=="83.125" && inlineGrid.nudgeEditor?.duration.stringValue=="0.75","Inline editor recovers strength and duration without rounding or opening a window")
+    let inlineHost=NSWindow(contentRect:inlineGrid.bounds,styleMask:[.titled],backing:.buffered,defer:false);inlineHost.contentView=inlineGrid
+    let inline=inlineGrid.nudgeEditor!
+    try require(inlineGrid.accessibilityChildren()?.contains{($0 as? NSTextField)===inline.strength}==true,"Inline numeric fields remain accessible inside the custom Metal grid")
+    var inlineCalls=[[String:Any]](),inlineReplies=[([String:Any])->Void]()
+    inlineGrid.onNudgeRequest={p,r in inlineCalls.append(p);inlineReplies.append(r)}
+    inline.strength.stringValue="50";inline.duration.stringValue="0.125"
+    _=inline.control(inline.strength,textView:NSTextView(),doCommandBy:#selector(NSResponder.insertTab(_:)))
+    try require(inline.duration.currentEditor() != nil,"Tab selects the in-pattern duration field")
+    inline.duration.stringValue="0.125";inline.commit(advance:true);inline.commit(advance:true)
+    let inlineCommand=inlineCalls[0]["command"] as! [String:Any]
+    try require(inlineCalls.count==1 && inlineCommand["value"] as? Double==0.5 && inlineCommand["duration"] as? Int==8192 && inlineCommand["offset"] as? Int==8192 && inlineCalls[0]["expectedRevision"] as? String=="inline:1","One in-cell write preserves onset, exact fractional duration and captured revision")
+    inlineGrid.model.revisionToken="inline:2"
+    inlineReplies.removeFirst()(["error":["message":"Song changed"]])
+    try require(inlineGrid.nudgeEditor===inline && inline.strength.stringValue=="50" && inline.revision=="inline:1","A stale inline edit retains its draft without rebasing onto a different song")
+    inline.strength.stringValue="NaN";inline.commit(advance:true);inline.strength.stringValue="50";inline.duration.stringValue="1000";inline.commit(advance:true)
+    try require(inlineCalls.count==1,"Invalid or out-of-pattern scratch values cannot reach the API")
+    _=inline.control(inline.duration,textView:NSTextView(),doCommandBy:#selector(NSResponder.cancelOperation(_:)))
+    try require(inlineGrid.nudgeEditor==nil && inlineGrid.cursorRow==3,"Escape cancels the draft without moving or writing")
+    inlineGrid.column=18;_=inlineGrid.beginNudgeEdit(kind:"nudge-forward")
+    inlineGrid.nudgeEditor!.commit(advance:true)
+    try require(inlineCalls.last?["column"] as? Int==7,"Inline scratch values work in all eight equal FX columns")
+    inlineReplies.removeFirst()(["result":["revision":"inline:3"]])
+    try require(inlineGrid.nudgeEditor==nil && inlineGrid.cursorRow==4,"Return saves and advances exactly one edit step")
     let navigation=EditorNavigation()
     let moved=try navigation.prepared(["expectedRevision":"r","expectedContext":navigation.token,"channel":2,"column":12],
       revision:"r",contextToken:navigation.token,patterns:[["index":0,"rows":64]],channels:3,effectColumns:[2,1,8])

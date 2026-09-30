@@ -69,6 +69,13 @@ extension InterfaceTests {
     view.loadSelection(); view.loadSelection()
     try require(imported.count == 1 && imported[0].count == 3 && view.importing && !view.loadButton.isEnabled, "Bulk load pins selection and rejects duplicate clicks")
     replies.removeFirst()(.success(3)); try require(!view.importing && view.status.stringValue.contains("one Undo"), "Bulk completion keeps the browser usable")
+    view.search.stringValue = "latest clap"
+    _ = view.control(view.search, textView:NSTextView(), doCommandBy:#selector(NSResponder.insertNewline(_:)))
+    try require(imported.count == 1, "Return in search waits for its own results before importing")
+    searches.last?(SampleLibraryResults(items:[view.entries[0]],total:1,tags:view.tags,offset:0))
+    try require(imported.count == 2 && imported.last?.count == 1, "Return imports the current search result, not stale rows")
+    replies.removeFirst()(.success(1))
+    view.updateResults(SampleLibraryResults(items:sampleBrowserFixture().entries,total:1200,tags:[("808 From Mars",1200),("Kicks",800),("WAV",1000)],offset:0))
     view.tagTable.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
     try require(queries.last?.tags == ["Kicks"], "Clicking a directory tag searches all inherited descendants")
     view.clearFilters(); try require(queries.last?.text == "" && queries.last?.tags.isEmpty == true && stopped > 0, "Clear filters retires preview and removes search constraints")

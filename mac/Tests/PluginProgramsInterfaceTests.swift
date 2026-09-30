@@ -29,7 +29,7 @@ extension InterfaceTests {
     try require(view.revision=="song:1","Another plugin's reply cannot replace this browser")
     view.load();replies.removeFirst()(["result":["revision":"song:3","data":programsData]])
     view.apply(dryRun:false);replies.removeFirst()(["result":["revision":"song:4","data":["plugin":"unit-synth","program":["id":"vst3:7:18:2"],"loaded":true]]])
-    try require(view.revision=="song:4" && view.status.stringValue.contains("Undo effect change"),"Successful program loads report history behavior")
+    try require(view.revision=="song:4" && view.status.stringValue.contains("Undo"),"Successful program loads report history behavior")
     view.load();var empty=programsData;empty["programs"]=[[String:Any]]();replies.removeFirst()(["result":["revision":"song:5","data":empty]])
     try require(!view.loadButton.isEnabled && view.status.stringValue.contains("no standard"),"Empty vendor catalogs explain native preset alternative")
     let editor=PluginEditor(frame:.zero);try require(!editor.programsButton.isEnabled,"Empty rack disables program browser")

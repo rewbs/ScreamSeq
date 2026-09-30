@@ -12,7 +12,7 @@ final class PluginProgramsEditor: NSView, NSTableViewDataSource, NSTableViewDele
     table.dataSource=self;table.delegate=self;table.allowsEmptySelection=true;table.setAccessibilityLabel("Plugin factory programs")
     let scroll=verticalScrollView();scroll.documentView=table
     search.placeholderString="Search programs and groups";search.delegate=self;search.setAccessibilityLabel("Search plugin programs")
-    let explanation=Theme.label("Programs supplied through the plugin’s standard AU or VST3 interface. Select a program, then Load. Loading stops playback and uses Undo effect change.",size:12,color:Theme.muted)
+    let explanation=Theme.label("Programs supplied through the plugin’s standard AU or VST3 interface. Select a program, then Load. Loading stops playback and uses Undo.",size:12,color:Theme.muted)
     for label in [explanation,status] {label.maximumNumberOfLines=3;label.lineBreakMode = .byWordWrapping;label.preferredMaxLayoutWidth=570;label.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
     status.heightAnchor.constraint(greaterThanOrEqualToConstant:44).isActive=true
     loadButton=ActionButton("Load program"){[weak self] in self?.apply(dryRun:false)}
@@ -53,7 +53,7 @@ final class PluginProgramsEditor: NSView, NSTableViewDataSource, NSTableViewDele
       guard let result=reply["result"] as? [String:Any],let data=result["data"] as? [String:Any],data["plugin"] as? String==self.plugin,
         (data["program"] as? [String:Any])?["id"] as? String==id,let revision=result["revision"] as? String else {self.failure(reply);return}
       self.revision=revision
-      self.status.stringValue=dryRun ? "Selection is valid. Loading will ask the plugin to prepare it." : "Program loaded. Undo effect change restores the previous settings."
+      self.status.stringValue=dryRun ? "Selection is valid. Loading will ask the plugin to prepare it." : "Program loaded. Undo restores the previous settings."
       self.controls()
     }
   }

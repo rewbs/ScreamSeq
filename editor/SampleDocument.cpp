@@ -196,7 +196,7 @@ SampleProcessResult Document::applySampleProcess(PreparedSampleProcess prepared)
   validateSampleUndo(*entry.sample, true);
   applySampleUndo(*entry.sample, true); // Everything that can allocate/throw precedes mutation.
   undo_.push_back(std::move(entry));
-  redo_.clear();
+  committedHistory();
   ++revision;
   trimHistory();
   return result;

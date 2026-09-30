@@ -1,0 +1,413 @@
+{
+  "changed": false,
+  "data": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 17372,
+    "fault": false,
+    "frames": 8894464,
+    "graphActivity": [
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n2"
+      },
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "persistent",
+        "tail": false,
+        "target": "n5"
+      },
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 2,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n5"
+      },
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n9"
+      },
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n20"
+      },
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n24"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n2"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n3"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n4"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n5"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n6"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n7"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n8"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n9"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n17"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n18"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n19"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n20"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n21"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n22"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n23"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n24"
+      }
+    ],
+    "left": 0.051444076001644135,
+    "loop": true,
+    "maxMicros": 4804.75,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 1920,
+    "pattern": 0,
+    "patternPosition": 15615.91175456739,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0.001875,
+    "region": {
+      "cursorRow": 0,
+      "loop": true,
+      "order": 0
+    },
+    "right": 0.05144578963518143,
+    "routing": {
+      "active": true,
+      "available": true,
+      "failedPlan": 0,
+      "latencyPending": false,
+      "renderedPlan": 1,
+      "requestedPlan": 1,
+      "state": "stable"
+    },
+    "row": 60,
+    "voicePositions": [
+      {
+        "channel": 0,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 231
+      },
+      {
+        "channel": 1,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 95
+      },
+      {
+        "channel": 2,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 222
+      },
+      {
+        "channel": 3,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 102
+      },
+      {
+        "channel": 4,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 245
+      },
+      {
+        "channel": 5,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 140
+      },
+      {
+        "channel": 6,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 45
+      },
+      {
+        "channel": 7,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 215
+      },
+      {
+        "channel": 8,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 139
+      },
+      {
+        "channel": 9,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 74
+      },
+      {
+        "channel": 10,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 20
+      },
+      {
+        "channel": 11,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 235
+      },
+      {
+        "channel": 12,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 206
+      },
+      {
+        "channel": 13,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 191
+      },
+      {
+        "channel": 14,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 190
+      },
+      {
+        "channel": 15,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 384,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 204
+      }
+    ],
+    "voices": 16
+  },
+  "documentId": "3C5DF33B-CF4E-4B2D-A354-929DCC662D0E",
+  "playbackStopped": false,
+  "revision": "3C5DF33B-CF4E-4B2D-A354-929DCC662D0E:3:0:0"
+}

@@ -176,7 +176,7 @@ SampleSpliceResult Document::applySampleEdit(PreparedSampleEdit prepared) {
   if (entry.splice)
     applySpliceUndo(*entry.splice, true, std::move(prepared.replacement_));
   undo_.push_back(std::move(entry));
-  redo_.clear();
+  committedHistory();
   ++revision;
   trimHistory();
   return std::move(prepared.result_);

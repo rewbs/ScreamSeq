@@ -16,6 +16,8 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <algorithm>
+#include <string>
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 namespace Steinberg {
@@ -42,6 +44,8 @@ extern "C" __attribute__((visibility("default"))) int ResonanceFixtureLatency(ui
 }
 static std::atomic<bool> fixtureChannelWeights{false};
 static bool fixturePitchMode=false;
+static bool fixtureLargeCatalog=false;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureLargeCatalog(bool enabled){fixtureLargeCatalog=enabled;}
 static bool fixtureEffectDelay=false;
 static std::atomic<uint64_t> fixtureObservedFrames{0},fixtureClockErrors{0};
 static bool fixtureObserve=false;
@@ -377,10 +381,11 @@ public:
     return kResultOk;
   }
   tresult PLUGIN_API setComponentState(IBStream *s) override { return setState(s); }
-  int32 PLUGIN_API getParameterCount() override { return programs ? 3 : instrument && fixturePitchMode ? 17 : 1; }
+  int32 PLUGIN_API getParameterCount() override { return fixtureLargeCatalog && !instrument && !programs ? 601 : programs ? 3 : instrument && fixturePitchMode ? 17 : 1; }
   tresult PLUGIN_API getParameterInfo(int32 i, ParameterInfo &p) override {
     if(i<0 || i>=getParameterCount()) return kInvalidArgument;
     p = {};
+    if(i && fixtureLargeCatalog && !instrument && !programs){p.id=20000+i;p.defaultNormalizedValue=0;p.flags=ParameterInfo::kCanAutomate;std::copy_n(u"Extra control",14,p.title);return kResultOk;}
     if(i && instrument && fixturePitchMode){p.id=999+i;p.defaultNormalizedValue=8192./16383;p.flags=ParameterInfo::kCanAutomate | ParameterInfo::kIsHidden;std::copy_n(u"Pitch wheel",12,p.title);return kResultOk;}
     if(i) {p.id=99+i;p.unitId=i==1?0:7;p.stepCount=2;p.flags=ParameterInfo::kIsProgramChange | (fixtureProgramMode==2 ? ParameterInfo::kIsReadOnly : 0);
       std::copy_n(u"Program",8,p.title);return kResultOk;}
@@ -394,8 +399,9 @@ public:
   tresult PLUGIN_API getParamValueByString(ParamID, TChar *, ParamValue &) override { return kNotImplemented; }
   ParamValue PLUGIN_API normalizedParamToPlain(ParamID id, ParamValue v) override { return programs && id>=100 ? v*2 : v; }
   ParamValue PLUGIN_API plainParamToNormalized(ParamID id, ParamValue v) override { return programs && id>=100 ? v/2 : v; }
-  ParamValue PLUGIN_API getParamNormalized(ParamID id) override { return id>=1000&&id<1016 ? pitchWheels[id-1000] : programs && id>=100 && id<=101 ? programValues[id-100] : gain.load(); }
+  ParamValue PLUGIN_API getParamNormalized(ParamID id) override { return id>=20000 ? 0 : id>=1000&&id<1016 ? pitchWheels[id-1000] : programs && id>=100 && id<=101 ? programValues[id-100] : gain.load(); }
   tresult PLUGIN_API setParamNormalized(ParamID id, ParamValue v) override {
+    if(id>=20000)return kResultOk;
     if(id>=1000&&id<1016){pitchWheels[id-1000]=v;return kResultOk;}
     if(programs && id>=100 && id<=101) {++fixtureProgramSelections;programValues[id-100]=v;return kResultOk;}
     gain = v;

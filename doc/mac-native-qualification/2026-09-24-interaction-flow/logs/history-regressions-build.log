@@ -1,0 +1,18 @@
+[ 12%] Built target TrackerFLAC
+[ 75%] Built target OpenMPTCore
+[ 91%] Built target TrackerEditor
+[ 96%] Built target TrackerHosted
+[100%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/session-tests.dir/Tests/SessionTests.mm.o
+[100%] Linking CXX executable session-tests
+[100%] Built target session-tests
+[  1%] Built target RealtimeAudit
+[ 13%] Built target TrackerFLAC
+[ 15%] Built target ResonanceFixture
+[ 75%] Built target OpenMPTCore
+[ 91%] Built target TrackerEditor
+[ 96%] Built target TrackerHosted
+[100%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/rack-tests.dir/Tests/RackTests.mm.o
+[100%] Linking CXX executable rack-tests
+[100%] Built target rack-tests

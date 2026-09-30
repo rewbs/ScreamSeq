@@ -13,6 +13,9 @@ NS_ASSUME_NONNULL_BEGIN
                                       error:(NSError **)error __attribute__((swift_error(none)));
 - (NSDictionary *)snapshot:(NSInteger)pattern;
 - (NSDictionary *)telemetry;
+- (NSDictionary *)signalTelemetry;
+- (NSDictionary *)routingTelemetry;
+- (NSDictionary *)listenTelemetry;
 - (NSArray<NSDictionary *> *)mixerMeters;
 - (NSArray<NSDictionary *> *)devices;
 - (BOOL)configureDevice:(NSUInteger)device buffer:(NSUInteger)buffer error:(NSError **)error;
@@ -37,6 +40,8 @@ NS_ASSUME_NONNULL_BEGIN
               error:(NSError **)error;
 - (void)undo;
 - (void)redo;
+- (BOOL)historyUndo:(BOOL)redo error:(NSError **)error;
+- (void)parameterGesture:(BOOL)active;
 - (void)muteChannel:(NSInteger)channel muted:(BOOL)muted;
 - (BOOL)editCells:(NSArray<NSDictionary *> *)edits error:(NSError **)error;
 - (NSInteger)addPattern:(NSInteger)rows
@@ -91,6 +96,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// remembers them for later launches and resolves the waiting rack and graph
 /// plugins in place, keeping their saved state. Never call without consent.
 - (BOOL)trustPluginLocations:(NSArray<NSString *> *)canonicalPaths error:(NSError **)error;
+- (BOOL)addPlugin:(NSDictionary *)descriptor target:(nullable NSString *)target error:(NSError **)error;
+- (BOOL)addPlugin:(NSDictionary *)descriptor target:(nullable NSString *)target before:(nullable NSString *)before position:(nullable NSDictionary *)position error:(NSError **)error;
 - (BOOL)assignPlugin:(NSInteger)slot instrument:(NSInteger)instrument error:(NSError **)error;
 - (BOOL)showPluginEditor:(NSInteger)slot error:(NSError **)error;
 - (NSInteger)collectPluginEdits:(BOOL)record error:(NSError **)error;
@@ -118,6 +125,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, readonly, nullable) NSString *recordingTakeID;
 - (BOOL)prepareAudition:(NSError **)error;
 - (BOOL)note:(NSInteger)note instrument:(NSInteger)instrument velocity:(NSInteger)velocity on:(BOOL)on;
+- (BOOL)note:(NSInteger)note instrument:(NSInteger)instrument velocity:(NSInteger)velocity on:(BOOL)on channel:(NSInteger)channel;
+- (BOOL)sampleNote:(NSInteger)note sample:(NSInteger)sample velocity:(NSInteger)velocity on:(BOOL)on channel:(NSInteger)channel;
 - (void)panic;
 - (NSData *)serializedData;
 + (BOOL)exportData:(NSData *)data path:(NSString *)path error:(NSError **)error;

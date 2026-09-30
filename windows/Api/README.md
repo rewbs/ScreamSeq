@@ -20,7 +20,9 @@ device fields report actual negotiation. See `../AUDIO_SETTINGS_PROGRESS.md`.
 
 The application supports revision-guarded `transport.note` and `transport.panic`
 using the shared renderer's preview queue. See `mac/AUTOMATION.md` for note,
-sample/instrument, velocity and release semantics. Stopped audition prepares a
+sample/instrument, velocity and release semantics. Optional zero-based `channel`
+selects pattern-channel routing for sample-backed previews; omit it for an
+independent inspector preview and repeat the same context on release. Stopped audition prepares a
 paused renderer; `transport.get` distinguishes `playing`, `audioActive` and
 `audition`. Native piano input has independent held-key ownership and guards
 against late releases from an earlier playback preparation. Windows responses
@@ -663,3 +665,19 @@ it does not introduce different musical editing semantics. Windows-only
 `workspace.get.instrumentEnvelope.mappingFields`, `mappingDirty` and
 `selectedKey` expose unfinished range fields, staged mapping state and the
 native list selection. See `../INSTRUMENT_IMPORT_PROGRESS.md`.
+
+Graph interaction parity (30 September 2026): `graph.node.add` supports `insertEdge` or `connect`; modulation Add initializes zero depth and a shared target base. `graph.nodes.detach` preserves internal/sidechain connections and heals a unique serial Main path, with optional `remove` and saved `positions`. These changes use the shared graph validation and one transaction. Rack parameter/bus/bypass APIs accept a persistent `plugin` ID instead of `slot` (exactly one). The new GraphOperations regression scenario is `cableInsertionAndDetachment`; this Mac checkout has not executed the Windows binary.
+
+### Shared song processing groups
+
+`graph.song.group.create/update/remove/export` mirrors the Mac API in
+`mac/AUTOMATION.md`. `graph.get.groups` persists nested presentation boundaries
+around `plugin:<instanceID>` rack members. Grouping, moving and ungrouping keep
+rack ownership, real mixer cables, stable parameter targets and DSP unchanged.
+`graph.layout.set.groups` batches boundary movement with ordinary node positions.
+Export uses the host's saved baseline-state hook and creates a fresh independent
+library recipe from consecutive enabled effects on one bus. Missing/bypassed
+members and unsupported topology fail before editing. All operations support
+revision guards, strict input, dry runs, no-op history and Undo/Redo. The portable
+adapter and codecs are tested on macOS; this does not claim native Windows UI
+interaction or device qualification.

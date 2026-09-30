@@ -36,6 +36,8 @@ extension InterfaceTests {
     try require(!workflow.busy && finished.last?.0 == false && finished.last?.1 == "Disk write failed", "Failed saving does not report success")
     let editor = PluginEditor(frame: .zero)
     try require(!editor.savePresetButton.isEnabled && !editor.loadPresetButton.isEnabled, "Empty plugin editor disables preset actions")
+    let catalog=editor.actionMenu()
+    try require(catalog.items.contains{$0.title=="Save preset…" && !$0.isEnabled && $0.toolTip != nil},"Unselected plugin actions remain discoverable with an explanation")
     editor.update(model: PatternModel(["nativePlugins": [["name": "Gain", "format": "Built-in", "instanceID": "original-plugin"]]]), values: [])
     var saved = -1, loaded = -1
     editor.onSavePreset = { saved = $0 }; editor.onLoadPreset = { loaded = $0 }
