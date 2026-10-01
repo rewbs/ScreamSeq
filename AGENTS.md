@@ -1,6 +1,6 @@
 # ScreamSeq native application work
 
-ScreamSeq is an independent OpenMPT derivative. Preserve upstream code and attribution. The native application lives in `editor/` and `mac/`; a Windows-native sibling belongs in `windows/`. `mptrack/` is upstream OpenMPT's Windows UI, not ScreamSeq's new frontend.
+ScreamSeq is an independent native tracker DAW built on OpenMPT's playback engine, with `main` as its integration branch. Preserve upstream history, copyright notices and attribution in the retained engine. Shared musical behavior lives in `editor/`; the native frontends live in `mac/` and `windows/`. Upstream OpenMPT's Windows UI is not ScreamSeq's frontend. See `CONTRIBUTING.md` and `UPSTREAM.md` for repository scope and provenance.
 
 Relevant project skills are in `.agents/skills/`: `screamseq-development`, `screamseq-realtime-audio`, `screamseq-agent-api` and `screamseq-qualification`. Read the ones needed for the task. Start with `doc/SCREAMSEQ_ARCHITECTURE.md` and the user's `doc/RESONANCE_UI_PHILOSOPHY.md` for native-app work.
 

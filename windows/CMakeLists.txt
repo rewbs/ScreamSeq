@@ -94,7 +94,11 @@ if(SCREAMSEQ_BUILD_APP)
     add_custom_command(TARGET ScreamSeq POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ScreamSeq>/THIRD-PARTY-NOTICES"
       COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ROOT}/include/pugixml/LICENSE.md"
-        "$<TARGET_FILE_DIR:ScreamSeq>/THIRD-PARTY-NOTICES/pugixml-LICENSE.md")
+        "$<TARGET_FILE_DIR:ScreamSeq>/THIRD-PARTY-NOTICES/pugixml-LICENSE.md"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ROOT}/LICENSE"
+        "$<TARGET_FILE_DIR:ScreamSeq>/THIRD-PARTY-NOTICES/OpenMPT-LICENSE.txt"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ROOT}/UPSTREAM.md"
+        "$<TARGET_FILE_DIR:ScreamSeq>/THIRD-PARTY-NOTICES/UPSTREAM.md")
   else()
     message(STATUS "ScreamSeq frontend sources are not present; building shared libraries/tests only")
   endif()

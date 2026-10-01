@@ -118,7 +118,16 @@ extension SignalGraphEditor {
   }
   func configureSongSourceInspector() {
     guard let source=songSource(selectedID)else{return}
-    let entries=[("All notes","")]+buses.filter{$0["kind"] as? String=="track"}.map{("Channel · "+busLabel($0),"bus:"+($0["id"] as? String ?? ""))}+(data["instruments"] as? [[String:Any]] ?? []).map{("Instrument · "+($0["name"] as? String ?? ""),"instrument:"+($0["id"] as? String ?? ""))}
+    var entries:[(String,String)]=[("All notes","")]
+    for bus in buses where bus["kind"] as? String=="track" {
+      let id=bus["id"] as? String ?? ""
+      entries.append(("Channel · "+busLabel(bus),"bus:"+id))
+    }
+    let instruments=data["instruments"] as? [[String:Any]] ?? []
+    for instrument in instruments {
+      let name=instrument["name"] as? String ?? "",id=instrument["id"] as? String ?? ""
+      entries.append(("Instrument · "+name,"instrument:"+id))
+    }
     let channel=source["noteTarget"] as? String ?? "",instrument=source["noteInstrument"] as? String ?? ""
     picker(sourceScope,entries,select:!channel.isEmpty ? "bus:"+channel:!instrument.isEmpty ? "instrument:"+instrument:"")
     followerPreFader.state=source["preFader"] as? Bool==true ? .on:.off;followerPreFader.isEnabled = !(source["audioBus"] as? String ?? "").isEmpty

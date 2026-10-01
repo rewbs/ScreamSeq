@@ -1,101 +1,110 @@
 # ScreamSeq
 
-![ScreamSeq icon](assets/branding/ScreamSeq.png)
+<img src="assets/branding/ScreamSeq.png" width="128" alt="ScreamSeq icon">
 
-A native tracker DAW built on OpenMPT, with precise note timing, sample instruments, AU/VST3 hosting, musical automation, a shared audio/modulation graph and an agent-facing editing API. This is an independent derivative, not an official OpenMPT release.
+ScreamSeq is a native tracker DAW with precise note timing, sample instruments,
+plugin hosting, and connected views of patterns, automation and signal flow.
+It builds on OpenMPT's playback engine with a shared C++ song model and native
+macOS and Windows frontends. ScreamSeq is an independent project, not an official
+OpenMPT release.
 
-The macOS app uses AppKit, Metal and Core Audio. A Windows-native sibling is planned alongside it, sharing musical data and DSP while using native Windows UI/audio facilities.
+## What you can do
 
-- [Build and use the macOS application](mac/README.md)
-- [Architecture and development workflow](doc/SCREAMSEQ_ARCHITECTURE.md)
-- [Graph workflow](mac/GRAPH_WORKFLOW.md), [precise notes](mac/PRECISE_NOTES.md), [agent API](mac/AUTOMATION.md)
-- [Project agent skills](.agents/skills/) and [Windows agent kickoff prompt](doc/WINDOWS_AGENT_PROMPT.md)
-- [Current delivery, verification and remaining work](doc/SCREAMSEQ_DELIVERY_REPORT_2026-09-21.md)
-- [License](LICENSE) and [branding/compatibility notes](assets/branding/BRANDING.md)
+- **Write patterns and arrangements.** Keyboard-driven note entry, independent
+  playback and editing cursors, pattern/order tools, fractional note timing,
+  musical tempo and groove, and one to eight FX columns per channel.
+- **Shape samples and instruments.** Waveform drawing, range processing,
+  clipboard editing, loop crossfades, sample libraries, multi-sample mappings,
+  and volume, pan, pitch and filter envelopes.
+- **Host effects and instruments.** Built-in processors and native plugin
+  interfaces, searchable parameters, presets, shared instrument assignments
+  and MIDI channels. macOS hosts AU and VST3; Windows hosts VST3.
+- **Connect processing and modulation.** Track/group/return buses, inserts,
+  sends, sidechains, reusable processing graphs, song-level modulation sources,
+  parameter links and signal inspection.
+- **Automate the music.** Pattern parameter envelopes, recorded automation,
+  reusable envelope shapes, compiled curve formulas and precise graph commands.
+- **Edit through a local API.** External tools and agents can inspect and change
+  songs through guarded JSON operations. Musical edits use stable identities,
+  revision checks, Undo and native project persistence.
+- **Import and export.** Edit MOD, XM, S3M, IT and MPTM songs, preview other
+  engine-supported formats, save native projects and export modules with checks
+  for native-feature loss. The macOS app also exports rendered stereo WAV.
 
-New projects use `.screamseq`; legacy `.resonance` projects remain readable. Stable legacy plugin and storage identifiers are intentionally retained.
+The [macOS guide](mac/README.md), [graph guide](mac/GRAPH_WORKFLOW.md) and
+[precise-note guide](mac/PRECISE_NOTES.md) describe the most developed interface.
+Platform coverage differs; Windows is an implemented editing frontend with
+parity work still in progress.
 
-The original upstream repository information follows.
+## Platforms and status
 
----
+| | macOS | Windows |
+| --- | --- | --- |
+| Native interface | Swift/AppKit, Metal pattern grid | Win32, Direct2D/DirectWrite over Direct3D 11/DXGI |
+| Audio and plugins | Core Audio, CoreMIDI, AU/VST3 | WASAPI, VST3 |
+| Local API transport | Private Unix socket | Private PID-scoped named pipe |
+| Development state | Broad editing and graph workflows; supported live routing transitions | Patterns, samples, instruments, plugins, envelopes and graph editing; newer live structural-edit publication and full parity remain unfinished |
 
-README
-======
+**This is development software and is not release-qualified.** The strict
+sustained 60 fps gate remains unmet. General note/MIDI graph routing, arbitrary
+live graph topology changes, broader commercial-plugin coverage and final
+cross-platform qualification remain open. Unsupported live edits preserve the
+accepted audio plan or require stopped preparation, according to the host.
 
+The [1 October graph checkpoint](doc/mac-native-qualification/2026-10-01-graph-resume/STOPPAGE_REPORT.md)
+records the measured scope and remaining graph work. It is a dated checkpoint,
+not a guarantee for every build or plugin. Windows implementation boundaries are
+documented in [application integration](windows/App/INTEGRATION.md); its earlier
+native qualification is collected in [the continuation record](windows/RESUME_PROGRESS.md).
 
-OpenMPT and libopenmpt
-======================
+## Build and run
 
-This repository contains OpenMPT, a free Windows/Wine-based
-[tracker](https://en.wikipedia.org/wiki/Music_tracker) and libopenmpt,
-a library to render tracker music (MOD, XM, S3M, IT MPTM and dozens of other
-legacy formats) to a PCM audio stream. libopenmpt is directly based on OpenMPT,
-offering the same playback quality and format support, and development of the
-two happens in parallel.
+From the repository root, on macOS 14 or newer with Xcode command-line tools and
+CMake:
 
+```sh
+bash mac/build-background.sh
+open bin/mac-background/ScreamSeq.app
+```
 
-License
--------
+This uses a separate development bundle and two compile workers. The build is
+locally ad-hoc signed. See [macOS build and test details](mac/README.md).
 
-The OpenMPT/libopenmpt project is distributed under the *BSD-3-Clause* License.
-See [LICENSE](LICENSE) for the full license text.
+On Windows with Visual Studio 2022 C++ Build Tools, a Windows SDK and CMake 3.24+:
 
-Files below the `include/` (external projects) and `contrib/` (related assets
-not directly considered integral part of the project) folders may be subject to
-other licenses. See the respective subfolders for license information. These
-folders are not distributed in all source packages, and in particular they are
-not distributed in the Autotools packages.
+```powershell
+./windows/build.ps1 -Architecture x64 -BuildDirectory bin/windows-dev -Test
+./bin/windows-dev/Release/ScreamSeq.exe
+```
 
+Use `-Architecture ARM64` for a native ARM64 build. See the
+[Windows guide](windows/README.md) for build requirements, test scope and limits.
+Use a fresh build directory when another development instance is already running.
 
-How to compile
---------------
+## Projects and automation
 
+New projects use `.screamseq`. The current native format is container 6 /
+metadata 17; earlier native formats are rejected. OpenMPT module import remains
+supported. Platform-specific plugins must be available on the destination
+platform: AU state is preserved on Windows, but AU processors cannot run there.
+The current sample engine uses 8/16-bit sample storage.
 
-### OpenMPT
+The local API exposes capabilities through `api.describe`; clients must query
+the running host rather than assume complete platform parity. See the
+[API guide and Python client](mac/AUTOMATION.md),
+[machine-readable schema](mac/Tools/resonance-api.schema.json) and
+[Windows API subset](windows/Api/README.md). No language model is embedded in
+the application. Legacy Resonance storage and plugin identifiers remain
+intentional [compatibility contracts](assets/branding/BRANDING.md).
 
- -  Supported Visual Studio versions:
+## Development and attribution
 
-     -  Visual Studio 2019, and 2022 Community/Professional/Enterprise
+`main` is the ScreamSeq integration branch. Start with
+[contributing](CONTRIBUTING.md), the [architecture](doc/SCREAMSEQ_ARCHITECTURE.md)
+and the [UI philosophy](doc/RESONANCE_UI_PHILOSOPHY.md). Shared musical behavior
+belongs in `editor/` and the engine; native UI and device hosting belong in
+`mac/` or `windows/`.
 
-        To compile the project, open `build/vsVERSIONwin7/OpenMPT.sln` (VERSION
-        being 2019, or 2022) and hit the compile button. Other target systems
-        can be found in the `vs2019*`, and `vs2022*` sibling folders.
-
-        Note that you have to build the `PluginBridge` and `PluginBridgeLegacy`
-        projects manually for architectures other than the one you are building
-        OpenMPT for, as Visual Studio only builds one architecture configuration
-        at a time.
-
-        Please note that we do not support building with a later Visual Studio
-        installation with an earlier compiler version. This is because, while
-        later Visual Studio versions allow installing earlier compilers to be
-        available via the later version's environment, in this configuration,
-        the earlier compiler will still use the later C and C++ runtime's
-        headers and implementation, which significantly increases the matrix of
-        possible configurations to test.
-
-     -  Visual Studio 2017 XP targeting toolset
-
- -  OpenMPT requires the compile host system to be Windows 8.1 (or later) on
-    amd64 for VS2019 and VS2017, Windows 10 (or later) on amd64 for VS2022, or
-    Windows 11 (or later) ARM64.
-
- -  In order to build OpenMPT for Windows XP, the Visual Studio 2017 XP 
-    targeting toolset as well as the Windows 8.1 SDK need to be installed. The
-    SDK is optionally included with Visual Studio 2017.
-
- -  Microsoft Foundation Classes (MFC) are required to build OpenMPT.
-
-
-### libopenmpt and openmpt123
-
-See [Dependencies](doc/libopenmpt/dependencies.md) and
-[Getting Started](doc/libopenmpt/gettingstarted.md).
-
-
-Contributing to OpenMPT/libopenmpt
-----------------------------------
-
-
-See [contributing](doc/contributing.md).
-
+ScreamSeq retains OpenMPT's history, code and attribution. The project is covered
+by the [BSD-3-Clause license](LICENSE), with separate licenses for bundled
+third-party components. See [upstream provenance and notices](UPSTREAM.md).

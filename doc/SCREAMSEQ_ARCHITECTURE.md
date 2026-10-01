@@ -1,6 +1,6 @@
 # ScreamSeq development map
 
-ScreamSeq is the renamed Resonance application and an independent derivative of OpenMPT. The upstream history remains intact. Historical reports retain their original names. Current behavior is defined by source and tests; the original Renoise feasibility table describes the starting point, not today's completion status.
+ScreamSeq is an independent tracker DAW built on the OpenMPT playback engine, developed on `main`. Both native applications are maintained here. The upstream history and attribution remain intact; [UPSTREAM.md](../UPSTREAM.md) records the retained engine and removed product components. Historical reports retain their original names. Current behavior is defined by source and tests; the original Renoise feasibility table describes the starting point, not today's completion status.
 
 ## Shared and platform boundaries
 
@@ -42,7 +42,7 @@ evidence and remaining parity work are recorded in `windows/RESUME_PROGRESS.md`.
 
 Build on macOS with `SCREAMSEQ_BUILD_DIR=bin/mac-screamseq SCREAMSEQ_BUILD_JOBS=4 bash mac/build.sh`. Output is `ScreamSeq.app`; `RESONANCE_BUILD_DIR` and `RESONANCE_BUILD_JOBS` remain accepted aliases. Set `RESONANCE_DEVELOPMENT_BUILD=1` for a separate development bundle identity. AppKit/Metal and Core Audio are the current native foundation; keep high-frequency drawing out of layout-heavy per-cell view trees.
 
-`ctest --test-dir <build> --output-on-failure` runs native regressions. `mac/test-interface.sh` builds/tests the AppKit editors and can save snapshots. `mac/Tests/test_automation.py` exercises the socket protocol and actual application; inspect its flags before invocation. Workspace, startup, recovery, sample-library, plugin and Core Audio loopback checks have dedicated entry points in `mac/Tests/`. The qualification skill describes safe instance handling and evidence limits.
+`ctest --test-dir <build> --output-on-failure` runs native regressions. `mac/build-reference.sh` extracts a pinned original OpenMPT commit from local Git history for the separate stock playback oracle; see `UPSTREAM.md` and `mac/COMPATIBILITY.md`. `mac/test-interface.sh` builds/tests the AppKit editors and can save snapshots. `mac/Tests/test_automation.py` exercises the socket protocol and actual application; inspect its flags before invocation. Workspace, startup, recovery, sample-library, plugin and Core Audio loopback checks have dedicated entry points in `mac/Tests/`. The qualification skill describes safe instance handling and evidence limits.
 
 Quit must drain document/recovery work asynchronously, then call `TrackerSession.shutdown()` on the main thread before AppKit exits. Stopping transport retains plugins; ARC teardown of the app controller is not guaranteed before vendor static destructors. `plugin-shutdown-tests` checks retained-session teardown (`--ui` also covers rack and graph recipe editors). `SCREAMSEQ_BUILD_DIR=<build> bash mac/test-shutdown.sh` checks the actual NSApplication Quit path, including pending worker calls that need the main thread and recovery writes, without audio or visible windows.
 
@@ -63,7 +63,7 @@ Quit must drain document/recovery work asynchronously, then call `TrackerSession
 
 The root `.agents/skills/` contains the maintained project skill sources; copies can be installed under the user's Codex skills directory. Use separate worktrees/checkouts for concurrent Mac and Windows agents, and coordinate shared model/API/format edits explicitly. Neither agent should overwrite the other's platform tree or invent divergent musical semantics.
 
-Keep binaries, build caches, private sample packs and user songs out of Git. Include reproducible fixtures and licenses. Old local qualification documents may contain absolute paths: prefer repository-relative references in new documentation. Do not update upstream OpenMPT's Windows product branding just because the ScreamSeq sibling is renamed.
+Keep binaries, build caches, private sample packs and user songs out of Git. Include reproducible fixtures and licenses. Old local qualification documents may contain absolute paths: prefer repository-relative references in new documentation. Preserve upstream copyright notices and engine identifiers. The old OpenMPT product UI and distribution build systems are no longer part of this tree.
 
 Envelope reuse lives in `editor/EnvelopeBank.hpp/.cpp`: song-local templates,
 resolved stable target links, fitting, and bounded instrument baking. Playable

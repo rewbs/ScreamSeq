@@ -6,7 +6,7 @@ measuring each callback. Results include cold first-use callbacks.
 """
 import array, json, pathlib, subprocess, tempfile, math, sys, os
 root=pathlib.Path(__file__).resolve().parents[1]
-binary=pathlib.Path(os.environ.get('RESONANCE_BUILD_DIR',str(root/'bin/mac-native'))).resolve()
+binary=pathlib.Path(os.environ.get('SCREAMSEQ_BUILD_DIR',os.environ.get('RESONANCE_BUILD_DIR',str(root/'bin/mac-native')))).resolve()
 fixtures=[root/'test'/n for n in ['test.mod','test.xm','test.s3m']]
 fixtures += [pathlib.Path(tempfile.gettempdir())/'resonance-tests'/n for n in ['demo.mptm','demo.it','loops.mptm','test.mptm']]
 results=[]

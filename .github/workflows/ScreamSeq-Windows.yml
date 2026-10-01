@@ -2,9 +2,9 @@ name: ScreamSeq Windows
 
 on:
   push:
-    branches: [codex/screamseq, codex/windows-native]
+    branches: [main, codex/windows-native]
   pull_request:
-    branches: [codex/screamseq]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

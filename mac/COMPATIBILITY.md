@@ -81,6 +81,25 @@ The plugin expansion was inspected in the running application: the rack showed t
 
 Run `bash mac/test.sh`; use `--device` for a brief device test, or `--soak 300` for the five-minute audio-only workload. `bash mac/sanitize.sh` runs memory/undefined-behavior checks separately from timing. Fidelity results are in `bin/mac-native/audio-test-results.json`; stock tests are in `bin/mac-native/stock-test-results.log`.
 
+The stock playback oracle is pinned to original OpenMPT commit
+`f83cedb0cd5446e4dfaa83ac97e3087107e26767`. `mac/test.sh` calls
+`bash mac/build-reference.sh`, which extracts that commit from retained local Git
+history into `<build>/reference-source/<commit>`, including its original licenses,
+fixtures and Makefile. It rebuilds the stock library, runs its `libopenmpt_test`
+suite from the archived source directory, and links `reference-renderer` using
+only the archived headers and library. No removed upstream files from the current
+ScreamSeq tree or network access are needed. A shallow clone without the pinned
+commit receives an explicit fetch command; the script never fetches automatically.
+
+Both scripts accept `SCREAMSEQ_BUILD_DIR` and `SCREAMSEQ_BUILD_JOBS`, with the
+legacy `RESONANCE_BUILD_DIR` and `RESONANCE_BUILD_JOBS` aliases. For example,
+`SCREAMSEQ_BUILD_DIR=bin/mac-reference SCREAMSEQ_BUILD_JOBS=2 bash mac/build-reference.sh`
+builds just the oracle and runs its stock suite. The selected build directory
+receives `reference-build.log`, `stock-test-results.log`, `reference-source.json`
+(the pin and binary hashes), and `reference-renderer`. The full native test script
+then runs `mac/test_audio.py` against that executable; its exact sample/frame
+comparison requirements are unchanged.
+
 With the display unlocked, run `bash mac/ui-test.sh 600`, then `bash mac/ui-test.sh 1800 --no-build` for the longer combined gate. Reports are saved under `bin/mac-native/qualification/`. Build the ZIP with `bash mac/package.sh`. Hardware loopback, additional devices/displays/OS versions and a broader real-song/plugin corpus remain unqualified.
 
 Native mixer, multi-bus and built-in expansion (2026-09-20):
