@@ -53,7 +53,8 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
   latency_ = backend_->latency(); tail_ = backend_->tail(); buses_ = backend_->buses();preparedInputs_=backend_->preparedAuxiliaryInputs();preparedOutputs_=backend_->preparedAuxiliaryOutputs();
   validatePluginAudioLayout(state.audioLayout,buses_);audioLayout_=pluginAudioLayoutSignature(buses_);
   for (uint32_t bus=1;bus<64;++bus)if(preparedOutputs_&(uint64_t(1)<<bus))auxiliaryOutputBuffers_[bus] = std::make_unique<PluginAudioStorage>();
-  if(!std::isfinite(latency_)||latency_<0||latency_>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
+  const auto initialLatency=latency_.load(std::memory_order_relaxed);
+  if(!std::isfinite(initialLatency)||initialLatency<0||initialLatency>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
   bypassControl_.prepare(rate,uint32_t(std::llround(latency_*rate)),isInstrument(),state.bypass);
   prepareBaselines();
 }
@@ -75,7 +76,8 @@ void NativePlugin::adoptLatency(LatencyUpdate &next) noexcept {
 void NativePlugin::refreshLatency() {
   if (backend_ && backend_->latencyChangePending()) {
     backend_->refreshLatency(); latency_ = backend_->latency(); tail_ = backend_->tail();
-    if(!std::isfinite(latency_)||latency_<0||latency_>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
+    const auto initialLatency=latency_.load(std::memory_order_relaxed);
+    if(!std::isfinite(initialLatency)||initialLatency<0||initialLatency>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
     bypassControl_.latency(uint32_t(std::llround(latency_*rate_)));
   }
 }
