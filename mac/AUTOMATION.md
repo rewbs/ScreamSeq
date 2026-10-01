@@ -591,7 +591,7 @@ The parameter must exist even for a deletion. Retain stable plugin identity in
 an editor, resolving its slot only at the guarded revision; rack reorder/removal
 remaps or removes the corresponding stored records.
 
-Structural operations, plugin parameter batches, plugin-state restoration and automation replacement stop transport before rebuilding assets. Small pattern batches can use the live edit queue; oversized or saturated batches stop playback while retaining the committed edit. The reply reports whether playback stopped. Editing operations do not implicitly start playback, audition notes, open/replace documents or execute arbitrary scripts. Transport/audition and project/file actions require their explicit commands; native saving/recovery retains API edits normally.
+Sample/structural document operations prepare rebuilt assets before replacing playback. Supported graph, routing, rack, parameter and recorded-timeline edits use bounded live publication; unsupported active transitions reject before changing the model/history or transport. Small pattern batches can use the live edit queue; oversized or saturated batches stop playback while retaining the committed edit. The reply reports whether playback stopped. Editing operations do not implicitly start playback, audition notes, open/replace documents or execute arbitrary scripts. Transport/audition and project/file actions require their explicit commands; native saving/recovery retains API edits normally.
 
 ### Shared plugin instruments and MIDI channels
 
@@ -943,7 +943,7 @@ existing plugin parameter interface; no new musical operation is hidden in UI.
 
 `plugin.buses.get {slot}` reads the loaded plugin's audio ports without rescanning or opening an interface. It returns the stable plugin identity and `buses`, each with `index`, `direction` (`input`/`output`), `name`, `channels`, `active` and `supported`. Native indices are preserved, including inactive ports. Mono and stereo ports are supported, up to 64 declared buses in either direction; larger channel layouts are listed as unsupported. The graph shows names with the native zero-based indices in its port menus. The older Audio buses editor numbers them from 1 for display.
 
-`plugin.buses.set {expectedRevision, slot, inputs?, outputs?, dryRun?}` sets the complete enabled auxiliary bus list for each supplied direction. Lists contain unique indices 1–63. Main bus 0 remains enabled; an empty list disables that direction's auxiliaries. Omitted directions retain their current configuration. Changes preserve opaque plugin state and use unified Undo/Redo. Mac playback continues only if a compatible plan can be prepared; unsupported active changes reject without stopping. Windows currently stops for port changes. A dry run validates the known layout without creating a plugin. Repeating the same lists, regardless of order, is a no-op. Old project entries with no activation fields keep only the main buses active.
+`plugin.buses.set {expectedRevision, slot, inputs?, outputs?, dryRun?}` sets the complete enabled auxiliary bus list for each supplied direction. Lists contain unique indices 1–63. Main bus 0 remains enabled; an empty list disables that direction's auxiliaries. Omitted directions retain their current configuration. Changes preserve opaque plugin state and use unified Undo/Redo. Mac playback continues only if a compatible plan can be prepared; unsupported active changes reject without stopping. Windows uses the same prepared rack path and rejects unsupported active physical-port changes before mutation. A dry run validates the known layout without creating a plugin. Repeating the same lists, regardless of order, is a no-op. Old project entries with no activation fields keep only the main buses active.
 
 Use named output sockets in the graph, or choose an instrument output in Mixer and use **Route here**. Supported wired outputs activate automatically. **Audio buses…** also allows explicit manual activation. Each output has independent bus faders, inserts and delay compensation. Inputs enabled without a routed source receive silence. Hardware output pairs remain a separate feature in progress. Route auxiliary effect inputs with `mixer.sidechains.set`, described below.
 
@@ -1664,7 +1664,7 @@ the playback copy. Inferred activation never changes saved manual plugin port
 settings or plugin Undo. Disconnecting routes restores the manual configuration
 on the next playback preparation. Layout-only edits do not stop playback.
 
-Mac route edits prepare a candidate while the accepted plan keeps playing.
+Mac and Windows route edits prepare a candidate while the accepted plan keeps playing.
 Supported effect insertion/removal/reordering, bus rewiring and detached-effect
 insertion retain existing processors and use a 10 ms routing crossfade; retained
 processors advance once per audio interval. The prepared candidate validates
@@ -1673,8 +1673,9 @@ Unsupported transitions, including incompatible port/latency changes, reject
 without stopping transport or partially editing the document. A transition still
 in progress returns the ordinary busy error; retry the same revision. Undo/Redo
 uses the same preparation and publication path. This is a qualified subset, not
-a promise that every vendor or arbitrary topology can change live. Windows
-currently retains its stop-on-structural-edit bridge. Dry runs remain nonmutating.
+a promise that every vendor or arbitrary topology can change live. Windows-native
+CI must pass its worker publication tests; a Mac-hosted adapter test alone is not
+Windows qualification. Dry runs remain nonmutating.
 
 `mixer.plugin.route` and `mixer.instrument.route` accept either `target` (the
 existing single-destination operation) or `targets:[busID,...]` (replace all
@@ -1727,6 +1728,14 @@ Those point edits stop playback and use the unified chronological Undo history.
 | `parameter.activity.get` | Optional `after` sequence (0…9007199254740991) and `limit` (1…8192, default 2048). Nondestructive retained history, token, cursor/oldest/latest, dropped count and current target. Restart cursor at zero when the token changes. Capture is restored on playback restart where the same stable target exists; a new engine starts a new token. |
 | `automation.recorded.get` | Stable `plugin`, `parameter`, optional `offset` (0…100000), `limit` (1…4096, default 512). Returns selected lane points, total and 48000 Hz timestamp rate. |
 | `automation.recorded.edit` | `plugin`, `parameter`, `frame`, `expectedRevision`; either `value` (native units, upsert) with optional `newFrame`, or `remove:true`. Optional `dryRun`. Preserves every other parameter and timestamp. Moves reject occupied destination timestamps. Validates before mutation; no-op creates no Undo. |
+
+Recorded-point edits and Undo/Redo prepare a bounded immutable timeline off the
+audio callback, then adopt it at one render boundary. Catch-up uses device-rate
+frames; deleting a lane restores its saved manual baseline. Earlier manual
+batches are consumed before that timeline and later batches after it. Rejected
+or full-queue publication changes neither musical state nor history and leaves
+playback running. Mac and Windows use the same executor and existing saved-point
+format; this operation does not replace opaque plugin state.
 
 Trace points include sample frame/seconds, zero-based pattern and order,
 fractional position in **256 units per row**, value, bucket extrema, audibility,
@@ -1855,7 +1864,7 @@ engine and restart when that engine is replaced; they are not document revisions
 `preparing` covers warmup and the 10 ms routing transition. A failed candidate
 keeps the old plan audible; Undo restores the displayed topology. The graph
 shows pending/failure text only when relevant. Windows exposes the same signal
-reading fields, but its structural-edit API has not enabled live publication.
+reading fields and publishes supported structural edits through the shared host.
 
 `graph.signal.clear {port, expectedRevision}` requests a latch clear at that
 port's next observed block. It does not edit the song or consume Undo. A new
@@ -2071,12 +2080,12 @@ change is one document Undo. On macOS prepared copies keep processing while the
 main output smoothly changes to latency-aligned dry audio and auxiliary outputs
 fade to silence. Undo/Redo uses the same prepared publication path. In the Mac
 inspector, the Bypass checkbox and canvas **M** action target the selected recipe
-processor and say that all uses change. Whole-group bypass and source mute are
-separate capabilities and remain explicitly unavailable where unsupported.
-Windows currently rejects active recipe-bypass changes and their Undo/Redo with
-`-32002`, preserving both transport and history; stop playback and independent
-preview notes first. Its shared runtime supports the effect, but live Windows
-publication/history hooks have not yet been integrated or qualified.
+processor and say that all uses change. Whole-group bypass is a separate
+boundary operation; source mute uses `graph.source.mute` as documented below.
+Windows publishes active recipe bypass and native-only Undo/Redo through the same
+prepared controls. Preparation or queue rejection preserves transport and history.
+Windows-native execution must pass its worker CI tests; this API source
+support does not establish a desktop or device qualification.
 
 On macOS, `graph.plugin.set` parameter edits update all prepared copies (ordinary,
 row, persistent and sample-instrument, including inactive copies) together at the
@@ -2185,3 +2194,39 @@ explicit choice; its connection inspector exposes the target mode. Changing
 that recipe target mode updates its contributing sources together. Adding or
 retargeting recipe topology remains subject to the existing live-publication
 capability checks.
+
+### Shared graph object actions
+
+All musical methods below require `expectedRevision`. Mutating methods support
+`dryRun`; validation/no-op/dry-run paths create no history, and a successful edit
+has one chronological Undo transaction.
+
+| Method | Parameters beyond revision | Meaning |
+|---|---|---|
+| `graph.source.mute` | `graph:null|ID,node,muted` | Mute a complete source contribution while its history continues; recipe scope affects every copy. |
+| `graph.makeIndependent` | `graph,target,scope:"channel"|"instrument",name?,number?` | Clone a definition with fresh entities; rebind all selected-channel uses/commands or the selected instrument assignment. |
+| `graph.selection.copy` | `graph,nodes` | Read-only response `{fragment,version:1}`. Internal selection topology only; no external cables. |
+| `graph.selection.cut` | `graph,nodes` | Return the same fragment and remove originals atomically. |
+| `graph.selection.paste` | `graph,fragment,patternMap?,parent?,x?,y?` | Fresh entities and independent curves; every copied pattern envelope requires a `{source,target}` map. |
+| `graph.selection.duplicate` | `graph,nodes,parent?,x?,y?` | Same-song copy/paste with explicit identity pattern mapping. |
+| `plugin.duplicate` | `plugin,position?` | Fresh rack instance from its saved manual baseline and preset; no assignment/automation/cable copy. Effects are detached. Returns `{slot,plugin,detached,dryRun}`. |
+| `graph.plugin.preset.save` | `graph,node,path,name,overwrite?` | Write the same native preset format as rack presets. Saving does not alter document history. |
+| `graph.plugin.preset.load` | `graph,node,path,expectedPresetRevision` | Validate and restore a preset baseline across recipe copies, preserving physical ports, routing and host bypass. |
+
+`graph.nodes.detach` also accepts `heal:{incoming?,outgoing?}` where indexes refer
+to the current definition's audio edges, pinned by the document revision. An
+omitted endpoint is valid only where that main boundary has no edge. The chosen
+incoming/outgoing path is replaced by one edge whose gain is their product;
+there is no implicit fan-in/fan-out cross product. Without `heal`, existing
+unique-boundary inference remains available. Other branch/sidechain edges stay
+when detaching and are removed with the selected nodes when `remove:true`.
+
+Copy/paste remaps graph/node/group identities and local presentation references.
+Clipboard pattern mapping is mandatory even when IDs happen to match in another
+song. The UI supplies explicit identity mappings only when the clipboard carries
+the same document token. Unsupported or stale destinations reject before any
+allocation is committed to the document. Cross-song copies materialize envelope
+curves rather than creating accidental song-local bank links.
+
+The note-event API, ownership policy, atomic mixed cable cuts and exact activity
+snapshot contract are specified in [Note routing](../doc/SCREAMSEQ_NOTE_ROUTING.md).

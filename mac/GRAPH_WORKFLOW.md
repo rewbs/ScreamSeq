@@ -390,3 +390,50 @@ host parameter list to expose a parameter. The last-touched bridge identifies
 song-rack instances, rather than guessing which shared template copy a knob
 belongs to. Real text edits keep normal text Undo/Redo; an untouched field
 focused by a graph gesture lets Cmd-Z reach the unified document history.
+
+## Source mute, independent uses and duplication
+
+Select a modulation source and press **M** to mute or unmute its entire
+contribution. This also silences a nonzero minimum depth; the source keeps its
+phase, envelope and note history moving. A reusable source edit affects every
+copy, as its inspector explains. Processor bypass remains a dry-path operation.
+
+Use **Make use independent…** on a channel/instrument graph copy when its next
+edits should no longer change other users. For a channel, all uses of that
+particular graph on the channel move together, including Row, Start, Stop and
+Amount commands. For an instrument, its assignment moves to the new definition.
+Other channel/instrument references remain on the original.
+
+Inside a reusable graph, **⌘C / ⌘X / ⌘V / ⌘D** copy, cut, paste or duplicate the
+selected nodes and their internal cables. External cables are not copied.
+Cross-song pattern envelopes ask for destination patterns explicitly. Cut,
+paste and duplicate are each one Undo operation. Nested groups follow their
+members. In the Song graph, **⌘D** duplicates one selected processor or modulation
+source; a processor starts unassigned, and an effect starts unconnected.
+**Save plugin preset… / Load plugin preset…** work on either a rack processor or
+a recipe processor. Loading preserves its routing and host bypass.
+
+For a branched recipe, **Detach and reconnect / Delete and reconnect** asks
+which incoming and outgoing main edges should be healed. Other branch cables
+remain on detach; deleting removes the selected nodes and their remaining
+incident cables. It does not invent every combination of fan-in and fan-out.
+
+## Plugin-instrument note cables
+
+Purple **Notes** sockets are separate from audio and parameter sockets. Connect
+a channel or plugin-instrument source to a plugin instrument to forward its
+plugin-instrument notes. A new destination waits for the next note-on; disabling
+or removing a cable releases notes owned by that cable. Sample-only notes are
+not layered into plugins.
+
+Assigned plugin instruments already have visible note cables. Editing one
+creates an explicit replacement; disconnecting it suppresses the implicit
+assignment. **Restore assigned instrument notes…** restores that default without
+removing explicit routes. Select a cable to change its MIDI channel or enabled
+state immediately. Dragging, **Connect to…**, Delete and mixed cable cutting use
+the same guarded transactions and one Undo.
+
+The selected event cable shows counters from its actual adopted route, including
+held notes/pedals and route-owned releases. Stopped, pending, unavailable, stale
+and retired snapshots are labeled; note activity is never inferred from audio
+levels.

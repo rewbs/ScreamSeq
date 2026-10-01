@@ -82,7 +82,7 @@ extension InterfaceTests {
 
     let readonly=GraphPortChoice(key:key("meter",7,false,true),node:SignalCanvasNode(id:"meter",title:"Meter",detail:"",kind:"audio",x:0,y:0),port:.init(number:7,label:"Level",modulation:true,signal:.parameter,unavailable:"Read-only parameter"))
     let event=GraphPortChoice(key:key("events"),node:SignalCanvasNode(id:"events",title:"Notes",detail:"",kind:"audio",x:0,y:0),port:.init(signal:.events))
-    try require(controls.portUnavailable(readonly)=="Read-only parameter" && controls.portUnavailable(event)?.contains("not available")==true,"Readonly parameters and unsupported event sockets give specific unavailable reasons")
+    try require(controls.portUnavailable(readonly)=="Read-only parameter" && controls.portUnavailable(event)?.contains("Song graph")==true,"Readonly parameters and unsupported event sockets give specific unavailable reasons")
     let nav=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1100,height:700));nav.update(song)
     let host=NSWindow(contentRect:nav.frame,styleMask:[.borderless],backing:.buffered,defer:false);host.contentView=nav;nav.layoutSubtreeIfNeeded()
     nav.scroll.magnification=1;nav.canvas.scroll(.zero)

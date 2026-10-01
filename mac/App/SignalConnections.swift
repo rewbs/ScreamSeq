@@ -14,6 +14,7 @@ extension SignalGraphEditor {
       for p in catalog where p["direction"] as? String==(output ? "output" : "input"){numbers.insert((p["index"] as? NSNumber)?.uint32Value ?? 0)}
       return numbers.sorted().map{Self.audioPort($0,output:output,catalog:catalog)}
     }
+    if node["muted"] as? Bool==true{result.detail="Muted · "+kind}
     result.inputs=["plugin","output","follower"].contains(kind) ? ports(output:false) : []
     result.outputs=["plugin","input"].contains(kind) ? ports(output:true) : kind=="output" ? [] : [SignalCanvasPort(label:"Signal",modulation:true)]
     if kind=="plugin"{
@@ -31,6 +32,7 @@ extension SignalGraphEditor {
     guard canvas.edges.indices.contains(index)else{return}
     selectedID=nil;canvas.selected=nil;canvas.selectedEdge=index;connection.selectItem(at:index)
     let edge=canvas.edges[index]
+    if selectedNoteRoute != nil{inspect();configureConnectionInspector();return}
     if edge.readOnlyReason != nil {inspect();configureConnectionInspector();return}
     picker(source,canvas.nodes.map{($0.title,$0.id)},select:edge.source)
     picker(destination,canvas.nodes.map{($0.title,$0.id)},select:edge.target)
@@ -142,10 +144,11 @@ extension SignalGraphEditor {
 extension SignalGraphEditor {
   var selectedConnectionIsEditable:Bool {
     guard let i=canvas.selectedEdge,canvas.edges.indices.contains(i) else{return false}
-    return graphID != nil || (songConnections.indices.contains(i) && ["output","send","graph-input","graph-output","plugin-input","plugin-output","modulation","follower-input"].contains(songConnections[i]["kind"] as? String ?? ""))
+    return graphID != nil || (songConnections.indices.contains(i) && ["output","send","graph-input","graph-output","plugin-input","plugin-output","modulation","follower-input","note"].contains(songConnections[i]["kind"] as? String ?? ""))
   }
   func configureConnectionInspector() {
     guard connectionSection != nil else{return}
+    noteControls.isHidden=selectedNoteRoute==nil
     if selectedProvenance != nil{connectionSection.isHidden=true;inspectorScroll.isHidden=false;inspectParameterProvenance();return}
     let selected=canvas.selectedEdge != nil,editable=selectedConnectionIsEditable
     connectionSection.isHidden = !selected && !manualConnection
@@ -156,6 +159,12 @@ extension SignalGraphEditor {
     connectionForm.isHidden=selected && !editable;openConnectionOwnerButton.isHidden = !selected || editable
     connectionKind.isEnabled = !selected
     source.isEnabled=true;destination.isEnabled=true
+    if let route=selectedNoteRoute {
+      connectionForm.isHidden=true;noteControls.configure(enabled:route["enabled"] as? Bool ?? true,channel:route["midiChannel"] as? Int ?? 0)
+      refreshNoteActivity(force:true)
+      connectionHint.stringValue=route["implicit"] as? Bool==true ? "Assigned instrument cable. Editing creates an explicit replacement in one Undo; disconnect keeps the assignment suppressed.":"Note events are separate from audio. Drag an endpoint to reroute; changes commit immediately."
+      return
+    }
     if selected && !editable {
       connectionHint.stringValue="Drag an insert’s input to another channel’s output to move that insert and the rest of its chain. Open a subgraph to edit its internal wires."
       openConnectionOwnerButton.title=connectionOwnerGraphNode==nil ? "Open mixer / assignment…" : "Open subgraph…"
@@ -184,6 +193,7 @@ extension SignalGraphEditor {
     guard canvas.selectedEdge != nil else{return}
     layoutSubtreeIfNeeded()
     connectionHeading.scrollToVisible(connectionHeading.bounds)
+    if selectedNoteRoute != nil{window?.makeFirstResponder(noteControls.channel);return}
     if !selectedConnectionIsEditable {window?.makeFirstResponder(openConnectionOwnerButton);return}
     let target:NSView=connectionKind.titleOfSelectedItem=="Modulation" ? minimum : connectionGain.isEnabled && connectionKind.titleOfSelectedItem != "Main output" ? connectionGain : destination
     window?.makeFirstResponder(target);(target as? NSTextField)?.selectText(nil)

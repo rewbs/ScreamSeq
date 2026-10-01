@@ -18,7 +18,11 @@ class PluginOperations {
   std::function<void()> stop_;
   std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters_;
   std::function<void(size_t,bool)> liveBypass_;
+  std::function<std::function<void()>(const Tracker::NativeSong &)> prepareNativePublication_;
+  std::function<std::function<void()>(const std::vector<Tracker::ParameterChange> &)> prepareRecordedPublication_;
+  std::function<std::function<void()>(const std::vector<Tracker::PluginState> &,const std::vector<Tracker::ParameterChange> &,const Tracker::NativeSong &)> prepareRackPublication_;
   std::optional<std::pair<size_t,bool>> bypassOnly(const Json &,const Json &) const;
+  std::optional<std::vector<Tracker::ParameterChange>> parameterOnlyChanges(const Json &,const Json &);
   struct History {Json plugins,automation;size_t bytes=0;uint64_t sequence=0;};
   std::deque<History> undo_,redo_;
   std::vector<std::pair<uint64_t,uint64_t>> historyGroups_;
@@ -56,6 +60,9 @@ public:
     std::optional<std::filesystem::path> libraryPath={});
   ~PluginOperations();
   void liveBypass(std::function<void(size_t,bool)> callback) {liveBypass_=std::move(callback);}
+  void nativePublication(std::function<std::function<void()>(const Tracker::NativeSong &)> callback) {prepareNativePublication_=std::move(callback);}
+  void recordedPublication(std::function<std::function<void()>(const std::vector<Tracker::ParameterChange> &)> callback) {prepareRecordedPublication_=std::move(callback);}
+  void rackPublication(decltype(prepareRackPublication_) callback) {prepareRackPublication_=std::move(callback);}
   static std::vector<std::string> reads();
   static std::vector<std::string> writes();
   Json invoke(const std::string &,const Json &);
@@ -74,7 +81,8 @@ public:
   // history. The callback applies one document entry; alreadyStopped prevents
   // repeating a fallible transport hook halfway through a grouped operation.
   void history(bool redo,const std::function<void(bool,bool)> &documentHistory,
-    const std::function<void(const Tracker::NativeSong &)> &validateNative={});
+    const std::function<void(const Tracker::NativeSong &)> &validateNative={},
+    const std::function<void(bool,const std::function<void()> &)> &liveDocumentHistory={});
   bool canUndo() {synchronizeHistory();return historyHead(false)!=0;}
   bool canRedo() {synchronizeHistory();return historyHead(true)!=0;}
   size_t openEditorCount() const {return openEditors_.size()+size_t(graphEditorWindowOpen_);}

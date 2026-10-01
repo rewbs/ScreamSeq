@@ -6,7 +6,7 @@
 #include <optional>
 #include <string>
 #include <vector>
-namespace Tracker { class Document; }
+namespace Tracker { class Document; struct NativeSong; }
 namespace ScreamSeq {
 using Json = nlohmann::json;
 struct EnvelopeHostHooks {
@@ -16,6 +16,7 @@ struct EnvelopeHostHooks {
   // (non-musical) automation. Native performance conflicts are checked here.
   std::function<bool(const std::string &,uint32_t)> parameterAvailable;
   std::function<bool(const std::string &,uint32_t)> parameterAutomationConflicts;
+  std::function<std::function<void()>(const Tracker::NativeSong &)> preparePublication;
 };
 // Control-thread only. Caller checks/removes expectedRevision; invoke returns
 // result.data. Read hooks must not mutate Document; stopPlayback must not throw

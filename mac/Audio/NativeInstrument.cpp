@@ -34,6 +34,14 @@ class InstrumentAdapter final : public IMidiPlugin {
   PluginChain &chain_;
   size_t processor_;
   std::atomic<bool> &failed_;
+  NoteSource noteSource_{};
+  bool noteContext_=false;
+  struct NoteContext {
+    InstrumentAdapter &adapter;NoteSource previous;bool active;
+    NoteContext(InstrumentAdapter &a,CHANNELINDEX voice,const ModInstrument *instrument=nullptr)
+      :adapter(a),previous(a.noteSource_),active(a.noteContext_) {a.noteSource_=a.chain_.noteSource(&a,a.m_SndFile,voice,instrument);a.noteContext_=true;}
+    ~NoteContext(){adapter.noteSource_=previous;adapter.noteContext_=active;}
+  };
 
 public:
   InstrumentAdapter(CSoundFile &song, SNDMIXPLUGIN &slot, std::shared_ptr<NativePlugin> plugin, uint64_t position,
@@ -63,9 +71,18 @@ public:
   bool ShouldProcessSilence() override { return true; }
   int GetNumInputChannels() const override { return 2; }
   int GetNumOutputChannels() const override { return 2; }
+  void MidiCC(MIDIEvents::MidiCC controller,uint8 value,CHANNELINDEX voice) override {NoteContext context(*this,voice);IMidiPlugin::MidiCC(controller,value,voice);}
+  void MidiPitchBendRaw(int32 bend,CHANNELINDEX voice) override {NoteContext context(*this,voice);IMidiPlugin::MidiPitchBendRaw(bend,voice);}
+  void MidiPitchBend(int32 increment,int8 depth,CHANNELINDEX voice) override {NoteContext context(*this,voice);IMidiPlugin::MidiPitchBend(increment,depth,voice);}
+  void MidiTonePortamento(int32 increment,uint8 note,int8 depth,CHANNELINDEX voice) override {NoteContext context(*this,voice);IMidiPlugin::MidiTonePortamento(increment,note,depth,voice);}
+  void MidiVibrato(int32 depth,int8 pwd,CHANNELINDEX voice) override {NoteContext context(*this,voice);IMidiPlugin::MidiVibrato(depth,pwd,voice);}
+  void MidiCommand(const ModInstrument &instrument,uint16 note,uint16 volume,CHANNELINDEX voice) override {NoteContext context(*this,voice,&instrument);IMidiPlugin::MidiCommand(instrument,note,volume,voice);}
+  void MoveChannel(CHANNELINDEX from,CHANNELINDEX to) override {IMidiPlugin::MoveChannel(from,to);chain_.moveInstrumentNotes(this,from,to);}
+  bool MidiSendFromTrack(OpenMPT::mpt::const_byte_span data,CHANNELINDEX voice) override {NoteContext context(*this,voice);return MidiSend(data);}
   bool MidiSend(OpenMPT::mpt::const_byte_span data) override {
     if (data.empty())
       return true;
+    if(noteContext_&&chain_.hasNoteRouting())return chain_.routeInstrumentMIDI(noteSource_,std::to_integer<uint8_t>(data[0]),data.size()>1?std::to_integer<uint8_t>(data[1]):0,data.size()>2?std::to_integer<uint8_t>(data[2]):0,position_);
     bool ok = plugin_->midi(std::to_integer<uint8_t>(data[0]), data.size() > 1 ? std::to_integer<uint8_t>(data[1]) : 0,
                             data.size() > 2 ? std::to_integer<uint8_t>(data[2]) : 0);
     if (!ok)
@@ -73,6 +90,7 @@ public:
     return ok;
   }
   void HardAllNotesOff() override {
+    if(chain_.hasNoteRouting()){chain_.releaseInstrumentNotes(this,position_);return;}
     for (uint8_t ch = 0; ch < 16; ++ch) {
       plugin_->midi(0xb0 | ch, 123, 0);
       plugin_->midi(0xb0 | ch, 120, 0);
@@ -177,7 +195,7 @@ void PluginChain::attachMusicalAutomation(Renderer &renderer, const NativeSong &
   for(size_t i=0;i<plugins_.size();++i)if(mixer_&&plugins_[i]->isInstrument()&&!instruments_[i])processing[i]=true;
   commandRuntime_=std::make_shared<PatternCommandRuntime>(native,plugins_,instances_,processing,automation_);
   musicalSong_=&song;song.nativePitchRatios.fill(nullptr);
-  pitchRuntime_=std::make_shared<PatternPitchRuntime>(native,song,plugins_,processing);
+  pitchRuntime_=std::make_shared<PatternPitchRuntime>(native,song,plugins_,processing,noteLedger_?this:nullptr);
   musicalCatalog_.clear();musicalTargets_.clear();
   for(auto &plugin:plugins_) {plugin->prepareMusicalAutomation();musicalCatalog_.push_back(plugin->parameters());}
   initialMusicalPlan_=prepareMusicalPlan(native);musicalPlan_=initialMusicalPlan_.get();
@@ -334,6 +352,7 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
   const bool needsRouting=native&&(!native->mixer.detached.empty()||!native->signal.assignments.empty()||!native->signal.instrumentAssignments.empty()||!native->signal.commands.empty()||!native->signal.songSources.empty()||!native->signal.songModulation.empty());
   if(needsRouting && !native->mixer.active()){implicit=*native;implicit->ensureMixer();native=&*implicit;}
   auto &song = renderer.song();
+  if(native){noteLedger_=std::make_unique<NoteRouteLedger>();initialNoteRouting_=prepareNoteRouting(*native);commitNoteRouting(initialNoteRouting_);adoptNoteRouting(*initialNoteRouting_);}
   if(native)prepareRoutingPorts(native->mixer);
   song.nativeSamplePlugin=nullptr;song.nativeSampleContext=nullptr;sampleRoutes_.clear();sampleSignalGraph_.reset();
   const auto sampleCopies=native?native->signal.instrumentAssignments.size()*(song.GetNumChannels()+1):0;
@@ -401,7 +420,7 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
     latency_ = mixer->plan().latency / sampleRate_; tail_ = mixer->plan().tail;
     captureTails();
     auto prepared=std::make_unique<MixerTransition::Plan>();prepared->runtime=std::move(mixer);prepared->catalog=processors;
-    auto hosted=std::make_shared<HostedMixerPlan>();hosted->owner=this;hosted->busObservations=busObservations_;hosted->rack=rack_;
+    auto hosted=std::make_shared<HostedMixerPlan>();hosted->owner=this;hosted->busObservations=busObservations_;hosted->rack=rack_;hosted->noteRouting=initialNoteRouting_;
     hosted->processorObservations=processorObservations_;hosted->processorObservations.resize(processors.size());
     for(size_t i=0;i<processors.size();++i) {
       auto processor=std::make_shared<MixerProcessor>();
@@ -418,6 +437,8 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
     prepared->runtime->observer(HostedMixerPlan::observe,prepared.get());
     prepared->processorStorage=bypassBytes+signalGraph_->storageBytes()+(sampleSignalGraph_?sampleSignalGraph_->storageBytes():0)+
       hosted->processors.size()*(sizeof(MixerProcessor)+RenderOnce<MixerProcessor>::storageBytes());
+    if(hosted->noteRouting)prepared->processorStorage+=hosted->noteRouting->storageBytes();
+    for(const auto &entry:hosted->rack)prepared->processorStorage+=entry->plugin->musicalMIDIStorageBytes();
     musicalSong_=&song;songPatternIDs_.clear();for(const auto &[index,pattern]:native->patterns)songPatternIDs_.emplace_back(index,pattern.id);
     hosted->song=prepareSongControls(*native,*prepared,*hosted);
     hosted->songSpec.songSources=native->signal.songSources;hosted->songSpec.songModulation=native->signal.songModulation;

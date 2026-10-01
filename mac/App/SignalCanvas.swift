@@ -46,6 +46,7 @@ struct SignalCanvasEdge {
   var amountUnit=""
   var waypoints=[NSPoint]()
   var readOnlyReason:String?=nil
+  var connection=""
 }
 // View-only summaries: these are neither audio nodes nor editable cables.
 struct SignalCanvasBoundary {
@@ -142,6 +143,10 @@ final class SignalCanvas: NSView {
   var selection=Set<String>()
   var selected: String? {didSet{if let selected {selectedBoundary=nil;if !selection.contains(selected){selection=[selected]}}else{selection=[]};needsDisplay=true}}
   func selectNodes(_ ids:Set<String>,primary:String?=nil) {selection=ids;selected=primary ?? nodes.first{ids.contains($0.id)}?.id}
+  var onClipboard:((String)->Void)?
+  @objc func copy(_ sender:Any?){onClipboard?("copy")}
+  @objc func cut(_ sender:Any?){onClipboard?("cut")}
+  @objc func paste(_ sender:Any?){onClipboard?("paste")}
   var onMoveNodes: (([(String,Double,Double)])->Void)?
   var onInsertNodes: (([String],Int,[(String,Double,Double)])->Void)?
   var onDetachNodes: (([String],[(String,Double,Double)],Bool)->Void)?
@@ -230,7 +235,7 @@ final class SignalCanvas: NSView {
     let to=GraphBoundaryPort(node:node,number:port.number,output:!cable.output,modulation:port.modulation)
     if let reason=cableOriginRejection(cable){return reason}
     if let reason=cable.port.unavailable ?? port.unavailable{return reason}
-    if cable.port.signalType == .events || port.signalType == .events{return "Note-event routing is not available yet"}
+    if (cable.port.signalType == .events) != (port.signalType == .events){return "Notes connect only to Notes sockets; audio and control remain separate"}
     if cable.node==node{return "A processor cannot connect to itself"}
     if port.modulation != cable.port.modulation && !permitsFollowerDrop(from:cable.port,to:port,output:cable.output,rewiring:cable.edge != nil) {
       return cable.edge==nil ? "Audio sockets accept audio; parameter sockets accept control sources or an envelope follower":"Rewiring preserves the cable type; create a new cable to insert a follower"
@@ -297,7 +302,7 @@ final class SignalCanvas: NSView {
     // mouse-down can replace/reorder them even while new reads are deferred.
     // Live values, badges and labels do not change connection identity.
     if isEditing && (self.edges.count != edges.count || !zip(self.edges,edges).allSatisfy({a,b in
-      a.source==b.source && a.target==b.target && a.modulation==b.modulation && a.output==b.output && a.input==b.input && (a.readOnlyReason==nil)==(b.readOnlyReason==nil)
+      a.source==b.source && a.target==b.target && a.modulation==b.modulation && a.output==b.output && a.input==b.input && a.connection==b.connection && (a.readOnlyReason==nil)==(b.readOnlyReason==nil)
     })) {
       cancelGesture()
       onInvalidatedGesture?("Graph connections changed · unfinished gesture cancelled; retry on the current graph")
@@ -550,14 +555,13 @@ final class SignalCanvas: NSView {
         amountDrag=(index,point,value,value);onCableHint?("Drag amount · Shift for precision · double-click for exact entry · Esc cancels");return
       }
       for source in [true,false] {if let handle=wireHandle(index,source:source),hypot(handle.x-point.x,handle.y-point.y)<8/max(0.3,enclosingScrollView?.magnification ?? 1) {
-        let edge=edges[index];beginCable(node:source ? edge.target:edge.source,port:SignalCanvasPort(number:source ? edge.input:edge.output,modulation:edge.modulation),output:!source,edge:index)
+        let edge=edges[index];beginCable(node:source ? edge.target:edge.source,port:SignalCanvasPort(number:source ? edge.input:edge.output,modulation:edge.modulation,signal:edgeSignal(edge)),output:!source,edge:index)
         onCableHint?("Drag to a matching socket · Esc or empty space cancels");return
       }}
     }
     if let hit=socket(at:point) {
       let id=hit.node,port=hit.port,output=hit.output
       if let reason=port.unavailable {onCableHint?(reason);return}
-      if port.signalType == .events{onCableHint?("Note-event routing is not available yet");return}
       addingMainInput=event.modifierFlags.contains(.option)
       selected=id;selectedEdge=nil;onSelect?(id)
       beginCable(node:id,port:port,output:output,edge:nil);onCableHint?("Drag to add a connection · Option-drag an effect’s Main in to sum another channel · Esc cancels");return
@@ -671,6 +675,7 @@ final class SignalCanvas: NSView {
     if ![123,124,125,126].contains(event.keyCode){commitNudge()}
     if !isEditing {
       let flags=event.modifierFlags.intersection([.command,.control,.option,.shift])
+      if flags == .command,event.charactersIgnoringModifiers?.lowercased()=="d",GraphCommand.duplicateSelection.usesCanvasDefault(){onClipboard?("duplicate");return}
       if (flags == .control || flags == [.control,.option]),event.charactersIgnoringModifiers?.lowercased()=="g",(flags == .control ? GraphCommand.groupSelection:GraphCommand.ungroup).usesCanvasDefault(){onGroup?(flags.contains(.option));return}
       if (flags.isEmpty || flags == .shift),event.charactersIgnoringModifiers?.lowercased()=="q",(flags == .shift ? GraphCommand.spectrum:GraphCommand.scope).usesCanvasDefault() {
         if !event.isARepeat {if let port=scopeTarget(at:hoverPoint){scopeHeld=true;onScope?(port,flags == .shift)}else{onCableHint?("Measurement unavailable here · select a host audio port")}};return

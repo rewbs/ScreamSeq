@@ -15,5 +15,7 @@ Tracker::NativeSong decodeNativeMetadata(const Json &metadata);
 Json encodeNativeMetadata(const Tracker::NativeSong &song);
 // Same UTF-8 validation and UTF-16 length limit for document API strings.
 std::string validatedNativeText(const Json &, size_t maximum);
+Json encodeSignalDefinitionMetadata(const Tracker::SignalDefinition &);
+Tracker::SignalDefinition decodeSignalDefinitionMetadata(const Json &);
 Json encodeMixerMetadata(const Tracker::MixerGraph &);
 } // namespace ScreamSeq::Project

@@ -150,6 +150,11 @@ public:
 	// MIDI event handling
 	bool MidiSend(uint32 midiCode);
 	virtual bool MidiSend(mpt::const_byte_span /*midiData*/) { return true; }
+#ifdef OPENMPT_EDITOR_CORE
+	// Preserve the originating voice for native note graph ownership. Legacy
+	// processors retain the exact MidiSend behavior through this default bridge.
+	virtual bool MidiSendFromTrack(mpt::const_byte_span data, CHANNELINDEX) { return MidiSend(data); }
+#endif
 	virtual void MidiCC(MIDIEvents::MidiCC /*nController*/, uint8 /*nParam*/, CHANNELINDEX /*trackChannel*/) { }
 	virtual void MidiPitchBendRaw(int32 /*pitchbend*/, CHANNELINDEX /*trackChannel*/) {}
 	virtual void MidiPitchBend(int32 /*increment*/, int8 /*pwd*/, CHANNELINDEX /*trackChannel*/) { }

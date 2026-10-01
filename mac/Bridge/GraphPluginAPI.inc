@@ -13,7 +13,18 @@
           return @{@"parameters":parameters,@"buses":pluginBusDictionaries(plugin.buses()),@"latency":@(plugin.latency()),@"tail":@(plugin.tail()),@"bypass":@(node->plugin.bypass)};};
         bool commit=false,dry=false;NSString *gesture=nil;uint32_t gestureParameter=0;
         if([method isEqual:@"graph.plugin.get"]){allowed(@[@"graph",@"node"]);auto plugin=make(node->plugin);result=metadata(*plugin);}
-        else if([method isEqual:@"graph.plugin.bypass"]){
+        else if([method isEqual:@"graph.plugin.preset.save"]){
+          allowed(@[@"graph",@"node",@"path",@"name",@"overwrite",@"dryRun"]);auto plugin=make(node->plugin);
+          for(const auto &parameter:plugin->parameters()){const auto value=baseline(parameter);if(value!=parameter.value)require(parameter.writable&&plugin->parameter(parameter.id,value),"Plugin rejected the configured manual baseline");}
+          const auto state=plugin->state();result=PluginPreset::write(string(p[@"path"],8192),descriptorDictionary(state.descriptor),[NSData dataWithBytes:state.state.data() length:state.state.size()],string(p[@"name"],200),p[@"overwrite"]?boolean(p[@"overwrite"]):false,p[@"dryRun"]?boolean(p[@"dryRun"]):false);
+        } else if([method isEqual:@"graph.plugin.preset.load"]){
+          allowed(@[@"graph",@"node",@"path",@"expectedPresetRevision",@"dryRun"]);dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
+          auto preset=PluginPreset::read(string(p[@"path"],8192));if(![string(p[@"expectedPresetRevision"],80) isEqual:preset[@"presetRevision"]])throw Error(-32001,"Preset changed; inspect it again before loading");
+          const auto &r=node->plugin;PluginDescriptor descriptor{r.type,r.subtype,r.manufacturer,r.name,r.format,r.path,r.classID,false};require(PluginPreset::matches(preset[@"plugin"],descriptorDictionary(descriptor)),"Preset belongs to a different plugin type");
+          auto replacement=r;NSData *state=preset[@"state"];const auto *bytes=static_cast<const std::byte *>(state.bytes);replacement.state.clear();if(state.length)replacement.state.assign(bytes,bytes+state.length);replacement.parameters.clear();
+          auto plugin=make(replacement);captureSignalParameterBases(*definition,nodeID,plugin->parameters());replacement.state=plugin->state().state;node->plugin=std::move(replacement);commit=true;
+          result=@{@"preset":PluginPreset::summary(preset),@"loaded":@(!dry),@"dryRun":@(dry)};
+        } else if([method isEqual:@"graph.plugin.bypass"]){
           allowed(@[@"graph",@"node",@"bypass",@"dryRun"]);dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
           node->plugin.bypass=boolean(p[@"bypass"]);result=@{@"bypass":@(node->plugin.bypass)};commit=true;
         } else if([method isEqual:@"graph.plugin.set"]){

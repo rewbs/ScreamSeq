@@ -275,6 +275,7 @@ void programDryRunTests(const std::filesystem::path &scanner,const std::filesyst
 }
 
 #include "MixerIntegrationTests.inc"
+#include "LiveGraphPublicationTests.inc"
 void graphRecipeRenderTests(const std::filesystem::path &directory) {
   {
     bool running=false,audition=false;unsigned stops=0;PlaybackHooks hooks;
@@ -441,10 +442,28 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
   }
   operations.history(false,[&](bool redo,bool){if(redo)document->redo();else document->undo();});
   need(document->native()==originalNative&&project.preserved.at("plugins").empty(),"History could not be used after a postcommit callback failure");
+  const auto beforeDuplicate=c.view();const auto duplicateBeforeGraph=graph();
+  const auto originalState=call(c,"plugin.state.get",{{"slot",2}});
+  invoke(c,"plugin.duplicate",{{"plugin",third},{"position",{{"x",520},{"y",240}}},{"dryRun",true}});
+  need(c.view()==beforeDuplicate&&graph()==duplicateBeforeGraph,"Duplicate dry run changed history or graph");
+  stale("plugin.duplicate",{{"plugin",third}});
+  const auto duplicated=invoke(c,"plugin.duplicate",{{"plugin",third},{"position",{{"x",520},{"y",240}}}});
+  const auto duplicateID=duplicated.at("plugin");need(rack().size()==4&&duplicateID!=third&&plugin(3)==duplicateID,"Duplicate did not allocate a fresh stable processor");
+  need(call(c,"plugin.state.get",{{"slot",3}}).at("data")==originalState.at("data"),"Duplicate changed saved opaque manual state");
+  const auto duplicateGraph=graph();need(std::find(duplicateGraph.at("mixer").at("detached").begin(),duplicateGraph.at("mixer").at("detached").end(),duplicateID)!=duplicateGraph.at("mixer").at("detached").end(),"Effect duplicate is not detached");
+  need(call(c,"automation.recorded.get",{{"plugin",duplicateID},{"parameter",1}}).at("points").empty(),"Duplicate copied recorded automation");
+  undo();need(rack().size()==3&&graph()==duplicateBeforeGraph,"Duplicate requires more than one Undo");
+  redo();need(rack().size()==4&&plugin(3)==duplicateID&&graph()==duplicateGraph,"Duplicate Redo did not retain identity");
+  const auto duplicatePath=directory/"duplicated-plugin.screamseq";invoke(c,"document.save",{{"path",duplicatePath.generic_string()},{"overwrite",true}});
+  invoke(c,"document.open",{{"path",duplicatePath.generic_string()},{"discard",true}});
+  need(plugin(3)==duplicateID&&graph()==duplicateGraph,"Duplicate did not persist");
   std::cout<<"PASS chronological aliases, targeted/grouped plugin add/remove, dry-run/stale/stop/postcommit rejection, cache guard, interleaved edits, recorded-lane remapping, redo forks and persistence\n";
 }
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--live-rack-publication") {liveRackPublicationTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-graph-publication") {liveGraphPublicationTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-recorded-publication") {liveRecordedAutomationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--unified-plugin-history") {unifiedPluginHistoryTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==2 && std::string(argv[1])=="--graph-pattern-view") {graphPatternViewTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--graph-recipes") {graphRecipeRenderTests(std::filesystem::u8path(argv[2]));return 0;}

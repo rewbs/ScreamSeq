@@ -61,6 +61,7 @@ public:
   // is written, allowing the host to fail safely instead of reusing old audio.
   bool overlay(size_t target,uint64_t absoluteFrame,double baseline,double &result) const noexcept;
   bool contribution(size_t source,uint64_t absoluteFrame,double &value) const noexcept;
+  bool scaledContribution(const SongModulationTarget::Contribution &,uint64_t absoluteFrame,double &value) const noexcept;
   // Limits linear host ramp segments at the absolute grid, random changes and
   // automation step/point boundaries. Quantized targets always use one sample.
   uint32_t rampFrames(size_t target,uint64_t absoluteFrame,uint32_t maximum,SignalClock) const noexcept;

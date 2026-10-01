@@ -64,7 +64,7 @@ extension SignalGraphEditor {
     let previousEdge=canvas.selectedEdge.flatMap{canvas.edges.indices.contains($0) ? canvas.edges[$0]:nil}
     graphFilterState.revealed.formUnion(boundary.reveal)
     rebuild()
-    canvas.selectedEdge=previousEdge.flatMap{old in canvas.edges.firstIndex{$0.source==old.source && $0.target==old.target && $0.output==old.output && $0.input==old.input && $0.modulation==old.modulation}}
+    canvas.selectedEdge=previousEdge.flatMap{old in canvas.edges.firstIndex{$0.source==old.source && $0.target==old.target && $0.output==old.output && $0.input==old.input && $0.modulation==old.modulation && $0.connection==old.connection}}
     inspect();configureConnectionInspector();window?.makeFirstResponder(canvas)
     status.stringValue="Revealed hidden routes · Clear filters restores the complete graph"
   }
@@ -90,7 +90,7 @@ extension SignalGraphEditor {
   @objc func changeNodeFilter() {
     let edge=canvas.selectedEdge.flatMap{canvas.edges.indices.contains($0) ? canvas.edges[$0]:nil}
     rebuild()
-    canvas.selectedEdge=edge.flatMap{old in canvas.edges.firstIndex{$0.source==old.source && $0.target==old.target && $0.output==old.output && $0.input==old.input && $0.modulation==old.modulation}}
+    canvas.selectedEdge=edge.flatMap{old in canvas.edges.firstIndex{$0.source==old.source && $0.target==old.target && $0.output==old.output && $0.input==old.input && $0.modulation==old.modulation && $0.connection==old.connection}}
     if !hasDraft {inspect()};configureConnectionInspector();requestEmptyViewportRecovery()
   }
   func clearNodeFilters() {

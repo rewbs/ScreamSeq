@@ -40,6 +40,7 @@ extension SignalGraphEditor {
       let from=realPort(a,out,output:true,modulation:modulation),to=realPort(b,input,output:false,modulation:modulation)
       if from.node != a || to.node != b {connectPorts(from.node,to.node,out:from.number,input:to.number,modulation:modulation);return}
     }
+    if out==Self.notePort || input==Self.notePort {guard out==Self.notePort,input==Self.notePort,!modulation else{status.stringValue="Notes connect only to Notes sockets";return};connectNotes(a,b);return}
     if graphID==nil,connectSongControl(a,b,out:out,input:input,modulation:modulation){return}
     let choices=canvas.nodes.map{($0.title,$0.id)}
     picker(source,choices,select:a);picker(destination,choices,select:b)
@@ -73,6 +74,7 @@ extension SignalGraphEditor {
       if from.node != a || to.node != b {rewire(index,source:from.node,target:to.node,out:from.number,input:to.number,modulation:modulation);return}
     }
     let old=canvas.edges[index]
+    if graphID==nil,songConnections.indices.contains(index),songConnections[index]["kind"] as? String=="note" {guard out==Self.notePort,input==Self.notePort,!modulation else{status.stringValue="Rewiring preserves note-event cables";return};connectNotes(a,b,replacing:index);return}
     if old.source==a && old.target==b && old.output==out && old.input==input {return}
     if graphID != nil {
       let original=definitionEdgeIndices[index]

@@ -222,6 +222,14 @@ bool AudioDevice::publishLiveRack(std::unique_ptr<LiveRackPlan> &plan) noexcept 
   if(!plan||!plugins_||!plugins_->publishRack(plan->hosted))return false;
   pluginStates_.swap(plan->states);automation_.swap(plan->automation);return true;
 }
+std::unique_ptr<AudioDevice::LiveRecordedPlan> AudioDevice::prepareRecordedAutomation(const std::vector<ParameterChange> &points) {
+  if(!active()||!plugins_)throw std::runtime_error("Live recorded automation is unavailable");
+  auto plan=std::make_unique<LiveRecordedPlan>();plan->points=points;plan->hosted=plugins_->prepareRecordedAutomation(points);return plan;
+}
+bool AudioDevice::publishRecordedAutomation(std::unique_ptr<LiveRecordedPlan> plan) {
+  if(!plan||!plugins_||!plugins_->publishRecordedAutomation(std::move(plan->hosted)))return false;
+  automation_.swap(plan->points);return true;
+}
 std::unique_ptr<MixerTransition::Plan> AudioDevice::prepareMixerRouting(const NativeSong &native) {
   if(!active() || !plugins_)return nullptr;
   auto prepared=native;prepared.ensureMixer();return plugins_->prepareMixerRouting(prepared);

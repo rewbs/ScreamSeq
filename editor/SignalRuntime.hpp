@@ -56,6 +56,7 @@ class SignalRuntime {
   std::array<double,128> midi_{};
   double amount_ = 1;
   bool gate_ = false;
+  bool watchesNotes_ = false;
   std::vector<std::unique_ptr<Port>> result_;
   static Port *port(std::vector<std::unique_ptr<Port>> &,uint32_t);
   static Port *lookup(const std::vector<std::unique_ptr<Port>> &,uint32_t) noexcept;
@@ -75,6 +76,7 @@ public:
   void note(bool gate, bool retrigger = false) noexcept;
   void parameterBase(uint64_t node,uint32_t parameter,double value) noexcept;
   void controls(const SignalControls &) noexcept; // Same nodes/edges/ports, no allocation.
+  bool watchesNotes() const noexcept { return watchesNotes_; }
   bool sameLayout(const SignalDefinition &) const noexcept;
   bool compatibleHistory(const SignalRuntime &) const noexcept;
   // Adopt on the audio owner. Scratch buffers are new; common delay rings and

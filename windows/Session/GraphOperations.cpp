@@ -1,7 +1,10 @@
 #include "GraphOperations.hpp"
+#include "NoteActivityJson.hpp"
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Project/NativeMetadata.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "editor/GraphEditing.hpp"
+#include "editor/GraphClipboard.hpp"
 #include <cmath>
 #include <set>
 namespace ScreamSeq {
@@ -48,7 +51,7 @@ void strictPoints(Json &points) {
   for(auto &p:points) { keys(p,{"position","value","curve","formula"}); integral(p,"position"); }
 }
 void strictSongSource(Json &source) {
-  keys(source,{"id","kind","name","x","y","rate","phase","attack","release","controller","envelopes",
+  keys(source,{"id","kind","name","x","y","rate","phase","attack","release","controller","envelopes","muted",
     "audioBus","audioPlugin","output","preFader","noteTarget","noteInstrument","amount"});
   integral(source,"controller",0,127);integral(source,"output",0,63);
   if(source.contains("envelopes")) {array(source["envelopes"],1024);for(auto &e:source["envelopes"]) {
@@ -64,13 +67,13 @@ void strictRecipe(Json &v) {
 void presentationKeys(const Json &p) {
   keys(p,{"regions","cables","collapsedNodes"});
   if(p.contains("regions"))for(const auto &r:array(p.at("regions"),128))keys(r,{"id","scope","kind","title","text","x","y","width","height","color","collapsed","nodes"});
-  if(p.contains("cables"))for(const auto &c:array(p.at("cables"),2048))keys(c,{"source","target","output","input","modulation","points"});
+  if(p.contains("cables"))for(const auto &c:array(p.at("cables"),2048))keys(c,{"source","target","output","input","modulation","points","connection"});
 }
 void strictDefinition(Json &d) {
   keys(d,{"id","number","name","nodes","audio","modulation","groups","presentation"}); if(d.contains("presentation"))presentationKeys(d.at("presentation")); integral(d,"number",1,999);
   array(field(d,"nodes"),64);
   for(auto &n:d["nodes"]) {
-    keys(n,{"id","kind","name","x","y","plugin","rate","phase","attack","release","controller","envelopes"});
+    keys(n,{"id","kind","name","x","y","plugin","rate","phase","attack","release","controller","envelopes","muted"});
     integral(n,"controller",0,127);
     if(n.contains("plugin")) strictRecipe(n["plugin"]);
     if(n.contains("envelopes")) { array(n["envelopes"],1024); for(auto &e:n["envelopes"]) { keys(e,{"pattern","enabled","points"}); field(e,"points"); strictPoints(e["points"]); } }
@@ -121,12 +124,13 @@ bool pluginInstrument(const std::vector<GraphRackRecord> &rack,uint16_t index) {
 }
 GraphOperations::GraphOperations(Tracker::Document &d,std::function<void()> stop,GraphHostHooks host)
   : document_(d),stopPlayback_(std::move(stop)),host_(std::move(host)) {}
-std::vector<std::string> GraphOperations::reads() { return {"graph.get","graph.automation.get","graph.provenance.get"}; }
-std::vector<std::string> GraphOperations::writes() { return {"graph.create","graph.clone","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.automation.set","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set"}; }
+std::vector<std::string> GraphOperations::reads() { return {"graph.note.activity","graph.get","graph.selection.copy","graph.automation.get","graph.provenance.get"}; }
+std::vector<std::string> GraphOperations::writes() { return {"graph.note.connect","graph.note.update","graph.note.disconnect","graph.note.restoreAssignment","graph.create","graph.clone","graph.makeIndependent","graph.selection.paste","graph.selection.cut","graph.selection.duplicate","graph.source.mute","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.automation.set","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set"}; }
 Json GraphOperations::invoke(const std::string &method,const Json &p) {
   using namespace Tracker;
   try {
     const auto &song=document_.song();
+    if(method=="graph.note.activity") {keys(p,{});return noteActivityJson(host_.noteActivity?host_.noteActivity():NoteActivitySnapshot{},host_.noteActive);}
     if(method=="graph.get") {
       keys(p,{"includeState","includeImplicitMixer"}); const bool state=p.contains("includeState")?boolean(p.at("includeState")):true;
       const auto encoded=Project::encodeNativeMetadata(document_.native()); auto result=encoded.at("signalGraph");
@@ -138,7 +142,9 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
       const auto rack=host_.rack?host_.rack():host_.cachedRack;
       result["plugins"]=Json::array();
       for(const auto &r:rack) { require(r.descriptor.is_object(),"Host rack descriptor must be an object"); auto item=r.descriptor;
-        item["id"]=r.id; item["slot"]=r.slot; item["bypass"]=r.bypass; item["instruments"]=r.instruments; result["plugins"].push_back(std::move(item)); }
+        item["id"]=r.id; item["slot"]=r.slot; item["bypass"]=r.bypass; item["instruments"]=r.instruments;item["assignments"]=Json::array();
+        for(const auto &assignment:r.assignments){const auto native=document_.native().instruments.find(uint16_t(assignment.instrument));item["assignments"].push_back({{"instrument",assignment.instrument},{"instrumentID",native==document_.native().instruments.end()?std::string{}:id(native->second.id)},{"channel",assignment.channel}});}
+        result["plugins"].push_back(std::move(item)); }
       result["patterns"]=Json::array();
       for(const auto &[index,e]:document_.native().patterns) if(song.Patterns.IsValidPat(index))
         result["patterns"].push_back({{"index",index},{"id",id(e.id)},{"rows",song.Patterns[index].GetNumRows()},{"rowsPerBeat",rowsPerBeat(song,index)},{"name",e.name}});
@@ -153,6 +159,12 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
       return result;
     }
 #include "GraphProvenanceOperations.inc"
+    if(method=="graph.selection.copy") {
+      keys(p,{"graph","nodes"});const auto graphID=identity(field(p,"graph"));const auto &library=document_.native().signal.library;
+      const auto d=std::find_if(library.begin(),library.end(),[&](const auto &v){return v.id==graphID;});require(d!=library.end(),"Subgraph no longer exists");
+      std::vector<uint64_t> ids;for(const auto &value:array(field(p,"nodes"),128))ids.push_back(identity(value));
+      return {{"fragment",Project::encodeSignalDefinitionMetadata(copySignalSelection(*d,ids))},{"version",1}};
+    }
     if(method=="graph.automation.get") {
       keys(p,{"graph","node","pattern"});
       auto metadata=Project::encodeNativeMetadata(document_.native());
@@ -170,7 +182,7 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
     require(p.is_object(),"Expected parameters object"); require(document_.editable(),"This document is read-only");
     const bool dry=p.contains("dryRun")?boolean(p.at("dryRun")):false;
     NativeSong next=document_.native(); auto &graph=next.signal;
-    uint64_t affected=0,nodeID=0,groupID=0;
+    uint64_t affected=0,nodeID=0,groupID=0;Json clipboardFragment;
     auto ensureMixer=[&]() {next.ensureMixer();};
     auto bus=[&](const Json &raw) {
       const auto target=identity(raw); ensureMixer();
@@ -179,7 +191,24 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
     auto newNumber=[&]() { for(uint16_t n=1;n<=999;++n) if(std::none_of(graph.library.begin(),graph.library.end(),[&](const auto &d){return d.number==n;})) return n; throw Api::ApiError(-32602,"No free subgraph number"); };
 #include "SongModulationOperations.inc"
 #include "GraphPresentationOperations.inc"
-    if(method=="graph.connections.remove") {
+#include "NoteRoutingOperations.inc"
+    if(method=="graph.selection.cut") {
+      keys(p,{"graph","nodes","dryRun"});affected=identity(field(p,"graph"));std::vector<uint64_t> ids;for(const auto &v:array(field(p,"nodes"),128))ids.push_back(identity(v));clipboardFragment=Project::encodeSignalDefinitionMetadata(cutSignalSelection(next,affected,ids));
+    } else if(method=="graph.selection.paste"||method=="graph.selection.duplicate") {
+      const bool duplicate=method=="graph.selection.duplicate";
+      if(duplicate)keys(p,{"graph","nodes","parent","x","y","dryRun"});else keys(p,{"graph","fragment","patternMap","parent","x","y","dryRun"});
+      affected=identity(field(p,"graph"));SignalDefinition fragment;std::map<uint64_t,uint64_t> patterns;
+      if(duplicate){std::vector<uint64_t> ids;for(const auto &v:array(field(p,"nodes"),128))ids.push_back(identity(v));fragment=copySignalSelection(definition(next,field(p,"graph")),ids);for(const auto &n:fragment.nodes)for(const auto &e:n.envelopes)patterns[e.pattern]=e.pattern;}
+      else{auto raw=field(p,"fragment");strictDefinition(raw);fragment=Project::decodeSignalDefinitionMetadata(raw);const auto maps=p.value("patternMap",Json::array());for(const auto &m:array(maps,1024)){keys(m,{"source","target"});require(patterns.emplace(identity(field(m,"source")),identity(field(m,"target"))).second,"Duplicate pattern mapping");}}
+      const auto pasted=pasteSignalSelection(next,affected,fragment,patterns,p.contains("parent")?identity(p.at("parent")):0,number(p.value("x",Json(0)),0,100000),number(p.value("y",Json(0)),0,100000));
+      if(!pasted.identities.empty())nodeID=pasted.identities.begin()->second;
+    } else if(method=="graph.makeIndependent") {
+      keys(p,{"graph","target","scope","name","number","dryRun"});const auto scope=text(field(p,"scope"),16);require(scope=="channel"||scope=="instrument","Choose channel or instrument scope");
+      const auto source=identity(field(p,"graph")),target=identity(field(p,"target"));
+      affected=makeSignalUseIndependent(next,source,target,scope=="instrument",p.contains("name")?std::optional<std::string>{text(p.at("name"),256)}:std::nullopt,p.contains("number")?uint16_t(integer(p.at("number"),1,999)):0).graph;
+    } else if(method=="graph.source.mute") {
+      keys(p,{"graph","node","muted","dryRun"});nodeID=identity(field(p,"node"));affected=field(p,"graph").is_null()?0:identity(p.at("graph"));muteSignalSource(next,affected,nodeID,boolean(field(p,"muted")));
+    } else if(method=="graph.connections.remove") {
       keys(p,{"connections","dryRun"});std::vector<SongConnectionRef> cables;
       for(const auto &c:array(field(p,"connections"),512)) {
         const auto kind=text(field(c,"kind"),32);SongConnectionRef ref{};
@@ -187,6 +216,7 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
         else if(kind=="graph-input"||kind=="graph-output") {const bool input=kind=="graph-input";if(input)keys(c,{"kind","source","target","input"});else keys(c,{"kind","source","target","output"});ref.kind=input?SongConnectionKind::GraphInput:SongConnectionKind::GraphOutput;ref.source=identity(field(c,"source"));ref.target=identity(field(c,"target"));ref.port=uint32_t(integer(field(c,input?"input":"output"),1,63));}
         else if(kind=="plugin-input") {keys(c,{"kind","source","plugin","input"});ref.kind=SongConnectionKind::PluginInput;ref.source=identity(field(c,"source"));ref.plugin=text(field(c,"plugin"),256);ref.port=uint32_t(integer(field(c,"input"),0,63));}
         else if(kind=="plugin-output") {keys(c,{"kind","target","plugin","output"});ref.kind=SongConnectionKind::PluginOutput;ref.target=identity(field(c,"target"));ref.plugin=text(field(c,"plugin"),256);ref.port=uint32_t(integer(field(c,"output"),0,63));}
+        else if(kind=="note") {keys(c,{"kind","route","instrument"});require(c.contains("route")!=c.contains("instrument"),"Choose an explicit note route or implicit instrument assignment");ref.kind=SongConnectionKind::Note;if(c.contains("route"))ref.source=identity(c.at("route"));else ref.target=identity(c.at("instrument"));}
         else if(kind=="modulation") {keys(c,{"kind","source","plugin","parameter"});ref.kind=SongConnectionKind::Modulation;ref.source=identity(field(c,"source"));ref.plugin=text(field(c,"plugin"),256);ref.port=uint32_t(integer(field(c,"parameter"),0,UINT32_MAX));}
         else if(kind=="follower-input") {keys(c,{"kind","node","source","plugin","output","preFader"});ref.kind=SongConnectionKind::FollowerInput;ref.target=identity(field(c,"node"));if(c.contains("source"))ref.source=identity(c.at("source"));if(c.contains("plugin"))ref.plugin=text(c.at("plugin"),256);ref.port=c.contains("output")?uint32_t(integer(c.at("output"),0,63)):0;ref.preFader=c.contains("preFader")?boolean(c.at("preFader")):false;}
         else throw Api::ApiError(-32602,"Only explicit song routes can be cut; fixed rack-chain wires require moving or deleting their processors");
@@ -447,11 +477,12 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
       replaceSignalEnvelope(previous,lane==envelopes.end()?SignalPatternEnvelope{pattern}:*lane);
       envelopes=std::move(previous);
     } else if(method=="graph.nodes.detach") {
-      keys(p,{"graph","nodes","remove","positions","dryRun"});auto &d=definition(next,field(p,"graph"));affected=d.id;
+      keys(p,{"graph","nodes","remove","positions","heal","dryRun"});auto &d=definition(next,field(p,"graph"));affected=d.id;
       std::vector<uint64_t> moving;for(const auto &v:array(field(p,"nodes"),32))moving.push_back(identity(v));
       const bool remove=p.contains("remove")?boolean(p.at("remove")):false;
       require(!remove||!p.contains("positions"),"Removed nodes cannot have positions");
-      detachSignalNodes(d,moving,remove);
+      std::optional<SignalHealPath> heal;if(p.contains("heal")){const auto &h=p.at("heal");keys(h,{"incoming","outgoing"});heal.emplace();if(h.contains("incoming")&&!h.at("incoming").is_null())heal->incoming=size_t(integer(h.at("incoming"),0,255));if(h.contains("outgoing")&&!h.at("outgoing").is_null())heal->outgoing=size_t(integer(h.at("outgoing"),0,255));}
+      detachSignalNodes(d,moving,remove,heal);
       const auto positions=p.value("positions",Json::array());
       for(const auto &v:array(positions,32)){keys(v,{"node","x","y"});auto id=identity(field(v,"node"));require(std::find(moving.begin(),moving.end(),id)!=moving.end(),"Position must belong to a detached node");auto &n=*std::find_if(d.nodes.begin(),d.nodes.end(),[&](const auto &n){return n.id==id;});n.x=number(field(v,"x"),0,100000);n.y=number(field(v,"y"),0,100000);}
     } else if(method=="graph.nodes.insert") {
@@ -473,10 +504,13 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
     if(host_.validateCandidate)host_.validateCandidate(next);
     const bool changed=next!=document_.native();
     if(changed&&!dry) {
-      if((next.mixer!=document_.native().mixer||!sameSignalProcessing(next.signal,document_.native().signal))&&stopPlayback_) stopPlayback_();
-      document_.annotate([&](NativeSong &n){n=next;});
+      std::function<void()> publish;
+      if(next.mixer!=document_.native().mixer||!sameSignalProcessing(next.signal,document_.native().signal)) {
+        if(host_.preparePublication)publish=host_.preparePublication(next);else publish=stopPlayback_;
+      }
+      document_.annotate([&](NativeSong &n){n=next;},publish);
     }
-    return {{"dryRun",dry},{"wouldChange",changed},{"graph",id(affected)},{"node",id(nodeID)},{"group",id(groupID)}};
+    Json response={{"dryRun",dry},{"wouldChange",changed},{"graph",id(affected)},{"node",id(nodeID)},{"route",method.starts_with("graph.note.")?id(nodeID):std::string{}},{"group",id(groupID)}};if(!clipboardFragment.is_null()){response["fragment"]=std::move(clipboardFragment);response["version"]=1;}return response;
   } catch(const std::invalid_argument &e) { throw Api::ApiError(-32602,e.what()); }
     catch(const std::out_of_range &e) { throw Api::ApiError(-32602,e.what()); }
     catch(const Json::exception &e) { throw Api::ApiError(-32602,e.what()); }

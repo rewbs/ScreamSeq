@@ -5889,7 +5889,11 @@ void CSoundFile::SendMIDIData(PlayState &playState, CHANNELINDEX nChn, bool isSm
 			{
 				if(IMixPlugin *pPlugin = m_MixPlugins[plug - 1].pMixPlugin; pPlugin != nullptr)
 				{
+#ifdef OPENMPT_EDITOR_CORE
+					pPlugin->MidiSendFromTrack(mpt::byte_cast<mpt::const_byte_span>(macro), nChn);
+#else
 					pPlugin->MidiSend(mpt::byte_cast<mpt::const_byte_span>(macro));
+#endif
 				}
 			}
 		}

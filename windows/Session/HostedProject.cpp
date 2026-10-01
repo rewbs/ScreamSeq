@@ -72,7 +72,7 @@ HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const P
   // Match the shared built-in processor range, including an empty rack.
   offline_=offline;
   require(rate>=8000 && rate<=384000,"Unsupported hosted playback sample rate");
-  native_=document.native();native_.validate(document.song());auto states=projectPluginStates(project);
+  native_=document.native();if(settings.liveEditing&&!native_.mixer.active())native_.ensureMixer();native_.validate(document.song());auto states=projectPluginStates(project);
   Tracker::validatePluginCapacity(states,native_.mixer.buses.size());auto automation=projectAbsoluteAutomation(project);
   // Audition pauses the pattern clock but retains prepared channel routing.
   // Each PreviewNote explicitly chooses its channel or independent inspector path.

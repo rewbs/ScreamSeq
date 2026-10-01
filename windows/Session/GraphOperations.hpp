@@ -16,6 +16,7 @@ struct GraphRackRecord {
   uint32_t slot = 0;
   bool bypass = false;
   std::vector<uint16_t> instruments; // Actual assigned tracker instrument slots.
+  std::vector<Tracker::PluginInstrumentAlias> assignments;
 };
 struct GraphRackClone {
   Tracker::GraphPluginRecipe recipe; // Baseline opaque state AND enabled aux buses.
@@ -30,6 +31,8 @@ struct GraphHostHooks {
   std::vector<GraphRackRecord> cachedRack;
   std::function<std::vector<Tracker::SignalActivity>()> activity;
   std::vector<Tracker::SignalActivity> cachedActivity;
+  std::function<Tracker::NoteActivitySnapshot()> noteActivity;
+  bool noteActive=false;
   // Must return the requested real slot's baseline state, never an automated
   // live state. Throw ApiError for absent/unavailable slots. No fallback recipe.
   std::function<GraphRackClone(uint32_t)> cloneRackSlot;
@@ -40,6 +43,9 @@ struct GraphHostHooks {
   std::function<Tracker::ParameterProvenanceRecording(const std::string &,uint32_t)> recording;
   std::map<std::pair<std::string,uint32_t>,Tracker::ParameterProvenanceRecording> cachedRecordings;
   std::function<void(const Tracker::NativeSong &)> validateCandidate;
+  // Prepare on the document owner; the returned callback publishes before the
+  // document/history adopts its candidate. Throwing leaves both unchanged.
+  std::function<std::function<void()>(const Tracker::NativeSong &)> preparePublication;
 };
 // Control-thread only. Caller checks/removes expectedRevision and constructs the
 // outer Mac response envelope. This layer returns result.data, not fake host data.

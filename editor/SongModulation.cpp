@@ -133,10 +133,14 @@ bool SongModulationRuntime::contribution(size_t index,uint64_t frame,double &val
   if(index>=sources_.size())return false;const auto &s=sources_[index];
   if(frame<s.frame||frame-s.frame>=s.frames)return false;value=s.values[size_t(frame-s.frame)];return true;
 }
+bool SongModulationRuntime::scaledContribution(const SongModulationTarget::Contribution &edge,uint64_t frame,double &value) const noexcept {
+  double normalized;if(!contribution(edge.source,frame,normalized))return false;
+  value=sources_[edge.source].spec.node.muted?0:edge.minimum+(edge.maximum-edge.minimum)*normalized;return true;
+}
 bool SongModulationRuntime::overlay(size_t index,uint64_t frame,double baseline,double &result) const noexcept {
   if(index>=targets_.size()||!std::isfinite(baseline))return false;
   const auto &target=targets_[index];double value=baseline;
-  for(const auto &c:target.contributions){double source;if(!contribution(c.source,frame,source))return false;value+=c.minimum+(c.maximum-c.minimum)*source;}
+  for(const auto &c:target.contributions){double source;if(!scaledContribution(c,frame,source))return false;value+=source;}
   value=std::clamp(value,0.,1.);
   if(target.quantized)value=std::clamp(std::round(value/target.normalizedStep)*target.normalizedStep,0.,1.);
   result=value;return true;

@@ -150,9 +150,12 @@ vendor-internal DSP modulation.
 The macOS Parameter activity inspector/API supplies source navigation and a
 revision-guarded recorded-point editor. Recorded point mutations reuse existing
 absolute automation storage and the plugin-state portion of unified chronological
-Undo; no metadata version is added. These recorded-point mutations require stopped
-playback and reject without stopping an active transport. Viewing and navigating
-existing points does not require a live processor or stop playback.
+Undo; no metadata version is added. Mac and Windows publish a bounded immutable
+recorded timeline at a render boundary. The worker prepares device-rate points
+and baseline catch-up before history changes; queue refusal leaves transport and
+both histories intact. A manual-queue fence orders earlier controls before the
+new timeline and later controls after it. Removed lanes restore their saved
+manual baseline. Viewing points does not require a prepared processor.
 Monitor identities are document scoped externally and distinguish graph roles,
 bus uses, sample-instrument channels and the independent inspector copy.
 The shared monitor is available to Windows hosting; a Windows-native panel/API
@@ -177,7 +180,7 @@ identity alone does not prove two processing paths equivalent. The combined host
 storage is bounded. A cycle in the transition union, incompatible latency or an
 unprepared source/port change rejects before the document or transport changes.
 
-The Mac host enables this path for supported effect Add/Remove, reorder,
+Both native session adapters enable this path for supported effect Add/Remove, reorder,
 detach/insert and bus routing, including grouped Undo/Redo. Fixed OpenMPT source
 adapter slots and held instrument state remain stable while effect catalogs
 change. Disconnected effects continue processing silence. Prepared built-in
@@ -186,8 +189,13 @@ unprepared VST3 bus activation and new outputs still require stopped preparation
 Arbitrary latency changes, new instrument adapters and instrument-assignment
 changes have no seamless handoff yet. A rejected live edit leaves the previous
 audible plan playing and reports the reason; it does not silently stop/restart.
-Windows shares the executor, model and storage, but its structural-edit adapter
-still uses stopped preparation. Portable tests are not a Windows app qualification.
+The Windows document worker prepares the same graph, mixer and rack plans and
+publishes them through native-only document/history commit callbacks. Grouped
+rack/routing Undo stages both domains before publishing. Unsupported live opaque
+rack-state changes reject rather than silently retaining a different preset.
+Windows-native worker tests cover publication, failure recovery and persistence;
+actual CI execution is the Windows qualification gate. Mac-hosted adapter tests
+do not establish Windows-native execution or desktop/device behavior.
 
 Per-plan meter maps and the bounded append-only signal-port catalog publish
 stable identities and meter slots together. Failed preparation cannot publish

@@ -11,6 +11,7 @@ class NativeSignalGraph {
   std::vector<std::unique_ptr<Bus>> buses_;
   double rate_;
   bool offline_=false;
+  ParameterActivity *activity_=nullptr;
   size_t storageBytes_=0,processors_=0;
   std::map<uint16_t,uint64_t> patternIDs_;
   MixerGraph routedMixer_;

@@ -120,6 +120,16 @@ void DocumentController::open(const std::filesystem::path &path) {
     onMain([this,batch=std::vector<Tracker::ParameterChange>(changes.begin(),changes.end())]{liveParameters_(batch);});
   };
   auto plugins=std::make_unique<PluginOperations>(*candidate.document,project_,[this]{onMain(stop_);},std::move(liveParameters),libraryPath_);
+  plugins->rackPublication([this](const auto &states,const auto &points,const auto &native){return prepareRackPublication(states,points,native);});
+  plugins->nativePublication([this](const Tracker::NativeSong &next){return prepareNativePublication(next);});
+  plugins->recordedPublication([this](const std::vector<Tracker::ParameterChange> &points)->std::function<void()>{
+    const auto feedback=playbackFeedback();if(!feedback.playing&&!feedback.audioActive)return [this]{onMain(stop_);};
+    if(!playback_)throw Api::ApiError(-32002,"Active playback has no prepared timeline; playback was preserved");
+    auto *chain=&playback_->chain();
+    auto plan=std::make_shared<std::unique_ptr<Tracker::RecordedAutomationPlan>>();
+    try{*plan=chain->prepareRecordedAutomation(points);}catch(const std::exception &e){throw Api::ApiError(-32002,std::string("Recorded automation preparation failed; playback was preserved: ")+e.what());}
+    return [chain,plan]{if(!chain->publishRecordedAutomation(std::move(*plan)))throw Api::ApiError(-32002,"Recorded automation publication is busy; retry the same revision");};
+  });
   if(playbackHooks_.pluginBypass)plugins->liveBypass([this](size_t slot,bool value){onMain([this,slot,value]{playbackHooks_.pluginBypass(slot,value);});});
   if(view_) retired_.push_back(view_);
   try {if(document_) onMain(stop_);} catch(...) {if(view_) retired_.pop_back();throw;}
@@ -292,7 +302,7 @@ void DocumentController::preflightGrowth(const std::string &method,const Json &p
   }
   if(method=="order.edit") added=8192;
   if(method=="document.save") added=256*1024; // Maximum UTF-16 destination plus metadata.
-  if(method=="plugin.add") added=16384; // Bounded rack-view fields; opaque state is not copied into the view.
+  if(method=="plugin.add"||method=="plugin.duplicate") added=16384; // Bounded rack-view fields; opaque state is not copied into the view.
   if(method=="sample.pcm.set" || method=="sample.copyToNew") added=16384;
   if(method=="instrument.create") added=(size_t(document_->song().GetNumSamples())+1)*8192;
   if(added && (added>maxCacheBytes_ || current->cacheBytes>maxCacheBytes_-added))
@@ -327,6 +337,44 @@ void DocumentController::validateAssetCandidate(const Tracker::Document &candida
 PlaybackFeedback DocumentController::playbackFeedback() {
   PlaybackFeedback result;if(playbackHooks_.feedback)onMain([&]{result=playbackHooks_.feedback();});return result;
 }
+std::function<void()> DocumentController::prepareRackPublication(const std::vector<Tracker::PluginState> &states,const std::vector<Tracker::ParameterChange> &points,const Tracker::NativeSong &native) {
+  const auto feedback=playbackFeedback();if(!feedback.playing&&!feedback.audioActive)return [this]{onMain(stop_);};
+  if(!playback_)throw Api::ApiError(-32002,"Active playback has no prepared rack; playback was preserved");
+  const auto current=projectPluginStates(project_);
+  // prepareRack preserves retained vendor state. An opaque preset change must
+  // never be silently accepted as a topology update.
+  for(const auto &next:states)if(const auto old=std::find_if(current.begin(),current.end(),[&](const auto &p){return p.instanceID==next.instanceID;});old!=current.end())
+    if(next.state!=old->state||next.bypass!=old->bypass)throw Api::ApiError(-32002,"This preset change cannot be prepared during playback; playback was preserved");
+  (void)points; // Topology changes retain each stable processor's existing timeline.
+  auto plan=std::make_shared<std::unique_ptr<Tracker::PluginChain::RackPlan>>();auto *chain=&playback_->chain();
+  try{auto prepared=native;prepared.ensureMixer();*plan=chain->prepareRack(states,prepared);}
+  catch(const std::exception &e){throw Api::ApiError(-32002,std::string("Rack preparation failed; playback was preserved: ")+e.what());}
+  return [chain,plan]{if(!chain->publishRack(*plan))throw Api::ApiError(-32002,"Rack publication is busy; retry the same revision");};
+}
+std::function<void()> DocumentController::prepareNativePublication(const Tracker::NativeSong &next) {
+  const auto &current=document_->native();
+  if(next.mixer==current.mixer&&Tracker::sameSignalProcessing(next.signal,current.signal)&&next.automation==current.automation)return {};
+  const auto feedback=playbackFeedback();
+  if(!feedback.playing&&!feedback.audioActive)return [this]{onMain(stop_);};
+  if(!playback_)throw Api::ApiError(-32002,"Active playback has no prepared graph; playback was preserved");
+  // The document worker is the sole producer of graph/routing snapshots. Its
+  // serial ownership also keeps this playback instance alive until publication.
+  struct Prepared {
+    Tracker::PluginChain *chain;
+    std::unique_ptr<Tracker::GraphControlPlan> controls;
+    std::unique_ptr<Tracker::MixerTransition::Plan> routing;
+  };
+  auto prepared=std::make_shared<Prepared>();prepared->chain=&playback_->chain();
+  try {
+    if(next.mixer==current.mixer)prepared->controls=prepared->chain->prepareGraphControls(next);
+    if(!prepared->controls)prepared->routing=prepared->chain->prepareMixerRouting(next);
+  } catch(const std::exception &e) {throw Api::ApiError(-32002,std::string("Graph preparation failed; playback was preserved: ")+e.what());}
+  if(!prepared->controls&&!prepared->routing)throw Api::ApiError(-32002,"This graph edit cannot be prepared during playback; playback was preserved");
+  return [prepared]{
+    const bool accepted=prepared->controls?prepared->chain->publishGraphControls(std::move(prepared->controls)):prepared->chain->publishMixerRouting(prepared->routing);
+    if(!accepted)throw Api::ApiError(-32002,"Graph publication is busy; retry the same revision");
+  };
+}
 Json DocumentController::operation(const std::string &method,Json params) {
   if(publicationPending_) publish();
   // Browser preferences are independent of the song. Do not flush vendor
@@ -347,7 +395,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     Json reply=Json::object();if(auto warning=plugins_->takeEditorWarning();!warning.empty())reply["pluginEditorWarning"]=std::move(warning);
     return reply;
   }
-  if(method=="document.save" || method=="document.open" || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane") {
+  if(method=="document.save" || method=="document.open" || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method.starts_with("automation.recorded.")) {
     flushEditors(true);
   }
   auto writes=DocumentOperations::writes();auto timelineWrites=TimelineOperations::writes();writes.insert(writes.end(),timelineWrites.begin(),timelineWrites.end());
@@ -399,25 +447,26 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(domain!="all"&&domain!="document"&&domain!="plugins")throw Api::ApiError(-32602,"History domain must be all, document or plugins; all use chronological history");
     plugins_->history(method=="history.redo",[&](bool redo,bool alreadyStopped){
       const auto &candidate=document_->historyNative(redo);validateGraphViewGrowth(candidate);
-      const auto feedback=playbackFeedback();
-      if(feedback.playing||feedback.audioActive)for(const auto &graph:document_->native().signal.library){
-        const auto nextGraph=std::find_if(candidate.signal.library.begin(),candidate.signal.library.end(),[&](const auto &g){return g.id==graph.id;});
-        if(nextGraph==candidate.signal.library.end())continue;
-        for(const auto &node:graph.nodes)if(node.kind==Tracker::SignalNodeKind::Plugin){
-          const auto nextNode=std::find_if(nextGraph->nodes.begin(),nextGraph->nodes.end(),[&](const auto &n){return n.id==node.id&&n.kind==Tracker::SignalNodeKind::Plugin;});
-          if(nextNode!=nextGraph->nodes.end()&&nextNode->plugin.bypass!=node.plugin.bypass)throw Api::ApiError(-32002,"Stop playback and preview notes to undo recipe bypass on Windows; playback has been preserved");
-        }
-      }
       if(alreadyStopped){
         // Grouped plugin history only contains annotate() metadata entries.
         // No live cells or allocating JSON reply may follow native publication.
         if(redo)document_->redo();else document_->undo();return;
       }
       Tracker::validatePluginCapacity(projectPluginStates(project_),candidate.mixer.buses.size());
+      auto supported=document_->native();supported.mixer=candidate.mixer;supported.signal=candidate.signal;supported.automation=candidate.automation;
+      supported.nextID=candidate.nextID;supported.envelopeBank=candidate.envelopeBank;supported.envelopeLinks=candidate.envelopeLinks;
+      const bool structural=redo?document_->redoChangesStructure():document_->undoChangesStructure();
+      if(!structural&&candidate==supported) {
+        auto publish=prepareNativePublication(candidate);
+        const auto edits=redo?document_->redo(publish):document_->undo(publish);
+        if(!edits.empty())onMain([this,edits]{edits_(edits);});
+        return;
+      }
       DocumentOperations operations(*document_,[this]{onMain(stop_);},
         [this](const auto &edits){for(const auto &e:edits)changedPatterns_.insert(e.pattern);onMain([this,edits]{edits_(edits);});});
       operations.invoke(redo?"history.redo":"history.undo",{{"domain","document"}});
-    },[&](const Tracker::NativeSong &candidate){validateGraphViewGrowth(candidate);});
+    },[&](const Tracker::NativeSong &candidate){validateGraphViewGrowth(candidate);},
+      [&](bool redo,const std::function<void()> &publish){if(redo)document_->redo(publish);else document_->undo(publish);});
     result=Json::object();
   } else if(pluginMethod) {
     if(method.starts_with("graph.plugin.")){const auto feedback=playbackFeedback();result=plugins_->invokeGraph(method,params,feedback.sampleRate,feedback.playing||feedback.audioActive);}
@@ -432,17 +481,22 @@ Json DocumentController::operation(const std::string &method,Json params) {
       for(const auto &point:project_.preserved.at("automation"))if(point.at(0)==slot&&point.at(1)==parameter){const auto frame=point.at(3).get<uint64_t>();if(!result.count)result.firstFrame=frame;else result.firstFrame=std::min(result.firstFrame,frame);result.lastFrame=std::max(result.lastFrame,frame);++result.count;}
       return result;
     };
+    hooks.noteActivity=[&]{return playback_?playback_->chain().noteActivity():Tracker::NoteActivitySnapshot{};};
+    hooks.noteActive=playbackFeedback().audioActive||playbackFeedback().playing;
     hooks.activity=[&]{return playbackFeedback().activity;};hooks.validateCandidate=[&](const Tracker::NativeSong &next){validateGraphViewGrowth(next);Tracker::validatePluginCapacity(projectPluginStates(project_,false),next.mixer.buses.size());};
+    hooks.preparePublication=[this](const Tracker::NativeSong &next){return prepareNativePublication(next);};
     GraphOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
   } else if(std::find(mixerMethods.begin(),mixerMethods.end(),method)!=mixerMethods.end()) {
     MixerHostHooks hooks;hooks.plugins=projectPluginStates(project_);hooks.buses=[&](size_t slot,bool required){return plugins_->audioBuses(slot,required);};hooks.feedback=[&]{return playbackFeedback();};
     hooks.validateCandidate=[&](const Tracker::NativeSong &next){validateGraphViewGrowth(next);};
+    hooks.preparePublication=[this](const Tracker::NativeSong &next){return prepareNativePublication(next);};
     if(playbackHooks_.controls)hooks.controls=[&](const auto &controls){bool accepted=false;onMain([&]{accepted=playbackHooks_.controls(controls);});return accepted;};
     MixerOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
   } else if(std::find(envelopeMethods.begin(),envelopeMethods.end(),method)!=envelopeMethods.end()) {
     const auto &rack=project_.preserved.at("plugins");auto slotOf=[&](const std::string &id){auto it=std::find_if(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==id;});return size_t(it-rack.begin());};
     EnvelopeHostHooks hooks;hooks.parameterAvailable=[&](const std::string &id,uint32_t parameter){const auto slot=slotOf(id);if(slot>=rack.size())return false;try{const auto parameters=plugins_->invoke("plugin.parameters.get",{{"slot",slot}});return std::any_of(parameters.begin(),parameters.end(),[&](const auto &p){return p.at("id")==parameter;});}catch(const std::exception &){return false;}};
     hooks.parameterAutomationConflicts=[&](const std::string &id,uint32_t parameter){const auto slot=slotOf(id);for(const auto &event:project_.preserved.at("automation"))if(event.at(0)==slot&&event.at(1)==parameter)return true;return false;};
+    hooks.preparePublication=[this](const Tracker::NativeSong &next){return prepareNativePublication(next);};
     EnvelopeOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks),cataloguePath_);result=operations.invoke(method,params);
   } else if(patternMethod) {
     PatternHostHooks hooks;for(const auto &p:project_.preserved.at("plugins"))hooks.plugins.push_back(p.at("instanceID").get<std::string>());
@@ -507,7 +561,7 @@ std::future<HostedProjectPlayback *> DocumentController::prepare(unsigned rate,J
     if(region.pattern!=UINT32_MAX && !document_->song().Patterns.IsValidPat(region.pattern)) throw Api::ApiError(-32602,"Pattern does not exist");
     region.endRow=settings.value("endRow",region.pattern==UINT32_MAX ? 0u : unsigned(document_->song().Patterns[region.pattern].GetNumRows()));
     region.cursorRow=settings.value("cursorRow",0u);region.loop=settings.value("loop",loop);
-    auto result=std::make_unique<HostedProjectPlayback>(*document_,project_,rate,HostedPlaybackSettings{settings.value("order",0u),region,audition},offline);
+    auto result=std::make_unique<HostedProjectPlayback>(*document_,project_,rate,HostedPlaybackSettings{settings.value("order",0u),region,audition,true},offline);
     playback_=std::move(result);return playback_.get();
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;

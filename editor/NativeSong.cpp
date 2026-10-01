@@ -31,6 +31,7 @@ void NativeSong::ensureMixer() {
   mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
 }
 void NativeSong::removePluginRoutes(const std::string &instance) {
+  std::erase_if(signal.noteRouting.routes,[&](const auto &route){return route.plugin==instance;});
   std::erase(mixer.detached,instance);
   for(auto &bus:mixer.buses)std::erase(bus.inserts,instance);
   std::erase_if(mixer.instruments,[&](const auto &route){return route.plugin==instance;});
@@ -47,7 +48,7 @@ void removeSongConnections(NativeSong &song,const std::vector<SongConnectionRef>
                            const std::vector<std::string> &instrumentPlugins) {
   if(connections.empty())return;
   if(connections.size()>512)throw std::invalid_argument("At most 512 song cables can be removed at once");
-  auto next=song;if(std::any_of(connections.begin(),connections.end(),[](const auto &c){return c.kind!=SongConnectionKind::FollowerInput&&c.kind!=SongConnectionKind::Modulation;}))next.ensureMixer();
+  auto next=song;if(std::any_of(connections.begin(),connections.end(),[](const auto &c){return c.kind!=SongConnectionKind::FollowerInput&&c.kind!=SongConnectionKind::Modulation&&c.kind!=SongConnectionKind::Note;}))next.ensureMixer();
   auto require=[](bool valid,const char *message){if(!valid)throw std::invalid_argument(message);};
   std::set<std::tuple<SongConnectionKind,uint64_t,uint64_t,std::string,uint32_t,bool>> seen;
   auto remove=[&](auto &routes,auto predicate){const auto count=std::erase_if(routes,predicate);require(count==1,"Song cable no longer exists; refresh the graph");};
@@ -56,6 +57,17 @@ void removeSongConnections(NativeSong &song,const std::vector<SongConnectionRef>
     require(c.kind==SongConnectionKind::Modulation||c.port<=63,"Cable port is outside 0…63");
     require(c.kind==SongConnectionKind::FollowerInput||!c.preFader,"Only follower tap identities accept preFader");
     switch(c.kind) {
+    case SongConnectionKind::Note: {
+      require(bool(c.source)!=bool(c.target)&&c.plugin.empty()&&!c.port,"Choose an explicit note route or implicit instrument assignment");
+      const auto connection=c.source?"note:n"+std::to_string(c.source):"note-assignment:n"+std::to_string(c.target);
+      if(c.source)remove(next.signal.noteRouting.routes,[&](const auto &route){return route.id==c.source;});
+      else {
+        require(std::any_of(next.instruments.begin(),next.instruments.end(),[&](const auto &i){return i.second.id==c.target;}),"Note instrument no longer exists");
+        auto &suppressed=next.signal.noteRouting.suppressedAssignments;
+        require(std::find(suppressed.begin(),suppressed.end(),c.target)==suppressed.end(),"Implicit note cable is already disconnected");suppressed.push_back(c.target);
+      }
+      std::erase_if(next.signal.presentation.cables,[&](const auto &path){return path.connection==connection;});break;
+    }
     case SongConnectionKind::Output: {
       require(c.source&&c.target&&c.plugin.empty()&&!c.port,"Invalid main-output cable identity");
       auto b=std::find_if(next.mixer.buses.begin(),next.mixer.buses.end(),[&](const auto &v){return v.id==c.source;});
@@ -106,6 +118,9 @@ void removeSongConnections(NativeSong &song,const std::vector<SongConnectionRef>
   song=std::move(next);
 }
 void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
+  for(const auto &[index,instrument]:instruments)if(!index||index>s.GetNumInstruments()||!s.Instruments[index]) {
+    const auto key="note-instrument:n"+std::to_string(instrument.id);signal.layout.erase(key);removeSignalPresentationNode(signal.presentation,key);
+  }
   auto sync = [&](auto &items, int begin, int end, auto valid) {
     for (auto i = items.begin(); i != items.end();) {
       if (i->first < begin || i->first >= end || !valid(i->first)) i = items.erase(i);
@@ -175,6 +190,10 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
     for(const auto &[index,track]:tracks)graphTargets.insert(track.id);
     if(masterID)graphTargets.insert(masterID);
   }
+  const auto instrumentExists=[&](uint64_t id){return std::any_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.second.id==id;});};
+  std::erase_if(signal.noteRouting.suppressedAssignments,[&](uint64_t id){return !instrumentExists(id);});
+  std::erase_if(signal.noteRouting.routes,[&](const auto &route){return route.sourceKind==NoteSourceKind::Instrument?!instrumentExists(route.source):std::none_of(tracks.begin(),tracks.end(),[&](const auto &t){return t.second.id==route.source;});});
+  reconcileNoteCableGeometry(signal.presentation,signal.noteRouting);
   std::erase_if(signal.instrumentAssignments,[&](const auto &a){return std::none_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.second.id==a.target;});});
   std::erase_if(signal.assignments,[&](const auto &a){return !graphTargets.contains(a.target);});
   std::erase_if(signal.inputs,[&](const auto &r){return !graphTargets.contains(r.source)||!graphTargets.contains(r.target);});
@@ -365,6 +384,8 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   for(const auto &[index,pattern]:patterns)graphPatterns[pattern.id]=s.Patterns[index].GetNumRows();
   std::vector<uint64_t> graphInstruments;for(const auto &[index,instrument]:instruments)graphInstruments.push_back(instrument.id);
   signal.validate(graphTargets,graphPatterns,graphInstruments);
+  signal.noteRouting.validate(trackIDs,graphInstruments);
+  for(const auto &route:signal.noteRouting.routes)check({route.id,{},{},0});
   for(const auto &group:signal.groups)check({group.id,{},{},0});
   for(const auto &source:signal.songSources)check({source.node.id,{},{},0});
   signalRoutingGraph(mixer,signal).validate(trackIDs);

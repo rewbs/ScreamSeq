@@ -1,0 +1,25 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+      Start  4: pattern-pitch
+ 1/10 Test  #4: pattern-pitch ....................   Passed    2.17 sec
+      Start 55: native-mixer
+ 2/10 Test #55: native-mixer .....................   Passed    4.82 sec
+      Start 61: recorded-automation
+ 3/10 Test #61: recorded-automation ..............   Passed    0.38 sec
+      Start 73: native-note-routing
+ 4/10 Test #73: native-note-routing ..............   Passed    0.81 sec
+      Start 74: note-routing
+ 5/10 Test #74: note-routing .....................   Passed    0.30 sec
+      Start 77: native-signal-graph
+ 6/10 Test #77: native-signal-graph ..............   Passed    0.46 sec
+      Start 78: signal-graph-session
+ 7/10 Test #78: signal-graph-session .............   Passed    0.48 sec
+      Start 89: windows-graph-document
+ 8/10 Test #89: windows-graph-document ...........   Passed    0.45 sec
+      Start 90: windows-native-metadata
+ 9/10 Test #90: windows-native-metadata ..........   Passed    0.91 sec
+      Start 93: graph-editing
+10/10 Test #93: graph-editing ....................   Passed    0.34 sec
+
+100% tests passed, 0 tests failed out of 10
+
+Total Test time (real) =  11.12 sec

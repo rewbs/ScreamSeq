@@ -19,25 +19,27 @@ void mixerIntegrationTests(const std::filesystem::path &directory) {
   need(call(c,"mixer.get",Json::object()).at("buses")==baseline,"Refused queue changed mixer baseline");
   refuse=false;invoke(c,"mixer.bus.set",{{"bus",master},{"gainDB",-12}});need(active&&stops==stopped,"Control-only edit stopped playback");
   std::array<float,2048> pcm{};need(playback->render(pcm.data(),1024),"Mixer render failed");
+  auto settle=[&]{for(unsigned i=0;i<32;++i)need(playback->render(pcm.data(),1024),"Live routing transition failed");};
   need(call(c,"mixer.meters",Json::object()).at("meters").size()==baseline.size(),"Prepared mixer meters absent");
   auto changed=c.view();invoke(c,"mixer.bus.set",{{"bus",master},{"gainDB",-96},{"preview",true}});
   need(c.view()==changed&&call(c,"mixer.get",Json::object()).at("buses").back().at("gainDB")==-12,"Preview changed saved music");
   // A no-op baseline edit restores a cancelled preview without creating Undo.
   invoke(c,"mixer.bus.set",{{"bus",master},{"gainDB",-12}});need(c.view()==changed,"Preview reset created history");
   invoke(c,"history.undo",{{"domain","document"}});need(call(c,"mixer.get",Json::object()).at("buses")==baseline,"Queue refusal or preview left a phantom Undo entry");
-  invoke(c,"history.redo",{{"domain","document"}});
-  // Invalid topology never stops a prepared render; valid topology does.
+  need(active&&stops==stopped,"Mixer Undo stopped playback");settle();
+  invoke(c,"history.redo",{{"domain","document"}});settle();
+  // Both validation rejection and a prepared topology publication preserve playback.
   active=true;const auto beforeStops=stops;view=c.view();rejected=false;
   try{invoke(c,"mixer.bus.set",{{"bus",master},{"output",master}});}catch(const Api::ApiError &){rejected=true;}
   need(rejected&&c.view()==view&&active&&stops==beforeStops,"Invalid route stopped or committed");
   const auto group=invoke(c,"mixer.bus.add",{{"kind","group"},{"name","Disconnected send"}}).at("bus");
-  need(!active&&stops==beforeStops+1,"Topology mutation did not stop");
-  invoke(c,"mixer.bus.set",{{"bus",group},{"output",nullptr}});
-  invoke(c,"mixer.sends.set",{{"bus",group},{"sends",Json::array({{{"target",master},{"gainDB",-6}}})}});
+  need(active&&stops==beforeStops,"Prepared topology mutation stopped playback");settle();
+  invoke(c,"mixer.bus.set",{{"bus",group},{"output",nullptr}});settle();
+  invoke(c,"mixer.sends.set",{{"bus",group},{"sends",Json::array({{{"target",master},{"gainDB",-6}}})}});settle();
   const auto path=directory/"mixer-integration.screamseq";
   const auto saved=call(c,"mixer.get",Json::object()).at("buses");
   invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});
-  invoke(c,"mixer.bus.remove",{{"bus",group}});invoke(c,"history.undo",{{"domain","document"}});
+  invoke(c,"mixer.bus.remove",{{"bus",group}});settle();invoke(c,"history.undo",{{"domain","document"}});settle();
   need(call(c,"mixer.get",Json::object()).at("buses")==saved,"Group removal Undo lost sends/disconnection");
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
   need(call(c,"mixer.get",Json::object()).at("buses")==saved,"Reopen lost mixer routes");
@@ -65,5 +67,5 @@ void mixerIntegrationTests(const std::filesystem::path &directory) {
   auto silence=render(48000);need(std::all_of(silence.begin(),silence.end(),[](float v){return v==0;}),"Detached tracks still audible");
   for(const auto &b:buses)if(b.at("id")!=output)invoke(pcmController,"mixer.sends.set",{{"bus",b.at("id")},{"sends",Json::array({{{"target",output},{"gainDB",0}}})}});
   for(auto rate:{44100u,48000u,96000u}){auto restored=render(rate);double delta=0,energy=0;for(size_t i=0;i<restored.size();++i){delta=std::max(delta,std::abs(double(restored[i])-references[rate][i]));energy+=std::abs(restored[i]);}need(delta<1e-6&&energy>1,"Unity sends did not restore disconnected-track PCM");}
-  std::cout<<"PASS mixer live publication/refusal/preview/history, topology stop, disconnection/sends/reopen and PCM at 44.1/48/96 kHz\n";
+  std::cout<<"PASS mixer live publication/refusal/preview/history, live topology, disconnection/sends/reopen and PCM at 44.1/48/96 kHz\n";
 }

@@ -10,6 +10,8 @@
 #include "editor/PatternTools.hpp"
 #include "editor/ParameterProvenance.hpp"
 #include "editor/ParameterBaseline.hpp"
+#include "editor/GraphEditing.hpp"
+#include "editor/GraphClipboard.hpp"
 #include "editor/AutomationTools.hpp"
 #include "editor/InstrumentEnvelopeTools.hpp"
 #include "editor/PatternCommands.hpp"
@@ -1714,8 +1716,13 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     if (const auto location = [self rackLocationIssue:states]; !location.empty())
       throw std::runtime_error(location);
     if(_audio->active()) {
-      auto prepared=[self prepareLivePlugins:states automation:automation native:native];
-      if(!_audio->publishLiveRack(prepared))throw std::runtime_error("Prepared rack publication was rejected; playback was preserved");
+      if(states==_plugins&&native==_document->native()) {
+        auto prepared=_audio->prepareRecordedAutomation(automation);
+        if(!_audio->publishRecordedAutomation(std::move(prepared)))throw std::runtime_error("Recorded automation publication is busy; playback was preserved");
+      } else {
+        auto prepared=[self prepareLivePlugins:states automation:automation native:native];
+        if(!_audio->publishLiveRack(prepared))throw std::runtime_error("Prepared rack publication was rejected; playback was preserved");
+      }
     } else _audio->setPlugins(states, automation);
   } catch (const std::exception &e) {
     if (_pluginError.empty() || _audio->active())
@@ -1764,6 +1771,10 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     EffectSnapshot current{_plugins, _automation, _manualParameters, source.back().sequence, source.back().bypassTarget};
     destination.reserve(destination.size() + 1);
     const auto &saved=source.back();
+    if(_pluginError.empty()&&saved.plugins==_plugins&&saved.manual==_manualParameters&&saved.automation!=_automation) {
+      [self restorePluginGraph:saved.plugins automation:saved.automation];
+      destination.push_back(std::move(current));source.pop_back();trimEffectHistory(destination);return YES;
+    }
     if(_pluginError.empty()&&!saved.bypassTarget.empty()) {
       const auto old=std::find_if(saved.plugins.begin(),saved.plugins.end(),[&](const auto &p){return p.instanceID==saved.bypassTarget;});
       const auto target=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==saved.bypassTarget;});

@@ -457,9 +457,13 @@ Json EnvelopeOperations::invoke(const std::string &method,const Json &p) {
     bool changed=next!=document_.native();
     for(const auto &[t,e]:baked) changed|=!sameInstrumentEnvelope(instrument(next,song,t),e);
     if(changed&&!dry) {
-      if(stopPlayback_) stopPlayback_();
-      if(baked.empty()) document_.annotate([&](NativeSong &n){n=next;});
-      else document_.transaction([&](OpenMPT::CSoundFile &s,NativeSong &n){n=next;for(const auto &[t,e]:baked) instrument(n,s,t)=e;});
+      if(baked.empty()) {
+        auto publish=host_.preparePublication?host_.preparePublication(next):stopPlayback_;
+        document_.annotate([&](NativeSong &n){n=next;},publish);
+      } else {
+        if(stopPlayback_)stopPlayback_();
+        document_.transaction([&](OpenMPT::CSoundFile &s,NativeSong &n){n=next;for(const auto &[t,e]:baked) instrument(n,s,t)=e;});
+      }
     }
     return {{"id",id(affected)},{"dryRun",dry},{"wouldChange",changed}};
   } catch(const std::invalid_argument &e) { throw Api::ApiError(-32602,e.what()); }

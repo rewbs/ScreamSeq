@@ -1,0 +1,11 @@
+stage=0 rms=0.0823632 peak=0.283682 max_render_us=3811.5
+stage=1 rms=0.00556063 peak=0.185977 max_render_us=128.417
+stage=2 rms=0.0357461 peak=0.283681 max_render_us=151.375
+stage=3 rms=0.0826028 peak=0.289655 max_render_us=281.916
+stage=4 rms=0.08243 peak=0.284136 max_render_us=152.542
+stage=5 rms=0.0826418 peak=0.283682 max_render_us=171.042
+stage=6 rms=0.0826754 peak=0.283678 max_render_us=167.166
+stage=7 rms=0.0824678 peak=0.283681 max_render_us=131.042
+stage=8 rms=0.00538472 peak=0.22814 max_render_us=175.625
+stage=9 rms=0.0823765 peak=0.283675 max_render_us=172.667
+PASS VST3 Serum 2 at 48000 Hz / 512 frames: 10 seconds, route edits, failed-preparation retention, note ownership, bypass; no device opened. Vendor-private realtime behavior and speakers not qualified.

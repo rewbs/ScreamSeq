@@ -2,11 +2,17 @@ import AppKit
 
 extension SignalGraphEditor {
   var bypassSelection:String? {canvas.selected ?? selectedID}
+  var selectedMuteSource:[String:Any]? {
+    guard let key=bypassSelection else{return nil}
+    let node=graphID==nil ? songSource(key):nodes.first{$0["id"] as? String==key}
+    guard let node,["lfo","follower","random","note-envelope","midi","amount","automation"].contains(node["kind"] as? String ?? "")else{return nil};return node
+  }
   var bypassUnavailableReason:String? {
     if canvas.selection.count>1{return "Select one processor or mixer bus; batch bypass is not supported"}
     if canvas.selectedEdge != nil{return "Select a processor or bus; use cable properties to mute a connection"}
+    if selectedMuteSource != nil{return nil}
     if graphID != nil {
-      guard let key=bypassSelection,nodes.contains(where:{$0["id"] as? String==key && $0["kind"] as? String=="plugin"})else{return "Select an effect inside this definition; whole-group and source bypass are not supported"}
+      guard let key=bypassSelection,nodes.contains(where:{$0["id"] as? String==key && $0["kind"] as? String=="plugin"})else{return "Select an effect or modulation source inside this definition; whole-group bypass is not supported yet"}
       return nil
     }
     guard let key=bypassSelection else{return nil}
@@ -14,11 +20,12 @@ extension SignalGraphEditor {
     if buses.contains(where:{$0["id"] as? String==key}){return nil}
     if selectedProcessingGroup != nil || songNodeGraph[key] != nil{return "Bypass for a processing group or subgraph copy is not supported yet"}
     if instrumentForSongNode(key) != nil{return "Sample-instrument mute is not supported from the graph yet"}
-    if key.hasPrefix("source:"){return "Modulator mute is not supported; disable its selected modulation connection instead"}
+    if key.hasPrefix("source:"){return "The modulation source no longer exists; reload the graph and select it again"}
     return "Select a current rack processor or mixer bus to bypass or mute"
   }
   var bypassActionTitle:String {
     guard let key=bypassSelection else{return "Bypass / mute processor…"}
+    if let source=selectedMuteSource{return (source["muted"] as? Bool==true ? "Unmute source":"Mute source")+(graphID==nil ? "":" in all uses")}
     if graphID != nil,let node=nodes.first(where:{$0["id"] as? String==key && $0["kind"] as? String=="plugin"}) {
       return (node["plugin"] as? [String:Any])?["bypass"] as? Bool==true ? "Enable effect in all uses":"Bypass effect in all uses"
     }
@@ -35,6 +42,7 @@ extension SignalGraphEditor {
       prepareCommand{[weak self] in guard let self,self.viewContext==context else{return};self.toggleSelectedBypass()};return
     }
     if let reason=bypassUnavailableReason{status.stringValue=reason;return}
+    if let source=selectedMuteSource,let node=source["id"] {mutate("graph.source.mute",["graph":graphID as Any? ?? NSNull(),"node":node,"muted":!(source["muted"] as? Bool ?? false)]);return}
     if let key=bypassSelection {
       if let graph=graphID,let node=nodes.first(where:{$0["id"] as? String==key && $0["kind"] as? String=="plugin"}) {
         mutate("graph.plugin.bypass",["graph":graph,"node":key,"bypass":!((node["plugin"] as? [String:Any])?["bypass"] as? Bool ?? false)]);return

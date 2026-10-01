@@ -80,6 +80,7 @@ extension SignalGraphEditor {
       guard let id=source["id"] as? String else{continue};let key="source:"+id,kind=source["kind"] as? String ?? "lfo"
       if saved[key]==nil{saved[key]=["x":source["x"] ?? 40,"y":source["y"] ?? 40]}
       add(key,source["name"] as? String ?? kind,kind,source["x"] as? Double ?? 40,source["y"] as? Double ?? 40,kind:"modulation")
+      if source["muted"] as? Bool==true{display[display.count-1].detail="Muted · "+kind}
       if kind=="follower" {
         let bus=source["audioBus"] as? String ?? "",plugin=source["audioPlugin"] as? String ?? "",port=source["output"] as? Int ?? 0
         let from = !bus.isEmpty ? lastStage[bus]:!plugin.isEmpty ? "plugin:"+plugin:nil
@@ -137,6 +138,7 @@ extension SignalGraphEditor {
         }
       }
     }
+    appendNoteRouting(nodes:&display,edges:&edges)
     (display,edges)=focusSongNodes(display,edges:edges)
     // Multi-output instruments can be taller than an entire channel strip.
     // Allocate default rows from their real socket heights, retaining saved positions.
@@ -212,5 +214,5 @@ extension SignalGraphEditor {
     default:break
     }
   }
-  func disconnectSong(_ index:Int){cutConnections([index])}
+  func disconnectSong(_ index:Int){if !disconnectNoteRoute(index){cutConnections([index])}}
 }

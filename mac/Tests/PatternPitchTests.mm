@@ -68,12 +68,17 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
   const auto vst=NativePlugin::discoverVST3(argv[1]),au=registerFixtureAUs();
   for(const auto &descriptor:{vst[1],au[1]})for(uint32_t rate:{44100u,48000u,96000u}) {
     Document doc;doc.transaction([](CSoundFile &s){check(s.Patterns[0].Resize(4),"Resize pitch pattern");s.Order().assign(3,0);
-      s.Order().SetDefaultTempoInt(125);s.Order().SetDefaultSpeed(6);s.m_nInstruments=1;s.Instruments[1]=new ModInstrument(0);
+      s.Order().SetDefaultTempoInt(125);s.Order().SetDefaultSpeed(6);s.m_nInstruments=2;s.Instruments[1]=new ModInstrument(0);s.Instruments[2]=new ModInstrument(0);
       auto &note=*s.Patterns[0].GetpModCommand(0,0);note.note=61;note.instr=1;});
     commands(doc);
     PluginState state{descriptor};state.instanceID="pitch-synth";state.instrument=1;
-    auto render=[&](uint32_t block){Renderer renderer(doc.snapshotData(),rate);PluginChain chain({state},rate,true);
-      chain.attachInstruments(renderer);chain.attachMusicalAutomation(renderer,doc.native());
+    auto render=[&](uint32_t block,bool routed=false){Renderer renderer(doc.snapshotData(),rate);
+      auto native=doc.native();PluginState target=state;target.instanceID="routed-pitch-synth";target.instrument=2;
+      std::vector<PluginState> rack{state};
+      if(routed){rack.push_back(target);native.signal.noteRouting.suppressedAssignments={native.instruments.at(1).id};
+        native.signal.noteRouting.routes={{native.makeEntity().id,NoteSourceKind::Channel,native.tracks.at(0).id,target.instanceID,0,true}};}
+      PluginChain chain(rack,rate,true);
+      chain.attachInstruments(renderer,routed?&native:nullptr);chain.attachMusicalAutomation(renderer,native);
       const auto total=rate*9/10;std::vector<float> out(total*2);
       for(uint32_t frame=0;frame<total;frame+=block){const auto count=std::min(block,total-frame);uint64_t a,f,l;tracker_audit_begin();
         renderer.render(out.data()+frame*2,count);const bool ok=chain.process(out.data()+frame*2,count);tracker_audit_end(&a,&f,&l);
@@ -87,6 +92,8 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
       if(std::abs(expected[frame*2]-value)>3e-7){std::cerr<<descriptor.format<<" rate "<<rate<<" frame "<<frame<<" got "<<expected[frame*2]<<" expected "<<value<<'\n';check(false,"Every sample receives the independently expected MIDI bend");}
     }
     for(auto block:{17u,128u,4096u})check(render(block)==expected,"Pitch delivery is bit-exact across callback sizes");
+    for(auto block:{17u,128u,4096u}){const auto rerouted=render(block,true);for(size_t i=0;i<expected.size();++i)
+      check(std::abs(rerouted[i]-expected[i])<3e-7,"Graph-routed AU/VST3 receives exact sub-tick pitch, not the original assigned plugin");}
     doc.transaction([](CSoundFile &s){s.Patterns[0].GetpModCommand(0,0)->Clear();});
     doc.annotate([&](NativeSong &n){const auto p=n.patterns.at(0).id,t=n.tracks.at(0).id;
       n.preciseNotes={{p,t,1234,1,61,93},{p,t,30001,0,255,127},{p,t,70000,1,65,77},{p,t,180003,0,255,127}};

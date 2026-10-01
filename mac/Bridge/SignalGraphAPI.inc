@@ -39,11 +39,12 @@
       auto *observation=_audio->signalObservation();bool found=false;
       if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==key.UTF8String){observation->clear(uint32_t(i+1));found=true;break;}
       require(found,"Observed signal port does not exist in the prepared graph");result=@{@"clearing":@YES};
+#include "NoteActivityAPI.inc"
 #include "GraphProvenanceAPI.inc"
     } else if ([method isEqual:@"graph.get"]) {
       allowed(@[@"includeState",@"includeImplicitMixer"]);NSMutableDictionary *data=[encodeSignalGraph(_document->native().signal,!p[@"includeState"]||boolean(p[@"includeState"])) mutableCopy];
 
-      NSMutableArray *plugins=[NSMutableArray array];for(size_t slot=0;slot<_plugins.size();++slot){const auto &p=_plugins[slot];NSMutableDictionary *item=[descriptorDictionary(p.descriptor) mutableCopy];item[@"id"]=@(p.instanceID.c_str());item[@"slot"]=@(slot);item[@"bypass"]=@(p.bypass);NSMutableArray *instruments=[NSMutableArray array];for(const auto &a:pluginAssignments(p))[instruments addObject:@(a.instrument)];item[@"instruments"]=instruments;item[@"audioBuses"]=pluginBusDictionaries(_audio->pluginBuses(slot));[plugins addObject:item];}data[@"plugins"]=plugins;
+      NSMutableArray *plugins=[NSMutableArray array];for(size_t slot=0;slot<_plugins.size();++slot){const auto &p=_plugins[slot];NSMutableDictionary *item=[descriptorDictionary(p.descriptor) mutableCopy];item[@"id"]=@(p.instanceID.c_str());item[@"slot"]=@(slot);item[@"bypass"]=@(p.bypass);NSMutableArray *instruments=[NSMutableArray array];for(const auto &a:pluginAssignments(p))[instruments addObject:@(a.instrument)];item[@"instruments"]=instruments;NSMutableArray *assignments=[NSMutableArray array];for(const auto &a:pluginAssignments(p)){const auto found=_document->native().instruments.find(a.instrument);if(found!=_document->native().instruments.end())[assignments addObject:@{@"instrument":@(a.instrument),@"instrumentID":nativeID(found->second.id),@"channel":@(a.channel)}];}item[@"assignments"]=assignments;item[@"audioBuses"]=pluginBusDictionaries(_audio->pluginBuses(slot));[plugins addObject:item];}data[@"plugins"]=plugins;
       NativeSong implicit;
       const bool showImplicit=p[@"includeImplicitMixer"]&&boolean(p[@"includeImplicitMixer"])&&!_document->native().mixer.active();
       if(showImplicit){implicit.tracks=_document->native().tracks;implicit.nextID=_document->native().nextID;implicit.masterID=_document->native().masterID;implicit.mixer=_document->native().mixer;implicit.ensureMixer();}
@@ -52,6 +53,11 @@
       NSMutableArray *instrumentList=[NSMutableArray array];for(const auto &[index,entity]:_document->native().instruments){bool plugin=false;for(const auto &p:_plugins)for(const auto &a:pluginAssignments(p))plugin|=a.instrument==index;[instrumentList addObject:@{@"index":@(index),@"id":nativeID(entity.id),@"name":songString(song,song.GetInstrumentName(index)),@"plugin":@(plugin)}];}data[@"instruments"]=instrumentList;
       data[@"activity"]=encodeSignalActivity(_audio->graphActivity());
       result=data;
+    } else if ([method isEqual:@"graph.selection.copy"]) {
+      allowed(@[@"graph",@"nodes"]);const auto graphIdentity=decodeNativeID(p[@"graph"]);const auto &library=_document->native().signal.library;
+      const auto found=std::find_if(library.begin(),library.end(),[&](const auto &d){return d.id==graphIdentity;});require(found!=library.end(),"Subgraph no longer exists");
+      std::vector<uint64_t> ids;for(id value:array(p[@"nodes"],128))ids.push_back(decodeNativeID(value));
+      try{result=@{@"fragment":encodeSignalDefinition(copySignalSelection(*found,ids)),@"version":@1};}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
     } else if ([method isEqual:@"graph.automation.get"]) {
       allowed(@[@"graph",@"node",@"pattern"]);require(p[@"graph"]!=nil,"Specify a subgraph identity or null for a song source");
       const auto id=p[@"graph"]==NSNull.null?0:decodeNativeID(p[@"graph"]),nodeID=decodeNativeID(p[@"node"]);
@@ -69,14 +75,36 @@
       NativeSong next=_document->native();auto &graph=next.signal;
       decltype(_pluginPathHints.graph) clonedPathHints;
       const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
-      uint64_t affected=0,nodeID=0,groupID=0;
+      uint64_t affected=0,nodeID=0,groupID=0;NSDictionary *clipboardFragment=nil;
       auto definition=[&](id raw)->SignalDefinition &{auto id=decodeNativeID(raw);auto found=std::find_if(graph.library.begin(),graph.library.end(),[&](const auto &d){return d.id==id;});require(found!=graph.library.end(),"Subgraph does not exist");return *found;};
       auto ensureMixer=[&](){next.ensureMixer();};
       auto bus=[&](id raw){ensureMixer();const auto id=decodeNativeID(raw);require(std::any_of(next.mixer.buses.begin(),next.mixer.buses.end(),[&](const auto &b){return b.id==id;}),"Graph target bus does not exist");return id;};
       auto newNumber=[&](){for(uint16_t number=1;number<=999;++number)if(std::none_of(graph.library.begin(),graph.library.end(),[&](const auto &d){return d.number==number;}))return number;throw Error(-32602,"No free subgraph number");};
 #include "SongModulationAPI.inc"
 #include "GraphPresentationAPI.inc"
-      if([method isEqual:@"graph.connections.remove"]) {
+#include "NoteRoutingAPI.inc"
+      if([method isEqual:@"graph.selection.cut"]) {
+        allowed(@[@"graph",@"nodes",@"dryRun"]);affected=decodeNativeID(p[@"graph"]);std::vector<uint64_t> ids;for(id value:array(p[@"nodes"],128))ids.push_back(decodeNativeID(value));
+        try{clipboardFragment=encodeSignalDefinition(cutSignalSelection(next,affected,ids));}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+      } else if([method isEqual:@"graph.selection.paste"]||[method isEqual:@"graph.selection.duplicate"]) {
+        const bool duplicate=[method isEqual:@"graph.selection.duplicate"];allowed(duplicate?@[@"graph",@"nodes",@"parent",@"x",@"y",@"dryRun"]:@[@"graph",@"fragment",@"patternMap",@"parent",@"x",@"y",@"dryRun"]);
+        affected=decodeNativeID(p[@"graph"]);SignalDefinition fragment;
+        std::map<uint64_t,uint64_t> patterns;
+        if(duplicate){std::vector<uint64_t> ids;for(id value:array(p[@"nodes"],128))ids.push_back(decodeNativeID(value));fragment=copySignalSelection(definition(p[@"graph"]),ids);for(const auto &n:fragment.nodes)for(const auto &e:n.envelopes)patterns[e.pattern]=e.pattern;}
+        else{fragment=decodeSignalDefinition(p[@"fragment"]);for(id raw:array(p[@"patternMap"]?:@[],1024)){auto map=object(raw);keys(map,@[@"source",@"target"]);require(patterns.emplace(decodeNativeID(map[@"source"]),decodeNativeID(map[@"target"])).second,"Duplicate pattern mapping");}}
+        try{const auto pasted=pasteSignalSelection(next,affected,fragment,patterns,p[@"parent"]?decodeNativeID(p[@"parent"]):0,number(p[@"x"]?:@0,0,100000),number(p[@"y"]?:@0,0,100000));
+          for(const auto &[old,id]:pasted.identities){if(!nodeID)nodeID=id;if(duplicate)if(const auto hint=_pluginPathHints.graph.find({affected,old});hint!=_pluginPathHints.graph.end())clonedPathHints[{affected,id}]=hint->second;}
+        }catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+      } else if([method isEqual:@"graph.makeIndependent"]) {
+        allowed(@[@"graph",@"target",@"scope",@"name",@"number",@"dryRun"]);const auto scope=string(p[@"scope"],16);require([scope isEqual:@"channel"]||[scope isEqual:@"instrument"],"Choose channel or instrument scope");
+        const auto source=decodeNativeID(p[@"graph"]),target=decodeNativeID(p[@"target"]);
+        try {const auto cloned=makeSignalUseIndependent(next,source,target,[scope isEqual:@"instrument"],p[@"name"]?std::optional<std::string>{string(p[@"name"],256).UTF8String}:std::nullopt,p[@"number"]?uint16_t(integer(p[@"number"],1,999)):0);affected=cloned.graph;
+          for(const auto &[old,id]:cloned.identities)if(const auto hint=_pluginPathHints.graph.find({source,old});hint!=_pluginPathHints.graph.end())clonedPathHints[{affected,id}]=hint->second;
+        }catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+      } else if([method isEqual:@"graph.source.mute"]) {
+        allowed(@[@"graph",@"node",@"muted",@"dryRun"]);require(p[@"graph"]!=nil,"Specify a graph identity or null for a song source");nodeID=decodeNativeID(p[@"node"]);affected=p[@"graph"]==NSNull.null?0:decodeNativeID(p[@"graph"]);
+        try{muteSignalSource(next,affected,nodeID,boolean(p[@"muted"]));}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+      } else if([method isEqual:@"graph.connections.remove"]) {
         allowed(@[@"connections",@"dryRun"]);std::vector<SongConnectionRef> cables;
         for(id raw:array(p[@"connections"],512)) {
           auto c=object(raw);auto kind=string(c[@"kind"],32);SongConnectionRef ref{};
@@ -84,6 +112,7 @@
           else if([kind isEqual:@"graph-input"]||[kind isEqual:@"graph-output"]) {const bool input=[kind isEqual:@"graph-input"];keys(c,input?@[@"kind",@"source",@"target",@"input"]:@[@"kind",@"source",@"target",@"output"]);ref.kind=input?SongConnectionKind::GraphInput:SongConnectionKind::GraphOutput;ref.source=decodeNativeID(c[@"source"]);ref.target=decodeNativeID(c[@"target"]);ref.port=uint32_t(integer(c[input?@"input":@"output"],1,63));}
           else if([kind isEqual:@"plugin-input"]) {keys(c,@[@"kind",@"source",@"plugin",@"input"]);ref.kind=SongConnectionKind::PluginInput;ref.source=decodeNativeID(c[@"source"]);ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"input"],0,63));}
           else if([kind isEqual:@"plugin-output"]) {keys(c,@[@"kind",@"target",@"plugin",@"output"]);ref.kind=SongConnectionKind::PluginOutput;ref.target=decodeNativeID(c[@"target"]);ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"output"],0,63));}
+          else if([kind isEqual:@"note"]) {keys(c,@[@"kind",@"route",@"instrument"]);require(bool(c[@"route"])!=bool(c[@"instrument"]),"Choose an explicit note route or implicit instrument assignment");ref.kind=SongConnectionKind::Note;if(c[@"route"])ref.source=decodeNativeID(c[@"route"]);else ref.target=decodeNativeID(c[@"instrument"]);}
           else if([kind isEqual:@"modulation"]) {keys(c,@[@"kind",@"source",@"plugin",@"parameter"]);ref.kind=SongConnectionKind::Modulation;ref.source=decodeNativeID(c[@"source"]);ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"parameter"],0,UINT32_MAX));}
           else if([kind isEqual:@"follower-input"]) {keys(c,@[@"kind",@"node",@"source",@"plugin",@"output",@"preFader"]);ref.kind=SongConnectionKind::FollowerInput;ref.target=decodeNativeID(c[@"node"]);if(c[@"source"])ref.source=decodeNativeID(c[@"source"]);if(c[@"plugin"])ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"output"]?:@0,0,63));ref.preFader=c[@"preFader"]?boolean(c[@"preFader"]):false;}
           else throw Error(-32602,"Only explicit song routes can be cut; fixed rack-chain wires require moving or deleting their processors");
@@ -228,11 +257,12 @@
         if(p[@"parent"]&&p[@"parent"]!=NSNull.null) {const auto id=decodeNativeID(p[@"parent"]);auto parent=std::find_if(d.groups.begin(),d.groups.end(),[&](const auto &g){return g.id==id;});require(parent!=d.groups.end(),"Processing group parent does not exist");parent->nodes.push_back(nodeID);}
         d.nodes.push_back(std::move(n));
       } else if([method isEqual:@"graph.nodes.detach"]) {
-        allowed(@[@"graph",@"nodes",@"remove",@"positions",@"dryRun"]);auto &d=definition(p[@"graph"]);affected=d.id;
+        allowed(@[@"graph",@"nodes",@"remove",@"positions",@"heal",@"dryRun"]);auto &d=definition(p[@"graph"]);affected=d.id;
         std::vector<uint64_t> moving;for(id raw:array(p[@"nodes"],32))moving.push_back(decodeNativeID(raw));
         const bool remove=p[@"remove"]?boolean(p[@"remove"]):false;
         require(!remove||!p[@"positions"],"Removed nodes cannot have positions");
-        try{detachSignalNodes(d,moving,remove);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+        std::optional<SignalHealPath> heal;if(p[@"heal"]){auto h=object(p[@"heal"]);keys(h,@[@"incoming",@"outgoing"]);heal.emplace();if(h[@"incoming"]&&h[@"incoming"]!=NSNull.null)heal->incoming=size_t(integer(h[@"incoming"],0,255));if(h[@"outgoing"]&&h[@"outgoing"]!=NSNull.null)heal->outgoing=size_t(integer(h[@"outgoing"],0,255));}
+        try{detachSignalNodes(d,moving,remove,heal);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
         for(id raw:array(p[@"positions"]?:@[],32)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);const auto id=decodeNativeID(v[@"node"]);require(std::find(moving.begin(),moving.end(),id)!=moving.end(),"Position must belong to a detached node");auto &node=*std::find_if(d.nodes.begin(),d.nodes.end(),[&](const auto &n){return n.id==id;});node.x=number(v[@"x"],0,100000);node.y=number(v[@"y"],0,100000);}
       } else if([method isEqual:@"graph.nodes.insert"]) {
         allowed(@[@"graph",@"nodes",@"edge",@"positions",@"dryRun"]);auto &d=definition(p[@"graph"]);affected=d.id;
@@ -277,7 +307,7 @@
       reconcileEnvelopeLinks(next,song);
       try{next.validate(song);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
       const bool changed=next!=_document->native();if(changed&&!dry){
-        if([method isEqual:@"graph.connections.remove"]) {
+        if([method isEqual:@"graph.connections.remove"]&&next.signal.noteRouting==_document->native().signal.noteRouting) {
           if(!_audio->mixerRoutingReady())throw Error(-32002,"Routing transition is busy; retry the same revision");
           auto routing=_audio->prepareMixerRouting(next);
           if(!routing&&_audio->active())throw Error(-32002,"This cable edit cannot be prepared during playback; stop playback and retry");
@@ -293,4 +323,5 @@
         }
       }
       if(changed&&!dry)_pluginPathHints.graph.merge(clonedPathHints);
-      result=@{@"dryRun":@(dry),@"wouldChange":@(changed),@"graph":affected?nativeID(affected):@"",@"node":nodeID?nativeID(nodeID):@"",@"group":groupID?nativeID(groupID):@""};
+      result=@{@"dryRun":@(dry),@"wouldChange":@(changed),@"graph":affected?nativeID(affected):@"",@"node":nodeID?nativeID(nodeID):@"",@"route":[method hasPrefix:@"graph.note."]&&nodeID?nativeID(nodeID):@"",@"group":groupID?nativeID(groupID):@""};
+      if(clipboardFragment){auto copiedResult=[result mutableCopy];copiedResult[@"fragment"]=clipboardFragment;copiedResult[@"version"]=@1;result=copiedResult;}

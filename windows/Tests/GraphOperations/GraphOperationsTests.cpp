@@ -2,6 +2,7 @@
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Project/NativeMetadata.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "soundlib/ModInstrument.h"
 #ifdef small
 #undef small
 #endif
@@ -612,14 +613,17 @@ void callbackOrderingAndUnrelatedData() {
   CHECK(f.doc->native().tracks==expected.tracks); CHECK(f.doc->native().patterns==expected.patterns);
   CHECK(f.doc->native().columnMutes==expected.columnMutes); CHECK(f.doc->cell(0,2,1)==cells);
   const auto reads=GraphOperations::reads(),writes=GraphOperations::writes();
-  CHECK((std::set<std::string>(reads.begin(),reads.end())==std::set<std::string>{"graph.get","graph.automation.get","graph.provenance.get"}));
-  CHECK((std::set<std::string>(writes.begin(),writes.end())==std::set<std::string>{"graph.create","graph.clone","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set","graph.automation.set"}));
-  CHECK(reads.size()==3); CHECK(writes.size()==29);
+  CHECK((std::set<std::string>(reads.begin(),reads.end())==std::set<std::string>{"graph.note.activity","graph.get","graph.selection.copy","graph.automation.get","graph.provenance.get"}));
+  CHECK((std::set<std::string>(writes.begin(),writes.end())==std::set<std::string>{"graph.note.connect","graph.note.update","graph.note.disconnect","graph.note.restoreAssignment","graph.makeIndependent","graph.selection.paste","graph.selection.cut","graph.selection.duplicate","graph.source.mute","graph.create","graph.clone","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set","graph.automation.set"}));
+  CHECK(reads.size()==5); CHECK(writes.size()==38);
 }
+#include "NoteRoutingOperationsTests.inc"
+#include "GraphEditingOperationsTests.inc"
 int main(int argc,char **argv) {
   try {
     if(argc==2&&std::string(argv[1])=="--catalog") { std::cout<<Json{{"reads",GraphOperations::reads()},{"writes",GraphOperations::writes()}}.dump(2)<<'\n'; return 0; }
     const std::vector<std::pair<const char *,void(*)()>> tests={
+      {"noteRoutingOperations",noteRoutingOperations},{"graphEditingOperations",graphEditingOperations},
       {"graphProvenance",graphProvenance},{"graphPresentation",graphPresentation},{"songModulationSources",songModulationSources},{"songAutomationAndBanks",songAutomationAndBanks},{"stableImplicitMaster",stableImplicitMaster},{"songCableCuts",songCableCuts},
       {"createReadHistory",createReadHistory},{"nodesAndCloning",nodesAndCloning},{"automationAndBanks",automationAndBanks},
       {"assignmentsRoutesLayoutCommands",assignmentsRoutesLayoutCommands},{"hostHooks",hostHooks},

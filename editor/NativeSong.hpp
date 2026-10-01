@@ -33,7 +33,7 @@ struct NativeNoteTrack {
 // Semantic cable identities survive filtering, grouping and route reordering.
 // Fixed rack-chain wires are intentionally absent: deleting them requires a
 // detached-processor ownership model, not an implicit reassignment to Master.
-enum class SongConnectionKind { Output, Send, GraphInput, GraphOutput, PluginInput, PluginOutput, FollowerInput, Modulation };
+enum class SongConnectionKind { Output, Send, GraphInput, GraphOutput, PluginInput, PluginOutput, FollowerInput, Modulation, Note };
 struct SongConnectionRef {
   SongConnectionKind kind;
   uint64_t source = 0, target = 0;

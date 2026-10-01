@@ -88,6 +88,7 @@ std::shared_ptr<PluginChain::HostedMixerPlan::SongControls> PluginChain::prepare
 
 void PluginChain::HostedMixerPlan::adopt(void *opaque,void *previous) noexcept {
   auto &next=*static_cast<HostedMixerPlan *>(opaque);
+  if(next.noteRouting)next.owner->adoptNoteRouting(*next.noteRouting);
   if(previous && next.song){const auto &old=*static_cast<HostedMixerPlan *>(previous);if(old.song){next.song->runtime->inheritState(*old.song->runtime);next.song->controllers=old.song->controllers;
     for(auto &scope:next.song->notes)for(const auto &prior:old.song->notes)if(next.song->runtime->source(scope.source).node.id==old.song->runtime->source(prior.source).node.id)
       {size_t index=0;for(auto &watch:scope.voices){while(index<prior.voices.size() && prior.voices[index].index<watch.index)++index;if(index<prior.voices.size() && prior.voices[index].index==watch.index)watch.generation=prior.voices[index].generation;}}
@@ -97,7 +98,9 @@ void PluginChain::HostedMixerPlan::adopt(void *opaque,void *previous) noexcept {
   if(next.musical)next.owner->activateMusicalPlan(*next.musical);
 }
 void PluginChain::HostedMixerPlan::begin(void *opaque,uint32_t frames,uint64_t position,bool current) noexcept {
-  auto &plan=*static_cast<HostedMixerPlan *>(opaque);plan.owner->beginSongControls(plan,frames,position,current);
+  auto &plan=*static_cast<HostedMixerPlan *>(opaque);
+  if(current&&plan.noteRouting)plan.owner->adoptNoteRouting(*plan.noteRouting);
+  plan.owner->beginSongControls(plan,frames,position,current);
 }
 void PluginChain::beginSongControls(HostedMixerPlan &hosted,uint32_t frames,uint64_t position,bool current) noexcept {
   if(current){activeHostedMixer_=&hosted;activeSongControls_=hosted.song.get();}

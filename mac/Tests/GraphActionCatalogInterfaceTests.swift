@@ -80,6 +80,10 @@ extension InterfaceTests {
     try detachedEffectChecks()
     try graphArrangeAndAddChecks()
     try graphSelectedBypassChecks()
+    try graphSourceAndIndependentChecks()
+    try graphClipboardAndPresetChecks()
+    try graphBranchedDetachChecks()
+    try graphNoteRoutingChecks()
     try graphStageChecks()
     try graphLastTouchedChecks()
     print("PASS graph parameter catalogue: stable targets, duplicate names, readonly reasons, retired reads and pending focus")
@@ -208,5 +212,75 @@ extension InterfaceTests {
     try require(writes.last?.0=="plugin.bypass" && writes.last?.1["plugin"] as? String=="effect","Explicit target selection uses the chosen stable plugin identity")
     editor.targetMenu.close();select("plugin:synth");editor.canvas.selectNodes(["plugin:synth","track"]);let before=writes.count;editor.toggleSelectedBypass()
     try require(writes.count==before && editor.bypassUnavailableReason?.contains("one processor")==true,"Mixed multiple selection cannot silently bypass just one arbitrary processor")
+  }
+}
+
+
+extension InterfaceTests {
+  static func graphSourceAndIndependentChecks() throws {
+    let editor=SignalGraphEditor(frame:.zero)
+    let recipe:[String:Any]=["id":"n100","name":"Shared","number":1,"nodes":[["id":"n101","kind":"input"],["id":"n102","kind":"lfo","muted":false],["id":"n103","kind":"output"]],"audio":[["source":"n101","target":"n103"]]]
+    let song:[String:Any]=["library":[recipe],"songSources":[["id":"n200","kind":"random","muted":true]],"assignments":[["target":"n10","graph":"n100"]],"commands":[["target":"n10","graph":"n100","kind":"start"],["target":"n11","graph":"n100","kind":"row"]],"instrumentAssignments":[["target":"n20","graph":"n100"]],"instruments":[["id":"n20","index":2,"name":"Keys","plugin":false]],"mixer":["buses":[["id":"n10","name":"Lead","kind":"track","output":"n12"],["id":"n11","name":"Bass","kind":"track","output":"n12"],["id":"n12","name":"Master","kind":"master"]]]]
+    editor.update(song);var writes=[(String,[String:Any])]()
+    editor.onRequest={method,params,reply in writes.append((method,params));reply(["error":["message":"captured"]])}
+    editor.selectedID="source:n200";editor.canvas.selectNodes(["source:n200"]);editor.toggleSelectedBypass()
+    try require(editor.bypassActionTitle=="Unmute source" && writes.last?.0=="graph.source.mute" && writes.last?.1["node"] as? String=="n200" && writes.last?.1["graph"] is NSNull && writes.last?.1["muted"] as? Bool==false,"Root source mute addresses the source identity and does not mutate a rack bypass")
+    editor.graphID="n100";editor.update(song);editor.selectedID="n102";editor.canvas.selectNodes(["n102"]);editor.toggleSelectedBypass()
+    try require(writes.last?.0=="graph.source.mute" && writes.last?.1["graph"] as? String=="n100" && writes.last?.1["node"] as? String=="n102" && writes.last?.1["muted"] as? Bool==true && editor.bypassActionTitle.contains("all uses"),"Reusable source mute states and edits the shared-definition scope")
+    editor.chooseIndependentUse(graph:"n100")
+    try require(Set(editor.targetMenu.entries.map(\.id))==["channel:n10","channel:n11","instrument:n20"],"Make-independent chooser includes command-only channels, deduplicates channel uses and includes instrument scope")
+    try require(editor.targetMenu.entries.first{$0.id=="channel:n10"}?.detail.contains("ordinary and pattern")==true,"Channel copy explains that paired Start/Stop and ordinary uses move together")
+    editor.targetMenu.onChoose?(editor.targetMenu.entries.first{$0.id=="channel:n10"}!)
+    try require(writes.last?.0=="graph.makeIndependent" && writes.last?.1["graph"] as? String=="n100" && writes.last?.1["target"] as? String=="n10" && writes.last?.1["scope"] as? String=="channel","Independent channel uses one exact shared-model transaction")
+    let muted=editor.canvasNode(["id":"n102","kind":"lfo","muted":true],definition:recipe)
+    try require(muted.detail.contains("Muted") && !muted.bypassed,"Muted sources never display an unrelated processor bypass badge")
+  }
+}
+
+extension InterfaceTests {
+  static func graphClipboardAndPresetChecks() throws {
+    let editor=SignalGraphEditor(frame:.zero),board=NSPasteboard(name:.init("screamseq-graph-test-"+UUID().uuidString));editor.graphPasteboard=board
+    defer{board.releaseGlobally()}
+    let definition:[String:Any]=["id":"n100","name":"Test","nodes":[["id":"n101","kind":"input"],["id":"n102","kind":"plugin","name":"Effect"],["id":"n103","kind":"output"],["id":"n104","kind":"automation","name":"Curve","envelopes":[["pattern":"n20","points":[["position":0,"value":0.5]]]]]],"audio":[]]
+    let song:[String:Any]=["library":[definition],"patterns":[["id":"n20","index":0,"name":"Verse"],["id":"n21","index":1,"name":"Chorus"]]]
+    editor.graphID="n100";editor.update(song);editor.selectedID="n102";editor.canvas.selectNodes(["n102","n104"])
+    var requests=[(String,[String:Any])]()
+    editor.onRequest={method,params,reply in requests.append((method,params));if method=="graph.selection.copy"{reply(["result":["revision":"","data":["version":1,"fragment":definition]]])}else if method=="plugin.preset.inspect"{reply(["result":["revision":"","data":["presetRevision":"preset-1","name":"Warm"]]])}else{reply(["error":["message":"captured"]])}}
+    editor.canvas.copy(nil)
+    try require(requests.last?.0=="graph.selection.copy" && Set(requests.last?.1["nodes"] as? [String] ?? [])==["n102","n104"] && board.data(forType:SignalGraphEditor.graphClipboardType) != nil,"Copy uses exact selected nodes and captures their baseline state through the read API")
+    editor.pasteGraphSelection()
+    let paste=requests.last
+    try require(paste?.0=="graph.selection.paste" && (paste?.1["patternMap"] as? [[String:String]])==[["source":"n20","target":"n20"]],"Same-song clipboard explicitly maps envelope patterns rather than trusting numeric IDs")
+    editor.duplicateGraphSelection();try require(requests.last?.0=="graph.selection.duplicate" && requests.last?.1["graph"] as? String=="n100","Duplicate is one shared native transaction")
+    editor.canvas.cut(nil);try require(requests.last?.0=="graph.selection.cut","Cmd-X cuts nodes through one document transaction")
+    board.clearContents();board.setData(try JSONSerialization.data(withJSONObject:["version":1,"document":"other-song","fragment":definition]),forType:SignalGraphEditor.graphClipboardType)
+    let count=requests.count;editor.pasteGraphSelection()
+    try require(requests.count==count && Set(editor.targetMenu.entries.map(\.id))==["n20","n21"],"Cross-song envelope paste offers explicit pattern mapping before making any mutation")
+    editor.targetMenu.onChoose?(editor.targetMenu.entries.first{$0.id=="n21"}!)
+    try require((requests.last?.1["patternMap"] as? [[String:String]])==[["source":"n20","target":"n21"]],"Cross-song paste uses the chosen destination pattern")
+    editor.targetMenu.close()
+    let target=GraphPresetTarget(graph:"n100",plugin:"n102",name:"Effect")
+    editor.loadGraphPreset(target,path:"/tmp/example.screamseq-preset",revision:"",document:editor.projectionDocument)
+    try require(requests.last?.0=="graph.plugin.preset.load" && requests.last?.1["graph"] as? String=="n100" && requests.last?.1["node"] as? String=="n102" && requests.last?.1["expectedPresetRevision"] as? String=="preset-1","Recipe preset load pins its exact target and inspected file revision")
+    editor.saveGraphPreset(target,path:"/tmp/example.screamseq-preset",name:"Sound",revision:"",document:editor.projectionDocument)
+    try require(requests.last?.0=="graph.plugin.preset.save" && requests.last?.1["node"] as? String=="n102","Recipe preset save uses the configured baseline API, not a rack slot")
+  }
+}
+
+
+extension InterfaceTests {
+  static func graphBranchedDetachChecks() throws {
+    let editor=SignalGraphEditor(frame:.zero)
+    let definition:[String:Any]=["id":"n100","name":"Branches","nodes":[["id":"n101","kind":"input","name":"Input"],["id":"n102","kind":"plugin","name":"Effect"],["id":"n103","kind":"output","name":"Output"]],"audio":[["source":"n101","target":"n102","output":0,"input":0,"gain":0.5],["source":"n101","target":"n102","output":1,"input":0,"gain":0.2],["source":"n102","target":"n103","output":0,"input":0,"gain":0.3],["source":"n102","target":"n103","output":0,"input":1,"gain":0.8]]]
+    editor.graphID="n100";editor.update(["library":[definition]]);editor.selectedID="n102";editor.canvas.selectNodes(["n102"])
+    var writes=[(String,[String:Any])]()
+    editor.onRequest={method,params,reply in writes.append((method,params));reply(["error":["message":"captured"]])}
+    editor.detachNodes(["n102"],positions:[],remove:false)
+    try require(writes.isEmpty && Set(editor.targetMenu.entries.map(\.id))==["0","1"],"A branched detach chooses a source before touching any route")
+    editor.targetMenu.onChoose?(editor.targetMenu.entries.first{$0.id=="1"}!)
+    try require(writes.isEmpty && Set(editor.targetMenu.entries.map(\.id))==["2","3"],"A branched detach chooses its exact destination instead of inventing a cross-product")
+    editor.targetMenu.onChoose?(editor.targetMenu.entries.first{$0.id=="3"}!)
+    let heal=writes.last?.1["heal"] as? [String:Any]
+    try require(writes.count==1 && writes.last?.0=="graph.nodes.detach" && heal?["incoming"] as? Int==1 && heal?["outgoing"] as? Int==3 && writes.last?.1["remove"] as? Bool==false,"Chosen main path is one revision-guarded transaction preserving other branches")
   }
 }

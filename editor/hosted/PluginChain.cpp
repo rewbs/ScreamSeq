@@ -19,6 +19,7 @@ void validatePluginCapacity(const std::vector<PluginState> &states, size_t mixer
 PluginChain::PluginChain(const std::vector<PluginState> &states, double rate, bool offline,
                          const std::vector<ParameterChange> &automation, uint64_t startFrame)
     : sampleRate_(rate), offline_(offline), automation_(automation) {
+  recordedActive_.store(!automation.empty(),std::memory_order_relaxed);
   activity_=std::make_unique<ParameterActivity>(rate);
   observation_=std::make_unique<SignalObservation>(rate);
   validatePluginCapacity(states);
@@ -34,6 +35,7 @@ PluginChain::PluginChain(const std::vector<PluginState> &states, double rate, bo
       token=observation_->add({node+(port.input?"/in/":"/out/")+std::to_string(port.index),node,port.name,!port.input,port.index,port.channels,int64_t(std::llround(plugin->latency()*rate)),0});
     }
     processorObservations_.push_back(observedPorts);
+    const auto baselineParameters=plugin->parameters();
     plugin->automate(automation, plugins_.size(), rate, uint64_t(double(startFrame) * rate / 48000));
     if (!plugin->isInstrument()) {
       latency_ += plugin->latency();
@@ -43,7 +45,7 @@ PluginChain::PluginChain(const std::vector<PluginState> &states, double rate, bo
     ParameterProcessor observed;observed.key="rack/"+state.instanceID;observed.name=state.descriptor.name;observed.plugin=state.instanceID;observed.bypass=state.bypass;observed.parameters=plugin->parameters();
     plugin->observe(activity_.get(),activity_->add(std::move(observed)));plugin->audible(true);
     auto entry=std::make_shared<RackEntry>();entry->plugin=plugin;entry->baseline=state;
-    entry->parameters=plugin->parameters();entry->ports=observedPorts;entry->activity=uint32_t(activity_->processors.size());
+    entry->parameters=baselineParameters;entry->ports=observedPorts;entry->activity=uint32_t(activity_->processors.size());
     rack_.push_back(entry);retainedRack_.push_back(entry);
     plugins_.push_back(std::move(plugin));
     instances_.push_back(state.instanceID);
@@ -242,17 +244,35 @@ std::unique_ptr<GraphControlPlan> PluginChain::prepareGraphControls(const Native
   if(mixerTransition_){const auto &hosted=*static_cast<HostedMixerPlan *>(mixerTransition_->controlPlan().processors.get());
     if(hosted.songSpec.songSources!=next.signal.songSources || hosted.songSpec.songModulation!=next.signal.songModulation)return nullptr;
   }
-  auto layout=[](SignalGraph graph){graph.songSources.clear();graph.songModulation.clear();for(auto &d:graph.library)for(auto &n:d.nodes)if(n.kind==SignalNodeKind::Plugin)n.plugin.state.clear();return graph;};
-  if(!sameSignalSourceLayout(layout(preparedSignal_),layout(next.signal)))return nullptr;
+  // This path retains copy/role/assignment and outer-port ownership. Recipe
+  // internals are compiled independently and transition through aligned dry.
+  auto layout=[](SignalGraph graph){graph.songSources.clear();graph.songModulation.clear();for(auto &d:graph.library){d.nodes.clear();d.audio.clear();d.modulation.clear();}return graph;};
+  if(!sameSignalControlLayout(layout(preparedSignal_),layout(next.signal)))return nullptr;
   if(!graphControlPlans_.available())throw std::runtime_error("Graph parameter updates are pending; retry the edit");
   auto plan=std::make_unique<GraphControlPlan>();
-  plan->signal=next.signal;plan->sourceRevision=graphControlRevision_;
+  plan->signal=next.signal;plan->sourceRevision=graphControlRevision_;plan->activityBase=activity_->processors.size();
+  if(noteLedger_)plan->noteRouting=prepareNoteRouting(next);
   size_t preparedBytes=(signalGraph_?signalGraph_->storageBytes():0)+(sampleSignalGraph_?sampleSignalGraph_->storageBytes():0)+bypassStorageBytes();
-  std::set<const GraphPluginState *> states;std::set<const SignalRuntime *> runtimes;std::set<const PluginParameterQueue *> queues;
+  std::set<const GraphPluginState *> states;std::set<const SignalRuntime *> runtimes;std::set<const PluginParameterQueue *> queues;std::set<const GraphProcessorSet *> processorSets;std::set<const GraphPluginEndpoint *> endpoints;
+  for(const auto &entry:retainedRack_)preparedBytes+=entry->plugin->musicalMIDIStorageBytes();
   auto budget=[&](size_t bytes){preparedBytes+=bytes;if(preparedBytes>256u*1024u*1024u)throw std::invalid_argument("Live graph controls exceed the 256 MB prepared storage budget");};
   auto account=[&](const GraphControlPlan &snapshot){
+    // Initial endpoints are already included in NativeSignalGraph::storageBytes.
+    for(const auto &owner:snapshot.processorOwners)for(const auto &p:owner.initial->entries){endpoints.insert(p.endpoint.get());states.insert(p.endpoint->initial().get());}
+    if(snapshot.noteRouting)budget(snapshot.noteRouting->storageBytes());
+    budget(snapshot.observations.capacity()*sizeof(GraphControlPlan::Observation));
+    for(const auto &entry:snapshot.observations){const auto &d=entry.descriptor;budget(d.key.capacity()+d.name.capacity()+d.plugin.capacity()+d.parameters.capacity()*sizeof(PluginParameter));for(const auto &p:d.parameters){budget(p.name.capacity()+p.unitLabel.capacity()+p.choices.capacity()*sizeof(std::string));for(const auto &choice:p.choices)budget(choice.capacity());}}
     for(const auto &p:snapshot.presets)for(const auto &state:{p.state,p.previous})if(state&&state!=p.endpoint->initial()&&states.insert(state.get()).second)budget(state->storageBytes());
     for(const auto &owner:snapshot.runtimeOwners){if(owner.state!=owner.initial&&runtimes.insert(owner.state.get()).second)budget(owner.state->storageBytes());for(const auto &old:owner.predecessors)if(old!=owner.initial&&runtimes.insert(old.get()).second)budget(old->storageBytes());}
+    for(const auto &owner:snapshot.processorOwners){
+      const auto accountSet=[&](const std::shared_ptr<GraphProcessorSet> &set){
+        if(set!=owner.initial&&processorSets.insert(set.get()).second)budget(sizeof(*set)+(set->entries.capacity()+set->retired.capacity())*sizeof(GraphProcessorSet::Entry));
+        for(const auto *entries:{&set->entries,&set->retired})for(const auto &p:*entries)if(endpoints.insert(p.endpoint.get()).second){budget(p.endpoint->storageBytes());if(states.insert(p.endpoint->initial().get()).second)budget(p.endpoint->initial()->storageBytes());}
+      };
+      accountSet(owner.state);for(const auto &old:owner.predecessors)accountSet(old);
+      budget(owner.predecessors.capacity()*sizeof(std::shared_ptr<GraphProcessorSet>));
+    }
+    budget(snapshot.processorOwners.capacity()*sizeof(GraphControlPlan::Processors));
     for(const auto &s:snapshot.scheduling)if(queues.insert(s.queue.get()).second)budget(sizeof(*s.queue));
     budget(sizeof(GraphControlPlan)+snapshot.signal.bytes()+snapshot.updates.capacity()*sizeof(GraphParameterUpdate)+snapshot.presets.capacity()*sizeof(GraphControlPlan::Preset)+snapshot.ranges.capacity()*sizeof(GraphControlPlan::Range)+snapshot.scheduling.capacity()*sizeof(GraphControlPlan::Scheduling)+snapshot.runtimeOwners.capacity()*sizeof(GraphControlPlan::Runtime));
     for(const auto &owner:snapshot.runtimeOwners)budget(owner.predecessors.capacity()*sizeof(std::shared_ptr<SignalRuntime>));
@@ -266,9 +286,13 @@ std::unique_ptr<GraphControlPlan> PluginChain::prepareGraphControls(const Native
   // consume() acknowledges before adoption. Retain every possible old runtime
   // through that boundary even if the producer immediately reuses old slots.
   graphControlPlans_.forEachRetained([&](const GraphControlPlan &snapshot){
+    for(auto &owner:plan->processorOwners)for(const auto &old:snapshot.processorOwners)if(old.target==owner.target&&old.state!=owner.state&&old.state!=owner.initial)
+      if(std::find(owner.predecessors.begin(),owner.predecessors.end(),old.state)==owner.predecessors.end())owner.predecessors.push_back(old.state);
     for(auto &owner:plan->runtimeOwners)for(const auto &old:snapshot.runtimeOwners)if(old.target==owner.target&&old.state!=owner.state&&old.state!=owner.initial)
       if(std::find(owner.predecessors.begin(),owner.predecessors.end(),old.state)==owner.predecessors.end())owner.predecessors.push_back(old.state);
   });
+  size_t processorCount=0;for(const auto &owner:plan->processorOwners)processorCount+=owner.state->entries.size();
+  if(processorCount>256)throw std::invalid_argument("Active song graph exceeds 256 prepared plugin copies");
   account(*plan);
   if(mixerTransition_){const auto &routing=mixerTransition_->controlPlan();auto catalog=routing.catalog;
     for(auto &processor:catalog)for(const auto &[id,tail]:plan->graphTails)if(processor.instance==id)processor.tail=tail;
@@ -294,15 +318,25 @@ std::unique_ptr<GraphControlPlan> PluginChain::prepareGraphControls(const Native
   MixerTransition::Plan storage;prepareRoutingMusical(next,*musical,storage);
   if(storage.processorStorage>64u*1024u*1024u)throw std::invalid_argument("Combined graph automation exceeds the 64 MB control budget");
   if(musical->musical)plan->musicalPublication=std::move(musical);
+  size_t observations=plan->activityBase;for(const auto &p:plan->observations)observations=std::max(observations,size_t(p.token));
+  activity_->processors.reserve(observations);
   return plan;
 }
 bool PluginChain::publishGraphControls(std::unique_ptr<GraphControlPlan> plan) {
-  if(!plan || plan->sourceRevision!=graphControlRevision_)return false;
+  if(!plan || plan->sourceRevision!=graphControlRevision_ || plan->activityBase!=activity_->processors.size())return false;
   auto *musical=static_cast<HostedMixerPlan *>(plan->musicalPublication.get());
-  if(musical && !acceptsRoutingMusical(*musical))return false;
-  const auto *published=plan.get();
+  if((musical && !acceptsRoutingMusical(*musical))||!acceptsNoteRouting(plan->noteRouting))return false;
+  auto *published=plan.get();
   if(!graphControlPlans_.publish(std::move(plan)))return false;
   if(musical)commitRoutingMusical(*musical);
+  commitNoteRouting(published->noteRouting);
+  static_assert(std::is_nothrow_move_constructible_v<ParameterProcessor> && std::is_nothrow_move_assignable_v<ParameterProcessor>);
+  // Catalogue vectors are control-only; capacity was reserved before the
+  // no-fail document commit. No rejected candidate leaves phantom processors.
+  for(auto &entry:published->observations){
+    if(entry.token<=activity_->processors.size())activity_->processors[entry.token-1]=std::move(entry.descriptor);
+    else activity_->processors.push_back(std::move(entry.descriptor));
+  }
   for(const auto &s:published->scheduling)s.state->scheduling=s.queue;
   lastGraphControls_=published;++graphControlRevision_;
   liveGraphTail_.store(published->renderedTail,std::memory_order_relaxed);liveTailRevision_.fetch_add(1,std::memory_order_relaxed);
@@ -311,11 +345,14 @@ bool PluginChain::publishGraphControls(std::unique_ptr<GraphControlPlan> plan) {
 }
 void PluginChain::applyPending() noexcept {
   if(parameterBlockOpen_)return;
+  const auto *recorded=recordedPlans_.consume();
   if(const auto *plan=graphControlPlans_.consume()){
+    if(plan->noteRouting)adoptNoteRouting(*plan->noteRouting);
     for(const auto &s:plan->scheduling)s.state->plugin->adoptScheduling(s.queue.get());
     for(const auto &range:plan->ranges)range.plugin->includeParameterRange(range.parameter,range.minimum,range.maximum);
-    for(const auto &owner:plan->runtimeOwners)if(*owner.target!=owner.state.get()){
-      owner.state->inheritState(**owner.target);*owner.target=owner.state.get();
+    for(const auto &owner:plan->runtimeOwners){
+      if(owner.adopt)owner.adopt(owner.context,owner.state.get(),owner.processors,owner.structural);
+      else if(*owner.target!=owner.state.get()){owner.state->inheritState(**owner.target);*owner.target=owner.state.get();}
     }
     for(const auto &preset:plan->presets)preset.endpoint->adopt(*preset.state);
     for(const auto &[endpoint,bypass]:plan->bypasses)endpoint->bypass(bypass);
@@ -335,6 +372,9 @@ void PluginChain::applyPending() noexcept {
     if(plan->musicalPublication){const auto &musical=*static_cast<const HostedMixerPlan *>(plan->musicalPublication.get());if(musical.musical)activateMusicalPlan(*musical.musical);}
   }
   auto r = read_.load(std::memory_order_relaxed), w = write_.load(std::memory_order_acquire);
+  bool recordedApplied=false;
+  auto adoptRecorded=[&]{for(const auto &lane:recorded->lanes)if(!lane.plugin->adoptRecordedAutomation(lane.timeline,position_))failed_=true;recordedApplied=true;};
+  if(recorded&&int32_t(recorded->parameterFence-r)<=0)adoptRecorded();
   // Bound ordinary UI traffic, but never split a published transaction. The
   // maximum complete batch is the preallocated queue capacity (4096 changes).
   for (unsigned n = 0; r != w;) {
@@ -342,7 +382,11 @@ void PluginChain::applyPending() noexcept {
     if(entry.observed)entry.plugin->editorParameter(change.id,change.value,position_);
     else if (!entry.plugin->appliedParameter(change.id,change.value,position_,{}))
       failed_ = true;
-    ++r;++n;if(n>=128 && entry.last)break;
+    ++r;++n;
+    if(recorded&&!recordedApplied&&r==recorded->parameterFence)adoptRecorded();
+    // A timeline follows every complete manual batch preceding its publication,
+    // even if that prefix exceeds the ordinary per-block UI traffic budget.
+    if(n>=128 && entry.last && (!recorded||recordedApplied))break;
   }
   read_.store(r, std::memory_order_release);
 }
@@ -417,6 +461,7 @@ void PluginChain::delayDry(float *left, float *right, uint32_t frames, uint64_t 
   dryThrough_ = position + frames;
 }
 void PluginChain::endNotes() noexcept {
+  if(noteLedger_)releaseInstrumentNotes(nullptr,position_);
   for (auto &plugin : plugins_)
     if (plugin->isInstrument())
       for (uint8_t ch = 0; ch < 16; ++ch)
@@ -555,7 +600,8 @@ std::unique_ptr<MixerTransition::Plan> PluginChain::prepareMixerRouting(const Na
   }
   prepared->processorStorage=(signalGraph_?signalGraph_->storageBytes():0)+(sampleSignalGraph_?sampleSignalGraph_->storageBytes():0)+
     hosted->processors.size()*(sizeof(MixerProcessor)+RenderOnce<MixerProcessor>::storageBytes());
-  for(const auto &entry:hosted->rack)prepared->processorStorage+=entry->plugin->bypassStorageBytes();
+  for(const auto &entry:hosted->rack)prepared->processorStorage+=entry->plugin->bypassStorageBytes()+entry->plugin->musicalMIDIStorageBytes();
+  if(noteLedger_){hosted->noteRouting=prepareNoteRouting(native,hosted->rack);prepared->processorStorage+=hosted->noteRouting->storageBytes();}
   hosted->song=prepareSongControls(native,*prepared,*hosted);
   hosted->songSpec.songSources=native.signal.songSources;hosted->songSpec.songModulation=native.signal.songModulation;
   prepared->processorStorage+=hosted->songSpec.bytes();
@@ -669,10 +715,10 @@ bool PluginChain::publishRack(std::unique_ptr<RackPlan> &plan) noexcept {
 bool PluginChain::publishMixerRouting(std::unique_ptr<MixerTransition::Plan> &plan) noexcept {
   if(!plan || !plan->processors)return false;
   auto &hosted=*static_cast<HostedMixerPlan *>(plan->processors.get());
-  if(!acceptsRoutingMusical(hosted) || (hosted.pendingPorts && !observation_->canPublishPorts(*hosted.pendingPorts)))return false;
+  if(!acceptsNoteRouting(hosted.noteRouting) || !acceptsRoutingMusical(hosted) || (hosted.pendingPorts && !observation_->canPublishPorts(*hosted.pendingPorts)))return false;
   const bool modulated=!hosted.songSpec.songModulation.empty();
   const bool published=mixerTransition_ && mixerTransition_->publish(plan);
-  if(published){if(hosted.pendingPorts)observation_->publishPorts(*hosted.pendingPorts);commitRoutingMusical(hosted);}
+  if(published){if(hosted.pendingPorts)observation_->publishPorts(*hosted.pendingPorts);commitRoutingMusical(hosted);commitNoteRouting(hosted.noteRouting);}
   if(published && modulated)hasMusicalControls_.store(true,std::memory_order_relaxed);
   return published;
 }

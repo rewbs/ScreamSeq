@@ -14,6 +14,7 @@ extension SignalGraphEditor {
       }
       return
     }
+    if offerBranchedDetach(ids,positions:positions,remove:remove){return}
     var params:[String:Any]=["graph":graphID,"nodes":remove ? expandedProcessingSelection(Set(ids)).sorted():ids,"remove":remove]
     if !positions.isEmpty {params["positions"]=positionObjects(positions)}
     mutate("graph.nodes.detach",params)
@@ -30,6 +31,7 @@ extension SignalGraphEditor {
     guard songConnections.indices.contains(index)else{return nil}
     let action=songConnections[index],kind=action["kind"] as? String ?? ""
     var ref:[String:Any]=["kind":kind]
+    if kind=="note" {return action["implicit"] as? Bool==true ? ["kind":"note","instrument":action["source"] ?? ""]:["kind":"note","route":action["id"] ?? ""]}
     if ["output","plugin-output","modulation","follower-input"].contains(kind) {return action}
     if kind=="send",let source=action["source"] as? String,let i=action["index"] as? Int,
       let sends=buses.first(where:{$0["id"] as? String==source})?["sends"] as? [[String:Any]],sends.indices.contains(i),let target=sends[i]["target"] as? String {

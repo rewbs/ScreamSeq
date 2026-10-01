@@ -8,7 +8,9 @@
 #include <algorithm>
 #include <utility>
 #include <functional>
+#include <optional>
 #include "MixerGraph.hpp"
+#include "NoteRouting.hpp"
 #include "GraphPresentation.hpp"
 #include "MusicalAutomation.hpp"
 
@@ -54,6 +56,8 @@ struct SignalNode {
   double rate = 1, phase = 0, attack = .01, release = .1;
   uint32_t controller = 1;
   std::vector<SignalPatternEnvelope> envelopes;
+  // Suppress every outgoing contribution while clocks, gates and history advance.
+  bool muted = false;
   bool operator==(const SignalNode &) const = default;
 };
 struct SignalAudioEdge {
@@ -156,6 +160,7 @@ struct SignalSongModulation {
   bool operator==(const SignalSongModulation &) const = default;
 };
 struct SignalGraph {
+  NoteRouting noteRouting;
   std::vector<SignalDefinition> library;
   std::vector<SignalAssignment> assignments;
   std::vector<SignalAssignment> instrumentAssignments; // target is stable instrument identity.
@@ -169,7 +174,7 @@ struct SignalGraph {
   std::vector<SignalSongModulation> songModulation;
   SignalPresentation presentation;
   bool operator==(const SignalGraph &) const = default;
-  bool empty() const { return library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty() && groups.empty() && songSources.empty() && songModulation.empty() && presentation.empty(); }
+  bool empty() const { return noteRouting.empty() && library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty() && groups.empty() && songSources.empty() && songModulation.empty() && presentation.empty(); }
   size_t bytes() const;
   // Callers supply stable song identities, not slot numbers.
   void validate(const std::vector<uint64_t> &targets,
@@ -191,7 +196,8 @@ void insertSignalNodes(SignalDefinition &, const std::vector<uint64_t> &, size_t
 // Pull a serial main path out, joining its sole predecessor and successor.
 // Auxiliary/modulation cables survive detachment; remove also deletes nodes
 // and all of their remaining connections. Ambiguity leaves the model intact.
-void detachSignalNodes(SignalDefinition &, const std::vector<uint64_t> &, bool remove = false);
+struct SignalHealPath {std::optional<size_t> incoming,outgoing;};
+void detachSignalNodes(SignalDefinition &, const std::vector<uint64_t> &, bool remove = false,std::optional<SignalHealPath> heal = {});
 // Selection consists of sibling nodes and/or nested boundaries. Both edits
 // preserve every processor, edge and binding and are atomic on rejection.
 void groupSignalNodes(SignalDefinition &, const std::vector<uint64_t> &, uint64_t id, uint64_t parent, std::string name);

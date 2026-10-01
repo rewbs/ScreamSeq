@@ -69,6 +69,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   let inspector=NSView(), inspectorScroll=verticalScrollView()
   let breadcrumbs=NSStackView(), scopeLabel=Theme.label("",size:10,color:Theme.muted)
   let addMenu=GraphAddMenu(),targetMenu=GraphAddMenu()
+  var graphPasteboard=NSPasteboard.general
   var addCatalog=[[String:Any]](), addCatalogLoaded=false, addGeneration=0
   var graphViewStates=[String:GraphViewState](), graphOrigin:String?,graphTarget:String?
   var provisionalLayouts=[String:[String:NSPoint]](), projectionDocument=""
@@ -76,6 +77,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   var onReveal:(()->Void)?
   var deferredGraphCommand:(()->Void)?
   var manualConnection = false
+  var noteActivityPending=false,noteActivityLastRead=0.0
+  let noteControls=GraphNoteRouteControls(frame:.zero)
   let connectionHeading=Theme.label("NEW CONNECTION",size:11,weight:.semibold)
   let connectionHint=Theme.label("Drag between matching ports, or choose endpoints below.",size:11,color:Theme.muted)
   var connectionSection:NSStackView!,connectionForm:NSStackView!,nodeSection:NSStackView!
@@ -122,6 +125,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   var lastTouchedReadGeneration=0
   func showActivity(_ values:[[String:Any]],playing:Bool){
     playbackActivity=values;playbackRunning=playing
+    refreshNoteActivity()
     var active=[String:[String:Any]]()
     for item in values{if item["role"] as? String=="instrument"{active["instrument-graph:\(item["instrument"] as? String ?? ""):\(item["target"] as? String ?? "")"]=item;continue};let role=(item["role"] as? String ?? "").capitalized;active["graph:\(item["target"] as? String ?? ""):\(role):\(item["graph"] as? String ?? "")"]=item}
     for i in canvas.nodes.indices where canvas.nodes[i].id.hasPrefix("graph:") || canvas.nodes[i].id.hasPrefix("instrument-graph:"){
@@ -173,7 +177,11 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     canvas.onConnect = {[weak self] a,b in self?.connect(a,b)}
     canvas.onOpen = {[weak self] id in self?.openNode(id)}
     canvas.onAdd = {[weak self] point in self?.showAdd(at:point)}
-    canvas.onAddConnected = {[weak self] node,port,output,point in self?.showAdd(at:point,connecting:GraphAddConnection(node:node,port:port,output:output))}
+    canvas.onAddConnected = {[weak self] node,port,output,point in
+      guard let self else{return}
+      if port.signalType == .events{self.connectFromSocket(.init(node:node,number:port.number,output:output,modulation:false));return}
+      self.showAdd(at:point,connecting:GraphAddConnection(node:node,port:port,output:output))
+    }
     canvas.onParent = {[weak self] in self?.navigateParent()}
     canvas.onGroup = {[weak self] unpack in if unpack{self?.ungroupSelection()}else{self?.groupSelection()}}
     canvas.onFit = {[weak self] in self?.fit()}
@@ -190,6 +198,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     listenControls.onError={[weak self] message in self?.status.stringValue=message}
     canvas.onListen={[weak self] key in guard let self else{return};self.listenControls.select(key==self.listenControls.port ? nil:key)}
     canvas.onChooseListen={[weak self] in self?.listenSelected()}
+    noteControls.onChange={[weak self] enabled,channel in self?.updateNoteRoute(enabled:enabled,channel:channel)}
+    canvas.onClipboard={[weak self] action in switch action {case "copy":self?.copyGraphSelection();case "cut":self?.copyGraphSelection(cutting:true);case "paste":self?.pasteGraphSelection();default:self?.duplicateGraphSelection()}}
     canvas.onBypass={[weak self] in self?.toggleSelectedBypass()}
     canvas.onStopListening={[weak self] in self?.listenControls.select(nil)}
     canvas.onScope={[weak self] port,spectrum in self?.signalScope.show(port:port,spectrum:spectrum)}
@@ -237,7 +247,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     connectionHint.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     connectionForm=stack(.vertical,[connectionKind,stack(.horizontal,[Theme.label("From",size:11),source]),stack(.horizontal,[Theme.label("To",size:11),destination]),audioPorts,modulationSection],spacing:7)
     connectionForm.stretchAcrossAxis()
-    connectionSection=stack(.vertical,[stack(.horizontal,[connectionHeading,NSView(),ActionButton("New…"){[weak self] in self?.newConnection()}]),stack(.horizontal,[connectButton,updateConnectionButton,removeConnectionButton]),connection,connectionHint,openConnectionOwnerButton,connectionForm],spacing:7)
+    connectionSection=stack(.vertical,[stack(.horizontal,[connectionHeading,NSView(),ActionButton("New…"){[weak self] in self?.newConnection()}]),stack(.horizontal,[connectButton,updateConnectionButton,removeConnectionButton]),connection,connectionHint,openConnectionOwnerButton,noteControls,connectionForm],spacing:7)
     connectionSection.stretchAcrossAxis()
     nodeSection=stack(.vertical,[detail,pluginControls,rackControls,name,
       useDetector,busControls,busSection,sourceSection],spacing:7)
@@ -278,6 +288,12 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     menu.addItem(GraphCommand.scope.item("Scope selected signal",key:"q"){[weak self] in self?.openScope(spectrum:false)})
     menu.addItem(GraphCommand.spectrum.item("Spectrum of selected signal",key:"q",modifiers:.shift){[weak self] in self?.openScope(spectrum:true)})
     menu.addItem(GraphCommand.openPlugin.item("Open plugin interface",key:"\r"){[weak self] in self?.openSelectedPlugin()})
+    menu.addItem(GraphCommand.copySelection.item("Copy nodes",key:"c",modifiers:.command,reason:graphClipboardReason){[weak self] in self?.copyGraphSelection()})
+    menu.addItem(GraphCommand.cutSelection.item("Cut nodes",key:"x",modifiers:.command,reason:graphClipboardReason){[weak self] in self?.copyGraphSelection(cutting:true)})
+    menu.addItem(GraphCommand.pasteSelection.item("Paste nodes",key:"v",modifiers:.command,reason:graphClipboardReason){[weak self] in self?.pasteGraphSelection()})
+    menu.addItem(GraphCommand.duplicateSelection.item("Duplicate node(s)",key:"d",modifiers:.command){[weak self] in self?.duplicateGraphSelection()})
+    menu.addItem(GraphCommand.presetSave.item("Save plugin preset…"){[weak self] in self?.showGraphPreset(saving:true)})
+    menu.addItem(GraphCommand.presetLoad.item("Load plugin preset…"){[weak self] in self?.showGraphPreset(saving:false)})
     appendParameterCommands(to:menu)
     appendPresentationCommands(to:menu)
     menu.addItem(GraphCommand.bypass.item(bypassActionTitle,key:"m",reason:bypassUnavailableReason){[weak self] in self?.toggleSelectedBypass()})
@@ -294,6 +310,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     menu.addItem(GraphCommand.exportGroup.item("Save to subgraph library…",reason:selectedProcessingGroup==nil ? "Select a processing group to save an independent copy":nil){[weak self] in self?.exportProcessingGroup()})
     let clone=GraphCommand.cloneGroup.item("Clone subgraph"){[weak self] in self?.withProcessingGroup(title:"Clone processing group",createThenAct:false){[weak self] id in self?.mutate("graph.clone",["graph":id])}}
     clone.toolTip="Choose the shared definition to make an independent copy";menu.addItem(clone)
+    menu.addItem(GraphCommand.restoreNoteAssignment.item("Restore assigned instrument notes…",reason:graphID != nil ? "Assigned note routing lives in the Song graph":nil){[weak self] in self?.restoreNoteAssignment()})
+    menu.addItem(GraphCommand.makeIndependent.item("Make use independent…"){[weak self] in self?.makeIndependentUse()})
     let sources=NSMenu(title:"Add modulation source");sources.autoenablesItems=false
     for (label,kind,command) in [("Pattern envelope","automation",GraphCommand.sourceAutomation),("LFO","lfo",.sourceLFO),("Audio follower","follower",.sourceFollower),("Random","random",.sourceRandom),("Note envelope","note-envelope",.sourceNote),("MIDI controller","midi",.sourceMIDI),("Amount","amount",.sourceAmount)] {
       let item=command.item(label){[weak self] in self?.nodeKind.selectItem(withTitle:kind);self?.addSource()}

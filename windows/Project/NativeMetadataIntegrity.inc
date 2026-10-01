@@ -59,6 +59,8 @@ void validateMetadataReferences(const NativeSong &n) {
   }
   for(const auto &group:n.signal.groups)identity(group.id);
   for(const auto &source:n.signal.songSources)identity(source.node.id);
+  for(const auto &route:n.signal.noteRouting.routes)identity(route.id);
+  n.signal.noteRouting.validate(trackIDs,std::vector<uint64_t>(instruments.begin(),instruments.end()));
   for (const auto &d : n.signal.library) { identity(d.id); for (const auto &node : d.nodes) identity(node.id); for(const auto &group:d.groups)identity(group.id); }
   std::vector<uint64_t> busIDs; for (const auto &b : n.mixer.buses) busIDs.push_back(b.id);
   if(!n.mixer.active()) {

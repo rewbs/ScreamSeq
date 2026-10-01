@@ -47,7 +47,7 @@ PluginOperations::PluginOperations(Tracker::Document &d,Project::ProjectState &p
 PluginOperations::~PluginOperations()=default;
 std::vector<GraphRackRecord> PluginOperations::graphRack() const {
   std::vector<GraphRackRecord> result;const auto states=projectPluginStates(project_,false);
-  for(size_t i=0;i<states.size();++i){const auto &s=states[i];GraphRackRecord item{descriptor(s.descriptor),s.instanceID,uint32_t(i),s.bypass};for(auto a:pluginAssignments(s))item.instruments.push_back(uint16_t(a.instrument));result.push_back(std::move(item));}
+  for(size_t i=0;i<states.size();++i){const auto &s=states[i];GraphRackRecord item{descriptor(s.descriptor),s.instanceID,uint32_t(i),s.bypass};item.assignments=pluginAssignments(s);for(auto a:item.assignments)item.instruments.push_back(uint16_t(a.instrument));result.push_back(std::move(item));}
   return result;
 }
 GraphRackClone PluginOperations::cloneRackSlot(uint32_t index) {
@@ -63,8 +63,8 @@ std::vector<PluginAudioBus> PluginOperations::audioBuses(size_t index,bool requi
 std::vector<PluginParameter> PluginOperations::parameterMetadata(const std::string &identity) {
   return editor(slot({{"plugin",identity}})).parameters();
 }
-std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.library.get","plugin.path.get","graph.plugin.path.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","automation.get","graph.plugin.get"};}
-std::vector<std::string> PluginOperations::writes(){return {"automation.replaceLane","plugin.add","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
+std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.library.get","plugin.path.get","graph.plugin.path.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","automation.get","automation.recorded.get","graph.plugin.get"};}
+std::vector<std::string> PluginOperations::writes(){return {"automation.replaceLane","automation.recorded.edit","plugin.add","plugin.duplicate","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.preset.save","graph.plugin.preset.load","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
 #include "GraphPluginOperations.inc"
 size_t PluginOperations::slot(const Json &p) const {
   const auto &rack=project_.preserved.at("plugins");
@@ -123,11 +123,14 @@ void PluginOperations::commit(Json plugins,Json automation,bool keepEditors,bool
   if(nativeChange){native->validate(document_.song());historyGroups_.reserve(historyGroups_.size()+1);}
   auto before=snapshot();need(before.bytes<=128u*1024u*1024u,"Plugin Undo state exceeds 128 MiB");
   const auto bypass=nativeChange?std::optional<std::pair<size_t,bool>>{}:bypassOnly(plugins,automation);
+  const bool recordedOnly=!nativeChange&&plugins==project_.preserved.at("plugins")&&automation!=project_.preserved.at("automation");
+  auto recorded=recordedOnly&&prepareRecordedPublication_?prepareRecordedPublication_(projectAbsoluteAutomation(candidate)):std::function<void()>{};
+  auto rackPublication=!recorded&&!bypass&&!(parameterOnly&&liveParameters_)&&prepareRackPublication_?prepareRackPublication_(projectPluginStates(candidate),projectAbsoluteAutomation(candidate),nativeChange?*native:document_.native()):std::function<void()>{};
   const auto first=document_.historySequence()+1;
   undo_.push_back(std::move(before)); // Allocate history before stopping or publishing.
   auto publish=[&]{
-    if(bypass)liveBypass_(bypass->first,bypass->second);else if(parameterOnly && liveParameters_) {if(!changes.empty())liveParameters_(changes);}else if(stop_)stop_();
-    if(!keepEditors&&!bypass){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
+    if(recorded)recorded();else if(bypass)liveBypass_(bypass->first,bypass->second);else if(parameterOnly && liveParameters_) {if(!changes.empty())liveParameters_(changes);}else if(rackPublication)rackPublication();else if(stop_)stop_();
+    if(!keepEditors&&!bypass&&!recordedOnly){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
     project_.preserved.swap(candidate.preserved);
     ++project_.pluginRevision;redo_.clear();
     undo_.back().sequence=document_.externalHistoryEdit();knownHistorySequence_=document_.historySequence();
@@ -137,6 +140,17 @@ void PluginOperations::commit(Json plugins,Json automation,bool keepEditors,bool
   if(nativeChange){historyGroups_.emplace_back(first,document_.historySequence());knownHistorySequence_=document_.historySequence();}
   trimHistory();
 }
+std::optional<std::vector<ParameterChange>> PluginOperations::parameterOnlyChanges(const Json &plugins,const Json &automation) {
+  if(!liveParameters_||automation!=project_.preserved.at("automation")||plugins.size()!=project_.preserved.at("plugins").size())return {};
+  auto candidate=project_;candidate.preserved["plugins"]=plugins;const auto before=projectPluginStates(project_),after=projectPluginStates(candidate);std::vector<ParameterChange> changes;
+  try{for(size_t i=0;i<before.size();++i){auto comparable=before[i];comparable.state=after[i].state;if(comparable!=after[i])return {};if(before[i].state==after[i].state)continue;
+    NativePlugin probe(before[i],48000),target(after[i],48000);const auto current=probe.parameters();
+    for(const auto &p:target.parameters()){const auto old=std::find_if(current.begin(),current.end(),[&](const auto &v){return v.id==p.id;});if(old==current.end())return {};if(p.value==old->value)continue;
+      if(!p.writable||!old->writable||!probe.parameter(p.id,p.value))return {};changes.push_back({uint32_t(i),p.id,p.value,0});}
+    if(probe.state().state!=after[i].state)return {};
+  }}catch(const std::exception &){return {};}
+  return changes;
+}
 void PluginOperations::restoreHistory(bool redo,bool alreadyStopped) {
   auto &from=redo?redo_:undo_;auto &to=redo?undo_:redo_;
   if(from.empty())return;
@@ -145,14 +159,19 @@ void PluginOperations::restoreHistory(bool redo,bool alreadyStopped) {
   validatePluginCapacity(projectPluginStates(candidate),document_.native().mixer.buses.size());(void)projectAbsoluteAutomation(candidate);
   auto before=snapshot();before.sequence=from.back().sequence;
   const auto bypass=alreadyStopped?std::optional<std::pair<size_t,bool>>{}:bypassOnly(from.back().plugins,from.back().automation);
+  const bool recordedOnly=from.back().plugins==project_.preserved.at("plugins")&&from.back().automation!=project_.preserved.at("automation");
+  auto recorded=!alreadyStopped&&recordedOnly&&prepareRecordedPublication_?prepareRecordedPublication_(projectAbsoluteAutomation(candidate)):std::function<void()>{};
+  auto parameters=!alreadyStopped&&!recorded&&!bypass?parameterOnlyChanges(from.back().plugins,from.back().automation):std::optional<std::vector<ParameterChange>>{};
+  auto rackPublication=!alreadyStopped&&!recorded&&!bypass&&!parameters&&prepareRackPublication_?prepareRackPublication_(projectPluginStates(candidate),projectAbsoluteAutomation(candidate),document_.native()):std::function<void()>{};
   to.push_back(std::move(before));
-  try{if(bypass)liveBypass_(bypass->first,bypass->second);else if(!alreadyStopped&&stop_)stop_();}catch(...){to.pop_back();throw;}
-  if(!bypass){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
+  try{if(recorded)recorded();else if(bypass)liveBypass_(bypass->first,bypass->second);else if(parameters)liveParameters_(*parameters);else if(rackPublication)rackPublication();else if(!alreadyStopped&&stop_)stop_();}catch(...){to.pop_back();throw;}
+  if(!bypass&&!recordedOnly){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
   project_.preserved.swap(candidate.preserved);
   from.pop_back();++project_.pluginRevision;
 }
 void PluginOperations::history(bool redo,const std::function<void(bool,bool)> &documentHistory,
-    const std::function<void(const NativeSong &)> &validateNative) {
+    const std::function<void(const NativeSong &)> &validateNative,
+    const std::function<void(bool,const std::function<void()> &)> &liveDocumentHistory) {
   synchronizeHistory();const auto first=historyHead(redo);if(!first)return;
   auto range=std::pair{first,first};for(const auto &group:historyGroups_)if(first>=group.first&&first<=group.second){range=group;break;}
   const bool grouped=range.first!=range.second;
@@ -164,6 +183,7 @@ void PluginOperations::history(bool redo,const std::function<void(bool,bool)> &d
     auto candidate=project_;candidate.preserved["plugins"]=plugins.back().plugins;candidate.preserved["automation"]=plugins.back().automation;
     validatePluginCapacity(projectPluginStates(candidate),native.mixer.buses.size());(void)projectAbsoluteAutomation(candidate);
     Project::invalidateRecoveryTake(candidate);
+    auto rackPublication=prepareRackPublication_&&liveDocumentHistory?prepareRackPublication_(projectPluginStates(candidate),projectAbsoluteAutomation(candidate),native):std::function<void()>{};
     auto before=snapshot();before.sequence=plugins.back().sequence;destination.push_back(std::move(before));
     const auto beforeRevision=document_.revision;
     std::exception_ptr completionFailure;
@@ -171,7 +191,7 @@ void PluginOperations::history(bool redo,const std::function<void(bool,bool)> &d
     // Native history is applied first in BOTH directions; Document stages its
     // own allocations before mutation. The remaining rack publication is a
     // no-throw swap, so a failed stop/native restore cannot leave half an edit.
-    try{if(stop_)stop_();documentHistory(redo,true);}catch(...){
+    try{if(rackPublication)liveDocumentHistory(redo,rackPublication);else {if(stop_)stop_();documentHistory(redo,true);}}catch(...){
       if(document_.revision==beforeRevision){destination.pop_back();throw;}
       // Defensive contract for other host callers: once native history moved,
       // finish the prepared rack publication even if their completion failed.
@@ -265,7 +285,7 @@ bool PluginOperations::flushEditors(bool force) {
 #include "PluginPathOperations.inc"
 #include "AbsoluteAutomation.inc"
 Json PluginOperations::invoke(const std::string &method,const Json &p) {
-  if(method=="automation.get"||method=="automation.replaceLane")return invokeAutomation(method,p);
+  if(method=="automation.get"||method=="automation.replaceLane"||method=="automation.recorded.get"||method=="automation.recorded.edit")return invokeAutomation(method,p);
   if(method.starts_with("plugin.path."))return invokePath(method,p);
   if(method=="plugin.preset.inspect") {keys(p,{"path"});return Plugins::PluginPreset::summary(Plugins::PluginPreset::read(text(field(p,"path"))));}
   if(method=="plugin.discover") {
@@ -286,6 +306,21 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
   if(method=="history.undo"||method=="history.redo") {
     // The document owner dispatches both domain aliases through history().
     throw Api::ApiError(-32601,"Use the unified document history owner");
+  }
+  if(method=="plugin.duplicate") {
+    keys(p,{"plugin","position","dryRun"});need(rack.size()<maximumNativePlugins,"Plugin rack is full");
+    const auto index=slot(p);auto state=projectPluginStates(project_).at(index);
+    state.instanceID=identity();setPluginAssignments(state,{});
+    auto next=document_.native();
+    if(!state.descriptor.instrument&&state.descriptor.type!=audioUnitMusicDeviceType)next.mixer.detached.push_back(state.instanceID);
+    if(p.contains("position")){const auto &position=p.at("position");keys(position,{"x","y"});next.signal.layout["plugin:"+state.instanceID]={number(field(position,"x"),0,100000),number(field(position,"y"),0,100000)};}
+    // The saved editor baseline excludes playback automation and already owns
+    // the configured manual values. Never capture a playing processor here.
+    NativePlugin probe(state,48000);
+    state.state=probe.state().state;next.validate(document_.song());const auto destination=rack.size();rack.push_back(record(state));
+    auto candidate=project_;candidate.preserved["plugins"]=rack;validatePluginCapacity(projectPluginStates(candidate),next.mixer.buses.size());
+    if(!dry)commit(std::move(rack),std::move(automation),false,false,{},&next);
+    return {{"slot",destination},{"plugin",state.instanceID},{"detached",!state.descriptor.instrument&&state.descriptor.type!=audioUnitMusicDeviceType},{"dryRun",dry}};
   }
   if(method=="plugin.add") {
     keys(p,{"descriptor","target","before","position","parent","detached","dryRun"});need(rack.size()<maximumNativePlugins,"Plugin rack is full");
@@ -360,7 +395,7 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     commit(std::move(rack),std::move(automation));return result;
   }
   if(method=="plugin.parameters.get"){keys(p,{"slot","plugin"});return parameters(editor(index));}
-  if(method=="plugin.state.get"){keys(p,{"slot"});return {{"descriptor",descriptor(state.descriptor)},{"data",base64(state.state)},{"kind","saved-baseline"}};}
+  if(method=="plugin.state.get"){keys(p,{"slot","plugin"});return {{"descriptor",descriptor(state.descriptor)},{"data",base64(state.state)},{"kind","saved-baseline"}};}
   if(method=="plugin.buses.get"){keys(p,{"slot","plugin"});return {{"plugin",state.instanceID},{"buses",buses(editor(index))}};}
   if(method=="plugin.editor.open"||method=="plugin.editor.close") {
     keys(p,{"slot"});auto &plugin=editor(index);if(method=="plugin.editor.open"){plugin.showEditor();openEditors_.insert(state.instanceID);}else {flushEditors(true);plugin.closeEditor();openEditors_.erase(state.instanceID);}return {{"open",plugin.editorOpen()},{"plugin",state.instanceID}};

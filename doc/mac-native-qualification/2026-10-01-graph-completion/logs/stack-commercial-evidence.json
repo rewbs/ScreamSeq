@@ -1,0 +1,10 @@
+{
+  "scope": "Follow-up to ten-suite checkpoint: ledger scratch allocation and 64KiB-stack regression; routed AU/VST3; duplicate instrument history; opt-in commercial offline checks. Not a device qualification.",
+  "binaries": {
+    "note-routing-tests": "43394dee88c1f85507978fd1ce7a54252b410b2884ac7849ed1648783749be63",
+    "native-note-routing-tests": "b0ffb762f489b57c33cf67340ddd9ad9a4dc09c9445e7d06a9c1512c3ee60bf7",
+    "pattern-pitch-tests": "c337268af5b921d25fd2e20c667376e6a9b5f084c5a19af3d9beea0f026688c3",
+    "signal-graph-session-tests": "f44758f5cf3f938fba5ecbad9756ef77665dc9a5f36edff00aed9fa1a387e7a2",
+    "commercial-graph-qualification": "d69ca1c9f21a22114046ac44b92493ee9fc9b0a0d9a46695800d5693e505ca42"
+  }
+}

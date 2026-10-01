@@ -2,7 +2,7 @@
 #include "soundlib/ModInstrument.h"
 namespace Tracker {
 PatternPitchRuntime::PatternPitchRuntime(const NativeSong &native,OpenMPT::CSoundFile &song,
- const std::vector<std::shared_ptr<NativePlugin>> &plugins,const std::vector<bool> &bypass) {
+ const std::vector<std::shared_ptr<NativePlugin>> &plugins,const std::vector<bool> &bypass,PluginChain *noteHost):noteHost_(noteHost) {
   std::map<uint16_t,size_t> targets;
   for(const auto &command:native.performance.commands) {
     if(command.kind!=PatternCommandKind::PitchSet&&command.kind!=PatternCommandKind::PitchSlide)continue;
@@ -43,6 +43,8 @@ bool PatternPitchRuntime::render(OpenMPT::CSoundFile &song,uint32_t count,uint64
     const bool muted=channel.dwFlags[CHN_MUTE|CHN_SYNCMUTE];
     if(muted){target.current=target.curve.at(begin);target.curve={target.current,target.current,begin,begin};}
     const auto instrument=std::find_if(instruments_.begin(),instruments_.end(),[&](const auto &v){return v.instrument==channel.pModInstrument;});
+    NoteSource routedSource;uint8_t routedChannel=0;
+    const bool routed=noteHost_&&noteHost_->patternPitchSource(song,target.channel,routedSource,routedChannel);
     int previousWheel=-1;
     for(uint32_t frame=0;frame<count;++frame) {
       const auto position=musical(frame);
@@ -52,12 +54,13 @@ bool PatternPitchRuntime::render(OpenMPT::CSoundFile &song,uint32_t count,uint64
       }
       const auto semitones=target.curve.at(position);
       target.ratios[frame]=std::exp2(semitones/12.);
-      if(target.used&&!muted&&instrument!=instruments_.end()) {
+      if(target.used&&!muted&&(noteHost_?routed:instrument!=instruments_.end())) {
         const auto depth=target.pitchRange;
         const int wheel=int(std::lround(std::clamp(semitones/depth,-1.,1.)*8192))+8192;
         if(wheel!=previousWheel) {
           const auto value=std::clamp(wheel,0,16383);
-          if(!instrument->plugin->scheduleMIDI(uint8_t(0xe0|instrument->midiChannel),uint8_t(value&127),uint8_t(value>>7),absoluteFrame+frame))return false;
+          if(noteHost_){if(!noteHost_->schedulePitchMIDI(routedSource,routedChannel,uint16_t(value),absoluteFrame+frame))return false;}
+          else if(!instrument->plugin->scheduleMIDI(uint8_t(0xe0|instrument->midiChannel),uint8_t(value&127),uint8_t(value>>7),absoluteFrame+frame))return false;
           previousWheel=wheel;
         }
       }

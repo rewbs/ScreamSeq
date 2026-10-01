@@ -46,13 +46,29 @@ only available rack-provider evidence. The audio-test host report includes the
 same `audio.faultDetails`. No vendor calls or serialization occur on rendering.
 
 The application now implements Mac-compatible `automation.get` and
-`automation.replaceLane` for absolute song parameter points. Timestamps are
+`automation.replaceLane` for absolute song parameter points, plus stable-ID
+`automation.recorded.get` and `automation.recorded.edit` point operations.
+The latter take `plugin` and `parameter`; edit takes `frame` with `value`, an
+optional `newFrame`, or `remove:true`, and supports `dryRun`. Timestamps are
 48 kHz frames, values are native parameter units, and replacement uses plugin
-Undo. The native Song automation window opens from the command palette or the
+Undo. During playback, point edits and their Undo/Redo prepare a bounded timeline
+snapshot and publish it at the next render boundary. A failed preparation or full
+publication queue preserves both playback and document history. The native Song automation window opens from the command palette or the
 pattern-curve editor. `workspace.get.absoluteAutomation` reports captured target,
 revision, draft, viewport and bounded draw geometry; its point preview truncates
 at 4096 while `pointCount` reports the complete lane. Use paginated
 `automation.get` to read every point. See `../ABSOLUTE_AUTOMATION_PROGRESS.md`.
+
+`graph.note.connect/update/disconnect/restoreAssignment` edits plugin-instrument
+note cables with stable source and destination identities. The write result's
+`route` is the cable ID. An instrument connect can suppress its implicit
+assignment in the same transaction; disconnecting an implicit assignment keeps
+it suppressed until restored. `graph.get.noteRouting` persists the cables and
+suppressed assignment IDs. Each plugin also exposes
+`assignments:[{instrument,instrumentID,channel}]` alongside its instrument indexes.
+New destinations receive the next note-on; removing a destination releases notes
+owned by its cables. These APIs use expectedRevision, dryRun, Undo and native
+project persistence, and reject unavailable or non-instrument destinations.
 
 `workspace.get.sampleDetail` exposes the detailed sample editor's captured
 identity/revision, draft points, selection, viewport, channels, bounded waveform
@@ -705,3 +721,32 @@ not the source's output meter. Gain and tap metadata describe the adopted plan,
 including while another plan is preparing. Shared host tests cover route PCM;
 the Windows JSON adapter remains subject to a native Windows execution check.
 Reusable recipe internals are outside this initial route-observation slice.
+
+`graph.note.activity {}` reads actual prepared note delivery counters without a
+revision or musical edit. It reports the playback `engine` identity, device
+`sampleRate`, accepted `requestedGeneration`, audio `adoptedGeneration`, `pending`,
+`available`, `active`, and `fresh`. An unavailable host has no engine or route
+records. Only previously adopted route incarnations appear in `routes`:
+`token` identifies the cable/destination incarnation, `copy` identifies the
+prepared destination, `route` is a native ID (null for an implicit assignment),
+and `sourceKind`, `source`, `plugin`, `midiChannel`, `implicit` identify its cable.
+`current` means the latest accepted plan contains it; `member` means the audio
+plan contains it. During pending adoption these can differ. Retired records
+retain their counters until their plans and held ownership retire, then disappear.
+A replacement token starts a new counter history; missing data is never silence.
+
+Each record exposes accepted `events`, `noteOns`, `noteOffs`, `failures`,
+`routingReleases`, `lastFrame`, `heldNotes`, and `heldPedals`. `lastFrame` uses the
+engine event/sub-block frame, including scheduled controller frame offsets.
+Removing one of several owners increments `routingReleases` and releases its
+ownership without inventing a physical note-off. Use event-count deltas for
+activity pulses. These are note/MIDI counters, not audio-level meters. Snapshots
+are control-thread reads of lock-free counters; `fresh:false` means an adoption
+crossed the read and membership should be refreshed. Up to 4,096 retained route
+incarnations are bounded and reclaimed on the control producer.
+
+`plugin.duplicate {plugin, position?:{x,y}, dryRun?}` copies the saved manual
+preset, bypass and auxiliary configuration into a fresh plugin identity. The
+result includes `slot`, `plugin`, `detached`, and `dryRun`. It copies no instrument
+assignments, recorded points, or song cables; effect copies start detached. The
+rack and optional canvas position join one unified history operation and persist.

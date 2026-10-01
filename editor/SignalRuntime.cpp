@@ -32,6 +32,7 @@ void SignalRuntime::Edge::add(uint32_t count) noexcept {
 SignalRuntime::SignalRuntime(SignalDefinition d,SignalPlan p,double rate,std::span<const SignalParameterInfo> parameters):definition_(std::move(d)),plan_(std::move(p)),sampleRate_(rate) {
   if(!std::isfinite(rate)||rate<8000||rate>384000)throw std::invalid_argument("Invalid signal graph sample rate");
   for(auto &node:definition_.nodes)std::sort(node.envelopes.begin(),node.envelopes.end(),[](const auto &a,const auto &b){return a.pattern<b.pattern;});
+  watchesNotes_=std::any_of(definition_.nodes.begin(),definition_.nodes.end(),[](const auto &n){return n.kind==SignalNodeKind::NoteEnvelope;});
   nodes_.resize(definition_.nodes.size());
   for(size_t i=0;i<nodes_.size();++i){port(nodes_[i].inputs,0);port(nodes_[i].outputs,0);nodes_[i].attackCoefficient=std::exp(-1/(rate*definition_.nodes[i].attack));nodes_[i].releaseCoefficient=std::exp(-1/(rate*definition_.nodes[i].release));}
   for(size_t i=0;i<definition_.audio.size();++i){const auto &e=plan_.edges[i];auto &spec=definition_.audio[i];
@@ -167,15 +168,15 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
         for(auto &t:targets_)if(t.node==index){
           if(controls_->modulation[t.sources.front().second].quantized){
             if(!(t.step>0)||count>quantum)return false;
-            for(uint32_t f=0;f<count;++f){double value=t.base;for(auto [sourceIndex,edge]:t.sources){const auto &m=controls_->modulation[edge];value+=m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].sampled[f];}value=std::clamp(value,0.,1.);t.sampled[f]=std::clamp(std::round(value/t.step)*t.step,0.,1.);}
-            if(cb.contribution){const auto at=position+offset+count-1;cb.contribution(cb.context,spec.id,t.parameter,0,t.base,at);for(auto [sourceIndex,edge]:t.sources){const auto &m=controls_->modulation[edge];cb.contribution(cb.context,spec.id,t.parameter,m.source,m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].sampled[count-1],at);}}
+            for(uint32_t f=0;f<count;++f){double value=t.base;for(auto [sourceIndex,edge]:t.sources){const auto &m=controls_->modulation[edge];value+=controls_->nodes[sourceIndex].muted?0:m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].sampled[f];}value=std::clamp(value,0.,1.);t.sampled[f]=std::clamp(std::round(value/t.step)*t.step,0.,1.);}
+            if(cb.contribution){const auto at=position+offset+count-1;cb.contribution(cb.context,spec.id,t.parameter,0,t.base,at);for(auto [sourceIndex,edge]:t.sources){const auto &m=controls_->modulation[edge];cb.contribution(cb.context,spec.id,t.parameter,m.source,controls_->nodes[sourceIndex].muted?0:m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].sampled[count-1],at);}}
             if(!cb.parameterSamples||!cb.parameterSamples(cb.context,spec.id,t.parameter,{t.sampled.data(),count},position+offset))return false;
             continue;
           }
           double first=t.base,last=t.base;
           if(cb.contribution)cb.contribution(cb.context,spec.id,t.parameter,0,t.base,position+offset);
-          for(auto [sourceIndex,edge]:t.sources){const auto &m=controls_->modulation[edge];first+=m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].first;last+=m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].last;
-            if(cb.contribution)cb.contribution(cb.context,spec.id,t.parameter,m.source,m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].first,position+offset);
+          for(auto [sourceIndex,edge]:t.sources){const auto &m=controls_->modulation[edge];first+=controls_->nodes[sourceIndex].muted?0:m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].first;last+=controls_->nodes[sourceIndex].muted?0:m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].last;
+            if(cb.contribution)cb.contribution(cb.context,spec.id,t.parameter,m.source,controls_->nodes[sourceIndex].muted?0:m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].first,position+offset);
           }
           if(!cb.parameter||!cb.parameter(cb.context,spec.id,t.parameter,std::clamp(first,0.,1.),std::clamp(last,0.,1.),position+offset,count-1))return false;
         }

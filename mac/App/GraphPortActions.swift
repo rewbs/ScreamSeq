@@ -11,7 +11,7 @@ struct GraphPortChoice {
     let type:String
     switch port.signalType {case .audio:type="Audio";case .sidechain:type="Sidechain audio";case .control:type="Control";case .parameter:type="Parameter";case .events:type="Note events"}
     let context=[owner,node.detail.trimmingCharacters(in:.whitespacesAndNewlines)].compactMap{$0}.filter{!$0.isEmpty && $0 != node.title}
-    let socket=key.modulation ? "\(type) \(key.output ? "output":"input")":"\(type) \(key.output ? "output":"input") \(key.number)"
+    let socket=(key.modulation || port.signalType == .events) ? "\(type) \(key.output ? "output":"input")":"\(type) \(key.output ? "output":"input") \(key.number)"
     return (context+[socket]+(port.channels.map{["\($0) ch"]} ?? [])).joined(separator:" · ")
   }
   var keywords:String {"\(node.title) \(node.detail) \(detail) \(key.node) \(key.number)"}
@@ -22,6 +22,7 @@ struct GraphPortChoice {
 }
 struct GraphCableLocation:Equatable {
   let source:String,target:String,output:UInt32,input:UInt32,modulation:Bool
+  var connection=""
 }
 struct GraphPortReturn {
   let document:String,graph:String?,group:String?,view:GraphViewState,revealed:Set<String>,cable:GraphCableLocation?
@@ -59,13 +60,17 @@ extension SignalGraphEditor {
   func portUnavailable(_ choice:GraphPortChoice)->String? {
     if let reason=choice.port.unavailable{return reason}
     if choice.node.kind=="provenance" {return "Reference source: edit its existing pattern or automation lane"}
-    if choice.port.signalType == .events{return "Note-event routing is not available yet"}
+    if choice.port.signalType == .events,graphID != nil{return "Plugin-instrument note routing lives in the Song graph"}
     return nil
   }
   func portPairUnavailable(_ first:GraphPortChoice,_ second:GraphPortChoice)->String? {
     if let reason=portUnavailable(first) ?? portUnavailable(second){return reason}
     guard first.key.output != second.key.output else{return "Choose an input and an output"}
     let a=first.key.output ? first:second,b=first.key.output ? second:first
+    if a.port.signalType == .events || b.port.signalType == .events {
+      guard a.port.signalType == .events,b.port.signalType == .events else{return "Notes connect only to Notes sockets; audio and control remain separate"}
+      return noteSource(canonicalPort(a.key).node) != nil && noteTarget(canonicalPort(b.key).node) != nil ? nil:"Choose a channel or plugin-instrument note source and a plugin instrument destination"
+    }
     if canonicalPort(a.key).node==canonicalPort(b.key).node{return "A processor cannot connect to itself"}
     if a.key.modulation==b.key.modulation{
       if graphID==nil,!a.key.modulation {
@@ -146,12 +151,14 @@ extension SignalGraphEditor {
   func addAtSocket(_ key:GraphBoundaryPort) {
     guard let choice=portChoice(key)else{return}
     if let reason=addSocketUnavailable(choice){status.stringValue=reason;return}
+    if choice.port.signalType == .events{connectFromSocket(key);return}
     let real=canonicalPort(key);revealPorts([key]);selectedID=key.node;canvas.selected=key.node;canvas.selectedEdge=nil
     var port=choice.port;port.number=real.number
     showAdd(connecting:GraphAddConnection(node:real.node,port:port,output:key.output))
   }
   func addSocketUnavailable(_ choice:GraphPortChoice)->String? {
     if let reason=portUnavailable(choice){return reason}
+    if choice.port.signalType == .events{return nil}
     if choice.key.modulation && choice.key.output{return "Expose a processor parameter and choose Connect to…"}
     if graphID==nil,!choice.key.modulation,!choice.key.output{return "Add from the upstream audio output, or open a reusable subgraph to insert before this socket"}
     if graphID==nil,!choice.key.modulation,choice.key.output,choice.key.number>0{return nil} // A follower accepts an auxiliary tap.
@@ -174,7 +181,7 @@ extension SignalGraphEditor {
   }
   func cableLocation(_ edge:SignalCanvasEdge)->GraphCableLocation {
     let a=realPort(edge.source,edge.output,output:true,modulation:edge.modulation),b=realPort(edge.target,edge.input,output:false,modulation:edge.modulation)
-    return .init(source:a.node,target:b.node,output:a.number,input:b.number,modulation:edge.modulation)
+    return .init(source:a.node,target:b.node,output:a.number,input:b.number,modulation:edge.modulation,connection:edge.connection)
   }
   func rememberPortReturn() {
     portReturn=GraphPortReturn(document:projectionDocument,graph:graphID,group:processingGroupID,view:GraphViewState(origin:scroll.contentView.bounds.origin,scale:scroll.magnification,selection:selectedID,filter:filterID,search:nodeSearch.stringValue,category:nodeCategory.indexOfSelectedItem),revealed:graphFilterState.revealed,cable:canvas.selectedEdge.flatMap{canvas.edges.indices.contains($0) ? cableLocation(canvas.edges[$0]):nil})

@@ -92,5 +92,7 @@ Json encodeNativeMetadata(const Tracker::NativeSong &n) {
   return encoded;
 }
 std::string validatedNativeText(const Json &value,size_t maximum) {return text(value,maximum);}
+Json encodeSignalDefinitionMetadata(const Tracker::SignalDefinition &d) {return definition(d);}
+Tracker::SignalDefinition decodeSignalDefinitionMetadata(const Json &value) {auto d=decodeDefinition(value,17);Tracker::compileSignal(d);return d;}
 Json encodeMixerMetadata(const Tracker::MixerGraph &graph) {return mixer(graph);}
 } // namespace ScreamSeq::Project

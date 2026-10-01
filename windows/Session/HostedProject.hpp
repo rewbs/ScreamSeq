@@ -12,6 +12,7 @@ struct HostedPlaybackSettings {
   uint32_t order=0;
   Tracker::PlaybackRegion region{};
   bool audition=false;
+  bool liveEditing=false; // Document/device playback prepares implicit routing.
 };
 // Construct/destroy on the stopped document/control owner. The callback may use
 // the prepared renderer/chain only; no Document or project tree is retained.

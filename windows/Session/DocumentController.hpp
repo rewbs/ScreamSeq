@@ -107,6 +107,8 @@ class DocumentController {
   void validateAssetCandidate(const Tracker::Document &candidate) const;
   void validateGraphViewGrowth(const Tracker::NativeSong &candidate) const;
   PlaybackFeedback playbackFeedback();
+  std::function<void()> prepareRackPublication(const std::vector<Tracker::PluginState> &,const std::vector<Tracker::ParameterChange> &,const Tracker::NativeSong &);
+  std::function<void()> prepareNativePublication(const Tracker::NativeSong &);
   void open(const std::filesystem::path &path);
   std::string revision() const;
   Json operation(const std::string &method,Json params);

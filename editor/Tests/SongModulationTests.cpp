@@ -91,6 +91,16 @@ static void notesAndFollowers() {
   auto midi=graph(SignalNodeKind::MIDI);midi.songSources[0].node.controller=74;SongModulationRuntime m(midi,metadata,48000);m.controller(74,64./127);m.renderSource(0,32,0,{});check(std::abs(m.values(0)[0]-64./127)<1e-12,"MIDI CC source failed");
   SongModulationRuntime next(midi,metadata,48000);next.inheritState(m);next.renderSource(0,32,32,{});check(next.values(0)[0]==m.values(0)[0],"Publication discarded held MIDI controls");
 }
+static void sourceMute() {
+  auto original=graph(SignalNodeKind::NoteEnvelope);original.songModulation[0].minimum=.2;original.songModulation[0].maximum=.6;
+  auto muted=original;muted.songSources[0].node.muted=true;
+  SongModulationRuntime reference(original,metadata,48000),silent(muted,metadata,48000);reference.note(0,0,true,true);silent.note(0,0,true,true);
+  for(uint32_t at=0;at<512;at+=32){check(reference.renderSource(0,32,at,{})&&silent.renderSource(0,32,at,{}),"Muted note sources keep advancing");double value,contribution;
+    check(silent.overlay(0,at,.3,value)&&value==.3&&silent.scaledContribution(silent.targets()[0].contributions[0],at,contribution)&&contribution==0,"Mute suppresses the complete contribution including a nonzero minimum");
+  }
+  SongModulationRuntime resumed(original,metadata,48000);resumed.inheritState(silent);reference.renderSource(0,32,512,{});resumed.renderSource(0,32,512,{});
+  for(uint32_t at=512;at<544;++at){double a,b;check(reference.overlay(0,at,0,a)&&resumed.overlay(0,at,0,b)&&a==b,"Unmuting retains the continuously advancing envelope");}
+}
 static void realtimeAudit() {
   auto g=graph(SignalNodeKind::Automation);g.songSources[0].node.envelopes={{91,true,{{0,.2,AutomationCurve::Scripted,CurveFormula("mix(start,end,t*t)+sin(beat)*0.01")},{127,.8,AutomationCurve::Smooth}}}};
   for(uint64_t id=2;id<=8;++id){auto source=g.songSources[0];source.node.id=id;source.node.kind=id%2?SignalNodeKind::LFO:SignalNodeKind::NoteEnvelope;source.node.envelopes.clear();g.songSources.push_back(source);g.songModulation.push_back({id,"effect",7,-.01,.01});}
@@ -108,4 +118,4 @@ static void realtimeAudit() {
 #endif
   check(success&&checksum>0&&r.storageBytes()<4*1024*1024,"Realtime evaluation failed or exceeded bounded storage");
 }
-int main(){try{partitionInvariance();overlaysAndValidation();notesAndFollowers();realtimeAudit();std::cout<<"PASS song modulation: absolute-grid/step/script/random invariance, live baseline additive overlays, explicit quantization, scoped held notes, current-PCM follower AR, publication inheritance, invalid/stale guards, zero callback allocations/frees/locks\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}
+int main(){try{partitionInvariance();sourceMute();overlaysAndValidation();notesAndFollowers();realtimeAudit();std::cout<<"PASS song modulation: absolute-grid/step/script/random invariance, live baseline additive overlays, explicit quantization, scoped held notes, current-PCM follower AR, publication inheritance, invalid/stale guards, zero callback allocations/frees/locks\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

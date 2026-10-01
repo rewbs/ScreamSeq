@@ -2,6 +2,39 @@
 // Values are native parameter units; timestamps are canonical 48-kHz frames.
 Json PluginOperations::invokeAutomation(const std::string &method,const Json &p) {
   const auto &saved=project_.preserved.at("automation");
+  if(method=="automation.recorded.get"||method=="automation.recorded.edit") {
+    // Stable rack identity matches the Mac point editor and survives moves.
+    const auto index=slot({{"plugin",field(p,"plugin")}});
+    const auto id=uint32_t(integer(field(p,"parameter"),0,UINT32_MAX));
+    if(method=="automation.recorded.get") {
+      keys(p,{"plugin","parameter","offset","limit"});
+      const auto offset=integer(p.value("offset",Json(0)),0,100000),limit=integer(p.value("limit",Json(512)),1,4096);
+      size_t total=0;Json points=Json::array();
+      for(const auto &point:saved)if(point.at(0)==index&&point.at(1)==id){if(total>=offset&&points.size()<limit)points.push_back({{"frame",point.at(3)},{"value",point.at(2)}});++total;}
+      return {{"points",points},{"total",total},{"offset",offset},{"sampleRate",48000}};
+    }
+    keys(p,{"plugin","parameter","frame","newFrame","value","remove","dryRun"});
+    const bool dry=flag(p,"dryRun"),remove=flag(p,"remove");
+    const auto frame=integer(field(p,"frame"),0,uint64_t(48000)*604800),newFrame=integer(p.value("newFrame",field(p,"frame")),0,uint64_t(48000)*604800);
+    need(remove?!p.contains("value"):p.contains("value"),"Supply value to add/update, or remove=true");
+    need(!remove||!p.contains("newFrame"),"Cannot move a removed point");
+    const auto catalog=editor(index).parameters();const auto parameter=std::find_if(catalog.begin(),catalog.end(),[&](const auto &v){return v.id==id;});
+    need(parameter!=catalog.end()&&parameter->writable,"Parameter is unavailable or read-only");
+    const auto &rack=project_.preserved.at("plugins");const auto plugin=rack[index].at("instanceID").get<std::string>();
+    if(!remove){
+      need(std::none_of(document_.native().automation.begin(),document_.native().automation.end(),[&](const auto &lane){return lane.enabled&&lane.plugin==plugin&&lane.parameter==id;}),"Disable this parameter's envelopes before adding recorded automation");
+      need(!document_.native().performance.controls(plugin,id),"Remove this parameter's pattern commands before adding recorded automation");
+    }
+    const float value=remove?0:float(number(field(p,"value"),parameter->min,parameter->max));
+    if(frame!=newFrame)need(std::none_of(saved.begin(),saved.end(),[&](const auto &v){return v.at(0)==index&&v.at(1)==id&&v.at(3)==newFrame;}),"A recorded point already exists at the new time");
+    Json next=Json::array();for(const auto &point:saved)if(!(point.at(0)==index&&point.at(1)==id&&point.at(3)==frame))next.push_back(point);
+    if(!remove)next.push_back(Json::array({index,id,value,newFrame}));
+    need(next.size()<=100000,"Automation exceeds 100000 points");
+    std::stable_sort(next.begin(),next.end(),[](const auto &a,const auto &b){return a.at(3)<b.at(3);});
+    const bool changed=next!=saved;const auto count=next.size();
+    if(changed&&!dry)commit(rack,std::move(next));
+    return {{"points",count},{"wouldChange",changed},{"dryRun",dry}};
+  }
   if(method=="automation.get") {
     keys(p,{"offset","limit"});const auto offset=integer(p.value("offset",Json(0)),0,saved.size());
     const auto limit=integer(p.value("limit",Json(1000)),1,4096);Json points=Json::array();

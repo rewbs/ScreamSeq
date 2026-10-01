@@ -18,10 +18,22 @@ Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsig
     auto metadata=[&](const NativePlugin &plugin){auto values=parameters(plugin);for(auto &v:values){v.erase("unit");const auto base=signalManualParameterValue(*definition,nodeID,v.at("id").get<uint32_t>(),v.at("min").get<double>(),v.at("max").get<double>(),v.at("value").get<double>());v["value"]=base;v["manualValue"]=base;v["effectiveValue"]=nullptr;v["valueRole"]="manual-template";}return Json{{"parameters",values},{"buses",buses(plugin)},{"latency",plugin.latency()},{"tail",plugin.tail()},{"bypass",node->plugin.bypass}};};
     bool commit=false;const bool dry=flag(p,"dryRun");Json result;
     if(method=="graph.plugin.get") {keys(p,{"graph","node"});auto plugin=make(node->plugin);return metadata(*plugin);}
-    if(method=="graph.plugin.bypass") {
+    if(method=="graph.plugin.preset.save") {
+      keys(p,{"graph","node","path","name","overwrite","dryRun"});auto plugin=make(node->plugin);
+      for(const auto &parameter:plugin->parameters()){const auto value=signalManualParameterValue(*definition,nodeID,parameter.id,parameter.min,parameter.max,parameter.value);if(value!=parameter.value)need(parameter.writable&&plugin->parameter(parameter.id,float(value)),"Plugin rejected the configured manual baseline");}
+      const auto state=plugin->state();return Plugins::PluginPreset::write(text(field(p,"path"),8192),descriptor(state.descriptor),state.state,text(field(p,"name"),200),flag(p,"overwrite"),dry);
+    }
+    if(method=="graph.plugin.preset.load") {
+      need(document_.editable(),"This document is read-only");keys(p,{"graph","node","path","expectedPresetRevision","dryRun"});
+      const auto preset=Plugins::PluginPreset::read(text(field(p,"path"),8192));if(text(field(p,"expectedPresetRevision"),80)!=preset.at("presetRevision").get<std::string>())throw Api::ApiError(-32001,"Preset changed; inspect it again before loading");
+      const auto &r=node->plugin;PluginDescriptor identity{r.type,r.subtype,r.manufacturer,r.name,r.format,r.path,r.classID,false};need(Plugins::PluginPreset::matches(preset.at("plugin"),descriptor(identity)),"Preset belongs to a different plugin type");
+      auto replacement=r;const auto &bytes=preset.at("state").get_binary();replacement.state.resize(bytes.size());if(!bytes.empty())std::memcpy(replacement.state.data(),bytes.data(),bytes.size());replacement.parameters.clear();
+      auto plugin=make(replacement);captureSignalParameterBases(*definition,nodeID,plugin->parameters());replacement.state=plugin->state().state;node->plugin=std::move(replacement);commit=true;
+      result={{"preset",Plugins::PluginPreset::summary(preset)},{"loaded",!dry},{"dryRun",dry}};
+    } else if(method=="graph.plugin.bypass") {
       need(document_.editable(),"This document is read-only");keys(p,{"graph","node","bypass","dryRun"});
       need(field(p,"bypass").is_boolean(),"Expected bypass boolean");node->plugin.bypass=p.at("bypass").get<bool>();
-      if(!dry&&audioActive&&next!=document_.native())throw Api::ApiError(-32002,"Stop playback and preview notes to change recipe bypass on Windows; playback has been preserved");
+      if(!dry&&audioActive&&!prepareNativePublication_&&next!=document_.native())throw Api::ApiError(-32002,"Live recipe publication is unavailable; playback has been preserved");
       result={{"bypass",node->plugin.bypass}};commit=true;
     } else if(method=="graph.plugin.set") {
       need(document_.editable(),"This document is read-only");
@@ -34,7 +46,7 @@ Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsig
       for(auto [id,value]:edits){need(plugin->parameter(id,value),"Plugin rejected parameter value");const auto found=std::find_if(available.begin(),available.end(),[&](const auto &v){return v.id==id;});const auto before=signalManualParameterValue(*definition,nodeID,id,found->min,found->max,found->value);if(value!=before)node->plugin.parameters[id]=value;if(found->max>found->min)for(auto &edge:definition->modulation)if(edge.target==nodeID&&edge.parameter==id)edge.base=(value-found->min)/(found->max-found->min);}result=metadata(*plugin);commit=true;
     } else if(method=="graph.plugin.editor.open") {
       keys(p,{"graph","node"});auto plugin=make(node->plugin);for(const auto &parameter:plugin->parameters()){const auto value=signalManualParameterValue(*definition,nodeID,parameter.id,parameter.min,parameter.max,parameter.value);if(value!=parameter.value)need(parameter.writable&&plugin->parameter(parameter.id,float(value)),"Plugin rejected the configured manual baseline");}plugin->showEditor();const auto token=identity();auto recipe=node->plugin;
-      result={{"editor",token},{"message","Edit this library recipe, then Apply plugin settings. Playback copies use it on the next start."}};
+      result={{"editor",token},{"message","Edit this library recipe, then Apply plugin settings."}};
       graphEditor_=std::move(plugin);graphEditorRecipe_=std::move(recipe);graphEditorGraph_=graph;graphEditorNode_=nodeID;graphEditorID_=token;graphEditorWindowOpen_=graphEditor_->editorOpen();
     } else if(method=="graph.plugin.editor.commit") {
       need(document_.editable(),"This document is read-only");
@@ -42,7 +54,10 @@ Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsig
       need(node->plugin==graphEditorRecipe_,"Plugin recipe changed; reopen its interface before applying settings");captureSignalParameterBases(*definition,nodeID,graphEditor_->parameters());node->plugin.state=graphEditor_->state().state;node->plugin.parameters.clear();result=metadata(*graphEditor_);commit=true;
     } else throw Api::ApiError(-32601,"Unknown graph plugin method");
     if(commit){next.validate(document_.song());auto committedRecipe=node->plugin;
-      if(!dry&&next!=document_.native())document_.annotate([&](NativeSong &n){n=std::move(next);},stop_);
+      if(!dry&&next!=document_.native()){
+        auto publish=prepareNativePublication_?prepareNativePublication_(next):stop_;
+        document_.annotate([&](NativeSong &n){n=std::move(next);},publish);
+      }
       if(!dry&&method=="graph.plugin.editor.commit")graphEditorRecipe_=std::move(committedRecipe);
     }
     return result;

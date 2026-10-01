@@ -14,6 +14,7 @@ bool audioSource(SignalNodeKind k) { return k == SignalNodeKind::Input || k == S
 bool audioTarget(SignalNodeKind k) { return k == SignalNodeKind::Output || k == SignalNodeKind::Plugin || k == SignalNodeKind::Follower; }
 bool modSource(SignalNodeKind k) { return k >= SignalNodeKind::LFO && k <= SignalNodeKind::Automation; }
 void validateSourceSettings(const SignalNode &n) {
+  require(!n.muted || modSource(n.kind),"Only modulation sources can be muted");
   require(text(n.name,1024) && finite(n.x,-100000,100000) && finite(n.y,-100000,100000),"Invalid graph node label or position");
   require(finite(n.rate,.0001,1024) && finite(n.phase,0,1) && finite(n.attack,.00001,60) && finite(n.release,.00001,60) && n.controller<=127,"Invalid modulation source settings");
   require(n.kind==SignalNodeKind::Automation || n.envelopes.empty(),"Only automation sources contain pattern curves");
@@ -182,7 +183,7 @@ size_t SignalDefinition::bytes() const {
   return n;
 }
 size_t SignalGraph::bytes() const {
-  size_t n = presentation.bytes() + sizeof(*this)+inputs.size()*sizeof(SignalInputRoute)+outputs.size()*sizeof(SignalOutputRoute)+(assignments.size()+instrumentAssignments.size())*sizeof(SignalAssignment)+commands.size()*sizeof(SignalCommand)+lanes.size()*sizeof(std::pair<uint64_t,uint8_t>);
+  size_t n = noteRouting.bytes() + presentation.bytes() + sizeof(*this)+inputs.size()*sizeof(SignalInputRoute)+outputs.size()*sizeof(SignalOutputRoute)+(assignments.size()+instrumentAssignments.size())*sizeof(SignalAssignment)+commands.size()*sizeof(SignalCommand)+lanes.size()*sizeof(std::pair<uint64_t,uint8_t>);
   for(const auto &[key,position]:layout)n+=key.size()+sizeof(position);
   for(const auto &d:library)n += d.bytes();
   for(const auto &s:songSources){n+=sizeof(s)+s.node.name.size()+s.audioPlugin.size();
@@ -289,7 +290,7 @@ void insertSignalNodes(SignalDefinition &definition,const std::vector<uint64_t> 
   audio.push_back({tail,target.target,0,target.input,1});
   next.audio=std::move(audio);compileSignal(next);definition=std::move(next);
 }
-void detachSignalNodes(SignalDefinition &definition,const std::vector<uint64_t> &ids,bool remove) {
+void detachSignalNodes(SignalDefinition &definition,const std::vector<uint64_t> &ids,bool remove,std::optional<SignalHealPath> heal) {
   auto next=definition;
   const std::set<uint64_t> selected(ids.begin(),ids.end());
   require(!selected.empty()&&selected.size()==ids.size()&&selected.size()<=32,"Select 1–32 distinct effects");
@@ -308,7 +309,13 @@ void detachSignalNodes(SignalDefinition &definition,const std::vector<uint64_t> 
     if(!selected.count(e.source)&&selected.count(e.target)&&e.input==0){require(e.target==head,"An internal effect has another main source");entering.push_back(i);}
     if(selected.count(e.source)&&!selected.count(e.target)&&e.output==0){require(e.source==tail,"An internal effect has another main destination");leaving.push_back(i);}
   }
-  require(entering.size()<=1&&leaving.size()<=1,"Choose the intended main path before healing a branched connection");
+  if(heal) {
+    auto chosen=[](std::vector<size_t> &edges,std::optional<size_t> selected){
+      require(edges.empty() ? !selected : selected&&std::find(edges.begin(),edges.end(),*selected)!=edges.end(),"Choose a current boundary edge for each side of the main path");
+      edges=selected?std::vector<size_t>{*selected}:std::vector<size_t>{};
+    };
+    chosen(entering,heal->incoming);chosen(leaving,heal->outgoing);
+  } else require(entering.size()<=1&&leaving.size()<=1,"Choose the intended main path before healing a branched connection");
   std::vector<SignalAudioEdge> audio;
   for(size_t i=0;i<next.audio.size();++i)if((entering.empty()||i!=entering[0])&&(leaving.empty()||i!=leaving[0]))audio.push_back(next.audio[i]);
   if(!entering.empty()&&!leaving.empty()) {
@@ -430,9 +437,10 @@ SignalDefinition extractSignalGroup(const SignalDefinition &definition,uint64_t 
   compileSignal(copy);return copy;
 }
 bool sameSignalProcessing(const SignalGraph &a,const SignalGraph &b) {
+  if(a.noteRouting!=b.noteRouting)return false;
   if(a.songModulation!=b.songModulation || a.songSources.size()!=b.songSources.size())return false;
   for(size_t i=0;i<a.songSources.size();++i){const auto &x=a.songSources[i],&y=b.songSources[i];const auto &n=x.node,&m=y.node;
-    if(n.id!=m.id||n.kind!=m.kind||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes||x.audioBus!=y.audioBus||x.audioPlugin!=y.audioPlugin||x.output!=y.output||x.preFader!=y.preFader||x.noteTarget!=y.noteTarget||x.noteInstrument!=y.noteInstrument||x.amount!=y.amount)return false;
+    if(n.id!=m.id||n.kind!=m.kind||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes||n.muted!=m.muted||x.audioBus!=y.audioBus||x.audioPlugin!=y.audioPlugin||x.output!=y.output||x.preFader!=y.preFader||x.noteTarget!=y.noteTarget||x.noteInstrument!=y.noteInstrument||x.amount!=y.amount)return false;
   }
   if(a.instrumentAssignments!=b.instrumentAssignments||a.inputs!=b.inputs||a.outputs!=b.outputs||a.assignments!=b.assignments||a.commands!=b.commands)return false;
   std::set<uint64_t> used;
@@ -446,7 +454,7 @@ bool sameSignalProcessing(const SignalGraph &a,const SignalGraph &b) {
     const auto &x=*xi,&y=*yi;
     if(x.id!=y.id||x.audio!=y.audio||x.modulation!=y.modulation||x.nodes.size()!=y.nodes.size())return false;
     for(size_t j=0;j<x.nodes.size();++j){const auto &n=x.nodes[j],&m=y.nodes[j];
-      if(n.id!=m.id||n.kind!=m.kind||n.plugin!=m.plugin||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes)return false;
+      if(n.id!=m.id||n.kind!=m.kind||n.plugin!=m.plugin||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes||n.muted!=m.muted)return false;
     }
   }
   return true;
@@ -459,12 +467,13 @@ bool sameSignalParameterLayout(SignalGraph a,SignalGraph b) {
   return sameSignalProcessing(a,b);
 }
 bool sameSignalControlLayout(SignalGraph a,SignalGraph b) {
+  a.noteRouting={};b.noteRouting={}; // Immutable event plans adopt without replacing audio processors.
   for(auto *graph:{&a,&b}){
-    for(auto &s:graph->songSources){auto &n=s.node;n.rate=1;n.phase=0;n.attack=.01;n.release=.1;n.controller=1;n.envelopes.clear();s.amount=1;}
+    for(auto &s:graph->songSources){auto &n=s.node;n.rate=1;n.phase=0;n.attack=.01;n.release=.1;n.controller=1;n.envelopes.clear();n.muted=false;s.amount=1;}
     for(auto &m:graph->songModulation)m.minimum=m.maximum=0;
   }
   for(auto *graph:{&a,&b})for(auto &d:graph->library){
-    for(auto &n:d.nodes){n.plugin.parameters.clear();n.plugin.bypass=false;n.rate=1;n.phase=0;n.attack=.01;n.release=.1;n.controller=1;n.envelopes.clear();}
+    for(auto &n:d.nodes){n.plugin.parameters.clear();n.plugin.bypass=false;n.rate=1;n.phase=0;n.attack=.01;n.release=.1;n.controller=1;n.envelopes.clear();n.muted=false;}
     for(auto &m:d.modulation){m.base=m.minimum=m.maximum=0;m.quantized=false;}
     for(auto &e:d.audio)e.gain=1;
   }
@@ -475,7 +484,7 @@ bool sameSignalSourceLayout(SignalGraph a,SignalGraph b) {
     std::set<uint64_t> followers;
     for(const auto &n:d.nodes)if(n.kind==SignalNodeKind::Follower)followers.insert(n.id);
     std::erase_if(d.audio,[&](const auto &e){return followers.contains(e.target);});
-    std::erase_if(d.nodes,[](const auto &n){return n.kind==SignalNodeKind::LFO||n.kind==SignalNodeKind::Follower||n.kind==SignalNodeKind::Random||n.kind==SignalNodeKind::MIDI||n.kind==SignalNodeKind::Amount||n.kind==SignalNodeKind::Automation;});
+    std::erase_if(d.nodes,[](const auto &n){return n.kind==SignalNodeKind::LFO||n.kind==SignalNodeKind::Follower||n.kind==SignalNodeKind::Random||n.kind==SignalNodeKind::MIDI||n.kind==SignalNodeKind::Amount||n.kind==SignalNodeKind::Automation||n.kind==SignalNodeKind::NoteEnvelope;});
     d.modulation.clear();
   }
   return sameSignalControlLayout(std::move(a),std::move(b));

@@ -7,6 +7,7 @@
 #include <stdexcept>
 namespace Tracker {
 void NativePlugin::automate(const std::vector<ParameterChange> &points, size_t slot, double rate, uint64_t start) {
+  activeAutomation_=&automation_;
   automation_.clear();
   automationPosition_ = 0;
   renderedThrough_ = start;
@@ -25,6 +26,7 @@ void NativePlugin::automate(const std::vector<ParameterChange> &points, size_t s
 }
 bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, std::span<const PluginAudioInput> inputs,const PluginSongModulation *modulation,std::span<const PluginParameterSamples> sampled) noexcept {
   if (frames > maximumFrames || position > UINT64_MAX - frames || sampled.size()>64) return false;
+  const auto &automation=*activeAutomation_;
   for(size_t i=0;i<sampled.size();++i){const auto &p=sampled[i];if(p.values.size()!=frames||frames>32||!std::isfinite(p.minimum)||!std::isfinite(p.maximum)||!std::isfinite(p.maximum-p.minimum)||p.maximum<=p.minimum)return false;for(const auto value:p.values)if(!std::isfinite(value)||value<0||value>1)return false;for(size_t j=0;j<i;++j)if(sampled[j].parameter==p.parameter)return false;}
   processingModulation_=modulation;
   struct Clear {const PluginSongModulation *&pointer;~Clear(){pointer=nullptr;}} clear{processingModulation_};
@@ -54,10 +56,10 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
       const auto &event=(*musicalMIDI_)[midiRead++];
       if(!midi(event.status,event.a,event.b))return false;
     }
-    while (automationPosition_ < automation_.size() && automation_[automationPosition_].frame <= position + consumed) {
+    while (automationPosition_ < automation.size() && automation[automationPosition_].frame <= position + consumed) {
       // No per-call event limit: it made dense automation fail, and fail
       // differently for each callback size. The prepared list bounds the work.
-      auto p = automation_[automationPosition_++];
+      auto p = automation[automationPosition_++];
       if (!appliedParameter(p.id,p.value,p.frame,{ParameterOrigin::Recorded}))
         return false;
     }
@@ -84,8 +86,8 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
       else if(backend_ && backend_->supportsSampleOffsetParameters()){const auto remaining=ramp.ramp.duration-(at-ramp.ramp.start);if(remaining<count)count=uint32_t(remaining+1);}
       else count = 1;
     }
-    if (automationPosition_ < automation_.size())
-      count = uint32_t(std::min<uint64_t>(count, automation_[automationPosition_].frame - position - consumed));
+    if (automationPosition_ < automation.size())
+      count = uint32_t(std::min<uint64_t>(count, automation[automationPosition_].frame - position - consumed));
     if (musicalRead < musicalCount_)
       count = uint32_t(std::min<uint64_t>(count, (*musicalEvents_)[musicalRead].frame - position - consumed));
     if(midiRead<musicalMIDICount_)count=uint32_t(std::min<uint64_t>(count,(*musicalMIDI_)[midiRead].frame-position-consumed));
@@ -103,7 +105,7 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
       // instead of interpolating through a saturation boundary.
       if(!denseModulation && count>1)for(const auto &target:modulation->targets)for(auto frame:{position+consumed,position+consumed+count-1}){
         double raw=(baselineAt(target.parameter,frame)-target.minimum)/(target.maximum-target.minimum);
-        for(const auto &source:modulation->runtime->targets()[target.index].contributions){double value;if(!modulation->runtime->contribution(source.source,frame,value))return false;raw+=source.minimum+(source.maximum-source.minimum)*value;}
+        for(const auto &source:modulation->runtime->targets()[target.index].contributions){double value;if(!modulation->runtime->scaledContribution(source,frame,value))return false;raw+=value;}
         if(raw<0 || raw>1)denseModulation=true;
       }
       if(denseModulation)count=std::min(count,16u);
@@ -127,7 +129,7 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
       }
       const auto frame=position+consumed+count-1;
       contribution(target.parameter,0,(baselineAt(target.parameter,frame)-target.minimum)/(target.maximum-target.minimum),frame);
-      for(const auto &source:modulation->runtime->targets()[target.index].contributions){double value;if(modulation->runtime->contribution(source.source,frame,value))contribution(target.parameter,modulation->runtime->source(source.source).node.id,source.minimum+(source.maximum-source.minimum)*value,frame);}
+      for(const auto &source:modulation->runtime->targets()[target.index].contributions){double value;if(modulation->runtime->scaledContribution(source,frame,value))contribution(target.parameter,modulation->runtime->source(source.source).node.id,value,frame);}
     }
     if (!count || !processBlock(buffer + consumed * 2, count, position + consumed, consumed))
       return false;

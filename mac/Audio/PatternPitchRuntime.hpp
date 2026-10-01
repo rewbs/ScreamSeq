@@ -31,12 +31,13 @@ class PatternPitchRuntime {
     std::shared_ptr<NativePlugin> plugin;
     uint8_t midiChannel=0;
   };
+  PluginChain *noteHost_=nullptr;
   std::vector<Target> targets_;
   std::vector<Instrument> instruments_;
   uint32_t pattern_=UINT32_MAX,order_=UINT32_MAX;
   double previousPosition_=0;
 public:
-  PatternPitchRuntime(const NativeSong &,OpenMPT::CSoundFile &,const std::vector<std::shared_ptr<NativePlugin>> &,const std::vector<bool> &);
+  PatternPitchRuntime(const NativeSong &,OpenMPT::CSoundFile &,const std::vector<std::shared_ptr<NativePlugin>> &,const std::vector<bool> &,PluginChain *noteHost=nullptr);
   bool render(OpenMPT::CSoundFile &,uint32_t count,uint64_t absoluteFrame) noexcept;
 };
 }
