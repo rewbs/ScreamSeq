@@ -1899,6 +1899,69 @@ def plugin_presets(client):
     print("PASS preset socket: native files, dry runs, baseline state, atomic overwrite, independent file/song revisions, retry/read freshness, type/decoder rejection and Undo/Redo")
 
 
+
+def note_routing_tools(client):
+    """Exercise the actual socket, including trigger-only instruments and atomic cuts."""
+    def write(method, **params):
+        return client.call(method, {"expectedRevision": client.call("document.get")["revision"], **params})
+    def graph(): return client.call("graph.get")["data"]
+    def notes(): return graph()["noteRouting"]
+    descriptor={"type":0,"subtype":0,"manufacturer":0,"name":"Resonance Test Instrument","format":"VST3","path":str(BUILD/"test-plugins/ResonanceFixture.vst3"),"classID":"5245534F4E414E43494E535452550001","isInstrument":True}
+    slot=write("instrument.create",empty=True)["data"]["instrument"]
+    instrument=next(i["id"] for i in client.call("document.get")["data"]["instruments"] if i["index"]==slot)
+    write("plugin.add",descriptor=descriptor)
+    original=client.call("document.get")["data"]["nativePlugins"][-1]["instanceID"]
+    write("plugin.add",descriptor=descriptor)
+    destination=client.call("document.get")["data"]["nativePlugins"][-1]["instanceID"]
+    write("instrument.plugin.set",instrument=slot,plugin=original,channel=5)
+    before=graph()
+    cable={"sourceKind":"instrument","source":instrument,"plugin":destination,"midiChannel":9,"suppressAssignment":True}
+    preview=write("graph.note.connect",**cable,dryRun=True)
+    assert not preview["changed"] and preview["data"]["wouldChange"] and graph()==before
+    request={"expectedRevision":client.call("document.get")["revision"],**cable}
+    result=client.call("graph.note.connect",request,"note-route-once")
+    assert client.call("graph.note.connect",request,"note-route-once")==result
+    route=result["data"]["route"]
+    expect_error(-32001,lambda:client.call("graph.note.connect",request))
+    assert notes()["suppressedAssignments"]==[instrument]
+    assert notes()["routes"][-1]=={"id":route,"sourceKind":"instrument","source":instrument,"plugin":destination,"midiChannel":9,"enabled":True}
+    unchanged=graph()
+    assert not write("graph.note.update",id=route,midiChannel=9,enabled=True)["changed"]
+    for bad in [{"midiChannel":True},{"midiChannel":17},{"plugin":"missing"},{"sourceKind":"sample"},{"unknown":1}]:
+        expect_error(-32602,lambda:write("graph.note.update",id=route,**bad))
+        assert graph()==unchanged
+    write("graph.note.update",id=route,enabled=False)
+    assert not notes()["routes"][-1]["enabled"]
+    write("history.undo");assert graph()==unchanged
+    write("plugin.remove",plugins=[original])
+    assert notes()["triggerSources"]==[{"instrument":instrument,"midiChannel":5}]
+    assert notes()["routes"][-1]["plugin"]==destination
+    write("history.undo");assert not notes()["triggerSources"]
+    write("history.redo");assert notes()["triggerSources"][0]["instrument"]==instrument
+    # Source identity and channel are serialized even with no assigned vendor.
+    with tempfile.TemporaryDirectory() as temp:
+        path=Path(temp)/"note-trigger.screamseq"
+        write("document.save",path=str(path))
+        stored=plistlib.loads(path.read_bytes())["native"]["signalGraph"]["noteRouting"]
+        assert stored==notes()
+    write("instrument.plugin.set",instrument=slot,plugin="")
+    assert not notes()["triggerSources"] and notes()["routes"][-1]["id"]==route
+    write("history.undo");assert notes()["triggerSources"]
+    before=graph()
+    expect_error(-32602,lambda:write("graph.connections.remove",connections=[{"kind":"note","route":route},{"kind":"note","route":"n99999999"}]))
+    assert graph()==before
+    write("graph.connections.remove",connections=[{"kind":"note","route":route}])
+    assert all(r["id"]!=route for r in notes()["routes"])
+    write("history.undo");assert graph()==before
+    activity=client.call("graph.note.activity")
+    assert not activity["changed"] and graph()==before
+    expect_error(-32602,lambda:client.call("graph.note.activity",{"unknown":True}))
+    write("graph.note.disconnect",id=route)
+    write("instrument.plugin.set",instrument=slot,plugin="")
+    write("plugin.remove",plugins=[destination])
+    print("PASS note routing socket: strict/stale/dry-run/idempotent edits, exact MIDI mapping, implicit suppression, orphan source persistence, atomic cuts and unified Undo")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="resonance-api-tests-") as tmp:
         directory = Path(tmp)
@@ -2073,6 +2136,7 @@ def main():
                 follower_conversion(client)
                 graph_provenance(client)
                 navigation_pattern(client)
+                note_routing_tools(client)
                 print("PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output")
             finally:
                 process.terminate()

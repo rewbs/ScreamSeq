@@ -6,7 +6,8 @@
 #include <algorithm>
 #include <cstring>
 static std::atomic<bool> fixtureAUChannelWeights{false};
-static bool fixtureAUPitchMode=false,fixtureAUStepped=false;
+static bool fixtureAUPitchMode=false,fixtureAUStepped=false,fixtureAUWideBuses=false;
+void setFixtureAUWideBuses(bool enabled){fixtureAUWideBuses=enabled;}
 void setFixtureAUStepped(bool enabled){fixtureAUStepped=enabled;}
 static float fixtureAUHiddenGain=1;static uint64_t fixtureAUCreated=0;
 void setFixtureAUHiddenGain(float value){fixtureAUHiddenGain=value;}
@@ -17,6 +18,8 @@ namespace {
 struct FixtureAU {
   AudioComponentPlugInInterface interface{}; // Must be first for the AU C interface.
   bool instrument = false;
+  const bool wideBuses=fixtureAUWideBuses;
+  UInt32 audioChannels(UInt32 bus)const{return wideBuses?(bus?3:5):(bus%2?1:2);}
   std::array<uint16_t, 16 * 128> notes{};
   float gain = .5f,hiddenGain=fixtureAUHiddenGain;
   std::array<uint16_t,16> pitchWheels{};
@@ -31,8 +34,8 @@ struct FixtureAU {
     interface.Open = [](void *, AudioComponentInstance) -> OSStatus { return noErr; };
     interface.Close = [](void *self) -> OSStatus { delete static_cast<FixtureAU *>(self); return noErr; };
     interface.Lookup = lookup;
-    for (size_t i = 0; i < inputs.size(); ++i) inputs[i].mChannelsPerFrame = i ? 1 : 2;
-    for (size_t i = 0; i < outputs.size(); ++i) outputs[i].mChannelsPerFrame = i % 2 ? 1 : 2;
+    for (size_t i = 0; i < inputs.size(); ++i) inputs[i].mChannelsPerFrame = audioChannels(UInt32(i));
+    for (size_t i = 0; i < outputs.size(); ++i) outputs[i].mChannelsPerFrame = audioChannels(UInt32(i));
   }
   static OSStatus initialize(void *) { return noErr; }
   static OSStatus info(void *, AudioUnitPropertyID id, AudioUnitScope, AudioUnitElement, UInt32 *size, Boolean *writable) {
@@ -53,7 +56,7 @@ struct FixtureAU {
     UInt32 required = 0; if (info(self, id, scope, bus, &required, nullptr) || !size || *size < required) return kAudioUnitErr_InvalidProperty;
     *size = required;
     switch (id) {
-      case kAudioUnitProperty_ElementCount: *static_cast<UInt32 *>(out) = scope == kAudioUnitScope_Input ? (s.instrument ? 0 : 2) : (s.instrument ? 32 : 1); break;
+      case kAudioUnitProperty_ElementCount: *static_cast<UInt32 *>(out) = scope == kAudioUnitScope_Input ? (s.instrument ? 0 : 2) : (s.instrument ? 32 : s.wideBuses ? 2 : 1); break;
       case kAudioUnitProperty_StreamFormat:
         if ((scope == kAudioUnitScope_Input && bus >= 2) || bus >= 32) return kAudioUnitErr_InvalidElement;
         *static_cast<AudioStreamBasicDescription *>(out) = scope == kAudioUnitScope_Input ? s.inputs[bus] : s.outputs[bus]; break;
@@ -92,7 +95,7 @@ struct FixtureAU {
       case kAudioUnitProperty_StreamFormat: {
         if (size != sizeof(AudioStreamBasicDescription) || (scope == kAudioUnitScope_Input && bus >= 2) || bus >= 32) return kAudioUnitErr_InvalidPropertyValue;
         auto value = *static_cast<const AudioStreamBasicDescription *>(data);
-        if (value.mChannelsPerFrame != (bus % 2 ? 1 : 2) || value.mFormatID != kAudioFormatLinearPCM || value.mBitsPerChannel != 32 || !(value.mFormatFlags & kAudioFormatFlagIsNonInterleaved)) return kAudioUnitErr_FormatNotSupported;
+        if (value.mChannelsPerFrame != s.audioChannels(bus) || value.mFormatID != kAudioFormatLinearPCM || value.mBitsPerChannel != 32 || !(value.mFormatFlags & kAudioFormatFlagIsNonInterleaved)) return kAudioUnitErr_FormatNotSupported;
         if (scope == kAudioUnitScope_Input) s.inputs[bus] = value; else s.outputs[bus] = value;
         break;
       }
@@ -127,7 +130,7 @@ struct FixtureAU {
   }
   static OSStatus render(void *self, AudioUnitRenderActionFlags *flags, const AudioTimeStamp *time, UInt32 bus, UInt32 frames, AudioBufferList *out) {
     auto &s = *static_cast<FixtureAU *>(self);
-    if (frames > 4096 || bus >= (s.instrument ? 32u : 1u) || out->mNumberBuffers != s.outputs[bus].mChannelsPerFrame) return kAudioUnitErr_InvalidPropertyValue;
+    if (frames > 4096 || bus >= (s.instrument ? 32u : s.wideBuses ? 2u : 1u) || out->mNumberBuffers != s.outputs[bus].mChannelsPerFrame) return kAudioUnitErr_InvalidPropertyValue;
     if (bus == 0) {
       if (time->mSampleTime < s.lastTime + s.lastFrames) return kAudioUnitErr_CannotDoInCurrentContext;
       s.lastTime = time->mSampleTime; s.lastFrames = frames; s.rendered = 1;
@@ -135,7 +138,9 @@ struct FixtureAU {
       if (s.lastTime != time->mSampleTime || s.lastFrames != frames || (s.rendered & (uint64_t(1) << bus))) return kAudioUnitErr_CannotDoInCurrentContext;
       s.rendered |= uint64_t(1) << bus;
     }
-    struct Buffers { UInt32 count; AudioBuffer data[2]; } input{2, {{1, frames * 4, nullptr}, {1, frames * 4, nullptr}}}, side{1, {{1, frames * 4, nullptr}, {}}};
+    struct Buffers {UInt32 count;AudioBuffer data[5];} input{},side{};
+    input.count=s.audioChannels(0);side.count=s.audioChannels(1);
+    for(auto *list:{&input,&side})for(UInt32 channel=0;channel<list->count;++channel)list->data[channel]={1,frames*4,nullptr};
     if (!s.instrument) {
       if (!s.callbacks[0].inputProc || !s.callbacks[1].inputProc) return kAudioUnitErr_NoConnection;
       auto error = s.callbacks[0].inputProc(s.callbacks[0].inputProcRefCon, flags, time, 0, frames, reinterpret_cast<AudioBufferList *>(&input));
@@ -152,9 +157,9 @@ struct FixtureAU {
     for (UInt32 channel = 0; channel < out->mNumberBuffers; ++channel) {
       auto &dest = out->mBuffers[channel]; if (!dest.mData || dest.mDataByteSize < frames * 4) return kAudioUnitErr_TooManyFramesToProcess;
       for (UInt32 i = 0; i < frames; ++i) {
-        float value = s.instrument ? (any ? .2f * s.gain * weight : 0) : static_cast<float *>(input.data[channel].mData)[i] * s.gain * (1 + static_cast<float *>(side.data[0].mData)[i]);
+        float value = s.wideBuses ? static_cast<float *>((bus?side:input).data[channel].mData)[i]*s.gain : s.instrument ? (any ? .2f * s.gain * weight : 0) : static_cast<float *>(input.data[channel].mData)[i] * s.gain * (1 + static_cast<float *>(side.data[0].mData)[i]);
         value*=s.hiddenGain;
-        if (bus) value *= float(bus + 1) * (channel ? -.5f : 1);
+        if (bus&&!s.wideBuses) value *= float(bus + 1) * (channel ? -.5f : 1);
         static_cast<float *>(dest.mData)[i] = value;
       }
     }

@@ -1,5 +1,6 @@
 // Extracted from mac/Audio/AudioUnitHost.mm; shared by all platform hosts.
 #include "HostedAudio.hpp"
+#include "PluginAudioLayout.hpp"
 #include "mac/Audio/NativeSignalGraph.hpp"
 #include "editor/TrackerDocument.hpp"
 #include <algorithm>
@@ -40,22 +41,37 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
     descriptor_.name = builtin_->definition().name;
     latency_ = builtin_->latency();
     tail_ = builtin_->tail();
-    buses_ = {{0, 2, "Stereo input", true, true, true}, {0, 2, "Stereo output", false, true, true}};
-    if (sidechain) buses_.push_back({1,2,"Detector sidechain",true,!auxiliaryInputs_.empty(),true});
+    buses_ = {{0, 2, "Stereo input", true, true, true,0,0,2}, {0, 2, "Stereo output", false, true, true,0,0,2}};
+    if (sidechain) buses_.push_back({1,2,"Detector sidechain",true,!auxiliaryInputs_.empty(),true,1,0,2});
+    validatePluginAudioLayout(state.audioLayout,buses_);audioLayout_=pluginAudioLayoutSignature(buses_);
     bypassControl_.prepare(rate,uint32_t(std::llround(latency_*rate)),false,state.bypass);
     prepareBaselines();
     return;
   }
   backend_ = platformPluginBackendFactory().create(state, rate, offline);
   if (!backend_) throw std::runtime_error("Platform plugin factory returned no processor");
-  latency_ = backend_->latency(); tail_ = backend_->tail(); buses_ = backend_->buses();preparedInputs_=backend_->preparedAuxiliaryInputs();
-  for (auto bus : auxiliaryOutputs_) auxiliaryOutputBuffers_[bus] = std::make_unique<PluginAudioStorage>();
+  latency_ = backend_->latency(); tail_ = backend_->tail(); buses_ = backend_->buses();preparedInputs_=backend_->preparedAuxiliaryInputs();preparedOutputs_=backend_->preparedAuxiliaryOutputs();
+  validatePluginAudioLayout(state.audioLayout,buses_);audioLayout_=pluginAudioLayoutSignature(buses_);
+  for (uint32_t bus=1;bus<64;++bus)if(preparedOutputs_&(uint64_t(1)<<bus))auxiliaryOutputBuffers_[bus] = std::make_unique<PluginAudioStorage>();
   if(!std::isfinite(latency_)||latency_<0||latency_>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
   bypassControl_.prepare(rate,uint32_t(std::llround(latency_*rate)),isInstrument(),state.bypass);
   prepareBaselines();
 }
 NativePlugin::~NativePlugin() = default;
 bool NativePlugin::latencyChangePending() const noexcept { return backend_ && backend_->latencyChangePending(); }
+std::shared_ptr<NativePlugin::LatencyUpdate> NativePlugin::prepareLatency() {
+  if(!backend_)return {};
+  const auto pending=backend_->pendingLatency();if(!pending)return {};
+  if(!pending->serial||pending->samples>rate_*10||!std::isfinite(pending->tail)||pending->tail<0)
+    throw std::invalid_argument("Plugin announced an invalid latency or tail");
+  auto result=std::make_shared<LatencyUpdate>();result->snapshot=*pending;
+  result->bypass=bypassControl_.prepareLatency(pending->samples);return result;
+}
+void NativePlugin::adoptLatency(LatencyUpdate &next) noexcept {
+  bypassControl_.adoptLatency(*next.bypass);latency_.store(next.snapshot.samples/rate_,std::memory_order_release);
+  tail_.store(next.snapshot.tail,std::memory_order_release);
+  backend_->acknowledgeLatency(next.snapshot.serial);
+}
 void NativePlugin::refreshLatency() {
   if (backend_ && backend_->latencyChangePending()) {
     backend_->refreshLatency(); latency_ = backend_->latency(); tail_ = backend_->tail();
@@ -70,7 +86,7 @@ bool NativePlugin::processBlock(float *buffer, uint32_t frames, uint64_t positio
     return builtin_->process(buffer,frames,detector);
   }
   if (!backend_->process(buffer, frames, position, inputSources_.data(), offset, transport_)) return false;
-  for (auto bus : auxiliaryOutputs_) {
+  for (uint32_t bus=1;bus<64;++bus)if(auxiliaryOutputBuffers_[bus]) {
     const auto *source = backend_->auxiliaryOutput(bus);
     if (!source) return false;
     std::copy_n(source, frames * 2, auxiliaryOutputBuffers_[bus]->interleaved.data() + offset * 2);
@@ -147,7 +163,7 @@ PluginState NativePlugin::state() const {
   state.instanceID = instanceID_;
   state.bypass=bypassed();
   state.instrument = assignedInstrument_; state.midiChannel = midiChannel_; state.aliases = aliases_;
-  state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;
+  state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;state.audioLayout=audioLayout_;
   if (builtin_) state.state = builtin_->state();
   return state;
 }
@@ -157,7 +173,7 @@ std::vector<PluginInstrumentAlias> NativePlugin::assignments() const {
   result.insert(result.end(), aliases_.begin(), aliases_.end());
   return result;
 }
-double NativePlugin::tail() const { return builtin_ ? builtin_->tail() : tail_; }
+double NativePlugin::tail() const { return builtin_ ? builtin_->tail() : tail_.load(std::memory_order_acquire); }
 uint64_t NativePlugin::tailRevision() const noexcept { return builtin_ ? builtin_->tailRevision() : 0; }
 void NativePlugin::includeParameterRange(uint32_t id, float minimum, float maximum) noexcept {
   if (builtin_) builtin_->includeParameterRange(id, minimum, maximum);

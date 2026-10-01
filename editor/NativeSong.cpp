@@ -192,6 +192,7 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
   }
   const auto instrumentExists=[&](uint64_t id){return std::any_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.second.id==id;});};
   std::erase_if(signal.noteRouting.suppressedAssignments,[&](uint64_t id){return !instrumentExists(id);});
+  std::erase_if(signal.noteRouting.triggerSources,[&](const auto &source){return !instrumentExists(source.instrument);});
   std::erase_if(signal.noteRouting.routes,[&](const auto &route){return route.sourceKind==NoteSourceKind::Instrument?!instrumentExists(route.source):std::none_of(tracks.begin(),tracks.end(),[&](const auto &t){return t.second.id==route.source;});});
   reconcileNoteCableGeometry(signal.presentation,signal.noteRouting);
   std::erase_if(signal.instrumentAssignments,[&](const auto &a){return std::none_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.second.id==a.target;});});

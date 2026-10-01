@@ -60,11 +60,28 @@ through the platform factory. There is intentionally no separate graph factory.
   data streams, as implemented in `mac/Audio/VST3Host.mm`. A Windows provider must
   retain that representation, not invent a new opaque wrapper. AU state remains
   unavailable on Windows and must stay retained by the document owner.
-- `buses()` returns stable prepared metadata. Main output 0 is stereo; main input
-  may be absent for instruments. Auxiliary indices are 1..63; main bus 0 is not
-  listed in activation arrays. Activate only requested auxiliaries, retain native
-  indices and advertise unsupported layouts accurately. Follow existing mono/
-  stereo conversion semantics when adapting native buffers to stereo host PCM.
+- `buses()` returns stable logical mono/stereo port metadata. Physical native
+  buses retain all channels as explicit pairs, with an odd final mono port.
+  The first pair keeps its physical bus index; additional pairs follow the
+  physical bus count in bus/channel order. `physicalBus`, `firstChannel` and
+  `physicalChannels` identify the native mapping. Each direction has at most
+  64 logical ports and each physical bus at most 64 channels. Main input may be
+  absent for instruments; auxiliary activation arrays contain logical IDs 1–63.
+- Prepare and activate every supported physical bus before rendering, including
+  logical ports with no cables. `preparedAuxiliaryInputs/Outputs()` describe this
+  immutable capacity; `active` describes requested musical membership. Missing
+  inputs receive silence. Pair wires never sum or truncate hidden channels;
+  explicit mono ports average stereo input and duplicate mono output.
+- `PluginState.audioLayout` pins the physical/channel-pair mapping after capture.
+  Its canonical signature includes inactive ports and excludes names/activation.
+  A nonempty saved mismatch rejects before activation; empty legacy signatures
+  remain readable. Include all plane, pointer and logical-output allocations in
+  `preparedStorageBytes()` so retained graph plans enforce the shared budget.
+- `pendingLatency()` runs on the control owner and returns a stable notification
+  serial, latency samples and tail seconds without resetting the processor.
+  `acknowledgeLatency(serial)` is callback-safe and follows prepared PDC adoption;
+  acknowledging an older serial never clears a newer notification. Unsupported
+  I/O/reload restart requests remain separate failures.
 - `latency()`/`tail()` are seconds, not frames. Validate finite/nonnegative latency
   and the existing two-second host limit before returning. Preserve existing tail
   conventions and program IDs. Program load/state/editor/discovery/destruction

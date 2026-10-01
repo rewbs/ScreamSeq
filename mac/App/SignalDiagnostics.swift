@@ -14,7 +14,7 @@ struct GraphSignalRouteID:Hashable {
     }
     guard let input=number("input"),let output=number("output") else{return nil};self.input=input;self.output=output
     switch kind {
-    case "output","send","graph-input","graph-output":guard !source.isEmpty && !target.isEmpty else{return nil}
+    case "output","send","graph-input","graph-output","graph-audio","graph-modulation":guard !source.isEmpty && !target.isEmpty else{return nil}
     case "plugin-input","insert":guard !source.isEmpty && !plugin.isEmpty else{return nil}
     case "plugin-output":guard !plugin.isEmpty && !target.isEmpty else{return nil}
     case "master-output":guard !source.isEmpty else{return nil}
@@ -25,7 +25,7 @@ struct GraphSignalRouteID:Hashable {
 struct GraphSignalRoute {
   let identity:GraphSignalRouteID,tap:String,preFader:Bool,gainDB:Double?
   init?(_ value:[String:Any]) {
-    guard let identity=GraphSignalRouteID(value),let tap=value["tap"] as? String,["post-gain","main-path","pre-master-fader"].contains(tap) else{return nil}
+    guard let identity=GraphSignalRouteID(value),let tap=value["tap"] as? String,["post-gain","main-path","pre-master-fader","contribution"].contains(tap) else{return nil}
     self.identity=identity;self.tap=tap;preFader=value["preFader"] as? Bool ?? false
     gainDB=(value["gainDB"] as? Double).flatMap{$0.isFinite ? $0:nil}
   }
@@ -38,6 +38,7 @@ struct GraphSignalRoute {
 
 struct GraphPortReading {
   let key:String,node:String,name:String,output:Bool,port:UInt32
+  let kind:String,value:Double?
   let route:GraphSignalRoute?
   let peak:Double,rms:Double,measured:Bool,clipped:Bool,invalid:Bool,available:Bool,fresh:Bool
   let through:Double,lastSignal:Double,channels:Int,latency:Double?,compensation:Double?
@@ -46,6 +47,7 @@ struct GraphPortReading {
     if let descriptor=value["route"] {
       guard let descriptor=descriptor as? [String:Any],let parsed=GraphSignalRoute(descriptor) else{return nil};route=parsed
     }else{route=nil}
+    kind=value["kind"] as? String ?? "audio";self.value=(value["value"] as? Double).flatMap{$0.isFinite ? $0:nil}
     self.key=key;self.node=node;self.name=value["name"] as? String ?? key;self.port=number;output=value["direction"] as? String=="output"
     available=value["available"] as? Bool ?? true;fresh=value["fresh"] as? Bool ?? true
     let peaks=value["peak"] as? [Double] ?? [],rmsValues=value["rms"] as? [Double] ?? []
@@ -61,6 +63,7 @@ struct GraphPortReading {
     guard available else{return "\(name) · Port unavailable in current route"}
     guard fresh else{return "\(name) · Waiting for current-route measurement"}
     guard measured else{return "\(name) · Measurement unavailable"}
+    if kind=="control" {return name+" · "+(value.map{String(format:"%.5g",$0)} ?? "Value unavailable")+" · exact selected copy at frame \(String(format:"%.0f",through))"}
     let routeDetail=route.map{" · "+$0.detail+(compensation.map{String(format:" · %.0f frames route delay",$0)} ?? "")} ?? ""
     return "\(name) · peak \(Self.db(peak)) · RMS \(Self.db(rms)) · \(channels)ch"+routeDetail+(clipped ? " · over 0 dBFS (latched)":"")+(invalid ? " · Invalid output":"")
   }
@@ -80,7 +83,7 @@ struct GraphSignalReadings {
         if port.available{routeIndices[route.identity]=routeIndices[route.identity]==nil ? index:-1}
         continue
       }
-      let key=GraphBoundaryPort(node:port.node,number:port.port,output:port.output,modulation:false)
+      let key=GraphBoundaryPort(node:port.node,number:port.port,output:port.output,modulation:port.kind=="control")
       if portIndices[key]==nil{portIndices[key]=index}
       nodeIndices[port.node,default:[]].append(index)
     }
@@ -88,9 +91,9 @@ struct GraphSignalReadings {
   func route(_ identity:GraphSignalRouteID)->GraphPortReading? {
     guard let index=routeIndices[identity],index>=0 else{return nil};return ports[index]
   }
-  func port(_ node:String,output:Bool,number:UInt32=0)->GraphPortReading? {
-    let real=aliases[GraphBoundaryPort(node:node,number:number,output:output,modulation:false)] ?? GraphRealPort(node:node,number:number)
-    return portIndices[GraphBoundaryPort(node:real.node,number:real.number,output:output,modulation:false)].map{ports[$0]}
+  func port(_ node:String,output:Bool,number:UInt32=0,modulation:Bool=false)->GraphPortReading? {
+    let real=aliases[GraphBoundaryPort(node:node,number:number,output:output,modulation:modulation)] ?? GraphRealPort(node:node,number:number)
+    return portIndices[GraphBoundaryPort(node:real.node,number:real.number,output:output,modulation:modulation)].map{ports[$0]}
   }
   func nodePorts(_ node:String,output:Bool?=nil)->[GraphPortReading] {
     let boundary=aliases.filter{$0.key.node==node && !$0.key.modulation && (output==nil || $0.key.output==output)}
@@ -101,7 +104,7 @@ struct GraphSignalReadings {
   // Boundary socket zero is a display index, not necessarily Main. Prefer the
   // unique real Main port; ambiguous parallel groups require a port choice.
   func primaryPort(_ node:String,output:Bool)->GraphPortReading? {
-    let values=nodePorts(node,output:output),main=values.filter{$0.port==0}
+    let values=nodePorts(node,output:output).filter{$0.kind=="audio"},main=values.filter{$0.port==0}
     return main.count==1 ? main[0] : values.count==1 ? values[0]:nil
   }
 }
@@ -125,7 +128,18 @@ extension SignalGraphEditor {
     }
   }
   func observedCablePort(_ index:Int)->GraphPortReading? {
-    guard graphID==nil,canvas.edges.indices.contains(index),!canvas.edges[index].modulation,canvas.edges[index].enabled,songConnections.indices.contains(index) else{return nil}
+    guard canvas.edges.indices.contains(index),canvas.edges[index].enabled else{return nil}
+    if graphID != nil {
+      guard definitionEdgeIndices.indices.contains(index) else{return nil};let original=definitionEdgeIndices[index]
+      let audio=definition?["audio"] as? [[String:Any]] ?? [],modulation=definition?["modulation"] as? [[String:Any]] ?? []
+      let isAudio=original<audio.count
+      guard isAudio || modulation.indices.contains(original-audio.count) else{return nil}
+      var descriptor=isAudio ? audio[original]:modulation[original-audio.count]
+      descriptor["kind"]=isAudio ? "graph-audio":"graph-modulation"
+      if !isAudio {descriptor["input"]=descriptor["parameter"];descriptor["output"]=0}
+      return GraphSignalRouteID(descriptor).flatMap{signalReadings.route($0)}
+    }
+    guard !canvas.edges[index].modulation,songConnections.indices.contains(index) else{return nil}
     let action=songConnections[index],kind=action["kind"] as? String ?? ""
     var descriptor=action
     switch kind {
@@ -160,7 +174,7 @@ extension SignalGraphEditor {
   func openScope(spectrum:Bool) {
     if let port=canvas.scopeTarget(at:nil) {signalScope.show(port:port,spectrum:spectrum);return}
     if canvas.selectedEdge != nil {status.stringValue="Measurement unavailable for this cable in the adopted route · select another measured cable or port";return}
-    chooseTarget(title:spectrum ? "Spectrum of signal":"Scope signal",entries:signalReadings.ports.filter(\.available).map {
+    chooseTarget(title:spectrum ? "Spectrum of signal":"Scope signal",entries:signalReadings.ports.filter{$0.available && $0.kind=="audio"}.map {
       .init(id:$0.key,title:$0.name,detail:$0.route?.detail ?? ($0.output ? "Audio output":"Audio input"),keywords:$0.node)
     }) {[weak self] port in self?.signalScope.show(port:port,spectrum:spectrum)}
   }
@@ -168,7 +182,7 @@ extension SignalGraphEditor {
     var named=value
     var retainedNames=[String:(node:String,raw:String,shown:String)]()
     named["ports"]=(value["ports"] as? [[String:Any]] ?? []).map { port -> [String:Any] in
-      guard let node=port["node"] as? String else{return port}
+      guard port["copy"]==nil,let node=port["node"] as? String else{return port}
       let route=(port["route"] as? [String:Any]).flatMap(GraphSignalRouteID.init)
       guard route != nil || signalNamePrefixes[node] != nil else{return port}
       let raw=port["name"] as? String ?? "Port",key=port["key"] as? String ?? node+"/"+raw
@@ -178,9 +192,7 @@ extension SignalGraphEditor {
       var result=port;result["name"]=shown;return result
     }
     signalPortNames=retainedNames
-    signalReadings.update(named)
-    signalReadings.aliases=boundaryPorts
-    canvas.signalReadings=graphID==nil ? signalReadings:GraphSignalReadings()
+    lastSignalData=named;applyCopyObservation()
     listenControls.update(value["listen"] as? [String:Any] ?? [:])
     canvas.listeningPort=listenControls.port
     let routing=value["routing"] as? [String:Any] ?? [:]
@@ -192,19 +204,20 @@ extension SignalGraphEditor {
   }
   func listenSelected() {
     if let edge=canvas.selectedEdge {
-      guard let port=observedCablePort(edge),port.output else{status.stringValue="Measurement unavailable for this cable in the adopted route";return}
+      guard let port=observedCablePort(edge),port.output,port.kind=="audio" else{status.stringValue="Measurement unavailable for this cable in the adopted route";return}
       listenControls.select(port.key==listenControls.port ? nil:port.key);return
     }
-    if let id=canvas.selected,let port=signalReadings.primaryPort(id,output:true),graphID==nil {
+    if let id=canvas.selected,let port=signalReadings.primaryPort(id,output:true) {
       listenControls.select(port.key==listenControls.port ? nil:port.key);return
     }
-    let selected=canvas.selected.map{signalReadings.nodePorts($0,output:true)} ?? []
-    let choices=graphID==nil && !selected.isEmpty ? selected:signalReadings.ports.filter{$0.output && $0.available}
+    let selected=canvas.selected.map{signalReadings.nodePorts($0,output:true).filter{$0.kind=="audio"}} ?? []
+    let choices = !selected.isEmpty ? selected:signalReadings.ports.filter{$0.output && $0.available && $0.kind=="audio"}
     chooseTarget(title:"Listen to output",entries:choices.map {
       .init(id:$0.key,title:$0.name,detail:$0.route?.detail ?? "Temporary monitor · output \($0.port)",keywords:$0.node)
     }) {[weak self] port in self?.listenControls.select(port)}
   }
   func revealObservedNode(_ id:String) {
+    if graphID != nil {selectedID=id;canvas.selected=id;canvas.selectedEdge=nil;inspect();configureConnectionInspector();frameSelection();return}
     rememberGraphView();graphID=nil;graphOrigin=nil;graphTarget=nil;filterID=nil
     processingGroupID=processingGroups.first{($0["nodes"] as? [String] ?? []).contains(id)}?["id"] as? String
     nodeSearch.stringValue="";nodeCategory.selectItem(at:0);selectedID=id;canvas.selectedEdge=nil
@@ -234,7 +247,6 @@ extension SignalGraphEditor {
   func traceSilence() {
     guard !hasDraft else{status.stringValue="Finish the current edit before tracing signal";return}
     guard signalReadings.active else{status.stringValue="Stopped · play the song to trace signal";return}
-    guard graphID==nil else{status.stringValue="Internal recipe ports are not measured yet. Return to Song to inspect its channel and rack path.";return}
     guard let selectedID else{status.stringValue="Select the channel or processor whose path you want to inspect";return}
     let owner=songNodeBus[selectedID]
     if let owner,let bus=buses.first(where:{$0["id"] as? String==owner}) {
@@ -255,13 +267,13 @@ extension SignalGraphEditor {
     while changed{let old=path;for edge in ungroupedEdges where !edge.modulation && edge.enabled && path.contains(edge.target){path.insert(edge.source)};changed=old != path}
     let candidates=ungroupedNodes.filter{path.contains($0.id)}
     for node in candidates {
-      guard songNodePlugin[node.id] != nil,let input=signalReadings.port(node.id,output:false),let output=signalReadings.port(node.id,output:true),input.measured,output.measured else{continue}
+      guard songNodePlugin[node.id] != nil || (graphID != nil && nodes.contains{$0["id"] as? String==node.id && $0["kind"] as? String=="plugin"}),let input=signalReadings.port(node.id,output:false),let output=signalReadings.port(node.id,output:true),input.measured,output.measured else{continue}
       if input.peak>1e-5 && output.peak<=1e-7 {
         revealObservedNode(node.id)
         status.stringValue="\(node.title): input active; output silent · Open interface to inspect the plugin";return
       }
     }
-    let readings=signalReadings.ports.filter{path.contains($0.node) && $0.measured}
+    let readings=signalReadings.ports.filter{path.contains($0.node) && $0.measured && $0.kind=="audio"}
     let audible=readings.filter{$0.peak>1e-5}
     status.stringValue=readings.isEmpty ? "Measurement unavailable for this path":audible.isEmpty ? "No signal measured on the observed part of this path · check notes and source playback":"Signal reaches \(audible.last?.name ?? "this path") · measured host ports do not diagnose vendor-internal routing"
     canvas.selectNodes(path.intersection(Set(canvas.nodes.map(\.id))),primary:selectedID)

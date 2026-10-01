@@ -1,0 +1,9 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 78: graph-signal-observation
+1/2 Test #78: graph-signal-observation .........   Passed    0.39 sec
+    Start 81: native-signal-graph
+2/2 Test #81: native-signal-graph ..............   Passed    0.52 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.92 sec

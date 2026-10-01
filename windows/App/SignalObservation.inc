@@ -19,7 +19,7 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
             throw ScreamSeq::Api::ApiError(-32602,"Monitor gain requires a selected output and a number between -60 and 12 dB");
         uint32_t token=0;
         if(!p["port"].is_null()) {
-            if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==p["port"].get_ref<const std::string &>()&&observation->ports[i].output&&observation->available(uint32_t(i+1))){token=uint32_t(i+1);break;}
+            if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==p["port"].get_ref<const std::string &>()&&observation->ports[i].kind=="audio"&&observation->ports[i].output&&observation->available(uint32_t(i+1))){token=uint32_t(i+1);break;}
             if(!token)throw ScreamSeq::Api::ApiError(-32602,"Choose an observed audio output in the prepared graph");
         }
         if(observation)observation->listen.select(token,float(std::pow(10.,p.value("gainDB",0.)/20.)));
@@ -30,7 +30,7 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
             throw ScreamSeq::Api::ApiError(-32602,"Specify one observed port key or null to stop capture");
         uint32_t token=0;
         if(!p["port"].is_null()) {
-            if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==p["port"].get_ref<const std::string &>()&&observation->available(uint32_t(i+1))){token=uint32_t(i+1);break;}
+            if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==p["port"].get_ref<const std::string &>()&&observation->ports[i].kind=="audio"&&observation->available(uint32_t(i+1))){token=uint32_t(i+1);break;}
             if(!token)throw ScreamSeq::Api::ApiError(-32602,"Observed scope port does not exist in the prepared graph");
         }
         if(observation)observation->scope.watch(token);
@@ -66,6 +66,9 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
             {"compensation",v.compensation<0?Json(nullptr):Json(v.compensation)},{"available",v.available},{"fresh",v.fresh},{"measured",v.measured},
             {"peak",{v.peakLeft,v.peakRight}},{"rms",{v.rmsLeft,v.rmsRight}},{"through",v.through},{"lastSignal",v.lastSignal},
             {"clipped",v.clipped},{"nonFinite",v.nonFinite}};
+        entry["kind"]=port.kind;
+        if(port.kind=="control"){entry["value"]=v.value;entry["first"]=v.first;entry["minimum"]=std::min(v.first,v.value);entry["maximum"]=std::max(v.first,v.value);}
+        if(port.copy){const auto &c=*port.copy;const auto id=[](uint64_t value){return "n"+std::to_string(value);};entry["copy"]={{"graph",id(c.graph)},{"target",c.target?Json(id(c.target)):Json(nullptr)},{"role",std::array{"row","persistent","ordinary","instrument"}[c.role]},{"instrument",c.instrument?Json(id(c.instrument)):Json(nullptr)},{"channel",c.channel==UINT16_MAX?Json(nullptr):Json(c.channel)}};}
         if(port.route) {
             const auto &r=*port.route;
             entry["route"]={{"kind",r.kind},{"source",r.source},{"target",r.target},{"plugin",r.plugin},
@@ -81,5 +84,5 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
         {"latencyPending",device.running()&&preparedPlayback&&preparedPlayback->chain().latencyChangePending()}};
     return {{"ports",std::move(ports)},{"listen",listenState()},{"routing",routing},{"active",device.running()},{"playing",device.running()&&!auditionOnly},
         {"sampleRate",lastRate?lastRate:48000},{"freshnessFrames",4096},{"peakDecaySeconds",.2},{"silenceThreshold",1e-7},
-        {"scope","Host mixer/rack ports and adopted route contributions; reusable graph internals are not included"}};
+        {"scope","Host ports, exact reusable graph copies, cable contributions and control values; control ranges describe quantum endpoints"}};
 }

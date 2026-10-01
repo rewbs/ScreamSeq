@@ -11,10 +11,11 @@ double graphModulationStep(const PluginParameter &parameter,bool quantized) {
 }
 GraphPluginState::GraphPluginState(const SignalDefinition &definition,const SignalNode &node,double rate,bool offline):recipe(node.plugin) {
   const auto &r=recipe;
-  PluginState state;state.descriptor={r.type,r.subtype,r.manufacturer,r.name,r.format,r.path,r.classID,false};state.state=r.state;
+  PluginState state;state.descriptor={r.type,r.subtype,r.manufacturer,r.name,r.format,r.path,r.classID,false};state.state=r.state;state.audioLayout=r.audioLayout;
   state.instanceID="graph-"+std::to_string(definition.id)+"-"+std::to_string(node.id);state.auxiliaryInputs=r.inputs;state.auxiliaryOutputs=r.outputs;state.bypass=r.bypass;
   plugin=std::make_shared<NativePlugin>(state,rate,offline);
   if(plugin->isInstrument())throw std::invalid_argument("Subgraphs accept effect plugins; route instrument outputs into a mixer bus");
+  inputs|=plugin->preparedAuxiliaryInputs();outputs|=plugin->preparedAuxiliaryOutputs();
   for(const auto &bus:plugin->buses())if(bus.active&&bus.supported&&bus.index<64)(bus.input?inputs:outputs)|=uint64_t(1)<<bus.index;
   latency=uint32_t(std::llround(plugin->latency()*rate));parameters=plugin->parameters();
   for(const auto &[id,value]:r.parameters){const auto p=std::find_if(parameters.begin(),parameters.end(),[&](const auto &p){return p.id==id;});

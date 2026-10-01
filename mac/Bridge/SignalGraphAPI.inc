@@ -6,7 +6,7 @@
       const double db=p[@"gainDB"]?number(p[@"gainDB"],-60,12):0;
       if(p[@"port"]!=NSNull.null) {
         const auto key=string(p[@"port"],512);
-        if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==key.UTF8String&&observation->ports[i].output&&observation->available(uint32_t(i+1))){token=uint32_t(i+1);break;}
+        if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==key.UTF8String&&observation->ports[i].kind=="audio"&&observation->ports[i].output&&observation->available(uint32_t(i+1))){token=uint32_t(i+1);break;}
         require(token!=0,"Choose an observed audio output in the prepared graph");
       } else require(!p[@"gainDB"],"Monitor gain requires a selected output");
       if(observation)observation->listen.select(token,float(std::pow(10.,db/20.)));
@@ -16,7 +16,7 @@
       auto *observation=_audio->signalObservation();uint32_t token=0;
       if(p[@"port"]!=NSNull.null) {
         const auto key=string(p[@"port"],512);
-        if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==key.UTF8String&&observation->available(uint32_t(i+1))){token=uint32_t(i+1);break;}
+        if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==key.UTF8String&&observation->ports[i].kind=="audio"&&observation->available(uint32_t(i+1))){token=uint32_t(i+1);break;}
         require(token!=0,"Observed scope port does not exist in the prepared graph");
       }
       if(observation)observation->scope.watch(token);
@@ -41,10 +41,11 @@
       require(found,"Observed signal port does not exist in the prepared graph");result=@{@"clearing":@YES};
 #include "NoteActivityAPI.inc"
 #include "GraphProvenanceAPI.inc"
+#include "GroupBypassReadAPI.inc"
     } else if ([method isEqual:@"graph.get"]) {
       allowed(@[@"includeState",@"includeImplicitMixer"]);NSMutableDictionary *data=[encodeSignalGraph(_document->native().signal,!p[@"includeState"]||boolean(p[@"includeState"])) mutableCopy];
 
-      NSMutableArray *plugins=[NSMutableArray array];for(size_t slot=0;slot<_plugins.size();++slot){const auto &p=_plugins[slot];NSMutableDictionary *item=[descriptorDictionary(p.descriptor) mutableCopy];item[@"id"]=@(p.instanceID.c_str());item[@"slot"]=@(slot);item[@"bypass"]=@(p.bypass);NSMutableArray *instruments=[NSMutableArray array];for(const auto &a:pluginAssignments(p))[instruments addObject:@(a.instrument)];item[@"instruments"]=instruments;NSMutableArray *assignments=[NSMutableArray array];for(const auto &a:pluginAssignments(p)){const auto found=_document->native().instruments.find(a.instrument);if(found!=_document->native().instruments.end())[assignments addObject:@{@"instrument":@(a.instrument),@"instrumentID":nativeID(found->second.id),@"channel":@(a.channel)}];}item[@"assignments"]=assignments;item[@"audioBuses"]=pluginBusDictionaries(_audio->pluginBuses(slot));[plugins addObject:item];}data[@"plugins"]=plugins;
+      NSMutableArray *plugins=[NSMutableArray array];for(size_t slot=0;slot<_plugins.size();++slot){const auto &p=_plugins[slot];NSMutableDictionary *item=[descriptorDictionary(p.descriptor) mutableCopy];item[@"id"]=@(p.instanceID.c_str());item[@"slot"]=@(slot);item[@"bypass"]=@(p.bypass);item[@"audioLayout"]=@(p.audioLayout.c_str());NSMutableArray *instruments=[NSMutableArray array];for(const auto &a:pluginAssignments(p))[instruments addObject:@(a.instrument)];item[@"instruments"]=instruments;NSMutableArray *assignments=[NSMutableArray array];for(const auto &a:pluginAssignments(p)){const auto found=_document->native().instruments.find(a.instrument);if(found!=_document->native().instruments.end())[assignments addObject:@{@"instrument":@(a.instrument),@"instrumentID":nativeID(found->second.id),@"channel":@(a.channel)}];}item[@"assignments"]=assignments;item[@"audioBuses"]=pluginBusDictionaries(_audio->pluginBuses(slot));[plugins addObject:item];}data[@"plugins"]=plugins;
       NativeSong implicit;
       const bool showImplicit=p[@"includeImplicitMixer"]&&boolean(p[@"includeImplicitMixer"])&&!_document->native().mixer.active();
       if(showImplicit){implicit.tracks=_document->native().tracks;implicit.nextID=_document->native().nextID;implicit.masterID=_document->native().masterID;implicit.mixer=_document->native().mixer;implicit.ensureMixer();}
@@ -83,6 +84,7 @@
 #include "SongModulationAPI.inc"
 #include "GraphPresentationAPI.inc"
 #include "NoteRoutingAPI.inc"
+#include "GroupBypassAPI.inc"
       if([method isEqual:@"graph.selection.cut"]) {
         allowed(@[@"graph",@"nodes",@"dryRun"]);affected=decodeNativeID(p[@"graph"]);std::vector<uint64_t> ids;for(id value:array(p[@"nodes"],128))ids.push_back(decodeNativeID(value));
         try{clipboardFragment=encodeSignalDefinition(cutSignalSelection(next,affected,ids));}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
@@ -144,7 +146,7 @@
           std::vector<std::pair<std::string,GraphPluginRecipe>> effects;
           for(size_t slot=0;slot<_plugins.size();++slot){const auto &state=_plugins[slot];const auto &d=state.descriptor;if(d.instrument||d.type==kAudioUnitType_MusicDevice)continue;
             GraphPluginRecipe recipe{d.format,d.name,d.path,d.classID,d.type,d.subtype,d.manufacturer,state.state,state.auxiliaryInputs,state.auxiliaryOutputs};
-            recipe.bypass=state.bypass;
+            recipe.bypass=state.bypass;recipe.audioLayout=state.audioLayout;
             for(const auto &value:_manualParameters)if(value.slot==slot)recipe.parameters[value.id]=value.value;
             effects.emplace_back(state.instanceID,std::move(recipe));
           }
@@ -164,6 +166,7 @@
         std::map<uint64_t,uint64_t> mapping;for(auto &node:copy.nodes){const auto id=next.makeEntity().id;mapping[node.id]=id;if(const auto hint=_pluginPathHints.graph.find({sourceGraph,node.id});hint!=_pluginPathHints.graph.end()){const auto stored=hint->second;clonedPathHints[{copy.id,id}]=stored;}node.id=id;}
         for(auto &group:copy.groups){const auto id=next.makeEntity().id;mapping[group.id]=id;group.id=id;}
         for(auto &group:copy.groups){if(group.parent)group.parent=mapping.at(group.parent);for(auto &member:group.nodes)member=mapping.at(member);}
+        remapSignalGroupDryRoutes(copy,mapping);
         for(const auto &l:std::vector<EnvelopeLink>(next.envelopeLinks))if(l.target.kind==EnvelopeTargetKind::Graph&&mapping.contains(l.target.owner)){auto link=l;link.target.owner=mapping.at(l.target.owner);next.envelopeLinks.push_back(link);}
         std::map<std::string,std::string> visualIDs;for(auto [from,to]:mapping)visualIDs["n"+std::to_string(from)]="n"+std::to_string(to);remapSignalPresentation(copy.presentation,visualIDs);
         for(auto &e:copy.audio){e.source=mapping.at(e.source);e.target=mapping.at(e.target);}for(auto &e:copy.modulation){e.source=mapping.at(e.source);e.target=mapping.at(e.target);}graph.library.push_back(std::move(copy));
@@ -177,7 +180,7 @@
         // New identities are allocated by graph.node.add, never supplied by a client.
         for(const auto &node:updated.nodes)require(std::any_of(previous.nodes.begin(),previous.nodes.end(),[&](const auto &n){return n.id==node.id&&n.kind==node.kind;}),"Add nodes using graph.node.add; node identities and kinds cannot be replaced");
         // A changed bundle location is a hint to resolve, exactly as when opening a project.
-        for(auto &node:updated.nodes)if(node.kind==SignalNodeKind::Plugin){auto existing=std::find_if(previous.nodes.begin(),previous.nodes.end(),[&](const auto &n){return n.id==node.id;});if(existing==previous.nodes.end()||existing->plugin.path!=node.plugin.path||existing->plugin.classID!=node.plugin.classID||existing->plugin.format!=node.plugin.format)[self resolveGraphRecipe:node.plugin];}
+        for(auto &node:updated.nodes)if(node.kind==SignalNodeKind::Plugin){auto existing=std::find_if(previous.nodes.begin(),previous.nodes.end(),[&](const auto &n){return n.id==node.id;});if(existing==previous.nodes.end()||existing->plugin!=node.plugin){[self resolveGraphRecipe:node.plugin];if(existing!=previous.nodes.end()&&!existing->plugin.audioLayout.empty()&&node.plugin.audioLayout.empty())node.plugin.audioLayout=existing->plugin.audioLayout;[self pinGraphRecipeLayout:node.plugin];}}
         for(const auto &group:updated.groups)require(std::any_of(previous.groups.begin(),previous.groups.end(),[&](const auto &g){return g.id==group.id;}),"Allocate group identities using graph.group.create");
         reconcileSignalPresentation(updated,previous);previous=std::move(updated);
       } else if([method isEqual:@"graph.group.create"]) {
@@ -213,9 +216,9 @@
         if(n.kind==SignalNodeKind::Plugin){require(bool(p[@"slot"])!=bool(p[@"plugin"]),"Supply a rack slot or a plugin recipe");
           if(p[@"slot"]){const auto slot=pluginSlot();auto source=_plugins[slot];if(!_audio->active()&&_pluginError.empty()&&!_audio->hasAutomatedState())source=_audio->pluginStates().at(slot);require(!source.descriptor.instrument&&source.descriptor.type!=kAudioUnitType_MusicDevice,"Subgraph inserts require an effect plugin");const auto &s=source.descriptor;
             n.plugin={s.format,s.name,s.path,s.classID,s.type,s.subtype,s.manufacturer,source.state,source.auxiliaryInputs,source.auxiliaryOutputs};
-            n.plugin.bypass=source.bypass;
+            n.plugin.bypass=source.bypass;n.plugin.audioLayout=source.audioLayout;
             n.name=string(p[@"name"]?:@(s.name.c_str()),256).UTF8String;
-          }else {n.plugin=decodeSignalRecipe(p[@"plugin"]);[self resolveGraphRecipe:n.plugin];}
+          }else {n.plugin=decodeSignalRecipe(p[@"plugin"]);[self resolveGraphRecipe:n.plugin];[self pinGraphRecipeLayout:n.plugin];}
         } else require(!p[@"slot"]&&!p[@"plugin"],"Only plugin nodes accept plugin recipes");
         require(!p[@"insertAfter"]||!p[@"insertEdge"],"Choose insertAfter or insertEdge, not both");
         if(p[@"insertEdge"]) {

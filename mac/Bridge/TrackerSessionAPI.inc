@@ -37,13 +37,13 @@
     string(method, 80);
     object(p);
     NSArray *reads = @[
-      @"parameter.activity.targets", @"parameter.activity.parameters", @"parameter.activity.get", @"parameter.activity.sources", @"automation.recorded.get", @"envelope.bank.list", @"envelope.catalogue.list", @"transport.get", @"automation.formula.preview", @"automation.formula.reference", @"graph.provenance.get", @"graph.note.activity", @"graph.get", @"graph.selection.copy", @"graph.signal.get", @"graph.scope.get", @"graph.listen.get", @"graph.automation.get", @"graph.plugin.get",
+      @"parameter.activity.targets", @"parameter.activity.parameters", @"parameter.activity.get", @"parameter.activity.sources", @"automation.recorded.get", @"envelope.bank.list", @"envelope.catalogue.list", @"transport.get", @"automation.formula.preview", @"automation.formula.reference", @"graph.provenance.get", @"graph.note.activity", @"graph.get", @"graph.selection.copy", @"graph.group.boundary", @"graph.signal.get", @"graph.scope.get", @"graph.listen.get", @"graph.automation.get", @"graph.plugin.get",
       @"recording.get", @"pattern.notes.get", @"pattern.performance.get", @"pattern.effects.get", @"instrument.envelope.get", @"instrument.envelope.copy",
       @"plugin.programs.get", @"plugin.instruments.get", @"document.timing.get", @"track.get", @"api.describe", @"document.get", @"pattern.get", @"pattern.timeline.get", @"pattern.commands", @"sample.get", @"sample.waveform.get", @"sample.snap.get", @"sample.pcm.get", @"sample.clipboard.get", @"instrument.get",
       @"plugin.preset.inspect", @"plugin.library.get", @"plugin.locations.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
     ];
     NSArray *writes = @[
-      @"parameter.activity.watch", @"automation.recorded.edit", @"envelope.bank.save", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.bypass", @"graph.plugin.preset.save", @"graph.plugin.preset.load", @"graph.note.connect", @"graph.note.update", @"graph.note.disconnect", @"graph.note.restoreAssignment", @"graph.source.mute", @"graph.makeIndependent", @"graph.selection.paste", @"graph.selection.cut", @"graph.selection.duplicate", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.presentation.set", @"graph.routes.set", @"graph.connections.remove", @"graph.controller", @"graph.signal.clear", @"graph.scope.watch", @"graph.listen.set", @"graph.song.source.add", @"graph.song.source.update", @"graph.song.source.remove", @"graph.song.modulation.set", @"graph.song.modulation.remove", @"graph.song.group.create", @"graph.song.group.update", @"graph.song.group.remove", @"graph.song.group.export", @"graph.group.create", @"graph.group.update", @"graph.group.remove", @"graph.group.export", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.nodes.insert", @"graph.nodes.detach", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
+      @"parameter.activity.watch", @"automation.recorded.edit", @"envelope.bank.save", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.bypass", @"graph.plugin.preset.save", @"graph.plugin.preset.load", @"graph.note.connect", @"graph.note.update", @"graph.note.disconnect", @"graph.note.restoreAssignment", @"graph.source.mute", @"graph.group.bypass", @"graph.makeIndependent", @"graph.selection.paste", @"graph.selection.cut", @"graph.selection.duplicate", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.presentation.set", @"graph.routes.set", @"graph.connections.remove", @"graph.controller", @"graph.signal.clear", @"graph.scope.watch", @"graph.listen.set", @"graph.song.source.add", @"graph.song.source.update", @"graph.song.source.remove", @"graph.song.modulation.set", @"graph.song.modulation.remove", @"graph.song.group.create", @"graph.song.group.update", @"graph.song.group.remove", @"graph.song.group.export", @"graph.group.create", @"graph.group.update", @"graph.group.remove", @"graph.group.export", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.nodes.insert", @"graph.nodes.detach", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
       @"recording.start", @"recording.capture", @"recording.stop", @"recording.commit", @"recording.discard", @"pattern.notes.set", @"pattern.performance.set", @"pattern.effects.set", @"pattern.effect.set", @"instrument.envelope.transform",
       @"instrument.plugin.set", @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule",
       @"sequence.select", @"sample.patch",          @"sample.process",    @"sample.import", @"sample.importMany", @"sample.clipboard.copy", @"sample.clipboard.set", @"sample.cut", @"sample.delete", @"sample.paste",
@@ -237,8 +237,8 @@
                                   @"liveEdits": @"Pattern lane changes, removals and automation-only Undo/Redo adopt a prepared plan at the next audio buffer without restarting playback. Removed/disabled lanes cancel pending ramps and restore the latest saved/manual parameter baseline. transport.get.patternPosition is fractional position in 1/256-row units."},
         @"mixer" : @{@"maxBuses": @240, @"maxInsertsPerBus": @32, @"maxSendsPerBus": @16, @"instrumentOutputBuses": @64,
                      @"liveRouting": @"Mac supported equal-latency routing, bus and effect-rack edits use prepared 10ms transitions with retained processors. Unsupported active changes reject without stopping playback or committing the candidate. graph.signal.get and Mac transport.get include routing:{available,active,requestedPlan,renderedPlan,failedPlan,state,latencyPending}. Plan counters belong to the prepared playback engine, not song revisions; they restart on preparation. Failed candidates leave the previous plan audible and require Undo to restore the displayed topology.",
-                     @"signalObservations": @"graph.signal.get exposes physical host ports and exact adopted route contributions. Optional route:{kind,source,target,plugin,input,output,tap,gainDB,preFader} uses the actual gained/delayed contribution before destination summing; compensation is the route delay. Use opaque keys for Scope/Listen. Route readings are separate from physical sockets. Missing/retired or ambiguous cable taps are unavailable, never source-output substitutes. During preparing, observations describe the adopted plan, not the final device crossfade. Recipe internals are not yet included.",
-                     @"processingGroups": @"graph.group.create packages sibling nodes/groups within a reusable definition without changing DSP, bindings or real cable endpoints; parent selects nesting. graph.group.update renames/moves the boundary and all descendants; graph.group.export saves an independent library copy and rejects external modulation dependencies; graph.group.remove ungroups or explicitly deletes contents. Flat nodes/audio/modulation remain authoritative; groups are saved boundaries, distinct from mixer buses and reusable library instances. Song-rack equivalents graph.song.group.create/update/remove/export package plugin:<instanceID> members and nested group IDs without replacing processors; export copies one consecutive enabled chain to an independent library recipe. graph.layout.set groups moves complete song boundaries. All edits support dryRun, revision guards and one Undo.",
+                     @"signalObservations": @"graph.signal.get exposes physical host ports and exact adopted route contributions. Optional route:{kind,source,target,plugin,input,output,tap,gainDB,preFader} uses the actual gained/delayed contribution before destination summing; compensation is the route delay. Use opaque keys for Scope/Listen. Route readings are separate from physical sockets. Missing/retired or ambiguous cable taps are unavailable, never source-output substitutes. During preparing, observations describe the adopted plan, not the final device crossfade. Reusable internal ports carry copy:{graph,target,role,instrument,channel}; select exactly one copy rather than aggregating definitions. kind:control exposes current value plus first/minimum/maximum quantum endpoints; these ranges are not continuous extrema, and Scope/Listen accept audio only.",
+                     @"processingGroups": @"graph.group.create packages sibling nodes/groups within a reusable definition without changing DSP, bindings or real cable endpoints; parent selects nesting. graph.group.boundary reads exact dry input/output identities; graph.group.bypass applies a warm boundary bypass with explicit dryRoutes for ambiguous branches, also graph:null for song groups. graph.group.update renames/moves the boundary and all descendants; graph.group.export saves an independent library copy and rejects external modulation dependencies; graph.group.remove ungroups or explicitly deletes contents. Flat nodes/audio/modulation remain authoritative; groups are saved boundaries, distinct from mixer buses and reusable library instances. Song-rack equivalents graph.song.group.create/update/remove/export package plugin:<instanceID> members and nested group IDs without replacing processors; export copies one consecutive enabled chain to an independent library recipe. graph.layout.set groups moves complete song boundaries. All edits support dryRun, revision guards and one Undo.",
                      @"patching": @"Socket connections add sources/destinations. graph.connections.remove atomically cuts explicit song routes by semantic identity, preserves other fan-out destinations and records one Undo; empty batches are no-ops. Fixed rack-chain wires cannot be cut independently. mixer.sidechains.set input:0 sums into Main in; input:1..63 feeds separate auxiliary buses. mixer.plugin.route targets:[bus IDs] provides fan-out; [] disconnects. Supported connected auxiliary ports enable automatically on playback, without plugin history changes. graph.nodes.detach pulls a serial chain out and heals its main path; remove:true deletes it; layout shares one Undo. graph.nodes.insert moves a serial chain onto definition.audio[edge] and heals its old path atomically; optional positions share the Undo. Shift/Command selection and group layout use graph.update or graph.layout.set.",
                      @"songModulation": @"graph.get.songSources/songModulation address existing rack processors without recipe conversion. graph.song.source.add {source,connect?} allocates one source and optional zero-depth edge. update patches settings, remove deletes selected sources and their edges. graph.song.modulation.set upserts by source/plugin/parameter, preserving omitted range values; remove atomically deletes explicit connections. Contributions add to the current manual/pattern/recorded baseline and clamp once; stepped targets require explicit quantized:true and usable steps. Read-only targets reject. graph.automation.get/set and envelope-bank graph targets accept graph:null for song sources. Limits: 64 sources and 256 edges.",
                      @"addConnected": @"graph.node.add connect:{node,port,output,modulation,base} creates and connects in one Undo. Modulation input drags create a source at zero depth and retain existing shared base. mixer.bus.add accepts sendFrom for an initially disabled return send, with optional position:{x,y}.",
@@ -1063,7 +1063,7 @@
     } else if ([method isEqual:@"plugin.buses.get"]) {
       allowed(@[@"slot", @"plugin"]);
       auto slot = pluginSlot();
-      result = @{@"plugin": @(_plugins[slot].instanceID.c_str()), @"buses": pluginBusDictionaries(_audio->pluginBuses(slot))};
+      result = @{@"plugin": @(_plugins[slot].instanceID.c_str()), @"buses": pluginBusDictionaries(_audio->pluginBuses(slot)), @"audioLayout": @(pluginAudioLayoutSignature(_audio->pluginBuses(slot)).c_str())};
     } else if ([method isEqual:@"plugin.buses.set"]) {
       allowed(@[@"slot", @"plugin", @"inputs", @"outputs", @"dryRun"]);
       const auto slot = pluginSlot();
@@ -1091,7 +1091,7 @@
         states[slot].auxiliaryInputs = next.auxiliaryInputs; states[slot].auxiliaryOutputs = next.auxiliaryOutputs;
         [self applyPluginGraph:states automation:_automation];
       }
-      result = @{@"wouldChange": @(different), @"buses": pluginBusDictionaries(_audio->pluginBuses(slot))};
+      result = @{@"wouldChange": @(different), @"buses": pluginBusDictionaries(_audio->pluginBuses(slot)), @"audioLayout": @(pluginAudioLayoutSignature(_audio->pluginBuses(slot)).c_str())};
     } else if ([method isEqual:@"instrument.plugin.set"]) {
       allowed(@[@"instrument", @"plugin", @"channel", @"dryRun"]);
       const auto instrument = uint32_t(instrumentIndex());
@@ -1115,11 +1115,13 @@
       };
       auto states = _plugins;
       prepare(states);
-      bool changed = false;
+      auto nextSources=_document->native();const auto clearSource=identity.length?uint64_t(0):nextSources.instruments.at(uint16_t(instrument)).id;
+      reconcilePluginNoteSources(nextSources,_plugins,states,clearSource);
+      bool changed = nextSources!=_document->native();
       for (size_t i = 0; i < states.size(); ++i) changed |= pluginAssignments(states[i]) != pluginAssignments(_plugins[i]);
       if (changed && !dry) {
         [self commitManualParameters]; states = _plugins; prepare(states);
-        [self applyPluginGraph:states automation:_automation];
+        [self applyPluginGraph:states automation:_automation unassignedNoteSource:clearSource];
       }
       result = @{@"instrument": @(instrument), @"plugin": identity, @"channel": @(channel), @"wouldChange": @(changed), @"dryRun": @(dry)};
     } else if ([method isEqual:@"plugin.instruments.get"]) {
@@ -1163,7 +1165,7 @@
             throw Error(-32001, "Saved plugin state exposes a different program list; reload the program list");
           probe.loadProgram(identity.UTF8String);
           // Only replace opaque state: preserve identity, instrument aliases, ports and routing.
-          states[slot].state = probe.state().state;
+          const auto captured=probe.state();states[slot].state=captured.state;states[slot].audioLayout=captured.audioLayout;
           [self applyPluginGraph:states automation:_automation];
         }
         result = @{@"plugin": p[@"plugin"], @"program": selected, @"catalogRevision": catalog[@"catalogRevision"],
@@ -1183,7 +1185,7 @@
         _plugins = _audio->pluginStates();
       const auto &plugin = _plugins[slot];
       result = PluginPreset::write(path, descriptorDictionary(plugin.descriptor),
-        [NSData dataWithBytes:plugin.state.data() length:plugin.state.size()], name, overwrite, dry);
+        [NSData dataWithBytes:plugin.state.data() length:plugin.state.size()], name, overwrite, dry, @(plugin.audioLayout.c_str()));
     } else if ([method isEqual:@"plugin.state.get"]) {
       allowed(@[ @"slot" ]);
       auto slot = pluginSlot();
@@ -1195,6 +1197,7 @@
       result = @{
         @"descriptor" : descriptorDictionary(_plugins[slot].descriptor),
         @"data" : [data base64EncodedStringWithOptions:0],
+        @"audioLayout" : @(_plugins[slot].audioLayout.c_str()),
         @"kind" : @"saved-baseline"
       };
     } else if ([method isEqual:@"plugin.add"]) {
@@ -1221,7 +1224,7 @@
       auto source=_plugins[slot];if(const auto issue=[self rackLocationIssue:std::vector<PluginState>{source}];!issue.empty())throw Error(-32602,issue.c_str());
       NativePlugin probe(source,_audio->sampleRate(),false);
       for(const auto &v:_manualParameters)if(v.slot==slot)require(probe.parameter(v.id,v.value),"Plugin rejected a saved manual baseline while duplicating");
-      auto duplicate=source;duplicate.state=probe.state().state;duplicate.instanceID=NSUUID.UUID.UUIDString.UTF8String;setPluginAssignments(duplicate,{});
+      const auto captured=probe.state();auto duplicate=source;duplicate.state=captured.state;duplicate.audioLayout=captured.audioLayout;duplicate.instanceID=NSUUID.UUID.UUIDString.UTF8String;setPluginAssignments(duplicate,{});
       auto states=_plugins;states.push_back(duplicate);auto next=_document->native();
       if(!duplicate.descriptor.instrument)next.mixer.detached.push_back(duplicate.instanceID);
       if(p[@"position"]){auto position=object(p[@"position"]);keys(position,@[@"x",@"y"]);next.signal.layout["plugin:"+duplicate.instanceID]={number(position[@"x"],0,100000),number(position[@"y"],0,100000)};}
@@ -1271,6 +1274,7 @@
         if (![string(p[@"expectedPresetRevision"], 80) isEqual:loadedPreset[@"presetRevision"]])
           throw Error(-32001, "Preset changed; inspect it again before loading");
         require(PluginPreset::matches(loadedPreset[@"plugin"], descriptorDictionary(_plugins[slot].descriptor)), "Preset belongs to a different plugin type");
+        const std::string savedLayout=string(loadedPreset[@"audioLayout"]?:@"",8192).UTF8String;require(_plugins[slot].audioLayout.empty()||savedLayout.empty()||_plugins[slot].audioLayout==savedLayout,"Preset audio layout differs from the connected plugin; review routing before loading");
         result = @{@"preset": PluginPreset::summary(loadedPreset), @"plugin": p[@"plugin"], @"loaded": @(!dry), @"dryRun": @(dry)};
       }
       std::vector<std::pair<uint32_t, float>> values;
@@ -1316,6 +1320,7 @@
         [self commitManualParameters];
         auto states = _plugins;
         states[slot].state = byteVector(bytes);
+        if(preset&&states[slot].audioLayout.empty())states[slot].audioLayout=string(loadedPreset[@"audioLayout"]?:@"",8192).UTF8String;
         NativePlugin probe(states[slot], _audio->sampleRate());
         for (auto &value : values)
           require(probe.parameter(value.first, value.second), "Plugin rejected parameter value");

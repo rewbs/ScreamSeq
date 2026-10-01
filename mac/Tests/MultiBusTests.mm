@@ -5,6 +5,7 @@
 #include "soundlib/ModInstrument.h"
 #import "../Bridge/TrackerSession.h"
 #include <iostream>
+#include <dlfcn.h>
 using namespace Tracker;
 using namespace OpenMPT;
 #ifdef TRACKER_SANITIZER
@@ -20,6 +21,9 @@ static void auditEnd(bool ok) {
   uint64_t a, f, l; tracker_audit_end(&a, &f, &l);
   check(ok, "Multi-bus audio callback succeeds"); check(a + f + l == 0, "No multi-bus callback allocations, frees or locks");
 }
+#include "editor/Tests/NativeWideBusChecks.hpp"
+#include "editor/Tests/ProviderLatencyChecks.hpp"
+void setFixtureAUWideBuses(bool);
 static NSDictionary *dictionary(const PluginDescriptor &d) {
   return @{@"type": @(d.type), @"subtype": @(d.subtype), @"manufacturer": @(d.manufacturer), @"name": @(d.name.c_str()),
     @"format": @(d.format.c_str()), @"path": @(d.path.c_str()), @"classID": @(d.classID.c_str()), @"isInstrument": @(d.instrument)};
@@ -52,7 +56,7 @@ static void hostOutputs(PluginState source, uint32_t rate, uint32_t block, bool 
       }
     }
   }
-  check(!plugin.auxiliaryOutput(3) && !plugin.auxiliaryOutput(64), "Disabled and invalid outputs have no audio buffer");
+  check(plugin.auxiliaryOutput(3) && (plugin.preparedAuxiliaryOutputs()&(uint64_t(1)<<3)) && !plugin.auxiliaryOutput(64), "Inactive supported outputs retain prepared live-connection capacity; invalid outputs have no buffer");
 }
 static void hostInputs(PluginState effect, uint32_t rate, uint32_t block, bool sharedPlans=false) {
   effect.auxiliaryInputs = {1}; auto owner=std::make_shared<NativePlugin>(effect,rate,true);
@@ -179,6 +183,13 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       graphOutputs({au[1]}, rate);
       graphSidechains({au[0]}, {au[1]}, rate);
     }
+    void *fixture=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW);check(fixture,"Open wide bus fixture");
+    auto wide=reinterpret_cast<void(*)(bool)>(dlsym(fixture,"ResonanceFixtureWideBuses"));check(wide,"Wide VST3 fixture export");wide(true);setFixtureAUWideBuses(true);
+    for(uint32_t rate:{44100u,48000u,96000u})for(uint32_t block:{17u,128u,4096u}){wideBusChecks(descriptors[0],rate,block);wideBusChecks(au[0],rate,block);}
+    wide(false);setFixtureAUWideBuses(false);
+    auto announce=reinterpret_cast<int(*)(uint32_t)>(dlsym(fixture,"ResonanceFixtureLatency"));
+    auto activations=reinterpret_cast<uint64_t(*)()>(dlsym(fixture,"ResonanceFixtureActivationCalls"));check(announce&&activations,"Latency fixture exports");
+    providerLatencyChecks(descriptors[0],[&](uint32_t frames){announce(frames);},[&]{return activations();});dlclose(fixture);
     TrackerSession *session = [TrackerSession new]; NSError *problem = nil;
     auto call = [&](NSString *method, NSDictionary *params, bool write = false) -> NSDictionary * {
       auto p = [params mutableCopy]; if (write) p[@"expectedRevision"] = session.automationRevision;

@@ -1,5 +1,6 @@
 #include "NativeSignalGraph.hpp"
 #include "editor/hosted/GraphPluginEndpoint.hpp"
+#include "editor/hosted/GraphSignalObservation.hpp"
 #include <cmath>
 #include <set>
 #include <stdexcept>
@@ -22,6 +23,9 @@ struct NativeSignalGraph::Instance {
   std::atomic<SignalRuntime *> publishedRuntime{nullptr};
   std::atomic<bool> layoutSettled{true};
   ParameterProcessor identity;
+  uint32_t observationDomain=0;
+  SignalCopyIdentity copyIdentity() const noexcept {return {identity.graph,identity.target,identity.instrument?uint8_t(3):identity.role,identity.instrument,identity.channel};}
+  static std::vector<SignalObservedBus> observedBuses(const GraphProcessorSet &processors) {std::vector<SignalObservedBus> result;for(const auto &p:processors.entries)for(const auto &bus:p.endpoint->initial()->plugin->buses())if(bus.supported)result.push_back({p.id,!bus.input,bus.index,bus.channels});return result;}
   enum class Transition {Stable,Out,Warm,In};
   Transition transition=Transition::Stable;
   uint32_t fadeFrames=1,phaseFrames=0;
@@ -212,7 +216,8 @@ struct NativeSignalGraph::Bus {
     return true;
   }
 };
-NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool offline,std::span<const SignalSampleSource> sampleSources,size_t storageLimit,size_t processorLimit,ParameterActivity *activity):rate_(rate),offline_(offline),activity_(activity),routedMixer_(signalRoutingGraph(native.mixer,native.signal)){
+NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool offline,std::span<const SignalSampleSource> sampleSources,size_t storageLimit,size_t processorLimit,ParameterActivity *activity,SignalObservation *observation):rate_(rate),offline_(offline),activity_(activity),observation_(observation),routedMixer_(signalRoutingGraph(native.mixer,native.signal)){
+  std::vector<SignalPortIdentity> observedPorts;
   for(const auto &[index,entity]:native.patterns)patternIDs_.emplace(index,entity.id);
   size_t processors=0,delayBytes=0;
   auto budget=[&](size_t bytes){if(bytes>storageLimit-delayBytes)throw std::invalid_argument("Song graph audio storage exceeds 256 MB");delayBytes+=bytes;};
@@ -245,6 +250,7 @@ NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool o
       instance->identity.graph=id;instance->identity.target=bus.id;instance->identity.role=role;
       instance->identity.name=bus.name+" · "+definition->name+" · ";
       for(const auto &source:sampleSources)if(source.target==bus.id){instance->identity.instrument=source.instrumentID;instance->identity.channel=source.channel;instance->identity.target=0;instance->identity.name="Instrument "+std::to_string(source.instrumentID)+(source.channel==UINT16_MAX?" · Inspector":" · Channel "+std::to_string(source.channel+1))+" · "+definition->name+" · ";}
+      if(observation){const auto before=instance->runtime->storageBytes();instance->observationDomain=observation->newDomain();instance->runtime->observer(std::make_shared<GraphSignalObservation>(*observation,instance->observationDomain,instance->copyIdentity(),*definition,instance->runtime->plan(),observedPorts,Instance::observedBuses(*instance->processors)));budget(instance->runtime->storageBytes()-before);}
       if(activity)for(auto &p:instance->processors->entries){
         auto n=std::find_if(definition->nodes.begin(),definition->nodes.end(),[&](const auto &n){return n.id==p.id;});
         auto observed=instance->observation(*n,*p.endpoint->initial());
@@ -269,6 +275,7 @@ NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool o
     for(auto &[pattern,events]:prepared->patterns)std::sort(events.begin(),events.end(),[](const auto &a,const auto &b){return std::tie(a.position,a.column)<std::tie(b.position,b.column);});
     buses_.push_back(std::move(prepared));
   }
+  if(observation){auto batch=observation->preparePorts(std::move(observedPorts));budget(batch.storageBytes());observation->publishPorts(batch);}
   storageBytes_=delayBytes;processors_=processors;
 }
 NativeSignalGraph::~NativeSignalGraph()=default;
@@ -296,11 +303,11 @@ void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPl
     plan.preparedProcessors+=std::count_if(d->nodes.begin(),d->nodes.end(),[](const auto &n){return n.kind==SignalNodeKind::Plugin;});
     if(plan.preparedProcessors>256)throw std::invalid_argument("Active song graph exceeds 256 prepared plugin copies");
     auto desired=std::make_shared<GraphProcessorSet>();
-    const auto sameVendor=[](const GraphPluginRecipe &a,const GraphPluginRecipe &b){return std::tie(a.format,a.path,a.classID,a.type,a.subtype,a.manufacturer,a.inputs,a.outputs)==std::tie(b.format,b.path,b.classID,b.type,b.subtype,b.manufacturer,b.inputs,b.outputs);};
+    const auto sameVendor=[](const GraphPluginState &state,const GraphPluginRecipe &b){const auto &a=state.recipe;return std::tie(a.format,a.path,a.classID,a.type,a.subtype,a.manufacturer)==std::tie(b.format,b.path,b.classID,b.type,b.subtype,b.manufacturer)&&(b.audioLayout.empty()||b.audioLayout==state.plugin->audioLayout());};
     for(const auto &node:d->nodes)if(node.kind==SignalNodeKind::Plugin){
       const auto *existing=processorSet->find(node.id);
-      if(existing&&!sameVendor(existing->endpoint->initial()->recipe,node.plugin))existing=nullptr;
-      if(!existing)for(const auto &retired:processorSet->retired)if(retired.id==node.id&&sameVendor(retired.endpoint->initial()->recipe,node.plugin)){existing=&retired;break;}
+      if(existing&&!sameVendor(*existing->endpoint->initial(),node.plugin))existing=nullptr;
+      if(!existing)for(const auto &retired:processorSet->retired)if(retired.id==node.id&&sameVendor(*retired.endpoint->initial(),node.plugin)){existing=&retired;break;}
       if(existing)desired->entries.push_back(*existing);
       else {
         auto state=std::make_shared<GraphPluginState>(*d,node,rate_,offline_);reserve(state->storageBytes());
@@ -325,6 +332,8 @@ void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPl
       const auto n=std::find_if(d->nodes.begin(),d->nodes.end(),[&](const auto &n){return n.id==p.id;});
       auto state=p.endpoint->initial();std::shared_ptr<GraphPluginState> retained;
       if(previous)for(const auto &preset:previous->presets)if(preset.endpoint==p.endpoint.get()){state=preset.state;retained=preset.previous;break;}
+      for(auto port:n->plugin.inputs)if(port>=64||!(state->inputs&(uint64_t(1)<<port)))throw std::invalid_argument("Recipe input is outside the prepared physical channel layout");
+      for(auto port:n->plugin.outputs)if(port>=64||!(state->outputs&(uint64_t(1)<<port)))throw std::invalid_argument("Recipe output is outside the prepared physical channel layout");
       if(state->recipe.state!=n->plugin.state){
         if(!p.endpoint->ready(state.get()))throw std::runtime_error("A graph preset is still fading; retry the edit shortly");
         auto replacement=std::make_shared<GraphPluginState>(*d,*n,rate_,offline_);reserve(replacement->storageBytes());
@@ -405,7 +414,9 @@ void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPl
       auto compiled=compileSignal(*d,processorInfo);
       const auto inputNode=std::find_if(d->nodes.begin(),d->nodes.end(),[](const auto &n){return n.kind==SignalNodeKind::Input;});
       for(const auto &edge:d->audio)if(edge.source==inputNode->id&&edge.output&&!(b->inputMask&(uint64_t(1)<<edge.output)))throw std::invalid_argument("A live source cannot enable an unprepared external graph input");
-      auto replacement=std::make_shared<SignalRuntime>(*d,std::move(compiled),rate_,parameterInfo);reserve(replacement->storageBytes());
+      auto replacement=std::make_shared<SignalRuntime>(*d,std::move(compiled),rate_,parameterInfo);
+      if(observation_)replacement->observer(std::make_shared<GraphSignalObservation>(*observation_,instance->observationDomain,instance->copyIdentity(),*d,replacement->plan(),plan.signalPortIdentities,Instance::observedBuses(*processorSet)));
+      reserve(replacement->storageBytes());
       if(replacement->latency()!=runtime->latency())throw std::invalid_argument("This recipe latency change needs a prepared outer-mixer transition");
       if(!structural&&!replacement->compatibleHistory(*runtime))throw std::invalid_argument("Live graph source edits must preserve audio latency and compensation");
       for(auto port:b->outputPorts)if(replacement->output(port)&&std::none_of(instance->auxiliary.begin(),instance->auxiliary.end(),[&](const auto &p){return p.port==port;}))throw std::invalid_argument("This recipe output activation needs a prepared outer-mixer transition");
@@ -457,6 +468,7 @@ void NativeSignalGraph::refreshLatencies(std::vector<MixerProcessorInfo> &mixerP
         i->dryDelay.assign(size_t(plan.totalLatency) * 2, 0); i->dryPosition = 0;
       }
       i->runtime->updateLatencyPlan(std::move(plan));
+      if(observation_){std::vector<SignalPortIdentity> pending;i->runtime->observer(std::make_shared<GraphSignalObservation>(*observation_,i->observationDomain,i->copyIdentity(),i->runtime->definition(),i->runtime->plan(),pending,Instance::observedBuses(*i->processors)));auto batch=observation_->preparePorts(std::move(pending));observation_->publishPorts(batch);}
       storageBytes_ = storageBytes_ - oldStorage - oldBypass - oldInitialProcessors + i->initialProcessorStorage() + (i->runtime==i->initialRuntime.get()?i->runtime->storageBytes():0) + i->dryDelay.size() * sizeof(float)+i->bypassStorage();
       i->tailFrames = uint64_t(std::ceil(tail * rate_)) + i->runtime->latency();
       b->reserved += i->runtime->latency();

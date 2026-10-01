@@ -12,6 +12,7 @@ class NativeSignalGraph {
   double rate_;
   bool offline_=false;
   ParameterActivity *activity_=nullptr;
+  SignalObservation *observation_=nullptr;
   size_t storageBytes_=0,processors_=0;
   std::map<uint16_t,uint64_t> patternIDs_;
   MixerGraph routedMixer_;
@@ -20,7 +21,7 @@ class NativeSignalGraph {
   std::array<std::atomic<uint8_t>,128> controllers_{};
   std::array<uint8_t,128> appliedControllers_{};
 public:
-  NativeSignalGraph(const NativeSong &,double sampleRate,bool offline,std::span<const SignalSampleSource> sampleSources={},size_t storageLimit=256*1024*1024,size_t processorLimit=256,ParameterActivity *activity=nullptr);
+  NativeSignalGraph(const NativeSong &,double sampleRate,bool offline,std::span<const SignalSampleSource> sampleSources={},size_t storageLimit=256*1024*1024,size_t processorLimit=256,ParameterActivity *activity=nullptr,SignalObservation *observation=nullptr);
   ~NativeSignalGraph();
   size_t storageBytes() const {return storageBytes_;}
   size_t processors() const {return processors_;}

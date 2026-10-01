@@ -130,7 +130,8 @@ final class SignalCanvas: NSView {
     var rects=[NSRect]()
     let overview=(enclosingScrollView?.magnification ?? 1)<0.65
     for node in nodes where node.kind != "frame" && node.kind != "comment" {
-      let oldOutputs=previous.nodePorts(node.id,output:true),newOutputs=signalReadings.nodePorts(node.id,output:true)
+      let oldOutputs=previous.nodePorts(node.id,output:true).filter{$0.kind=="audio"},newOutputs=signalReadings.nodePorts(node.id,output:true).filter{$0.kind=="audio"}
+      if previous.port(node.id,output:true,modulation:true)?.value != signalReadings.port(node.id,output:true,modulation:true)?.value || previous.active != signalReadings.active || previous.port(node.id,output:true,modulation:true)?.measured != signalReadings.port(node.id,output:true,modulation:true)?.measured {rects.append(NSRect(x:node.x+10,y:node.y+32,width:160,height:21))}
       if oldOutputs.map(\.key) != newOutputs.map(\.key){rects.append(NSRect(x:node.x+8,y:node.y+4,width:166,height:52))}
       if !overview {for output in [false,true] where meterPaint(previous,node:node.id,output:output) != meterPaint(signalReadings,node:node.id,output:output) {
         rects.append(NSRect(x:node.x+(output ? 92:10),y:node.meterY,width:76,height:3).insetBy(dx:-2,dy:-2))
@@ -268,13 +269,13 @@ final class SignalCanvas: NSView {
     if let stub=boundaries.first(where:{boundaryRect($0.id)?.contains(point)==true}) {toolTip=stub.help}
     else if let node=nodes.reversed().first(where:{$0.canCollapse && $0.disclosureRect.contains(point)}) {toolTip=(node.collapsed ? "Expand":"Collapse")+" node · H · connected sockets remain available"}
     else if let socket=socket(at:point) {
-      let port=socket.port.modulation ? nil:signalReadings.port(socket.node,output:socket.output,number:socket.port.number)
+      let port=signalReadings.port(socket.node,output:socket.output,number:socket.port.number,modulation:socket.port.modulation)
       toolTip=port?.summary(active:signalReadings.active) ?? (signalReadings.active ? "Measurement unavailable for this port":"Stopped")
     }else if let node=nodes.last(where:{$0.hitRect.contains(point)}) {
       let values=signalReadings.nodePorts(node.id)
       toolTip=values.isEmpty ? "Measurement unavailable for this node":values.map{$0.summary(active:signalReadings.active)}.joined(separator:"\n")
-    }else if let index=edge(at:point),!edges[index].modulation {
-      toolTip=observedEdgePort?(index).map{$0.summary(active:signalReadings.active)+" · hold Q for scope, ⇧Q for spectrum"} ?? "Measurement unavailable for this cable in the adopted route"
+    }else if let index=edge(at:point) {
+      toolTip=observedEdgePort?(index).map{$0.summary(active:signalReadings.active)+($0.kind=="audio" ? " · hold Q for scope, ⇧Q for spectrum":"")} ?? "Measurement unavailable for this cable in the adopted route"
     }
     else{toolTip=nil}
   }
@@ -465,7 +466,7 @@ final class SignalCanvas: NSView {
       if node.kind=="comment" {let color=NSColor(calibratedRed:Double((node.visualColor>>16)&255)/255,green:Double((node.visualColor>>8)&255)/255,blue:Double(node.visualColor&255)/255,alpha:1);color.withAlphaComponent(0.12).setFill();NSBezierPath(roundedRect:node.rect,xRadius:7,yRadius:7).fill();(selection.contains(node.id) ? Theme.accent:color).setStroke();NSBezierPath(roundedRect:node.rect,xRadius:7,yRadius:7).stroke();label(node.title,NSRect(x:node.x+10,y:node.y+8,width:node.rect.width-20,height:22),color,12,.semibold);label(node.detail,NSRect(x:node.x+10,y:node.y+33,width:node.rect.width-20,height:node.rect.height-40),Theme.text,11);continue}
       let path=NSBezierPath(roundedRect:node.rect,xRadius:7,yRadius:7);Theme.raised.setFill();path.fill();(selection.contains(node.id) ? Theme.accent : Theme.border).setStroke();path.lineWidth=selection.contains(node.id) ? 2 : 1;path.stroke()
       let scale=max(0.3,enclosingScrollView?.magnification ?? 1),overview=scale<0.65
-      let outputs=signalReadings.nodePorts(node.id,output:true)
+      let outputs=signalReadings.nodePorts(node.id,output:true).filter{$0.kind=="audio"}
       if node.canCollapse {label(node.collapsed ? "▸":"▾",node.disclosureRect,Theme.muted,12,.semibold)}
       label(node.title,NSRect(x:node.x+(node.canCollapse ? 24:10),y:node.y+9,width:(outputs.isEmpty ? 160:142)-(node.canCollapse ? 14:0),height:overview && node.role==nil && !node.collapsed ? 42:23),inactiveStageCopies.contains(node.id) ? Theme.muted:Theme.text,max(13,9/scale),.semibold)
       if !outputs.isEmpty {
@@ -477,7 +478,7 @@ final class SignalCanvas: NSView {
       if node.bypassed {
         let pass=NSBezierPath();pass.move(to:NSPoint(x:node.rect.minX+6,y:node.rect.maxY-6));pass.line(to:NSPoint(x:node.rect.maxX-6,y:node.rect.maxY-6));pass.lineWidth=2;pass.setLineDash([4,3],count:2,phase:0);Theme.gold.withAlphaComponent(0.7).setStroke();pass.stroke()
       }
-      if !overview && !node.collapsed {label(node.detail,NSRect(x:node.x+13,y:node.y+35,width:154,height:16),Theme.muted,10)}
+      if !overview && !node.collapsed {let control=signalReadings.port(node.id,output:true,modulation:true);let text=signalReadings.active && control?.measured==true ? control?.value.map{String(format:"Current value: %.5g",$0)} ?? node.detail:node.detail;label(text,NSRect(x:node.x+13,y:node.y+35,width:154,height:16),Theme.muted,10)}
       else if let role=node.role {label(role,NSRect(x:node.x+10,y:node.y+35,width:160,height:24),Theme.muted,max(10,8/scale))}
       if !overview {
         for output in [false,true] {
@@ -543,7 +544,7 @@ final class SignalCanvas: NSView {
       selectNodes([node.id]);selectedEdge=nil;onSelect?(node.id);onCollapse?();return
     }
     if cutTool {cutStroke=[point];cutEdges=[];return}
-    if let node=nodes.reversed().first(where:{$0.hitRect.contains(point)}),!signalReadings.nodePorts(node.id,output:true).isEmpty,
+    if let node=nodes.reversed().first(where:{$0.hitRect.contains(point)}),!signalReadings.nodePorts(node.id,output:true).filter({$0.kind=="audio"}).isEmpty,
        listenBadge(node).contains(point) || event.modifierFlags.intersection([.control,.shift,.command,.option]) == [.control,.shift] {
       selectNodes([node.id]);selectedEdge=nil;onSelect?(node.id);if let port=signalReadings.primaryPort(node.id,output:true){onListen?(port.key)}else{onChooseListen?()};return
     }

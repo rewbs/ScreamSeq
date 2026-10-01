@@ -17,6 +17,7 @@ struct GraphRackRecord {
   bool bypass = false;
   std::vector<uint16_t> instruments; // Actual assigned tracker instrument slots.
   std::vector<Tracker::PluginInstrumentAlias> assignments;
+  std::string audioLayout;
 };
 struct GraphRackClone {
   Tracker::GraphPluginRecipe recipe; // Baseline opaque state AND enabled aux buses.
@@ -36,6 +37,8 @@ struct GraphHostHooks {
   // Must return the requested real slot's baseline state, never an automated
   // live state. Throw ApiError for absent/unavailable slots. No fallback recipe.
   std::function<GraphRackClone(uint32_t)> cloneRackSlot;
+  // Real hosts validate and pin new/changed recipes to physical bus slices.
+  std::function<void(Tracker::GraphPluginRecipe &)> prepareRecipe;
   // Stable rack identities, not slots. An empty/missing catalogue means the
   // parameter is unavailable; never infer writable/continuous from its number.
   std::function<std::vector<Tracker::PluginParameter>(const std::string &)> parameters;

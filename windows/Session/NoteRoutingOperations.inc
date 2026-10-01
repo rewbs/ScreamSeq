@@ -1,7 +1,7 @@
     if(method.starts_with("graph.note.")) {
       auto &routing=graph.noteRouting;const auto rack=host_.rack?host_.rack():host_.cachedRack;
       auto instrument=[&](const Json &raw){const auto target=identity(raw);const auto found=std::find_if(next.instruments.begin(),next.instruments.end(),[&](const auto &v){return v.second.id==target;});
-        require(found!=next.instruments.end(),"Note instrument does not exist");require(pluginInstrument(rack,found->first),"Note cables carry plugin-instrument events; assign a plugin instrument first");return target;};
+        require(found!=next.instruments.end(),"Note instrument does not exist");require(pluginInstrument(rack,found->first)||std::any_of(routing.triggerSources.begin(),routing.triggerSources.end(),[&](const auto &s){return s.instrument==target;}),"Note cables carry plugin-instrument events; assign a plugin instrument first");return target;};
       auto kind=[&](const Json &raw){const auto value=text(raw,16);require(value=="channel"||value=="instrument","Note sourceKind must be channel or instrument");return value=="channel"?NoteSourceKind::Channel:NoteSourceKind::Instrument;};
       auto validate=[&](const NoteRoute &route){
         require(std::any_of(rack.begin(),rack.end(),[&](const auto &r){return r.id==route.plugin&&(r.descriptor.value("isInstrument",false)||r.descriptor.value("type",0u)==audioUnitMusicDeviceType);}),"Note destination must be an existing plugin instrument");

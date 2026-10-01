@@ -75,6 +75,7 @@ extension InterfaceTests {
     try require(retry.message.stringValue.contains("cannot yet"),"Automatic rollback reads preserve the actionable failed-edit message")
     retry.set(1,value:-6);replies.removeFirst()(["result":["revision":"song:2","data":[:]]])
     try require(retry.message.stringValue.contains("updated") && !retry.message.stringValue.contains("cannot yet"),"A successful retry clears the inspector's previous parameter error")
+    try graphGroupBypassChecks()
     try graphParameterBaselineChecks()
     try graphParameterRangeChecks()
     try detachedEffectChecks()
@@ -196,13 +197,13 @@ extension InterfaceTests {
     select("track");editor.toggleSelectedBypass()
     try require(editor.bypassActionTitle=="Mute bus" && writes.last?.0=="mixer.bus.set" && writes.last?.1["bus"] as? String=="track" && writes.last?.1["mute"] as? Bool==true,"Channel mute uses the existing shared mixer transaction")
     let count=writes.count
-    for key in ["instrument:n20","n200","source:n999","stale-plugin"] {select(key);editor.toggleSelectedBypass();try require(writes.count==count && editor.targetMenu.entries.isEmpty && editor.bypassUnavailableReason != nil,"Unsupported selected context cannot redirect bypass to a song-rack chooser")}
+    for key in ["instrument:n20","source:n999","stale-plugin"] {select(key);editor.toggleSelectedBypass();try require(writes.count==count && editor.targetMenu.entries.isEmpty && editor.bypassUnavailableReason != nil,"Unsupported selected context cannot redirect bypass to a song-rack chooser")}
     editor.graphID="n100";editor.update(song);select("n102");editor.toggleSelectedBypass()
     try require(writes.count==count+1 && writes.last?.0=="graph.plugin.bypass" && writes.last?.1["graph"] as? String=="n100" && writes.last?.1["node"] as? String=="n102" && writes.last?.1["bypass"] as? Bool==true && editor.targetMenu.entries.isEmpty,"Selected recipe bypass targets the exact definition processor, not an unrelated song-rack processor")
     let action=editor.actionMenu().items.first{($0 as? ContextAction)?.commandID==GraphCommand.bypass.id}
     try require(action?.isEnabled==true && action?.title.contains("all uses")==true,"Recipe bypass is discoverable and explains its shared-definition scope")
     select("n101");editor.toggleSelectedBypass()
-    try require(writes.count==count+1 && editor.bypassUnavailableReason != nil,"Source and whole-group bypass remain unsupported rather than redirecting to a processor")
+    try require(writes.count==count+1 && editor.bypassUnavailableReason != nil,"Graph input boundaries cannot redirect bypass to a processor")
     let bypassed=editor.canvasNode(["id":"n102","kind":"plugin","plugin":["bypass":true]],definition:recipe)
     try require(bypassed.bypassed && bypassed.detail.contains("dry through"),"Bypassed recipe card visibly describes host pass-through")
     editor.graphID=nil;editor.update(song);editor.selectedID=nil;editor.canvas.selected=nil;editor.canvas.selectedEdge=nil
@@ -282,5 +283,30 @@ extension InterfaceTests {
     editor.targetMenu.onChoose?(editor.targetMenu.entries.first{$0.id=="3"}!)
     let heal=writes.last?.1["heal"] as? [String:Any]
     try require(writes.count==1 && writes.last?.0=="graph.nodes.detach" && heal?["incoming"] as? Int==1 && heal?["outgoing"] as? Int==3 && writes.last?.1["remove"] as? Bool==false,"Chosen main path is one revision-guarded transaction preserving other branches")
+  }
+}
+
+extension InterfaceTests {
+  static func graphGroupBypassChecks() throws {
+    let editor=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1000,height:600))
+    let group:[String:Any]=["id":"n20","name":"Parallel","nodes":["n3","n4"]]
+    let recipe:[String:Any]=["id":"n1","number":1,"name":"Recipe","nodes":[["id":"n2","kind":"input"],["id":"n3","kind":"plugin"],["id":"n4","kind":"plugin"],["id":"n5","kind":"output"]],"audio":[],"groups":[group]]
+    editor.graphID="n1";editor.update(["library":[recipe]]);editor.selectedID="n20";editor.canvas.selectNodes(["n20"])
+    let input:[String:Any]=["source":"n2","target":"n3","output":0,"input":0],outA:[String:Any]=["node":"n3","port":0],outB:[String:Any]=["node":"n4","port":0]
+    var reads=0,writes=[[String:Any]](),pending:(([String:Any])->Void)?
+    editor.onRequest={method,p,reply in
+      if method=="graph.group.boundary"{reads+=1;pending=reply}
+      else if method=="graph.group.bypass"{writes.append(p);reply(["error":["message":"captured"]])}
+    }
+    editor.toggleSelectedBypass();pending?(["result":["data":["needsMapping":false]]])
+    try require(reads==1 && writes.count==1 && writes[0]["graph"] as? String=="n1" && writes[0]["group"] as? String=="n20" && writes[0]["bypass"] as? Bool==true,"A selected processing group uses true boundary bypass in one exact-target mutation")
+    writes=[];editor.setProcessingGroupBypass(group,bypass:true);pending?(["result":["data":["needsMapping":true,"inputs":[input],"outputs":[outA,outB]]]])
+    try require(writes.isEmpty && editor.targetMenu.entries.count==1,"Ambiguous group bypass waits for explicit dry routes without partial edits")
+    editor.targetMenu.onChoose?(editor.targetMenu.entries[0]);try require(writes.isEmpty,"Choosing the first branch must not commit a partial group map")
+    editor.targetMenu.onChoose?(editor.targetMenu.entries[0]);try require(writes.count==1 && (writes[0]["dryRoutes"] as? [[String:Any]])?.count==2,"All branch choices commit in one group transaction")
+    writes=[];editor.setProcessingGroupBypass(group,bypass:true);editor.selectedID="n3";pending?(["result":["data":["needsMapping":false]]])
+    try require(writes.isEmpty,"A retargeted pending group read cannot bypass a different selection")
+    editor.selectedID="n20";editor.setProcessingGroupBypass(group,bypass:false)
+    try require(writes.count==1 && writes[0]["bypass"] as? Bool==false && reads==3,"Enabling a group preserves its dry mapping without an extra chooser/read")
   }
 }

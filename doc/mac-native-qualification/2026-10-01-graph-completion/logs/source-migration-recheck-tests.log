@@ -1,0 +1,9 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 58: multi-bus
+1/2 Test #58: multi-bus ........................   Passed    2.86 sec
+    Start 75: native-source-migration
+2/2 Test #75: native-source-migration ..........   Passed    0.86 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   3.73 sec

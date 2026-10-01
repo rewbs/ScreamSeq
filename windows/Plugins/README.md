@@ -109,8 +109,11 @@ The shared README remains the authoritative provider contract. This adapter:
 - consumes/resets input and output queues each slice, accepts frames <=4096,
   copies sidechain inputs at the whole-block input offset, returns auxiliary
   outputs starting at zero, and uses the Mac mono/stereo conversion rules;
-- requires stereo main buses, supports mono/stereo enabled auxiliaries 1..63,
-  retains inactive bus metadata and rejects nonexistent/duplicate activations;
+- preserves native N-channel buses as explicit stereo/odd-mono logical ports,
+  retains first-pair IDs and prepares all physical buses before activation;
+  the first live cable uses existing buffers, and disconnected inputs get silence;
+- pins captured physical/channel mappings in `audioLayout` and rejects a changed
+  saved layout before activation, rather than retargeting numeric pair ports;
 - publishes current transport before MIDI, supplies current VST process context,
   emits note on/off/poly pressure and mapped CC/bend/aftertouch, tracks channels
   for all-notes/all-sound-off, and does not invent another musical clock;
@@ -123,9 +126,10 @@ The shared README remains the authoritative provider contract. This adapter:
   stays immutable. Count/identity, step, flags or unit-group changes require a
   stopped rebuild and still fault; a default-value change is harmless because
   the facade does not cache default values;
-- handles latency notifications through stopped latency maintenance; bus/reload
-  and other unsupported structural restarts still latch a fault. Stop and
-  recreate on the control owner; continuing with stale buffers is unsupported;
+- exposes serial-guarded latency snapshots on the control owner and callback-safe
+  exact-generation acknowledgment for prepared PDC adoption, without deactivating
+  the vendor; stopped compatibility refresh uses the same query/ack path;
+  bus/reload and unsupported structural restarts still latch a separate fault;
 - faults/silences on queue overflow, invalid output and processing failure.
   A lock-free first-failure record retains a static reason and numeric detail;
   control-thread diagnostics can inspect it without invoking vendor code.

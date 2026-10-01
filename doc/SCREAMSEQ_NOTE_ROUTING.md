@@ -12,6 +12,14 @@ without disabling note generation in the tracker. Muting or editing an implicit
 cable materializes an explicit replacement in the same transaction. Suppressed
 assignments persist until explicitly restored.
 
+Removing an instrument's originally assigned plugin preserves its note generator
+when explicit cables still route it to another plugin. The song retains that
+instrument and its MIDI channel in `noteRouting.triggerSources`; it has no
+implicit destination. Saving/reopening and Undo retain this source. Explicitly
+unassigning it with `instrument.plugin.set {instrument, plugin:""}` restores its
+sample mapping for future notes. Existing cables remain visible but inactive;
+sample notes never become MIDI merely because those cables remain.
+
 A new destination waits for the next note-on. It never receives synthetic held
 notes. Removing, muting or repatching a cable sends the matching note-offs for
 that cable's held generations. Two paths to the same destination/channel deliver

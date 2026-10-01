@@ -12,23 +12,23 @@ Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsig
     const auto graph=nativeID(field(p,"graph")),nodeID=nativeID(field(p,"node"));
     auto next=document_.native();auto definition=std::find_if(next.signal.library.begin(),next.signal.library.end(),[&](const auto &d){return d.id==graph;});need(definition!=next.signal.library.end(),"Subgraph no longer exists");
     auto node=std::find_if(definition->nodes.begin(),definition->nodes.end(),[&](const auto &n){return n.id==nodeID;});need(node!=definition->nodes.end()&&node->kind==SignalNodeKind::Plugin,"Select a graph plugin node");
-    auto make=[&](const GraphPluginRecipe &r){PluginState state;state.descriptor={r.type,r.subtype,r.manufacturer,r.name,r.format,r.path,r.classID,false};state.state=r.state;state.auxiliaryInputs=r.inputs;state.auxiliaryOutputs=r.outputs;
+    auto make=[&](const GraphPluginRecipe &r){PluginState state;state.descriptor={r.type,r.subtype,r.manufacturer,r.name,r.format,r.path,r.classID,false};state.state=r.state;state.audioLayout=r.audioLayout;state.auxiliaryInputs=r.inputs;state.auxiliaryOutputs=r.outputs;
       auto plugin=std::make_unique<NativePlugin>(state,rate);need(!plugin->isInstrument(),"Graph nodes require effect plugins");
       const auto catalog=plugin->parameters();for(const auto &[id,value]:r.parameters){const auto p=std::find_if(catalog.begin(),catalog.end(),[&](const auto &p){return p.id==id;});need(p!=catalog.end()&&p->writable&&value>=p->min&&value<=p->max&&plugin->parameter(id,float(value)),"Graph parameter baseline is unavailable or outside its range");}return plugin;};
-    auto metadata=[&](const NativePlugin &plugin){auto values=parameters(plugin);for(auto &v:values){v.erase("unit");const auto base=signalManualParameterValue(*definition,nodeID,v.at("id").get<uint32_t>(),v.at("min").get<double>(),v.at("max").get<double>(),v.at("value").get<double>());v["value"]=base;v["manualValue"]=base;v["effectiveValue"]=nullptr;v["valueRole"]="manual-template";}return Json{{"parameters",values},{"buses",buses(plugin)},{"latency",plugin.latency()},{"tail",plugin.tail()},{"bypass",node->plugin.bypass}};};
+    auto metadata=[&](const NativePlugin &plugin){auto values=parameters(plugin);for(auto &v:values){v.erase("unit");const auto base=signalManualParameterValue(*definition,nodeID,v.at("id").get<uint32_t>(),v.at("min").get<double>(),v.at("max").get<double>(),v.at("value").get<double>());v["value"]=base;v["manualValue"]=base;v["effectiveValue"]=nullptr;v["valueRole"]="manual-template";}return Json{{"parameters",values},{"buses",buses(plugin)},{"latency",plugin.latency()},{"tail",plugin.tail()},{"bypass",node->plugin.bypass},{"audioLayout",pluginAudioLayoutSignature(plugin.buses())}};};
     bool commit=false;const bool dry=flag(p,"dryRun");Json result;
     if(method=="graph.plugin.get") {keys(p,{"graph","node"});auto plugin=make(node->plugin);return metadata(*plugin);}
     if(method=="graph.plugin.preset.save") {
       keys(p,{"graph","node","path","name","overwrite","dryRun"});auto plugin=make(node->plugin);
       for(const auto &parameter:plugin->parameters()){const auto value=signalManualParameterValue(*definition,nodeID,parameter.id,parameter.min,parameter.max,parameter.value);if(value!=parameter.value)need(parameter.writable&&plugin->parameter(parameter.id,float(value)),"Plugin rejected the configured manual baseline");}
-      const auto state=plugin->state();return Plugins::PluginPreset::write(text(field(p,"path"),8192),descriptor(state.descriptor),state.state,text(field(p,"name"),200),flag(p,"overwrite"),dry);
+      const auto state=plugin->state();return Plugins::PluginPreset::write(text(field(p,"path"),8192),descriptor(state.descriptor),state.state,text(field(p,"name"),200),flag(p,"overwrite"),dry,state.audioLayout);
     }
     if(method=="graph.plugin.preset.load") {
       need(document_.editable(),"This document is read-only");keys(p,{"graph","node","path","expectedPresetRevision","dryRun"});
       const auto preset=Plugins::PluginPreset::read(text(field(p,"path"),8192));if(text(field(p,"expectedPresetRevision"),80)!=preset.at("presetRevision").get<std::string>())throw Api::ApiError(-32001,"Preset changed; inspect it again before loading");
       const auto &r=node->plugin;PluginDescriptor identity{r.type,r.subtype,r.manufacturer,r.name,r.format,r.path,r.classID,false};need(Plugins::PluginPreset::matches(preset.at("plugin"),descriptor(identity)),"Preset belongs to a different plugin type");
-      auto replacement=r;const auto &bytes=preset.at("state").get_binary();replacement.state.resize(bytes.size());if(!bytes.empty())std::memcpy(replacement.state.data(),bytes.data(),bytes.size());replacement.parameters.clear();
-      auto plugin=make(replacement);captureSignalParameterBases(*definition,nodeID,plugin->parameters());replacement.state=plugin->state().state;node->plugin=std::move(replacement);commit=true;
+      auto replacement=r;const auto savedLayout=text(preset.value("audioLayout",Json("")),8192);need(replacement.audioLayout.empty()||savedLayout.empty()||replacement.audioLayout==savedLayout,"Preset audio layout differs from the connected plugin; review routing before loading");if(replacement.audioLayout.empty())replacement.audioLayout=savedLayout;const auto &bytes=preset.at("state").get_binary();replacement.state.resize(bytes.size());if(!bytes.empty())std::memcpy(replacement.state.data(),bytes.data(),bytes.size());replacement.parameters.clear();
+      auto plugin=make(replacement);captureSignalParameterBases(*definition,nodeID,plugin->parameters());const auto captured=plugin->state();replacement.state=captured.state;replacement.audioLayout=captured.audioLayout;node->plugin=std::move(replacement);commit=true;
       result={{"preset",Plugins::PluginPreset::summary(preset)},{"loaded",!dry},{"dryRun",dry}};
     } else if(method=="graph.plugin.bypass") {
       need(document_.editable(),"This document is read-only");keys(p,{"graph","node","bypass","dryRun"});
@@ -51,7 +51,7 @@ Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsig
     } else if(method=="graph.plugin.editor.commit") {
       need(document_.editable(),"This document is read-only");
       keys(p,{"graph","node","editor","dryRun"});need(graphEditor_&&text(field(p,"editor"),100)==graphEditorID_&&graphEditorGraph_==graph&&graphEditorNode_==nodeID,"Graph plugin editor has changed");
-      need(node->plugin==graphEditorRecipe_,"Plugin recipe changed; reopen its interface before applying settings");captureSignalParameterBases(*definition,nodeID,graphEditor_->parameters());node->plugin.state=graphEditor_->state().state;node->plugin.parameters.clear();result=metadata(*graphEditor_);commit=true;
+      need(node->plugin==graphEditorRecipe_,"Plugin recipe changed; reopen its interface before applying settings");captureSignalParameterBases(*definition,nodeID,graphEditor_->parameters());const auto captured=graphEditor_->state();node->plugin.state=captured.state;node->plugin.audioLayout=captured.audioLayout;node->plugin.parameters.clear();result=metadata(*graphEditor_);commit=true;
     } else throw Api::ApiError(-32601,"Unknown graph plugin method");
     if(commit){next.validate(document_.song());auto committedRecipe=node->plugin;
       if(!dry&&next!=document_.native()){

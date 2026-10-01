@@ -16,6 +16,7 @@ int main(){try{
   d.audio={{input,plugin},{plugin,output}};d.modulation={{lfo,plugin,12,-.3,.6,.2,true}};
   const auto group=song.makeEntity().id,inner=song.makeEntity().id;
   d.groups={{group,0,"Outer",10,20,{}},{inner,group,"Inner",30,40,{plugin,lfo}}};
+  d.groups[1].bypass=true;d.groups[1].dryRoutes={{{input,plugin,0,0},{plugin,0}}};
   SignalVisualRegion region;region.id="frame";region.title="Test";region.nodes={"n"+std::to_string(plugin)};region.scope="n"+std::to_string(group);d.presentation.regions={region};d.presentation.collapsedNodes=region.nodes;
   d.presentation.cables={{"n"+std::to_string(lfo),"n"+std::to_string(plugin),0,12,true,{{20,30}}}};
   song.signal.library={d};const auto a=song.tracks[0].id,b=song.tracks[1].id,pattern=song.patterns[0].id;
@@ -32,6 +33,7 @@ int main(){try{
   const auto &fresh=song.signal.library.back();CHECK(fresh.number==2&&fresh.name=="Channel 1");
   CHECK(fresh.groups[1].parent==copy.identities.at(group)&&fresh.groups[1].nodes[0]==copy.identities.at(plugin));
   CHECK(fresh.nodes[1].plugin==d.nodes[1].plugin&&fresh.nodes[3].muted);
+  CHECK(fresh.groups[1].bypass&&fresh.groups[1].dryRoutes[0].input.source==copy.identities.at(input)&&fresh.groups[1].dryRoutes[0].output.node==copy.identities.at(plugin));
   CHECK(fresh.presentation.regions[0].nodes[0]=="n"+std::to_string(copy.identities.at(plugin))&&fresh.presentation.regions[0].scope=="n"+std::to_string(copy.identities.at(group)));
   CHECK(fresh.presentation.cables[0].source=="n"+std::to_string(copy.identities.at(lfo))&&fresh.presentation.collapsedNodes[0]=="n"+std::to_string(copy.identities.at(plugin)));
   const auto channelState=song;auto independent=makeSignalUseIndependent(song,d.id,instrument,true);
@@ -60,7 +62,7 @@ int main(){try{
   auto cut=before;auto cutFragment=cutSignalSelection(cut,d.id,{plugin,lfo});CHECK(cutFragment.modulation.size()==1&&cutFragment.audio.empty());CHECK(cut.signal.library[0].nodes.size()==2&&cut.signal.library[0].audio.empty()&&cut.signal.library[0].groups.empty());
   CHECK(cut.signal.assignments==before.signal.assignments&&cut.signal.commands==before.signal.commands);
   auto beforeCut=cut;rejects([&]{cutSignalSelection(cut,d.id,{input});});CHECK(cut==beforeCut);
-  auto branch=d;branch.audio={{input,plugin,0,0,.5},{input,plugin,1,0,.2},{plugin,output,0,0,.3},{plugin,output,0,1,.8}};
+  auto branch=d;for(auto &g:branch.groups){g.bypass=false;g.dryRoutes.clear();}branch.audio={{input,plugin,0,0,.5},{input,plugin,1,0,.2},{plugin,output,0,0,.3},{plugin,output,0,1,.8}};
   const auto branched=branch;rejects([&]{detachSignalNodes(branch,{plugin});});CHECK(branch==branched);
   detachSignalNodes(branch,{plugin},false,SignalHealPath{0,2});CHECK(branch.audio.size()==3);
   CHECK(branch.audio[0]==branched.audio[1]&&branch.audio[1]==branched.audio[3]);CHECK((branch.audio[2]==SignalAudioEdge{input,output,0,0,.15}));

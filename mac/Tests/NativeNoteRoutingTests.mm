@@ -24,6 +24,7 @@ static std::unique_ptr<Document> fixture(){auto doc=std::make_unique<Document>()
   s.Patterns[0].GetpModCommand(5,0)->note=NOTE_KEYOFF;
 });return doc;}
 #include "NoteActivityHostChecks.inc"
+#include "NoteRoutingScopeChecks.inc"
 static NSDictionary *descriptorDictionary(const PluginDescriptor &d){return @{@"type":@(d.type),@"subtype":@(d.subtype),@"manufacturer":@(d.manufacturer),@"name":@(d.name.c_str()),@"format":@(d.format.c_str()),@"path":@(d.path.c_str()),@"classID":@(d.classID.c_str()),@"isInstrument":@(d.instrument)};}
 static void sessionChecks(const PluginDescriptor &descriptor){
   TrackerSession *session=[TrackerSession new];NSError *error=nil;check([session addInstrument:0 error:&error]>0,"Create note instrument");
@@ -47,11 +48,31 @@ static void sessionChecks(const PluginDescriptor &descriptor){
   auto saved=[reopened automationMethod:@"graph.get" params:@{} error:&error][@"data"][@"noteRouting"];check([saved isEqual:graph()[@"noteRouting"]],"Routes, mapping, mute and implicit suppression persist");[NSFileManager.defaultManager removeItemAtPath:path error:nil];
   call(@"graph.note.restoreAssignment",@{@"instrument":instrument},true);check([graph()[@"noteRouting"][@"suppressedAssignments"] count]==0,"Explicit restore reveals default cable");
   call(@"graph.note.disconnect",@{@"id":route},true);check([graph()[@"noteRouting"][@"routes"] count]==0,"Explicit disconnect removes cable");
+  // Removing the assigned synth must not turn its still-routed trigger into
+  // sample playback. The source kind/channel belong to portable song data.
+  call(@"instrument.plugin.set",@{@"instrument":@1,@"plugin":plugin,@"channel":@5},true);
+  check([session addPlugin:descriptorDictionary(descriptor) error:&error],"Add unassigned note destination");
+  NSString *destination=graph()[@"plugins"][1][@"id"];
+  NSString *retained=call(@"graph.note.connect",@{@"sourceKind":@"instrument",@"source":instrument,@"plugin":destination},true)[@"data"][@"route"];
+  call(@"plugin.remove",@{@"plugins":@[plugin]},true);
+  auto triggers=graph()[@"noteRouting"][@"triggerSources"];
+  check([triggers count]==1&&[triggers[0][@"instrument"] isEqual:instrument]&&[triggers[0][@"midiChannel"] intValue]==5,"Removing original plugin erased a routed note source");
+  call(@"history.undo",@{},true);check([graph()[@"plugins"] count]==2&&[graph()[@"noteRouting"][@"triggerSources"] count]==0,"Undo source migration and rack removal atomically");
+  call(@"history.redo",@{},true);check([graph()[@"plugins"] count]==1&&[graph()[@"noteRouting"][@"triggerSources"] count]==1,"Redo source migration and rack removal atomically");
+  call(@"graph.note.update",@{@"id":retained,@"midiChannel":@7},true);
+  check([[session serializedData] writeToFile:path atomically:YES],"Save retained plugin trigger");
+  check([reopened openPath:path error:&error],"Reopen retained plugin trigger");
+  check([[reopened automationMethod:@"graph.get" params:@{} error:&error][@"data"][@"noteRouting"] isEqual:graph()[@"noteRouting"]],"Retained trigger/cable mapping must persist");
+  [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+  call(@"instrument.plugin.set",@{@"instrument":@1,@"plugin":@""},true);
+  check([graph()[@"noteRouting"][@"triggerSources"] count]==0&&[graph()[@"noteRouting"][@"routes"] count]==1,"Explicit unassign restores sample mode without deleting unrelated cable data");
+  call(@"history.undo",@{},true);check([graph()[@"noteRouting"][@"triggerSources"] count]==1,"Undo explicit source-mode reset");
 }
 int main(int argc,char **argv){trustFixtureArguments(argc,argv);@autoreleasepool{try{
   check(argc==2,"Fixture bundle required");void *handle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW|RTLD_LOCAL);check(handle,"Load fixture");auto weighted=reinterpret_cast<void(*)(bool)>(dlsym(handle,"ResonanceFixtureChannelWeights"));check(weighted,"Channel-weight fixture hook");weighted(true);setFixtureAUChannelWeights(true);
   const auto vst=NativePlugin::discoverVST3(argv[1]),au=registerFixtureAUs();
   for(const auto &descriptor:{vst[1],au[1]}){
+    noteRoutingScopeChecks(descriptor);
     noteActivityHostChecks(descriptor);
     PluginState a{descriptor},b{descriptor};a.instanceID="note-a";b.instanceID="note-b";a.instrument=1;b.instrument=2;
     auto render=[&](uint32_t block){auto doc=fixture();auto native=doc->native();Renderer renderer(doc->snapshotData(),48000);PluginChain chain({a,b},48000,true);chain.attachInstruments(renderer,&native);chain.attachMusicalAutomation(renderer,native);

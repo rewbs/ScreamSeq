@@ -102,8 +102,8 @@ Json decode(std::span<const std::byte> bytes){
   Json root;
   try{root=bytes.size()>=8&&std::memcmp(bytes.data(),"bplist00",8)==0?Project::decodePlist(bytes,limits()):decodeXML(bytes);}
   catch(const Api::ApiError &){throw;}catch(const std::runtime_error &e){throw Api::ApiError(-32602,e.what());}
-  keys(root,{"format","version","name","plugin","state"});const auto &format=field(root,"format");need(format=="Resonance plugin preset"||format=="ScreamSeq plugin preset","Not a ScreamSeq plugin preset");
-  integer(field(root,"version"),1,1);text(field(root,"name"),200);descriptor(field(root,"plugin"));const auto &state=field(root,"state");need(state.is_binary()&&!state.get_binary().has_subtype()&&state.get_binary().size()<=PluginPreset::maximumStateBytes,"Invalid or oversized preset state");
+  keys(root,{"format","version","name","plugin","state","audioLayout"});const auto &format=field(root,"format");need(format=="Resonance plugin preset"||format=="ScreamSeq plugin preset","Not a ScreamSeq plugin preset");
+  text(root.value("audioLayout",Json("")),8192);integer(field(root,"version"),1,1);text(field(root,"name"),200);descriptor(field(root,"plugin"));const auto &state=field(root,"state");need(state.is_binary()&&!state.get_binary().has_subtype()&&state.get_binary().size()<=PluginPreset::maximumStateBytes,"Invalid or oversized preset state");
   root["presetRevision"]=revision(bytes);return root;
 }
 }
@@ -112,18 +112,18 @@ PluginPreset::Json PluginPreset::read(const std::string &raw){
   std::vector<std::byte> bytes;try{bytes=Project::readProjectBytes(path,maximumFileBytes);}catch(const std::exception &e){throw Api::ApiError(-32602,e.what());}
   need(!bytes.empty(),"Preset file is empty");return decode(bytes);
 }
-PluginPreset::Json PluginPreset::summary(const Json &preset){return {{"name",preset.at("name")},{"descriptor",preset.at("plugin")},{"presetRevision",preset.at("presetRevision")},{"stateBytes",preset.at("state").get_binary().size()},{"presetVersion",1}};}
+PluginPreset::Json PluginPreset::summary(const Json &preset){return {{"name",preset.at("name")},{"descriptor",preset.at("plugin")},{"presetRevision",preset.at("presetRevision")},{"stateBytes",preset.at("state").get_binary().size()},{"presetVersion",1},{"audioLayout",preset.value("audioLayout",Json(""))}};}
 bool PluginPreset::matches(const Json &a,const Json &b){
   descriptor(a);descriptor(b);if(a.at("format")!=b.at("format")||a.at("isInstrument")!=b.at("isInstrument"))return false;
   if(a.at("format")=="AU")return a.at("type")==b.at("type")&&a.at("subtype")==b.at("subtype")&&a.at("manufacturer")==b.at("manufacturer");
   auto left=a.at("classID").get<std::string>(),right=b.at("classID").get<std::string>();if(a.at("format")=="VST3"){for(auto &c:left)c=char(std::toupper(static_cast<unsigned char>(c)));for(auto &c:right)c=char(std::toupper(static_cast<unsigned char>(c)));}return left==right;
 }
-PluginPreset::Json PluginPreset::write(const std::string &raw,const Json &plugin,std::span<const std::byte> state,const std::string &name,bool overwrite,bool dry){
-  const auto path=pathCheck(raw);descriptor(plugin);text(Json(name),200);need(state.size()<=maximumStateBytes,"Preset state exceeds 16 MiB");need(std::filesystem::is_directory(path.parent_path()),"Preset directory does not exist");
+PluginPreset::Json PluginPreset::write(const std::string &raw,const Json &plugin,std::span<const std::byte> state,const std::string &name,bool overwrite,bool dry,const std::string &audioLayout){
+  const auto path=pathCheck(raw);descriptor(plugin);text(Json(name),200);text(Json(audioLayout),8192);need(state.size()<=maximumStateBytes,"Preset state exceeds 16 MiB");need(std::filesystem::is_directory(path.parent_path()),"Preset directory does not exist");
   const auto attributes=GetFileAttributesW(path.c_str());if(attributes!=INVALID_FILE_ATTRIBUTES){need(overwrite,"Preset exists; use overwrite:true to replace it");need(!(attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_DEVICE|FILE_ATTRIBUTE_REPARSE_POINT)),"Existing preset destination must be a regular file");}
   else need(GetLastError()==ERROR_FILE_NOT_FOUND,"Cannot inspect preset destination");
   std::vector<uint8_t> data(state.size());if(!state.empty())std::memcpy(data.data(),state.data(),state.size());
-  Json root={{"format","Resonance plugin preset"},{"version",1},{"name",name},{"plugin",plugin},{"state",Json::binary(std::move(data))}};std::vector<std::byte> bytes;
+  Json root={{"format","Resonance plugin preset"},{"version",1},{"name",name},{"plugin",plugin},{"state",Json::binary(std::move(data))},{"audioLayout",audioLayout}};std::vector<std::byte> bytes;
   try{bytes=Project::encodePlist(root,limits());}catch(const std::runtime_error &e){throw Api::ApiError(-32602,e.what());}
   root["presetRevision"]=revision(bytes);auto result=summary(root);result["path"]=raw;result["written"]=!dry;
   if(!dry)Project::writeProjectFile(path,bytes,overwrite);return result;

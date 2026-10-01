@@ -22,6 +22,7 @@ SignalCloneResult cloneSignalGraph(NativeSong &song,uint64_t graph,std::optional
   for(auto &node:copy.nodes){const auto old=node.id;node.id=next.makeEntity().id;result.identities.emplace(old,node.id);}
   for(auto &group:copy.groups){const auto old=group.id;group.id=next.makeEntity().id;result.identities.emplace(old,group.id);}
   for(auto &group:copy.groups){if(group.parent)group.parent=result.identities.at(group.parent);for(auto &id:group.nodes)id=result.identities.at(id);}
+  remapSignalGroupDryRoutes(copy,result.identities);
   for(auto &edge:copy.audio){edge.source=result.identities.at(edge.source);edge.target=result.identities.at(edge.target);}
   for(auto &edge:copy.modulation){edge.source=result.identities.at(edge.source);edge.target=result.identities.at(edge.target);}
   std::map<std::string,std::string> keys;for(const auto &[from,to]:result.identities)keys["n"+std::to_string(from)]="n"+std::to_string(to);

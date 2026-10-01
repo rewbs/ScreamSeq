@@ -147,7 +147,7 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
     musicalMIDICount_-=midiRead;
   }
   bypassControl_.finish(buffer,frames);
-  for(auto bus:auxiliaryOutputs_)bypassControl_.finish(auxiliaryOutputBuffers_[bus]->interleaved.data(),frames,true);
+  for(uint32_t bus=1;bus<64;++bus)if(auxiliaryOutputBuffers_[bus])bypassControl_.finish(auxiliaryOutputBuffers_[bus]->interleaved.data(),frames,true);
   if (!outputDelay_.empty())
     for (uint32_t n = 0; n < frames * 2; ++n) {
       std::swap(buffer[n], outputDelay_[outputDelayPosition_]);

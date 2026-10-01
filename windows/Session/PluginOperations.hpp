@@ -75,6 +75,7 @@ public:
   std::string takeEditorWarning(){return std::exchange(editorWarning_,std::string{});}
   std::vector<GraphRackRecord> graphRack() const;
   GraphRackClone cloneRackSlot(uint32_t);
+  void prepareRecipe(Tracker::GraphPluginRecipe &);
   std::vector<Tracker::PluginAudioBus> audioBuses(size_t,bool required=false);
   std::vector<Tracker::PluginParameter> parameterMetadata(const std::string &identity);
   // Both API domain names and all UI Undo entry points share chronological

@@ -18,13 +18,21 @@ struct NoteRoute {
   bool enabled=true;
   bool operator==(const NoteRoute &) const = default;
 };
+struct NoteTriggerSource {
+  uint64_t instrument=0;
+  uint8_t midiChannel=1;
+  bool operator==(const NoteTriggerSource &) const = default;
+};
 struct NoteRouting {
   std::vector<NoteRoute> routes;
   // A disconnected implicit assignment must stay disconnected. The instrument
   // still generates events in the engine; its graph cables own delivery.
   std::vector<uint64_t> suppressedAssignments;
+  // A removed default plugin must not erase a source still routed elsewhere.
+  // These generators have no implicit destination. Explicit unassign clears one.
+  std::vector<NoteTriggerSource> triggerSources;
   bool operator==(const NoteRouting &) const = default;
-  bool empty() const { return routes.empty() && suppressedAssignments.empty(); }
+  bool empty() const { return routes.empty() && suppressedAssignments.empty() && triggerSources.empty(); }
   size_t bytes() const;
   void validate(std::span<const uint64_t> tracks,std::span<const uint64_t> instruments) const;
 };

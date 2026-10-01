@@ -5,6 +5,12 @@ static void graphEditingSessionChecks() {
   NSString *graph=api(@"graph.create",@{@"name":@"Editing actions"},true)[@"data"][@"graph"];
   NSString *source=api(@"graph.node.add",@{@"graph":graph,@"kind":@"lfo"},true)[@"data"][@"node"];
   NSString *plugin=api(@"graph.node.add",@{@"graph":graph,@"kind":@"plugin",@"plugin":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1"},@"insertEdge":@0},true)[@"data"][@"node"];
+  auto pluginMetadata=api(@"graph.plugin.get",@{@"graph":graph,@"node":plugin})[@"data"];
+  check([pluginMetadata[@"audioLayout"] hasPrefix:@"pairs-v1"]&&[pluginMetadata[@"buses"][0][@"physicalChannels"] unsignedIntValue]>0,"Plugin metadata must expose actual physical slices and a stable layout fingerprint");
+  NSDictionary *pinnedRecipe=nil;for(NSDictionary *n in snapshot()[@"library"][0][@"nodes"])if([n[@"id"] isEqual:plugin])pinnedRecipe=n[@"plugin"];
+  check([pinnedRecipe[@"audioLayout"] isEqual:pluginMetadata[@"audioLayout"]],"New recipe must pin actual audio layout before it can be connected");
+  auto layoutBefore=snapshot();NSString *layoutRevision=s.automationRevision;NSMutableDictionary *wrongRecipe=[pinnedRecipe mutableCopy];wrongRecipe[@"audioLayout"]=@"pairs-v1;o0=0:0:2:8";
+  check(![s automationMethod:@"graph.node.add" params:@{@"graph":graph,@"kind":@"plugin",@"plugin":wrongRecipe,@"expectedRevision":layoutRevision} error:&error]&&[layoutBefore isEqual:snapshot()]&&[layoutRevision isEqual:s.automationRevision],"A mismatched vendor layout must reject creation without mutation or history");
   auto findSource=[&](NSString *which)->NSDictionary *{for(NSDictionary *d in snapshot()[@"library"])if([d[@"id"] isEqual:which])for(NSDictionary *n in d[@"nodes"])if([n[@"id"] isEqual:source])return n;return nil;};
   auto before=snapshot();NSString *revision=s.automationRevision;
   api(@"graph.source.mute",@{@"graph":graph,@"node":source,@"muted":@YES,@"dryRun":@YES},true);check([before isEqual:snapshot()]&&[revision isEqual:s.automationRevision],"Source mute preview changes history");
@@ -41,5 +47,12 @@ static void graphEditingSessionChecks() {
   auto synthCopy=api(@"plugin.duplicate",@{@"plugin":synth},true)[@"data"];
   check([snapshot()[@"plugins"] count]==4&&![synthCopy[@"plugin"] isEqual:synth]&&![synthCopy[@"detached"] boolValue]&&[snapshot()[@"plugins"][3][@"assignments"] count]==0,"Rack-only instrument duplicate must publish without a native annotation");
   api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Rack-only instrument duplicate must have one Undo");api(@"history.redo",@{},true);check([snapshot()[@"plugins"] count]==4,"Rack-only instrument duplicate Redo failed");
+  NSString *boundaryGroup=api(@"graph.group.create",@{@"graph":graph,@"nodes":@[plugin],@"name":@"Dry boundary"},true)[@"data"][@"group"];
+  auto boundary=api(@"graph.group.boundary",@{@"graph":graph,@"group":boundaryGroup})[@"data"];check(![boundary[@"needsMapping"] boolValue]&&[boundary[@"inputs"] count]==1&&[boundary[@"outputs"] count]==1,"Group boundary must report exact unique dry path");
+  before=snapshot();revision=s.automationRevision;api(@"graph.group.bypass",@{@"graph":graph,@"group":boundaryGroup,@"bypass":@YES,@"dryRun":@YES},true);check([before isEqual:snapshot()]&&[revision isEqual:s.automationRevision],"Group bypass dry run mutated model/history");
+  api(@"graph.group.bypass",@{@"graph":graph,@"group":boundaryGroup,@"bypass":@YES,@"dryRoutes":boundary[@"dryRoutes"]},true);auto groupBypassed=snapshot();check([groupBypassed[@"library"][0][@"groups"][0][@"bypass"] boolValue],"Group bypass flag missing");
+  revision=s.automationRevision;api(@"graph.group.bypass",@{@"graph":graph,@"group":boundaryGroup,@"bypass":@YES},true);check([revision isEqual:s.automationRevision],"Identical group bypass adds history");api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Group bypass Undo is not atomic");api(@"history.redo",@{},true);check([groupBypassed isEqual:snapshot()],"Group bypass Redo changed dry mappings");
+  api(@"graph.clone",@{@"graph":graph},true);check([[[snapshot()[@"library"] lastObject][@"groups"] firstObject][@"bypass"] boolValue],"Graph clone discarded group bypass");
+  api(@"graph.group.export",@{@"graph":graph,@"group":boundaryGroup},true);check([[[snapshot()[@"library"] lastObject][@"groups"] firstObject][@"bypass"] boolValue],"Export must retain the actual bypass boundary");
   NSString *songPath=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];before=snapshot();check([s savePath:songPath error:&error]&&[s openPath:songPath error:&error]&&[before isEqual:snapshot()],"Graph editing actions did not survive native project round trip");[[NSFileManager defaultManager] removeItemAtPath:songPath error:nil];
 }

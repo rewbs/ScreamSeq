@@ -1,3 +1,4 @@
+#include "editor/hosted/PluginAudioLayout.hpp"
 // Adapted from mac/Audio/VST3Host.mm; shared scheduling/DSP remain in editor/hosted.
 #include "NativeBackend.hpp"
 #include "Module.hpp"
@@ -328,12 +329,10 @@ struct NativeBackend::Impl {
   // ProcessData includes every declared bus, including inactive auxiliaries.
   // Allocate channel-pointer arrays once, never in the render callback.
   std::vector<AudioBusBuffers> inputBuffers, outputBuffers;
-  std::vector<std::vector<float *>> inputChannels, outputChannels;
   std::vector<PluginAudioBus> buses;
-  std::vector<std::unique_ptr<PluginAudioStorage>> inputStorage, outputStorage;
+  std::unique_ptr<PluginAudioBufferPlan> audio;
   Owned<Events> events{new Events}, outputEvents{new Events};
   Owned<Changes> changes{new Changes}, outputChanges{new Changes};
-  std::array<float, 4096> left{}, right{}, outLeft{}, outRight{};
   std::vector<PluginParameter> metadata;
   // The audio-side parameter contract is immutable after preparation. Only
   // control readers use this separately published presentation snapshot.
@@ -363,7 +362,7 @@ struct NativeBackend::Impl {
     uint64_t empty=0;firstFailure.compare_exchange_strong(empty,(uint64_t(reason)<<32)|detail,std::memory_order_relaxed);
     failed.store(true,std::memory_order_release);return false;
   }
-  std::atomic<bool> latencyChanged{false};
+  std::atomic<uint64_t> latencySerial{0},acknowledgedLatency{0};
   std::atomic<int32> rejectedRestart{0};
   const DWORD ownerThread=GetCurrentThreadId();
   struct Callbacks final:IComponentHandler,IPlugFrame {
@@ -451,7 +450,7 @@ struct NativeBackend::Impl {
       else try{if(!refreshParameterPresentation())return kResultFalse;}
       catch(...){fail(Failure::ParameterCatalog);return kResultFalse;}
     }
-    if (flags & kLatencyChanged) latencyChanged.store(true, std::memory_order_release);
+    if (flags & kLatencyChanged) latencySerial.fetch_add(1,std::memory_order_release);
     if (controller && (flags & kParamValuesChanged))
       for (size_t i = 0; i < metadata.size(); ++i) {
         auto value = controller->getParamNormalized(metadata[i].id);
@@ -667,47 +666,30 @@ struct NativeBackend::Impl {
       throw std::runtime_error("Unsupported VST3 audio bus layout");
     SpeakerArrangement stereo = SpeakerArr::kStereo;
     std::vector<SpeakerArrangement> inputArrangements(inputBuses, stereo), outputArrangements(outputBuses, stereo);
-    for (int i = 1; i < inputBuses; ++i)
+    for (int i = 0; i < inputBuses; ++i)
       require(processor->getBusArrangement(kInput, i, inputArrangements[i]), "Cannot read VST3 input layout");
-    for (int i = 1; i < outputBuses; ++i)
+    for (int i = 0; i < outputBuses; ++i)
       require(processor->getBusArrangement(kOutput, i, outputArrangements[i]), "Cannot read VST3 output layout");
     require(processor->setBusArrangements(inputArrangements.data(), inputBuses, outputArrangements.data(), outputBuses),
             "VST3 requires an unsupported speaker layout");
-    for (int dir = 0; dir < 2; ++dir) {
-      auto &buffers = dir == kInput ? inputBuffers : outputBuffers;
-      auto &channels = dir == kInput ? inputChannels : outputChannels;
-      auto &storage = dir == kInput ? inputStorage : outputStorage;
-      const auto &enabled = dir == kInput ? state.auxiliaryInputs : state.auxiliaryOutputs;
-      const auto count = dir == kInput ? inputBuses : outputBuses;
-      if (component->getBusCount(kAudio, dir) != count)
-        throw std::runtime_error("VST3 changed its bus count during setup");
-      buffers.resize(count);
-      channels.resize(count);
-      storage.resize(count);
-      if(std::set<uint32_t>(enabled.begin(),enabled.end()).size()!=enabled.size())throw std::runtime_error("Duplicate VST3 auxiliary activation");
-      for (auto index : enabled)
-        if (!index || index >= uint32_t(count)) throw std::runtime_error("VST3 auxiliary bus does not exist");
-      for (int i = 0; i < count; ++i) {
-        BusInfo info{};
-        require(component->getBusInfo(kAudio, dir, i, info), "Cannot read VST3 audio bus");
-        if (info.channelCount < 1 || info.channelCount > 64 || (i == 0 && info.channelCount != 2))
-          throw std::runtime_error("VST3 requires an unsupported channel layout");
-        channels[i].resize(info.channelCount, nullptr);
-        buffers[i].numChannels = info.channelCount;
-        buffers[i].channelBuffers32 = channels[i].data();
-        const bool activeBus = i == 0 || std::find(enabled.begin(), enabled.end(), uint32_t(i)) != enabled.end();
-        const bool supported = info.channelCount <= 2;
-        if (activeBus && !supported) throw std::runtime_error("VST3 auxiliary bus requires more than two channels");
-        buses.push_back({uint32_t(i), uint32_t(info.channelCount), utf8(info.name), dir == kInput, activeBus, supported});
-        if (i == 0) {
-          channels[i][0] = dir == kInput ? left.data() : outLeft.data();
-          channels[i][1] = dir == kInput ? right.data() : outRight.data();
-        } else if (activeBus) {
-          storage[i] = std::make_unique<PluginAudioStorage>();
-          channels[i][0] = storage[i]->left.data();
-          if (info.channelCount == 2) channels[i][1] = storage[i]->right.data();
-        }
-        require(component->activateBus(kAudio, dir, i, activeBus), "Cannot activate VST3 audio bus");
+    std::vector<PluginPhysicalBus> physicalInputs,physicalOutputs;
+    for(int dir=0;dir<2;++dir){
+      auto &physical=dir==kInput?physicalInputs:physicalOutputs;
+      const auto count=dir==kInput?inputBuses:outputBuses;
+      if(component->getBusCount(kAudio,dir)!=count)throw std::runtime_error("VST3 changed its bus count during setup");
+      for(int i=0;i<count;++i){BusInfo info{};require(component->getBusInfo(kAudio,dir,i,info),"Cannot read VST3 audio bus");
+        if(info.channelCount<1||info.channelCount>64)throw std::runtime_error("Unsupported VST3 channel layout");
+        physical.push_back({uint32_t(info.channelCount),utf8(info.name)});
+      }
+    }
+    audio=std::make_unique<PluginAudioBufferPlan>(physicalInputs,physicalOutputs,state.auxiliaryInputs,state.auxiliaryOutputs);
+    buses=audio->buses();validatePluginAudioLayout(state.audioLayout,buses);
+    for(int dir=0;dir<2;++dir){auto &buffers=dir==kInput?inputBuffers:outputBuffers;auto &physical=dir==kInput?audio->inputs():audio->outputs();
+      buffers.resize(physical.size());
+      for(size_t i=0;i<physical.size();++i){buffers[i].numChannels=int32(physical[i].channels.size());buffers[i].channelBuffers32=physical[i].channels.data();
+        // Activation is immutable capacity. Logical cables select the prepared
+        // planes at render time, including a first live auxiliary connection.
+        require(component->activateBus(kAudio,dir,int32(i),true),"Cannot activate VST3 audio bus");
       }
     }
     for (int dir = 0; dir < 2; ++dir){
@@ -759,6 +741,9 @@ struct NativeBackend::Impl {
     require(processor->setProcessing(true), "Cannot start VST3 processing");
     processing = true;
     if(failed) throw std::runtime_error("VST3 failed during preparation; unsupported restart flags="+std::to_string(rejectedRestart.load()));
+    preparedLatency=processor->getLatencySamples()/rate;preparedTail=std::min(30.0,processor->getTailSamples()/rate);
+    if(preparedLatency>2)throw std::runtime_error("VST3 latency exceeds two seconds");
+    acknowledgedLatency.store(latencySerial.load(std::memory_order_acquire),std::memory_order_release);
     preparing=false;
     if(parameterTitlesPending&&!refreshParameterPresentation())throw std::runtime_error("VST3 changed its prepared parameter contract during activation");
   }
@@ -880,7 +865,7 @@ bool NativeBackend::Impl::process(float *buffer, uint32_t frames, uint64_t posit
   struct Finish{Impl &s;float *buffer;uint32_t frames;bool &success;~Finish(){
     s.events->count=s.outputEvents->count=s.changes->count=s.outputChanges->count=0;
     s.events->overflow=s.outputEvents->overflow=s.changes->overflow=s.outputChanges->overflow=false;
-    if(!success){s.fail(Impl::Failure::Process);if(buffer)std::fill_n(buffer,std::min(frames,4096u)*2,0.f);for(auto &b:s.outputStorage)if(b)std::fill(b->interleaved.begin(),b->interleaved.end(),0.f);}
+    if(!success){s.fail(Impl::Failure::Process);if(buffer)std::fill_n(buffer,std::min(frames,4096u)*2,0.f);s.audio->clearSlices();}
   }}finish{s,buffer,frames,success};
   if(s.failed)return false;
   if ((!buffer && frames)||frames > 4096 || offset>4096 || frames>4096-offset || position>INT64_MAX)return s.fail(Impl::Failure::Block,frames);
@@ -894,23 +879,7 @@ bool NativeBackend::Impl::process(float *buffer, uint32_t frames, uint64_t posit
   }
   s.audioRead.store(ar, std::memory_order_release);
   for(int32 i=0;i<s.changes->count;++i)for(int32 j=0;j<s.changes->items[i]->count;++j)if(uint32_t(s.changes->items[i]->points[j].offset)>=std::max(1u,frames))return s.fail(Impl::Failure::InputOffset,s.changes->items[i]->id);
-  for (uint32_t i = 0; i < frames; ++i) {
-    s.left[i] = buffer[i * 2];
-    s.right[i] = buffer[i * 2 + 1];
-  }
-  s.outLeft.fill(0);
-  s.outRight.fill(0);
-  for (size_t bus = 1; bus < s.inputStorage.size(); ++bus) if (s.inputStorage[bus]) {
-    auto &audio = *s.inputStorage[bus]; const float *source = inputs ? inputs[bus] : nullptr;
-    for (uint32_t i = 0; i < frames; ++i) {
-      const float l = source ? source[(offset + i) * 2] : 0, r = source ? source[(offset + i) * 2 + 1] : 0;
-      audio.left[i] = s.inputBuffers[bus].numChannels == 1 ? (l + r) * .5f : l;
-      audio.right[i] = r;
-    }
-  }
-  for (auto &audio : s.outputStorage) if (audio) {
-    std::fill_n(audio->left.data(), frames, 0); std::fill_n(audio->right.data(), frames, 0);
-  }
+  s.audio->gather(buffer,inputs,offset,frames);
   ProcessContext context{};
   context.sampleRate = s.rate;
   context.projectTimeSamples = position;
@@ -952,31 +921,17 @@ bool NativeBackend::Impl::process(float *buffer, uint32_t frames, uint64_t posit
   }}
   if (result != kResultOk)
     return s.fail(Impl::Failure::ProcessorResult,uint32_t(result));
-  for (size_t bus = 1; bus < s.outputStorage.size(); ++bus) if (s.outputStorage[bus]) {
-    auto &audio = *s.outputStorage[bus];
-    for (uint32_t i = 0; i < frames; ++i) {
-      // A plugin may signal silence without writing every output sample.
-      const auto flags = s.outputBuffers[bus].silenceFlags;
-      const float l = flags & 1 ? 0 : audio.left[i];
-      const float r = s.outputBuffers[bus].numChannels == 1 ? l : (flags & 2 ? 0 : audio.right[i]);
-      if (!std::isfinite(l) || !std::isfinite(r))return s.fail(Impl::Failure::AuxiliaryNonfinite,uint32_t(bus));
-      audio.interleaved[i * 2] = l; audio.interleaved[i * 2 + 1] = r;
-    }
-  }
-  for (uint32_t i = 0; i < frames; ++i) {
-    if (!std::isfinite(s.outLeft[i]) || !std::isfinite(s.outRight[i]))
-      return s.fail(Impl::Failure::MainNonfinite);
-    buffer[i * 2] = s.outputBuffers[0].silenceFlags & 1 ? 0 : s.outLeft[i];
-    buffer[i * 2 + 1] = s.outputBuffers[0].silenceFlags & 2 ? 0 : s.outRight[i];
-  }
+  std::array<uint64_t,64> silence{};
+  for(size_t bus=0;bus<s.outputBuffers.size();++bus)silence[bus]=s.outputBuffers[bus].silenceFlags;
+  if(!s.audio->scatter(buffer,frames,{silence.data(),s.outputBuffers.size()}))return s.fail(Impl::Failure::AuxiliaryNonfinite);
   success=true;
   return true;
 }
 const std::vector<PluginAudioBus> &NativeBackend::buses() const { return impl_->buses; }
-const float *NativeBackend::auxiliaryOutput(uint32_t bus) const noexcept {
-  return bus < impl_->outputStorage.size() && impl_->outputStorage[bus]
-    ? impl_->outputStorage[bus]->interleaved.data() : nullptr;
-}
+uint64_t NativeBackend::preparedAuxiliaryInputs() const noexcept {return impl_->audio->preparedInputs();}
+uint64_t NativeBackend::preparedAuxiliaryOutputs() const noexcept {return impl_->audio->preparedOutputs();}
+size_t NativeBackend::preparedStorageBytes() const noexcept {return sizeof(Impl)+impl_->audio->storageBytes()+(impl_->inputBuffers.capacity()+impl_->outputBuffers.capacity())*sizeof(AudioBusBuffers);}
+const float *NativeBackend::auxiliaryOutput(uint32_t bus) const noexcept {return impl_->audio->output(bus);}
 std::vector<PluginParameter> NativeBackend::parameters() const {
   const auto presentation=impl_->parameterPresentation.load(std::memory_order_acquire);
   auto result = presentation?*presentation:impl_->metadata;
@@ -1033,29 +988,34 @@ PluginState NativeBackend::state() const {
     if(haveControllerState||!root.contains("controller"))root["controller"]=binary(controller);
     result.state=ScreamSeq::Project::encodePlist(root,plistLimits());
   });
+  result.audioLayout=pluginAudioLayoutSignature(impl_->buses);
   return result;
 }
 double NativeBackend::latency() const {
   return impl_->preparedLatency;
 }
 bool NativeBackend::latencyChangePending() const noexcept {
-  return impl_->latencyChanged.load(std::memory_order_acquire);
+  return impl_->latencySerial.load(std::memory_order_acquire)>impl_->acknowledgedLatency.load(std::memory_order_acquire);
+}
+std::optional<PluginLatencySnapshot> NativeBackend::pendingLatency() {
+  std::optional<PluginLatencySnapshot> result;
+  pluginMainCall([&]{auto &s=*impl_;const auto serial=s.latencySerial.load(std::memory_order_acquire);
+    if(serial<=s.acknowledgedLatency.load(std::memory_order_acquire))return;
+    const auto samples=s.processor->getLatencySamples();const auto tail=std::min(30.,s.processor->getTailSamples()/s.rate);
+    if(samples>s.rate*2)throw std::runtime_error("VST3 latency exceeds two seconds");
+    if(s.latencySerial.load(std::memory_order_acquire)==serial)result=PluginLatencySnapshot{serial,samples,tail};
+  });return result;
+}
+void NativeBackend::acknowledgeLatency(uint64_t serial) noexcept {
+  auto &s=*impl_;if(serial>s.latencySerial.load(std::memory_order_acquire))return;
+  auto previous=s.acknowledgedLatency.load(std::memory_order_relaxed);
+  while(previous<serial&&!s.acknowledgedLatency.compare_exchange_weak(previous,serial,std::memory_order_release,std::memory_order_relaxed)){}
 }
 void NativeBackend::refreshLatency() {
-  pluginMainCall([&] {
-    auto &s=*impl_;
-    if (!s.latencyChanged.exchange(false, std::memory_order_acq_rel)) return;
-    try {
-      require(s.processor->setProcessing(false), "Cannot pause VST3 for latency update"); s.processing=false;
-      require(s.component->setActive(false), "Cannot deactivate VST3 for latency update"); s.active=false;
-      require(s.component->setActive(true), "Cannot reactivate VST3 after latency update"); s.active=true;
-      const auto frames=s.processor->getLatencySamples();
-      if (frames>s.rate*2) throw std::runtime_error("VST3 latency exceeds two seconds");
-      s.preparedLatency=frames/s.rate;
-      s.preparedTail=std::min(30.0,s.processor->getTailSamples()/s.rate);
-      require(s.processor->setProcessing(true), "Cannot resume VST3 after latency update"); s.processing=true;
-    } catch (...) { s.fail(Impl::Failure::Latency); throw; }
-  });
+  if(auto value=pendingLatency()){
+    impl_->preparedLatency=value->samples/impl_->rate;impl_->preparedTail=value->tail;
+    acknowledgeLatency(value->serial);
+  }
 }
 double NativeBackend::tail() const {
   return impl_->preparedTail;

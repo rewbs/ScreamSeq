@@ -12,6 +12,8 @@
 #include "editor/ParameterBaseline.hpp"
 #include "editor/GraphEditing.hpp"
 #include "editor/GraphClipboard.hpp"
+#include "editor/hosted/PluginAudioLayout.hpp"
+#include "editor/PluginNoteSources.hpp"
 #include "editor/AutomationTools.hpp"
 #include "editor/InstrumentEnvelopeTools.hpp"
 #include "editor/PatternCommands.hpp"
@@ -153,6 +155,7 @@ NSDictionary *descriptorDictionary(const PluginDescriptor &d) {
 NSArray *pluginBusDictionaries(const std::vector<PluginAudioBus> &buses) {
   NSMutableArray *result = [NSMutableArray array];
   for (const auto &bus : buses) [result addObject:@{@"index": @(bus.index), @"channels": @(bus.channels),
+    @"physicalBus": @(bus.physicalChannels ? bus.physicalBus : bus.index), @"firstChannel": @(bus.firstChannel), @"physicalChannels": @(bus.physicalChannels ? bus.physicalChannels : bus.channels),
     @"name": @(bus.name.c_str()), @"direction": bus.input ? @"input" : @"output", @"active": @(bus.active), @"supported": @(bus.supported)}];
   return result;
 }
@@ -196,6 +199,7 @@ std::vector<PluginState> decodePlugins(NSDictionary *root) {
       throw std::runtime_error("Invalid Audio Unit bypass value");
     PluginState state{descriptor(item), {}, bool([item[@"bypass"] boolValue])};
     state.instanceID = Automation::string(item[@"instanceID"], 128).UTF8String;
+    state.audioLayout = Automation::string(item[@"audioLayout"] ?: @"",8192).UTF8String;
     if (state.instanceID.empty() || !instanceIDs.insert(state.instanceID).second)
       throw std::runtime_error("Invalid or duplicate plugin instance identity");
     auto busIndices = [](id raw) {
@@ -344,7 +348,7 @@ struct EffectSnapshot {
   size_t bytes() const {
     size_t result = (automation.size() + manual.size() + parameterValues.size()) * sizeof(ParameterChange) + bypassTarget.size();
     for (const auto &plugin : plugins)
-      result += plugin.state.size() + plugin.descriptor.name.size() + sizeof(PluginState) + plugin.aliases.size() * sizeof(PluginInstrumentAlias);
+      result += plugin.state.size() + plugin.audioLayout.size() + plugin.descriptor.name.size() + sizeof(PluginState) + plugin.aliases.size() * sizeof(PluginInstrumentAlias);
     return result;
   }
 };
@@ -693,6 +697,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
                                      "Add it with plugin.add or install it in a VST3 folder first.").c_str());
   recipe.path = found.UTF8String;
 }
+// Pin new recipes to the actual physical layout without modifying their saved sound.
+- (void)pinGraphRecipeLayout:(GraphPluginRecipe &)recipe {
+  PluginState state;state.descriptor={recipe.type,recipe.subtype,recipe.manufacturer,recipe.name,recipe.format,recipe.path,recipe.classID,false};state.state=recipe.state;state.audioLayout=recipe.audioLayout;state.auxiliaryInputs=recipe.inputs;state.auxiliaryOutputs=recipe.outputs;
+  NativePlugin probe(state,_audio->sampleRate(),false);Automation::require(!probe.isInstrument(),"Graph nodes require effect plugins");recipe.audioLayout=pluginAudioLayoutSignature(probe.buses());
+}
 // Fold manual parameter edits into the saved baseline without baking the current
 // playback automation values into it. Runs on the control worker while UI writes
 // are suspended; the live parameter queue remains bounded and cheap.
@@ -771,6 +780,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     item[@"instrumentAssignments"] = encodePluginAssignments(plugin);
     item[@"instanceID"] = @(plugin.instanceID.c_str());
     item[@"state"] = [NSData dataWithBytes:plugin.state.data() length:plugin.state.size()];
+    item[@"audioLayout"] = @(plugin.audioLayout.c_str());
     NSMutableArray *inputs = [NSMutableArray array], *outputs = [NSMutableArray array];
     for (auto bus : plugin.auxiliaryInputs) [inputs addObject:@(bus)];
     for (auto bus : plugin.auxiliaryOutputs) [outputs addObject:@(bus)];
@@ -952,6 +962,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       @"available":@(value.available),@"fresh":@(value.fresh),@"measured":@(value.measured),@"peak":@[@(value.peakLeft),@(value.peakRight)],
       @"rms":@[@(value.rmsLeft),@(value.rmsRight)],@"through":@(value.through),@"lastSignal":@(value.lastSignal),
       @"clipped":@(value.clipped),@"nonFinite":@(value.nonFinite)} mutableCopy];
+    entry[@"kind"]=@(port.kind.c_str());
+    if(port.kind=="control"){entry[@"value"]=@(value.value);entry[@"first"]=@(value.first);entry[@"minimum"]=@(std::min(value.first,value.value));entry[@"maximum"]=@(std::max(value.first,value.value));}
+    if(port.copy){const auto &c=*port.copy;entry[@"copy"]=@{@"graph":nativeID(c.graph),@"target":c.target?(id)nativeID(c.target):NSNull.null,@"role":@[@"row",@"persistent",@"ordinary",@"instrument"][c.role],@"instrument":c.instrument?(id)nativeID(c.instrument):NSNull.null,@"channel":c.channel==UINT16_MAX?(id)NSNull.null:@(c.channel)};}
     if(port.route) {
       const auto &route=*port.route;
       entry[@"route"]=@{@"kind":@(route.kind.c_str()),@"source":@(route.source.c_str()),@"target":@(route.target.c_str()),
@@ -961,7 +974,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     [ports addObject:entry];
   }
   return @{@"ports":ports,@"listen":[self listenTelemetry],@"routing":[self routingTelemetry],@"active":@(_audio->active()),@"playing":@(self.playing),@"sampleRate":@(_audio->sampleRate()),
-    @"freshnessFrames":@4096,@"peakDecaySeconds":@0.2,@"silenceThreshold":@1e-7,@"scope":@"Host mixer/rack ports and adopted route contributions; reusable graph internals are not included"};
+    @"freshnessFrames":@4096,@"peakDecaySeconds":@0.2,@"silenceThreshold":@1e-7,@"scope":@"Host ports, exact reusable graph copies, cable contributions and control values; control ranges describe quantum endpoints"};
 }
 - (NSDictionary *)routingTelemetry {
   const auto reading=_audio->mixerRoutingReading();
@@ -1737,7 +1750,15 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (void)applyPluginGraph:(const std::vector<PluginState> &)states
               automation:(const std::vector<ParameterChange> &)automation {
-  [self applyPluginGraph:states automation:automation native:_document->native()];
+  [self applyPluginGraph:states automation:automation unassignedNoteSource:0];
+}
+- (void)applyPluginGraph:(const std::vector<PluginState> &)states
+              automation:(const std::vector<ParameterChange> &)automation unassignedNoteSource:(uint64_t)instrument {
+  auto next=_document->native();reconcilePluginNoteSources(next,_plugins,states,instrument);
+  if(next==_document->native()){[self applyPluginGraph:states automation:automation native:next];return;}
+  next.validate(_document->song());_historyGroups.reserve(_historyGroups.size()+1);const auto first=_document->historySequence()+1;
+  _document->annotate([&](NativeSong &native){native=next;},[&]{[self applyPluginGraph:states automation:automation native:next];});
+  _historyGroups.emplace_back(first,_document->historySequence());if(_historyGroups.size()>512)_historyGroups.erase(_historyGroups.begin());_knownHistorySequence=_document->historySequence();
 }
 - (void)applyPluginGraph:(const std::vector<PluginState> &)states
               automation:(const std::vector<ParameterChange> &)automation native:(const NativeSong &)native {
@@ -1793,7 +1814,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       for(const auto &point:saved.parameterValues) {
         if(point.slot>=saved.plugins.size())throw std::runtime_error("Historical parameter processor is unavailable");
         const auto &old=saved.plugins[point.slot];const auto target=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==old.instanceID;});
-        if(target==_plugins.end()||target->descriptor!=old.descriptor||target->bypass!=old.bypass||target->instrument!=old.instrument||target->midiChannel!=old.midiChannel||target->aliases!=old.aliases||target->auxiliaryInputs!=old.auxiliaryInputs||target->auxiliaryOutputs!=old.auxiliaryOutputs)
+        if(target==_plugins.end()||target->descriptor!=old.descriptor||target->audioLayout!=old.audioLayout||target->bypass!=old.bypass||target->instrument!=old.instrument||target->midiChannel!=old.midiChannel||target->aliases!=old.aliases||target->auxiliaryInputs!=old.auxiliaryInputs||target->auxiliaryOutputs!=old.auxiliaryOutputs)
           throw std::runtime_error("Historical parameter processor changed; restore its routing before its values");
         const auto slot=uint32_t(target-_plugins.begin());
         const auto value=[self manualValueForHistory:slot identifier:point.id alreadyApplied:NO];
@@ -1877,6 +1898,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
           @[ @"--validate", [@(d.type) stringValue], [@(d.subtype) stringValue], [@(d.manufacturer) stringValue] ]);
     auto states = (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
     states.push_back({d, {}, false, 0, NSUUID.UUID.UUIDString.UTF8String});
+    {NativePlugin probe(states.back(),_audio->sampleRate(),false);states.back().audioLayout=pluginAudioLayoutSignature(probe.buses());}
     if (target || detached) {
       if(d.instrument || d.type==kAudioUnitType_MusicDevice) throw std::invalid_argument("Instrument plugins use instrument assignments");
       auto next=_document->native();
@@ -1990,6 +2012,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     std::vector<size_t> slots(states.size(),SIZE_MAX);size_t index=0;
     for(size_t i=0;i<states.size();++i)if(!removed.contains(states[i].instanceID))slots[i]=index++;
     std::erase_if(states,[&](const auto &p){return removed.contains(p.instanceID);});
+    reconcilePluginNoteSources(next,_plugins,states);
     auto automation = _automation;
     std::erase_if(automation,[&](const auto &point){return point.slot>=slots.size() || slots[point.slot]==SIZE_MAX;});
     for(auto &point:automation)point.slot=uint32_t(slots[point.slot]);

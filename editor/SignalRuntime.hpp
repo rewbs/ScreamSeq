@@ -1,6 +1,8 @@
 #pragma once
 #include "SignalGraph.hpp"
 #include "MixerRuntime.hpp"
+#include "SignalRuntimeObserver.hpp"
+#include "SignalGroupRuntime.hpp"
 #include <array>
 #include <memory>
 #include <span>
@@ -38,7 +40,7 @@ class SignalRuntime {
     Port *source = nullptr, *target = nullptr;
     std::vector<float> delay;
     size_t cursor = 0;
-    void add(uint32_t) noexcept;
+    void add(uint32_t,float *,const SignalGroupRuntime *,size_t) noexcept;
   };
   SignalDefinition definition_;
   const SignalDefinition *controls_ = &definition_; // Plan lifetime is owned by the control publisher.
@@ -50,6 +52,9 @@ class SignalRuntime {
   using EdgeIdentity=std::tuple<uint64_t,uint32_t,uint64_t,uint32_t>;
   std::vector<std::pair<EdgeIdentity,size_t>> edgeIndex_;
   size_t preparedBytes_=0;
+  std::shared_ptr<SignalRuntimeObserver> observer_;
+  std::unique_ptr<std::array<float,maximumFrames*2>> observationScratch_;
+  std::unique_ptr<SignalGroupRuntime> groups_;
   size_t measureStorage() const noexcept;
   struct ModulationTarget { size_t node = 0; uint32_t parameter = 0; double base = 0; std::vector<std::pair<size_t,size_t>> sources; double step=0; std::array<double,quantum> sampled{}; };
   std::vector<ModulationTarget> targets_;
@@ -72,6 +77,10 @@ public:
   bool render(float *main, uint32_t frames, uint64_t position, SignalClock,
               const SignalCallbacks &, std::span<const MixerAudioInput> inputs = {}) noexcept;
   const float *output(uint32_t bus) const noexcept;
+  // Only an unpublished runtime may be configured. Ownership is retired with
+  // its prepared runtime, never released by the audio callback.
+  void observer(std::shared_ptr<SignalRuntimeObserver> value) {observer_=std::move(value);if(observer_&&!observationScratch_)observationScratch_=std::make_unique<std::array<float,maximumFrames*2>>();preparedBytes_=measureStorage();}
+  const SignalPlan &plan() const noexcept {return plan_;}
   void amount(double value) noexcept { amount_ = value; }
   void note(bool gate, bool retrigger = false) noexcept;
   void parameterBase(uint64_t node,uint32_t parameter,double value) noexcept;

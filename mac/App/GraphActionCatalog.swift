@@ -10,7 +10,7 @@ extension SignalGraphEditor {
   var bypassUnavailableReason:String? {
     if canvas.selection.count>1{return "Select one processor or mixer bus; batch bypass is not supported"}
     if canvas.selectedEdge != nil{return "Select a processor or bus; use cable properties to mute a connection"}
-    if selectedMuteSource != nil{return nil}
+    if selectedMuteSource != nil || selectedProcessingGroup != nil{return nil}
     if graphID != nil {
       guard let key=bypassSelection,nodes.contains(where:{$0["id"] as? String==key && $0["kind"] as? String=="plugin"})else{return "Select an effect or modulation source inside this definition; whole-group bypass is not supported yet"}
       return nil
@@ -25,6 +25,7 @@ extension SignalGraphEditor {
   }
   var bypassActionTitle:String {
     guard let key=bypassSelection else{return "Bypass / mute processor…"}
+    if let group=selectedProcessingGroup{return (group["bypass"] as? Bool==true ? "Enable group":"Bypass group")+(graphID==nil ? "":" in all uses")}
     if let source=selectedMuteSource{return (source["muted"] as? Bool==true ? "Unmute source":"Mute source")+(graphID==nil ? "":" in all uses")}
     if graphID != nil,let node=nodes.first(where:{$0["id"] as? String==key && $0["kind"] as? String=="plugin"}) {
       return (node["plugin"] as? [String:Any])?["bypass"] as? Bool==true ? "Enable effect in all uses":"Bypass effect in all uses"
@@ -42,6 +43,7 @@ extension SignalGraphEditor {
       prepareCommand{[weak self] in guard let self,self.viewContext==context else{return};self.toggleSelectedBypass()};return
     }
     if let reason=bypassUnavailableReason{status.stringValue=reason;return}
+    if let group=selectedProcessingGroup{setProcessingGroupBypass(group,bypass:!(group["bypass"] as? Bool ?? false));return}
     if let source=selectedMuteSource,let node=source["id"] {mutate("graph.source.mute",["graph":graphID as Any? ?? NSNull(),"node":node,"muted":!(source["muted"] as? Bool ?? false)]);return}
     if let key=bypassSelection {
       if let graph=graphID,let node=nodes.first(where:{$0["id"] as? String==key && $0["kind"] as? String=="plugin"}) {

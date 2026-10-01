@@ -272,12 +272,13 @@ static void structuralRecipes(const PluginDescriptor &descriptor,const char *pat
   }
   delayed(false);hidden(1);setFixtureAUHiddenGain(1);
 }
+#include "GraphCopyObservationChecks.inc"
 int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Pass VST3 fixture");auto plugins=NativePlugin::discoverVST3(argv[1]);
   recipeBypassEndpoint(plugins[0],argv[1]);
   sourcePreparationFailure(plugins[0]);
   newlyWatchedNotes(plugins[0]);compoundHeldNote(plugins[0]);
-  auto fixtureAUs=registerFixtureAUs();structuralRecipes(plugins[0],argv[1],false);structuralRecipes(fixtureAUs.at(0),argv[1],true);
+  auto fixtureAUs=registerFixtureAUs();exactCopyObservation(plugins[0]);exactCopyObservation(fixtureAUs.at(0));structuralRecipes(plugins[0],argv[1],false);structuralRecipes(fixtureAUs.at(0),argv[1],true);
   discreteHosted(plugins[0],argv[1]);
   auto gain=definition(100,plugins[0],true);
   setFixtureAUStepped(true);scalarDiscreteHosted(fixtureAUs.at(0),7);setFixtureAUStepped(false);

@@ -23,7 +23,8 @@ SignalDefinition copySignalSelection(const SignalDefinition &source,const std::v
   std::erase_if(copy.groups,[&](auto &g){std::erase_if(g.nodes,[&](auto id){return !selected.contains(id);});return !groups.contains(g.id);});
   for(auto &g:copy.groups)if(!groups.contains(g.parent))g.parent=0;
   std::set<std::string> keys;for(const auto &n:copy.nodes)if(!boundary(n))keys.insert("n"+std::to_string(n.id));for(const auto &g:copy.groups)keys.insert("n"+std::to_string(g.id));
-  pruneSignalPresentation(copy.presentation,keys);compileSignal(copy);return copy;
+  std::erase_if(copy.presentation.regions,[&](const auto &r){return r.nodes.empty()||std::none_of(r.nodes.begin(),r.nodes.end(),[&](const auto &key){return keys.contains(key);});});
+  pruneSignalPresentation(copy.presentation,keys);pruneSignalGroupDryRoutes(copy);compileSignal(copy);return copy;
 }
 SignalDefinition cutSignalSelection(NativeSong &song,uint64_t graph,const std::vector<uint64_t> &ids) {
   auto next=song;auto d=std::find_if(next.signal.library.begin(),next.signal.library.end(),[&](const auto &d){return d.id==graph;});need(d!=next.signal.library.end(),"Subgraph no longer exists");
@@ -41,10 +42,13 @@ SignalCloneResult pasteSignalSelection(NativeSong &song,uint64_t graph,const Sig
   std::erase_if(copy.nodes,boundary);std::erase_if(copy.audio,[&](const auto &e){return !selected.contains(e.source)||!selected.contains(e.target);});std::erase_if(copy.modulation,[&](const auto &e){return !selected.contains(e.source)||!selected.contains(e.target);});
   SignalCloneResult result;result.graph=graph;double minX=100000,minY=100000;
   for(const auto &n:copy.nodes){minX=std::min(minX,n.x);minY=std::min(minY,n.y);}for(const auto &g:copy.groups){minX=std::min(minX,g.x);minY=std::min(minY,g.y);}
+  for(const auto &r:copy.presentation.regions){minX=std::min(minX,r.x);minY=std::min(minY,r.y);}
+  for(const auto &c:copy.presentation.cables)for(const auto &point:c.points){minX=std::min(minX,point[0]);minY=std::min(minY,point[1]);}
   for(auto &n:copy.nodes){const auto old=n.id;n.id=next.makeEntity().id;result.identities[old]=n.id;n.x+=x-minX;n.y+=y-minY;
     for(auto &lane:n.envelopes){const auto p=patterns.find(lane.pattern);need(p!=patterns.end(),"Map every copied pattern envelope explicitly before pasting");need(std::any_of(next.patterns.begin(),next.patterns.end(),[&](const auto &v){return v.second.id==p->second;}),"A mapped pattern no longer exists");lane.pattern=p->second;}}
   for(auto &g:copy.groups){const auto old=g.id;g.id=next.makeEntity().id;result.identities[old]=g.id;g.x+=x-minX;g.y+=y-minY;}
   for(auto &g:copy.groups){g.parent=g.parent?result.identities.at(g.parent):parent;for(auto &id:g.nodes)id=result.identities.at(id);}
+  remapSignalGroupDryRoutes(copy,result.identities);
   for(auto &e:copy.audio){e.source=result.identities.at(e.source);e.target=result.identities.at(e.target);}for(auto &e:copy.modulation){e.source=result.identities.at(e.source);e.target=result.identities.at(e.target);}
   if(parent){auto &owner=*std::find_if(destination.groups.begin(),destination.groups.end(),[&](const auto &g){return g.id==parent;});for(const auto &n:copy.nodes)if(std::none_of(copy.groups.begin(),copy.groups.end(),[&](const auto &g){return std::find(g.nodes.begin(),g.nodes.end(),n.id)!=g.nodes.end();}))owner.nodes.push_back(n.id);}
   std::map<std::string,std::string> keys;for(auto [a,b]:result.identities)keys["n"+std::to_string(a)]="n"+std::to_string(b);remapSignalPresentation(copy.presentation,keys);

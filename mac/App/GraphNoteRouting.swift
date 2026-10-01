@@ -17,7 +17,9 @@ extension SignalGraphEditor {
   static let notePort:UInt32=UInt32.max-1
   var noteRouting:[String:Any]{data["noteRouting"] as? [String:Any] ?? [:]}
   var noteRoutes:[[String:Any]]{noteRouting["routes"] as? [[String:Any]] ?? []}
-  var noteSourceInstruments:[[String:Any]] {(data["instruments"] as? [[String:Any]] ?? []).filter{instrument in instrument["plugin"] as? Bool==true || noteRoutes.contains{$0["sourceKind"] as? String=="instrument" && $0["source"] as? String==instrument["id"] as? String}}}
+  var noteTriggerSources:[[String:Any]]{noteRouting["triggerSources"] as? [[String:Any]] ?? []}
+  func noteInstrumentActive(_ id:String)->Bool{(data["instruments"] as? [[String:Any]] ?? []).contains{$0["id"] as? String==id && $0["plugin"] as? Bool==true} || noteTriggerSources.contains{$0["instrument"] as? String==id}}
+  var noteSourceInstruments:[[String:Any]] {(data["instruments"] as? [[String:Any]] ?? []).filter{instrument in instrument["plugin"] as? Bool==true || noteTriggerSources.contains{$0["instrument"] as? String==instrument["id"] as? String} || noteRoutes.contains{$0["sourceKind"] as? String=="instrument" && $0["source"] as? String==instrument["id"] as? String}}}
   func noteSource(_ key:String)->(kind:String,id:String)? {
     if key.hasPrefix("note-instrument:"),let value=noteSourceInstruments.first(where:{"note-instrument:"+($0["id"] as? String ?? "")==key}),let id=value["id"] as? String{return("instrument",id)}
     if let bus=buses.first(where:{$0["id"] as? String==key && $0["kind"] as? String=="track"}),let id=bus["id"] as? String{return("channel",id)}
@@ -29,8 +31,9 @@ extension SignalGraphEditor {
     var y=(nodes.map{$0.rect.maxY}.max() ?? 30)+60
     for instrument in noteSourceInstruments {
       guard let id=instrument["id"] as? String else{continue};let key="note-instrument:"+id,position=saved.first{$0["node"] as? String==key}
-      var node=SignalCanvasNode(id:key,title:"I\(instrument["index"] ?? 0) · \(instrument["name"] as? String ?? "Instrument")",detail:"Plugin-instrument note source",kind:"events",x:position?["x"] as? Double ?? 30,y:position?["y"] as? Double ?? y)
-      node.inputs=[];node.outputs=[SignalCanvasPort(number:Self.notePort,label:"Notes",signal:.events)];nodes.append(node);y+=110
+      let active=noteInstrumentActive(id),orphan=instrument["plugin"] as? Bool != true && active
+      var node=SignalCanvasNode(id:key,title:"I\(instrument["index"] ?? 0) · \(instrument["name"] as? String ?? "Instrument")",detail:orphan ? "Plugin trigger · no default destination" : active ? "Plugin-instrument note source":"Inactive note routes · sample mode",kind:"events",x:position?["x"] as? Double ?? 30,y:position?["y"] as? Double ?? y)
+      node.inputs=[];node.outputs=[SignalCanvasPort(number:Self.notePort,label:"Notes",signal:.events,unavailable:active ? nil:"Sample mode: assign a plugin before forwarding notes")];nodes.append(node);y+=110
     }
     for i in nodes.indices {
       if noteSource(nodes[i].id)?.kind=="channel"{nodes[i].outputs.append(.init(number:Self.notePort,label:"Notes",signal:.events))}
@@ -40,8 +43,8 @@ extension SignalGraphEditor {
       guard let source=route["source"] as? String,let kind=route["sourceKind"] as? String,let plugin=route["plugin"] as? String else{return}
       let from=kind=="channel" ? source:"note-instrument:"+source,to="plugin:"+plugin
       guard nodes.contains(where:{$0.id==from}),nodes.contains(where:{$0.id==to})else{return}
-      let channel=route["midiChannel"] as? Int ?? 0,enabled=route["enabled"] as? Bool ?? true
-      edges.append(SignalCanvasEdge(source:from,target:to,label:(implicit ? "Assigned notes":"Notes")+(channel>0 ? " · MIDI \(channel)":""),output:Self.notePort,input:Self.notePort,enabled:enabled))
+      let channel=route["midiChannel"] as? Int ?? 0,enabled=route["enabled"] as? Bool ?? true,active=kind=="channel" || noteInstrumentActive(source)
+      edges.append(SignalCanvasEdge(source:from,target:to,label:(implicit ? "Assigned notes":"Notes")+(channel>0 ? " · MIDI \(channel)":"")+(active ? "":" · sample mode"),output:Self.notePort,input:Self.notePort,enabled:enabled && active))
       edges[edges.count-1].connection=implicit ? "note-assignment:"+source:"note:"+(route["id"] as? String ?? "")
       var action=route;action["kind"]="note";action["implicit"]=implicit;songConnections.append(action)
     }
@@ -78,6 +81,17 @@ extension SignalGraphEditor {
     else if let id=route["id"]{mutate("graph.note.disconnect",["id":id])}
     return true
   }
+  func chooseNoteInstrument(title:String,action:@escaping([String:Any])->Void) {
+    guard graphID==nil else{status.stringValue="Instrument note routing lives in the Song graph";return}
+    if let key=canvas.selected ?? selectedID,let instrument=noteSourceInstruments.first(where:{"note-instrument:"+($0["id"] as? String ?? "")==key}){action(instrument);return}
+    chooseTarget(title:title,entries:noteSourceInstruments.compactMap{instrument in guard let id=instrument["id"] as? String else{return nil};return .init(id:id,title:"I\(instrument["index"] ?? 0) · \(instrument["name"] as? String ?? "Instrument")",detail:noteInstrumentActive(id) ? "Plugin-instrument note source":"Inactive note routes · sample mode",keywords:id)}){[weak self] id in guard let instrument=self?.noteSourceInstruments.first(where:{$0["id"] as? String==id})else{return};action(instrument)}
+  }
+  func useNoteSampleMapping(){chooseNoteInstrument(title:"Use an instrument’s sample mapping"){[weak self] instrument in guard let index=instrument["index"] as? Int else{return};self?.mutate("instrument.plugin.set",["instrument":index,"plugin":"","channel":1])}}
+  func assignNoteSourcePlugin(){chooseNoteInstrument(title:"Choose a tracker instrument"){[weak self] instrument in
+    guard let self,let index=instrument["index"] as? Int else{return}
+    let channel=self.noteTriggerSources.first{$0["instrument"] as? String==instrument["id"] as? String}?["midiChannel"] as? Int ?? 1
+    self.chooseTarget(title:"Assign a plugin instrument",entries:self.rackPlugins.compactMap{plugin in guard plugin["isInstrument"] as? Bool==true,let id=plugin["id"] as? String else{return nil};return .init(id:id,title:plugin["name"] as? String ?? "Plugin instrument",detail:"Use this synth for I\(index); existing note routes remain",keywords:id)}){[weak self] id in self?.mutate("instrument.plugin.set",["instrument":index,"plugin":id,"channel":channel])}
+  }}
   func restoreNoteAssignment() {
     let suppressed=Set(noteRouting["suppressedAssignments"] as? [String] ?? [])
     if let source=(canvas.selected ?? selectedID).flatMap({noteSource($0)}),source.kind=="instrument",suppressed.contains(source.id){mutate("graph.note.restoreAssignment",["instrument":source.id]);return}

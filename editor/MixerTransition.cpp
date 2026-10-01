@@ -130,13 +130,11 @@ float MixerTransition::amount(uint32_t frame) const noexcept {
   return float(std::min<uint64_t>(fade_+frame-warmup_,fadeFrames_))/fadeFrames_;
 }
 void MixerTransition::prepareSources(Plan &plan) const {
-  require(size_t(std::count_if(plan.catalog.begin(),plan.catalog.end(),[](const auto &p){return p.instrument;}))==instrumentSources_.size(),
-    "Prepare source adapters before adding or removing an instrument");
   plan.sourceProcessors.assign(sourceSlots_,SIZE_MAX);
   for(const auto &[slot,source]:instrumentSources_) {
     const auto found=std::find_if(plan.catalog.begin(),plan.catalog.end(),[&](const auto &p){return p.instance==source.instance;});
-    require(found!=plan.catalog.end() && found->instrument && found->latency==source.latency &&
-      found->bypass==source.bypass && found->outputBuses==source.outputBuses &&
+    if(found==plan.catalog.end())continue; // Retired plugin endpoints use the per-plan source renderer.
+    require(found->instrument && found->latency==source.latency && found->outputBuses==source.outputBuses &&
       found->activeOutputs==source.activeOutputs && found->activeInputs==source.activeInputs,
       "A routing transition must retain source identity, latency and active ports");
     plan.sourceProcessors[slot]=size_t(found-plan.catalog.begin());
@@ -247,12 +245,22 @@ bool MixerTransition::begin(uint32_t frames,uint64_t position) noexcept {
   if(plans_.current().begin)plans_.current().begin(plans_.current().processors.get(),frames,position,true);
   return true;
 }
+bool MixerTransition::renderSources(uint32_t frames,uint64_t position) noexcept {
+  if(!open_ || frames!=frames_ || position!=position_){failed_=true;return false;}
+  auto &current=plans_.current();
+  // Retained RenderOnce wrappers share vendor output, but each plan has its
+  // own route sums and follower inputs. The accepted controls render first.
+  if(current.renderSources&&!current.renderSources(current.processors.get(),*current.runtime,frames,position,true)){failed_=true;return false;}
+  if(auto *previous=plans_.previous();previous&&previous->renderSources)
+    if(!previous->renderSources(previous->processors.get(),*previous->runtime,frames,position,false)){failed_=true;return false;}
+  return true;
+}
 void MixerTransition::instrument(size_t processor,uint32_t port,const float *samples) noexcept {
   auto &current=plans_.current();
   if(!open_ || processor>=current.sourceProcessors.size() || current.sourceProcessors[processor]==SIZE_MAX){failed_=true;return;}
   current.runtime->instrument(current.sourceProcessors[processor],port,samples);
   if(current.source)current.source(current.processors.get(),current.sourceProcessors[processor],port,samples,frames_,position_);
-  if(auto *previous=plans_.previous()){previous->runtime->instrument(previous->sourceProcessors[processor],port,samples);if(previous->source)previous->source(previous->processors.get(),previous->sourceProcessors[processor],port,samples,frames_,position_);}
+  if(auto *previous=plans_.previous();previous&&processor<previous->sourceProcessors.size()&&previous->sourceProcessors[processor]!=SIZE_MAX){previous->runtime->instrument(previous->sourceProcessors[processor],port,samples);if(previous->source)previous->source(previous->processors.get(),previous->sourceProcessors[processor],port,samples,frames_,position_);}
 }
 const float *MixerTransition::evaluate(Plan &plan,std::span<const DirectInput> sources) noexcept {
   if(plan.execution){

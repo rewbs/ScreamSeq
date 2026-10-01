@@ -12,6 +12,7 @@
 #include "MixerGraph.hpp"
 #include "NoteRouting.hpp"
 #include "GraphPresentation.hpp"
+#include "SignalGroupBypass.hpp"
 #include "MusicalAutomation.hpp"
 
 namespace Tracker {
@@ -28,6 +29,8 @@ struct GraphPluginRecipe {
   // Host bypass belongs to the shared recipe. Every use keeps processing and
   // reveals latency-aligned dry audio; it never replaces the vendor preset.
   bool bypass = false;
+  // Logical port identities are pinned to physical bus/channel slices.
+  std::string audioLayout;
   bool operator==(const GraphPluginRecipe &) const = default;
 };
 enum class SignalNodeKind : uint8_t { Input, Output, Plugin, LFO, Follower, Random, NoteEnvelope, MIDI, Amount, Automation };
@@ -84,6 +87,8 @@ struct SignalGroup {
   std::string name;
   double x=0,y=0;
   std::vector<uint64_t> nodes;
+  bool bypass=false;
+  std::vector<SignalGroupDryRoute> dryRoutes;
   bool operator==(const SignalGroup &) const = default;
 };
 struct SignalDefinition {
@@ -131,6 +136,8 @@ struct SignalSongGroup {
   std::string name;
   double x=0,y=0;
   std::vector<std::string> nodes; // canonical "plugin:<instance ID>" keys
+  bool bypass=false;
+  std::vector<SignalSongGroupDryRoute> dryRoutes;
   bool operator==(const SignalSongGroup &) const = default;
 };
 // Song-level controls target existing rack instances; they never turn a rack

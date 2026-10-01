@@ -494,9 +494,8 @@
       "additionalProperties": false,
       "description": "Load a validated portable plugin preset into a shared recipe in one Undo. Preserve audio ports, routing, bypass and modulation ranges; update all target manual modulation baselines from the loaded preset. All uses update together through prepared publication."
     },
-
     {
-      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument’s implicit cable.",
+      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument\u2019s implicit cable.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -708,7 +707,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Restore an instrument’s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
+      "description": "Restore an instrument\u2019s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -13604,7 +13603,9 @@
         "params": {
           "type": "object",
           "properties": {
-            "definition": {"$ref": "#/$defs/signalDefinition"},
+            "definition": {
+              "$ref": "#/$defs/signalDefinition"
+            },
             "expectedRevision": {
               "type": "string",
               "maxLength": 200
@@ -13813,6 +13814,11 @@
                   "type": "boolean",
                   "default": false,
                   "description": "Host bypass for this processor in all copies; not a vendor parameter."
+                },
+                "audioLayout": {
+                  "type": "string",
+                  "maxLength": 8192,
+                  "description": "Host-captured logical-port to physical-channel fingerprint. A nonempty mismatch is rejected before processing; never clear it to silently retarget saved routing."
                 }
               },
               "required": [
@@ -14200,7 +14206,9 @@
               "minimum": 0,
               "maximum": 127
             },
-            "muted": {"type": "boolean"},
+            "muted": {
+              "type": "boolean"
+            },
             "value": {
               "type": "integer",
               "minimum": 0,
@@ -18148,7 +18156,29 @@
         "params": {
           "type": "object",
           "properties": {
-            "heal": {"type":"object","properties":{"incoming":{"type":["integer","null"],"minimum":0,"maximum":255},"outgoing":{"type":["integer","null"],"minimum":0,"maximum":255}},"additionalProperties":false,"description":"Explicit boundary edge indices for a branched main path, guarded by expectedRevision. Chosen edge gains multiply; unchosen branches remain when detaching. No implicit cross-product."},
+            "heal": {
+              "type": "object",
+              "properties": {
+                "incoming": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "outgoing": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 255
+                }
+              },
+              "additionalProperties": false,
+              "description": "Explicit boundary edge indices for a branched main path, guarded by expectedRevision. Chosen edge gains multiply; unchosen branches remain when detaching. No implicit cross-product."
+            },
             "graph": {
               "type": "string",
               "pattern": "^n[1-9][0-9]*$",
@@ -19396,7 +19426,9 @@
                   "minimum": 0,
                   "maximum": 127
                 },
-                "muted": {"type": "boolean"},
+                "muted": {
+                  "type": "boolean"
+                },
                 "envelopes": {
                   "type": "array",
                   "maxItems": 1024,
@@ -19652,7 +19684,9 @@
                   "minimum": 0,
                   "maximum": 127
                 },
-                "muted": {"type": "boolean"},
+                "muted": {
+                  "type": "boolean"
+                },
                 "audioBus": {
                   "oneOf": [
                     {
@@ -20102,6 +20136,317 @@
       ],
       "additionalProperties": false,
       "description": "Read existing envelope, pattern FX column and recorded automation provenance for a stable plugin parameter. Available stopped or unloaded; no DSP, revision or history mutation. Paginated bounded references retain original base-control semantics."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.group.boundary"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            }
+          },
+          "required": [
+            "graph",
+            "group"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Read exact group audio ingress and egress identities, current/inferred dry routes, requested bypass and needsMapping without preparing plugins."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.group.bypass"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "bypass": {
+              "type": "boolean"
+            },
+            "dryRoutes": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "pattern": "^n[1-9][0-9]*$",
+                                "maxLength": 32
+                              },
+                              "target": {
+                                "type": "string",
+                                "pattern": "^n[1-9][0-9]*$",
+                                "maxLength": 32
+                              },
+                              "output": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 63
+                              },
+                              "input": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 63
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "target"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "enum": [
+                              "",
+                              null
+                            ]
+                          }
+                        ]
+                      },
+                      "output": {
+                        "type": "object",
+                        "properties": {
+                          "node": {
+                            "type": "string",
+                            "pattern": "^n[1-9][0-9]*$",
+                            "maxLength": 32
+                          },
+                          "port": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 63
+                          }
+                        },
+                        "required": [
+                          "node"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "input",
+                      "output"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "insert",
+                                  "output",
+                                  "master-output",
+                                  "send",
+                                  "plugin-input",
+                                  "plugin-output",
+                                  "graph-input",
+                                  "follower-input"
+                                ]
+                              },
+                              "source": {
+                                "type": "string",
+                                "maxLength": 256
+                              },
+                              "target": {
+                                "type": "string",
+                                "maxLength": 256
+                              },
+                              "plugin": {
+                                "type": "string",
+                                "maxLength": 256
+                              },
+                              "tap": {
+                                "enum": [
+                                  "post-gain",
+                                  "main-path",
+                                  "pre-master-fader"
+                                ]
+                              },
+                              "input": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 63
+                              },
+                              "output": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 63
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "enum": [
+                              "",
+                              null
+                            ]
+                          }
+                        ]
+                      },
+                      "output": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "insert",
+                              "output",
+                              "master-output",
+                              "send",
+                              "plugin-input",
+                              "plugin-output",
+                              "graph-input",
+                              "follower-input"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "target": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "plugin": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "tap": {
+                            "enum": [
+                              "post-gain",
+                              "main-path",
+                              "pre-master-fader"
+                            ]
+                          },
+                          "input": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 63
+                          },
+                          "output": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 63
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "input",
+                      "output"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "graph",
+            "group",
+            "bypass",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Bypass a real processing boundary while its contents keep running. A unique input/output dry path is inferred; ambiguous boundaries require an explicit dryRoutes map covering each outgoing boundary. graph:null selects a song group. One Undo; no per-member bypass substitution."
     }
   ],
   "$defs": {
@@ -20245,6 +20590,11 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Host bypass for this processor in all copies; not a vendor parameter."
+                  },
+                  "audioLayout": {
+                    "type": "string",
+                    "maxLength": 8192,
+                    "description": "Host-captured logical-port to physical-channel fingerprint. A nonempty mismatch is rejected before processing; never clear it to silently retarget saved routing."
                   }
                 },
                 "required": [
@@ -20503,6 +20853,206 @@
                 },
                 "maxItems": 64,
                 "uniqueItems": true
+              },
+              "bypass": {
+                "type": "boolean"
+              },
+              "dryRoutes": {
+                "type": "array",
+                "maxItems": 256,
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "input": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "pattern": "^n[1-9][0-9]*$",
+                                  "maxLength": 32
+                                },
+                                "target": {
+                                  "type": "string",
+                                  "pattern": "^n[1-9][0-9]*$",
+                                  "maxLength": 32
+                                },
+                                "output": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 63
+                                },
+                                "input": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 63
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "target"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "enum": [
+                                "",
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        "output": {
+                          "type": "object",
+                          "properties": {
+                            "node": {
+                              "type": "string",
+                              "pattern": "^n[1-9][0-9]*$",
+                              "maxLength": 32
+                            },
+                            "port": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 63
+                            }
+                          },
+                          "required": [
+                            "node"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "input",
+                        "output"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "input": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "insert",
+                                    "output",
+                                    "master-output",
+                                    "send",
+                                    "plugin-input",
+                                    "plugin-output",
+                                    "graph-input",
+                                    "follower-input"
+                                  ]
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "maxLength": 256
+                                },
+                                "target": {
+                                  "type": "string",
+                                  "maxLength": 256
+                                },
+                                "plugin": {
+                                  "type": "string",
+                                  "maxLength": 256
+                                },
+                                "tap": {
+                                  "enum": [
+                                    "post-gain",
+                                    "main-path",
+                                    "pre-master-fader"
+                                  ]
+                                },
+                                "input": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 63
+                                },
+                                "output": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 63
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "enum": [
+                                "",
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        "output": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "insert",
+                                "output",
+                                "master-output",
+                                "send",
+                                "plugin-input",
+                                "plugin-output",
+                                "graph-input",
+                                "follower-input"
+                              ]
+                            },
+                            "source": {
+                              "type": "string",
+                              "maxLength": 256
+                            },
+                            "target": {
+                              "type": "string",
+                              "maxLength": 256
+                            },
+                            "plugin": {
+                              "type": "string",
+                              "maxLength": 256
+                            },
+                            "tap": {
+                              "enum": [
+                                "post-gain",
+                                "main-path",
+                                "pre-master-fader"
+                              ]
+                            },
+                            "input": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 63
+                            },
+                            "output": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 63
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "input",
+                        "output"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
               }
             },
             "required": [

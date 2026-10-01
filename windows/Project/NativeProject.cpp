@@ -49,6 +49,7 @@ void validateRecords(Json &root,const Tracker::NativeSong &native) {
 		(void)data(plugin.at("state"),16u*1024u*1024u);
 		if(plugin.contains("name")) (void)text(plugin.at("name"),1024);
 		if(plugin.contains("bypass")) (void)flag(plugin.at("bypass"));
+		if(plugin.contains("audioLayout")) (void)text(plugin.at("audioLayout"),8192);
 		// AUComponent.h defines kAudioUnitType_MusicDevice as the stored FourCC aumu.
 		constexpr uint32_t musicDevice=(uint32_t('a')<<24)|(uint32_t('u')<<16)|(uint32_t('m')<<8)|uint32_t('u');
 		const bool declaredInstrument=plugin.contains("isInstrument") ? flag(plugin.at("isInstrument")) : false;

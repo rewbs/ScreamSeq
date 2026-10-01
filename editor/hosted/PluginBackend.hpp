@@ -23,6 +23,8 @@ public:
   // Immutable render capacity, distinct from the logical enabled-port list.
   // Most hosts prepare only active inputs. AU prepares all supported inputs.
   virtual uint64_t preparedAuxiliaryInputs() const {uint64_t mask=0;for(const auto &bus:buses())if(bus.input&&bus.index&&bus.index<64&&bus.supported&&bus.active)mask|=uint64_t(1)<<bus.index;return mask;}
+  virtual uint64_t preparedAuxiliaryOutputs() const {uint64_t mask=0;for(const auto &bus:buses())if(!bus.input&&bus.index&&bus.index<64&&bus.supported&&bus.active)mask|=uint64_t(1)<<bus.index;return mask;}
+  virtual size_t preparedStorageBytes() const noexcept {return 0;}
   virtual const float *auxiliaryOutput(uint32_t bus) const noexcept = 0;
   virtual std::vector<PluginParameter> parameters() const = 0;
   virtual std::vector<PluginProgram> programs() const = 0;
@@ -31,7 +33,11 @@ public:
   virtual double latency() const = 0;
   virtual double tail() const = 0;
   virtual bool latencyChangePending() const noexcept { return false; }
-  virtual void refreshLatency() {} // Rendering must be joined by the control owner.
+  // Query on the control owner; no processing/activation reset. A prepared PDC
+  // plan acknowledges only its exact observed serial after audio adoption.
+  virtual std::optional<PluginLatencySnapshot> pendingLatency() {return {};}
+  virtual void acknowledgeLatency(uint64_t) noexcept {}
+  virtual void refreshLatency() {} // Stopped compatibility maintenance.
   virtual void showEditor() = 0;
   virtual void closeEditor() = 0;
   virtual bool editorOpen() const = 0;

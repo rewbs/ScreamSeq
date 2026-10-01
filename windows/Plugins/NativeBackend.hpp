@@ -12,6 +12,9 @@ public:
  void transport(const PluginTransport &) noexcept override;
  bool midi(uint8_t,uint8_t,uint8_t)noexcept override;
  const std::vector<PluginAudioBus>&buses()const override;
+ uint64_t preparedAuxiliaryInputs()const noexcept override;
+ uint64_t preparedAuxiliaryOutputs()const noexcept override;
+ size_t preparedStorageBytes()const noexcept override;
  const float *auxiliaryOutput(uint32_t)const noexcept override;
  std::vector<PluginParameter> parameters()const override;
  std::vector<PluginProgram> programs()const override;
@@ -19,6 +22,8 @@ public:
  PluginState state()const override;
  double latency()const override;
  bool latencyChangePending()const noexcept override;
+ std::optional<PluginLatencySnapshot> pendingLatency()override;
+ void acknowledgeLatency(uint64_t)noexcept override;
  void refreshLatency()override;
  double tail()const override;
  void showEditor()override;

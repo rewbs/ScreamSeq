@@ -41,14 +41,15 @@ void stableImplicitMaster() {
   const auto decoded=ScreamSeq::Project::decodeNativeMetadata(implicit);CHECK(decoded.masterID==before.nextID);CHECK(decoded.nextID==before.nextID+1);CHECK(!decoded.mixer.active());
 }
 void songProcessingGroups() {
-  Fixture f;ScreamSeq::GraphHostHooks hooks;
+  Fixture f;ScreamSeq::GraphHostHooks hooks;unsigned publications=0;
+  hooks.preparePublication=[&](const NativeSong &){return [&]{++publications;};};
   hooks.cachedRack={{{{"name","Gain"},{"isInstrument",false}},"rack-a",0},{{{"name","Tone"},{"isInstrument",false}},"rack-b",1}};
   hooks.cachedRack[0].bypass=true;
   hooks.cloneRackSlot=[](uint32_t slot){ScreamSeq::GraphRackClone c;c.recipe.name=slot?"Tone":"Gain";c.recipe.classID="resonance.gainer.v1";c.recipe.parameters[1]=-6;return c;};
   GraphOperations api(*f.doc,[&]{++f.stops;},hooks);
   const Json create={{"nodes",{"plugin:rack-a","plugin:rack-b"}},{"name","Pair"},{"positions",Json::array({{{"node","plugin:rack-a"},{"x",200},{"y",100}},{{"node","plugin:rack-b"},{"x",435},{"y",100}}})}};
   auto preview=create;preview["dryRun"]=true;const auto before=f.doc->native();api.invoke("graph.song.group.create",preview);CHECK(f.doc->native()==before);
-  const auto group=api.invoke("graph.song.group.create",create)["group"];CHECK(f.stops==0);
+  const auto group=api.invoke("graph.song.group.create",create)["group"];CHECK(f.stops==0&&publications==1);
   const auto grouped=f.doc->native();CHECK(grouped.signal.groups.size()==1);CHECK(grouped.mixer==before.mixer);
   f.doc->undo();CHECK(f.doc->native().signal.groups.empty());f.doc->redo();CHECK(f.doc->native()==grouped);
   const auto encoded=ScreamSeq::Project::encodeNativeMetadata(grouped);CHECK(ScreamSeq::Project::decodeNativeMetadata(encoded)==grouped);
@@ -356,40 +357,42 @@ void strictValidation() {
   CHECK(f.doc->native().nextID==NativeSong::maximumID && f.doc->native().mixer.active()); // Reserved Master needs no new ID.
 }
 void processingGroups() {
-  Fixture f;const auto graph=f.api.invoke("graph.create",Json::object()).at("graph");
-  const auto plugin=f.api.invoke("graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",recipe()},{"insertEdge",0}}).at("node");
-  const auto lfo=f.api.invoke("graph.node.add",{{"graph",graph},{"kind","lfo"}}).at("node");
-  f.api.invoke("graph.assign",{{"target",nativeID(f.doc->native().tracks.at(0).id)},{"graph",graph}});
+  Fixture f;unsigned publications=0;ScreamSeq::GraphHostHooks hooks;hooks.preparePublication=[&](const NativeSong &){return [&]{++publications;};};GraphOperations api(*f.doc,[&]{++f.stops;},hooks);
+  const auto graph=api.invoke("graph.create",Json::object()).at("graph");
+  const auto plugin=api.invoke("graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",recipe()},{"insertEdge",0}}).at("node");
+  const auto lfo=api.invoke("graph.node.add",{{"graph",graph},{"kind","lfo"}}).at("node");
+  api.invoke("graph.assign",{{"target",nativeID(f.doc->native().tracks.at(0).id)},{"graph",graph}});
   auto controlled=definition(f);controlled["nodes"][2]["plugin"]["parameters"]=Json::array({{{"id",7},{"value",.375}}});controlled["nodes"][2]["plugin"]["bypass"]=true;
-  f.api.invoke("graph.update",{{"definition",controlled}});
+  api.invoke("graph.update",{{"definition",controlled}});
   CHECK(f.doc->native().signal.library[0].nodes[2].plugin.parameters.at(7)==.375);
   const auto stops=f.stops;const auto revision=f.doc->revision;
   const auto before=f.doc->native();
-  const auto draft=f.api.invoke("graph.group.create",{{"graph",graph},{"nodes",{plugin,lfo}},{"name","Motion"},{"dryRun",true}});
+  const auto draft=api.invoke("graph.group.create",{{"graph",graph},{"nodes",{plugin,lfo}},{"name","Motion"},{"dryRun",true}});
   CHECK(f.doc->native()==before&&f.doc->revision==revision&&f.stops==stops);
-  const auto group=f.api.invoke("graph.group.create",{{"graph",graph},{"nodes",{plugin,lfo}},{"name","Motion"}}).at("group");
+  const auto group=api.invoke("graph.group.create",{{"graph",graph},{"nodes",{plugin,lfo}},{"name","Motion"}}).at("group");
   CHECK(group==draft.at("group")&&f.stops==stops);
-  const auto inner=f.api.invoke("graph.group.create",{{"graph",graph},{"parent",group},{"nodes",{lfo}},{"name","Modulation"}}).at("group");
+  const auto inner=api.invoke("graph.group.create",{{"graph",graph},{"parent",group},{"nodes",{lfo}},{"name","Modulation"}}).at("group");
   const auto d=definition(f);const auto x=d["nodes"][2]["x"].get<double>();
   const auto gx=d["groups"][0]["x"].get<double>(),gy=d["groups"][0]["y"].get<double>();
-  f.api.invoke("graph.group.update",{{"graph",graph},{"group",group},{"x",gx+130},{"y",gy-25}});
+  api.invoke("graph.group.update",{{"graph",graph},{"group",group},{"x",gx+130},{"y",gy-25}});
   CHECK(definition(f)["nodes"][2]["x"]==x+130&&f.stops==stops);
   auto omitted=definition(f);omitted.erase("groups");
-  CHECK(!f.api.invoke("graph.update",{{"definition",omitted}})["wouldChange"].get<bool>());
+  CHECK(!api.invoke("graph.update",{{"definition",omitted}})["wouldChange"].get<bool>());
   const auto grouped=f.doc->native();
-  f.api.invoke("graph.group.export",{{"graph",graph},{"group",group},{"dryRun",true}});CHECK(f.doc->native()==grouped);
-  const auto exported=f.api.invoke("graph.group.export",{{"graph",graph},{"group",group}}).at("graph");
+  api.invoke("graph.group.export",{{"graph",graph},{"group",group},{"dryRun",true}});CHECK(f.doc->native()==grouped);
+  const auto exported=api.invoke("graph.group.export",{{"graph",graph},{"group",group}}).at("graph");
   CHECK(f.stops==stops&&definition(f)==ScreamSeq::Project::encodeNativeMetadata(grouped)["signalGraph"]["library"][0]);
   const auto copy=definition(f,1);CHECK(std::any_of(copy["nodes"].begin(),copy["nodes"].end(),[](const auto &n){return n.contains("plugin")&&n["plugin"].value("bypass",false);}));CHECK(copy["id"]==exported&&copy["groups"].size()==1&&copy["groups"][0]["parent"]=="");
   std::set<Json> ids;for(const auto &n:definition(f)["nodes"])ids.insert(n["id"]);for(const auto &g:definition(f)["groups"])ids.insert(g["id"]);
   for(const auto &n:copy["nodes"])CHECK(!ids.contains(n["id"]));for(const auto &g:copy["groups"])CHECK(!ids.contains(g["id"]));
   const auto saved=f.doc->native();CHECK(ScreamSeq::Project::decodeNativeMetadata(ScreamSeq::Project::encodeNativeMetadata(saved))==saved);
   f.doc->undo();CHECK(f.doc->native().signal.library.size()==1);f.doc->redo();CHECK(f.doc->native()==saved);
-  f.api.invoke("graph.group.remove",{{"graph",graph},{"group",inner}});CHECK(definition(f)["groups"].size()==1&&definition(f)["groups"][0]["nodes"].size()==2);
+  api.invoke("graph.group.remove",{{"graph",graph},{"group",inner}});CHECK(definition(f)["groups"].size()==1&&definition(f)["groups"][0]["nodes"].size()==2);
   rejected(f,"graph.group.update",{{"graph",graph},{"group",inner},{"name","Gone"}});
   auto invalid=definition(f);invalid["groups"][0]["id"]="n900000";rejected(f,"graph.update",{{"definition",invalid}});
-  f.api.invoke("graph.group.remove",{{"graph",graph},{"group",group},{"deleteContents",true}});
-  CHECK(definition(f)["groups"].empty()&&definition(f)["nodes"].size()==2&&f.stops==stops+1);
+  const auto beforeDeletePublications=publications;
+  api.invoke("graph.group.remove",{{"graph",graph},{"group",group},{"deleteContents",true}});
+  CHECK(definition(f)["groups"].empty()&&definition(f)["nodes"].size()==2&&f.stops==stops&&publications==beforeDeletePublications+1);
 }
 void dryRunsAndRedo() {
   Fixture f; f.doc->transaction([](OpenMPT::CSoundFile &s){CHECK(s.AllocateInstrument(1));});
@@ -613,9 +616,9 @@ void callbackOrderingAndUnrelatedData() {
   CHECK(f.doc->native().tracks==expected.tracks); CHECK(f.doc->native().patterns==expected.patterns);
   CHECK(f.doc->native().columnMutes==expected.columnMutes); CHECK(f.doc->cell(0,2,1)==cells);
   const auto reads=GraphOperations::reads(),writes=GraphOperations::writes();
-  CHECK((std::set<std::string>(reads.begin(),reads.end())==std::set<std::string>{"graph.note.activity","graph.get","graph.selection.copy","graph.automation.get","graph.provenance.get"}));
-  CHECK((std::set<std::string>(writes.begin(),writes.end())==std::set<std::string>{"graph.note.connect","graph.note.update","graph.note.disconnect","graph.note.restoreAssignment","graph.makeIndependent","graph.selection.paste","graph.selection.cut","graph.selection.duplicate","graph.source.mute","graph.create","graph.clone","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set","graph.automation.set"}));
-  CHECK(reads.size()==5); CHECK(writes.size()==38);
+  CHECK((std::set<std::string>(reads.begin(),reads.end())==std::set<std::string>{"graph.note.activity","graph.get","graph.selection.copy","graph.group.boundary","graph.automation.get","graph.provenance.get"}));
+  CHECK((std::set<std::string>(writes.begin(),writes.end())==std::set<std::string>{"graph.note.connect","graph.note.update","graph.note.disconnect","graph.note.restoreAssignment","graph.makeIndependent","graph.selection.paste","graph.selection.cut","graph.selection.duplicate","graph.source.mute","graph.group.bypass","graph.create","graph.clone","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set","graph.automation.set"}));
+  CHECK(reads.size()==6); CHECK(writes.size()==39);
 }
 #include "NoteRoutingOperationsTests.inc"
 #include "GraphEditingOperationsTests.inc"
@@ -623,7 +626,7 @@ int main(int argc,char **argv) {
   try {
     if(argc==2&&std::string(argv[1])=="--catalog") { std::cout<<Json{{"reads",GraphOperations::reads()},{"writes",GraphOperations::writes()}}.dump(2)<<'\n'; return 0; }
     const std::vector<std::pair<const char *,void(*)()>> tests={
-      {"noteRoutingOperations",noteRoutingOperations},{"graphEditingOperations",graphEditingOperations},
+      {"noteRoutingOperations",noteRoutingOperations},{"graphEditingOperations",graphEditingOperations},{"groupBypassOperations",groupBypassOperations},
       {"graphProvenance",graphProvenance},{"graphPresentation",graphPresentation},{"songModulationSources",songModulationSources},{"songAutomationAndBanks",songAutomationAndBanks},{"stableImplicitMaster",stableImplicitMaster},{"songCableCuts",songCableCuts},
       {"createReadHistory",createReadHistory},{"nodesAndCloning",nodesAndCloning},{"automationAndBanks",automationAndBanks},
       {"assignmentsRoutesLayoutCommands",assignmentsRoutesLayoutCommands},{"hostHooks",hostHooks},

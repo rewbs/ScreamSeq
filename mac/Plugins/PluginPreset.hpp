@@ -10,6 +10,6 @@ public:
   static NSDictionary *summary(NSDictionary *preset);
   static bool matches(NSDictionary *a, NSDictionary *b);
   static NSDictionary *write(NSString *path, NSDictionary *descriptor, NSData *state,
-                            NSString *name, bool overwrite, bool dryRun);
+                            NSString *name, bool overwrite, bool dryRun, NSString *audioLayout = @"");
 };
 }

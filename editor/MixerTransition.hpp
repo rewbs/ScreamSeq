@@ -18,6 +18,7 @@ public:
   using Begin = void (*)(void *,uint32_t,uint64_t,bool) noexcept;
   using Adopt = void (*)(void *,void *) noexcept;
   using Source = void (*)(void *,size_t,uint32_t,const float *,uint32_t,uint64_t) noexcept;
+  using Sources = bool (*)(void *,MixerRuntime &,uint32_t,uint64_t,bool) noexcept;
   struct Dependency {size_t bus=SIZE_MAX,processor=SIZE_MAX,target=SIZE_MAX;};
   struct DirectInput {const float *left=nullptr,*right=nullptr;};
   struct InputMorph {
@@ -40,6 +41,7 @@ public:
     Begin begin=nullptr;
     Adopt adopt=nullptr;
     Source source=nullptr;
+    Sources renderSources=nullptr;
     std::vector<Dependency> dependencies;
     std::unique_ptr<InputMorph> execution;
     std::unique_ptr<InputMorph> morph;
@@ -120,6 +122,7 @@ public:
   // Render callbacks use precisely the same chunk boundaries for both plans.
   // Each instrument source is rendered by the host once and distributed here.
   bool begin(uint32_t frames,uint64_t position) noexcept;
+  bool renderSources(uint32_t frames,uint64_t position) noexcept;
   // processor is the original catalog slot retained by the host adapter, even
   // when effect insertion/removal changes the catalog indices of later plans.
   void instrument(size_t processor,uint32_t output,const float *) noexcept;

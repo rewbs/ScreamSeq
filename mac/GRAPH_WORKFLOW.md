@@ -437,3 +437,7 @@ The selected event cable shows counters from its actual adopted route, including
 held notes/pedals and route-owned releases. Stopped, pending, unavailable, stale
 and retired snapshots are labeled; note activity is never inferred from audio
 levels.
+
+Plugin buses with more than two channels appear as separate mono/stereo sockets with explicit channel ranges. For example, an eight-channel output exposes four independently routable pairs; the socket label shows which physical channels it carries. Saved routing is pinned to that layout, so a vendor update cannot silently redirect an old connection to another channel pair.
+
+When a plugin assignment is removed but explicit note routes remain, its tracker instrument stays a **Plugin trigger** with no default destination. The graph keeps that source visible. **Use instrument sample mapping…** explicitly restores sample playback; any retained note cables then appear inactive. **Assign plugin to note instrument…** makes those routes useful again without losing their settings.

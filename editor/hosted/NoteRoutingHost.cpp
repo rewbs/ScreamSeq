@@ -25,6 +25,8 @@ std::shared_ptr<const HostedNoteRoutingPlan> PluginChain::prepareNoteRouting(con
   for(const auto &[index,t]:native.tracks){if(index>=plan->tracks.size())throw std::invalid_argument("Note track exceeds prepared source capacity");plan->tracks[index]=t.id;tracks.push_back(t.id);}
   for(const auto &[index,i]:native.instruments){if(index>=plan->instruments.size())throw std::invalid_argument("Note instrument exceeds prepared source capacity");plan->instruments[index]=i.id;instruments.push_back(i.id);}
   native.signal.noteRouting.validate(tracks,instruments);
+  for(const auto &trigger:native.signal.noteRouting.triggerSources)for(size_t index=1;index<plan->instruments.size();++index)
+    if(plan->instruments[index]==trigger.instrument)plan->pluginInstruments[index]=true;
   std::vector<NoteAssignment> assignments;std::vector<NoteEndpointInfo> endpoints;
   for(const auto &entry:rack)if(entry->plugin->isInstrument()){
     // Allocate for every possible instrument destination before playback. Live

@@ -146,8 +146,12 @@ extension SignalGraphEditor {
     let title=name.isEmpty ? (number==0 ? (output ? "Main out":"Main in") : "Aux \(output ? "output":"input") \(number)") : name
     let channels=p?["channels"] as? Int
     let sidechain = !output && (name.lowercased().contains("sidechain") || name.lowercased().contains("side chain") || name.lowercased().contains("detector"))
-    let label=title+(channels.map{" · \($0)ch"} ?? "")
-    return SignalCanvasPort(number:number,label:label,active:p?["active"] as? Bool ?? true,signal:sidechain ? .sidechain:.audio,channels:channels,unavailable:p?["supported"] as? Bool==false ? "\(title) · \(channels ?? 0) channels: this host currently supports mono/stereo buses":nil)
+    let first=p?["firstChannel"] as? Int ?? 0,physical=p?["physicalChannels"] as? Int ?? channels ?? 0
+    let channelLabel:String
+    if let channels,physical>channels {channelLabel=channels==1 ? "channel \(first+1) of \(physical)" : "channels \(first+1)–\(first+channels) of \(physical)"}
+    else{channelLabel=channels.map{"\($0)ch"} ?? ""}
+    let label=title+(channelLabel.isEmpty ? "":" · \(channelLabel)")
+    return SignalCanvasPort(number:number,label:label,active:p?["active"] as? Bool ?? true,signal:sidechain ? .sidechain:.audio,channels:channels,unavailable:p?["supported"] as? Bool==false ? "\(title): this physical bus/channel slice is unavailable":nil)
   }
   func refreshPortChoices() {
     for (popup,nodePicker,field,output) in [(outputChoice,source,outputPort,true),(inputChoice,destination,inputPort,false)] {

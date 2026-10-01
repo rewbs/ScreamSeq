@@ -1,6 +1,7 @@
 import AppKit
 extension InterfaceTests {
   static func graphStageChecks() throws {
+    try graphCopyObservationChecks()
     let stage=SignalStagePresentation()
     func copy(_ graph:String,_ role:String,_ x:Double,_ y:Double)->SignalCanvasNode {var n=SignalCanvasNode(id:"graph:track:\(role):\(graph)",title:graph,detail:role,kind:"audio",x:x,y:y);n.role=role;return n}
     let nodes=[copy("A","Persistent",500,60),copy("B","Persistent",100,200),copy("A","Row",50,450),copy("C","Ordinary",850,70)]
@@ -40,6 +41,27 @@ extension InterfaceTests {
     editor.showActivity(initial,playing:true)
     try require(editor.canvas.stages.count==1 && editor.canvas.stages[0].audible==[nodes[1].id,nodes[0].id] && writes==0,"Host activity projects only occupied visible stages without a song or API mutation")
     try require(editor.canvas.nodes.count==saved.count && zip(editor.canvas.nodes,saved).allSatisfy{$0.0.id==$0.1.0 && $0.0.rect==$0.1.1} && editor.canvas.edges.map{$0.source+"→"+$0.target}==edges && editor.selectedID==nodes[0].id,"Audible order presentation preserves saved layout, editable endpoints and current selection")
+  }
+}
+
+extension InterfaceTests {
+  static func graphCopyObservationChecks() throws {
+    let editor=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1000,height:650));editor.graphID="n10";editor.graphTarget="n100"
+    func port(_ target:String,_ level:Double,_ kind:String="audio")->[String:Any] {
+      ["key":"copy/\(target)/\(kind)","node":"node:n13","name":"Gain output","direction":"output","port":0,"kind":kind,"value":level,"channels":2,"peak":[level,level],"rms":[level,level],"through":128,"measured":true,"available":true,"fresh":true,"copy":["graph":"n10","target":target,"role":"ordinary"]]
+    }
+    editor.showSignals(["active":true,"ports":[port("n100",0.2),port("n101",0.8),port("n100",0.35,"control")]])
+    try require(editor.signalReadings.ports.count==2 && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.2,"A recipe observes one context-selected copy; it must neither average nor take another copy's meter")
+    try require(editor.signalReadings.port("n13",output:true,modulation:true)?.value==0.35,"Control outputs retain normalized scalar readings without masquerading as audio ports")
+    let selected=editor.copyObservation.selected!
+    editor.showSignals(["active":true,"ports":[port("n101",0.8)]])
+    try require(editor.copyObservation.selected==selected && editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("unavailable"),"Retired selected copy remains unavailable until explicitly changed")
+    editor.copyObservation.select(editor.copyObservation.copies[0].key)
+    try require(editor.signalReadings.primaryPort("n13",output:true)?.peak==0.8,"Selecting a different copy updates readings immediately without a document mutation")
+    editor.graphID=nil;editor.applyCopyObservation()
+    try require(editor.signalReadings.ports.isEmpty && editor.copyObservation.isHidden,"Recipe ports do not leak into song-node aggregate readings")
+    var control=port("n101",0.4,"control");control.removeValue(forKey:"copy");control["node"]="control";editor.showSignals(["active":true,"ports":[control]])
+    try require(editor.signalReadings.primaryPort("control",output:true)==nil && editor.signalReadings.ports[0].summary(active:true).contains("0.4"),"Control values cannot be offered as Listen/Scope audio or described in dBFS")
   }
 }
 

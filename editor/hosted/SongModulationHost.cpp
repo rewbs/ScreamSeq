@@ -88,6 +88,7 @@ std::shared_ptr<PluginChain::HostedMixerPlan::SongControls> PluginChain::prepare
 
 void PluginChain::HostedMixerPlan::adopt(void *opaque,void *previous) noexcept {
   auto &next=*static_cast<HostedMixerPlan *>(opaque);
+  if(next.instrumentBindings)next.owner->adoptInstrumentBindings(*next.instrumentBindings);
   if(next.noteRouting)next.owner->adoptNoteRouting(*next.noteRouting);
   if(previous && next.song){const auto &old=*static_cast<HostedMixerPlan *>(previous);if(old.song){next.song->runtime->inheritState(*old.song->runtime);next.song->controllers=old.song->controllers;
     for(auto &scope:next.song->notes)for(const auto &prior:old.song->notes)if(next.song->runtime->source(scope.source).node.id==old.song->runtime->source(prior.source).node.id)

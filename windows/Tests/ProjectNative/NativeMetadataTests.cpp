@@ -119,6 +119,7 @@ void optionalDefaults(const Json &encoded) {
   compare("/signalGraph/library/0/nodes/0","rate",1); compare("/signalGraph/library/0/nodes/0","attack",.01); compare("/signalGraph/library/0/nodes/0","release",.1); compare("/signalGraph/library/0/nodes/0","controller",1);
   compare("/signalGraph/library/0/nodes/9/envelopes/0","enabled",true);
   compare("/signalGraph/library/0/nodes/2/plugin","bypass",false);
+  compare("/signalGraph/library/0/nodes/2/plugin","audioLayout","");
   compare("/signalGraph/library/0/audio/0","input",0); compare("/signalGraph/library/0/audio/0","output",0); compare("/signalGraph/library/0/audio/0","gain",1);
   compare("/signalGraph/library/0/modulation/0","minimum",0); compare("/signalGraph/library/0/modulation/0","maximum",1); compare("/signalGraph/library/0/modulation/0","base",0); compare("/signalGraph/library/0/modulation/0","enabled",true); compare("/signalGraph/library/0/modulation/0","quantized",false);
   for (const char *key : {"amount","wet"}) { compare("/signalGraph/assignments/0",key,1); compare("/signalGraph/instrumentAssignments/0",key,1); compare("/signalGraph/commands/0",key,1); }
@@ -145,10 +146,11 @@ void boundaryTests(const NativeSong &model, const Json &encoded) {
   n.patterns.begin()->second.name += "a"; rejects([&]{ (void)encodeNativeMetadata(n); },"UTF-16 length overflow");
   for (const auto &format : {"Built-in","AU","VST3"}) for (size_t size : {size_t(0),size_t(1),size_t(2),size_t(3),size_t(255),size_t(256),size_t(257)}) {
     n = model; auto &recipe = n.signal.library[0].nodes[2].plugin; recipe.format = format; recipe.state.resize(size);
-    recipe.bypass=true;
+    recipe.bypass=true;recipe.audioLayout="pairs-v1;i0=0:0:2:6;i1=0:2:2:6;i2=0:4:2:6;o0=0:0:2:2";
     for (size_t i = 0; i < size; ++i) recipe.state[i] = std::byte(i%256);
     check(decodeNativeMetadata(encodeNativeMetadata(n)) == n,"plugin identity and all base64 padding lengths");
   }
+  n=model;n.signal.library[0].nodes[2].plugin.audioLayout=std::string(8192,'x');check(decodeNativeMetadata(encodeNativeMetadata(n))==n,"maximum audio layout signature roundtrip");n.signal.library[0].nodes[2].plugin.audioLayout+='x';rejects([&]{(void)encodeNativeMetadata(n);},"oversized audio layout signature");
   n = model; n.signal.library[0].nodes[2].plugin.state.resize(8*1024*1024,std::byte(0xa5));
   check(decodeNativeMetadata(encodeNativeMetadata(n)) == n,"8 MiB plugin state boundary");
   n.signal.library[0].nodes[2].plugin.state.push_back(std::byte(0)); rejects([&]{ (void)encodeNativeMetadata(n); },"plugin state over 8 MiB");

@@ -941,17 +941,17 @@ existing plugin parameter interface; no new musical operation is hidden in UI.
 
 ### Plugin audio buses
 
-`plugin.buses.get {slot}` reads the loaded plugin's audio ports without rescanning or opening an interface. It returns the stable plugin identity and `buses`, each with `index`, `direction` (`input`/`output`), `name`, `channels`, `active` and `supported`. Native indices are preserved, including inactive ports. Mono and stereo ports are supported, up to 64 declared buses in either direction; larger channel layouts are listed as unsupported. The graph shows names with the native zero-based indices in its port menus. The older Audio buses editor numbers them from 1 for display.
+`plugin.buses.get {slot}` reads the loaded plugin's audio ports without rescanning or opening an interface. It returns the stable plugin identity and `buses`, each with `index`, `direction` (`input`/`output`), `name`, `channels`, `active`, `supported`, `physicalBus`, `firstChannel` and `physicalChannels`. Native N-channel buses expose explicit stereo pairs and an odd final mono port. Each first pair retains the physical bus index; extra pairs follow the physical bus count in bus/channel order. Each direction supports at most 64 logical ports, with at most 64 channels per physical bus. All native buffers are prepared before playback, including inactive ports, so connecting a supported port requires no vendor activation change. Captured `audioLayout` pins the mapping; a changed saved physical layout rejects before playback instead of silently retargeting a wire. The graph shows names with the native zero-based indices in its port menus. The older Audio buses editor numbers them from 1 for display.
 
 `plugin.buses.set {expectedRevision, slot, inputs?, outputs?, dryRun?}` sets the complete enabled auxiliary bus list for each supplied direction. Lists contain unique indices 1–63. Main bus 0 remains enabled; an empty list disables that direction's auxiliaries. Omitted directions retain their current configuration. Changes preserve opaque plugin state and use unified Undo/Redo. Mac playback continues only if a compatible plan can be prepared; unsupported active changes reject without stopping. Windows uses the same prepared rack path and rejects unsupported active physical-port changes before mutation. A dry run validates the known layout without creating a plugin. Repeating the same lists, regardless of order, is a no-op. Old project entries with no activation fields keep only the main buses active.
 
 Use named output sockets in the graph, or choose an instrument output in Mixer and use **Route here**. Supported wired outputs activate automatically. **Audio buses…** also allows explicit manual activation. Each output has independent bus faders, inserts and delay compensation. Inputs enabled without a routed source receive silence. Hardware output pairs remain a separate feature in progress. Route auxiliary effect inputs with `mixer.sidechains.set`, described below.
 
-Host behavior follows [VST3 bus indices and buffers](https://steinbergmedia.github.io/vst3_doc/vstinterfaces/structSteinberg_1_1Vst_1_1ProcessData.html) and [Audio Unit multi-output timestamps](https://developer.apple.com/documentation/audiotoolbox/audiounitrender(_:_:_:_:_:_:)). All enabled AU outputs use the same timestamp/frame count; VST3 is processed once for all buses. Sample-timed parameter splits preserve offsets across every auxiliary buffer.
+Host behavior follows [VST3 bus indices and buffers](https://steinbergmedia.github.io/vst3_doc/vstinterfaces/structSteinberg_1_1Vst_1_1ProcessData.html) and [Audio Unit multi-output timestamps](https://developer.apple.com/documentation/audiotoolbox/audiounitrender(_:_:_:_:_:_:)). All prepared AU physical outputs use the same timestamp/frame count; VST3 is processed once for all buses. Sample-timed parameter splits preserve offsets across every auxiliary buffer.
 
 ### Mixer sidechains
 
-`mixer.sidechains.set {expectedRevision, plugin, input, sources, dryRun?}` replaces every source feeding one auxiliary effect input. `plugin` is a stable effect instance ID; `input` is its native input bus index 1–63 (or 0 for additional main-input summing). Supported wired inputs activate automatically at playback. Each source is `{source: busID, gainDB?: 0, preFader?: false, enabled?: true}`. Gain ranges from −96 to +12 dB. There are at most 128 sidechain routes in a graph; repeated sources for one plugin/input are rejected. An empty `sources` list removes that routing, including an unavailable plugin's retained routes.
+`mixer.sidechains.set {expectedRevision, plugin, input, sources, dryRun?}` replaces every source feeding one auxiliary effect input. `plugin` is a stable effect instance ID; `input` is its logical input pair index 1–63 (or 0 for additional main-input summing). Supported wired inputs activate automatically at playback. Each source is `{source: busID, gainDB?: 0, preFader?: false, enabled?: true}`. Gain ranges from −96 to +12 dB. There are at most 128 sidechain routes in a graph; repeated sources for one plugin/input are rejected. An empty `sources` list removes that routing, including an unavailable plugin's retained routes.
 
 Multiple sources sum into one input. Stereo-to-mono inputs average their channels. Both pre/post taps are after source inserts; the pre-fader tap precedes the bus fader, balance and width. Sidechains honor source mute and solo. Solo the key source too if it must continue triggering a soloed receiver. For an almost silent key track, use a pre-fader route and turn its track fader down. There is no automatic unmuting of unrelated tracks.
 
@@ -1649,7 +1649,7 @@ the displayed revision; all edits remain available to agents.
 {"method":"mixer.inserts.move","params":{"expectedRevision":"<document revision>","plugins":["<distortion instance>","<compressor instance>"],"target":"<track bus ID>","before":null}}
 ```
 
-`plugins` must be a nonempty, ordered, contiguous segment from one bus (1–32 IDs), or one explicitly detached effect. Unassigned rack effects belong to Master in rack order, except identities in `mixer.detached`. `before` names an existing destination insert; omit it or use `null` to append. No processors are cloned or replaced; state, stable parameter bindings, automation and sidechain references stay attached to the same IDs. The entire candidate routing graph is validated before mutation. Feedback, invalid anchors, duplicates and nonconsecutive segments are rejected atomically. `dryRun:true` validates without changing the revision; an effective no-op makes no Undo entry. Mac structural moves use the supported live transition below; Windows currently stops playback. The operation is exposed by both native API adapters.
+`plugins` must be a nonempty, ordered, contiguous segment from one bus (1–32 IDs), or one explicitly detached effect. Unassigned rack effects belong to Master in rack order, except identities in `mixer.detached`. `before` names an existing destination insert; omit it or use `null` to append. No processors are cloned or replaced; state, stable parameter bindings, automation and sidechain references stay attached to the same IDs. The entire candidate routing graph is validated before mutation. Feedback, invalid anchors, duplicates and nonconsecutive segments are rejected atomically. `dryRun:true` validates without changing the revision; an effective no-op makes no Undo entry. Mac and Windows structural moves use the supported live transition below. The operation is exposed by both native API adapters.
 
 The song graph's `plugins` records include available `audioBuses` on Mac so unconnected active auxiliary sockets can be displayed. Empty catalogs do not imply a plugin has no ports. Graph search/type/channel filters are view state; they do not alter song routing. Canvas wire indices are display indices, not API identities.
 
@@ -2230,3 +2230,49 @@ curves rather than creating accidental song-local bank links.
 
 The note-event API, ownership policy, atomic mixed cable cuts and exact activity
 snapshot contract are specified in [Note routing](../doc/SCREAMSEQ_NOTE_ROUTING.md).
+
+### Physical audio bus slices
+
+`plugin.buses.get`, graph rack `audioBuses`, and `graph.plugin.get.buses` expose logical mono/stereo ports with `physicalBus`, zero-based `firstChannel`, and `physicalChannels`. Route using the returned logical `index`; channel pairs are not new vendor buses. The first pair retains the physical bus index, and additional pairs follow the physical bus count. Labels identify the channel range (for example, channels 5–6 of 6). A direction supports at most 64 logical ports.
+
+The host captures `audioLayout` on rack state, graph recipes and portable plugin presets. It pins logical port indices to physical channels; a nonempty saved fingerprint that disagrees with the installed plugin is rejected before activation. Existing records with no fingerprint can still load, and newly created recipes are pinned from an actual host probe. Copy, duplicate, presets and project persistence preserve the fingerprint; changing a display name or enabling a prepared auxiliary slice does not change its identity. Do not clear a fingerprint to bypass a routing mismatch: review the changed physical layout and reconnect deliberately.
+
+### Processing-group bypass
+
+`graph.group.boundary {graph,group}` reads exact ingress/egress identities and
+`needsMapping`. `graph` is a reusable definition ID, or `null` for the song graph.
+`graph.group.bypass {graph,group,bypass,dryRoutes?,expectedRevision,dryRun?}`
+changes the boundary in one Undo. It keeps every inner processor and source warm;
+only outgoing audio/control contributions are bypassed. It does not toggle the
+individual vendors. A unique input/output infers a dry path, a generator boundary
+uses silence, and a branched boundary requires a dry input for every outgoing
+boundary. Dry paths retain input gain and latency alignment before outgoing gains.
+
+Recipe maps use `{input:{source,target,output,input},output:{node,port}}`.
+Song maps use the exact route objects returned by the boundary read. An empty
+string input denotes prepared silence; API reads also accept null for that input.
+The canonical saved form uses an empty string so native property lists remain
+portable. Mappings are validated against the current boundary and causal latency;
+invalid or stale edits leave the document, history and playback unchanged.
+
+### Exact reusable-copy signal observation
+
+`graph.signal.get` includes recipe node ports and each gained, compensated audio
+cable contribution. Its optional `copy:{graph,target,role,instrument,channel}`
+identifies one actual ordinary, row, persistent, or sample-instrument processor
+copy. Inspector audition has a null channel. Recipe node keys use `node:nID`;
+audio-route kinds are `graph-audio` and control-route kinds `graph-modulation`.
+Treat the opaque port key as the identity for `graph.scope.watch` and
+`graph.listen.set`. Those operations accept audio ports only.
+
+Control records have `kind:"control"`, `value` (last endpoint), `first`, and
+`minimum`/`maximum` of the current processing quantum's endpoints. They describe
+actual source or contribution values, including muted contributions, rather than
+vendor-internal modulation. They do not claim to preserve every extremum between
+endpoints. `parameter.activity.*` remains the final parameter/provenance monitor.
+
+Copy membership changes when its prepared runtime actually adopts. A removed
+node/cable becomes unavailable; a retained key never substitutes another copy.
+Inactive copies continue to process their own silence, and are not a proxy for
+the summed channel signal. Scope/Listen inspect internal processing before the
+outer wet/dry or structural transition mix.

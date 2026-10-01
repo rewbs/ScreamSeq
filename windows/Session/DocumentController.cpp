@@ -473,6 +473,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     else result=plugins_->invoke(method,params);
   } else if(std::find(graphMethods.begin(),graphMethods.end(),method)!=graphMethods.end()) {
     GraphHostHooks hooks;hooks.rack=[&]{return plugins_->graphRack();};hooks.cloneRackSlot=[&](uint32_t slot){return plugins_->cloneRackSlot(slot);};
+    hooks.prepareRecipe=[&](Tracker::GraphPluginRecipe &recipe){plugins_->prepareRecipe(recipe);};
     hooks.parameters=[&](const std::string &identity){return plugins_->parameterMetadata(identity);};
     hooks.recording=[&](const std::string &identity,uint32_t parameter){
       Tracker::ParameterProvenanceRecording result;const auto &rack=project_.preserved.at("plugins");

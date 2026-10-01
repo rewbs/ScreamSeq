@@ -18,6 +18,7 @@ struct PluginTransport {
 // Transient fault evidence, never serialized into a plugin recipe. Implementors
 // return a static reason string and atomically published numeric detail, so the
 // control owner can inspect a failure without calling a vendor from rendering.
+struct PluginLatencySnapshot {uint64_t serial=0;uint32_t samples=0;double tail=0;};
 struct PluginFailure { const char *reason = nullptr; uint32_t detail = 0; };
 struct PluginFailureEntry { size_t slot; std::string instanceID; PluginFailure failure; };
 struct PluginDescriptor {
@@ -54,9 +55,10 @@ struct PluginState {
   bool bypass = false;
   uint32_t instrument = 0; // One-based tracker instrument assignment; zero is unassigned.
   std::string instanceID; // Project identity; independent of rack position or plugin type.
-  std::vector<uint32_t> auxiliaryInputs, auxiliaryOutputs; // Native bus indices; main bus 0 is always enabled.
+  std::vector<uint32_t> auxiliaryInputs, auxiliaryOutputs; // Logical channel-pair port indices; main port 0 is always enabled.
   uint32_t midiChannel = 1;
   std::vector<PluginInstrumentAlias> aliases;
+  std::string audioLayout; // Optional saved physical/channel-pair identity; empty in legacy projects.
   bool operator==(const PluginState &) const = default;
 };
 std::vector<PluginInstrumentAlias> pluginAssignments(const PluginState &);
@@ -72,6 +74,7 @@ struct PluginAudioBus {
   uint32_t index = 0, channels = 0;
   std::string name;
   bool input = false, active = false, supported = false;
+  uint32_t physicalBus = 0, firstChannel = 0, physicalChannels = 0;
 };
 using PluginAudioInput = MixerAudioInput;
 struct PluginAudioStorage {

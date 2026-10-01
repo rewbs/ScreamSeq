@@ -11,7 +11,7 @@ extension InterfaceTests {
     editor.onRequest={method,p,reply in
       if method=="graph.get"{reply(["result":["revision":revision,"data":song]])}
       else if method=="graph.note.activity"{reply(["result":["revision":revision,"data":["available":false]]])}
-      else if method.hasPrefix("graph.note.") || method=="graph.connections.remove" || method=="plugin.duplicate"{writes.append((method,p));reply(["result":["revision":revision,"data":[:]]])}
+      else if method.hasPrefix("graph.note.") || method=="graph.connections.remove" || method=="plugin.duplicate" || method=="instrument.plugin.set"{writes.append((method,p));reply(["result":["revision":revision,"data":[:]]])}
       else{reply(["result":["revision":revision,"data":[]]])}
     }
     editor.load()
@@ -63,6 +63,17 @@ extension InterfaceTests {
     try require(GraphNoteActivitySnapshot(stale,route:route).text.contains("consistent adopted"),"Torn generation snapshots never display stale event activity as current")
     stale=snapshot;stale["routes"]=[["route":"n21","implicit":false,"sourceKind":"channel","source":"n1","plugin":"synth-b","current":false,"member":false,"heldNotes":99]]
     try require(GraphNoteActivitySnapshot(stale,route:route).text.contains("retired activity"),"Retired route counters do not impersonate the current mapping")
+    song["instruments"]=[["id":"n10","index":1,"name":"Bass","plugin":false]]
+    song["noteRouting"]=["routes":[],"suppressedAssignments":[],"triggerSources":[["instrument":"n10","midiChannel":4]]]
+    revision="note-song:4";editor.load()
+    try require(editor.canvas.nodes.first{$0.id=="note-instrument:n10"}?.detail=="Plugin trigger · no default destination","An orphan trigger remains visible without a rack assignment or outgoing route")
+    editor.selectedID="note-instrument:n10";editor.canvas.selected=editor.selectedID;editor.useNoteSampleMapping()
+    try require(writes.last?.0=="instrument.plugin.set" && writes.last?.1["instrument"] as? Int==1 && writes.last?.1["plugin"] as? String=="","Use sample mapping explicitly clears the orphan trigger through the instrument API")
+    song["noteRouting"]=["routes":[["id":"n30","sourceKind":"instrument","source":"n10","plugin":"synth-b","midiChannel":4,"enabled":true]],"triggerSources":[],"suppressedAssignments":[]]
+    revision="note-song:5";editor.load()
+    try require(editor.canvas.nodes.first{$0.id=="note-instrument:n10"}?.detail=="Inactive note routes · sample mode" && editor.canvas.edges.first{$0.connection=="note:n30"}?.enabled==false,"Explicit cables remain visible and truthfully inactive after restoring sample mode")
+    let pair=SignalGraphEditor.audioPort(4,output:true,catalog:[["index":4,"direction":"output","name":"Surround","channels":2,"physicalBus":0,"firstChannel":4,"physicalChannels":6,"supported":true]])
+    try require(pair.number==4 && pair.label=="Surround · channels 5–6 of 6" && pair.unavailable==nil,"A physical multichannel bus exposes readable channel slices without changing stable logical routing IDs")
     print("PASS note routing UI: typed channel/instrument ports, implicit suppression, exact MIDI mapping identity, immediate controls and stale keyboard guards")
   }
 }

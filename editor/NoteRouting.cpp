@@ -18,12 +18,12 @@ void NoteRouteActivity::release(bool pedal,uint64_t frame,bool routing) noexcept
   if(routing)routingReleases.fetch_add(1,std::memory_order_relaxed);
 }
 size_t NoteRouting::bytes() const {
-  size_t n=routes.size()*sizeof(NoteRoute)+suppressedAssignments.size()*sizeof(uint64_t);
+  size_t n=routes.size()*sizeof(NoteRoute)+suppressedAssignments.size()*sizeof(uint64_t)+triggerSources.size()*sizeof(NoteTriggerSource);
   for(const auto &r:routes)n+=r.plugin.size();return n;
 }
 void NoteRouting::validate(std::span<const uint64_t> tracks,std::span<const uint64_t> instruments) const {
   auto require=[](bool ok,const char *why){if(!ok)throw std::invalid_argument(why);};
-  require(routes.size()<=512&&suppressedAssignments.size()<=255,"Note routing exceeds 512 cables or 255 instrument assignments");
+  require(routes.size()<=512&&suppressedAssignments.size()<=255&&triggerSources.size()<=255,"Note routing exceeds 512 cables or 255 instrument sources");
   std::set<uint64_t> ids,suppressed;
   std::set<std::tuple<NoteSourceKind,uint64_t,std::string,uint8_t>> connections;
   for(const auto &r:routes){
@@ -35,6 +35,8 @@ void NoteRouting::validate(std::span<const uint64_t> tracks,std::span<const uint
     require(connections.emplace(r.sourceKind,r.source,r.plugin,r.midiChannel).second,"Duplicate note cable");
   }
   for(auto id:suppressedAssignments)require(id&&suppressed.insert(id).second&&std::find(instruments.begin(),instruments.end(),id)!=instruments.end(),"Invalid or duplicate suppressed note assignment");
+  std::set<uint64_t> sources;
+  for(const auto &source:triggerSources)require(source.instrument&&sources.insert(source.instrument).second&&source.midiChannel>=1&&source.midiChannel<=16&&std::find(instruments.begin(),instruments.end(),source.instrument)!=instruments.end(),"Invalid or duplicate plugin-trigger source");
 }
 bool NoteRoutingPlan::Route::matches(const NoteSource &s) const noexcept {
   return source&&(kind==NoteSourceKind::Channel?s.track:s.instrument)==source;

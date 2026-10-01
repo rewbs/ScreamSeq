@@ -82,3 +82,53 @@ process or system audio route was involved.
 BlackHole 2ch was present at preflight (48 kHz). The system defaults pointed at
 Bluetooth audio; no system default was changed. No musician ScreamSeq process was
 running at that preflight. Tests must continue to use a distinct QA bundle/process.
+
+## Multichannel, source identity and exact-copy checkpoint
+
+Actual AU/VST3 fixtures now pass physical multichannel pair/mono routing across
+44.1/48/96 kHz and 17/128/4096-frame blocks. The provider prepares every supported
+physical bus before playback. Immutable physical layout fingerprints prevent a
+preset from silently retargeting cable channels. Windows-native equivalents are
+registered for CI; they have not yet executed successfully on Windows.
+
+Native source migration preserves plugin-trigger identity and channel after its
+original plugin is removed, so surviving note cables remain playable. Explicit
+sample-mode conversion clears that identity. Regression coverage includes held
+and future routed notes, independent alias releases and 72 sequential instrument
+identities reusing bounded adapter slots. The original 72-distinct-vendor stress
+case hit the existing retained-state memory budget; that budget was not weakened.
+
+Exact reusable-copy observations now expose actual processor/boundary PCM,
+post-gain/post-delay cable contributions, control-source endpoints and mapped
+modulation contributions. Native AU/VST3 checks distinguish two simultaneous
+copies and an inactive copy and capture the selected copy's actual waveform,
+with callback allocation/free/lock auditing. The portable observation test first
+used release-disabled assertions; those were replaced by unconditional checks
+before recording its functional pass. Generation changes reset diagnostic history;
+pending or retired readings cannot masquerade as current silence.
+
+The copied-source AppKit suite passed Notes routing, group dry-map configuration,
+exact-copy selection and command access. A subsequent small unavailable-copy
+label improvement remains to be rerun. These are offscreen checks, not native
+presentation evidence. Recipe group dry bypass has actual runtime PCM coverage;
+the root song-group wrapper, loose-chain cuts and final live topology migrations
+are still being integrated.
+
+The combined nine-suite run initially passed eight. Its remaining Windows-adapter
+test expected grouping never to prepare DSP; the test now uses the actual
+prepared-publication hook and passes independently. See
+[combined results](logs/group-boundary-tests.log),
+[the corrected adapter test](logs/group-windows-adapter-tests.log), and
+[AppKit results](logs/copy-group-interface.log). A single full final-source run is
+still required. CI checkpoint `bdc07aced` failed to link because the Windows
+application source list omitted GraphClipboard.cpp; that registration is fixed
+in the current source and awaits a fresh native run.
+
+The copied native host also passes the full real-socket suite, including new
+trigger-source persistence, strict validation, retry deduplication, atomic mixed
+cuts and unified Undo. The first private-host launch lacked its sibling scanner;
+copying that test dependency fixed setup. No production source change was needed.
+[Socket results](logs/source-copy-socket.log). The subsequent group scratch audit
+fixed a 4096-frame write into a 32-sample modulation scratch area when a group had
+stateful sources but no parameter targets. Its maximum-block PCM/realtime
+regression passes: [results](logs/group-scratch-tests.log).

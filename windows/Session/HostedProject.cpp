@@ -39,6 +39,7 @@ std::vector<Tracker::PluginState> projectPluginStates(const Project::ProjectStat
     const bool declaredInstrument=flag(record.value("isInstrument",Json(false)));d.instrument=d.type==Tracker::audioUnitMusicDeviceType||declaredInstrument;
     if(d.format=="VST3")require(d.classID.size()==32&&std::all_of(d.classID.begin(),d.classID.end(),[](char c){return (c>='0'&&c<='9')||(c>='a'&&c<='f')||(c>='A'&&c<='F');}),"Invalid VST3 class ID");
     if(d.format=="Built-in")require(!d.classID.empty()&&!d.type&&!d.subtype&&!d.manufacturer&&!d.instrument&&d.path.empty(),"Invalid built-in descriptor");
+    state.audioLayout=text(record.value("audioLayout",Json("")),8192);
     state.instanceID=text(record.at("instanceID"),128);require(!state.instanceID.empty()&&ids.insert(state.instanceID).second,"Invalid/duplicate plugin instance identity");
     state.bypass=flag(record.value("bypass",Json(false)));state.instrument=uint32_t(integer(record.value("instrument",Json(0)),255));
     state.auxiliaryInputs=buses(record.value("auxiliaryInputs",Json::array()));state.auxiliaryOutputs=buses(record.value("auxiliaryOutputs",Json::array()));

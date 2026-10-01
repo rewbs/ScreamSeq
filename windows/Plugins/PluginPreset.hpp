@@ -12,6 +12,6 @@ public:
   static Json summary(const Json &preset);
   static bool matches(const Json &a,const Json &b);
   static Json write(const std::string &path,const Json &descriptor,std::span<const std::byte> state,
-                    const std::string &name,bool overwrite,bool dryRun);
+                    const std::string &name,bool overwrite,bool dryRun,const std::string &audioLayout = {});
 };
 }
