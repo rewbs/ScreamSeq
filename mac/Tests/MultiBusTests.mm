@@ -101,7 +101,7 @@ static void graphOutputs(PluginState synth, uint32_t rate) {
     auto &on = *s.Patterns[0].GetpModCommand(0, 0); on.note = 61; on.instr = 1;
   });
   doc->annotate([](NativeSong &n) {
-    const auto master = n.makeEntity().id;
+    const auto master = n.masterID;
     for (const auto &[index, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
     n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
     n.mixer.instruments = {{"synth", n.tracks.at(0).id, 0}, {"synth", n.tracks.at(1).id, 1}, {"synth", n.tracks.at(2).id, 2}};
@@ -131,7 +131,7 @@ static void graphSidechains(PluginState effect, PluginState synth, uint32_t rate
     auto &on = *s.Patterns[0].GetpModCommand(0, 0); on.note = 61; on.instr = 1;
   });
   doc->annotate([](NativeSong &n) {
-    const auto master = n.makeEntity().id;
+    const auto master = n.masterID;
     for (const auto &[index, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
     n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
     n.mixer.instruments = {{"synth", n.tracks.at(0).id, 0}, {"synth", n.tracks.at(1).id, 1}};

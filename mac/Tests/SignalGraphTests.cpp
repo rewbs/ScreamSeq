@@ -24,9 +24,80 @@ struct Fixture {
     if(frame+duration>=f.values.size())return false;
     for(uint32_t i=0;i<=duration;++i)f.values[frame+i]=duration?a+(b-a)*i/duration:a;return true;
   }
-  SignalCallbacks callbacks(){return {this,process,output,parameter};}
+  static bool parameterSamples(void *context,uint64_t,uint32_t,std::span<const double> values,uint64_t frame)noexcept {
+    auto &f=*static_cast<Fixture *>(context);if(frame+values.size()>f.values.size())return false;
+    std::copy(values.begin(),values.end(),f.values.begin()+frame);return true;
+  }
+  SignalCallbacks callbacks(){return {this,process,output,parameter,nullptr,parameterSamples};}
 };
+static void discreteModulation() {
+  const std::array<SignalParameterInfo,1> metadata{{{2,0,.25}}};
+  for(auto kind:{SignalNodeKind::LFO,SignalNodeKind::Random,SignalNodeKind::Amount,SignalNodeKind::MIDI,SignalNodeKind::Automation,SignalNodeKind::NoteEnvelope,SignalNodeKind::Follower}) {
+    auto d=graph();d.nodes.push_back({4,kind,"Discrete source"});auto &source=d.nodes.back();source.rate=13.25;source.phase=.137;source.attack=.002;source.release=.003;source.controller=74;
+    if(kind==SignalNodeKind::Automation)source.envelopes={{91,true,{{0,.1,AutomationCurve::Linear},{512,.9}}}};
+    d.modulation={{4,2,0,-.1,1,.05,true,true}};if(kind==SignalNodeKind::Follower)d.audio.push_back({1,4});
+    std::array<double,512> reference{};
+    for(uint32_t block:{1u,7u,17u,128u,512u}) {
+      Fixture fixture;SignalRuntime runtime(d,compileSignal(d),48000,metadata);runtime.amount(.6);runtime.controller(74,.6);runtime.note(true,true);double envelope=0;
+      std::array<float,1024> audio{};
+      for(uint32_t at=0;at<512;){auto count=std::min(block,512-at);for(uint32_t f=0;f<count;++f)audio[f*2]=audio[f*2+1]=at+f<203?.6f:.2f;
+        check(runtime.render(audio.data(),count,at+13,{double(at+13)/24000,120,true,91,double(at),1,512,4},fixture.callbacks()),"Discrete source render failed");at+=count;}
+      for(uint32_t f=0;f<512;++f){const auto actual=fixture.values[f+13];check(actual*4==std::round(actual*4),"Discrete target emitted an intermediate value");
+        if(block==1)reference[f]=actual;else check(actual==reference[f],"Discrete modulation depends on callback partition");
+        double value=.6;
+        if(kind==SignalNodeKind::LFO){const auto first=(f+13)/32*32,last=first+31;const auto a=.5+.5*std::sin(2*3.141592653589793*(double(first)/24000*source.rate+source.phase));const auto b=.5+.5*std::sin(2*3.141592653589793*(double(last)/24000*source.rate+source.phase));value=a+(b-a)*double(f+13-first)/31;}
+        else if(kind==SignalNodeKind::Automation)value=.1+.8*f/512.;
+        else if(kind==SignalNodeKind::Follower||kind==SignalNodeKind::NoteEnvelope){const double target=kind==SignalNodeKind::NoteEnvelope?1:f<203?double(.6f):double(.2f);const double c=std::exp(-1/(48000*(target>envelope?.002:.003)));envelope=target+c*(envelope-target);value=envelope;}
+        if(kind!=SignalNodeKind::Random){const double expected=std::clamp(std::round(std::clamp(.05-.1+1.1*value,0.,1.)*4)/4,0.,1.);check(actual==expected,"Quantized source differs from independent per-sample envelope/curve reference");}
+      }
+    }
+  }
+  auto sum=graph();sum.nodes.push_back({4,SignalNodeKind::Amount,"A"});sum.nodes.push_back({5,SignalNodeKind::Amount,"B"});sum.modulation={{4,2,0,.11,.11,.2,true,true},{5,2,0,.11,.11,.2,true,true}};
+  Fixture fixture;SignalRuntime combined(sum,compileSignal(sum),48000,metadata);std::array<float,64> audio{};check(combined.render(audio.data(),32,0,{},fixture.callbacks())&&fixture.values[0]==.5,"Sum all sources and clamp once before quantization, never round contributors separately");
+  rejects([&]{SignalRuntime invalid(sum,compileSignal(sum),48000);});
+  auto continuous=sum;for(auto &m:continuous.modulation)m.quantized=false;
+  SignalRuntime switchable(continuous,compileSignal(continuous),48000,metadata);SignalControls controls(sum,48000);switchable.controls(controls);check(switchable.render(audio.data(),32,0,{},fixture.callbacks())&&fixture.values[0]==.5,"Prepared parameter steps support live mode-only changes");
+}
+static void sourceRuntimeTransfer() {
+  auto before=graph();before.audio.push_back({1,3});
+  before.nodes.push_back({4,SignalNodeKind::Follower,"Follower"});before.nodes.back().attack=.003;before.nodes.back().release=.007;
+  before.audio.push_back({1,4});before.modulation={{4,2,0,0,.4,.1,true}};
+  auto after=before;
+  after.nodes.insert(after.nodes.begin()+1,{5,SignalNodeKind::MIDI,"Controller"});after.nodes[1].controller=74;
+  after.nodes.push_back({6,SignalNodeKind::Amount,"Amount"});
+  after.modulation.push_back({5,2,0,0,.2,.1,true});after.modulation.push_back({6,2,0,0,.1,.1,true});
+  SignalGraph a,b;a.library={before};a.assignments={{10,before.id}};b=a;b.library={after};
+  check(sameSignalSourceLayout(a,b)&&!sameSignalControlLayout(a,b),"Source topology is a distinct prepared operation");
+  for(auto kind:{SignalNodeKind::LFO,SignalNodeKind::Random,SignalNodeKind::Automation}){auto candidate=b;candidate.library[0].nodes[1].kind=kind;check(sameSignalSourceLayout(a,candidate),"Stateless and scripted sources can be prepared independently of vendors");}
+  for(unsigned changed=0;changed<5;++changed){auto candidate=b;
+    if(changed==0)candidate.library[0].nodes.push_back({7,SignalNodeKind::NoteEnvelope,"New note scope"});
+    if(changed==1)candidate.library[0].audio[0].target=3;
+    if(changed==2)candidate.library[0].nodes[2].plugin.inputs={1};
+    if(changed==3)candidate.assignments[0].target=11;
+    if(changed==4)candidate.library[0].nodes[2].id=88;
+    check(!sameSignalSourceLayout(a,candidate),"Live sources must not relax processors, audio paths, ports, assignments or note scope");
+  }
+  const std::vector<SignalProcessorInfo> metadata{{2,13,1,1}};
+  for(uint32_t block:{1u,17u,512u}){
+    SignalRuntime original(before,compileSignal(before,metadata),48000),replacement(after,compileSignal(after,metadata),48000),reference(after,compileSignal(after,metadata),48000);
+    check(replacement.compatibleHistory(original)&&!original.sameLayout(after),"Prepared source layout retains audible compensation");
+    original.controller(74,.7);reference.controller(74,.7);original.amount(.6);reference.amount(.6);original.note(true);reference.note(true);
+    Fixture actual,expected;std::array<float,1024> x{},y{};
+    for(uint32_t at=0;at<1700;){auto frames=std::min(block,1700-at);if(at<613)frames=std::min(frames,613-at);
+      if(at==613)replacement.inheritState(original);
+      for(uint32_t f=0;f<frames;++f)x[f*2]=x[f*2+1]=y[f*2]=y[f*2+1]=float(.3+.2*std::sin(double(at+f)*.037));
+      auto &runtime=at<613?original:replacement;
+      check(runtime.render(x.data(),frames,at,{},actual.callbacks())&&reference.render(y.data(),frames,at,{},expected.callbacks()),"Live source state transfer renders");
+      for(uint32_t f=0;f<frames*2;++f)check(x[f]==y[f],"Source adoption preserves nonempty compensation rings and floating addition order");
+      if(at>=613)for(uint32_t f=0;f<frames;++f)check(std::abs(actual.values[at+f]-expected.values[at+f])<1e-12,"Stable follower envelope, controller and amount state survives reordered source adoption");
+      at+=frames;
+    }
+    auto changedLatency=metadata;changedLatency[0].latency=14;SignalRuntime incompatible(after,compileSignal(after,changedLatency),48000);check(!incompatible.compatibleHistory(replacement),"Changed compensation cannot silently drop retained PCM");
+  }
+}
 int main(){try{
+  discreteModulation();
+  sourceRuntimeTransfer();
   auto patch=graph();patch.nodes.push_back({4,SignalNodeKind::Plugin,"Insert A"});patch.nodes.push_back({5,SignalNodeKind::Plugin,"Insert B"});patch.nodes.push_back({6,SignalNodeKind::LFO,"Mod"});patch.modulation={{6,4,7,.1,.8,.2,true}};
   patch.audio.push_back({4,5,0,0,.7});auto originalPatch=patch;
   insertSignalNodes(patch,{5,4},0);

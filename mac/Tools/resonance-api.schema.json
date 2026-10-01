@@ -1553,13 +1553,46 @@
             "expectedRevision": {
               "type": "string",
               "description": "Opaque revision from the last read. Mandatory for every mutation."
+            },
+            "plugins": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 240,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "description": "Stable plugin IDs for one atomic removal. Use this or slot. Removes routing and empty processing groups; musical automation remains unresolved."
             }
           },
           "required": [
-            "slot",
             "expectedRevision"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "slot"
+              ],
+              "not": {
+                "required": [
+                  "plugins"
+                ]
+              }
+            },
+            {
+              "required": [
+                "plugins"
+              ],
+              "not": {
+                "required": [
+                  "slot"
+                ]
+              }
+            }
+          ]
         }
       },
       "required": [
@@ -1669,13 +1702,55 @@
                 "y"
               ],
               "additionalProperties": false
+            },
+            "parent": {
+              "type": "string",
+              "description": "Optional song processing group ID. Membership, plugin, routing and position commit in one Undo."
+            },
+            "detached": {
+              "type": "boolean"
             }
           },
           "required": [
             "descriptor",
             "expectedRevision"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "detached": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "detached"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "target"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "before"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "parent"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
         }
       },
       "required": [
@@ -2068,7 +2143,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Atomically replace one parameter lane; empty points deletes it. Other lanes survive. Duplicate timestamps rejected; points sorted. Rebuilds graph and stops playback.",
+      "description": "Atomically replace one recorded parameter lane; empty points deletes it. Other lanes survive. Duplicate timestamps rejected; points sorted. Requires stopped playback; rejected live edits preserve transport and history.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -7082,7 +7157,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Create or replace a pattern-relative lane by stable plugin identity. Atomic document undo; preview with dryRun. Applying stops playback.",
+      "description": "Create or replace a pattern-relative lane by stable plugin identity. Unified Undo; preview with dryRun. Compatible prepared updates keep playback running; unsupported live changes reject without stopping transport.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -9164,7 +9239,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Transform a saved pattern lane with exact before/after preview and one-step document undo. Positions use 1/256 row; ranges are half-open. Collisions/tail loss reject. Applying a change stops playback.",
+      "description": "Transform a saved pattern lane with exact before/after preview and one-step unified Undo. Positions use 1/256 row; ranges are half-open. Collisions/tail loss reject. Compatible prepared updates keep playback running; unsupported live changes reject without stopping transport.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -12914,6 +12989,11 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "bypass": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Host bypass for this processor in all copies; not a vendor parameter."
                           }
                         },
                         "required": [
@@ -13116,6 +13196,10 @@
                       },
                       "enabled": {
                         "type": "boolean"
+                      },
+                      "quantized": {
+                        "type": "boolean",
+                        "description": "Explicit target-step mode. Required true for discrete targets; all enabled sources of one parameter share the same mode."
                       }
                     },
                     "required": [
@@ -13175,6 +13259,9 @@
                     "additionalProperties": false
                   },
                   "maxItems": 64
+                },
+                "presentation": {
+                  "$ref": "#/$defs/graphPresentation"
                 }
               },
               "required": [
@@ -13390,6 +13477,11 @@
                     ],
                     "additionalProperties": false
                   }
+                },
+                "bypass": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Host bypass for this processor in all copies; not a vendor parameter."
                 }
               },
               "required": [
@@ -13437,6 +13529,10 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1
+                },
+                "quantized": {
+                  "type": "boolean",
+                  "description": "Explicit target-step mode. Required true for discrete targets; all enabled sources of one parameter share the same mode."
                 }
               },
               "required": [
@@ -13457,6 +13553,25 @@
                   "type": "null"
                 }
               ]
+            },
+            "audioInput": {
+              "type": "object",
+              "properties": {
+                "node": {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$"
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                }
+              },
+              "required": [
+                "node"
+              ],
+              "additionalProperties": false,
+              "description": "For a follower with a parameter connect target: tap this existing audio output. Node, input wire and zero-depth modulation wire are created atomically with one Undo. Feedback cycles are rejected."
             }
           },
           "required": [
@@ -14035,6 +14150,62 @@
       ],
       "additionalProperties": false,
       "description": "Inspect a library plugin recipe in an isolated instance; returns parameter and audio-port metadata."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.bypass"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "bypass": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "graph",
+            "node",
+            "bypass",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Set host bypass for one reusable recipe processor in every use of the shared definition. Preserves presets, parameters, latency and warm processing. One Undo; dry-run and identical values are no-ops. Windows currently requires stopped playback/audition and rejects active changes without stopping transport."
     },
     {
       "type": "object",
@@ -14789,9 +14960,16 @@
           "type": "object",
           "properties": {
             "graph": {
-              "type": "string",
-              "pattern": "^n[1-9][0-9]*$",
-              "maxLength": 32
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "node": {
               "type": "string",
@@ -14819,7 +14997,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Read reusable definitions, routes, pattern commands, saved layout, rack/mixer context and read-only activity. Activity gives each active copy target, graph, role, one-based audible stack order and tail flag; it is observational and may advance independently of document revision."
+      "description": "Read or replace one pattern curve. graph:null addresses a song-level source; otherwise graph is its reusable definition ID. Other patterns are preserved."
     },
     {
       "type": "object",
@@ -14839,9 +15017,16 @@
           "type": "object",
           "properties": {
             "graph": {
-              "type": "string",
-              "pattern": "^n[1-9][0-9]*$",
-              "maxLength": 32
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "node": {
               "type": "string",
@@ -14944,7 +15129,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Read reusable definitions, routes, pattern commands, saved layout, rack/mixer context and read-only activity. Activity gives each active copy target, graph, role, one-based audible stack order and tail flag; it is observational and may advance independently of document revision."
+      "description": "Read or replace one pattern curve. graph:null addresses a song-level source; otherwise graph is its reusable definition ID. Other patterns are preserved."
     },
     {
       "type": "object",
@@ -15101,9 +15286,16 @@
                       "const": "graph"
                     },
                     "graph": {
-                      "type": "string",
-                      "pattern": "^n[1-9][0-9]*$",
-                      "maxLength": 32
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^n[1-9][0-9]*$",
+                          "maxLength": 32
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "node": {
                       "type": "string",
@@ -15329,9 +15521,16 @@
                       "const": "graph"
                     },
                     "graph": {
-                      "type": "string",
-                      "pattern": "^n[1-9][0-9]*$",
-                      "maxLength": 32
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^n[1-9][0-9]*$",
+                          "maxLength": 32
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "node": {
                       "type": "string",
@@ -15484,9 +15683,16 @@
                       "const": "graph"
                     },
                     "graph": {
-                      "type": "string",
-                      "pattern": "^n[1-9][0-9]*$",
-                      "maxLength": 32
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^n[1-9][0-9]*$",
+                          "maxLength": 32
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "node": {
                       "type": "string",
@@ -15622,9 +15828,16 @@
                       "const": "graph"
                     },
                     "graph": {
-                      "type": "string",
-                      "pattern": "^n[1-9][0-9]*$",
-                      "maxLength": 32
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^n[1-9][0-9]*$",
+                          "maxLength": 32
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "node": {
                       "type": "string",
@@ -16954,6 +17167,89 @@
       "additionalProperties": false
     },
     {
+      "description": "Pull one effect out of its serial main path and heal that path. Retains plugin identity/state/bindings and clocks the disconnected effect on silence. Explicit auxiliary cables must be disconnected first; loose multi-effect chains are not yet supported. One unified Undo includes supplied layout. Compatible live transitions preserve playback; dryRun validates only.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "mixer.inserts.detach"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "plugins": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "positions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "node": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "x": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "node",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 1
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "plugins"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -17465,7 +17761,7 @@
       "description": "Detach a serial effect chain and heal its main path atomically. Preserve auxiliary/modulation routes unless remove is true. Ambiguous branches fail unchanged. Optional positions share one Undo."
     },
     {
-      "description": "Read prepared host audio-port peak/RMS, clip flags, sample clocks and latency metadata. Measured false differs from silence. Stopped values are historical; reusable graph internals are not yet observed.",
+      "description": "Read host physical ports and exact gained/delayed route contributions from the adopted plan. Optional route descriptors identify kind/source/target/plugin/input/output, tap, adopted gainDB and preFader; use returned opaque keys for scope/listen. Measured false differs from silence. Stopped values are historical; reusable graph internals are not yet observed.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -18224,6 +18520,1243 @@
       ],
       "additionalProperties": false,
       "description": "Song-level processing boundary. Preserves rack identities, routing and sound. Copy a consecutive chain from one mixer owner into an independent library definition, including baseline settings and auxiliary ports. Original processors, routes and automation remain intact. Bypassed/missing members and cross-channel or nonconsecutive chains reject without mutation."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.connections.remove"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "connections": {
+              "type": "array",
+              "maxItems": 512,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "output"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "target": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "source",
+                      "target"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "send"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "target": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "source",
+                      "target"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "graph-input"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "target": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "input": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 63
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "source",
+                      "target",
+                      "input"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "graph-output"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "target": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "output": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 63
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "source",
+                      "target",
+                      "output"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "plugin-input"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "plugin": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "input": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "source",
+                      "plugin",
+                      "input"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "plugin-output"
+                      },
+                      "target": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "plugin": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "output": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "target",
+                      "plugin",
+                      "output"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "modulation"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "plugin": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "parameter": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "source",
+                      "plugin",
+                      "parameter"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "follower-input"
+                      },
+                      "node": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "plugin": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "output": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      },
+                      "preFader": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "node"
+                    ],
+                    "oneOf": [
+                      {
+                        "required": [
+                          "source"
+                        ],
+                        "not": {
+                          "required": [
+                            "plugin"
+                          ]
+                        }
+                      },
+                      {
+                        "required": [
+                          "plugin"
+                        ],
+                        "not": {
+                          "required": [
+                            "source"
+                          ]
+                        }
+                      }
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "connections",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Atomically cut explicit song routes by stable semantic endpoints. One Undo; dryRun validates without changing history. Empty batches are no-ops. Cutting an instrument\u2019s last destination preserves an explicit disconnected output; fixed rack-chain wires are rejected."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.song.source.add"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "lfo",
+                    "follower",
+                    "random",
+                    "note-envelope",
+                    "midi",
+                    "amount",
+                    "automation"
+                  ]
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000
+                },
+                "rate": {
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1024
+                },
+                "phase": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "attack": {
+                  "type": "number",
+                  "minimum": 1e-05,
+                  "maximum": 60
+                },
+                "release": {
+                  "type": "number",
+                  "minimum": 1e-05,
+                  "maximum": 60
+                },
+                "controller": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                },
+                "envelopes": {
+                  "type": "array",
+                  "maxItems": 1024,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "pattern": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "points": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 4096,
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "position": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 1048575
+                            },
+                            "value": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "curve": {
+                              "enum": [
+                                "step",
+                                "linear",
+                                "smooth",
+                                "exponential",
+                                "logarithmic",
+                                "step-next",
+                                "exponential-reverse",
+                                "logarithmic-reverse",
+                                "scripted"
+                              ]
+                            },
+                            "formula": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048,
+                              "description": "Bounded math expression. Required with scripted curve. start/end are normalized, t or beatOffset is segment progress, beat is pattern position in beats, beats is elapsed segment beats. Terminal segments extend to pattern end and end equals start."
+                            }
+                          },
+                          "required": [
+                            "position",
+                            "value"
+                          ],
+                          "additionalProperties": false,
+                          "allOf": [
+                            {
+                              "if": {
+                                "properties": {
+                                  "curve": {
+                                    "const": "scripted"
+                                  }
+                                },
+                                "required": [
+                                  "curve"
+                                ]
+                              },
+                              "then": {
+                                "required": [
+                                  "formula"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "pattern",
+                      "points"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "audioBus": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    {
+                      "const": ""
+                    }
+                  ]
+                },
+                "audioPlugin": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "output": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                },
+                "preFader": {
+                  "type": "boolean"
+                },
+                "noteTarget": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    {
+                      "const": ""
+                    }
+                  ]
+                },
+                "noteInstrument": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    {
+                      "const": ""
+                    }
+                  ]
+                },
+                "amount": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            "connect": {
+              "type": "object",
+              "properties": {
+                "plugin": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "parameter": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4294967295
+                },
+                "quantized": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "plugin",
+                "parameter"
+              ],
+              "additionalProperties": false
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "source",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Allocate a song-level control source, optionally connect to a stable rack parameter at zero depth, in one Undo. No processor is replaced."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.song.source.update"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "source": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000
+                },
+                "rate": {
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1024
+                },
+                "phase": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "attack": {
+                  "type": "number",
+                  "minimum": 1e-05,
+                  "maximum": 60
+                },
+                "release": {
+                  "type": "number",
+                  "minimum": 1e-05,
+                  "maximum": 60
+                },
+                "controller": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                },
+                "audioBus": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    {
+                      "const": ""
+                    }
+                  ]
+                },
+                "audioPlugin": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "output": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                },
+                "preFader": {
+                  "type": "boolean"
+                },
+                "noteTarget": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    {
+                      "const": ""
+                    }
+                  ]
+                },
+                "noteInstrument": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    {
+                      "const": ""
+                    }
+                  ]
+                },
+                "amount": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "node",
+            "source",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Patch source settings; preserve identity/kind and other settings. Use graph.automation.set for pattern curves."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.song.source.remove"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$",
+                "maxLength": 32
+              },
+              "maxItems": 64,
+              "uniqueItems": true
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "nodes",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Atomically remove selected song sources and their modulation connections. Unknown/duplicate identities reject the whole edit."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.song.modulation.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "minimum": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "maximum": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "quantized": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "replace": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                "plugin": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "parameter": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4294967295
+                }
+              },
+              "required": [
+                "source",
+                "plugin",
+                "parameter"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "source",
+            "plugin",
+            "parameter",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Upsert one additive normalized contribution. Omitted fields retain previous values, or start at zero depth. Stepped targets require explicit quantized:true and usable discrete steps; read-only targets reject. All enabled contributions to one target share its quantization mode. Optional replace:{source,plugin,parameter} reroutes an existing edge in one Undo, retaining its range and flags. Missing old edge or collision with another destination rejects atomically."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.song.modulation.remove"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "connections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "pattern": "^n[1-9][0-9]*$",
+                    "maxLength": 32
+                  },
+                  "plugin": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "parameter": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  }
+                },
+                "required": [
+                  "source",
+                  "plugin",
+                  "parameter"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "connections",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Remove an exact set of modulation edges atomically. Unknown/duplicate edges reject; an empty batch is a no-op."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.presentation.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "positions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "node": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "x": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "node",
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 8192
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "graph": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "presentation": {
+              "$ref": "#/$defs/graphPresentation"
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "presentation"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Presentation-only frames, comments and cable reroute geometry at song (graph:null) or reusable-definition scope. Replaces presentation; optional absolute node positions commit with it in one Undo. Never changes DSP or stops playback. Stable local annotation IDs and real cable endpoints survive projections."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.provenance.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "pattern": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256
+            }
+          },
+          "required": [
+            "plugin",
+            "parameter"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Read existing envelope, pattern FX column and recorded automation provenance for a stable plugin parameter. Available stopped or unloaded; no DSP, revision or history mutation. Paginated bounded references retain original base-control semantics."
     }
-  ]
+  ],
+  "$defs": {
+    "graphPresentation": {
+      "type": "object",
+      "properties": {
+        "collapsedNodes": {
+          "type": "array",
+          "maxItems": 8192,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "description": "Stable real node keys displayed as compact cards; presentation only."
+        },
+        "regions": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "kind": {
+                "enum": [
+                  "frame",
+                  "comment"
+                ]
+              },
+              "scope": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "x": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "y": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "width": {
+                "type": "number",
+                "minimum": 120,
+                "maximum": 100000
+              },
+              "height": {
+                "type": "number",
+                "minimum": 60,
+                "maximum": 100000
+              },
+              "color": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 16777215
+              },
+              "collapsed": {
+                "type": "boolean"
+              },
+              "nodes": {
+                "type": "array",
+                "maxItems": 8192,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                }
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "cables": {
+          "type": "array",
+          "maxItems": 2048,
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "output": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 63
+              },
+              "input": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              "modulation": {
+                "type": "boolean"
+              },
+              "points": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 64,
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000
+                    },
+                    {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              }
+            },
+            "required": [
+              "source",
+              "target",
+              "points"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
 }

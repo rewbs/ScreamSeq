@@ -4,10 +4,12 @@ extension SignalGraphEditor {
   // Rack inserts execute on their owning bus. Moving a chain changes ownership,
   // never replaces processors or routes the entire master back into a channel.
   func insertMove(_ a:String,_ b:String)->[String:Any]? {
-    guard let plugin=songNodePlugin[b],let owner=buses.first(where:{effectiveInserts($0).contains(plugin)}),
+    guard let plugin=songNodePlugin[b],
           let target=songNodeBus[a],let destination=buses.first(where:{$0["id"] as? String==target}) else{return nil}
-    let inserts=effectiveInserts(owner),start=inserts.firstIndex(of:plugin)!
-    let moving=Array(inserts[start...]),remaining=effectiveInserts(destination).filter{!moving.contains($0)}
+    let moving:[String]
+    if detachedEffects.contains(plugin){moving=[plugin]}
+    else{guard let owner=buses.first(where:{effectiveInserts($0).contains(plugin)})else{return nil};let inserts=effectiveInserts(owner);guard let start=inserts.firstIndex(of:plugin)else{return nil};moving=Array(inserts[start...])}
+    let remaining=effectiveInserts(destination).filter{!moving.contains($0)}
     // A channel socket is before its inserts; a processor socket is after it.
     let before:String?
     if let after=songNodePlugin[a] {
@@ -17,7 +19,7 @@ extension SignalGraphEditor {
     return ["plugins":moving,"target":target,"before":before as Any? ?? NSNull()]
   }
   func cableDescription(_ a:String,_ b:String,out:UInt32,input:UInt32,modulation:Bool)->String {
-    if graphID==nil,out==0,input==0,!canvas.addingMainInput,let move=insertMove(a,b),let ids=move["plugins"] as? [String] {
+    if graphID==nil,!modulation,out==0,input==0,!canvas.addingMainInput,let move=insertMove(a,b),let ids=move["plugins"] as? [String] {
       let names=ids.map{id in rackPlugins.first{$0["id"] as? String==id}?["name"] as? String ?? id}.joined(separator:" → ")
       let target=buses.first{$0["id"] as? String==move["target"] as? String}?["name"] as? String ?? "channel"
       return "Release to move \(names) to \(target) · one Undo step"
@@ -32,11 +34,13 @@ extension SignalGraphEditor {
     return hi>lo ? max(0,min(1,(current-lo)/(hi-lo))):0
   }
   func connectPorts(_ a:String,_ b:String,out:UInt32,input:UInt32,modulation:Bool) {
-    guard !loading else{return}
+    // Capture the visible ports now; mutate queues a refresh in progress with
+    // this revision rather than dropping a completed cable gesture.
     if graphID==nil {
       let from=realPort(a,out,output:true,modulation:modulation),to=realPort(b,input,output:false,modulation:modulation)
       if from.node != a || to.node != b {connectPorts(from.node,to.node,out:from.number,input:to.number,modulation:modulation);return}
     }
+    if graphID==nil,connectSongControl(a,b,out:out,input:input,modulation:modulation){return}
     let choices=canvas.nodes.map{($0.title,$0.id)}
     picker(source,choices,select:a);picker(destination,choices,select:b)
     outputPort.stringValue=String(out);inputPort.stringValue=String(input);refreshPortChoices()
@@ -45,8 +49,7 @@ extension SignalGraphEditor {
       outputPort.stringValue=String(out);inputPort.stringValue=String(input);parameter.stringValue=String(input)
       // A fresh socket gesture should not inherit an unrelated selected wire's gain.
       let realTarget=realPort(b,input,output:false,modulation:modulation)
-      connectionGain.doubleValue=1;minimum.doubleValue=0;maximum.doubleValue=modulation ? 0:1;base.doubleValue=modulation ? modulationBase(node:realTarget.node,parameter:realTarget.number):0;connectionEnabled.state = .on
-      if modulation {pendingModulationFocus=(definition?["modulation"] as? [[String:Any]] ?? []).count}
+      connectionGain.doubleValue=1;minimum.doubleValue=0;maximum.doubleValue=modulation ? 0:1;base.doubleValue=modulation ? modulationBase(node:realTarget.node,parameter:realTarget.number):0;connectionEnabled.state = .on;connectionQuantized.state = .off
       connect(a,b);return
     }
     if out==0,input==0,let move=insertMove(a,b),!canvas.addingMainInput {connectionKind.selectItem(withTitle:"Main output");mutate("mixer.inserts.move",move);return}
@@ -63,7 +66,8 @@ extension SignalGraphEditor {
     connectSong(a,b)
   }
   func rewire(_ index:Int,source a:String,target b:String,out:UInt32,input:UInt32,modulation:Bool) {
-    guard !loading,canvas.edges.indices.contains(index)else{return}
+    if canvas.edges.indices.contains(index),let reason=canvas.edges[index].readOnlyReason{status.stringValue=reason;return}
+    guard canvas.edges.indices.contains(index)else{return}
     if graphID==nil {
       let from=realPort(a,out,output:true,modulation:modulation),to=realPort(b,input,output:false,modulation:modulation)
       if from.node != a || to.node != b {rewire(index,source:from.node,target:to.node,out:from.number,input:to.number,modulation:modulation);return}
@@ -74,17 +78,22 @@ extension SignalGraphEditor {
       let original=definitionEdgeIndices[index]
       let from=realPort(a,out,output:true,modulation:modulation),to=realPort(b,input,output:false,modulation:modulation)
       let a=from.node,b=to.node,out=from.number,input=to.number
-      updateDefinition{d in
-        var audio=d["audio"] as? [[String:Any]] ?? [],mods=d["modulation"] as? [[String:Any]] ?? []
-        if original<audio.count {audio[original].merge(["source":a,"target":b,"output":out,"input":input]){_,new in new};d["audio"]=audio}
-        else if mods.indices.contains(original-audio.count) {
-          let i=original-audio.count
-          // All contributors to one parameter share its base; retain the target's
-          // existing base when reconnecting a modulation source to that parameter.
-          if let peer=mods.enumerated().first(where:{$0.offset != i && $0.element["target"] as? String==b && ($0.element["parameter"] as? NSNumber)?.uint32Value==input}) {mods[i]["base"]=peer.element["base"]}
-          mods[i].merge(["source":a,"target":b,"parameter":input]){_,new in new};d["modulation"]=mods
+      let apply:(Bool)->Void={[weak self] quantized in guard let self else{return};let baseline=self.modulationBase(node:b,parameter:input)
+        self.updateDefinition{d in
+          var audio=d["audio"] as? [[String:Any]] ?? [],mods=d["modulation"] as? [[String:Any]] ?? []
+          if original<audio.count {audio[original].merge(["source":a,"target":b,"output":out,"input":input]){_,new in new};d["audio"]=audio}
+          else if mods.indices.contains(original-audio.count) {
+            let i=original-audio.count
+            mods[i].merge(["source":a,"target":b,"parameter":input,"base":baseline,"quantized":quantized]){_,new in new};d["modulation"]=mods
+          }
         }
-      };return
+      }
+      if modulation {let mods=definition?["modulation"] as? [[String:Any]] ?? [],i=original-(definition?["audio"] as? [[String:Any]] ?? []).count;let existing=mods.indices.contains(i) ? mods[i]:[:];let same=existing["target"] as? String==b && (existing["parameter"] as? NSNumber)?.uint32Value==input;let chosen=existing["quantized"] as? Bool==true;if same{apply(chosen)}else{withRecipeParameterMode(node:b,parameter:input,apply)}}else{apply(false)}
+      return
+    }
+    if songConnections.indices.contains(index),["modulation","follower-input"].contains(songConnections[index]["kind"] as? String ?? "") {
+      selectConnection(index);outputPort.stringValue=String(out);inputPort.stringValue=String(input);parameter.stringValue=String(input)
+      updateSongControl(index,source:a,target:b);return
     }
     // Do not turn a fixed insert wire into an unrelated bus-output mutation.
     guard songConnections.indices.contains(index)else{return}

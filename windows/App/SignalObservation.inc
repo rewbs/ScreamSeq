@@ -5,7 +5,7 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
     auto listenState=[&]() -> Json {
         const auto target=observation?observation->listen.requested():Tracker::SignalListen::Target{};
         return {{"port",observation&&target.token&&target.token<=observation->ports.size()?Json(observation->ports[target.token-1].key):Json(nullptr)},
-            {"gainDB",20*std::log10(target.gain)},{"pending",observation&&observation->listen.pending()},
+            {"gainDB",20*std::log10(target.gain)},{"available",!target.token||(observation&&observation->available(target.token))},{"pending",observation&&observation->listen.pending()},
             {"transitionFrames",observation?observation->listen.transitionFrames():0}};
     };
     if(method=="graph.listen.get") {
@@ -19,7 +19,7 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
             throw ScreamSeq::Api::ApiError(-32602,"Monitor gain requires a selected output and a number between -60 and 12 dB");
         uint32_t token=0;
         if(!p["port"].is_null()) {
-            if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==p["port"].get_ref<const std::string &>()&&observation->ports[i].output){token=uint32_t(i+1);break;}
+            if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==p["port"].get_ref<const std::string &>()&&observation->ports[i].output&&observation->available(uint32_t(i+1))){token=uint32_t(i+1);break;}
             if(!token)throw ScreamSeq::Api::ApiError(-32602,"Choose an observed audio output in the prepared graph");
         }
         if(observation)observation->listen.select(token,float(std::pow(10.,p.value("gainDB",0.)/20.)));
@@ -30,7 +30,7 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
             throw ScreamSeq::Api::ApiError(-32602,"Specify one observed port key or null to stop capture");
         uint32_t token=0;
         if(!p["port"].is_null()) {
-            if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==p["port"].get_ref<const std::string &>()){token=uint32_t(i+1);break;}
+            if(observation)for(size_t i=0;i<observation->ports.size();++i)if(observation->ports[i].key==p["port"].get_ref<const std::string &>()&&observation->available(uint32_t(i+1))){token=uint32_t(i+1);break;}
             if(!token)throw ScreamSeq::Api::ApiError(-32602,"Observed scope port does not exist in the prepared graph");
         }
         if(observation)observation->scope.watch(token);
@@ -40,11 +40,12 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
         if(p.size()>(p.contains("spectrum")?1u:0u)||(p.contains("spectrum")&&!p["spectrum"].is_boolean()))
             throw ScreamSeq::Api::ApiError(-32602,"graph.scope.get accepts only an optional spectrum boolean");
         auto capture=observation?observation->scope.snapshot(p.value("spectrum",false)):Tracker::SignalScopeSnapshot{};
+        const auto reading=observation?observation->read(capture.token):Tracker::SignalPortReading{};const bool fresh=reading.fresh&&reading.generation==capture.routeGeneration;if(!fresh){capture.waveform.clear();capture.spectrum.clear();capture.frames=capture.fftFrames=0;}
         Json waveform=Json::array(),bins=Json::array();
         for(const auto &v:capture.waveform)waveform.push_back({{"first",v.first},{"last",v.last},{"minimum",{v.minimum[0],v.minimum[1]}},{"maximum",{v.maximum[0],v.maximum[1]}}});
         for(auto v:capture.spectrum)bins.push_back(v);
         return {{"port",observation&&capture.token&&capture.token<=observation->ports.size()?Json(observation->ports[capture.token-1].key):Json(nullptr)},
-            {"active",device.running()},{"generation",capture.generation},{"sampleRate",lastRate?lastRate:48000},
+            {"available",reading.available},{"fresh",fresh},{"active",device.running()},{"generation",capture.generation},{"routeGeneration",capture.routeGeneration},{"sampleRate",lastRate?lastRate:48000},
             {"frames",capture.frames},{"through",capture.through},{"dropped",capture.dropped},{"invalid",capture.invalid},
             {"waveform",std::move(waveform)},{"spectrum",std::move(bins)},{"fftFrames",capture.fftFrames},{"window","Hann"},{"downsample","min/max buckets; capture is full rate"}};
     }
@@ -59,12 +60,19 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
     if(!p.empty())throw ScreamSeq::Api::ApiError(-32602,"graph.signal.get accepts no parameters");
     Json ports=Json::array();
     if(observation)for(size_t i=0;i<observation->ports.size();++i) {
-        const auto &port=observation->ports[i];const auto v=observation->read(uint32_t(i+1));
-        ports.push_back({{"key",port.key},{"node",port.node},{"name",port.name},{"direction",port.output?"output":"input"},
-            {"port",port.port},{"channels",port.channels},{"processorLatency",port.processorLatency<0?Json(nullptr):Json(port.processorLatency)},
-            {"compensation",port.compensation<0?Json(nullptr):Json(port.compensation)},{"measured",v.measured},
+        const auto &port=observation->ports[i];const auto v=observation->read(uint32_t(i+1));if(!v.available)continue;
+        Json entry={{"key",port.key},{"node",port.node},{"name",port.name},{"direction",port.output?"output":"input"},
+            {"port",port.port},{"channels",port.channels},{"processorLatency",v.processorLatency<0?Json(nullptr):Json(v.processorLatency)},
+            {"compensation",v.compensation<0?Json(nullptr):Json(v.compensation)},{"available",v.available},{"fresh",v.fresh},{"measured",v.measured},
             {"peak",{v.peakLeft,v.peakRight}},{"rms",{v.rmsLeft,v.rmsRight}},{"through",v.through},{"lastSignal",v.lastSignal},
-            {"clipped",v.clipped},{"nonFinite",v.nonFinite}});
+            {"clipped",v.clipped},{"nonFinite",v.nonFinite}};
+        if(port.route) {
+            const auto &r=*port.route;
+            entry["route"]={{"kind",r.kind},{"source",r.source},{"target",r.target},{"plugin",r.plugin},
+                {"input",r.input},{"output",r.output},{"tap",r.tap},{"preFader",v.preFader},
+                {"gainDB",std::isfinite(v.routeGain)&&v.routeGain>0?Json(20*std::log10(v.routeGain)):Json(nullptr)}};
+        }
+        ports.push_back(std::move(entry));
     }
     const auto route=preparedPlayback?preparedPlayback->chain().mixerRoutingReading():Tracker::MixerTransition::Reading{};
     const Json routing={{"available",route.requested!=0},{"active",device.running()},
@@ -72,6 +80,6 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
         {"state",!device.running()?"stopped":route.rejected()?"failed":route.preparing()?"preparing":"stable"},
         {"latencyPending",device.running()&&preparedPlayback&&preparedPlayback->chain().latencyChangePending()}};
     return {{"ports",std::move(ports)},{"listen",listenState()},{"routing",routing},{"active",device.running()},{"playing",device.running()&&!auditionOnly},
-        {"sampleRate",lastRate?lastRate:48000},{"peakDecaySeconds",.2},{"silenceThreshold",1e-7},
-        {"scope","Host mixer and rack audio ports; reusable graph internals are not included"}};
+        {"sampleRate",lastRate?lastRate:48000},{"freshnessFrames",4096},{"peakDecaySeconds",.2},{"silenceThreshold",1e-7},
+        {"scope","Host mixer/rack ports and adopted route contributions; reusable graph internals are not included"}};
 }

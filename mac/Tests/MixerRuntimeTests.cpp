@@ -107,6 +107,97 @@ void liveMeterRegistration() {
     "Registering new return meters during observation preserves stable slots and performs no audio-thread allocation/free/lock");
   check(identitiesValid && enumerations>0,"Telemetry can enumerate immutable port identities while live bus registration publishes new meters");
 }
+void exactRouteTaps() {
+  for(uint32_t block:{17u,512u,4096u}) {
+    constexpr uint32_t total=3000;
+    MixerGraph graph;graph.buses={{1,5,MixerBusKind::Track,"A"},{2,5,MixerBusKind::Track,"B"},{3,5,MixerBusKind::Return,"Pre"},{4,5,MixerBusKind::Return,"Post"},{5,0,MixerBusKind::Master,"Main"}};
+    graph.buses[0].inserts={"fx"};graph.buses[0].gainDB=-6;graph.buses[0].sends={{3,-12,true},{4,-9,false}};
+    graph.buses[4].inserts={"out"};graph.buses[4].gainDB=-3;
+    graph.sidechains={{2,"fx",0,-10,false},{2,"fx",1,-5,true}};
+    graph.instruments={{"synth",0,0},{"synth",1,1}};
+    std::vector<MixerProcessorInfo> processors={{"fx",0,0,false,false,1,UINT64_MAX,2},{"out"},{"synth",0,0,true,false,2,3}};
+    auto plan=compileMixer(graph,{1,2},processors,48000);
+    for(auto &edge:plan.connections)if(edge.source==0)edge.delay=edge.send?(edge.preFader?5:7):3;
+    for(auto &edge:plan.sidechains)edge.delay=edge.input?13:11;
+    for(auto &edge:plan.instruments)edge.delay=19;
+    auto measured=std::make_unique<MixerRuntime>(graph,plan,48000),plain=std::make_unique<MixerRuntime>(graph,plan,48000);
+    struct Captures {std::array<std::vector<std::vector<float>>,5> values;};Captures captures;
+    std::array<size_t,5> sizes{plan.connections.size(),plan.sidechains.size(),plan.instruments.size(),processors.size(),graph.buses.size()};
+    for(size_t kind=0;kind<sizes.size();++kind){captures.values[kind].resize(sizes[kind]);for(auto &v:captures.values[kind])v.resize(total*2);}
+    measured->routeObserver([](void *context,MixerRuntime::RouteKind kind,size_t index,const float *pcm,uint32_t count,uint64_t position)noexcept{
+      auto &result=static_cast<Captures *>(context)->values[size_t(kind)][index];std::copy_n(pcm,count*2,result.data()+position*2);
+    },&captures);
+    auto process=[](void *,size_t processor,float *buffer,uint32_t frames,uint64_t)noexcept{if(processor==0)for(size_t i=0;i<frames*2;++i)buffer[i]*=2;return true;};
+    auto a=[](int64_t p){return p<0?0.f:float(.2+.05*std::sin(p*.037));};
+    auto b=[](int64_t p){return p<0?0.f:float(.1+.03*std::cos(p*.029));};
+    auto synth=[](int64_t p){return p<0?0.f:float(.08-.01*std::sin(p*.053));};
+    const float fader=float(std::pow(10.,-.3)),preGain=float(std::pow(10.,-.6)),postGain=float(std::pow(10.,-.45));
+    const float mainGain=float(std::pow(10.,-.5));
+    auto pre=[&](int64_t p){return p<0?0.f:2*(a(p)+synth(p-19)+b(p-11)*mainGain);};
+    auto post=[&](int64_t p){return pre(p)*fader;};
+    std::array<float,4096> left{},right{},otherLeft{},otherRight{};std::array<float,8192> instrument{};
+    for(uint32_t position=0;position<total;) {
+      const auto count=std::min(block,total-position);
+      for(uint32_t f=0;f<count;++f){left[f]=a(position+f);right[f]=-left[f];otherLeft[f]=b(position+f);otherRight[f]=-otherLeft[f];instrument[f*2]=synth(position+f);instrument[f*2+1]=-instrument[f*2];}
+      uint64_t allocations,frees,locks;tracker_audit_begin();measured->begin(count,position);plain->begin(count,position);
+      measured->instrument(2,1,instrument.data());plain->instrument(2,1,instrument.data());
+      for(auto bus:plan.order){measured->process(bus,bus==0?left.data():bus==1?otherLeft.data():nullptr,bus==0?right.data():bus==1?otherRight.data():nullptr,process,nullptr);plain->process(bus,bus==0?left.data():bus==1?otherLeft.data():nullptr,bus==0?right.data():bus==1?otherRight.data():nullptr,process,nullptr);}
+      measured->complete();plain->complete();tracker_audit_end(&allocations,&frees,&locks);
+      check(allocations+frees+locks==0 && !measured->failed() && !plain->failed(),"Exact route taps allocate/free/lock nothing in processing");
+      check(std::equal(measured->busOutput(plan.master),measured->busOutput(plan.master)+count*2,plain->busOutput(plan.master)),"Enabling exact route observation preserves DSP addition order bit for bit");position+=count;
+    }
+    auto compare=[&](const std::vector<float> &pcm,auto expected,const char *message){for(uint32_t f=0;f<total;++f){const auto value=expected(f);check(std::abs(pcm[f*2]-value)<2e-7 && std::abs(pcm[f*2+1]+value)<2e-7,message);}};
+    for(size_t i=0;i<plan.connections.size();++i){const auto &edge=plan.connections[i];if(edge.source==0)compare(captures.values[0][i],[&](int64_t p){return (edge.preFader?pre(p-edge.delay):post(p-edge.delay))*float(edge.gain);},"Main/send captures contain actual post-gain compensated contribution, including post-insert pre-fader taps");}
+    for(size_t i=0;i<plan.sidechains.size();++i){const auto &edge=plan.sidechains[i];compare(captures.values[1][i],[&](int64_t p){return b(p-edge.delay)*float(edge.gain);},"Auxiliary and Main-in sidechain taps contain their own delayed gain, not aggregate destination audio");}
+    compare(captures.values[2][0],[&](int64_t p){return synth(p-19);},"Instrument-output tap contains the actual compensated source contribution");
+    compare(captures.values[3][0],[&](int64_t p){return a(p)+synth(p-19);},"Serial insert tap excludes separately summed Main-in routes");
+    compare(captures.values[4][plan.master],[&](int64_t p){return b(p)+post(p-3)+pre(p-5)*preGain+post(p-7)*postGain;},"Master wire tap is after inserts and before final master fader");
+  }
+}
+void currentPlanMeters() {
+  auto observation=std::make_unique<SignalObservation>(48000);
+  const auto one=observation->add({"one","one","One",true});
+  const auto two=observation->add({"two","two","Two",true});
+  const std::array<SignalPortConfiguration,2> initial{{{one,7,3},{two,2,8}}};
+  const std::array<SignalPortConfiguration,1> changed{{{one,13,11}}};
+  observation->activate(initial);
+  check(observation->read(one).available && !observation->read(one).fresh,"A current port is available before its first measurement");
+  std::array<float,1024> audio;audio.fill(.25f);
+  observation->scope.watch(one);
+  observation->observe(one,audio.data(),512,0);observation->observe(two,audio.data(),512,0);
+  check(observation->scope.snapshot().frames==512,"Current plan scope initially captures its selected route");
+  uint64_t a,f,l;tracker_audit_begin();observation->activate(changed);tracker_audit_end(&a,&f,&l);
+  auto reading=observation->read(one);
+  check(observation->scope.snapshot().frames==0,"Plan adoption invalidates retained scope history before new audio arrives");
+  check(a+f+l==0 && reading.available && !reading.measured && !reading.fresh && reading.processorLatency==13 && reading.compensation==11,
+    "Actual plan adoption invalidates old measurements and atomically updates latency without audio allocation/free/lock");
+  check(!observation->read(two).available && !observation->available(two),"Retired routes cannot retain visible meters or accept a scope/listen selection");
+  observation->observe(two,audio.data(),512,512);
+  check(!observation->read(two).available,"Old fading plan observations cannot revive a retired port");
+  observation->observe(one,audio.data(),512,512);
+  check(observation->read(one).fresh && observation->read(one).through==1024,"Retargeted port measures actual new-plan PCM");
+  check(observation->scope.snapshot().frames==512 && observation->scope.snapshot().waveform.front().first==512,"New route scope excludes prior route samples despite contiguous clocks");
+  observation->activate(initial);
+  check(observation->read(two).available && !observation->read(two).fresh,"Undo or candidate rollback restores membership but never reuses old-plan samples");
+  observation->observe(two,nullptr,512,1024);observation->observe(one,audio.data(),512,6144);
+  check(!observation->read(two).fresh && !observation->read(two).measured && observation->read(one).fresh,
+    "An available but undriven port becomes stale as the render clock advances");
+  auto prepared=observation->preparePorts({{"new","new","New",true}});
+  const auto third=uint32_t(prepared.base+1);const std::array<SignalPortConfiguration,1> arriving{{{third,5,9}}};
+  observation->activate(arriving);check(!observation->available(third),"Plan adoption can safely precede new identity publication");
+  check(observation->scope.snapshot().frames==0,"Queued samples from a retired route cannot reappear in scope history");
+  observation->publishPorts(prepared);observation->observe(third,audio.data(),512,6656);
+  check(observation->read(third).fresh && observation->read(third).processorLatency==5 && !observation->read(one).available,
+    "Prepared new tokens join the adopted plan without reviving historical catalogue entries");
+  observation->activate(std::array<SignalPortConfiguration,1>{{{third,5,10}}});
+  std::atomic<bool> finished{false};bool coherent=true;size_t reads=0;
+  std::thread reader([&]{do{const auto value=observation->read(third);if(value.available)coherent&=value.compensation==value.processorLatency*2;++reads;}while(!finished.load(std::memory_order_acquire));});
+  // One audio writer, many concurrent UI reads; readers must never combine the
+  // latency of one route revision with the compensation of another.
+  tracker_audit_begin();for(int64_t i=1;i<10000;++i){observation->activate(std::array<SignalPortConfiguration,1>{{{third,i,i*2}}});observation->observe(third,audio.data(),1,7168+i);}
+  tracker_audit_end(&a,&f,&l);finished.store(true,std::memory_order_release);reader.join();
+  check(coherent && reads && a+f+l==0,"Concurrent plan metadata reads are coherent and audio adoption remains realtime safe");
+}
 void meterDecay() {
   SignalObservation observation(48000);
   auto port=observation.add({"track/in/0","track","Track input",false});
@@ -427,6 +518,8 @@ int main() {
     guard->complete();
     check(guard->failed() && silenced[0] == 0 && silenced[1] == 0, "Post-fader overflow is silenced before reaching the integer output mixer");
     liveMeterRegistration();
+    currentPlanMeters();
+    exactRouteTaps();
     meterDecay();
     scopeCapture();
     listenCapture();

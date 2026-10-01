@@ -1,0 +1,3 @@
+Dry virtual loopback: 96000 stereo frames, 48000 Hz / 512 frames, max error 0, RMS error 0, alignment 8192 capture frames, callback overruns 0
+AU effect virtual loopback: 96000 stereo frames, 48000 Hz / 512 frames, max error 0, RMS error 0, alignment 8704 capture frames, callback overruns 0
+FAIL: VST3 is missing or outside the trusted plugin locations: /tmp/screamseq-graph-polish-20261001/bin/graph-polish-qa/test-plugins/ResonanceFixture.vst3

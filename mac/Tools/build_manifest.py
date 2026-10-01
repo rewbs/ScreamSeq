@@ -9,7 +9,7 @@ import sys
 
 root = pathlib.Path(__file__).resolve().parents[2]
 paths = set()
-for folder in ("editor", "mac"):
+for folder in ("editor", "mac", "windows"):
     paths.update(p for p in (root / folder).rglob("*") if p.is_file() and "__pycache__" not in p.parts)
 changed = subprocess.check_output(["git", "diff", "--name-only", "HEAD", "-z"], cwd=root)
 paths.update(root / name.decode() for name in changed.split(b"\0") if name)

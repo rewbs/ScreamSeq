@@ -24,7 +24,7 @@ static std::unique_ptr<Document> fixture() {
     for (int i = 0; i < 10; ++i) { auto &cell = *song.Patterns[0].GetpModCommand(0, i); cell.note = 61; cell.instr = uint8_t(i + 1); }
   });
   doc->annotate([](NativeSong &n) {
-    const auto master = n.makeEntity().id;
+    const auto master = n.masterID;
     for (const auto &[index, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
     while (n.mixer.buses.size() < 239) n.mixer.buses.push_back({n.makeEntity().id, master, MixerBusKind::Group, "Group"});
     n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});

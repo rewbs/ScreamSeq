@@ -27,7 +27,7 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     formula.font = .monospacedSystemFont(ofSize:11,weight:.regular);formula.isHidden=true
     canvas.onEdit = {[weak self] in self?.markDraft()};canvas.onSelect = {[weak self] in self?.showPoint()};canvas.onViewport = {[weak self] in self?.preview()}
     canvas.onEditFinished = {[weak self] in self?.apply()}
-    canvas.setAccessibilityLabel("Subgraph pattern automation curve");canvas.heightAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
+    canvas.setAccessibilityLabel("Graph pattern automation curve");canvas.heightAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
     let controls=stack(.horizontal,[heading,pattern,curve,snap,enabled,NSView(),ActionButton("−"){[weak self] in self?.canvas.zoom(0.5)},ActionButton("+"){[weak self] in self?.canvas.zoom(2)},ActionButton("Fit"){[weak self] in self?.canvas.fit()}],spacing:4)
     let more=ActionMenuButton{[weak self] in let menu=NSMenu();menu.addItem(ContextAction("Delete selected point",key:"\u{7f}"){self?.canvas.removeSelected()});menu.addItem(ContextAction("Create rising ramp"){self?.ramp()});menu.addItem(ContextAction("Retry saving changes"){self?.apply()});menu.addItem(ContextAction("Reload / discard pending changes"){self?.load()});return menu}
     let footer=stack(.horizontal,[ActionButton("Bank…"){[weak self] in self?.showBank()},Theme.label("Row",size:11),row,Theme.label("%",size:11),value,NSView(),more],spacing:4)
@@ -47,13 +47,25 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
   func context(graph:String?,node:[String:Any]?,patterns:[[String:Any]],revision:String){
     guard !hasDraft,!loading else{return}
     let id=node?["kind"] as? String=="automation" ? node?["id"] as? String : nil
-    guard let graph,let id else{self.graph=nil;self.node=nil;isHidden=true;previewGeneration+=1;return}
-    isHidden=false
+    guard let id else{
+      if self.node != nil{previewGeneration+=1;previewWork?.cancel()}
+      self.graph=nil;self.node=nil;if !isHidden{isHidden=true};return
+    }
+    if isHidden{isHidden=false}
     let changed=self.graph != graph || self.node != id
-    self.patterns=patterns;pattern.removeAllItems()
-    for p in patterns{let item=NSMenuItem(title:"Pattern \(p["index"] ?? 0) · \(p["name"] as? String ?? "")",action:nil,keyEquivalent:"");item.representedObject=p["index"];pattern.menu?.addItem(item)}
-    if let index=patterns.firstIndex(where:{$0["index"] as? Int==patternIndex}){pattern.selectItem(at:index)}else{patternIndex=patterns.first?["index"] as? Int ?? 0}
-    self.graph=graph;self.node=id;heading.stringValue=node?["name"] as? String ?? "Pattern curve"
+    self.patterns=patterns
+    let choices=patterns.map{("Pattern \($0["index"] ?? 0) · \($0["name"] as? String ?? "")",$0["index"] as? Int ?? 0)}
+    // A shared revision also changes when notes are typed. Retain the native
+    // menu and its active item until its actual pattern catalogue changes.
+    if pattern.numberOfItems != choices.count || zip(pattern.itemArray,choices).contains(where:{$0.0.title != $0.1.0 || $0.0.representedObject as? Int != $0.1.1}) {
+      pattern.removeAllItems()
+      for (title,index) in choices{let item=NSMenuItem(title:title,action:nil,keyEquivalent:"");item.representedObject=index;pattern.menu?.addItem(item)}
+    }
+    let selected=choices.firstIndex(where:{$0.1==patternIndex}) ?? 0
+    if choices.indices.contains(selected){patternIndex=choices[selected].1;if pattern.indexOfSelectedItem != selected{pattern.selectItem(at:selected)}}
+    else{patternIndex=0}
+    self.graph=graph;self.node=id
+    let title=node?["name"] as? String ?? "Pattern curve";if heading.stringValue != title{heading.stringValue=title}
     if changed || self.revision != revision{load()}
   }
   @objc func changePattern(){
@@ -61,10 +73,10 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     patternIndex=pattern.selectedItem?.representedObject as? Int ?? 0;canvas.fit();load()
   }
   func load(){
-    guard !loading,let graph,let node,let onRequest else{return}
+    guard !loading,let node,let onRequest else{return};let graph=self.graph
     saveWork?.cancel();saveWork=nil;pointFieldsDirty=false
     loading=true;generation+=1;previewGeneration+=1;let token=generation,document=documentGeneration
-    onRequest("graph.automation.get",["graph":graph,"node":node,"pattern":patternIndex]){[weak self] response in
+    onRequest("graph.automation.get",["graph":graph as Any? ?? NSNull(),"node":node,"pattern":patternIndex]){[weak self] response in
       guard let self,self.graph==graph,self.node==node,self.documentGeneration==document else{return};self.loading=false
       guard let result=response["result"] as? [String:Any],let data=result["data"] as? [String:Any]else{self.error(response);return}
       guard token==self.generation else{self.status.stringValue="The draft changed while loading. Reload to discard it.";return}
@@ -112,8 +124,8 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
     }
   }
   func showBank(){
-    guard !loading,let graph,let node,let onRequest else{return};let points=canvas.points,pattern=patternIndex
-    let target:[String:Any]=["kind":"graph","graph":graph,"node":node,"pattern":patternIndex]
+    guard !loading,let node,let onRequest else{return};let graph=self.graph;let points=canvas.points,pattern=patternIndex
+    let target:[String:Any]=["kind":"graph","graph":graph as Any? ?? NSNull(),"node":node,"pattern":patternIndex]
     if EnvelopeBankWindow.reuse(bankWindow,for:target,refused:{[weak self] in self?.status.stringValue=$0}){return}
     let shape:[String:Any]=["span":canvas.rows*256,"rowsPerBeat":rowsPerBeat,"points":canvas.points.map(\.dictionary)]
     bankWindow?.close();bankWindow=EnvelopeBankWindow(title:heading.stringValue,target:target,shape:canvas.points.isEmpty ? nil:shape,revision:revision,request:onRequest,canReplace:{[weak self] in (self?.hasDraft==false || self?.canvas.points==points) && self?.graph==graph && self?.node==node && self?.patternIndex==pattern},applied:{[weak self] in self?.hasDraft=false;self?.load();self?.onChanged?()})
@@ -128,10 +140,10 @@ final class GraphEnvelopeEditor:NSView,NSTextFieldDelegate {
   }
   func ramp(){pointFieldsDirty=false;canvas.points=[EnvelopePoint(position:0,value:0,curve:"linear"),EnvelopePoint(position:canvas.rows*256-1,value:1,curve:"linear")];canvas.selected=0;showPoint();markDraft()}
   func apply(){
-    guard !loading,hasDraft,!pointFieldsDirty,!canvas.isDragging,let graph,let node,onRequest != nil else{return}
+    guard !loading,hasDraft,!pointFieldsDirty,!canvas.isDragging,let node,onRequest != nil else{return};let graph=self.graph
     saveWork?.cancel();saveWork=nil
     loading=true;let token=generation,document=documentGeneration
-    send(["expectedRevision":revision,"graph":graph,"node":node,"pattern":patternIndex,"enabled":enabled.state == .on,"points":canvas.points.map(\.dictionary)],document:document){[weak self] response in
+    send(["expectedRevision":revision,"graph":graph as Any? ?? NSNull(),"node":node,"pattern":patternIndex,"enabled":enabled.state == .on,"points":canvas.points.map(\.dictionary)],document:document){[weak self] response in
       guard let self,self.graph==graph,self.node==node,self.documentGeneration==document else{return};self.loading=false
       guard let result=response["result"] as? [String:Any]else{self.error(response);return}
       self.revision=result["revision"] as? String ?? self.revision

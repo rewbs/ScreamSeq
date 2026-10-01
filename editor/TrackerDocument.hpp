@@ -170,8 +170,12 @@ public:
 	std::vector<Edit> edit(const std::vector<Edit> &edits);
 	void validateEdits(const std::vector<Edit> &edits) const;
 	bool editNative(NativeSong metadata, const std::vector<Edit> &edits = {});
-	std::vector<Edit> undo();
-	std::vector<Edit> redo();
+    // A native-only history entry may publish an external prepared plan after
+    // every allocation succeeds, before changing native data/history/revision.
+    // The callback must not mutate this Document. Refusal leaves both histories
+    // intact. Cell/sample/structure entries reject a callback before invoking it.
+    std::vector<Edit> undo(const std::function<void()> &beforeCommit = {});
+    std::vector<Edit> redo(const std::function<void()> &beforeCommit = {});
 	bool canUndo() const { return !undo_.empty(); }
 	bool canRedo() const { return !redo_.empty(); }
 	// Shared ordering for document edits and a platform host's plugin snapshots.

@@ -25,6 +25,12 @@ extension AppController {
     patternGraphHost.lanes.onClear = {[weak self] target,column,row in self?.clearGraphCommand(target:target,column:column,row:row)}
     signalGraphEditor.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
     signalGraphEditor.onReveal = {[weak self] in self?.workspace?.show("graph")}
+    signalGraphEditor.onSourceReference = {[weak self] source in
+      guard let self else{return};self.openParameterSource(source)
+      let kind=source["kind"] as? String ?? "",panel=kind=="envelope" ? "automation":kind=="recorded" ? "parameterActivity":"graph"
+      self.workspace?.panels[panel]?.onBack={[weak self] in self?.signalGraphEditor.returnToProvenance()}
+      if kind=="pattern-set" || kind=="pattern-slide"{self.statusLabel.stringValue+=" · ⌘K → Back to graph source"}
+    }
     signalGraphEditor.onAddSongEffect = { [weak self] target in self?.addPlugin(target: target) }
     signalGraphEditor.rackControls.onGesture={[weak self] active in self?.session.parameterGesture(active)}
     signalGraphEditor.rackControls.onAutomate={[weak self] id,parameter in self?.automateParameter(plugin:id,parameter:Int(parameter))}
@@ -90,7 +96,7 @@ extension AppController {
     NotificationCenter.default.addObserver(forName:NSApplication.didResignActiveNotification,object:nil,queue:.main){[weak self] _ in self?.releaseWorkspaceKeys();self?.releaseInspectorKeys();self?.commandPalette.sequences.cancel()}
     commandPalette.sequences.onHint = {[weak self] hint in self?.window.subtitle=hint}
     commandPalette.shortcutAllowed = {[weak self] id in
-      !id.hasPrefix("graph.") || NSApp.keyWindow?.firstResponder === self?.signalGraphEditor.canvas
+      id==GraphCommand.returnFromSource.id || !id.hasPrefix("graph.") || NSApp.keyWindow?.firstResponder === self?.signalGraphEditor.canvas
     }
     commandPalette.additionalMenus = { [weak self] in
       guard let self, let dock = self.workspace else { return [] }
@@ -181,7 +187,7 @@ extension AppController {
     case "graph":
       guard force || !signalGraphEditor.hasDraft else{panel.target.stringValue="Draft held · shared graph";return}
       if force || workspaceContextTokens[id] != model.revisionToken {workspaceContextTokens[id]=model.revisionToken;signalGraphEditor.load()}
-      panel.target.stringValue="Shared song graph"
+      if panel.target.stringValue != "Shared song graph" {panel.target.stringValue="Shared song graph"}
     case "mixer":if force || workspaceContextTokens[id]==nil {workspaceContextTokens[id]="loaded";mixerEditor.load()}
     default:break
     }

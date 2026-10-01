@@ -342,6 +342,8 @@ add_test(NAME native-song COMMAND native-song-tests)
 add_executable(device-tests Tests/DeviceTests.cpp)
 target_link_libraries(device-tests PRIVATE TrackerMac)
 add_executable(loopback-tests Tests/LoopbackTests.cpp)
+set_source_files_properties(Tests/LoopbackTests.cpp PROPERTIES LANGUAGE OBJCXX)
+target_compile_options(loopback-tests PRIVATE -fobjc-arc)
 target_link_libraries(loopback-tests PRIVATE TrackerMac)
 add_executable(midi-tests Tests/MidiTests.cpp)
 target_link_libraries(midi-tests PRIVATE TrackerMac)
@@ -395,7 +397,7 @@ else()
   target_link_libraries(realtime-transition-tests PRIVATE RealtimeAudit)
 endif()
 add_test(NAME realtime-transition COMMAND realtime-transition-tests)
-add_executable(native-mixer-tests Tests/NativeMixerTests.mm)
+add_executable(native-mixer-tests Tests/NativeMixerTests.mm Tests/FixtureAU.mm)
 target_compile_options(native-mixer-tests PRIVATE -fobjc-arc)
 target_link_libraries(native-mixer-tests PRIVATE TrackerMac)
 if(CMAKE_CXX_FLAGS MATCHES "sanitize")
@@ -540,13 +542,22 @@ add_dependencies(automation-target-tests plugin-scanner ResonanceFixture)
 add_test(NAME automation-target COMMAND automation-target-tests "${CMAKE_BINARY_DIR}/test-plugins/ResonanceFixture.vst3")
 
 # Portable signal graph compiler and allocation-free graph renderer.
-target_sources(TrackerEditor PRIVATE "${ROOT}/editor/SignalGraph.cpp" "${ROOT}/editor/SignalRuntime.cpp")
+target_sources(TrackerEditor PRIVATE "${ROOT}/editor/SignalGraph.cpp" "${ROOT}/editor/SignalRuntime.cpp" "${ROOT}/editor/SongModulation.cpp" "${ROOT}/editor/GraphPresentation.cpp" "${ROOT}/editor/ParameterProvenance.cpp")
 add_executable(signal-graph-tests Tests/SignalGraphTests.cpp)
 target_link_libraries(signal-graph-tests PRIVATE TrackerEditor)
 add_test(NAME signal-graph COMMAND signal-graph-tests)
+add_executable(song-modulation-tests "${ROOT}/editor/Tests/SongModulationTests.cpp")
+target_link_libraries(song-modulation-tests PRIVATE TrackerEditor)
+if(CMAKE_CXX_FLAGS MATCHES "sanitize")
+  target_compile_definitions(song-modulation-tests PRIVATE TRACKER_SANITIZER)
+else()
+  target_link_libraries(song-modulation-tests PRIVATE RealtimeAudit)
+endif()
+add_test(NAME song-modulation COMMAND song-modulation-tests)
+
 
 # NativeSignalGraph.cpp is compiled once by TrackerHosted.
-add_executable(native-signal-graph-tests Tests/NativeSignalGraphTests.mm)
+add_executable(native-signal-graph-tests Tests/NativeSignalGraphTests.mm Tests/FixtureAU.mm)
 target_compile_options(native-signal-graph-tests PRIVATE -fobjc-arc)
 target_link_libraries(native-signal-graph-tests PRIVATE TrackerMac)
 if(CMAKE_CXX_FLAGS MATCHES "sanitize")
@@ -636,6 +647,10 @@ target_compile_options(unified-history-tests PRIVATE -fobjc-arc)
 target_link_libraries(unified-history-tests PRIVATE TrackerMac)
 add_test(NAME unified-history COMMAND unified-history-tests)
 
+add_executable(document-history-allocation-tests "${ROOT}/editor/Tests/DocumentHistoryAllocationTests.cpp")
+target_link_libraries(document-history-allocation-tests PRIVATE TrackerEditor)
+add_test(NAME document-history-allocation COMMAND document-history-allocation-tests)
+
 # The Windows document adapter is platform-neutral; exercise its shared song
 # semantics on macOS too, without claiming a Windows UI/device qualification.
 add_executable(windows-graph-document-tests
@@ -645,3 +660,24 @@ add_executable(windows-graph-document-tests
 target_include_directories(windows-graph-document-tests PRIVATE "${ROOT}/include/nlohmann-json/include")
 target_link_libraries(windows-graph-document-tests PRIVATE TrackerEditor)
 add_test(NAME windows-graph-document COMMAND windows-graph-document-tests)
+
+# Exercise the Windows codec against all shared metadata on this platform.
+# This verifies portable storage semantics, not the Windows application/device.
+add_executable(windows-native-metadata-tests
+  "${ROOT}/windows/Tests/ProjectNative/NativeMetadataTests.cpp"
+  "${ROOT}/windows/Project/NativeMetadata.cpp")
+target_include_directories(windows-native-metadata-tests PRIVATE "${ROOT}/include/nlohmann-json/include")
+target_link_libraries(windows-native-metadata-tests PRIVATE TrackerEditor)
+add_test(NAME windows-native-metadata COMMAND windows-native-metadata-tests)
+
+add_executable(windows-mixer-document-tests
+  "${ROOT}/windows/Tests/MixerOperationsTests.cpp"
+  "${ROOT}/windows/Session/MixerOperations.cpp"
+  "${ROOT}/windows/Project/NativeMetadata.cpp")
+target_include_directories(windows-mixer-document-tests PRIVATE "${ROOT}/include/nlohmann-json/include")
+target_link_libraries(windows-mixer-document-tests PRIVATE TrackerMac)
+add_test(NAME windows-mixer-document COMMAND windows-mixer-document-tests)
+
+add_executable(parameter-provenance-tests "${ROOT}/editor/Tests/ParameterProvenanceTests.cpp")
+target_link_libraries(parameter-provenance-tests PRIVATE TrackerEditor)
+add_test(NAME parameter-provenance COMMAND parameter-provenance-tests)

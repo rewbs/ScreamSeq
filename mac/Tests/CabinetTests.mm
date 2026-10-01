@@ -178,7 +178,7 @@ static PluginDescriptor descriptor() {
 static void compensation() {
   auto doc = Document::demo();
   doc->annotate([](NativeSong &n) {
-    const auto master = n.makeEntity().id;
+    const auto master = n.masterID;
     for (const auto &[index, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
     n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
   });

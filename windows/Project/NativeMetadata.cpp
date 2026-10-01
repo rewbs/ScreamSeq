@@ -54,6 +54,7 @@ NativeEntity decodeEntity(const Json &v) { return {decodeID(field(v,"id")), text
 Tracker::NativeSong decodeNativeMetadata(const Json &v) {
   const auto version = unsigned(integer(field(v,"version"),17,17));
   NativeSong n; n.nextID = integer(field(v,"nextID"),1,NativeSong::maximumID);
+  if(v.contains("masterID"))n.masterID=decodeID(v.at("masterID"));
   auto map = [&](const char *key, auto &out) { for (const auto &item : array(field(v,key),65536)) { const auto &p = array(item,2); need(p.size() == 2,"Invalid indexed metadata"); need(out.emplace(uint16_t(integer(p[0],0,65535)),decodeEntity(p[1])).second,"Duplicate metadata index"); } };
   map("patterns",n.patterns); map("tracks",n.tracks); map("samples",n.samples); map("instruments",n.instruments);
   for (const auto &s : array(field(v,"sequences"),256)) { NativeSequence seq{decodeEntity(field(s,"info")),{}}; for (const auto &o : array(field(s,"orders"),65536)) seq.orders.push_back(decodeEntity(o)); n.sequences.push_back(std::move(seq)); }
@@ -69,6 +70,7 @@ Tracker::NativeSong decodeNativeMetadata(const Json &v) {
   }
   if (gate(10,"signalGraph")) n.signal = decodeSignal(field(v,"signalGraph"),version);
   if (gate(14,"envelopeBank")) decodeBank(n,field(v,"envelopeBank"));
+  n.reserveMasterIdentity();
   validateMetadataReferences(n);
   return n;
 }
@@ -81,7 +83,7 @@ Json encodeNativeMetadata(const Tracker::NativeSong &n) {
   for (const auto &t : n.noteTracks) { Json columns = Json::array(); for (auto id : t.columns) columns.push_back(nativeID(id)); tracks.push_back({{"bus",nativeID(t.bus)},{"columns",columns}}); }
   for (auto [id,muted] : n.columnMutes) mutes.push_back(Json::array({nativeID(id),muted}));
   for (const auto &p : n.preciseNotes) { Json j{{"pattern",nativeID(p.pattern)},{"track",nativeID(p.track)},{"position",p.position},{"instrument",p.instrument},{"note",p.note},{"velocity",p.velocity}}; if (p.effect || p.parameter) { j["effect"] = p.effect; j["parameter"] = p.parameter; } notes.push_back(std::move(j)); }
-  Json encoded{{"version",17},{"nextID",n.nextID},{"patterns",map(n.patterns)},{"tracks",map(n.tracks)},{"samples",map(n.samples)},{"instruments",map(n.instruments)},{"sequences",sequences},
+  Json encoded{{"version",17},{"nextID",n.nextID},{"masterID",nativeID(n.masterID)},{"patterns",map(n.patterns)},{"tracks",map(n.tracks)},{"samples",map(n.samples)},{"instruments",map(n.instruments)},{"sequences",sequences},
     {"automation",automation},{"mixer",mixer(n.mixer)},{"noteTracks",tracks},{"columnMutes",mutes},{"preciseNotes",notes},{"performance",performance(n.performance)},{"signalGraph",signal(n.signal)},{"envelopeBank",bank(n)}};
   // Never silently discard non-default data in conditionally encoded members,
   // or serialize a model the reader cannot accept. Snapshot validation remains

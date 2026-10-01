@@ -1,4 +1,5 @@
 #include "../Audio/AudioDevice.hpp"
+#include "FixtureTrust.hpp"
 #include "soundlib/ModInstrument.h"
 #include <algorithm>
 #include <chrono>
@@ -88,6 +89,9 @@ int main(int argc, char **argv) {
     // Explicitly select a named virtual device. Never record the default input,
     // microphone, or speakers, and never change the system's default route.
     require(argc >= 2 && argc <= 4, "usage: loopback-tests 'BlackHole 2ch' [VST3 fixture] [graph soak seconds]");
+    // Trust only the explicitly supplied test bundle, in this test process.
+    // Do not install the fixture or change the musician's plugin trust store.
+    trustFixtureArguments(argc, argv);
     const int graphSeconds=argc==4?std::stoi(argv[3]):2;
     require(graphSeconds>=2&&graphSeconds<=300,"Graph capture duration must be 2..300 seconds");
     const std::string name = argv[1];
@@ -137,7 +141,7 @@ int main(int argc, char **argv) {
         effects.push_back(plugin);
       }
       if(test==5){
-        native=document->native();auto &n=*native;const auto master=n.makeEntity().id;
+        native=document->native();auto &n=*native;const auto master=n.masterID;
         for(const auto &[channel,track]:n.tracks)n.mixer.buses.push_back({track.id,master,Tracker::MixerBusKind::Track,"Track"});
         n.mixer.buses.push_back({master,0,Tracker::MixerBusKind::Master,"Master"});
         auto descriptor=Tracker::NativePlugin::discoverVST3(argv[2]).at(0);

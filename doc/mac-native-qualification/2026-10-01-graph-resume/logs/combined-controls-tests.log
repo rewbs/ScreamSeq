@@ -1,0 +1,25 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+      Start  2: precise-ramps
+ 1/10 Test  #2: precise-ramps ....................   Passed    0.61 sec
+      Start 53: mixer-publication
+ 2/10 Test #53: mixer-publication ................   Passed    0.16 sec
+      Start 55: native-mixer
+ 3/10 Test #55: native-mixer .....................   Passed    3.68 sec
+      Start 63: musical-automation
+ 4/10 Test #63: musical-automation ...............   Passed    1.47 sec
+      Start 73: song-modulation
+ 5/10 Test #73: song-modulation ..................   Passed    0.01 sec
+      Start 75: signal-graph-session
+ 6/10 Test #75: signal-graph-session .............   Passed    0.45 sec
+      Start 81: envelope-bank
+ 7/10 Test #81: envelope-bank ....................   Passed    0.47 sec
+      Start 84: unified-history
+ 8/10 Test #84: unified-history ..................   Passed    0.42 sec
+      Start 86: windows-graph-document
+ 9/10 Test #86: windows-graph-document ...........   Passed    0.07 sec
+      Start 88: windows-mixer-document
+10/10 Test #88: windows-mixer-document ...........   Passed    0.37 sec
+
+100% tests passed, 0 tests failed out of 10
+
+Total Test time (real) =   7.71 sec

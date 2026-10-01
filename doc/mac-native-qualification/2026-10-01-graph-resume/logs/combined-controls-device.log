@@ -1,0 +1,1 @@
+PASS live CoreAudio rack add/remove/reorder and grouped Undo/Redo, implicit mixer, retained manual state, unsafe-order rejection, root/recipe linked bank plus lane atomic publication, detached add/insert/history

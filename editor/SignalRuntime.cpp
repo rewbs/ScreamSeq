@@ -29,7 +29,7 @@ void SignalRuntime::Edge::add(uint32_t count) noexcept {
   if(delay.empty()){for(size_t i=0;i<count*2;++i)to[i]+=from[i]*gain;return;}
   for(size_t i=0;i<count*2;++i){to[i]+=delay[cursor]*gain;delay[cursor]=from[i];if(++cursor==delay.size())cursor=0;}
 }
-SignalRuntime::SignalRuntime(SignalDefinition d,SignalPlan p,double rate):definition_(std::move(d)),plan_(std::move(p)),sampleRate_(rate) {
+SignalRuntime::SignalRuntime(SignalDefinition d,SignalPlan p,double rate,std::span<const SignalParameterInfo> parameters):definition_(std::move(d)),plan_(std::move(p)),sampleRate_(rate) {
   if(!std::isfinite(rate)||rate<8000||rate>384000)throw std::invalid_argument("Invalid signal graph sample rate");
   for(auto &node:definition_.nodes)std::sort(node.envelopes.begin(),node.envelopes.end(),[](const auto &a,const auto &b){return a.pattern<b.pattern;});
   nodes_.resize(definition_.nodes.size());
@@ -43,16 +43,49 @@ SignalRuntime::SignalRuntime(SignalDefinition d,SignalPlan p,double rate):defini
     const auto to=index(m.target),from=index(m.source);
     auto target=std::find_if(targets_.begin(),targets_.end(),[&](const auto &v){return v.node==to&&v.parameter==m.parameter;});
     if(target==targets_.end()){targets_.push_back({to,m.parameter,m.base,{}});target=targets_.end()-1;}
+    const auto metadata=std::find_if(parameters.begin(),parameters.end(),[&](const auto &v){return v.node==m.target&&v.parameter==m.parameter;});
+    if(metadata!=parameters.end()){if(!std::isfinite(metadata->normalizedStep)||metadata->normalizedStep<0||metadata->normalizedStep>1)throw std::invalid_argument("Invalid graph parameter quantization step");target->step=metadata->normalizedStep;}
+    if(m.quantized&&target->step<=0)throw std::invalid_argument("Quantized graph modulation requires prepared parameter steps");
     target->sources.emplace_back(from,i);
+  }
+  for(size_t i=0;i<definition_.nodes.size();++i)nodeIndex_.emplace_back(definition_.nodes[i].id,i);
+  for(size_t i=0;i<definition_.audio.size();++i){const auto &e=definition_.audio[i];edgeIndex_.emplace_back(EdgeIdentity{e.source,e.output,e.target,e.input},i);}
+  std::sort(nodeIndex_.begin(),nodeIndex_.end());std::sort(edgeIndex_.begin(),edgeIndex_.end());preparedBytes_=measureStorage();
+}
+bool SignalRuntime::sameLayout(const SignalDefinition &next) const noexcept {
+  if(next.nodes.size()!=definition_.nodes.size()||next.audio.size()!=definition_.audio.size()||next.modulation.size()!=definition_.modulation.size())return false;
+  for(size_t i=0;i<next.nodes.size();++i)if(next.nodes[i].id!=definition_.nodes[i].id||next.nodes[i].kind!=definition_.nodes[i].kind)return false;
+  for(size_t i=0;i<next.audio.size();++i){const auto &a=next.audio[i],&b=definition_.audio[i];if(std::tie(a.source,a.output,a.target,a.input)!=std::tie(b.source,b.output,b.target,b.input))return false;}
+  for(size_t i=0;i<next.modulation.size();++i){const auto &a=next.modulation[i],&b=definition_.modulation[i];if(std::tie(a.source,a.target,a.parameter,a.enabled)!=std::tie(b.source,b.target,b.parameter,b.enabled))return false;}
+  return true;
+}
+bool SignalRuntime::compatibleHistory(const SignalRuntime &previous) const noexcept {
+  if(plan_.totalLatency!=previous.plan_.totalLatency)return false;
+  for(const auto &[identity,index]:edgeIndex_){const auto found=std::lower_bound(previous.edgeIndex_.begin(),previous.edgeIndex_.end(),std::pair{identity,size_t(0)});
+    if(found!=previous.edgeIndex_.end()&&found->first==identity&&plan_.edges[index].delay!=previous.plan_.edges[found->second].delay)return false;
+  }
+  return true;
+}
+void SignalRuntime::inheritState(SignalRuntime &previous) noexcept {
+  if(&previous==this)return;
+  midi_=previous.midi_;amount_=previous.amount_;gate_=previous.gate_;
+  for(const auto &[id,index]:nodeIndex_){const auto found=std::lower_bound(previous.nodeIndex_.begin(),previous.nodeIndex_.end(),std::pair{id,size_t(0)});
+    if(found!=previous.nodeIndex_.end()&&found->first==id&&definition_.nodes[index].kind==previous.definition_.nodes[found->second].kind)nodes_[index].envelope=previous.nodes_[found->second].envelope;
+  }
+  for(const auto &[identity,index]:edgeIndex_){const auto found=std::lower_bound(previous.edgeIndex_.begin(),previous.edgeIndex_.end(),std::pair{identity,size_t(0)});
+    if(found!=previous.edgeIndex_.end()&&found->first==identity){auto &a=edges_[index],&b=previous.edges_[found->second];
+      if(a.delay.size()==b.delay.size()){a.delay.swap(b.delay);std::swap(a.cursor,b.cursor);}
+    }
   }
 }
 void SignalRuntime::updateLatencyPlan(SignalPlan plan) {
   if (plan.order != plan_.order || plan.edges.size() != edges_.size())
     throw std::invalid_argument("Latency update changed signal topology");
   for (size_t i = 0; i < edges_.size(); ++i) if (plan.edges[i].delay != plan_.edges[i].delay) {
-    edges_[i].delay.assign(size_t(plan.edges[i].delay) * 2, 0); edges_[i].cursor = 0;
+    std::vector<float>(size_t(plan.edges[i].delay) * 2,0).swap(edges_[i].delay); edges_[i].cursor = 0;
   }
   plan_ = std::move(plan);
+  preparedBytes_=measureStorage();
 }
 void SignalRuntime::parameterBase(uint64_t node,uint32_t parameter,double value) noexcept {
   for(auto &target:targets_)if(definition_.nodes[target.node].id==node&&target.parameter==parameter)target.base=value;
@@ -111,6 +144,7 @@ double SignalRuntime::sampledSource(size_t index,uint64_t frame,double beat,doub
 bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalClock clock,const SignalCallbacks &cb,std::span<const MixerAudioInput> inputs) noexcept {
   if(!main||frames>maximumFrames||!std::isfinite(clock.beat)||!std::isfinite(clock.tempo)||clock.tempo<=0||!std::isfinite(clock.position)||!std::isfinite(clock.unitsPerFrame)||clock.unitsPerFrame<0||!std::isfinite(clock.endPosition)||!std::isfinite(clock.rowsPerBeat)||clock.rowsPerBeat<1)return false;
   const double beatsPerFrame=clock.playing?clock.tempo/(60*sampleRate_):0;
+  const bool discrete=std::any_of(targets_.begin(),targets_.end(),[&](const auto &t){return controls_->modulation[t.sources.front().second].quantized;});
   for(uint32_t offset=0;offset<frames;){auto count=std::min<uint32_t>(targets_.empty()?maximumFrames:uint32_t(quantum-(position+offset)%quantum),frames-offset);
     // Stop at point boundaries so step curves never become short ramps.
     if(clock.playing&&clock.unitsPerFrame>0)for(size_t i=0;i<nodes_.size();++i)if(controls_->nodes[i].kind==SignalNodeKind::Automation){
@@ -130,10 +164,18 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
         if(from)std::copy_n(from+offset*2,count*2,p->samples.data());else std::fill_n(p->samples.data(),count*2,0.f);}}
       else if(spec.kind==SignalNodeKind::Output){for(auto &p:n.inputs)std::copy_n(p->samples.data(),count*2,lookup(result_,p->index)->samples.data()+offset*2);}
       else if(spec.kind==SignalNodeKind::Plugin){
-        for(const auto &t:targets_)if(t.node==index){double first=t.base,last=t.base;
+        for(auto &t:targets_)if(t.node==index){
+          if(controls_->modulation[t.sources.front().second].quantized){
+            if(!(t.step>0)||count>quantum)return false;
+            for(uint32_t f=0;f<count;++f){double value=t.base;for(auto [sourceIndex,edge]:t.sources){const auto &m=controls_->modulation[edge];value+=m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].sampled[f];}value=std::clamp(value,0.,1.);t.sampled[f]=std::clamp(std::round(value/t.step)*t.step,0.,1.);}
+            if(cb.contribution){const auto at=position+offset+count-1;cb.contribution(cb.context,spec.id,t.parameter,0,t.base,at);for(auto [sourceIndex,edge]:t.sources){const auto &m=controls_->modulation[edge];cb.contribution(cb.context,spec.id,t.parameter,m.source,m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].sampled[count-1],at);}}
+            if(!cb.parameterSamples||!cb.parameterSamples(cb.context,spec.id,t.parameter,{t.sampled.data(),count},position+offset))return false;
+            continue;
+          }
+          double first=t.base,last=t.base;
           if(cb.contribution)cb.contribution(cb.context,spec.id,t.parameter,0,t.base,position+offset);
           for(auto [sourceIndex,edge]:t.sources){const auto &m=controls_->modulation[edge];first+=m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].first;last+=m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].last;
-            if(cb.contribution)cb.contribution(cb.context,spec.id,t.parameter,edge+1,m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].first,position+offset);
+            if(cb.contribution)cb.contribution(cb.context,spec.id,t.parameter,m.source,m.minimum+(m.maximum-m.minimum)*nodes_[sourceIndex].first,position+offset);
           }
           if(!cb.parameter||!cb.parameter(cb.context,spec.id,t.parameter,std::clamp(first,0.,1.),std::clamp(last,0.,1.),position+offset,count-1))return false;
         }
@@ -143,16 +185,16 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
       } else if(spec.kind==SignalNodeKind::Follower||spec.kind==SignalNodeKind::NoteEnvelope){
         for(uint32_t f=0;f<count;++f){const double target=spec.kind==SignalNodeKind::Follower?std::min(1.f,std::max(std::abs(in[f*2]),std::abs(in[f*2+1]))):double(gate_);
           const double coefficient=(target>n.envelope?n.attackCoefficient:n.releaseCoefficient);
-          n.envelope=target+coefficient*(n.envelope-target);if(f==0)n.first=n.envelope;}
+          n.envelope=target+coefficient*(n.envelope-target);if(f==0)n.first=n.envelope;if(discrete)n.sampled[f]=n.envelope;}
         n.last=n.envelope;
-      } else {n.first=sampledSource(index,position+offset,clock.beat+offset*beatsPerFrame,clock.position+offset*clock.unitsPerFrame,beatsPerFrame,clock);n.last=sampledSource(index,position+offset+count-1,clock.beat+(offset+count-1)*beatsPerFrame,clock.position+(offset+count-1)*clock.unitsPerFrame,beatsPerFrame,clock);}
+      } else {n.first=sampledSource(index,position+offset,clock.beat+offset*beatsPerFrame,clock.position+offset*clock.unitsPerFrame,beatsPerFrame,clock);n.last=sampledSource(index,position+offset+count-1,clock.beat+(offset+count-1)*beatsPerFrame,clock.position+(offset+count-1)*clock.unitsPerFrame,beatsPerFrame,clock);if(discrete)for(uint32_t f=0;f<count;++f)n.sampled[f]=sampledSource(index,position+offset+f,clock.beat+(offset+f)*beatsPerFrame,clock.position+(offset+f)*clock.unitsPerFrame,beatsPerFrame,clock);}
     }
     offset+=count;
   }
   std::copy_n(lookup(result_,0)->samples.data(),frames*2,main);return true;
 }
-size_t SignalRuntime::storageBytes() const noexcept {
-  size_t bytes=definition_.bytes()+result_.size()*sizeof(Port);for(const auto &n:nodes_)bytes+=(n.inputs.size()+n.outputs.size())*sizeof(Port);for(const auto &e:edges_)bytes+=e.delay.size()*sizeof(float);return bytes;
+size_t SignalRuntime::measureStorage() const noexcept {
+  size_t bytes=definition_.bytes()+result_.size()*sizeof(Port)+nodes_.capacity()*sizeof(Node)+targets_.capacity()*sizeof(ModulationTarget)+nodeIndex_.capacity()*sizeof(nodeIndex_[0])+edgeIndex_.capacity()*sizeof(edgeIndex_[0]);for(const auto &t:targets_)bytes+=t.sources.capacity()*sizeof(t.sources[0]);for(const auto &n:nodes_)bytes+=(n.inputs.size()+n.outputs.size())*sizeof(Port);for(const auto &e:edges_)bytes+=e.delay.capacity()*sizeof(float);return bytes;
 }
 const float *SignalRuntime::output(uint32_t bus) const noexcept {auto p=lookup(result_,bus);return p?p->samples.data():nullptr;}
 } // namespace Tracker

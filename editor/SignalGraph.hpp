@@ -9,6 +9,7 @@
 #include <utility>
 #include <functional>
 #include "MixerGraph.hpp"
+#include "GraphPresentation.hpp"
 #include "MusicalAutomation.hpp"
 
 namespace Tracker {
@@ -22,6 +23,9 @@ struct GraphPluginRecipe {
   // Native-unit baselines applied after the opaque preset. Stable IDs make
   // control edits publishable without serializing or replacing active DSP.
   std::map<uint32_t,double> parameters;
+  // Host bypass belongs to the shared recipe. Every use keeps processing and
+  // reveals latency-aligned dry audio; it never replaces the vendor preset.
+  bool bypass = false;
   bool operator==(const GraphPluginRecipe &) const = default;
 };
 enum class SignalNodeKind : uint8_t { Input, Output, Plugin, LFO, Follower, Random, NoteEnvelope, MIDI, Amount, Automation };
@@ -65,6 +69,7 @@ struct SignalModulation {
   // clamp once. Minimum/maximum can descend, enabling inverse modulation.
   double minimum = 0, maximum = 1, base = 0;
   bool enabled = true;
+  bool quantized = false; // Explicit target-step mode; quantize the final summed value once.
   bool operator==(const SignalModulation &) const = default;
 };
 // A processing boundary, not a bus or a second processor instance. The flat
@@ -85,6 +90,7 @@ struct SignalDefinition {
   std::vector<SignalAudioEdge> audio;
   std::vector<SignalModulation> modulation;
   std::vector<SignalGroup> groups;
+  SignalPresentation presentation;
   bool operator==(const SignalDefinition &) const = default;
   size_t bytes() const;
 };
@@ -123,6 +129,32 @@ struct SignalSongGroup {
   std::vector<std::string> nodes; // canonical "plugin:<instance ID>" keys
   bool operator==(const SignalSongGroup &) const = default;
 };
+// Song-level controls target existing rack instances; they never turn a rack
+// processor into a recipe or replace its stable parameter identity/state.
+struct SignalSongSource {
+  SignalNode node;
+  // Follower input is either a mixer bus tap or a processor output. An empty
+  // input is a disconnected, silent source. Bus taps can be pre/post fader.
+  uint64_t audioBus=0;
+  std::string audioPlugin;
+  uint32_t output=0;
+  bool preFader=false;
+  // Note sources can follow one channel or instrument; both zero means all
+  // notes. These are stable document identities, never mutable slot numbers.
+  uint64_t noteTarget=0,noteInstrument=0;
+  double amount=1;
+  bool operator==(const SignalSongSource &) const = default;
+};
+struct SignalSongModulation {
+  uint64_t source=0;
+  std::string plugin;
+  uint32_t parameter=0;
+  // Add normalized contributions to the host's existing manual/automation
+  // baseline, then clamp once. A new connection starts at zero depth.
+  double minimum=0,maximum=0;
+  bool enabled=true,quantized=false;
+  bool operator==(const SignalSongModulation &) const = default;
+};
 struct SignalGraph {
   std::vector<SignalDefinition> library;
   std::vector<SignalAssignment> assignments;
@@ -133,8 +165,11 @@ struct SignalGraph {
   std::vector<SignalInputRoute> inputs;
   std::vector<SignalOutputRoute> outputs;
   std::vector<SignalSongGroup> groups;
+  std::vector<SignalSongSource> songSources;
+  std::vector<SignalSongModulation> songModulation;
+  SignalPresentation presentation;
   bool operator==(const SignalGraph &) const = default;
-  bool empty() const { return library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty() && groups.empty(); }
+  bool empty() const { return library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty() && groups.empty() && songSources.empty() && songModulation.empty() && presentation.empty(); }
   size_t bytes() const;
   // Callers supply stable song identities, not slot numbers.
   void validate(const std::vector<uint64_t> &targets,
@@ -162,6 +197,7 @@ void detachSignalNodes(SignalDefinition &, const std::vector<uint64_t> &, bool r
 void groupSignalNodes(SignalDefinition &, const std::vector<uint64_t> &, uint64_t id, uint64_t parent, std::string name);
 void ungroupSignalNodes(SignalDefinition &, uint64_t id);
 void pruneSignalGroups(SignalDefinition &);
+void reconcileSignalPresentation(SignalDefinition &,const SignalDefinition &previous);
 // Move the boundary and all descendants together without changing DSP.
 void moveSignalGroup(SignalDefinition &, uint64_t id, double x, double y);
 // Extract a boundary as a standalone recipe. Caller allocates input/output
@@ -173,6 +209,9 @@ bool sameSignalProcessing(const SignalGraph &, const SignalGraph &);
 bool sameSignalParameterLayout(SignalGraph, SignalGraph);
 // Fixed topology with changed source/envelope/depth/cable gain controls.
 bool sameSignalControlLayout(SignalGraph, SignalGraph);
+// Retain audible processing and existing note scope; allow prepared source,
+// follower-tap and modulation changes without rebuilding vendor processors.
+bool sameSignalSourceLayout(SignalGraph, SignalGraph);
 std::string signalBusIdentity(uint64_t);
 MixerGraph signalRoutingGraph(MixerGraph,const SignalGraph &);
 struct SignalProcessorInfo {

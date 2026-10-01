@@ -14,7 +14,7 @@ double number(const Json &v,double lo,double hi){need(v.is_number()&&!v.is_boole
 uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){auto n=number(v,double(lo),double(hi));need(std::floor(n)==n,"Expected mixer integer");return uint64_t(n);}
 bool flag(const Json &p,const char *k,bool fallback=false){if(!p.contains(k))return fallback;need(p.at(k).is_boolean(),"Expected mixer boolean");return p.at(k).get<bool>();}
 const Json &array(const Json &v,size_t maximum){need(v.is_array()&&v.size()<=maximum,"Invalid mixer array or capacity");return v;}
-std::string text(const Json &v,size_t maximum){need(v.is_string(),"Expected mixer text");const auto s=v.get<std::string>();need(s.size()<=maximum*4&&s.find('\0')==std::string::npos,"Invalid mixer text");if(!s.empty()){auto n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0);need(n>0&&size_t(n)<=maximum,"Invalid UTF-8 or oversized mixer text");}return s;}
+std::string text(const Json &v,size_t maximum){return Project::validatedNativeText(v,maximum);}
 std::string id(uint64_t value){return value?"n"+std::to_string(value):"";}
 uint64_t identity(const Json &v){const auto s=text(v,32);need(s.size()>1&&s[0]=='n'&&s[1]!='0',"Invalid native identity");uint64_t n=0;for(size_t i=1;i<s.size();++i){need(s[i]>='0'&&s[i]<='9'&&n<NativeSong::maximumID/10,"Invalid native identity");n=n*10+s[i]-'0';}need(n>0&&n<NativeSong::maximumID,"Invalid native identity");return n;}
 uint64_t allocate(NativeSong &n){need(n.nextID>0&&n.nextID<NativeSong::maximumID,"Native identity limit reached");return n.makeEntity().id;}
@@ -22,7 +22,7 @@ Json meterObjects(const MixerGraph &graph,const PlaybackFeedback &feedback){auto
 }
 MixerOperations::MixerOperations(Tracker::Document &d,std::function<void()> stop,MixerHostHooks hooks):document_(d),stop_(std::move(stop)),host_(std::move(hooks)){}
 std::vector<std::string> MixerOperations::reads(){return {"mixer.get","mixer.meters"};}
-std::vector<std::string> MixerOperations::writes(){return {"mixer.enable","mixer.bus.add","mixer.bus.set","mixer.bus.remove","mixer.inserts.move","mixer.sends.set","mixer.sidechains.set","mixer.instrument.route","mixer.plugin.route"};}
+std::vector<std::string> MixerOperations::writes(){return {"mixer.enable","mixer.bus.add","mixer.bus.set","mixer.bus.remove","mixer.inserts.move","mixer.inserts.detach","mixer.sends.set","mixer.sidechains.set","mixer.instrument.route","mixer.plugin.route"};}
 Json MixerOperations::invoke(const std::string &method,const Json &p) {
   using namespace Tracker;
   try {
@@ -32,35 +32,43 @@ Json MixerOperations::invoke(const std::string &method,const Json &p) {
     const auto buses=[&](size_t slot,bool required=false)->const std::vector<PluginAudioBus> &{if(!ports.contains(slot)){need(bool(host_.buses),"Mixer needs a real plugin bus catalog");ports[slot]=host_.buses(slot,required);}return ports.at(slot);};
     if(method=="mixer.meters"){keys(p,{});return {{"meters",meterObjects(original,feedback)},{"playing",feedback.playing}};}
     if(method=="mixer.get") {
-      keys(p,{});auto result=Project::encodeMixerMetadata(original);result["active"]=original.active();result["meters"]=meterObjects(original,feedback);result["sampleRate"]=feedback.sampleRate;result["playing"]=feedback.playing;result["latencySeconds"]=feedback.playing?feedback.latency:0;
+      keys(p,{"includeImplicit"});const bool implicit=flag(p,"includeImplicit")&&!original.active();
+      NativeSong projection;if(implicit){projection.tracks=native.tracks;projection.nextID=native.nextID;projection.masterID=native.masterID;projection.mixer=native.mixer;projection.ensureMixer();}
+      auto result=Project::encodeMixerMetadata(implicit?projection.mixer:original);result["active"]=original.active();result["implicit"]=implicit;result["meters"]=meterObjects(original,feedback);result["sampleRate"]=feedback.sampleRate;result["playing"]=feedback.playing;result["latencySeconds"]=feedback.playing?feedback.latency:0;
       auto &available=result["plugins"]=Json::array();
       for(size_t i=0;i<host_.plugins.size();++i){const auto &plugin=host_.plugins[i];Json audio=Json::array();unsigned count=0;for(const auto &b:buses(i)){if(!b.input)++count;audio.push_back({{"index",b.index},{"direction",b.input?"input":"output"},{"name",b.name},{"channels",b.channels},{"active",b.active},{"supported",b.supported}});}available.push_back({{"id",plugin.instanceID},{"slot",i},{"name",plugin.descriptor.name},{"instrument",plugin.descriptor.instrument||plugin.descriptor.type==audioUnitMusicDeviceType},{"bypass",plugin.bypass},{"outputBuses",count},{"audioBuses",audio}});}
       return result;
     }
     const auto supported=writes();need(std::find(supported.begin(),supported.end(),method)!=supported.end(),"Unknown mixer operation");need(document_.editable(),"This document is read-only");
     const bool preview=flag(p,"preview"),dry=flag(p,"dryRun");NativeSong next;if(preview)next.mixer=original;else next=native;auto &graph=next.mixer;uint64_t affected=0;
+    if(method!="mixer.enable"&&method!="mixer.inserts.detach"&&!preview)next.ensureMixer();
     auto findBus=[&](const Json &raw)->MixerBus &{const auto wanted=identity(raw);auto found=std::find_if(graph.buses.begin(),graph.buses.end(),[&](const auto &b){return b.id==wanted;});need(found!=graph.buses.end(),"Mixer bus does not exist");return *found;};
     auto master=[&]{auto found=std::find_if(graph.buses.begin(),graph.buses.end(),[](const auto &b){return b.kind==MixerBusKind::Master;});need(found!=graph.buses.end(),"Enable the mixer first");return found->id;};
     auto pluginSlot=[&](const Json &raw){const auto wanted=text(raw,128);auto found=std::find_if(host_.plugins.begin(),host_.plugins.end(),[&](const auto &v){return v.instanceID==wanted;});need(found!=host_.plugins.end(),"Plugin instance does not exist");return size_t(found-host_.plugins.begin());};
     auto isInstrument=[&](size_t slot){const auto &d=host_.plugins.at(slot).descriptor;return d.instrument||d.type==audioUnitMusicDeviceType;};
     auto plugin=[&](const Json &raw,bool instrument){auto slot=pluginSlot(raw);need(isInstrument(slot)==instrument,instrument?"Select an instrument plugin":"Insert chains require effect plugins");return host_.plugins[slot].instanceID;};
     if(method=="mixer.enable") {
-      keys(p,{"enabled","dryRun"});if(flag(p,"enabled",true)&&!graph.active()){const auto output=allocate(next);for(const auto &[channel,t]:next.tracks)graph.buses.push_back({t.id,output,MixerBusKind::Track,t.name.empty()?"Track "+std::to_string(channel+1):t.name,t.color});graph.buses.push_back({output,0,MixerBusKind::Master,"Master"});}
-      else if(!flag(p,"enabled",true)){graph={};next.noteTracks.clear();next.signal.assignments.clear();next.signal.commands.clear();next.signal.lanes.clear();next.signal.inputs.clear();next.signal.outputs.clear();}
+      keys(p,{"enabled","dryRun"});if(flag(p,"enabled",true))next.ensureMixer();
+      else if(!flag(p,"enabled",true)){auto detached=std::move(graph.detached);graph={};graph.detached=std::move(detached);next.noteTracks.clear();next.signal.assignments.clear();next.signal.commands.clear();next.signal.lanes.clear();next.signal.inputs.clear();next.signal.outputs.clear();}
     } else if(method=="mixer.bus.add") {
-      keys(p,{"kind","name","output","dryRun"});const auto kind=text(field(p,"kind"),16);need(kind=="group"||kind=="return","Add a group or a return; track buses follow song tracks");const auto output=p.contains("output")?identity(p.at("output")):master();affected=allocate(next);graph.buses.push_back({affected,output,kind=="group"?MixerBusKind::Group:MixerBusKind::Return,text(p.value("name",Json(kind=="group"?"Group":"Return")),256)});
+      keys(p,{"kind","name","output","sendFrom","position","dryRun"});const auto kind=text(field(p,"kind"),16);need(kind=="group"||kind=="return","Add a group or a return; track buses follow song tracks");const auto output=p.contains("output")?identity(p.at("output")):master();affected=allocate(next);graph.buses.push_back({affected,output,kind=="group"?MixerBusKind::Group:MixerBusKind::Return,text(p.value("name",Json(kind=="group"?"Group":"Return")),256)});
+      if(p.contains("sendFrom")){need(kind=="return","An automatic send requires a return bus");auto &source=findBus(p.at("sendFrom"));need(source.kind!=MixerBusKind::Master,"Master cannot send upstream");source.sends.push_back({affected,-96,false,false});}
+      if(p.contains("position")){const auto &position=p.at("position");keys(position,{"x","y"});next.signal.layout[id(affected)]={number(field(position,"x"),0,100000),number(field(position,"y"),0,100000)};}
     } else if(method=="mixer.bus.set") {
       keys(p,{"bus","name","color","output","preGainDB","prePan","gainDB","pan","width","timingMS","mute","solo","inserts","dryRun","preview"});auto &bus=findBus(field(p,"bus"));affected=bus.id;
       if(p.contains("name"))bus.name=text(p.at("name"),256);if(p.contains("color"))bus.color=uint32_t(integer(p.at("color"),0,0xffffff));if(p.contains("output"))bus.output=p.at("output").is_null()?0:identity(p.at("output"));
       if(p.contains("preGainDB"))bus.preGainDB=number(p.at("preGainDB"),-96,24);if(p.contains("prePan"))bus.prePan=number(p.at("prePan"),-1,1);if(p.contains("gainDB"))bus.gainDB=number(p.at("gainDB"),-96,24);if(p.contains("pan"))bus.pan=number(p.at("pan"),-1,1);if(p.contains("width"))bus.width=number(p.at("width"),0,2);if(p.contains("timingMS"))bus.timingMS=number(p.at("timingMS"),-500,500);if(p.contains("mute"))bus.mute=flag(p,"mute");if(p.contains("solo"))bus.solo=flag(p,"solo");
-      if(p.contains("inserts")){bus.inserts.clear();for(const auto &v:array(p.at("inserts"),32))bus.inserts.push_back(plugin(v,false));}
-    } else if(method=="mixer.inserts.move") {
-      keys(p,{"plugins","target","before","positions","dryRun"});std::vector<std::string> rack,moving;
+      if(p.contains("inserts")){bus.inserts.clear();for(const auto &v:array(p.at("inserts"),32)){auto id=plugin(v,false);bus.inserts.push_back(id);std::erase(graph.detached,id);}}
+    } else if(method=="mixer.inserts.move"||method=="mixer.inserts.detach") {
+      const bool detach=method=="mixer.inserts.detach";
+      if(detach)keys(p,{"plugins","positions","dryRun"});else keys(p,{"plugins","target","before","positions","dryRun"});std::vector<std::string> rack,moving;
       for(size_t i=0;i<host_.plugins.size();++i)if(!isInstrument(i))rack.push_back(host_.plugins[i].instanceID);
       for(const auto &v:array(field(p,"plugins"),32))moving.push_back(plugin(v,false));
-      affected=findBus(field(p,"target")).id;
-      moveMixerInserts(graph,rack,moving,affected,p.contains("before")&&!p.at("before").is_null()?text(p.at("before"),128):"");
-      for(const auto &v:array(p.value("positions",Json::array()),32)){keys(v,{"node","x","y"});auto key=text(field(v,"node"),256);need(std::any_of(moving.begin(),moving.end(),[&](const auto &id){return key=="plugin:"+id;}),"Position must belong to a moved insert");next.signal.layout[key]={number(field(v,"x"),0,100000),number(field(v,"y"),0,100000)};}
+      need(!detach||moving.size()==1,"Detach one rack effect at a time; loose chains are not supported yet");
+      if(detach){if(std::find(graph.detached.begin(),graph.detached.end(),moving.front())==graph.detached.end())next.ensureMixer();detachMixerInsert(graph,rack,moving.front());}
+      else {affected=findBus(field(p,"target")).id;moveMixerInserts(graph,rack,moving,affected,p.contains("before")&&!p.at("before").is_null()?text(p.at("before"),128):"");}
+      const auto positions=p.value("positions",Json::array());
+      for(const auto &v:array(positions,detach?1:32)){keys(v,{"node","x","y"});auto key=text(field(v,"node"),256);need(std::any_of(moving.begin(),moving.end(),[&](const auto &id){return key=="plugin:"+id;}),"Position must belong to a moved insert");next.signal.layout[key]={number(field(v,"x"),0,100000),number(field(v,"y"),0,100000)};}
     } else if(method=="mixer.bus.remove") {
       keys(p,{"bus","dryRun"});const auto bus=findBus(field(p,"bus"));affected=bus.id;need(bus.kind==MixerBusKind::Group||bus.kind==MixerBusKind::Return,"Only groups and returns can be removed");
       std::erase_if(next.noteTracks,[&](const auto &v){return v.bus==affected;});std::erase_if(next.signal.assignments,[&](const auto &v){return v.target==affected;});std::erase_if(next.signal.commands,[&](const auto &v){return v.target==affected;});next.signal.lanes.erase(affected);
@@ -88,7 +96,7 @@ Json MixerOperations::invoke(const std::string &method,const Json &p) {
     if(!dry&&(different||preview||(method=="mixer.bus.set"&&graph.active()))) {
       std::vector<MixerControls> controls;if(controlsOnly&&graph.active())for(size_t i=0;i<graph.buses.size();++i){const auto &b=graph.buses[i];controls.push_back({b.preGainDB,b.gainDB,b.pan,b.width,plan.nodes[i].audible,b.prePan});}
       const bool active=graph.active();
-      auto publish=[&]{if(controlsOnly&&active){if(host_.controls&&!host_.controls(controls))throw Api::ApiError(-32002,"Mixer control queue is busy; retry the same revision");need(bool(host_.controls)||!feedback.playing,"Active mixer needs a real live control hook");}else if(stop_)stop_();};
+      auto publish=[&]{if(controlsOnly&&active){if(host_.controls&&!host_.controls(controls))throw Api::ApiError(-32002,"Mixer control queue is busy; retry the same revision");need(bool(host_.controls)||!feedback.playing,"Active mixer needs a real live control hook");}else if(!controlsOnly&&stop_)stop_();};
       if(preview||!different)publish();else document_.annotate([&](NativeSong &n){n=std::move(next);},publish);
     }
     return result;

@@ -96,6 +96,7 @@ extension SignalGraphEditor {
     for group in processingGroups {
       guard let id=group["id"] as? String,parent(id)==processingGroupID else{continue}
       let contents=members[id] ?? []
+      if graphID==nil,filterID != nil,contents.isEmpty{continue}
       var card=SignalCanvasNode(id:id,title:group["name"] as? String ?? "Group",detail:"Processing group · \(contents.count) nodes",kind:"group",x:group["x"] as? Double ?? 0,y:group["y"] as? Double ?? 0,inputs:[],outputs:[])
       for node in contents {for output in [false,true] {for port in output ? node.outputs:node.inputs {
         // Connected internal-only sockets stay inside. Free and external

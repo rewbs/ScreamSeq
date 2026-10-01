@@ -42,6 +42,9 @@ struct MixerGraph {
   std::vector<MixerBus> buses;
   std::vector<MixerInstrumentOutput> instruments;
   std::vector<MixerSidechain> sidechains;
+  // Explicitly unconnected effect instances. Other unowned rack effects keep
+  // their normal Master fallback. Detached processors remain clocked on silence.
+  std::vector<std::string> detached;
   // An empty graph uses the legacy, reference-qualified master-rack path.
   bool active() const { return !buses.empty(); }
   bool operator==(const MixerGraph &) const = default;
@@ -60,13 +63,15 @@ struct MixerProcessorInfo {
   bool instrument = false, bypass = false;
   uint32_t outputBuses = 1;
   uint64_t activeOutputs = UINT64_MAX;
-  uint64_t activeInputs = 0; // Auxiliary input bits only; main input belongs to the insert chain.
+  uint64_t activeInputs = 0; // Prepared auxiliary capacity; main input belongs to the insert chain.
+  uint64_t mainInputFallback = 0; // Missing detector input uses this processor's main input (native dynamics only).
 };
 struct MixerConnection {
   size_t source = 0, target = 0;
   bool preFader = false;
   double gain = 1;
   uint32_t delay = 0;
+  bool send = false; // Observation identity; main output and send may share endpoints.
 };
 struct MixerNodePlan {
   size_t bus = 0;
@@ -90,6 +95,7 @@ struct MixerSidechainPlan {
 struct MixerPlan {
   std::vector<MixerNodePlan> nodes; // Indexed by bus, evaluated in order.
   std::vector<size_t> order;
+  std::vector<size_t> detached; // Effects clocked on silence, with no audible output.
   std::vector<MixerConnection> connections;
   std::vector<MixerInstrumentPlan> instruments;
   std::vector<MixerSidechainPlan> sidechains;
@@ -102,6 +108,11 @@ struct MixerPlan {
 void moveMixerInserts(MixerGraph &, const std::vector<std::string> &effectRack,
                       const std::vector<std::string> &plugins, uint64_t target,
                       const std::string &before = {});
+// Pull one effect out of its implicit serial main path, healing that path.
+// Explicit auxiliary routes are ambiguous and must be disconnected first.
+// No processor/state/binding is removed; the detached effect clocks silence.
+void detachMixerInsert(MixerGraph &, const std::vector<std::string> &effectRack,
+                       const std::string &plugin);
 MixerPlan compileMixer(const MixerGraph &, const std::vector<uint64_t> &tracks,
                        const std::vector<MixerProcessorInfo> &, uint32_t sampleRate);
 // Control-thread dependency comparison for a prepared live transition. Each

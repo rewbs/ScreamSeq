@@ -12,10 +12,10 @@
 #include <vector>
 
 namespace Tracker {
-struct SignalScopeSample {uint64_t generation=0,frame=0;float left=0,right=0;};
+struct SignalScopeSample {uint64_t generation=0,routeGeneration=0,frame=0;float left=0,right=0;};
 struct SignalScopeBucket {uint64_t first=0,last=0;float minimum[2]{},maximum[2]{};};
 struct SignalScopeSnapshot {
-  uint64_t generation=0,dropped=0,invalid=0,through=0;
+  uint64_t generation=0,routeGeneration=0,dropped=0,invalid=0,through=0;
   uint32_t token=0,frames=0,fftFrames=0;
   std::vector<SignalScopeBucket> waveform;
   std::vector<float> spectrum; // Linear peak amplitude, max of L/R. Bin n = n*rate/fftFrames.
@@ -30,7 +30,7 @@ class SignalScope {
   std::unique_ptr<std::array<SignalScopeSample,capacity>> queue_=std::make_unique<std::array<SignalScopeSample,capacity>>();
   alignas(64) std::atomic<uint32_t> written_{0};
   alignas(64) std::atomic<uint32_t> read_{0};
-  std::atomic<uint64_t> selection_{0},dropped_{0},invalid_{0};
+  std::atomic<uint64_t> selection_{0},routeGeneration_{0},dropped_{0},invalid_{0};
   uint64_t requested_=0;
   std::deque<SignalScopeSample> history_;
   static std::vector<float> spectrum(const std::deque<SignalScopeSample> &samples,uint32_t &size) {
@@ -73,13 +73,14 @@ public:
     history_.clear();selection_.store(requested_,std::memory_order_release);
   }
   uint32_t token() const {return uint32_t(requested_);}
+  void route(uint64_t generation) noexcept {routeGeneration_.store(generation,std::memory_order_release);}
   void capture(uint32_t token,const float *samples,uint32_t frames,uint64_t position) noexcept {
-    const auto selection=selection_.load(std::memory_order_acquire);
+    const auto selection=selection_.load(std::memory_order_acquire),route=routeGeneration_.load(std::memory_order_relaxed);
     if(!token || uint32_t(selection)!=token || !frames || frames>4096 || position>UINT64_MAX-frames)return;
     const auto w=written_.load(std::memory_order_relaxed),r=read_.load(std::memory_order_acquire);
     const auto count=std::min(frames,capacity-(w-r));uint64_t invalid=0;
     for(uint32_t i=0;i<count;++i) {
-      auto &sample=(*queue_)[(w+i)%capacity];sample.generation=selection>>32;sample.frame=position+i;
+      auto &sample=(*queue_)[(w+i)%capacity];sample.generation=selection>>32;sample.routeGeneration=route;sample.frame=position+i;
       sample.left=samples?samples[2*i]:0;sample.right=samples?samples[2*i+1]:0;
       if(!std::isfinite(sample.left)){sample.left=0;++invalid;}
       if(!std::isfinite(sample.right)){sample.right=0;++invalid;}
@@ -89,10 +90,11 @@ public:
     if(invalid)invalid_.fetch_add(invalid,std::memory_order_relaxed);
   }
   SignalScopeSnapshot snapshot(bool includeSpectrum=false) { // Single control reader.
-    SignalScopeSnapshot result;result.token=token();result.generation=requested_>>32;
+    SignalScopeSnapshot result;result.token=token();result.generation=requested_>>32;result.routeGeneration=routeGeneration_.load(std::memory_order_acquire);
+    if(!history_.empty() && history_.back().routeGeneration!=result.routeGeneration)history_.clear();
     const auto r=read_.load(std::memory_order_relaxed),w=written_.load(std::memory_order_acquire);
     for(auto index=r;index!=w;++index) {
-      const auto &sample=(*queue_)[index%capacity];if(sample.generation!=result.generation)continue;
+      const auto &sample=(*queue_)[index%capacity];if(sample.generation!=result.generation || sample.routeGeneration!=result.routeGeneration)continue;
       // Never draw a waveform or FFT across a dropped block or a clock reset.
       if(!history_.empty() && sample.frame!=history_.back().frame+1)history_.clear();
       history_.push_back(sample);if(history_.size()>historyLimit)history_.pop_front();

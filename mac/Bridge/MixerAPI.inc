@@ -5,7 +5,7 @@
       const auto &native = _document->native();
       NativeSong implicit;
       const bool showImplicit = p[@"includeImplicit"] && boolean(p[@"includeImplicit"]) && !native.mixer.active();
-      if (showImplicit) { implicit.tracks = native.tracks; implicit.nextID = native.nextID; implicit.ensureMixer(); }
+      if (showImplicit) { implicit.tracks = native.tracks; implicit.nextID = native.nextID; implicit.masterID = native.masterID; implicit.mixer=native.mixer; implicit.ensureMixer(); }
       NSMutableDictionary *data = [encodeMixer(showImplicit ? implicit.mixer : native.mixer) mutableCopy];
       data[@"active"] = @(native.mixer.active());
       data[@"implicit"] = @(showImplicit);
@@ -31,7 +31,7 @@
       else candidate = _document->native();
       auto &graph = candidate.mixer;
       const auto &original = _document->native().mixer;
-      if (![method isEqual:@"mixer.enable"] && !preview) candidate.ensureMixer();
+      if (![method isEqual:@"mixer.enable"] && ![method isEqual:@"mixer.inserts.detach"] && !preview) candidate.ensureMixer();
       auto findBus = [&](id identifier) -> MixerBus & {
         auto id = decodeNativeID(identifier);
         auto found = std::find_if(graph.buses.begin(), graph.buses.end(), [&](const auto &bus) { return bus.id == id; });
@@ -54,7 +54,7 @@
         allowed(@[@"enabled", @"dryRun"]);
         bool enabled = p[@"enabled"] ? boolean(p[@"enabled"]) : true;
         if (enabled) candidate.ensureMixer();
-        else { graph = {}; candidate.noteTracks.clear(); candidate.signal.assignments.clear(); candidate.signal.commands.clear(); candidate.signal.lanes.clear();candidate.signal.inputs.clear();candidate.signal.outputs.clear(); }
+        else { auto detached=std::move(graph.detached); graph = {}; graph.detached=std::move(detached); candidate.noteTracks.clear(); candidate.signal.assignments.clear(); candidate.signal.commands.clear(); candidate.signal.lanes.clear();candidate.signal.inputs.clear();candidate.signal.outputs.clear(); }
       } else if ([method isEqual:@"mixer.bus.add"]) {
         allowed(@[@"kind", @"name", @"output", @"sendFrom", @"position", @"dryRun"]);
         const auto kind = decodeMixerKind(p[@"kind"]);
@@ -80,18 +80,21 @@
         if (p[@"solo"]) bus.solo = boolean(p[@"solo"]);
         if (p[@"inserts"]) {
           bus.inserts.clear();
-          for (id insert in array(p[@"inserts"], 32)) bus.inserts.push_back(plugin(insert, false));
+          for (id insert in array(p[@"inserts"], 32)) {auto id=plugin(insert,false);bus.inserts.push_back(id);std::erase(graph.detached,id);}
         }
-      } else if ([method isEqual:@"mixer.inserts.move"]) {
-        allowed(@[@"plugins", @"target", @"before", @"positions", @"dryRun"]);
+      } else if ([method isEqual:@"mixer.inserts.move"] || [method isEqual:@"mixer.inserts.detach"]) {
+        const bool detach=[method isEqual:@"mixer.inserts.detach"];
+        allowed(detach ? @[@"plugins",@"positions",@"dryRun"] : @[@"plugins", @"target", @"before", @"positions", @"dryRun"]);
         std::vector<std::string> rack, moving;
         for(const auto &item : _plugins) if(!item.descriptor.instrument && item.descriptor.type != kAudioUnitType_MusicDevice) rack.push_back(item.instanceID);
         for(id raw : array(p[@"plugins"],32)) moving.push_back(plugin(raw,false));
-        affected = findBus(p[@"target"]).id;
+        require(!detach || moving.size()==1,"Detach one rack effect at a time; loose chains are not supported yet");
+        if(detach && std::find(graph.detached.begin(),graph.detached.end(),moving.front())==graph.detached.end())candidate.ensureMixer();
+        if(!detach)affected = findBus(p[@"target"]).id;
         const std::string before = p[@"before"] && p[@"before"] != NSNull.null ? string(p[@"before"],128).UTF8String : "";
-        try { moveMixerInserts(graph,rack,moving,affected,before); }
+        try { if(detach)detachMixerInsert(graph,rack,moving.front());else moveMixerInserts(graph,rack,moving,affected,before); }
         catch(const std::invalid_argument &e) { throw Error(-32602,e.what()); }
-        for(id raw:array(p[@"positions"]?:@[],32)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);const std::string key=string(v[@"node"],256).UTF8String;require(std::any_of(moving.begin(),moving.end(),[&](const auto &id){return key=="plugin:"+id;}),"Position must belong to a moved insert");candidate.signal.layout[key]={number(v[@"x"],0,100000),number(v[@"y"],0,100000)};}
+        for(id raw:array(p[@"positions"]?:@[],detach?1:32)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);const std::string key=string(v[@"node"],256).UTF8String;require(std::any_of(moving.begin(),moving.end(),[&](const auto &id){return key=="plugin:"+id;}),"Position must belong to a moved insert");candidate.signal.layout[key]={number(v[@"x"],0,100000),number(v[@"y"],0,100000)};}
 
       } else if ([method isEqual:@"mixer.bus.remove"]) {
         allowed(@[@"bus", @"dryRun"]);
@@ -199,16 +202,14 @@
             const auto &bus = graph.buses[i]; controls.push_back({bus.preGainDB, bus.gainDB, bus.pan, bus.width, plan.nodes[i].audible, bus.prePan});
           }
           if (!_audio->mixerControls(controls)) throw Error(-32002, "Mixer control queue is busy; retry the same revision");
-        } else {
+        } else if(!controlsOnly) {
           if(!_audio->mixerRoutingReady())throw Error(-32002,"Routing transition is busy; retry the same revision");
           routing=_audio->prepareMixerRouting(candidate);
-          if(!routing)_audio->stop();
+          if(!routing && _audio->active())throw Error(-32002,"This routing change needs a stopped transport; playback and routing were preserved");
         }
-        if (!preview) _document->annotate([&](NativeSong &n) { n = candidate; });
-        // Preparation is complete before the Undo/model transaction; publication
-        // cannot allocate. With this sole document producer no newer plan can
-        // supersede the validated source between prepare and publish.
-        if(routing && !_audio->publishMixerRouting(routing))_audio->stop();
+        auto publish=[&]{if(routing && !_audio->publishMixerRouting(routing))throw Error(-32002,"Routing publication was refused; retry the same revision");};
+        if (!preview) _document->annotate([&](NativeSong &n) { n = candidate; },publish);
+        else publish();
       }
       result = @{@"mixer": encodeMixer(graph), @"wouldChange": @(different), @"preview": @(preview),
         @"bus": affected ? (id)nativeID(affected) : (id)NSNull.null, @"controlsOnly": @(controlsOnly)};

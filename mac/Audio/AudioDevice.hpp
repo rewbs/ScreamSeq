@@ -49,6 +49,13 @@ public:
   void setPlugins(const std::vector<PluginState> &states, const std::vector<ParameterChange> &automation = {},
                   bool preserveEditors = false);
   std::vector<PluginState> pluginStates();
+  struct LiveRackPlan {
+    std::unique_ptr<PluginChain::RackPlan> hosted;
+    std::vector<PluginState> states;
+    std::vector<ParameterChange> automation;
+  };
+  std::unique_ptr<LiveRackPlan> prepareLiveRack(const std::vector<PluginState> &,const std::vector<ParameterChange> &,const NativeSong &);
+  bool publishLiveRack(std::unique_ptr<LiveRackPlan> &) noexcept;
   bool hasAutomatedState() const {return plugins_&&plugins_->hasAutomatedState();}
   std::vector<PluginProgram> pluginPrograms(size_t slot) const { return plugins_ ? plugins_->programs(slot) : std::vector<PluginProgram>{}; }
   std::vector<PluginAudioBus> pluginBuses(size_t slot) const { return plugins_ ? plugins_->buses(slot) : std::vector<PluginAudioBus>{}; }
@@ -91,9 +98,7 @@ public:
   bool mixerControls(const std::vector<MixerControls> &controls) { return !active() || (plugins_ && plugins_->mixerControls(controls)); }
   bool mixerRoutingReady() {return !active() || !plugins_ || plugins_->mixerRoutingReady();}
   MixerTransition::Reading mixerRoutingReading() const noexcept {return plugins_?plugins_->mixerRoutingReading():MixerTransition::Reading{};}
-  std::unique_ptr<MixerTransition::Plan> prepareMixerRouting(const NativeSong &native) {
-    return active() && plugins_?plugins_->prepareMixerRouting(native):nullptr;
-  }
+  std::unique_ptr<MixerTransition::Plan> prepareMixerRouting(const NativeSong &native);
   std::unique_ptr<GraphControlPlan> prepareGraphControls(const NativeSong &native) {return active()&&plugins_?plugins_->prepareGraphControls(native):nullptr;}
   bool publishGraphControls(std::unique_ptr<GraphControlPlan> plan) {return plugins_&&plugins_->publishGraphControls(std::move(plan));}
   bool publishMixerRouting(std::unique_ptr<MixerTransition::Plan> &plan) noexcept {return plugins_ && plugins_->publishMixerRouting(plan);}

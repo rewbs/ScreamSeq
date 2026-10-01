@@ -48,6 +48,34 @@ extension InterfaceTests {
     host.makeFirstResponder(nil)
     try require(requests.last?.0=="automation.recorded.edit" && requests.last?.1["frame"] as? Int==48000 && requests.last?.1["value"] as? Double == -30,"Committing an inline recorded value preserves its time and edits the exact parameter")
     answer([:]);answer(["points":[["frame":48000,"value":-30]],"total":1])
+    // Song-level contributors use stable source IDs, not recipe edge indices.
+    editor.detailMode.selectedSegment=0
+    editor.loadSources();answer(["sources":[
+      ["kind":"graph-source","scope":"song","id":"n0","title":"Unmodulated base","enabled":true,"graph":NSNull()],
+      ["kind":"graph-source","scope":"song","id":"n501","node":"n501","title":"Slow LFO","enabled":true,"graph":NSNull()],
+      ["kind":"graph-source","scope":"song","id":"n502","node":"n502","title":"Disabled LFO","enabled":false,"graph":NSNull()]
+    ]])
+    editor.table.selectRowIndexes(IndexSet(integer:1),byExtendingSelection:false)
+    editor.openSelectedMapping()
+    try require(link?["node"] as? String=="n501" && link?["plugin"] as? String=="b" && link?["parameter"] as? Int==71 && link?["editConnection"] as? Bool==true,"Song mapping link retains stable source, plugin and parameter")
+    let contribution=ParameterTraceSample(["value":0.3,"source":["kind":"graph-source","id":"n501"]])!
+    let contributionLink=editor.link(contribution)
+    try require(contributionLink["node"] as? String=="n501" && contributionLink["scope"] as? String=="song","Trace contribution resolves its source rather than the receiving processor")
+    let aggregate=editor.link(ParameterTraceSample(["value":1,"source":["kind":"graph","id":"n0"]])!)
+    try require(aggregate["scope"] as? String=="song" && aggregate["node"]==nil && aggregate["plugin"] as? String=="b","Final song value opens the target and all contributors")
+    try require(editor.unclampedModulationValue==nil,"An incomplete contribution snapshot cannot invent a clamp total")
+    RunLoop.current.run(until:Date().addingTimeInterval(0.12));editor.poll()
+    answer(["target":["key":"rack/b"],"parameter":71,"token":"1:2","cursor":1005,"points":[
+      ["sequence":1001,"value":0.8,"source":["kind":"graph-source","id":"n0"]],
+      ["sequence":1002,"value":0.3,"source":["kind":"graph-source","id":"n501"]],
+      ["sequence":1003,"value":0.9,"source":["kind":"graph-source","id":"n502"]],
+      ["sequence":1004,"value":0.9,"source":["kind":"graph-source","id":"n999"]],
+      ["sequence":1005,"value":1.0,"source":["kind":"graph","id":"n0"]]
+    ]])
+    try require(abs((editor.unclampedModulationValue ?? 0)-1.1)<0.00001,"Clamp accounting includes the base and only currently enabled contributions")
+    try require(editor.tableView(editor.table,objectValueFor:editor.table.tableColumns[1],row:2) as? String=="Inactive","Disabled sources never display an old active contribution")
+    editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false);link=nil;editor.openSelectedMapping()
+    try require(link==nil && editor.status.stringValue.contains("contribution"),"The base has no modulation cable to edit")
     print("PASS parameter activity UI: stable target selection, source links, retired replies and trace zoom")
   }
 }

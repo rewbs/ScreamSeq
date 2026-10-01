@@ -1,0 +1,15 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-sanitized
+    Start 55: native-mixer
+1/5 Test #55: native-mixer .....................   Passed   45.34 sec
+    Start 62: plugin-latency
+2/5 Test #62: plugin-latency ...................   Passed    3.98 sec
+    Start 72: signal-graph
+3/5 Test #72: signal-graph .....................   Passed    0.64 sec
+    Start 74: native-signal-graph
+4/5 Test #74: native-signal-graph ..............   Passed    3.23 sec
+    Start 83: parameter-activity
+5/5 Test #83: parameter-activity ...............   Passed    1.89 sec
+
+100% tests passed, 0 tests failed out of 5
+
+Total Test time (real) =  57.21 sec

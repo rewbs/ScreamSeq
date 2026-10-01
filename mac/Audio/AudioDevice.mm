@@ -156,6 +156,10 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
     pluginStates_ = plugins_->states();
   if (!unit_)
     configure();
+  // Prepare the implicit mixer too, so the first live insert has existing
+  // channel adapters and never requires rebuilding held instrument sources.
+  std::optional<NativeSong> implicit;
+  if(native&&!native->mixer.active()&&!isolatedSample){implicit=*native;implicit->ensureMixer();native=&*implicit;}
   renderer_ = std::make_unique<Renderer>(bytes, uint32_t(sampleRate_), order, preview, sourcePath, sequence, region, native);
   if (native && !preview) {renderer_->applyColumnMutes(*native, renderer_->song());renderer_->preparePreciseNotes(*native);}
   previewing_ = preview;
@@ -208,6 +212,19 @@ void AudioDevice::setPlugins(const std::vector<PluginState> &states, const std::
   restoreParameterActivity();
   pluginStates_ = states;
   automation_ = automation;
+}
+std::unique_ptr<AudioDevice::LiveRackPlan> AudioDevice::prepareLiveRack(const std::vector<PluginState> &states,const std::vector<ParameterChange> &automation,const NativeSong &native) {
+  if(!active()||!plugins_)throw std::runtime_error("Live rack processing is unavailable");
+  auto plan=std::make_unique<LiveRackPlan>();plan->states=states;plan->automation=automation;
+  auto prepared=native;prepared.ensureMixer();plan->hosted=plugins_->prepareRack(states,prepared);return plan;
+}
+bool AudioDevice::publishLiveRack(std::unique_ptr<LiveRackPlan> &plan) noexcept {
+  if(!plan||!plugins_||!plugins_->publishRack(plan->hosted))return false;
+  pluginStates_.swap(plan->states);automation_.swap(plan->automation);return true;
+}
+std::unique_ptr<MixerTransition::Plan> AudioDevice::prepareMixerRouting(const NativeSong &native) {
+  if(!active() || !plugins_)return nullptr;
+  auto prepared=native;prepared.ensureMixer();return plugins_->prepareMixerRouting(prepared);
 }
 std::vector<PluginState> AudioDevice::pluginStates() {
   stop();

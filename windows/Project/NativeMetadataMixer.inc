@@ -8,10 +8,11 @@ Json mixer(const MixerGraph &g) {
   }
   for (const auto &r : g.instruments) instruments.push_back({{"plugin",r.plugin},{"target",r.target ? nativeID(r.target) : ""},{"output",r.output}});
   for (const auto &r : g.sidechains) sidechains.push_back({{"source",nativeID(r.source)},{"plugin",r.plugin},{"input",r.input},{"gainDB",r.gainDB},{"preFader",r.preFader},{"enabled",r.enabled}});
-  return {{"buses",buses},{"instruments",instruments},{"sidechains",sidechains}};
+  return {{"buses",buses},{"instruments",instruments},{"sidechains",sidechains},{"detached",g.detached}};
 }
 MixerGraph decodeMixer(const Json &v, unsigned version) {
   MixerGraph g;
+  if(v.contains("detached"))for(const auto &plugin:items(v,"detached",240))g.detached.push_back(text(plugin,128));
   for (const auto &b : items(v,"buses",240)) {
     MixerBus bus; bus.id = decodeID(field(b,"id")); bus.kind = MixerBusKind(enumIndex(field(b,"kind"),MIXER_NAMES));
     bus.name = text(field(b,"name"),256); bus.color = u32(b,"color",0,0xffffff);

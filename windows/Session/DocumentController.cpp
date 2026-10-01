@@ -231,7 +231,7 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     {"channels",next->channels},{"effectColumns",next->effectColumns},{"orders",orders},{"patterns",patterns},{"samples",samples},{"instruments",instruments},{"nativePlugins",plugins},{"editable",document.editable()},
     {"sequence",song.Order.GetCurrentSequenceIndex()},{"sequences",sequences},{"tempo",song.Order().GetDefaultTempo().ToDouble()},{"speed",song.Order().GetDefaultSpeed()},
     {"nativeSummary",{{"preciseNotes",native.preciseNotes.size()},{"signalDefinitions",native.signal.library.size()},{"envelopeTemplates",native.envelopeBank.size()}}},
-    {"canUndo",document.canUndo()},{"canRedo",document.canRedo()},{"canUndoPlugins",same&&plugins_&&plugins_->canUndo()},{"canRedoPlugins",same&&plugins_&&plugins_->canRedo()},{"openPluginEditors",same&&plugins_?plugins_->openEditorCount():0},{"issues",project.issues}};
+    {"canUndo",same&&plugins_?plugins_->canUndo():document.canUndo()},{"canRedo",same&&plugins_?plugins_->canRedo():document.canRedo()},{"canUndoPlugins",same&&plugins_&&plugins_->canUndo()},{"canRedoPlugins",same&&plugins_&&plugins_->canRedo()},{"openPluginEditors",same&&plugins_?plugins_->openEditorCount():0},{"issues",project.issues}};
   {
     std::lock_guard lock(mutex_);
     bool changed=!view_ || view_->session.documentId!=result.documentId;
@@ -292,6 +292,7 @@ void DocumentController::preflightGrowth(const std::string &method,const Json &p
   }
   if(method=="order.edit") added=8192;
   if(method=="document.save") added=256*1024; // Maximum UTF-16 destination plus metadata.
+  if(method=="plugin.add") added=16384; // Bounded rack-view fields; opaque state is not copied into the view.
   if(method=="sample.pcm.set" || method=="sample.copyToNew") added=16384;
   if(method=="instrument.create") added=(size_t(document_->song().GetNumSamples())+1)*8192;
   if(added && (added>maxCacheBytes_ || current->cacheBytes>maxCacheBytes_-added))
@@ -393,10 +394,44 @@ Json DocumentController::operation(const std::string &method,Json params) {
       result={{"path",utf8(path)},{"format",ext==L".screamseq" ? "screamseq" : "resonance"},{"written",!dry},{"projectVersion",6}};
       if(auto warning=plugins_->takeEditorWarning();!warning.empty())result["pluginEditorWarning"]=std::move(warning);
     }
+  } else if(method=="history.undo"||method=="history.redo") {
+    keys(params,{"domain"});const auto domain=params.value("domain",Json("all"));
+    if(domain!="all"&&domain!="document"&&domain!="plugins")throw Api::ApiError(-32602,"History domain must be all, document or plugins; all use chronological history");
+    plugins_->history(method=="history.redo",[&](bool redo,bool alreadyStopped){
+      const auto &candidate=document_->historyNative(redo);validateGraphViewGrowth(candidate);
+      const auto feedback=playbackFeedback();
+      if(feedback.playing||feedback.audioActive)for(const auto &graph:document_->native().signal.library){
+        const auto nextGraph=std::find_if(candidate.signal.library.begin(),candidate.signal.library.end(),[&](const auto &g){return g.id==graph.id;});
+        if(nextGraph==candidate.signal.library.end())continue;
+        for(const auto &node:graph.nodes)if(node.kind==Tracker::SignalNodeKind::Plugin){
+          const auto nextNode=std::find_if(nextGraph->nodes.begin(),nextGraph->nodes.end(),[&](const auto &n){return n.id==node.id&&n.kind==Tracker::SignalNodeKind::Plugin;});
+          if(nextNode!=nextGraph->nodes.end()&&nextNode->plugin.bypass!=node.plugin.bypass)throw Api::ApiError(-32002,"Stop playback and preview notes to undo recipe bypass on Windows; playback has been preserved");
+        }
+      }
+      if(alreadyStopped){
+        // Grouped plugin history only contains annotate() metadata entries.
+        // No live cells or allocating JSON reply may follow native publication.
+        if(redo)document_->redo();else document_->undo();return;
+      }
+      Tracker::validatePluginCapacity(projectPluginStates(project_),candidate.mixer.buses.size());
+      DocumentOperations operations(*document_,[this]{onMain(stop_);},
+        [this](const auto &edits){for(const auto &e:edits)changedPatterns_.insert(e.pattern);onMain([this,edits]{edits_(edits);});});
+      operations.invoke(redo?"history.redo":"history.undo",{{"domain","document"}});
+    },[&](const Tracker::NativeSong &candidate){validateGraphViewGrowth(candidate);});
+    result=Json::object();
   } else if(pluginMethod) {
-    result=method.starts_with("graph.plugin.")?plugins_->invokeGraph(method,params,playbackFeedback().sampleRate):plugins_->invoke(method,params);
+    if(method.starts_with("graph.plugin.")){const auto feedback=playbackFeedback();result=plugins_->invokeGraph(method,params,feedback.sampleRate,feedback.playing||feedback.audioActive);}
+    else result=plugins_->invoke(method,params);
   } else if(std::find(graphMethods.begin(),graphMethods.end(),method)!=graphMethods.end()) {
     GraphHostHooks hooks;hooks.rack=[&]{return plugins_->graphRack();};hooks.cloneRackSlot=[&](uint32_t slot){return plugins_->cloneRackSlot(slot);};
+    hooks.parameters=[&](const std::string &identity){return plugins_->parameterMetadata(identity);};
+    hooks.recording=[&](const std::string &identity,uint32_t parameter){
+      Tracker::ParameterProvenanceRecording result;const auto &rack=project_.preserved.at("plugins");
+      const auto found=std::find_if(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==identity;});
+      if(found==rack.end())return result;const auto slot=size_t(found-rack.begin());
+      for(const auto &point:project_.preserved.at("automation"))if(point.at(0)==slot&&point.at(1)==parameter){const auto frame=point.at(3).get<uint64_t>();if(!result.count)result.firstFrame=frame;else result.firstFrame=std::min(result.firstFrame,frame);result.lastFrame=std::max(result.lastFrame,frame);++result.count;}
+      return result;
+    };
     hooks.activity=[&]{return playbackFeedback().activity;};hooks.validateCandidate=[&](const Tracker::NativeSong &next){validateGraphViewGrowth(next);Tracker::validatePluginCapacity(projectPluginStates(project_,false),next.mixer.buses.size());};
     GraphOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
   } else if(std::find(mixerMethods.begin(),mixerMethods.end(),method)!=mixerMethods.end()) {

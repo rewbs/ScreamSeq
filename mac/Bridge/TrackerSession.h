@@ -98,10 +98,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)trustPluginLocations:(NSArray<NSString *> *)canonicalPaths error:(NSError **)error;
 - (BOOL)addPlugin:(NSDictionary *)descriptor target:(nullable NSString *)target error:(NSError **)error;
 - (BOOL)addPlugin:(NSDictionary *)descriptor target:(nullable NSString *)target before:(nullable NSString *)before position:(nullable NSDictionary *)position error:(NSError **)error;
+- (BOOL)addPlugin:(NSDictionary *)descriptor target:(nullable NSString *)target before:(nullable NSString *)before position:(nullable NSDictionary *)position parent:(nullable NSString *)parent error:(NSError **)error;
+- (BOOL)addPlugin:(NSDictionary *)descriptor target:(nullable NSString *)target before:(nullable NSString *)before position:(nullable NSDictionary *)position parent:(nullable NSString *)parent detached:(BOOL)detached error:(NSError **)error;
 - (BOOL)assignPlugin:(NSInteger)slot instrument:(NSInteger)instrument error:(NSError **)error;
 - (BOOL)showPluginEditor:(NSInteger)slot error:(NSError **)error;
 - (NSInteger)collectPluginEdits:(BOOL)record error:(NSError **)error;
 - (BOOL)removePlugin:(NSInteger)slot error:(NSError **)error;
+- (BOOL)removePlugins:(NSArray<NSString *> *)identifiers error:(NSError **)error;
 - (BOOL)movePlugin:(NSInteger)slot direction:(NSInteger)direction error:(NSError **)error;
 - (BOOL)bypassPlugin:(NSInteger)slot bypass:(BOOL)bypass error:(NSError **)error;
 - (NSArray<NSDictionary *> *)pluginParameters:(NSInteger)slot;

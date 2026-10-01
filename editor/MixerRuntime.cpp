@@ -16,12 +16,13 @@ bool MixerRuntime::Delay::prepare(const float *interleaved,const float *left,con
   }
   return true;
 }
-bool MixerRuntime::Delay::add(const float *source,float *destination,uint32_t frames,uint64_t position,float gain) noexcept {
+bool MixerRuntime::Delay::add(const float *source,float *destination,uint32_t frames,uint64_t position,float gain,float *capture) noexcept {
   if(state_) {
     if(!prepare(source,nullptr,nullptr,frames,position))return false;
     source=state_->output.data();
   }
-  if(source)for(size_t i=0;i<size_t(frames)*2;++i)destination[i]+=source[i]*gain;
+  if(source)for(size_t i=0;i<size_t(frames)*2;++i){destination[i]+=source[i]*gain;if(capture)capture[i]=source[i]*gain;}
+  else if(capture)std::fill_n(capture,size_t(frames)*2,0.f);
   return true;
 }
 bool MixerRuntime::Delay::addPlanar(const float *left,const float *right,float *destination,uint32_t frames,uint64_t position) noexcept {
@@ -173,10 +174,12 @@ void MixerRuntime::begin(uint32_t frames, uint64_t position) noexcept {
   frames_ = frames; position_ = position; next_ = 0;
   started_ = true;
   pending();
-  for (auto &node : nodes_) std::fill_n(node->input.data(), frames * 2, 0);
+  for (auto &node : nodes_) { std::fill_n(node->input.data(), frames * 2, 0); node->stage=0; node->processor=0; }
+  processingBus_=SIZE_MAX;
   for (auto &aux : auxiliaries_) { if(aux.main)std::fill_n(aux.main->data(),frames*2,0); for (auto &buffer : aux.buffers) std::fill_n(buffer->data(), frames * 2, 0); }
 }
 std::span<const MixerAudioInput> MixerRuntime::inputs(size_t processor) const noexcept {
+  if(processor==overrideProcessor_)return overrideInputs_;
   for (const auto &aux : auxiliaries_) if (aux.processor == processor) return aux.inputs;
   return {};
 }
@@ -187,56 +190,71 @@ void MixerRuntime::instrument(size_t processor, uint32_t output, const float *bu
   for (size_t i = 0; i < plan_.instruments.size(); ++i) {
     const auto &source = plan_.instruments[i];
     if (source.processor == processor && source.output == output) {
-      if(source.owner==SIZE_MAX){if(next_){failed_=true;return;}if(!instruments_[i].add(buffer,nodes_[source.target]->input.data(),frames_,position_))failed_=true;}
+      if(source.owner==SIZE_MAX){if(next_){failed_=true;return;}if(!instruments_[i].add(buffer,nodes_[source.target]->input.data(),frames_,position_,1,routeObserver_?routeScratch_.data():nullptr))failed_=true;}
       else {
-        if(!next_||plan_.order[next_-1]!=source.owner){failed_=true;return;}
+        if(processingBus_!=source.owner){failed_=true;return;}
         const auto &owner=*nodes_[source.owner];
         for(uint32_t frame=0;frame<frames_;++frame){float audible=owner.target.audible;if(owner.ramp&&frame<owner.ramp){const float t=float(rampFrames_-owner.ramp+frame+1)/rampFrames_;audible=owner.rampStart.audible+(owner.target.audible-owner.rampStart.audible)*t;}for(int ch=0;ch<2;++ch)auxiliaryScratch_[frame*2+ch]=(buffer?buffer[frame*2+ch]:0)*audible;}
-        if(!instruments_[i].add(auxiliaryScratch_.data(),nodes_[source.target]->input.data(),frames_,position_))failed_=true;
+        if(!instruments_[i].add(auxiliaryScratch_.data(),nodes_[source.target]->input.data(),frames_,position_,1,routeObserver_?routeScratch_.data():nullptr))failed_=true;
       }
+      if(routeObserver_)routeObserver_(routeObserverContext_,RouteKind::Instrument,i,routeScratch_.data(),frames_,position_);
     }
   }
 }
-const float *MixerRuntime::process(size_t bus, const float *directLeft, const float *directRight,
-                                   Process callback, void *context) noexcept {
-  if (!frames_ || next_ >= plan_.order.size() || plan_.order[next_] != bus) { failed_ = true; return nullptr; }
-  ++next_;
-  auto &node = *nodes_[bus]; const auto &plan = plan_.nodes[bus];
-  if(!node.direct.addPlanar(directLeft,directRight,node.input.data(),frames_,position_)){failed_=true;return nullptr;}
+MixerRuntime::Values MixerRuntime::at(const Node &node,uint32_t sample) const noexcept {
+  if(!node.ramp || sample>=node.ramp)return node.target;
+  const float t=float(rampFrames_-node.ramp+sample+1)/rampFrames_;
+  auto interpolate=[t](float a,float b){return a+(b-a)*t;};
+  return {interpolate(node.rampStart.pre,node.target.pre),interpolate(node.rampStart.gain,node.target.gain),
+    interpolate(node.rampStart.pan,node.target.pan),interpolate(node.rampStart.width,node.target.width),
+    interpolate(node.rampStart.audible,node.target.audible),interpolate(node.rampStart.prePan,node.target.prePan)};
+}
+bool MixerRuntime::beginBus(size_t bus,const float *directLeft,const float *directRight) noexcept {
+  if(!frames_ || bus>=nodes_.size() || nodes_[bus]->stage){failed_=true;return false;}
+  auto &node=*nodes_[bus];node.stage=1;
+  if(!node.direct.addPlanar(directLeft,directRight,node.input.data(),frames_,position_)){failed_=true;return false;}
   if(observer_)observer_(observerContext_,bus,false,node.input.data(),frames_,position_);
-  auto at = [&](uint32_t sample) noexcept {
-    if (!node.ramp || sample >= node.ramp) return node.target;
-    // Evaluate from a fixed start and absolute ramp offset. Repeatedly
-    // interpolating from the last block's rounded value accumulates error
-    // with very short callbacks and makes the gesture depend on block size.
-    const float t = float(rampFrames_ - node.ramp + sample + 1) / rampFrames_;
-    auto interpolate = [t](float a, float b) { return a + (b - a) * t; };
-    return Values{interpolate(node.rampStart.pre, node.target.pre), interpolate(node.rampStart.gain, node.target.gain),
-                  interpolate(node.rampStart.pan, node.target.pan), interpolate(node.rampStart.width, node.target.width),
-                  interpolate(node.rampStart.audible, node.target.audible), interpolate(node.rampStart.prePan, node.target.prePan)};
-  };
-  for (uint32_t i = 0; i < frames_; ++i) {
-    auto v = at(i);
-    node.work[i * 2] = node.input[i * 2] * v.pre;
-    node.work[i * 2 + 1] = node.input[i * 2 + 1] * v.pre;
-    if (v.prePan != 0) {
-      node.work[i * 2] *= 1 - std::max(0.f, v.prePan);
-      node.work[i * 2 + 1] *= 1 + std::min(0.f, v.prePan);
-    }
+  for(uint32_t i=0;i<frames_;++i){
+    const auto v=at(node,i);
+    node.work[i*2]=node.input[i*2]*v.pre;
+    node.work[i*2+1]=node.input[i*2+1]*v.pre;
+    if(v.prePan!=0){node.work[i*2]*=1-std::max(0.f,v.prePan);node.work[i*2+1]*=1+std::min(0.f,v.prePan);}
   }
-  for (auto processor : plan.processors) {
-    // Extra main-input sources sum immediately before this processor. Auxiliary
-    // detector buses stay separate and retain their own latency compensation.
-    for(const auto &aux : auxiliaries_) if(aux.processor==processor && aux.main)
-      for(uint32_t i=0;i<frames_*2;++i) node.work[i] += (*aux.main)[i];
-    if (!callback || !callback(context, processor, node.work.data(), frames_, position_)) {
-      failed_ = true; std::fill_n(node.work.data(), frames_ * 2, 0); break;
-    }
-    instrument(processor, 0, node.work.data()); // Fan-out without processing twice.
+  return true;
+}
+float *MixerRuntime::processorInput(size_t bus,size_t processor) noexcept {
+  if(!frames_ || bus>=nodes_.size()){failed_=true;return nullptr;}
+  auto &node=*nodes_[bus];const auto &plan=plan_.nodes[bus];
+  if(node.stage!=1 || node.processor>=plan.processors.size() || plan.processors[node.processor]!=processor){failed_=true;return nullptr;}
+  processingBus_=bus;node.stage=2;
+  if(routeObserver_)routeObserver_(routeObserverContext_,RouteKind::Insert,processor,node.work.data(),frames_,position_);
+  for(const auto &aux:auxiliaries_)if(aux.processor==processor && aux.main)
+    for(uint32_t i=0;i<frames_*2;++i)node.work[i]+=(*aux.main)[i];
+  return node.work.data();
+}
+bool MixerRuntime::finishProcessor(size_t bus,size_t processor) noexcept {
+  if(bus>=nodes_.size() || nodes_[bus]->stage!=2 || processingBus_!=bus){failed_=true;return false;}
+  auto &node=*nodes_[bus];instrument(processor,0,node.work.data());++node.processor;node.stage=1;
+  return !failed_;
+}
+const float *MixerRuntime::process(size_t bus,const float *directLeft,const float *directRight,Process callback,void *context) noexcept {
+  if(!frames_ || next_>=plan_.order.size() || plan_.order[next_]!=bus || !beginBus(bus,directLeft,directRight)){failed_=true;return nullptr;}
+  for(auto processor:plan_.nodes[bus].processors){
+    auto *buffer=processorInput(bus,processor);
+    if(!buffer || !callback || !callback(context,processor,buffer,frames_,position_)){failed_=true;return nullptr;}
+    if(!finishProcessor(bus,processor))return nullptr;
   }
+  return finishBus(bus);
+}
+const float *MixerRuntime::finishBus(size_t bus) noexcept {
+  if(!frames_ || bus>=nodes_.size()){failed_=true;return nullptr;}
+  auto &node=*nodes_[bus];const auto &plan=plan_.nodes[bus];
+  if(node.stage!=1 || node.processor!=plan.processors.size()){failed_=true;return nullptr;}
+  node.stage=3;++next_;
+  if(routeObserver_ && bus==plan_.master)routeObserver_(routeObserverContext_,RouteKind::MasterInput,bus,node.work.data(),frames_,position_);
   float peakL = 0, peakR = 0;
   for (uint32_t i = 0; i < frames_; ++i) {
-    auto v = at(i);
+    auto v = at(node,i);
     float left = node.work[i * 2], right = node.work[i * 2 + 1];
     if (!std::isfinite(left) || !std::isfinite(right)) { failed_ = true; left = right = 0; }
     node.input[i * 2] = left * v.audible; node.input[i * 2 + 1] = right * v.audible;
@@ -248,14 +266,16 @@ const float *MixerRuntime::process(size_t bus, const float *directLeft, const fl
     node.work[i * 2] = left; node.work[i * 2 + 1] = right;
     peakL = std::max(peakL, std::abs(left)); peakR = std::max(peakR, std::abs(right));
   }
-  node.current = at(frames_ - 1); node.ramp = frames_ >= node.ramp ? 0 : node.ramp - frames_;
+  node.current = at(node,frames_ - 1); node.ramp = frames_ >= node.ramp ? 0 : node.ramp - frames_;
   for (auto index : plan.outputs) {
     const auto &edge = plan_.connections[index];
-    if(!edges_[index].add(edge.preFader?node.input.data():node.work.data(),nodes_[edge.target]->input.data(),frames_,position_,float(edge.gain)))failed_=true;
+    if(!edges_[index].add(edge.preFader?node.input.data():node.work.data(),nodes_[edge.target]->input.data(),frames_,position_,float(edge.gain),routeObserver_?routeScratch_.data():nullptr))failed_=true;
+    if(routeObserver_)routeObserver_(routeObserverContext_,RouteKind::Connection,index,routeScratch_.data(),frames_,position_);
   }
   for (auto index : plan.sidechains) {
     const auto &side = plan_.sidechains[index];
-    if(!sideDelays_[index].add(side.preFader?node.input.data():node.work.data(),sideTargets_[index],frames_,position_,float(side.gain)))failed_=true;
+    if(!sideDelays_[index].add(side.preFader?node.input.data():node.work.data(),sideTargets_[index],frames_,position_,float(side.gain),routeObserver_?routeScratch_.data():nullptr))failed_=true;
+    if(routeObserver_)routeObserver_(routeObserverContext_,RouteKind::Sidechain,index,routeScratch_.data(),frames_,position_);
   }
   const float decay = float(std::exp(-double(frames_) / (rate_ * .2)));
   if(observer_)observer_(observerContext_,bus,true,node.work.data(),frames_,position_);

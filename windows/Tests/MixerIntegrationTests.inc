@@ -41,6 +41,19 @@ void mixerIntegrationTests(const std::filesystem::path &directory) {
   need(call(c,"mixer.get",Json::object()).at("buses")==saved,"Group removal Undo lost sends/disconnection");
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
   need(call(c,"mixer.get",Json::object()).at("buses")==saved,"Reopen lost mixer routes");
+  const auto returnBefore=call(c,"graph.get",{{"includeState",false}});
+  const auto source=saved[0].at("id");
+  const Json addReturn={{"kind","return"},{"name","Quiet return"},{"sendFrom",source},{"position",{{"x",420},{"y",180}}}};
+  auto previewReturn=addReturn;previewReturn["dryRun"]=true;invoke(c,"mixer.bus.add",previewReturn);
+  need(call(c,"graph.get",{{"includeState",false}})==returnBefore,"Return preview changed send or placement");
+  const auto addedReturn=invoke(c,"mixer.bus.add",addReturn).at("bus");
+  const auto returnAfter=call(c,"graph.get",{{"includeState",false}});
+  const auto &send=returnAfter.at("mixer").at("buses")[0].at("sends").back();
+  need(send.at("target")==addedReturn&&send.at("gainDB")==-96&&send.at("enabled")==false,"New return send must start inaudible");
+  const auto &layout=returnAfter.at("layout");const auto placed=std::find_if(layout.begin(),layout.end(),[&](const auto &p){return p.at("node")==addedReturn;});
+  need(placed!=layout.end()&&placed->at("x")==420&&placed->at("y")==180,"Return placement was not saved");
+  invoke(c,"history.undo");need(call(c,"graph.get",{{"includeState",false}})==returnBefore,"Return, send and position need one Undo");
+  invoke(c,"history.redo");need(call(c,"graph.get",{{"includeState",false}})==returnAfter,"Return Redo lost route or placement");
   // Offline PCM: a detached track is silent; a unity send restores its exact
   // contribution. Compare fresh renderer instances at three device rates.
   DocumentController pcmController({},"mixer-pcm",[]{},[](const auto &){});

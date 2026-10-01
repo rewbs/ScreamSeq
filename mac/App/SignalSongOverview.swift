@@ -1,17 +1,29 @@
 import AppKit
 
 extension SignalGraphEditor {
+  // Names and duplicate disambiguation depend on document topology, not on the
+  // audio meter clock. Bridge the bus collection once per data replacement;
+  // repeated casts/filtering here used several milliseconds on every live poll.
+  func rebuildBusLabels() {
+    let all=buses
+    busNameCounts=Dictionary(all.map{($0["name"] as? String ?? "Bus",1)},uniquingKeysWith:+)
+    busLabels=Dictionary(all.compactMap{bus -> (String,String)? in
+      guard let id=bus["id"] as? String else{return nil}
+      return(id,busLabel(bus))
+    },uniquingKeysWith:{first,_ in first})
+  }
   func busLabel(_ bus:[String:Any])->String {
     let name=bus["name"] as? String ?? "Bus"
-    guard buses.filter({($0["name"] as? String ?? "Bus")==name}).count>1 else{return name}
+    guard (busNameCounts[name] ?? 0)>1 else{return name}
     return (bus["id"] as? String ?? "")+" · "+name
   }
   var rackPlugins:[[String:Any]]{data["plugins"] as? [[String:Any]] ?? []}
   func effectiveInserts(_ bus:[String:Any])->[String]{
     var inserts=bus["inserts"] as? [String] ?? []
-    if bus["kind"] as? String=="master"{let assigned=Set(buses.flatMap{$0["inserts"] as? [String] ?? []});inserts += rackPlugins.filter{$0["isInstrument"] as? Bool != true && !assigned.contains($0["id"] as? String ?? "")}.compactMap{$0["id"] as? String}}
+    if bus["kind"] as? String=="master"{let assigned=Set(buses.flatMap{$0["inserts"] as? [String] ?? []}).union(detachedEffects);inserts += rackPlugins.filter{$0["isInstrument"] as? Bool != true && !assigned.contains($0["id"] as? String ?? "")}.compactMap{$0["id"] as? String}}
     return inserts
   }
+  var detachedEffects:Set<String>{Set(mixer["detached"] as? [String] ?? [])}
   func buildSongOverview()->([SignalCanvasNode],[SignalCanvasEdge]){
     songNodeBus=[:];songNodeGraph=[:];songNodePlugin=[:];songConnections=[]
     // Filtered channel paths retain their own provisional layout. Cached default
@@ -19,28 +31,11 @@ extension SignalGraphEditor {
     // in a three-channel view. Saved, explicitly moved nodes remain authoritative.
     let layoutKey=filterID ?? "all"
     var provisionalPositions=provisionalLayouts[layoutKey] ?? [:]
+    let retainedPositions=Set(provisionalPositions.keys)
     var display=[SignalCanvasNode](),edges=[SignalCanvasEdge](),firstStage=[String:String](),lastStage=[String:String](),defaultRows=[String:Double]()
     let assignments=data["assignments"] as? [[String:Any]] ?? [],commands=data["commands"] as? [[String:Any]] ?? []
-    var visible=Set(buses.compactMap{$0["id"] as? String})
-    if let filterID {
-      // Follow output paths, then recursively include their audio dependencies.
-      // Do not pull in unrelated sibling tracks solely through the master.
-      visible=[filterID];var changed=true
-      while changed{let old=visible
-        for b in buses{guard let id=b["id"] as? String else{continue};if visible.contains(id){if let out=b["output"] as? String,!out.isEmpty{visible.insert(out)};for send in b["sends"] as? [[String:Any]] ?? []{if let target=send["target"] as? String{visible.insert(target)}}}}
-        for route in data["inputs"] as? [[String:Any]] ?? []{if let target=route["target"] as? String,visible.contains(target),let source=route["source"] as? String{visible.insert(source)}}
-        for route in data["outputs"] as? [[String:Any]] ?? []{if let source=route["source"] as? String,visible.contains(source),let target=route["target"] as? String{visible.insert(target)}}
-        for side in mixer["sidechains"] as? [[String:Any]] ?? []{let plugin=side["plugin"] as? String ?? "";if buses.contains(where:{visible.contains($0["id"] as? String ?? "") && effectiveInserts($0).contains(plugin)}),let source=side["source"] as? String{visible.insert(source)}}
-        for target in buses where visible.contains(target["id"] as? String ?? "") && target["kind"] as? String != "track" {
-          guard let targetID=target["id"] as? String,target["kind"] as? String != "master" || targetID==filterID else{continue}
-          for source in buses where source["output"] as? String==targetID || (source["sends"] as? [[String:Any]] ?? []).contains(where:{$0["target"] as? String==targetID}){if let id=source["id"] as? String{visible.insert(id)}}
-          for route in data["outputs"] as? [[String:Any]] ?? [] where route["target"] as? String==targetID{if let source=route["source"] as? String{visible.insert(source)}}
-          for route in mixer["instruments"] as? [[String:Any]] ?? [] where route["target"] as? String==targetID{let plugin=route["plugin"] as? String ?? "";for source in buses where effectiveInserts(source).contains(plugin){if let id=source["id"] as? String{visible.insert(id)}}}
-        }
-        changed=old != visible
-      }
-    }
-    let saved=Dictionary((data["layout"] as? [[String:Any]] ?? []).compactMap{p->(String,[String:Any])? in guard let key=p["node"] as? String else{return nil};return(key,p)},uniquingKeysWith:{_,last in last})
+    let visible=Set(buses.compactMap{$0["id"] as? String})
+    var saved=Dictionary((data["layout"] as? [[String:Any]] ?? []).compactMap{p->(String,[String:Any])? in guard let key=p["node"] as? String else{return nil};return(key,p)},uniquingKeysWith:{_,last in last})
     func add(_ id:String,_ title:String,_ detail:String,_ x:Double,_ y:Double,kind:String="audio") {defaultRows[id]=y;display.append(SignalCanvasNode(id:id,title:title,detail:detail,kind:kind,x:saved[id]?["x"] as? Double ?? x,y:saved[id]?["y"] as? Double ?? y))}
     func edge(_ a:String,_ b:String,_ label:String,_ action:[String:Any]=[:],modulation:Bool=false,output:UInt32=0,input:UInt32=0,enabled:Bool=true){edges.append(SignalCanvasEdge(source:a,target:b,label:label,modulation:modulation,output:output,input:input,enabled:enabled));songConnections.append(action)}
     // Master is a final output sink. When it has processors, expose the summing
@@ -67,6 +62,10 @@ extension SignalGraphEditor {
       if let out=b["output"] as? String,!out.isEmpty,visible.contains(out){edge(end,firstStage[out] ?? out,"Output",["kind":"output","source":id,"target":out])}
       for (i,send) in (b["sends"] as? [[String:Any]] ?? []).enumerated(){if let to=send["target"] as? String,visible.contains(to){edge(end,firstStage[to] ?? to,send["enabled"] as? Bool==false ? "Send · −∞":"Send",["kind":"send","source":id,"index":i],enabled:send["enabled"] as? Bool ?? true)}}
     }
+    for p in rackPlugins where detachedEffects.contains(p["id"] as? String ?? "") {
+      guard let id=p["id"] as? String else{continue};let key="plugin:"+id
+      add(key,p["name"] as? String ?? "Effect","Unconnected · drag into a path",30,Double(30+row*125));row+=1;songNodePlugin[key]=id
+    }
     for p in rackPlugins where p["isInstrument"] as? Bool==true {guard let id=p["id"] as? String else{continue};let key="plugin:\(id)";let routes=(mixer["instruments"] as? [[String:Any]] ?? []).filter{$0["plugin"] as? String==id};let master=buses.first{$0["kind"] as? String=="master"}?["id"] as? String ?? ""
       var targets=routes
       if !routes.contains(where:{$0["output"] as? Int==0}){targets.append(["target":master,"output":0])}
@@ -77,6 +76,26 @@ extension SignalGraphEditor {
     for (i,r) in (data["outputs"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let b=r["target"] as? String,visible.contains(a),visible.contains(b){let stage=display.last{songNodeBus[$0.id]==a && songNodeGraph[$0.id] != nil}?.id ?? a;edge(stage,firstStage[b] ?? b,"Graph out \(r["output"] ?? 1)",["kind":"graph-output","index":i],output:(r["output"] as? NSNumber)?.uint32Value ?? 1)}}
     for (i,r) in (mixer["sidechains"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let plugin=r["plugin"] as? String,let from=lastStage[a],songNodePlugin["plugin:\(plugin)"] != nil{edge(from,"plugin:\(plugin)",(r["input"] as? Int==0 ? "Main input mix":"Sidechain \(r["input"] ?? 1)"),["kind":"plugin-input","index":i],input:(r["input"] as? NSNumber)?.uint32Value ?? 1)}}
     for r in mixer["instruments"] as? [[String:Any]] ?? []{let plugin=r["plugin"] as? String ?? "";if rackPlugins.first(where:{$0["id"] as? String==plugin})?["isInstrument"] as? Bool != true,let target=r["target"] as? String,visible.contains(target),songNodePlugin["plugin:\(plugin)"] != nil{edge("plugin:\(plugin)",firstStage[target] ?? target,"Aux \(r["output"] ?? 0)",["kind":"plugin-output","plugin":plugin,"output":r["output"] ?? 0,"target":target],output:(r["output"] as? NSNumber)?.uint32Value ?? 0)}}
+    for source in songSources {
+      guard let id=source["id"] as? String else{continue};let key="source:"+id,kind=source["kind"] as? String ?? "lfo"
+      if saved[key]==nil{saved[key]=["x":source["x"] ?? 40,"y":source["y"] ?? 40]}
+      add(key,source["name"] as? String ?? kind,kind,source["x"] as? Double ?? 40,source["y"] as? Double ?? 40,kind:"modulation")
+      if kind=="follower" {
+        let bus=source["audioBus"] as? String ?? "",plugin=source["audioPlugin"] as? String ?? "",port=source["output"] as? Int ?? 0
+        let from = !bus.isEmpty ? lastStage[bus]:!plugin.isEmpty ? "plugin:"+plugin:nil
+        if let from,display.contains(where:{$0.id==from}) {
+          var action:[String:Any]=["kind":"follower-input","node":id,"output":port,"preFader":source["preFader"] ?? false]
+          if !bus.isEmpty{action["source"]=bus}else{action["plugin"]=plugin}
+          edge(from,key,source["preFader"] as? Bool==true ? "Follower · pre-fader":"Follower · post-fader",action,output:UInt32(port))
+        }
+      }
+    }
+    for m in songModulation {
+      guard let source=m["source"] as? String,let plugin=m["plugin"] as? String else{continue};let parameter=(m["parameter"] as? NSNumber)?.uint32Value ?? 0
+      let label=songParameter(plugin,parameter)?["name"] as? String ?? "Param \(parameter)"
+      edge("source:"+source,"plugin:"+plugin,label,["kind":"modulation","source":source,"plugin":plugin,"parameter":parameter],modulation:true,input:parameter,enabled:m["enabled"] as? Bool ?? true)
+      edges[edges.count-1].amount=m["maximum"] as? Double ?? 0;edges[edges.count-1].amountRange = -1...1;edges[edges.count-1].amountUnit=m["quantized"] as? Bool==true ? "stepped depth":"depth"
+    }
     for i in edges.indices {
       let action=songConnections[i],kind=action["kind"] as? String ?? ""
       var amount:Double?
@@ -100,12 +119,25 @@ extension SignalGraphEditor {
         if let graph=songNodeGraph[id],let definition=definitions.first(where:{$0["id"] as? String==graph}),let endpoint=(definition["nodes"] as? [[String:Any]] ?? []).first(where:{$0["kind"] as? String==(output ? "output":"input")})?["id"] as? String {
           exposed=(definition["audio"] as? [[String:Any]] ?? []).filter{$0[output ? "target":"source"] as? String==endpoint}.compactMap{($0[output ? "input":"output"] as? NSNumber)?.uint32Value}
         }
-        let numbers=Set(exposed+edges.filter{(output ? $0.source:$0.target)==id}.map{output ? $0.output:$0.input}+known.compactMap{($0["index"] as? NSNumber)?.uint32Value}+[UInt32(0)])
+        let numbers=Set(exposed+edges.filter{!$0.modulation && (output ? $0.source:$0.target)==id}.map{output ? $0.output:$0.input}+known.compactMap{($0["index"] as? NSNumber)?.uint32Value}+[UInt32(0)])
         return numbers.sorted().map{number in Self.audioPort(number,output:output,catalog:known)}
       }
-      display[i].inputs=plugin?["isInstrument"] as? Bool==true ? []:sockets(output:false)
+      display[i].inputs=plugin?["isInstrument"] as? Bool==true || id.hasPrefix("instrument:") ? []:sockets(output:false)
       display[i].outputs=sockets(output:true)
+      if let source=songSource(id) {display[i].inputs=source["kind"] as? String=="follower" ? [SignalCanvasPort(label:"Audio to follow")]:[];display[i].outputs=[SignalCanvasPort(label:"Signal",modulation:true)]}
+      else if let pluginID=songNodePlugin[id] {
+        var parameters=Set(songModulation.filter{$0["plugin"] as? String==pluginID}.compactMap{($0["parameter"] as? NSNumber)?.uint32Value})
+        if let exposed=exposedParameters[id]{parameters.insert(exposed)}
+        // Existing base-automation references are independent of the most
+        // recently exposed modulation target. Keep their exact socket alive.
+        if let target=provenance.target,target.plugin==pluginID{parameters.insert(target.parameter)}
+        display[i].inputs += parameters.sorted().map{number in
+          let value=songParameter(pluginID,number),title=value?["name"] as? String ?? "Param \(number)"
+          return SignalCanvasPort(number:number,label:title+(value?["canSlide"] as? Bool==false ? " · stepped":""),modulation:true,signal:.parameter,unavailable:value?["writable"] as? Bool==false ? "Read-only parameter":nil)
+        }
+      }
     }
+    (display,edges)=focusSongNodes(display,edges:edges)
     // Multi-output instruments can be taller than an entire channel strip.
     // Allocate default rows from their real socket heights, retaining saved positions.
     var heights=[Double:Double](),rowY=[Double:Double](),nextY=30.0
@@ -124,6 +156,20 @@ extension SignalGraphEditor {
       }
       if id==master {display[i].outputs=[]}
     }
+    // Revealing another branch must not drop its new default card onto a
+    // musician-positioned return, or move the path they were already reading.
+    // Reserve saved and previously displayed positions first; only fresh
+    // provisional cards may move. These positions never enter song metadata.
+    var reserved=display.filter{saved[$0.id] != nil || retainedPositions.contains($0.id)}.map(\.rect)
+    for index in display.indices where saved[display[index].id]==nil && !retainedPositions.contains(display[index].id) {
+      for _ in 0...display.count {
+        let collisions=reserved.filter{$0.insetBy(dx:-16,dy:-16).intersects(display[index].rect)}
+        guard let bottom=collisions.map(\.maxY).max() else{break}
+        display[index].y=max(display[index].y,bottom+24)
+      }
+      reserved.append(display[index].rect)
+      provisionalPositions[display[index].id]=NSPoint(x:display[index].x,y:display[index].y)
+    }
     provisionalLayouts[layoutKey]=provisionalPositions
     return(display,edges)
   }
@@ -141,6 +187,9 @@ extension SignalGraphEditor {
     }else if let plugin=songNodePlugin[id]{onPlugin?(plugin)}else if let bus=songNodeBus[id]{onBus?(bus)}
   }
   func connectSong(_ a:String,_ b:String){
+    let mode=connectionKind.titleOfSelectedItem ?? ""
+    if mode=="Modulation" || mode=="Follower input" {let modulation=mode=="Modulation",out=UInt32(outputPort.stringValue) ?? 0,input=UInt32(parameter.stringValue) ?? 0;let from=realPort(a,out,output:true,modulation:modulation),to=realPort(b,input,output:false,modulation:modulation);_ = connectSongControl(from.node,to.node,out:from.number,input:to.number,modulation:modulation);return}
+
     guard let rawOutput=UInt32(outputPort.stringValue),let rawInput=UInt32(inputPort.stringValue)else{status.stringValue="Choose valid audio ports";return}
     let sourcePort=realPort(a,rawOutput,output:true,modulation:false),targetPort=realPort(b,rawInput,output:false,modulation:false)
     let a=sourcePort.node,b=targetPort.node,output=Int(sourcePort.number),input=Int(targetPort.number)
@@ -163,14 +212,5 @@ extension SignalGraphEditor {
     default:break
     }
   }
-  func disconnectSong(_ index:Int){guard songConnections.indices.contains(index)else{return};let item=songConnections[index]
-    switch item["kind"] as? String {
-    case "output":mutate("mixer.bus.set",["bus":item["source"] ?? "","output":NSNull()])
-    case "send":guard let source=item["source"] as? String,let i=item["index"] as? Int,let bus=buses.first(where:{$0["id"] as? String==source})else{return};var sends=bus["sends"] as? [[String:Any]] ?? [];sends.remove(at:i);mutate("mixer.sends.set",["bus":source,"sends":sends])
-    case "graph-input","graph-output":let key=item["kind"] as? String=="graph-input" ? "inputs" : "outputs";var routes=data[key] as? [[String:Any]] ?? [];guard let i=item["index"] as? Int,routes.indices.contains(i)else{return};routes.remove(at:i);mutate("graph.routes.set",[key:routes])
-    case "plugin-input":var routes=mixer["sidechains"] as? [[String:Any]] ?? [];guard let i=item["index"] as? Int,routes.indices.contains(i)else{return};let removed=routes.remove(at:i);let plugin=removed["plugin"] as? String ?? "",port=removed["input"] as? Int ?? 1;let sources=routes.filter{$0["plugin"] as? String==plugin && $0["input"] as? Int==port}.map{r->[String:Any] in var v=r;v.removeValue(forKey:"plugin");v.removeValue(forKey:"input");return v};mutate("mixer.sidechains.set",["plugin":plugin,"input":port,"sources":sources])
-    case "plugin-output":let plugin=item["plugin"] as? String ?? "",port=item["output"] as? Int ?? 0;let targets=pluginOutputTargets(plugin,port:port).filter{$0 != item["target"] as? String};mutate("mixer.plugin.route",["plugin":plugin,"output":port,"targets":targets])
-    default:status.stringValue="Reconnect the channel output to another bus; internal chains are edited in their subgraph."
-    }
-  }
+  func disconnectSong(_ index:Int){cutConnections([index])}
 }

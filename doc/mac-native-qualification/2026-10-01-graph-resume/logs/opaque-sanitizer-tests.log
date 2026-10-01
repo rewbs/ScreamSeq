@@ -1,0 +1,13 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-sanitized
+    Start 53: mixer-publication
+1/4 Test #53: mixer-publication ................   Passed    1.03 sec
+    Start 55: native-mixer
+2/4 Test #55: native-mixer .....................   Passed   19.93 sec
+    Start 62: plugin-latency
+3/4 Test #62: plugin-latency ...................   Passed    0.94 sec
+    Start 73: song-modulation
+4/4 Test #73: song-modulation ..................   Passed    0.37 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =  22.28 sec

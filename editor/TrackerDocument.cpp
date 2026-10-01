@@ -448,10 +448,12 @@ bool Document::editNative(NativeSong metadata, const std::vector<Edit> &input)
 	native_=std::move(metadata);undo_.push_back(std::move(entry));committedHistory();++revision;trimHistory();
 	return true;
 }
-std::vector<Edit> Document::undo()
+std::vector<Edit> Document::undo(const std::function<void()> &beforeCommit)
 {
 	if(undo_.empty()) return {};
 	const auto &pending = undo_.back();
+    if(beforeCommit && (!pending.cells.empty() || !pending.before.empty() || !pending.after.empty() || pending.sample || pending.splice || pending.slot))
+        throw std::invalid_argument("Live history publication requires a native-only entry");
 	if(pending.sample) validateSampleUndo(*pending.sample, false);
 	SampleAllocation sampleReplacement;
 	if(pending.splice) sampleReplacement = prepareSpliceUndo(*pending.splice, false);
@@ -469,6 +471,17 @@ std::vector<Edit> Document::undo()
 		std::swap(e.before, e.after);
 		inverse.push_back(e);
 	}
+	// Reserving vector capacity is not sufficient on MSVC: moving a NativeSong
+	// map can allocate its sentinel. Stage a copy there (a no-throw move on
+	// platforms that provide it) while the song and source history are intact.
+    if(beforeCommit) {
+        // Copy even on platforms with noexcept moves: a refused external
+        // publication must leave the source history snapshot undamaged.
+        redo_.push_back(undo_.back());
+        try { beforeCommit(); } catch(...) {redo_.pop_back();throw;}
+    } else redo_.push_back(std::move_if_noexcept(undo_.back()));
+	const auto &staged = redo_.back();
+	static_assert(std::is_nothrow_move_assignable_v<NativeSong>);
 	if(replacement)
 	{
 		song_ = std::move(replacement);
@@ -477,19 +490,20 @@ std::vector<Edit> Document::undo()
 	else
 		for(auto &e : inverse)
 			put(*song_, e);
-	if(pending.sample) applySampleUndo(*pending.sample, false);
-	if(pending.splice) applySpliceUndo(*pending.splice, false, std::move(sampleReplacement));
-	if(pending.slot) applySampleSlot(*pending.slot, false, std::move(sampleReplacement));
+	if(staged.sample) applySampleUndo(*staged.sample, false);
+	if(staged.splice) applySpliceUndo(*staged.splice, false, std::move(sampleReplacement));
+	if(staged.slot) applySampleSlot(*staged.slot, false, std::move(sampleReplacement));
 	if(metadata) native_ = std::move(*metadata);
-	redo_.push_back(std::move(undo_.back()));
 	undo_.pop_back();
 	++revision;
 	return inverse;
 }
-std::vector<Edit> Document::redo()
+std::vector<Edit> Document::redo(const std::function<void()> &beforeCommit)
 {
 	if(redo_.empty()) return {};
 	const auto &pending = redo_.back();
+    if(beforeCommit && (!pending.cells.empty() || !pending.before.empty() || !pending.after.empty() || pending.sample || pending.splice || pending.slot))
+        throw std::invalid_argument("Live history publication requires a native-only entry");
 	if(pending.sample) validateSampleUndo(*pending.sample, true);
 	SampleAllocation sampleReplacement;
 	if(pending.splice) sampleReplacement = prepareSpliceUndo(*pending.splice, true);
@@ -500,6 +514,16 @@ std::vector<Edit> Document::redo()
 	if(metadata) metadata->nextID = std::max(metadata->nextID, native_.nextID);
 	auto cells = pending.cells;
 	undo_.reserve(undo_.size() + 1);
+	// See undo(): no potentially allocating history construction may follow
+	// publication of song, sample or native metadata changes.
+    if(beforeCommit) {
+        // Copy even on platforms with noexcept moves: a refused external
+        // publication must leave the source history snapshot undamaged.
+        undo_.push_back(redo_.back());
+        try { beforeCommit(); } catch(...) {undo_.pop_back();throw;}
+    } else undo_.push_back(std::move_if_noexcept(redo_.back()));
+	const auto &staged = undo_.back();
+	static_assert(std::is_nothrow_move_assignable_v<NativeSong>);
 	if(replacement)
 	{
 		song_ = std::move(replacement);
@@ -508,11 +532,10 @@ std::vector<Edit> Document::redo()
 	else
 		for(auto &e : cells)
 			put(*song_, e);
-	if(pending.sample) applySampleUndo(*pending.sample, true);
-	if(pending.splice) applySpliceUndo(*pending.splice, true, std::move(sampleReplacement));
-	if(pending.slot) applySampleSlot(*pending.slot, true, std::move(sampleReplacement));
+	if(staged.sample) applySampleUndo(*staged.sample, true);
+	if(staged.splice) applySpliceUndo(*staged.splice, true, std::move(sampleReplacement));
+	if(staged.slot) applySampleSlot(*staged.slot, true, std::move(sampleReplacement));
 	if(metadata) native_ = std::move(*metadata);
-	undo_.push_back(std::move(redo_.back()));
 	redo_.pop_back();
 	++revision;
 	return cells;

@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 tracker_seconds="${1:-60}"
 if ! [[ "$tracker_seconds" =~ ^[0-9]+$ ]] || (( tracker_seconds < 15 || tracker_seconds > 3600 )); then
-  echo 'Usage: bash mac/ui-test.sh [15..3600 seconds] [--no-build] [--vst3] [--graph | --existing-graph song.screamseq] [--device "BlackHole 2ch"]' >&2
+  echo 'Usage: bash mac/ui-test.sh [15..3600 seconds] [--no-build] [--vst3] [--graph | --existing-graph song.screamseq] [--float-graph] [--device "BlackHole 2ch"]' >&2
   exit 2
 fi
 if (( $# )); then shift; fi
@@ -14,11 +14,13 @@ tracker_generated_graph=0
 tracker_vst3=0
 tracker_extra=()
 tracker_existing=''
+tracker_float=0
 while (( $# )); do
   case "$1" in
     --no-build) tracker_skip=1; shift ;;
     --vst3) tracker_vst3=1; shift ;;
     --graph) tracker_graph=1; tracker_generated_graph=1; tracker_extra+=(--ui-test-graph); shift ;;
+    --float-graph) tracker_float=1; tracker_extra+=(--ui-test-float-graph); shift ;;
     --existing-graph)
       [[ -f "${2:-}" ]] || { echo 'Provide an existing 16+ channel graph fixture' >&2; exit 2; }
       tracker_existing="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
@@ -29,6 +31,10 @@ while (( $# )); do
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
+if (( tracker_float )) && [[ -z "$tracker_existing" ]]; then
+  echo '--float-graph requires --existing-graph so both window modes use the same dense fixture' >&2
+  exit 2
+fi
 if [[ -n "$tracker_existing" ]] && (( tracker_generated_graph || tracker_vst3 )); then
   echo '--existing-graph owns the fixture; do not combine it with --graph or --vst3' >&2
   exit 2
@@ -75,6 +81,7 @@ while time.monotonic() < deadline:
         if data.get('processID') == pid:
             prefix = 'vst3-' if data.get('requestedVST3') else ''
             if data.get('usesGraph'): prefix += 'graph-'
+            if data.get('graphWindowMode') == 'floating': prefix += 'floating-'
             target = build / 'qualification' / f'ui-{prefix}{seconds}s.json'
             target.write_text(json.dumps(data, indent=2) + '\n')
             print(json.dumps(data, indent=2))

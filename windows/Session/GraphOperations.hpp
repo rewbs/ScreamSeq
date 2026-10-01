@@ -1,7 +1,10 @@
 #pragma once
 #include <nlohmann/json.hpp>
 #include "editor/SignalGraph.hpp"
+#include "editor/ParameterProvenance.hpp"
+#include "editor/hosted/PluginTypes.hpp"
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 namespace Tracker { class Document; struct NativeSong; }
@@ -30,6 +33,12 @@ struct GraphHostHooks {
   // Must return the requested real slot's baseline state, never an automated
   // live state. Throw ApiError for absent/unavailable slots. No fallback recipe.
   std::function<GraphRackClone(uint32_t)> cloneRackSlot;
+  // Stable rack identities, not slots. An empty/missing catalogue means the
+  // parameter is unavailable; never infer writable/continuous from its number.
+  std::function<std::vector<Tracker::PluginParameter>(const std::string &)> parameters;
+  std::map<std::string,std::vector<Tracker::PluginParameter>> cachedParameters;
+  std::function<Tracker::ParameterProvenanceRecording(const std::string &,uint32_t)> recording;
+  std::map<std::pair<std::string,uint32_t>,Tracker::ParameterProvenanceRecording> cachedRecordings;
   std::function<void(const Tracker::NativeSong &)> validateCandidate;
 };
 // Control-thread only. Caller checks/removes expectedRevision and constructs the

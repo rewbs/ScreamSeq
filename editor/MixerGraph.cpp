@@ -24,8 +24,18 @@ void moveMixerInserts(MixerGraph &graph, const std::vector<std::string> &effectR
   for(const auto &id : plugins) require(selected.insert(id).second && std::find(effectRack.begin(), effectRack.end(), id) != effectRack.end(), "Unknown or duplicate effect plugin");
   std::set<std::string> owned;
   for(const auto &bus : next.buses) for(const auto &id : bus.inserts) owned.insert(id);
-  for(const auto &id : effectRack) if(!owned.count(id)) master->inserts.push_back(id);
+  for(const auto &id : effectRack) if(!owned.count(id)&&std::find(next.detached.begin(),next.detached.end(),id)==next.detached.end()) master->inserts.push_back(id);
   const auto original = next;
+  // A single loose processor has no preceding chain to preserve. Moving it
+  // into a path establishes ownership and clears its explicit disconnected state.
+  if(plugins.size()==1&&std::find(next.detached.begin(),next.detached.end(),plugins.front())!=next.detached.end()) {
+    auto destination=std::find_if(next.buses.begin(),next.buses.end(),[&](const auto &b){return b.id==target;});
+    require(destination!=next.buses.end(),"Insert destination does not exist");
+    auto point=before.empty()?destination->inserts.end():std::find(destination->inserts.begin(),destination->inserts.end(),before);
+    require(before.empty()||point!=destination->inserts.end(),"Insertion point is not on the destination bus");
+    require(destination->inserts.size()<32,"Destination insert limit exceeded");
+    destination->inserts.insert(point,plugins.front());std::erase(next.detached,plugins.front());graph=std::move(next);return;
+  }
   auto source = std::find_if(next.buses.begin(), next.buses.end(), [&](const auto &b) { return std::find(b.inserts.begin(), b.inserts.end(), plugins.front()) != b.inserts.end(); });
   auto destination = std::find_if(next.buses.begin(), next.buses.end(), [&](const auto &b) { return b.id == target; });
   require(source != next.buses.end() && destination != next.buses.end(), "Insert source or destination does not exist");
@@ -42,6 +52,25 @@ void moveMixerInserts(MixerGraph &graph, const std::vector<std::string> &effectR
   if(next != original) graph = std::move(next);
 }
 
+void detachMixerInsert(MixerGraph &graph, const std::vector<std::string> &effectRack,
+                       const std::string &plugin) {
+  require(std::find(effectRack.begin(),effectRack.end(),plugin)!=effectRack.end(),"Unknown effect plugin");
+  if(std::find(graph.detached.begin(),graph.detached.end(),plugin)!=graph.detached.end())return;
+  require(std::none_of(graph.sidechains.begin(),graph.sidechains.end(),[&](const auto &s){return s.plugin==plugin;}) &&
+          std::none_of(graph.instruments.begin(),graph.instruments.end(),[&](const auto &s){return s.plugin==plugin&&s.target!=0;}),
+          "Disconnect this effect's explicit input/output cables before detaching its main path");
+  auto next=graph;
+  auto master=std::find_if(next.buses.begin(),next.buses.end(),[](const auto &b){return b.kind==MixerBusKind::Master;});
+  require(master!=next.buses.end(),"Mixer has no Master bus");
+  // Materialize unrelated fallback effects in the same order compileMixer uses.
+  std::set<std::string> owned;
+  for(const auto &bus:next.buses)for(const auto &id:bus.inserts)owned.insert(id);
+  for(const auto &id:effectRack)if(!owned.count(id)&&std::find(next.detached.begin(),next.detached.end(),id)==next.detached.end())master->inserts.push_back(id);
+  for(auto &bus:next.buses)std::erase(bus.inserts,plugin);
+  next.detached.push_back(plugin);
+  graph=std::move(next);
+}
+
 size_t MixerGraph::bytes() const {
   size_t result = sizeof(*this);
   for (const auto &bus : buses) {
@@ -50,9 +79,13 @@ size_t MixerGraph::bytes() const {
   }
   for (const auto &source : instruments) result += sizeof(source) + source.plugin.size();
   for (const auto &side : sidechains) result += sizeof(side) + side.plugin.size();
+  for(const auto &plugin:detached)result+=sizeof(plugin)+plugin.size();
   return result;
 }
 std::vector<size_t> MixerGraph::validate(const std::vector<uint64_t> &tracks) const {
+  std::set<std::string> loose;
+  require(detached.size()<=240,"Use at most 240 unconnected processors");
+  for(const auto &plugin:detached)require(!plugin.empty()&&text(plugin,128)&&loose.insert(plugin).second,"Invalid or duplicate unconnected effect identity");
   if (buses.empty()) { require(instruments.empty() && sidechains.empty(), "Plugin routing requires a mixer graph"); return {}; }
   require(buses.size() <= 240, "Use at most 240 mixer buses");
   const std::set<uint64_t> knownTracks(tracks.begin(), tracks.end());
@@ -76,7 +109,7 @@ std::vector<size_t> MixerGraph::validate(const std::vector<uint64_t> &tracks) co
     if (bus.kind == MixerBusKind::Master) { ++masters; master = i; require(bus.output == 0 && bus.sends.empty(), "Master output cannot feed another bus"); }
     require(bus.inserts.size() <= 64 && bus.sends.size() <= 16, "Bus insert or send limit exceeded");
     for (const auto &plugin : bus.inserts)
-      require(!plugin.empty() && text(plugin, 128) && effects.insert(plugin).second, "A plugin instance can have only one insert owner");
+      require(!plugin.empty() && text(plugin, 128) && !loose.contains(plugin) && effects.insert(plugin).second, "A plugin instance can have only one insert owner and cannot also be unconnected");
     for (const auto &plugin : bus.inserts) owners[plugin] = i;
   }
   require(masters == 1 && foundTracks == knownTracks, "Mixer requires one master and one bus for every track");
@@ -170,6 +203,13 @@ MixerPlan compileMixer(const MixerGraph &graph, const std::vector<uint64_t> &tra
       if (!processors[found->second].bypass) plan.nodes[i].processors.push_back(found->second);
     }
   }
+  std::set<size_t> detached;
+  for(const auto &id:graph.detached)if(auto found=pluginIndices.find(id);found!=pluginIndices.end()) {
+    const auto index=found->second;
+    require(!processors[index].instrument,"Instrument sources cannot be detached effects");
+    detached.insert(index);assigned.insert(index);
+    if(!processors[index].bypass)plan.detached.push_back(index);
+  }
   // Preserve the existing Add Plugin behavior: effects without an explicit bus
   // owner process on the master, in rack order.
   for (size_t i = 0; i < processors.size(); ++i)
@@ -178,6 +218,7 @@ MixerPlan compileMixer(const MixerGraph &graph, const std::vector<uint64_t> &tra
     auto found = pluginIndices.find(side.plugin); if (found == pluginIndices.end()) continue;
     const auto processor = found->second; const auto &p = processors[processor];
     require(!p.instrument, "Sidechains target effect plugins");
+    require(!detached.contains(processor),"Insert an unconnected effect before routing audio into it");
     if (!side.enabled || p.bypass || (side.input && !(p.activeInputs & (uint64_t(1) << side.input)))) continue;
     for (const auto &node : plan.nodes) {
       uint64_t prefix = 0;
@@ -193,23 +234,26 @@ MixerPlan compileMixer(const MixerGraph &graph, const std::vector<uint64_t> &tra
       }
     }
   }
-  auto connect = [&](size_t source, uint64_t target, double gain, bool pre) {
+  auto connect = [&](size_t source, uint64_t target, double gain, bool pre, bool send=false) {
     const size_t connection = plan.connections.size();
-    plan.connections.push_back({source, indices.at(target), pre, gain, 0});
+    plan.connections.push_back({source, indices.at(target), pre, gain, 0, send});
     plan.nodes[source].outputs.push_back(connection);
   };
   for (size_t i = 0; i < graph.buses.size(); ++i) {
     const auto &bus = graph.buses[i];
     if (bus.kind != MixerBusKind::Master && bus.output) connect(i, bus.output, 1, false);
-    for (const auto &send : bus.sends) if (send.enabled) connect(i, send.target, std::pow(10.0, send.gainDB / 20), send.preFader);
+    for (const auto &send : bus.sends) if (send.enabled) connect(i, send.target, std::pow(10.0, send.gainDB / 20), send.preFader, true);
   }
   std::set<std::pair<size_t, uint32_t>> routedInstruments;
   for (const auto &source : graph.instruments) {
     auto found = pluginIndices.find(source.plugin);
     if (found == pluginIndices.end()) continue;
     const auto &p = processors[found->second];
+    // A zero destination is an explicit disconnected-output marker, not an
+    // audio route. Keep it across detach/reinsert without requiring an owner.
+    if(!source.target){routedInstruments.emplace(found->second,source.output);continue;}
     size_t owner=SIZE_MAX;uint32_t prefix=0;
-    if(!p.instrument){require(assigned.contains(found->second),"Assign an effect insert owner before routing its auxiliary output");
+    if(!p.instrument){require(!detached.contains(found->second),"Insert an unconnected effect before routing its output");require(assigned.contains(found->second),"Assign an effect insert owner before routing its auxiliary output");
       for(const auto &node:plan.nodes){uint64_t before=0;for(auto index:node.processors){before+=processors[index].latency;if(index==found->second){owner=node.bus;require(before<=uint64_t(rate)*30,"Auxiliary output latency exceeds 30 seconds");prefix=uint32_t(before);break;}}if(owner!=SIZE_MAX)break;}
       if(owner==SIZE_MAX)continue; // A bypassed or unresolved insert has no auxiliary output.
     }
@@ -332,6 +376,7 @@ MixerTransitionReuse mixerTransitionReuse(
         inputs.at(route.target).push_back(routeExpression(output(i,route.output),route.delay,1,history.instruments[index]));
       }
     }
+    for(const auto index:plan.detached)result[index]=description(index,sum({}));
     for(const auto bus:plan.order) {
       const auto &node=plan.nodes.at(bus);const auto &control=graph.buses.at(bus);
       history.direct[bus]=intern({History,intern({Direct,control.id,uint64_t(control.kind)}),node.directDelay});

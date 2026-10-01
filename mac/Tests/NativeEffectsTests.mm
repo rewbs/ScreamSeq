@@ -129,7 +129,7 @@ static void nativeSong(uint32_t rate, const PluginDescriptor &descriptor) {
   auto doc = Document::demo(); PluginState state{descriptor}; state.instanceID = "native-gain";
   const uint32_t parameter = (descriptor.classID == "resonance.digital-filter.v1" || descriptor.classID == "resonance.stereo-expander.v1") ? 2 : nativeEffect(descriptor.classID).kind == EffectKind::Equalizer ? 11 : 1;
   doc->annotate([&](NativeSong &n) {
-    auto master = n.makeEntity().id;
+    auto master = n.masterID;
     for (const auto &[index, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
     n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"}); n.mixer.buses.back().inserts = {"native-gain"};
     n.automation.push_back({n.makeEntity().id, n.patterns.at(0).id, "native-gain", parameter, true,

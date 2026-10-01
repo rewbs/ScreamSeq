@@ -7,6 +7,34 @@ private final class UnavailableCommandTarget: NSObject, NSMenuItemValidation {
 }
 extension InterfaceTests {
   static func patternGridChecks() throws {
+    let workTrace=UIWorkTrace(capacity:3)
+    for index in 0..<5 {workTrace.record(.graphDraw,start:Double(index),end:Double(index)+0.25)}
+    try require(workTrace.snapshot().map(\.sequence)==[2,3,4] && workTrace.overwritten==2,
+      "Main-thread work evidence retains the newest bounded records in chronological order")
+    try require(workTrace.snapshot().allSatisfy{$0.phase == .graphDraw && $0.durationMS==250},
+      "Work trace timestamps preserve the duration and phase without clock conversion")
+    workTrace.reset()
+    try require(workTrace.snapshot().isEmpty && workTrace.overwritten==0,"Measurement reset does not leak setup work into the timeline")
+    workTrace.record(.tick,start:10,end:11)
+    try require(workTrace.snapshot().count==1 && workTrace.snapshot()[0].sequence==0,"A new measurement starts a fresh trace generation")
+    // GPU and compositor completions may race and outlive the bounded history.
+    // Their evidence must stay attached to the original drawable, never a newer
+    // entry which happens to occupy the same ring slot.
+    let trace=PatternFrameTrace(capacity:8)
+    let retired=trace.begin(generation:0,callback:0,deadline:1,presentationTarget:2,geometryPrepared:0)
+    var frameIDs=[Int]()
+    for index in 1...8 {frameIDs.append(trace.begin(generation:1,callback:Double(index),deadline:Double(index)+1,presentationTarget:Double(index)+2,geometryPrepared:Double(index)-0.01))}
+    trace.update(retired){$0.presented = -100}
+    DispatchQueue.concurrentPerform(iterations:frameIDs.count*2){index in
+      let frame=frameIDs[index/2]
+      if index%2==0{trace.update(frame){$0.gpuEnd=Double(frame)+0.5}}
+      else{trace.update(frame){$0.presented=Double(frame)+2}}
+    }
+    let captured=trace.snapshot(generation:1)
+    try require(captured.count==8 && captured.map(\.sequence)==frameIDs && trace.snapshot(generation:0).isEmpty,
+      "The frame timeline stays bounded and rejects an overwritten generation")
+    try require(captured.allSatisfy{$0.gpuEnd==Double($0.sequence)+0.5 && $0.presented==$0.presentationTarget},
+      "Racing GPU and presentation completions remain correlated to their own drawable")
     let prior = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
     defer { UserDefaults.standard.setVolatileDomain(prior, forName: UserDefaults.argumentDomain) }
     var defaults = prior

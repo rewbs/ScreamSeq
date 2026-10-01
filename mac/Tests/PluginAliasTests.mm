@@ -44,7 +44,7 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
       auto render=[&](uint32_t block,bool mute=false,bool sameChannel=false,bool mixer=false) {
         auto state=synth;if(sameChannel)setPluginAssignments(state,{{1,2},{2,2},{3,16}});
         auto local=song();
-        if(mixer)local->annotate([](NativeSong &n){auto master=n.makeEntity().id;for(const auto &[channel,track]:n.tracks)n.mixer.buses.push_back({track.id,master,MixerBusKind::Track,"Track"});n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});n.mixer.instruments={{"shared",master,0}};});
+        if(mixer)local->annotate([](NativeSong &n){auto master=n.masterID;for(const auto &[channel,track]:n.tracks)n.mixer.buses.push_back({track.id,master,MixerBusKind::Track,"Track"});n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});n.mixer.instruments={{"shared",master,0}};});
         Renderer renderer(local->snapshotData(),rate);PluginChain chain({state},rate,true);chain.attachInstruments(renderer,mixer?&local->native():nullptr);
         check(renderer.song().Instruments[1]->nMixPlug==renderer.song().Instruments[2]->nMixPlug&&renderer.song().Instruments[2]->nMixPlug==renderer.song().Instruments[3]->nMixPlug,"All aliases use one core adapter");
         check(renderer.song().Instruments[2]->nMidiChannel==(sameChannel?2:7),"Core instrument has explicit MIDI channel");

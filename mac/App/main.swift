@@ -155,7 +155,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       self, selector: #selector(systemSleep), name: NSWorkspace.willSleepNotification, object: nil)
     NSWorkspace.shared.notificationCenter.addObserver(
       self, selector: #selector(systemWake), name: NSWorkspace.didWakeNotification, object: nil)
-    window = NSWindow(
+    window = UIWorkTrace.window(
       contentRect: NSRect(x: 0, y: 0, width: 1360, height: 880),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
     )
@@ -732,7 +732,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     finishLiveRecording()
   }
   func tick() {
-    defer { patternView.refreshRenderSnapshot() }
+    let trace=UIWorkTrace.active,tickStarted=UIWorkTrace.active == nil ? 0:CACurrentMediaTime()
+    defer {
+      UIWorkTrace.measure(.snapshot){patternView.refreshRenderSnapshot()}
+      trace?.finish(.tick,start:tickStarted)
+    }
     guard !busy, !sessionReading else { return }
     // This also runs while a dialog is open. An application-modal dialog owns the
     // document until it closes: keep input and displays alive, but start no
@@ -756,7 +760,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     do {
       var pluginError: NSError?
-      let edits = session.collectPluginEdits(pluginEditor.record.state == .on, error: &pluginError)
+      let edits = UIWorkTrace.measure(.pluginEdits){session.collectPluginEdits(pluginEditor.record.state == .on, error: &pluginError)}
       if let pluginError { throw pluginError }
       if edits > 0 {
         dirty = true
@@ -764,13 +768,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       }
     } catch { statusLabel.stringValue = error.localizedDescription }
     // A sheet's own action (Save, Open) must not find the document busy.
-    if !dialog { drainNotes() }
+    if !dialog { UIWorkTrace.measure(.drainNotes){drainNotes()} }
     guard !busy else { return }
     if workspace?.visibleIDs.contains("parameterActivity")==true {parameterActivity.poll()}
     guard !busy else{return}
-    if !dialog {updatePositionTimeline()}
+    if !dialog {UIWorkTrace.measure(.positionTimeline){updatePositionTimeline()}}
     guard !busy else {return}
-    let t = session.telemetry()
+    let t = UIWorkTrace.measure(.telemetry){session.telemetry()}
     parameterActivity.showPositions(editPattern:patternView.navigation.pattern,row:patternView.cursorRow,playPattern:session.playing ? t["pattern"] as? Int:nil,position:(t["patternPosition"] as? NSNumber)?.doubleValue)
     workspaceAutomation.showPositions(editPattern:patternView.navigation.pattern,row:patternView.cursorRow,
       playPattern:session.playing ? t["pattern"] as? Int:nil,position:(t["patternPosition"] as? NSNumber)?.doubleValue)
@@ -791,7 +795,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if t["pluginFailure"] as? Bool == true {
       statusLabel.stringValue = "Playback stopped: a plugin returned invalid output"
     }
-    handleMIDI(session.midiEvents(), telemetry: t, allowEdits: !appModal)
+    UIWorkTrace.measure(.midi){handleMIDI(session.midiEvents(), telemetry: t, allowEdits: !appModal)}
     // Finishing a take is a document request, which a dialog would reject.
     if !dialog && !playing && recordingTakeID != nil && !recordingFinishing {finishLiveRecording()}
     let transportTitle = playing ? "Stop" : "Play"
@@ -830,11 +834,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     meter.needsDisplay = true
     if mixerWindow?.isVisible == true || workspace?.visibleIDs.contains("mixer") == true {
-      mixerEditor.showMeters(session.mixerMeters())
-      mixerEditor.synchronize(session.automationRevision)
+      UIWorkTrace.measure(.mixer){
+        mixerEditor.showMeters(session.mixerMeters())
+        mixerEditor.synchronize(session.automationRevision)
+      }
     }
     guard !busy else{return}
-    patternGraphHost.refresh()
+    UIWorkTrace.measure(.patternGraphRefresh){patternGraphHost.refresh()}
     guard !busy else{return}
     let now = CFAbsoluteTimeGetCurrent()
     if now - lastWorkspaceRefresh > 0.12 {
@@ -842,13 +848,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       // Read prepared telemetry while the document worker is idle. Context
       // refresh can enqueue a rebuild which replaces the prepared chain.
       if workspace?.visibleIDs.contains("graph") == true {
-        signalGraphEditor.showActivity(t["graphActivity"] as? [[String:Any]] ?? [],playing:playing)
-        signalGraphEditor.showSignals(session.signalTelemetry() as? [String:Any] ?? [:])
+        UIWorkTrace.measure(.graphTelemetry){
+          signalGraphEditor.showActivity(t["graphActivity"] as? [[String:Any]] ?? [],playing:playing)
+          let signalTelemetry=UIWorkTrace.measure(.graphSignalRead){session.signalTelemetry() as? [String:Any] ?? [:]}
+          UIWorkTrace.measure(.graphSignalDisplay){signalGraphEditor.showSignals(signalTelemetry)}
+        }
       } else {
         signalGraphEditor.listenControls.update(session.listenTelemetry() as? [String:Any] ?? [:])
       }
-      if !appModal {updateWorkspaceContext()}
-      if !busy {signalGraphEditor.signalScope.poll(visible:workspace?.visibleIDs.contains("graph")==true)}
+      if !appModal {UIWorkTrace.measure(.workspaceContext){updateWorkspaceContext()}}
+      if !busy {UIWorkTrace.measure(.signalScope){signalGraphEditor.signalScope.poll(visible:workspace?.visibleIDs.contains("graph")==true)}}
     }
     guard !busy else{return}
     if workspace?.visibleIDs.contains("plugins") == true && pluginEditor.meterRefreshDue(now) {
@@ -871,25 +880,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       }
     }
   }
-  // Text being edited in whichever window has the keyboard, including the
-  // shared field editor of a text field. Undo belongs to that text, not the song.
-  var editedText: NSTextView? {
-    guard let text = (NSApp.keyWindow ?? window)?.firstResponder as? NSTextView, text.isEditable else { return nil }
-    return text
-  }
   @objc func undo() {
-    if let text = editedText {
-      text.undoManager?.undo()
-      return
-    }
-    perform("Undo…", markDirty: true, { try self.session.historyUndo(false) }, completion: { self.refreshPreciseNotesAfterHistory() })
+    if EditorHistory.performTextHistory(in: (NSApp.keyWindow ?? window)?.firstResponder, redo: false) { return }
+    perform("Undo…", markDirty: true, { try self.session.historyUndo(false) }, completion: { self.signalGraphEditor.historyDidComplete();self.refreshPreciseNotesAfterHistory() })
   }
   @objc func redo() {
-    if let text = editedText {
-      text.undoManager?.redo()
-      return
-    }
-    perform("Redo…", markDirty: true, { try self.session.historyUndo(true) }, completion: { self.refreshPreciseNotesAfterHistory() })
+    if EditorHistory.performTextHistory(in: (NSApp.keyWindow ?? window)?.firstResponder, redo: true) { return }
+    perform("Redo…", markDirty: true, { try self.session.historyUndo(true) }, completion: { self.signalGraphEditor.historyDidComplete();self.refreshPreciseNotesAfterHistory() })
   }
   func refreshPreciseNotesAfterHistory() {
     // A focused inspector intentionally ignores ordinary follow refreshes, but
@@ -1691,6 +1688,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func show(_ error: Error) {
     statusLabel.stringValue = error.localizedDescription
+    if signalGraphEditor.window != nil,signalGraphEditor.window === NSApp.keyWindow {signalGraphEditor.showExternalFailure(error.localizedDescription)}
     NSSound.beep()
   }
   enum UnsavedChoice { case proceed, save, cancel }

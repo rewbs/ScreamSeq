@@ -150,7 +150,7 @@ int main(){try{
   }
   {
     auto local=Tracker::Document::demo();auto conflicting=state;auto native=local->native();
-    auto master=native.makeEntity().id;native.mixer.buses.push_back({master,0,Tracker::MixerBusKind::Master,"Master"});
+    auto master=native.masterID;native.mixer.buses.push_back({master,0,Tracker::MixerBusKind::Master,"Master"});
     for(const auto &[index,track]:native.tracks)native.mixer.buses.push_back({track.id,master,Tracker::MixerBusKind::Track,"Track"});
     native.mixer.buses[0].inserts={"native-project-rack"};Tracker::MusicalAutomationLane lane;
     lane.id=native.makeEntity().id;lane.pattern=native.patterns.begin()->second.id;lane.plugin="native-project-rack";lane.parameter=1;lane.points={{0,.5}};

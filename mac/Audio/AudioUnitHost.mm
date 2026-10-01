@@ -55,6 +55,7 @@ public:
   void transport(const PluginTransport &t) noexcept override { transport_ = t; }
   bool midi(uint8_t, uint8_t, uint8_t) noexcept override;
   const std::vector<PluginAudioBus> &buses() const override { return buses_; }
+  uint64_t preparedAuxiliaryInputs() const override {if(vst_)return PluginBackend::preparedAuxiliaryInputs();uint64_t mask=0;for(size_t i=1;i<auInputs_.size();++i)if(auInputs_[i])mask|=uint64_t(1)<<i;return mask;}
   const float *auxiliaryOutput(uint32_t bus) const noexcept override {
     return bus < auxiliaryOutputBuffers_.size() && auxiliaryOutputBuffers_[bus] ? auxiliaryOutputBuffers_[bus]->interleaved.data() : nullptr;
   }
@@ -422,6 +423,7 @@ std::vector<PluginParameter> MacPluginBackend::parameters() const {
           (info.flags & kAudioUnitParameterFlag_HasCFNameString) ? string(info.cfNameString) : std::string(info.name);
       result.push_back({id, name, info.minValue, info.maxValue, value, info.unit});
       result.back().continuous = info.unit != kAudioUnitParameterUnit_Indexed && info.unit != kAudioUnitParameterUnit_Boolean && info.unit != kAudioUnitParameterUnit_MIDINoteNumber;
+      if(!result.back().continuous)result.back().step=1;
       if ((info.flags & kAudioUnitParameterFlag_CFNameRelease) && info.cfNameString)
         CFRelease(info.cfNameString);
     }

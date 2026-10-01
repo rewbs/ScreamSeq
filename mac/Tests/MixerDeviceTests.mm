@@ -46,7 +46,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       eq10Slot = slotFor("resonance.eq10.v1"), mixerEQSlot = slotFor("resonance.mixer-eq.v1"), combSlot = slotFor("resonance.comb-filter.v1"),
       distortionSlot = slotFor("resonance.distortion.v1"), lofiSlot = slotFor("resonance.lofimat.v1"), cabinetSlot = slotFor("resonance.cabinet-simulator.v1"), compressorSlot=slotFor("resonance.compressor.v1"), gateSlot=slotFor("resonance.gate.v1"), maximizerSlot=slotFor("resonance.maximizer.v1"), busSlot=slotFor("resonance.bus-compressor.v1");
     doc->annotate([](NativeSong &n) {
-      const auto master = n.makeEntity().id;
+      const auto master = n.masterID;
       std::array<uint64_t, 4> groups; for (auto &id : groups) id = n.makeEntity().id;
       std::array<uint64_t, 2> returns; for (auto &id : returns) id = n.makeEntity().id;
       for (const auto &[ch, track] : n.tracks) {

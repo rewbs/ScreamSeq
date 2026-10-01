@@ -310,8 +310,12 @@ std::optional<EnvelopeTarget> target(NativeSong &n,const OpenMPT::CSoundFile &so
   const auto index=uint16_t(integer(field(v,"pattern"),0,UINT16_MAX));
   require(song.Patterns.IsValidPat(index)&&n.patterns.contains(index),"Pattern no longer exists"); const auto pattern=n.patterns.at(index).id;
   if(kind=="graph") {
-    keys(v,{"kind","graph","node","pattern"}); const auto graph=identity(field(v,"graph")),node=identity(field(v,"node"));
-    for(auto &g:n.signal.library) if(g.id==graph) for(auto &item:g.nodes) if(item.id==node&&item.kind==SignalNodeKind::Automation) {
+    keys(v,{"kind","graph","node","pattern"}); const auto graph=field(v,"graph").is_null()?0:identity(v.at("graph")),node=identity(field(v,"node"));
+    SignalNode *source=nullptr;
+    if(!graph) {for(auto &s:n.signal.songSources)if(s.node.id==node)source=&s.node;}
+    else for(auto &g:n.signal.library)if(g.id==graph)for(auto &item:g.nodes)if(item.id==node)source=&item;
+    if(source&&source->kind==SignalNodeKind::Automation) {
+      auto &item=*source;
       auto e=std::find_if(item.envelopes.begin(),item.envelopes.end(),[&](const auto &e){return e.pattern==pattern;});
       if(e==item.envelopes.end()) {
         if(!create) return {};

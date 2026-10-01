@@ -157,6 +157,10 @@ Json nativeProjectTree(Tracker::Document &document,const ProjectState &state) {
 		result["native"]=mergePreserved(result.at("native"),state.metadataBaseline,current);
 		result["native"]["version"]=17;
 	} else result["native"]=current;
+	// Materialize the reserved identity even when an otherwise unchanged v17
+	// tree omitted the optional field. Its allocation advanced the known counter.
+	result["native"]["masterID"]=current.at("masterID");
+	result["native"]["nextID"]=current.at("nextID");
 	result["sequence"]=unsigned(document.song().Order.GetCurrentSequenceIndex());
 	if(result.contains("recoveryTake")) {
 		const RecoveryOrigin currentOrigin{document.revision,unsigned(document.song().Order.GetCurrentSequenceIndex())};

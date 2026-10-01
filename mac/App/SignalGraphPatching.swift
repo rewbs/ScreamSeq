@@ -3,13 +3,59 @@ import AppKit
 extension SignalGraphEditor {
   func detachNodes(_ ids:[String],positions:[(String,Double,Double)],remove:Bool) {
     guard !ids.isEmpty else{status.stringValue="Select an effect chain to reconnect its main path";return}
-    guard let graphID else{rebuild();status.stringValue="Enter a processing group to detach its main path";return}
-    var params:[String:Any]=["graph":graphID,"nodes":ids,"remove":remove]
+    guard let graphID else {
+      if remove {removeSongNodes(Set(ids))}
+      else {
+        let plugins=ids.compactMap{songNodePlugin[$0]}
+        guard plugins.count==1,plugins.count==ids.count else {rebuild();status.stringValue="Detach one rack effect at a time; loose chains are not supported yet";return}
+        var params:[String:Any]=["plugins":plugins]
+        if !positions.isEmpty {params["positions"]=positionObjects(positions)}
+        mutate("mixer.inserts.detach",params)
+      }
+      return
+    }
+    var params:[String:Any]=["graph":graphID,"nodes":remove ? expandedProcessingSelection(Set(ids)).sorted():ids,"remove":remove]
     if !positions.isEmpty {params["positions"]=positionObjects(positions)}
     mutate("graph.nodes.detach",params)
   }
+  func removeSongNodes(_ selected:Set<String>) {
+    let sources=selected.compactMap{songSource($0)?["id"] as? String}
+    if !sources.isEmpty {guard sources.count==selected.count else{status.stringValue="Select only modulation sources, or only rack processors, to remove them in one Undo";return};mutate("graph.song.source.remove",["nodes":sources.sorted()]);return}
+    guard !selected.isEmpty,selected.allSatisfy({id in songNodePlugin[id] != nil || processingGroups.contains(where:{$0["id"] as? String==id})})else{status.stringValue="Select rack processors or processing groups to remove";return}
+    let ids=expandedProcessingSelection(selected),plugins=expandedProcessingSelection(selected).compactMap{songNodePlugin[$0]}
+    guard !plugins.isEmpty,plugins.count==ids.count else{status.stringValue="Select rack processors or processing groups to remove";return}
+    mutate("plugin.remove",["plugins":plugins.sorted()])
+  }
+  func songCableReference(_ index:Int)->[String:Any]? {
+    guard songConnections.indices.contains(index)else{return nil}
+    let action=songConnections[index],kind=action["kind"] as? String ?? ""
+    var ref:[String:Any]=["kind":kind]
+    if ["output","plugin-output","modulation","follower-input"].contains(kind) {return action}
+    if kind=="send",let source=action["source"] as? String,let i=action["index"] as? Int,
+      let sends=buses.first(where:{$0["id"] as? String==source})?["sends"] as? [[String:Any]],sends.indices.contains(i),let target=sends[i]["target"] as? String {
+      return ["kind":kind,"source":source,"target":target]
+    }
+    let routes:[[String:Any]],fields:[String]
+    switch kind {
+    case "graph-input":routes=data["inputs"] as? [[String:Any]] ?? [];fields=["source","target","input"]
+    case "graph-output":routes=data["outputs"] as? [[String:Any]] ?? [];fields=["source","target","output"]
+    case "plugin-input":routes=mixer["sidechains"] as? [[String:Any]] ?? [];fields=["source","plugin","input"]
+    default:return nil
+    }
+    guard let i=action["index"] as? Int,routes.indices.contains(i)else{return nil}
+    for field in fields {guard let value=routes[i][field]else{return nil};ref[field]=value}
+    return ref
+  }
   func cutConnections(_ indices:[Int]) {
-    guard graphID != nil else{status.stringValue="Cut cables inside a processing group; song connections can be selected and deleted individually";return}
+    guard !indices.isEmpty else{return}
+    if indices.contains(where:{canvas.edges.indices.contains($0) && canvas.edges[$0].readOnlyReason != nil}){status.stringValue="No cables cut. "+GraphParameterProvenance.readOnlyReason;return}
+    if graphID==nil {
+      let unique=Set(indices).sorted(),refs=Set(indices).sorted().compactMap{songCableReference($0)}
+      guard refs.count==unique.count else {
+        status.stringValue="No cables cut: this selection includes a fixed rack or instrument chain. Move the processors onto another cable, or use Delete and heal.";return
+      }
+      mutate("graph.connections.remove",["connections":refs]);return
+    }
     let removed=Set(indices.compactMap{definitionEdgeIndices.indices.contains($0) ? definitionEdgeIndices[$0]:nil})
     guard !removed.isEmpty else{return}
     updateDefinition{d in
@@ -32,13 +78,17 @@ extension SignalGraphEditor {
     guard let plugin=selectedBuiltinDetector,let slot=plugin["slot"] else{return}
     mutate("plugin.parameters.set",["slot":slot,"values":[["id":9,"value":2]]])
   }
-  func moveNodes(_ positions:[(String,Double,Double)]) {
+  func moveNodes(_ incoming:[(String,Double,Double)]) {
+    for(id,x,y)in incoming where provenance.sources[id] != nil{provenance.positions[id]=NSPoint(x:x,y:y)}
+    let positions=incoming.filter{provenance.sources[$0.0]==nil}
+    if positions.isEmpty{rebuild();return}
     guard !loading else{
       let context=[projectionDocument]+viewContext
       if pendingMoveContext != context {pendingMoves=[:]};pendingMoveContext=context
       for(id,x,y)in positions{pendingMoves[id]=(x,y)}
       return
     }
+    if moveVisualSelection(positions){return}
     if graphID==nil{
       let groupIDs=Set(processingGroups.compactMap{$0["id"] as? String})
       let valid=positions.filter{p in canvas.nodes.first{$0.id==p.0}?.kind != "boundary"}
@@ -63,10 +113,14 @@ extension SignalGraphEditor {
   func positionObjects(_ values:[(String,Double,Double)])->[[String:Any]] {values.map{["node":$0.0,"x":$0.1,"y":$0.2]}}
   func insertionMove(_ ids:[String],edge:Int)->[String:Any]? {
     guard graphID==nil,songConnections.indices.contains(edge),!ids.isEmpty else{return nil}
-    let selected=Set(ids.compactMap{songNodePlugin[$0]});guard selected.count==ids.count,
-      let owner=buses.first(where:{Set(effectiveInserts($0)).isSuperset(of:selected)})else{return nil}
-    let all=effectiveInserts(owner),ordered=all.filter{selected.contains($0)}
-    guard let start=all.firstIndex(of:ordered[0]),Array(all[start..<(start+ordered.count)])==ordered else{return nil}
+    let selected=Set(ids.compactMap{songNodePlugin[$0]});guard selected.count==ids.count else{return nil}
+    let ordered:[String]
+    if selected.count==1,let plugin=selected.first,detachedEffects.contains(plugin){ordered=[plugin]}
+    else{
+      guard let owner=buses.first(where:{Set(effectiveInserts($0)).isSuperset(of:selected)})else{return nil}
+      let all=effectiveInserts(owner);ordered=all.filter{selected.contains($0)}
+      guard let first=ordered.first,let start=all.firstIndex(of:first),Array(all[start..<(start+ordered.count)])==ordered else{return nil}
+    }
     let action=songConnections[edge],kind=action["kind"] as? String ?? ""
     guard ["insert","output","master-output"].contains(kind),let target=action["source"] as? String else{return nil}
     let before=kind=="insert" ? action["plugin"] as? String:nil
@@ -113,6 +167,8 @@ extension SignalGraphEditor {
     guard graphID==nil,let selectedSource=chosen(source),let selectedTarget=chosen(destination)else{return}
     let from=realPort(selectedSource,UInt32(outputPort.stringValue) ?? 0,output:true,modulation:false),to=realPort(selectedTarget,UInt32(inputPort.stringValue) ?? 0,output:false,modulation:false)
     let a=from.node,b=to.node,input=to.number,output=from.number
+    if songSource(selectedSource) != nil{connectionKind.selectItem(withTitle:"Modulation");connectionModeChanged();return}
+    if songSource(b)?["kind"] as? String=="follower"{connectionKind.selectItem(withTitle:"Follower input");connectionModeChanged();return}
     let kind=input>0 ? (songNodePlugin[b] != nil ? "Plugin sidechain":"Graph sidechain") : songNodePlugin[b] != nil ? "Main output" : songNodePlugin[a] != nil ? "Plugin auxiliary" : output>0 ? "Graph auxiliary":"Main output"
     connectionKind.selectItem(withTitle:kind);connectionModeChanged()
   }
@@ -138,6 +194,7 @@ extension SignalGraphEditor {
     };d["nodes"]=list
   }
   func loadPortCatalogs() {
+    if graphID==nil{loadSongParameterCatalogs();return}
     guard let graph=graphID,!hasDraft,!loading,!catalogLoading,onRequest != nil,
       let node=nodes.first(where:{$0["kind"] as? String=="plugin" && portCatalogs[$0["id"] as? String ?? ""]==nil && catalogFailures[$0["id"] as? String ?? ""] != revision}),let id=node["id"] as? String else{return}
     catalogLoading=true;let document=projectionDocument,generation=catalogGeneration,capturedRevision=revision

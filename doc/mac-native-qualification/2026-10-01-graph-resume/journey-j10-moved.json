@@ -1,0 +1,540 @@
+{
+  "mixer": {
+    "changed": false,
+    "data": {
+      "active": true,
+      "buses": [
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n2",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Pulse",
+          "output": "n12",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n3",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Sub",
+          "output": "n12",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [
+            {
+              "enabled": true,
+              "gainDB": -12,
+              "preFader": false,
+              "target": "n47"
+            }
+          ],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n4",
+          "inserts": [
+            "A36C47E2-6525-4DE4-9E2B-CF79687A8719"
+          ],
+          "kind": "track",
+          "mute": false,
+          "name": "Kick",
+          "output": "n12",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n5",
+          "inserts": [
+            "85A95A61-F293-479E-899D-E1D9ADD585B4",
+            "94A8A7AD-6A08-4FAB-9671-47771D55738F"
+          ],
+          "kind": "track",
+          "mute": false,
+          "name": "Hats",
+          "output": "n12",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n6",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 5",
+          "output": "n12",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n7",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 6",
+          "output": "n12",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n8",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 7",
+          "output": "n12",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n9",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 8",
+          "output": "n12",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n12",
+          "inserts": [],
+          "kind": "master",
+          "mute": false,
+          "name": "Master",
+          "output": "",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n47",
+          "inserts": [],
+          "kind": "return",
+          "mute": false,
+          "name": "Return",
+          "output": "n12",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        }
+      ],
+      "detached": [],
+      "implicit": false,
+      "instruments": [],
+      "latencySeconds": 0.00375,
+      "meters": [
+        {
+          "bus": "n2",
+          "left": 0.008463169448077679,
+          "right": 0.008463169448077679
+        },
+        {
+          "bus": "n3",
+          "left": 0.07997220754623413,
+          "right": 0.07997220754623413
+        },
+        {
+          "bus": "n4",
+          "left": 0.01995505578815937,
+          "right": 0.020767193287611008
+        },
+        {
+          "bus": "n5",
+          "left": 0.025306470692157745,
+          "right": 0.025306470692157745
+        },
+        {
+          "bus": "n6",
+          "left": 0,
+          "right": 0
+        },
+        {
+          "bus": "n7",
+          "left": 0,
+          "right": 0
+        },
+        {
+          "bus": "n8",
+          "left": 0,
+          "right": 0
+        },
+        {
+          "bus": "n9",
+          "left": 0,
+          "right": 0
+        },
+        {
+          "bus": "n12",
+          "left": 0.04225639998912811,
+          "right": 0.039843037724494934
+        },
+        {
+          "bus": "n47",
+          "left": 0.020088110119104385,
+          "right": 0.020088110119104385
+        }
+      ],
+      "playing": true,
+      "plugins": [
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Input 1",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Output 1",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "id": "A36C47E2-6525-4DE4-9E2B-CF79687A8719",
+          "instrument": false,
+          "name": "Apple: AUMatrixReverb",
+          "outputBuses": 1,
+          "slot": 0
+        },
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Stereo input",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Stereo output",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 1,
+              "name": "Detector sidechain",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "id": "94A8A7AD-6A08-4FAB-9671-47771D55738F",
+          "instrument": false,
+          "name": "Compressor",
+          "outputBuses": 1,
+          "slot": 1
+        },
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Stereo input",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Stereo output",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "id": "85A95A61-F293-479E-899D-E1D9ADD585B4",
+          "instrument": false,
+          "name": "EQ5",
+          "outputBuses": 1,
+          "slot": 2
+        }
+      ],
+      "sampleRate": 48000,
+      "sidechains": [
+        {
+          "enabled": true,
+          "gainDB": 0,
+          "input": 1,
+          "plugin": "94A8A7AD-6A08-4FAB-9671-47771D55738F",
+          "preFader": false,
+          "source": "n3"
+        }
+      ]
+    },
+    "documentId": "9D9B7FCA-2C8D-42B7-B341-8CBB04AF4B3A",
+    "playbackStopped": false,
+    "revision": "9D9B7FCA-2C8D-42B7-B341-8CBB04AF4B3A:22:3:0"
+  },
+  "transport": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 2655,
+      "fault": false,
+      "frames": 1359360,
+      "graphActivity": [
+        {
+          "graph": "n24",
+          "instrument": "",
+          "order": 2,
+          "role": "persistent",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n24",
+          "instrument": "",
+          "order": 3,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n32",
+          "instrument": "",
+          "order": 1,
+          "role": "persistent",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n37",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n12"
+        },
+        {
+          "graph": "n41",
+          "instrument": "n17",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n41",
+          "instrument": "n17",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n41",
+          "instrument": "n17",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n41",
+          "instrument": "n17",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n41",
+          "instrument": "n17",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n41",
+          "instrument": "n17",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n41",
+          "instrument": "n17",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n41",
+          "instrument": "n17",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        }
+      ],
+      "left": 0.037068016827106476,
+      "loop": true,
+      "maxMicros": 4623.833,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 3940,
+      "pattern": 0,
+      "patternPosition": 10826.65563598759,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.00375,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.039084166288375854,
+      "routing": {
+        "active": true,
+        "available": true,
+        "failedPlan": 0,
+        "latencyPending": false,
+        "renderedPlan": 2,
+        "requestedPlan": 2,
+        "state": "stable"
+      },
+      "row": 42,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 59,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 74
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 15,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 243
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 30,
+          "instrument": 3,
+          "sample": 3,
+          "sampleFrame": 6648
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 59,
+          "instrument": 4,
+          "sample": 4,
+          "sampleFrame": 846
+        }
+      ],
+      "voices": 4
+    },
+    "documentId": "9D9B7FCA-2C8D-42B7-B341-8CBB04AF4B3A",
+    "playbackStopped": false,
+    "revision": "9D9B7FCA-2C8D-42B7-B341-8CBB04AF4B3A:22:3:0"
+  }
+}

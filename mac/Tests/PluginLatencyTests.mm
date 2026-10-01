@@ -14,7 +14,7 @@ using namespace OpenMPT;
 static void check(bool b, const char *why) { if (!b) throw std::runtime_error(why); }
 static void enable(Document &doc) {
   doc.annotate([](NativeSong &n) {
-    auto master = n.makeEntity().id;
+    auto master = n.masterID;
     for (const auto &[ch, t] : n.tracks) n.mixer.buses.push_back({t.id,master,MixerBusKind::Track,"Track"});
     n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});
   });
@@ -92,13 +92,24 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
       std::array<float,256> audio{};
       renderer.render(audio.data(),128);check(chain.process(audio.data(),128),"Initial render");
       const auto before=renderer.telemetry().frames;
+      auto &observations=chain.signalObservation();
+      auto token=[&](const std::string &key){const auto p=std::find_if(observations.ports.begin(),observations.ports.end(),[&](const auto &v){return v.key==key;});check(p!=observations.ports.end(),"Latency fixture has a stable observed port");return uint32_t(p-observations.ports.begin()+1);};
+      const auto pluginOutput=token("plugin:"+effect.instanceID+"/out/0");
+      const auto trackOutput=mixer?token("n"+std::to_string(doc->native().tracks.at(0).id)+"/out/0"):0;
+      check(observations.read(pluginOutput).fresh && observations.read(pluginOutput).processorLatency==0,"Initial latency telemetry is measured at the actual processor output");
       check(latency(7)==1 && chain.latencyChangePending(),"Chain sees latency request");
       chain.refreshLatencies();
       check(!chain.failed() && !chain.latencyChangePending() && std::llround(chain.latency()*rate)==7,"Rack/mixer delay compensation refreshes");
       check(renderer.telemetry().frames==before,"Latency update preserves musical position");
+      check(observations.read(pluginOutput).available && !observations.read(pluginOutput).fresh && observations.read(pluginOutput).processorLatency==7,
+        "Stopped latency refresh updates existing observation metadata and invalidates pre-refresh PCM");
+      if(mixer)check(observations.read(trackOutput).processorLatency==7,"Bus telemetry updates aggregate insert latency with the rebuilt mixer");
       tracker_audit_begin();renderer.render(audio.data(),128);const bool ok=chain.process(audio.data(),128);uint64_t a,f,l;tracker_audit_end(&a,&f,&l);
       check(ok && a+f+l==0 && renderer.telemetry().frames>before,"Playback continues after delay rebuild with no realtime allocations");
+      check(observations.read(pluginOutput).fresh,"Latency-refreshed processor telemetry becomes current after the next audio block");
       check(latency(0)==1,"Latency may decrease");chain.refreshLatencies();check(chain.latency()==0,"Decreased latency applied");
+      check(observations.read(pluginOutput).processorLatency==0 && !observations.read(pluginOutput).fresh,"Decreased latency replaces prior catalogue metadata without reusing old samples");
+      if(mixer)check(observations.read(trackOutput).processorLatency==0,"Bus telemetry follows decreased insert latency");
     }
     latency(0);
     {
@@ -113,11 +124,23 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
       Renderer renderer(doc->serialize(),rate);PluginChain chain({},rate);chain.attachInstruments(renderer,&doc->native());
       std::array<float,256> audio{};renderer.render(audio.data(),128);check(chain.process(audio.data(),128),"Graph initial render");
       const auto activity=chain.graphActivity();check(!activity.empty(),"Active ordinary graph");
+      auto withSource=doc->native();withSource.signal.library[0].nodes.push_back({withSource.makeEntity().id,SignalNodeKind::Amount,"Prepared source"});
+      auto sourcePlan=chain.prepareGraphControls(withSource);check(sourcePlan&&chain.publishGraphControls(std::move(sourcePlan)),"Prepare a replacement control runtime before latency refresh");
+      renderer.render(audio.data(),128);check(chain.process(audio.data(),128),"New source runtime adopts before latency changes");
+      auto staleSource=chain.prepareGraphControls(withSource);
       check(latency(7)==1 && chain.latencyChangePending(),"Graph copy latency request");chain.refreshLatencies();
       check(std::llround(chain.latency()*rate)==7 && !chain.failed(),"Subgraph and mixer delay plans update together");
+      check(!chain.publishGraphControls(std::move(staleSource)),"Stopped compensation refresh invalidates plans prepared against the old delays");
+      withSource.signal.library[0].nodes.push_back({withSource.makeEntity().id,SignalNodeKind::Random,"Second prepared source"});
+      auto refreshedSource=chain.prepareGraphControls(withSource);check(refreshedSource&&chain.publishGraphControls(std::move(refreshedSource)),"Further source edits use the adopted runtime's refreshed latency rather than its retired initial plan");
       const auto after=chain.graphActivity();check(after.size()==activity.size() && after[0].order==activity[0].order,"Graph activity retained");
       tracker_audit_begin();renderer.render(audio.data(),128);const bool ok=chain.process(audio.data(),128);uint64_t a,f,l;tracker_audit_end(&a,&f,&l);
       check(ok && a+f+l==0,"Reconfigured graph remains realtime safe");
+      auto next=doc->native();NativePlugin fresh(effect,rate);next.signal.library[0].nodes[1].plugin.state=fresh.state().state;
+      auto preset=chain.prepareGraphControls(next);check(preset&&chain.publishGraphControls(std::move(preset)),"Same actual latency preset remains compatible after stopped graph latency refresh");
+      chain.refreshLatencies(); // The opaque preset has not been consumed by audio yet.
+      renderer.render(audio.data(),128);check(chain.process(audio.data(),128),"A pending preset adopts before stopped latency refresh and then renders");
+      auto route=chain.prepareMixerRouting(next);check(route&&chain.publishMixerRouting(route),"Transition catalogue remains coherent after stopped graph latency refresh");
     }
   }
   latency(0);

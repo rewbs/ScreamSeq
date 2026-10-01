@@ -77,6 +77,14 @@ Parameter/port writes validate the whole candidate before stopping playback.
 Editor open returns a token; commit requires that token, captured graph/node
 and unchanged recipe. Closing the native window retains its uncommitted draft
 until explicit API close or document replacement. Commit supports dry run.
+`graph.plugin.bypass {graph,node,bypass,expectedRevision,dryRun?}` changes the
+saved host-bypass flag for one recipe processor in all uses. Getter metadata
+includes `bypass`; parameters and opaque preset data are preserved, as are
+clone/group-export copies. A changed flag is one document Undo; identical values
+and dry runs are no-ops. Windows currently requires stopped playback and audition
+for this action and its Undo/Redo. Active changes return `-32002` without stopping
+transport or changing history. The live shared-engine path exists, but Windows
+publication/history-hook integration and native qualification remain pending.
 `workspace.get.graphEditor` exposes the reusable canvas's captured revision,
 draft flags, selection and retained hit-test geometry. The contextual workspace
 panel API is unchanged.
@@ -681,3 +689,19 @@ members and unsupported topology fail before editing. All operations support
 revision guards, strict input, dry runs, no-op history and Undo/Redo. The portable
 adapter and codecs are tested on macOS; this does not claim native Windows UI
 interaction or device qualification.
+
+
+`graph.signal.get` now exposes exact adopted mixer-route contributions alongside
+physical audio ports. A route reading carries
+`route:{kind,source,target,plugin,input,output,tap,gainDB,preFader}`; unused IDs
+are empty strings and unused numbers zero. `compensation` is its route delay.
+The captured contribution is after route gain/delay and before destination
+summing. Serial inserts use `tap:"main-path"` before auxiliary Main-in summing;
+Master's processor output uses `tap:"pre-master-fader"`. Other routes use
+`tap:"post-gain"`. Plugin/recipe auxiliary outputs do not imply a bus-fader tap.
+Use the returned opaque key for Scope/Listen and keep route observations out of
+physical socket indices. Missing or ambiguous route observations are unavailable,
+not the source's output meter. Gain and tap metadata describe the adopted plan,
+including while another plan is preparing. Shared host tests cover route PCM;
+the Windows JSON adapter remains subject to a native Windows execution check.
+Reusable recipe internals are outside this initial route-observation slice.

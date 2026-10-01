@@ -1,0 +1,412 @@
+{
+  "processID": 16055,
+  "nativeSpaceStartedPlayback": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 2338,
+    "fault": false,
+    "frames": 1197056,
+    "graphActivity": [
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n2"
+      },
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "persistent",
+        "tail": false,
+        "target": "n5"
+      },
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 2,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n5"
+      },
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n9"
+      },
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n20"
+      },
+      {
+        "graph": "n26",
+        "instrument": "",
+        "order": 1,
+        "role": "ordinary",
+        "tail": false,
+        "target": "n24"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n2"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n3"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n4"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n5"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n6"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n7"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n8"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n9"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n17"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n18"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n19"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n20"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n21"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n22"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n23"
+      },
+      {
+        "graph": "n26",
+        "instrument": "n32",
+        "order": 1,
+        "role": "instrument",
+        "tail": false,
+        "target": "n24"
+      }
+    ],
+    "left": 0.06781643629074097,
+    "loop": true,
+    "maxMicros": 5144.5,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 4690,
+    "pattern": 0,
+    "patternPosition": 3665.3622888659083,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0.001875,
+    "region": {
+      "cursorRow": 0,
+      "loop": true,
+      "order": 0
+    },
+    "right": 0.06780038774013519,
+    "routing": {
+      "active": true,
+      "available": true,
+      "failedPlan": 0,
+      "latencyPending": false,
+      "renderedPlan": 1,
+      "requestedPlan": 1,
+      "state": "stable"
+    },
+    "row": 14,
+    "voicePositions": [
+      {
+        "channel": 0,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 83
+      },
+      {
+        "channel": 1,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 105
+      },
+      {
+        "channel": 2,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 145
+      },
+      {
+        "channel": 3,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 202
+      },
+      {
+        "channel": 4,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 22
+      },
+      {
+        "channel": 5,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 117
+      },
+      {
+        "channel": 6,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 234
+      },
+      {
+        "channel": 7,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 116
+      },
+      {
+        "channel": 8,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 22
+      },
+      {
+        "channel": 9,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 209
+      },
+      {
+        "channel": 10,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 166
+      },
+      {
+        "channel": 11,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 151
+      },
+      {
+        "channel": 12,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 166
+      },
+      {
+        "channel": 13,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 212
+      },
+      {
+        "channel": 14,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 1,
+        "sample": 1,
+        "sampleFrame": 35
+      },
+      {
+        "channel": 15,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 52,
+        "instrument": 2,
+        "sample": 2,
+        "sampleFrame": 149
+      }
+    ],
+    "voices": 16
+  },
+  "revealLeftGraphUnchanged": false,
+  "revealLeftRevisionUnchanged": true
+}

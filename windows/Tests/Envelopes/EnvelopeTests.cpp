@@ -99,6 +99,27 @@ void linkedUses() {
   CHECK(f.doc->native().envelopeLinks.empty()); f.api.invoke("envelope.bank.remove",{{"id",master}});
   CHECK(f.doc->native().envelopeBank.empty()); f.doc->undo(); CHECK(f.doc->native().envelopeBank.size()==1);
 }
+void songGraphTargets() {
+  Fixture f;f.doc->annotate([](NativeSong &n){SignalSongSource s;s.node.id=n.makeEntity().id;s.node.kind=SignalNodeKind::Automation;s.node.name="Song curve";n.signal.songSources.push_back(s);});
+  const Json target={{"kind","graph"},{"graph",nullptr},{"node",nid(f.doc->native().signal.songSources[0].node.id)},{"pattern",0}};
+  CHECK(!f.api.invoke("envelope.bank.list",{{"target",target}}).contains("shape"));
+  const auto master=f.api.invoke("envelope.bank.save",{{"name","Song template"},{"shape",shape()}})["id"];
+  Json apply={{"template",master},{"target",target},{"linked",true},{"dryRun",true}};
+  const auto before=f.doc->native();f.api.invoke("envelope.bank.apply",apply);CHECK(f.doc->native()==before);
+  apply.erase("dryRun");f.api.invoke("envelope.bank.apply",apply);CHECK(f.doc->native().envelopeLinks.size()==1);
+  auto read=f.api.invoke("envelope.bank.list",{{"target",target}});CHECK(read["linkedTemplate"]==master);
+  CHECK(f.doc->native().signal.songSources[0].node.envelopes[0].points[0].value==.25);
+  const auto linked=f.doc->native();f.api.invoke("envelope.bank.save",{{"id",master},{"name","Reversed"},{"shape",shape(1,0)}});
+  CHECK(f.doc->native().signal.songSources[0].node.envelopes[0].points[0].value==1);
+  f.doc->undo();CHECK(f.doc->native()==linked);f.doc->redo();
+  const auto encoded=ScreamSeq::Project::encodeNativeMetadata(f.doc->native());CHECK(ScreamSeq::Project::decodeNativeMetadata(encoded)==f.doc->native());
+  f.api.invoke("envelope.bank.unlink",{{"target",target}});CHECK(f.doc->native().envelopeLinks.empty());
+  const auto independent=f.doc->native().signal.songSources[0].node.envelopes;
+  f.api.invoke("envelope.bank.save",{{"id",master},{"name","Separate"},{"shape",shape(.4,.6)}});CHECK(f.doc->native().signal.songSources[0].node.envelopes==independent);
+  const auto copy=f.api.invoke("envelope.bank.save",{{"name","Captured song curve"},{"target",target}})["id"];CHECK(copy!=master);
+  auto invalid=apply;invalid["target"].erase("graph");rejected(f,"envelope.bank.apply",invalid);
+  invalid=apply;invalid["target"]["node"]="n999999";rejected(f,"envelope.bank.apply",invalid);
+}
 std::filesystem::path testScratch() {
   std::filesystem::path root;
   for(const auto *name:{L"TMPDIR",L"TEMP",L"TMP"}) {
@@ -478,6 +499,7 @@ int wmain(int argc,wchar_t **argv) {
     }
     if(scenario=="bankHistory") bankHistory();
     else if(scenario=="linkedUses") linkedUses();
+    else if(scenario=="songGraphTargets") songGraphTargets();
     else if(scenario=="catalogueCopies") catalogueCopies();
     else if(scenario=="strictShapesAndTargets") strictShapesAndTargets();
     else if(scenario=="parameterHooks") parameterHooks();

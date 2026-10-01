@@ -1,0 +1,37 @@
+{
+  "audioActive": false,
+  "audition": false,
+  "callbacks": 26213,
+  "fault": false,
+  "frames": 13421056,
+  "graphActivity": [],
+  "left": 0.035677939653396606,
+  "loop": true,
+  "maxMicros": 3946.5,
+  "order": 0,
+  "overruns": 0,
+  "p999Micros": 3700,
+  "pattern": 0,
+  "patternPosition": 2349.446397793864,
+  "playing": false,
+  "pluginFailure": false,
+  "pluginLatency": 0.00375,
+  "region": {
+    "cursorRow": 0,
+    "loop": true,
+    "order": 0
+  },
+  "right": 0.03734162449836731,
+  "routing": {
+    "active": false,
+    "available": true,
+    "failedPlan": 0,
+    "latencyPending": false,
+    "renderedPlan": 1,
+    "requestedPlan": 1,
+    "state": "stopped"
+  },
+  "row": 9,
+  "voicePositions": [],
+  "voices": 4
+}

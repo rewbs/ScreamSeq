@@ -314,6 +314,8 @@ final class PatternView: MTKView, MTKViewDelegate {
   required init(coder: NSCoder) { fatalError() }
   deinit { metalPresenter?.stop() }
   func refreshRenderSnapshot(){metalPresenter?.refreshSnapshot()}
+  var qualificationFrameTrace:[PatternFrameTrace.Entry] {metalPresenter?.frameTrace?.snapshot(generation:metricsGeneration) ?? []}
+  var qualificationRunLoopTrace:QualificationRunLoopTrace? {metalPresenter?.runLoopTrace}
   func shutdownRendering(){metalPresenter?.stop();metalPresenter=nil}
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()

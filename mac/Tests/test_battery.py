@@ -21,12 +21,12 @@ sys.path.insert(0, str(ROOT / "mac/Tools"))
 from resonance_api import APIError, Client, endpoints
 
 
-def app_run(output, index, action):
+def app_run(build, output, index, action):
     with tempfile.TemporaryDirectory(prefix="resonance-battery-") as tmp:
         directory = Path(tmp)
         with (output / f"app-{index}.log").open("w") as log:
             process = subprocess.Popen(
-                [str(ROOT / "bin/mac-native/ScreamSeq.app/Contents/MacOS/ScreamSeq"), "--automation-test"],
+                [str(build / "ScreamSeq.app/Contents/MacOS/ScreamSeq"), "--automation-test"],
                 stdout=log, stderr=log,
                 env={**os.environ, "RESONANCE_AUTOMATION_TEST_DIRECTORY": str(directory)})
             found = []
@@ -55,8 +55,12 @@ def app_run(output, index, action):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "bin/mac-native/battery-qualification")
+    parser.add_argument("--build", type=Path,
+                        default=Path(os.environ.get("SCREAMSEQ_BUILD_DIR", os.environ.get("RESONANCE_BUILD_DIR", str(ROOT / "bin/mac-native")))))
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    args.build = args.build.resolve()
+    args.output = args.output or args.build / "battery-qualification"
     args.output.mkdir(parents=True, exist_ok=True)
     results = {}
 
@@ -80,7 +84,7 @@ def main():
         results["battery"] = []
         for descriptor in battery:
             kind = descriptor["format"]
-            scanner = ROOT / "bin/mac-native/plugin-scanner"
+            scanner = args.build / "plugin-scanner"
             probe_args = (["--validate-vst3", descriptor["path"], descriptor["classID"], "1"] if kind == "VST3"
                           else ["--validate", *[str(descriptor[k]) for k in ("type", "subtype", "manufacturer")]])
             with (args.output / f"scanner-{kind}.log").open("w") as log:
@@ -112,7 +116,7 @@ def main():
             print(f"PASS Battery 4 {kind}: isolated MIDI/render/state probe; hidden app worker load, {len(parameters)} parameters, state restore and removal", flush=True)
         return inventory["data"]
 
-    inventory = app_run(args.output, 1, exercise)
+    inventory = app_run(args.build, args.output, 1, exercise)
 
     def restart(client):
         started = time.monotonic()
@@ -121,7 +125,7 @@ def main():
         # Full scanning on this installation is measured above. A cached load
         # should have ample margin even on a busy development machine.
         assert results["restartCacheSeconds"] < 2
-    app_run(args.output, 2, restart)
+    app_run(args.build, args.output, 2, restart)
     results["hardwareAudioOutput"] = False
     results["visibleWindows"] = False
     (args.output / "results.json").write_text(json.dumps(results, indent=2) + "\n")

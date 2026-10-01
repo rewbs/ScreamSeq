@@ -50,16 +50,25 @@
           const auto slot=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==target.plugin;})-_plugins.begin();
           const auto count=std::count_if(_automation.begin(),_automation.end(),[&](const auto &v){return v.slot==slot&&v.id==id;});
           add(@{@"kind":@"recorded",@"title":[NSString stringWithFormat:@"Recorded automation · %lu timed points",size_t(count)],@"count":@(count),@"enabled":@(count>0),@"plugin":@(target.plugin.c_str()),@"parameter":@(id)});
+          bool base=false;
+          for(const auto &m:native.signal.songModulation)if(m.plugin==target.plugin&&m.parameter==id) {
+            const auto source=std::find_if(native.signal.songSources.begin(),native.signal.songSources.end(),[&](const auto &v){return v.node.id==m.source;});
+            if(source==native.signal.songSources.end())continue;
+            if(!base&&m.enabled){
+              add(@{@"kind":@"graph-source",@"scope":@"song",@"id":nativeID(0),@"title":@"Unmodulated base · manual or automated value",@"enabled":@YES,@"graph":NSNull.null,@"plugin":@(target.plugin.c_str()),@"parameter":@(id)});base=true;
+            }
+            add(@{@"kind":@"graph-source",@"scope":@"song",@"id":nativeID(m.source),@"title":[NSString stringWithFormat:@"%@ · contribution %.4f … %.4f%@",@(source->node.name.c_str()),m.minimum,m.maximum,m.quantized?@" · discrete values":@""],@"enabled":@(m.enabled),@"graph":NSNull.null,@"node":nativeID(m.source),@"plugin":@(m.plugin.c_str()),@"parameter":@(m.parameter),@"minimum":@(m.minimum),@"maximum":@(m.maximum),@"quantized":@(m.quantized),@"sourceKind":@(int(source->node.kind))});
+          }
         } else for(const auto &g:native.signal.library)if(g.id==target.graph) {
           bool base=false;for(size_t index=0;index<g.modulation.size();++index){const auto &m=g.modulation[index];if(m.target!=target.node||m.parameter!=id)continue;
             auto n=std::find_if(g.nodes.begin(),g.nodes.end(),[&](const auto &n){return n.id==m.source;});
             if(!base&&m.enabled){add(@{@"kind":@"graph-source",@"id":nativeID(0),@"title":[NSString stringWithFormat:@"Modulation base · %.4f",m.base],@"enabled":@YES,@"graph":nativeID(g.id),@"node":nativeID(m.target),@"connection":@(index),@"value":@(m.base)});base=true;}
-            add(@{@"kind":@"graph-source",@"id":nativeID(index+1),@"title":[NSString stringWithFormat:@"%@ · contribution %.4f … %.4f",@(n->name.c_str()),m.minimum,m.maximum],@"enabled":@(m.enabled),@"graph":nativeID(g.id),@"node":nativeID(m.source),@"connection":@(index),@"sourceKind":@(int(n->kind))});
+            add(@{@"kind":@"graph-source",@"id":nativeID(m.source),@"title":[NSString stringWithFormat:@"%@ · contribution %.4f … %.4f",@(n->name.c_str()),m.minimum,m.maximum],@"enabled":@(m.enabled),@"graph":nativeID(g.id),@"node":nativeID(m.source),@"connection":@(index),@"sourceKind":@(int(n->kind))});
           }
           for(const auto &c:native.signal.commands)if(c.target==target.target&&(c.graph==target.graph||c.kind==SignalCommandKind::Clear))
             add(@{@"kind":@"graph-command",@"title":[NSString stringWithFormat:@"Graph activity / amount / wet · Pattern %u · row %.3f",patternIndex(c.pattern),double(c.position)/65536],@"pattern":@(patternIndex(c.pattern)),@"position":@(c.position),@"target":nativeID(c.target),@"column":@(c.column),@"graph":nativeID(g.id),@"enabled":@YES});
         }
-        result=@{@"sources":sources,@"omitted":@(omitted),@"rule":target.graph?@"Each graph copy has independent state. Modulation adds contributions to a base, then clamps to 0…1. Inactive copies still process silence; wet and activity affect audibility, not the parameter value.":@"Enabled envelopes, parameter pattern commands and recorded automation are mutually exclusive for each rack parameter. Manual edits may be overwritten on the next automation event. Plugin-internal modulation is not exposed."};
+        result=@{@"sources":sources,@"omitted":@(omitted),@"rule":target.graph?@"Each graph copy has independent state. Modulation adds contributions to a base, then clamps to 0…1. Inactive copies still process silence; wet and activity affect audibility, not the parameter value.":@"Enabled envelopes, parameter pattern commands and recorded automation are mutually exclusive base controls. Song modulation adds its contributions to that base, then clamps to 0…1 and rounds discrete targets. Manual edits may be overwritten by base automation. Plugin-internal modulation is not exposed."};
       } else throw Error(-32601,"Unknown parameter activity method");
     } else if([method isEqual:@"automation.recorded.get"] || [method isEqual:@"automation.recorded.edit"]) {
       const auto slot=instanceSlot();auto id=uint32_t(integer(p[@"parameter"],0,UINT32_MAX));

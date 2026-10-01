@@ -1,0 +1,36 @@
+PASS Battery 4 VST3: isolated MIDI/render/state probe; hidden app worker load, 2224 parameters, state restore and removal
+PASS Battery 4 AU: isolated MIDI/render/state probe; hidden app worker load, 128 parameters, state restore and removal
+{
+  "rescanSeconds": 17.79767245799303,
+  "warmCacheSeconds": 0.005783166969195008,
+  "inventoryCount": 93,
+  "battery": [
+    {
+      "format": "VST3",
+      "loadSeconds": 3.2162500839913264,
+      "stateBytes": 51126,
+      "parameters": 2224,
+      "probe": {
+        "valid": true,
+        "latency": 0,
+        "parameters": 2224
+      },
+      "appLoadRestoreRemove": "passed"
+    },
+    {
+      "format": "AU",
+      "loadSeconds": 3.1609845000202768,
+      "stateBytes": 51218,
+      "parameters": 128,
+      "probe": {
+        "valid": true,
+        "latency": 0,
+        "parameters": 128
+      },
+      "appLoadRestoreRemove": "passed"
+    }
+  ],
+  "restartCacheSeconds": 0.48318716703215614,
+  "hardwareAudioOutput": false,
+  "visibleWindows": false
+}

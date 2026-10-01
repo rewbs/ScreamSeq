@@ -4,6 +4,7 @@
 namespace ScreamSeq {
 struct PlaybackFeedback {
   bool playing=false;
+  bool audioActive=false; // Includes independent instrument/sample audition.
   unsigned sampleRate=48000;
   double latency=0;
   std::vector<Tracker::MixerMeter> meters;

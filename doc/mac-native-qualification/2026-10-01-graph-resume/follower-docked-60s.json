@@ -1,0 +1,648 @@
+{
+  "activityOptions": [
+    "userInitiated",
+    "idleDisplaySleepDisabled"
+  ],
+  "applicationActive": true,
+  "applicationHidden": false,
+  "artifacts": "/var/folders/_l/wc099tqn2kvfk697dlrd02hr0000gn/T/resonance-ui-qualification-0837ECDF-7CC3-44C1-93A4-642BEDFDC2E3",
+  "audioActive": true,
+  "audition": false,
+  "automationPoints": 0,
+  "baseRevision": "e48c645bbec79b39ce181aa678cd57a7dc909133",
+  "bufferSize": 512,
+  "bufferStarvations": 0,
+  "callbacks": 5625,
+  "displayLinkCallbacks": 3591,
+  "displayMaximumFPS": 120,
+  "durationSeconds": 60.013033986091614,
+  "executable": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/follower/strict-docked-17ce4d84/ScreamSeq Performance QA.app/Contents/MacOS/ScreamSeq",
+  "failures": [
+    "Missed presentation deadlines exceed 0.1%",
+    "Presentation stall exceeded two 60 Hz periods",
+    "Presented pattern geometry became stale for more than two periods"
+  ],
+  "fault": false,
+  "frames": 2880000,
+  "framesCommittedAfterDeadline": 0,
+  "framesGPUEndedAfterPresentationTarget": 0,
+  "framesPresented": 3583,
+  "frameTimeline": "/var/folders/_l/wc099tqn2kvfk697dlrd02hr0000gn/T/resonance-ui-qualification-0837ECDF-7CC3-44C1-93A4-642BEDFDC2E3/frame-timeline.json",
+  "frameTimelineSamples": 3602,
+  "graphActivity": [
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 1,
+      "role": "ordinary",
+      "tail": false,
+      "target": "n2"
+    },
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 1,
+      "role": "persistent",
+      "tail": false,
+      "target": "n5"
+    },
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 2,
+      "role": "ordinary",
+      "tail": false,
+      "target": "n5"
+    },
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 1,
+      "role": "ordinary",
+      "tail": false,
+      "target": "n9"
+    },
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 1,
+      "role": "ordinary",
+      "tail": false,
+      "target": "n20"
+    },
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 1,
+      "role": "ordinary",
+      "tail": false,
+      "target": "n24"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n2"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n3"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n4"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n5"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n6"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n7"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n8"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n9"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n17"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n18"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n19"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n20"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n21"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n22"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n23"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n24"
+    }
+  ],
+  "graphDisplay": {
+    "backingScale": 2,
+    "frame": {
+      "height": 982,
+      "width": 1512,
+      "x": 0,
+      "y": 0
+    },
+    "id": 1,
+    "visibleFrame": {
+      "height": 879,
+      "width": 1512,
+      "x": 0,
+      "y": 70
+    }
+  },
+  "graphDrawStatistics": {
+    "draws": 451,
+    "maximumDirtyToVisibleArea": 1.000000209321488,
+    "maximumDrawnNodes": 12,
+    "meanDrawnLabels": 39.066518847006655,
+    "meanDrawnNodes": 8.015521064301552,
+    "meanPaintToVisibleArea": 0.47632475930586904,
+    "totalNodes": 50
+  },
+  "graphEditorHeight": 371,
+  "graphFullyVisibleNodes": 9,
+  "graphMagnification": 0.9,
+  "graphMinimumFullyVisibleNodes": 9,
+  "graphViewportHeight": 264,
+  "graphViewportWidth": 1333,
+  "graphVisible": true,
+  "graphVisibleNodes": 10,
+  "graphWindowFrame": {
+    "height": 879,
+    "width": 1512,
+    "x": 0,
+    "y": 70
+  },
+  "graphWindowMode": "docked",
+  "graphWindowVisible": true,
+  "inactiveWindowStateSamples": 0,
+  "lastFPS": 57.972577668644284,
+  "left": 0.03302720934152603,
+  "liveEdits": 299,
+  "liveSaves": 3,
+  "loop": true,
+  "mainDisplay": {
+    "backingScale": 2,
+    "frame": {
+      "height": 982,
+      "width": 1512,
+      "x": 0,
+      "y": 0
+    },
+    "id": 1,
+    "visibleFrame": {
+      "height": 879,
+      "width": 1512,
+      "x": 0,
+      "y": 70
+    }
+  },
+  "mainWindowFrame": {
+    "height": 879,
+    "width": 1512,
+    "x": 0,
+    "y": 70
+  },
+  "maxCPUFrameMS": 1.0219812393188477,
+  "maxDisplayLinkIntervalMS": 33.419583342038095,
+  "maxGeometrySnapshotAgeMS": 48.58354164753109,
+  "maxGPUFrameMS": 4.163333389442414,
+  "maximumSoundingTrackMeters": 16,
+  "maxMainThreadDrawMS": 1.0219812393188477,
+  "maxMicros": 5692.25,
+  "maxPresentMS": 41.66637494927272,
+  "maxRenderQueueWaitMS": 0,
+  "meanPresentedFPS": 59.767377322514925,
+  "measurementClockEnd": 303329.5590414584,
+  "measurementClockStart": 303269.5584522501,
+  "measurementStarted": true,
+  "metalDrawableHeight": 400,
+  "metalDrawableWidth": 2194,
+  "missedPresentations": 30,
+  "missedSubmissionDeadlines": 0,
+  "missingActivityWindowStateSamples": 0,
+  "noKeyWindowStateSamples": 0,
+  "order": 0,
+  "outOfOrderPresentations": 0,
+  "overruns": 0,
+  "p01DisplayLinkLeadMS": 16.21974998852238,
+  "p99CPUFrameMS": 0.1800060272216797,
+  "p99DisplayLinkIntervalMS": 17.04933337168768,
+  "p99DrawableWaitMS": 0,
+  "p99GeometrySnapshotAgeMS": 17.908916692249477,
+  "p99GPUFrameMS": 0.24845829466357827,
+  "p99MainThreadDrawMS": 0.1800060272216797,
+  "p99PresentationTargetErrorMS": 8.319666667375714,
+  "p99PresentMS": 24.999874993227422,
+  "p99RenderQueueWaitMS": 0,
+  "p99SubmissionLatenessMS": -15.156416629906744,
+  "p999Micros": 4030,
+  "passed": false,
+  "pattern": 0,
+  "patternPosition": 12385.422957600827,
+  "playing": true,
+  "pluginFailure": false,
+  "pluginLatency": 0.001875,
+  "presentationCallbacks": 3588,
+  "presentationSamples": 3462,
+  "presentsWithTransaction": false,
+  "processID": 17244,
+  "region": {
+    "order": 0
+  },
+  "rendererPaused": false,
+  "requestedSeconds": 60,
+  "requestedVST3": false,
+  "right": 0.033034346997737885,
+  "routing": {
+    "active": true,
+    "available": true,
+    "failedPlan": 0,
+    "latencyPending": false,
+    "renderedPlan": 1,
+    "requestedPlan": 1,
+    "state": "stable"
+  },
+  "row": 48,
+  "sampleRate": 48000,
+  "sortedMaxPresentMS": 41.66637494927272,
+  "sortedP99PresentMS": 24.999874993227422,
+  "sortedPresentationSamples": 3462,
+  "sourceFingerprint": "33abffce47cad57ce364717de513884b75124ac999188a435aec19ba743fa601",
+  "submittedFrames": 3591,
+  "timestamp": "2026-10-01T06:34:35Z",
+  "uiWorkPhases": {
+    "drainNotes": {
+      "maxMS": 0.03425002796575427,
+      "p99MS": 0.005249981768429279,
+      "samples": 3577
+    },
+    "graphDraw": {
+      "maxMS": 5.404541618190706,
+      "p99MS": 4.668416630011052,
+      "samples": 451
+    },
+    "graphSignalDisplay": {
+      "maxMS": 5.469875002745539,
+      "p99MS": 3.2455417094752192,
+      "samples": 450
+    },
+    "graphSignalRead": {
+      "maxMS": 1.7355416784994304,
+      "p99MS": 1.5156249864958227,
+      "samples": 450
+    },
+    "graphTelemetry": {
+      "maxMS": 6.149000022560358,
+      "p99MS": 5.598166666459292,
+      "samples": 450
+    },
+    "midi": {
+      "maxMS": 0.05095836240798235,
+      "p99MS": 0.014916702639311552,
+      "samples": 3577
+    },
+    "patternGraphRefresh": {
+      "maxMS": 0.3024583566002548,
+      "p99MS": 0.022458378225564957,
+      "samples": 3577
+    },
+    "pluginEdits": {
+      "maxMS": 0.04549999721348286,
+      "p99MS": 0.011916679795831442,
+      "samples": 3577
+    },
+    "positionTimeline": {
+      "maxMS": 0.019499973859637976,
+      "p99MS": 0.0016666599549353123,
+      "samples": 3577
+    },
+    "qualificationProgress": {
+      "maxMS": 1.1441666283644736,
+      "p99MS": 0.962125021032989,
+      "samples": 6
+    },
+    "qualificationTick": {
+      "maxMS": 1.7210000078193843,
+      "p99MS": 1.014875015243888,
+      "samples": 1199
+    },
+    "signalScope": {
+      "maxMS": 0.010208343155682087,
+      "p99MS": 0.004333327524363995,
+      "samples": 151
+    },
+    "snapshot": {
+      "maxMS": 1.030791667290032,
+      "p99MS": 0.19216665532439947,
+      "samples": 3597
+    },
+    "telemetry": {
+      "maxMS": 7.759083353448659,
+      "p99MS": 0.41862501529976726,
+      "samples": 3577
+    },
+    "tick": {
+      "maxMS": 8.885374991223216,
+      "p99MS": 5.715416686143726,
+      "samples": 3597
+    },
+    "windowLayout": {
+      "maxMS": 4.612541699316353,
+      "p99MS": 0.270041695330292,
+      "samples": 12441
+    },
+    "workspaceContext": {
+      "maxMS": 0.4690833739005029,
+      "p99MS": 0.2127499901689589,
+      "samples": 450
+    }
+  },
+  "uiWorkTimeline": "/var/folders/_l/wc099tqn2kvfk697dlrd02hr0000gn/T/resonance-ui-qualification-0837ECDF-7CC3-44C1-93A4-642BEDFDC2E3/ui-work-timeline.json",
+  "uiWorkTimelineOverwritten": 0,
+  "uiWorkTimelineSamples": 44704,
+  "undoRedoCycles": 14,
+  "unpresentedDrawables": 5,
+  "usesExistingGraph": true,
+  "usesGraph": true,
+  "usesVST3": false,
+  "visiblePatternHeight": 200,
+  "voicePositions": [
+    {
+      "channel": 0,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 155,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 2
+    },
+    {
+      "channel": 1,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 156,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 47
+    },
+    {
+      "channel": 2,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 157,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 96
+    },
+    {
+      "channel": 3,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 157,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 147
+    },
+    {
+      "channel": 4,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 151,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 202
+    },
+    {
+      "channel": 5,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 154,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 4
+    },
+    {
+      "channel": 6,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 154,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 65
+    },
+    {
+      "channel": 7,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 157,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 130
+    },
+    {
+      "channel": 8,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 152,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 198
+    },
+    {
+      "channel": 9,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 125,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 15
+    },
+    {
+      "channel": 10,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 125,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 92
+    },
+    {
+      "channel": 11,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 125,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 173
+    },
+    {
+      "channel": 12,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 125,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 4
+    },
+    {
+      "channel": 13,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 125,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 96
+    },
+    {
+      "channel": 14,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 125,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 193
+    },
+    {
+      "channel": 15,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 125,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 39
+    }
+  ],
+  "voices": 16,
+  "windowLevel": 0,
+  "windowMiniaturized": false,
+  "windowOccluded": false,
+  "windowStateSamples": 1202,
+  "windowStateTimeline": "/var/folders/_l/wc099tqn2kvfk697dlrd02hr0000gn/T/resonance-ui-qualification-0837ECDF-7CC3-44C1-93A4-642BEDFDC2E3/window-state-timeline.json",
+  "windowStateTransitionsDropped": 0,
+  "windowVisible": true,
+  "workspaceHeight": 639,
+  "workspaceLowerHeight": 438,
+  "workspaceUpperHeight": 200
+}

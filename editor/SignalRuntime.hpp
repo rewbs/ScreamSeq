@@ -4,6 +4,7 @@
 #include <array>
 #include <memory>
 #include <span>
+#include <tuple>
 
 namespace Tracker {
 struct SignalControls {
@@ -12,12 +13,14 @@ struct SignalControls {
   SignalControls(SignalDefinition,double sampleRate);
 };
 struct SignalClock { double beat = 0, tempo = 120; bool playing = true; uint64_t pattern = 0; double position = 0, unitsPerFrame = 0, endPosition = 0, rowsPerBeat = 4; };
+struct SignalParameterInfo {uint64_t node=0;uint32_t parameter=0;double normalizedStep=0;};
 struct SignalCallbacks {
   void *context = nullptr;
   bool (*process)(void *, uint64_t, float *, uint32_t, uint64_t, std::span<const MixerAudioInput>) noexcept = nullptr;
   const float *(*output)(void *, uint64_t, uint32_t) noexcept = nullptr;
   bool (*parameter)(void *, uint64_t, uint32_t, double, double, uint64_t, uint32_t) noexcept = nullptr;
   void (*contribution)(void *,uint64_t,uint32_t,uint64_t,double,uint64_t) noexcept = nullptr;
+  bool (*parameterSamples)(void *,uint64_t,uint32_t,std::span<const double>,uint64_t) noexcept = nullptr;
 };
 // One prepared instance. All vectors/delays/ports are allocated in the constructor;
 // render, note, controller and amount are audio-thread-only, allocation-free calls.
@@ -28,6 +31,7 @@ class SignalRuntime {
     std::vector<std::unique_ptr<Port>> inputs, outputs;
     std::vector<MixerAudioInput> auxiliary;
     double envelope = 0, first = 0, last = 0, attackCoefficient = 0, releaseCoefficient = 0;
+    std::array<double,quantum> sampled{};
   };
   struct Edge {
     const SignalAudioEdge *spec = nullptr;
@@ -42,7 +46,12 @@ class SignalRuntime {
   double sampleRate_;
   std::vector<Node> nodes_;
   std::vector<Edge> edges_;
-  struct ModulationTarget { size_t node = 0; uint32_t parameter = 0; double base = 0; std::vector<std::pair<size_t,size_t>> sources; };
+  std::vector<std::pair<uint64_t,size_t>> nodeIndex_;
+  using EdgeIdentity=std::tuple<uint64_t,uint32_t,uint64_t,uint32_t>;
+  std::vector<std::pair<EdgeIdentity,size_t>> edgeIndex_;
+  size_t preparedBytes_=0;
+  size_t measureStorage() const noexcept;
+  struct ModulationTarget { size_t node = 0; uint32_t parameter = 0; double base = 0; std::vector<std::pair<size_t,size_t>> sources; double step=0; std::array<double,quantum> sampled{}; };
   std::vector<ModulationTarget> targets_;
   std::array<double,128> midi_{};
   double amount_ = 1;
@@ -54,7 +63,7 @@ class SignalRuntime {
   double sampledSource(size_t,uint64_t,double,double,double,const SignalClock &) const noexcept;
   const SignalPatternEnvelope *envelope(size_t,uint64_t) const noexcept;
 public:
-  SignalRuntime(SignalDefinition, SignalPlan, double sampleRate);
+  SignalRuntime(SignalDefinition, SignalPlan, double sampleRate,std::span<const SignalParameterInfo> parameters={});
   SignalRuntime(const SignalRuntime &)=delete;
   SignalRuntime &operator=(const SignalRuntime &)=delete;
   SignalRuntime(SignalRuntime &&)=delete;
@@ -66,8 +75,13 @@ public:
   void note(bool gate, bool retrigger = false) noexcept;
   void parameterBase(uint64_t node,uint32_t parameter,double value) noexcept;
   void controls(const SignalControls &) noexcept; // Same nodes/edges/ports, no allocation.
+  bool sameLayout(const SignalDefinition &) const noexcept;
+  bool compatibleHistory(const SignalRuntime &) const noexcept;
+  // Adopt on the audio owner. Scratch buffers are new; common delay rings and
+  // stable source histories transfer without allocation, copying or disposal.
+  void inheritState(SignalRuntime &) noexcept;
   void controller(uint32_t cc,double value) noexcept { if(cc<128)midi_[cc]=value; }
-  size_t storageBytes() const noexcept;
+  size_t storageBytes() const noexcept {return preparedBytes_;}
   uint32_t latency() const {return plan_.totalLatency;}
   const SignalDefinition &definition() const { return definition_; }
   void updateLatencyPlan(SignalPlan); // Control thread; retains modulation/gate state.

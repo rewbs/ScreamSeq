@@ -36,7 +36,7 @@ static void previewRouting() {
     for(auto &p:s.Patterns)if(p.IsValid())for(ROWINDEX r=0;r<p.GetNumRows();++r)for(CHANNELINDEX c=0;c<s.GetNumChannels();++c)*p.GetpModCommand(r,c)={};
   });
   doc->annotate([](NativeSong &n){
-    auto master=n.makeEntity().id;
+    auto master=n.masterID;
     for(const auto &[channel,track]:n.tracks)n.mixer.buses.push_back({track.id,master,MixerBusKind::Track,"Track"});
     n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});
     auto graph=[&](double gain){auto id=n.makeEntity().id,in=n.makeEntity().id,out=n.makeEntity().id;n.signal.library.push_back({id,uint16_t(n.signal.library.size()+1),"Preview reference",{{in,SignalNodeKind::Input,"Input"},{out,SignalNodeKind::Output,"Output"}},{{in,out,0,0,gain}},{}});return id;};
@@ -82,7 +82,7 @@ int main(){@autoreleasepool{try{
   for(uint32_t rate:{44100u,48000u,96000u}){
     auto doc=Document::demo();doc->transaction([](CSoundFile &s){s.Order().assign(2,0);s.Patterns[0].Resize(4);for(auto &p:s.Patterns)if(p.IsValid())for(ROWINDEX row=0;row<p.GetNumRows();++row)for(CHANNELINDEX ch=1;ch<s.GetNumChannels();++ch)*p.GetpModCommand(row,ch)={};});
     uint64_t graph=0,source=0,target=0,aux=0,master=0;
-    doc->annotate([&](NativeSong &n){master=n.makeEntity().id;aux=n.makeEntity().id;source=n.tracks.at(0).id;target=n.tracks.at(1).id;
+    doc->annotate([&](NativeSong &n){master=n.masterID;aux=n.makeEntity().id;source=n.tracks.at(0).id;target=n.tracks.at(1).id;
       for(const auto &[channel,track]:n.tracks)n.mixer.buses.push_back({track.id,master,MixerBusKind::Track,"Track"});
       n.mixer.buses.push_back({aux,master,MixerBusKind::Return,"Graph return"});n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});});
     auto baseline=render(*doc,rate,128);double energy=0;for(auto sample:baseline)energy+=std::abs(sample);check(energy>1,"Reference song is silent");
@@ -109,7 +109,7 @@ int main(){@autoreleasepool{try{
       song.ChnSettings[0].nPan=0;song.ChnSettings[1].nPan=256;
     });
     uint64_t instrumentGraph=0;
-    doc->annotate([&](NativeSong &n){auto master=n.makeEntity().id;for(const auto &[channel,track]:n.tracks)n.mixer.buses.push_back({track.id,master,MixerBusKind::Track,"Track"});n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});
+    doc->annotate([&](NativeSong &n){auto master=n.masterID;for(const auto &[channel,track]:n.tracks)n.mixer.buses.push_back({track.id,master,MixerBusKind::Track,"Track"});n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});
       instrumentGraph=n.makeEntity().id;auto in=n.makeEntity().id,out=n.makeEntity().id;n.signal.library.push_back({instrumentGraph,1,"Half level",{{in,SignalNodeKind::Input,"Input"},{out,SignalNodeKind::Output,"Output"}},{{in,out,0,0,.5}}, {}});
       auto channelGraph=n.makeEntity().id;in=n.makeEntity().id;out=n.makeEntity().id;n.signal.library.push_back({channelGraph,2,"Channel double",{{in,SignalNodeKind::Input,"Input"},{out,SignalNodeKind::Output,"Output"}},{{in,out,0,0,2}}, {}});n.signal.assignments={{n.tracks.at(0).id,channelGraph,1,1}};
     });

@@ -134,8 +134,11 @@ static void hostingAndMeters() {
     };
     const auto baseline=render(128,false);for(uint32_t block:{17u,512u,4096u})check(baseline==render(block,true),"Host input and automation are exact across live/offline partitions");
     NativePlugin missing(state,rate);float zero[]{1,1};check(missing.process(zero,1,0)&&zero[0]==0&&zero[1]==0,"Activated but unrouted external input is silent");
-    auto disabled=state;disabled.auxiliaryInputs.clear();NativePlugin inactive(disabled,rate);float buffer[]{1,1},key[]{1,1};PluginAudioInput source{1,key};check(!inactive.process(buffer,1,0,{&source,1}),"Inactive auxiliary input rejects supplied buffers");
-    check(inactive.process(buffer,1,0)&&buffer[0]==0&&buffer[1]==0,"External selection with disabled bus remains silent, never silently falls back");
+    auto disabled=state;disabled.auxiliaryInputs.clear();NativePlugin inactive(disabled,rate),unrouted(disabled,rate);float buffer[]{1,1},key[]{1,1};PluginAudioInput source{1,key};
+    check(!inactive.buses().back().active && (inactive.preparedAuxiliaryInputs()&2),"Logical input activation is independent of immutable prepared detector capacity");
+    check(inactive.process(buffer,1,0,{&source,1}),"Prepared builtin detector can accept a first live cable without mutating vendor configuration");
+    source.bus=2;check(!inactive.process(buffer,1,1,{&source,1}),"Unprepared detector bus still rejects supplied buffers");
+    check(unrouted.process(buffer,1,0)&&buffer[0]==0&&buffer[1]==0,"Explicit external selection with no routed buffer remains silent, never silently falls back");
   }
   for(const char *id:{Compressor,"resonance.gainer.v1"}) {
     PluginState bad{descriptor(id)};bad.auxiliaryInputs={2};bool rejected=false;try{NativePlugin p(bad,48000);}catch(const std::invalid_argument &){rejected=true;}check(rejected,"Invalid builtin detector bus rejects");

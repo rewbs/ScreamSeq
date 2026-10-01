@@ -26,6 +26,112 @@ def expect_error(code, action):
         raise AssertionError(f"Expected API error {code}")
 
 
+def graph_provenance(client):
+    """Canonical existing edits remain readable without preparing processors."""
+    before=client.call("document.get")
+    reply=client.call("graph.provenance.get", {"plugin":"unloaded-provenance-probe", "parameter":4294967295})
+    assert not reply["changed"] and reply["revision"]==before["revision"]
+    assert reply["data"]["sources"]==[] and reply["data"]["unitsPerRow"]==65536
+    for bad in [{"parameter":True}, {"offset":-1}, {"limit":257}, {"typo":1}]:
+        expect_error(-32602, lambda:client.call("graph.provenance.get", {"plugin":"unloaded-provenance-probe","parameter":1,**bad}))
+    assert client.call("document.get")==before
+    print("PASS graph provenance socket: stopped/unloaded stable targets, strict read-only bounds, no revision or history edit")
+
+
+
+def follower_conversion(client):
+    """Audio tap + follower + stable parameter form a single guarded edit."""
+    def write(method, **params):
+        return client.call(method, {"expectedRevision":client.call("document.get")["revision"], **params})
+    graph = write("graph.create", name="Socket follower conversion")["data"]["graph"]
+    effect = write("graph.node.add", graph=graph, kind="plugin", plugin={"format":"Built-in", "classID":"resonance.gainer.v1"}, insertEdge=0)["data"]["node"]
+    def read(): return next(d for d in client.call("graph.get")["data"]["library"] if d["id"]==graph)
+    before = read()
+    source = next(n["id"] for n in before["nodes"] if n["kind"]=="input")
+    args = {"graph":graph, "kind":"follower", "audioInput":{"node":source,"port":0}, "connect":{"node":effect,"port":1,"output":False,"modulation":True,"base":0.5}}
+    revision = client.call("document.get")["revision"]
+    write("graph.node.add", **args, dryRun=True)
+    assert read()==before and client.call("document.get")["revision"]==revision
+    follower = write("graph.node.add", **args)["data"]["node"]
+    after=read()
+    assert after["audio"][-1]["source"]==source and after["audio"][-1]["target"]==follower
+    assert after["modulation"][-1]["source"]==follower and after["modulation"][-1]["target"]==effect
+    assert after["modulation"][-1]["minimum"]==after["modulation"][-1]["maximum"]==0
+    write("history.undo"); assert read()==before
+    write("history.redo"); assert read()==after
+    expect_error(-32001,lambda:client.call("graph.node.add", {**args,"expectedRevision":revision}))
+    for extra in [{"kind":"lfo"},{"audioInput":{"node":effect}},{"audioInput":{"node":"n99999999"}},{"audioInput":{"node":source,"port":True}},{"audioInput":{"node":source,"unknown":1}}]:
+        expect_error(-32602,lambda:write("graph.node.add", **{**args,**extra}))
+        assert read()==after
+    write("graph.remove", graph=graph)
+    print("PASS follower conversion socket: exact tap and parameter, zero depth, dry run, atomic invalid/cycle/stale rejection and one Undo/Redo")
+
+
+def song_modulation(client):
+    """Use the real socket on this test's private silent host, never an ambient app."""
+    def read(): return client.call("graph.get")["data"]
+    def write(method, **params):
+        return client.call(method, {"expectedRevision":client.call("document.get")["revision"], **params})
+    write("plugin.add", descriptor={"format":"Built-in", "classID":"resonance.gainer.v1", "name":"Gainer", "type":0, "subtype":0, "manufacturer":0})
+    plugin = read()["plugins"][-1]["id"]
+    initial = read()
+    arguments = {"source":{"kind":"lfo", "name":"Socket movement", "rate":2}, "connect":{"plugin":plugin, "parameter":1}}
+    revision = client.call("document.get")["revision"]
+    assert write("graph.song.source.add", **arguments, dryRun=True)["data"]["wouldChange"]
+    assert read() == initial and client.call("document.get")["revision"] == revision
+    source = write("graph.song.source.add", **arguments)["data"]["node"]
+    connected = read()
+    edge = next(e for e in connected["songModulation"] if e["source"] == source)
+    assert edge["plugin"] == plugin and edge["minimum"] == edge["maximum"] == 0
+    assert connected["plugins"] == initial["plugins"] and connected["mixer"] == initial["mixer"]
+    write("history.undo")
+    assert read() == initial
+    write("history.redo")
+    assert read() == connected
+    edge_id = {"source":source, "plugin":plugin, "parameter":1}
+    write("graph.song.modulation.set", **edge_id, minimum=-.2, maximum=.3)
+    changed = read()
+    assert not write("graph.song.modulation.set", **edge_id, minimum=-.2, maximum=.3)["changed"]
+    expect_error(-32001, lambda: client.call("graph.song.source.update", {"expectedRevision":revision, "node":source, "source":{"rate":4}}))
+    for params in [dict(edge_id, maximum=2), dict(edge_id, parameter=True), dict(edge_id, parameter=99999), dict(edge_id, quantized=True)]:
+        expect_error(-32602, lambda: write("graph.song.modulation.set", **params))
+        assert read() == changed
+    for nodes in [[source, source], [source, "n99999999"]]:
+        expect_error(-32602, lambda: write("graph.song.source.remove", nodes=nodes))
+        assert read() == changed
+    expect_error(-32602, lambda: write("graph.song.modulation.remove", connections=[edge_id, dict(edge_id, parameter=99999)]))
+    assert read() == changed
+    curve = write("graph.song.source.add", source={"kind":"automation", "name":"Socket envelope"})["data"]["node"]
+    before_reroute = read()
+    write("graph.song.modulation.set", source=curve, plugin=plugin, parameter=1, replace=edge_id)
+    rerouted = next(e for e in read()["songModulation"] if e["plugin"] == plugin)
+    assert rerouted["source"] == curve and rerouted["minimum"] == -.2 and rerouted["maximum"] == .3
+    write("history.undo")
+    assert read() == before_reroute
+    target = {"kind":"graph", "graph":None, "node":curve, "pattern":0}
+    curve_args = {"graph":None, "node":curve, "pattern":0}
+    points = [{"position":0, "value":.2, "curve":"smooth"}, {"position":256, "value":.8, "curve":"linear"}]
+    write("graph.automation.set", **curve_args, points=points)
+    assert client.call("graph.automation.get", curve_args)["data"]["points"] == points
+    bank = write("envelope.bank.save", target=target, name="Socket root envelope")["data"]["id"]
+    write("envelope.bank.apply", template=bank, target=target, linked=True)
+    assert client.call("envelope.bank.list", {"target":target})["data"]["linkedTemplate"] == bank
+    expect_error(-32602, lambda: write("graph.automation.set", **curve_args, points=[{"position":0,"value":.9}]))
+    saved = read()
+    write("graph.connections.remove", connections=[{"kind":"modulation", **edge_id}])
+    assert all(e["source"] != source for e in read()["songModulation"])
+    write("history.undo")
+    assert read() == saved
+    write("graph.song.source.remove", nodes=[source, curve])
+    assert all(s["id"] not in [source, curve] for s in read()["songSources"])
+    write("history.undo")
+    assert read() == saved and client.call("envelope.bank.list", {"target":target})["data"]["linkedTemplate"] == bank
+    write("graph.song.source.remove", nodes=[source, curve])
+    write("envelope.bank.remove", id=bank)
+    write("plugin.remove", plugins=[plugin])
+    print("PASS song modulation socket: stable targets, zero-depth add, atomic strict/stale rejection, curve/bank integration, mixed-cut API and unified Undo")
+
+
 def plugin_bypass(client):
     def write(method, **params):
         return client.call(method, {"expectedRevision": client.call("document.get")["revision"], **params})
@@ -55,6 +161,41 @@ def plugin_bypass(client):
     assert client.call("plugin.state.get", {"slot":slot})["data"] == state
     write("plugin.remove", slot=slot)
     print("PASS bypass socket: stable identity, pending manual values, no-op, strict/stale rejection, one-step Undo/Redo and unchanged processor state")
+
+
+
+def detach_insert(client):
+    def write(method, **params):
+        return client.call(method, {"expectedRevision":client.call("document.get")["revision"], **params})
+    descriptor = {"format":"Built-in", "classID":"resonance.gainer.v1", "name":"Gainer", "type":0, "subtype":0, "manufacturer":0}
+    write("plugin.add", descriptor=descriptor)
+    graph = client.call("graph.get", {"includeImplicitMixer":True})["data"]
+    plugin = graph["plugins"][-1]["id"]
+    write("plugin.parameters.set", plugin=plugin, values=[{"id":1,"value":-9}])
+    # Materialize the baseline outside the musical history, as autosave does.
+    slot = next(p["slot"] for p in graph["plugins"] if p["id"]==plugin)
+    state = client.call("plugin.state.get", {"slot":slot})["data"]
+    before = client.call("graph.get", {"includeImplicitMixer":True})["data"]
+    arguments = {"plugins":[plugin], "positions":[{"node":"plugin:"+plugin,"x":810,"y":390}]}
+    assert write("mixer.inserts.detach", **arguments, dryRun=True)["data"]["wouldChange"]
+    assert client.call("graph.get", {"includeImplicitMixer":True})["data"]==before
+    revision = client.call("document.get")["revision"]
+    write("mixer.inserts.detach", **arguments)
+    detached = client.call("graph.get", {"includeImplicitMixer":True})["data"]
+    assert plugin in detached["mixer"]["detached"]
+    assert all(plugin not in b.get("inserts",[]) for b in detached["mixer"]["buses"])
+    assert client.call("plugin.state.get", {"slot":slot})["data"]==state
+    assert not write("mixer.inserts.detach", **arguments)["changed"]
+    expect_error(-32001, lambda:client.call("mixer.inserts.detach", {**arguments,"expectedRevision":revision}))
+    for bad in [{"plugins":[]}, {"plugins":[plugin,plugin]}, {"plugins":["missing"]}, {"target":"n1"}, {"positions":[{"node":"plugin:missing","x":0,"y":0}]}]:
+        expect_error(-32602, lambda:write("mixer.inserts.detach", **{**arguments, **bad}))
+    assert client.call("graph.get", {"includeImplicitMixer":True})["data"]==detached
+    write("history.undo")
+    assert client.call("graph.get", {"includeImplicitMixer":True})["data"]==before
+    write("history.redo")
+    assert client.call("graph.get", {"includeImplicitMixer":True})["data"]==detached
+    write("plugin.remove", plugins=[plugin])
+    print("PASS detach socket: one stable processor, healed main path, saved layout, scalar state, no-op, dry-run, strict/stale rejection and unified Undo")
 
 
 def processing_groups(client):
@@ -214,6 +355,12 @@ def parameter_activity(client):
     assert client.call("automation.recorded.get", lane)["data"]["total"] == 1
     sources = client.call("parameter.activity.sources", {"target": target["key"], "parameter": 1})["data"]["sources"]
     assert next(s for s in sources if s["kind"] == "recorded")["count"] == 1
+    before_provenance = client.call("document.get")
+    projected = client.call("graph.provenance.get", lane)["data"]["sources"]
+    recorded = next(s for s in projected if s["kind"] == "recorded")
+    assert recorded["plugin"] == plugin and recorded["parameter"] == 1
+    assert recorded["count"] == 1 and recorded["firstFrame"] == recorded["lastFrame"] == 96000
+    assert recorded["sampleRate"] == 48000 and client.call("document.get") == before_provenance
     print("PASS parameter activity socket: prepared identities, transient watch, strict bounds, recorded point editing, source links, collision rejection and Undo/Redo")
 
 
@@ -1143,16 +1290,25 @@ def musical_automation(client):
     expect_error(-32001, lambda: client.call("automation.pattern.set", params))
     lane = client.call("automation.pattern.get", {"pattern": 0})["data"]["lanes"][0]
     assert lane["resolved"] and lane["plugin"] == instance and lane["points"][0]["curve"] == "exponential"
+    provenance_target = {"plugin": instance, "parameter": 7, "pattern": 0}
+    envelope_sources = client.call("graph.provenance.get", provenance_target)["data"]["sources"]
+    assert len(envelope_sources) == 1
+    envelope = envelope_sources[0]
+    assert envelope["kind"] == "envelope" and envelope["id"] == lane["id"] and envelope["pattern"] == 0
+    assert envelope["position"] == 0 and envelope["endPosition"] == 63 * 65536 and envelope["count"] == 2
+    assert client.call("document.get")["revision"] == applied["revision"]
     expect_error(-32602, lambda: client.call("automation.replaceLane", {"expectedRevision": applied["revision"],
         "slot": 0, "id": 7, "points": [{"frame": 0, "value": .5}]}))
     no_op = client.call("automation.pattern.set", {**params, "expectedRevision": applied["revision"]})
     assert not no_op["changed"]
     client.call("history.undo", {"expectedRevision": applied["revision"], "domain": "document"})
     assert client.call("automation.pattern.get", {"pattern": 0})["data"]["lanes"] == []
+    assert client.call("graph.provenance.get", provenance_target)["data"]["sources"] == []
     revision = client.call("document.get")["revision"]
     client.call("history.redo", {"expectedRevision": revision, "domain": "document"})
     current = client.call("automation.pattern.get", {"pattern": 0})
     assert current["data"]["lanes"][0]["id"] == lane["id"]
+    assert client.call("graph.provenance.get", provenance_target)["data"]["sources"] == envelope_sources
     # Shared envelope operators: exact previews, independent clip geometry, retry/no-op/history.
     original_points = lane["points"]
     def transform(operation, **extra):
@@ -1213,6 +1369,30 @@ def mixer_tools(client):
     expect_error(-32602, lambda: write("mixer.bus.set", {"bus": space, "output": group}))
     for params in [{"gainDB": True}, {"width": 3}, {"pan": -2}, {"prePan": -1.01}, {"prePan": True}, {"prePan": None}, {"typo": 2}, {"inserts": ["missing"]}]:
         expect_error(-32602, lambda: write("mixer.bus.set", {"bus": first, **params}))
+    # One cut stroke uses semantic routes, not filtered graph edge indices.
+    connected_before_cut = client.call("mixer.get")["data"]
+    cut_revision = client.call("document.get")["revision"]
+    cut_params = {"expectedRevision": cut_revision, "connections": [
+        {"kind": "output", "source": first, "target": group},
+        {"kind": "send", "source": group, "target": space}]}
+    preview = client.call("graph.connections.remove", {**cut_params, "dryRun": True})
+    assert preview["data"]["wouldChange"] and not preview["changed"]
+    assert client.call("mixer.get")["data"] == connected_before_cut
+    for cable in [{"kind": "insert", "plugin": "missing"}, cut_params["connections"][0],
+                  {"kind": "output", "source": first, "target": "n999999"}]:
+        expect_error(-32602, lambda: client.call("graph.connections.remove", {
+            **cut_params, "connections": cut_params["connections"] + [cable]}))
+        assert client.call("mixer.get")["data"] == connected_before_cut
+    cut = client.call("graph.connections.remove", cut_params, "song-cut-stroke")
+    assert client.call("graph.connections.remove", cut_params, "song-cut-stroke") == cut
+    expect_error(-32001, lambda: client.call("graph.connections.remove", cut_params))
+    cut_buses = client.call("mixer.get")["data"]["buses"]
+    assert next(b for b in cut_buses if b["id"] == first)["output"] == ""
+    assert next(b for b in cut_buses if b["id"] == group)["sends"] == []
+    write("history.undo", {"domain": "document"})
+    assert client.call("mixer.get")["data"] == connected_before_cut
+    assert not write("graph.connections.remove", {"connections": []})["changed"]
+    assert client.call("document.get")["data"]["canRedo"]
     connected=client.call("mixer.get")["data"]
     assert not write("mixer.bus.set", {"bus": first,"output":None,"dryRun":True})["changed"]
     assert client.call("mixer.get")["data"]==connected
@@ -1548,6 +1728,14 @@ def pattern_performance(client):
         data = client.call("pattern.performance.get", {"pattern": 0})["data"]
         assert applied["changed"] and data["unitsPerRow"] == 65536 and data["commands"][0]["position"] == 12345
         assert data["bindings"][-1]["plugin"] == plugin and data["bindings"][-1]["resolved"]
+        provenance_target = {"plugin": plugin, "parameter": 7, "pattern": 0}
+        command_sources = client.call("graph.provenance.get", provenance_target)["data"]["sources"]
+        assert len(command_sources) == 1
+        source = command_sources[0]
+        assert source["kind"] == "pattern-commands" and source["binding"] == 255 and source["column"] == 1
+        assert source["channel"] == 0 and source["pattern"] == 0 and source["count"] == 1
+        assert source["commands"] == [{"kind":"pattern-slide", "position":12345, "duration":98765, "value":0.8123456789}]
+        assert client.call("document.get")["revision"] == applied["revision"]
         assert not write("pattern.performance.set", params)["changed"]
         expect_error(-32001, lambda: client.call("pattern.performance.set", {**params, "expectedRevision": "stale"}))
         expect_error(-32602, lambda: write("pattern.performance.set", {"pattern": 0, "removeBindings": [255]}))
@@ -1557,8 +1745,10 @@ def pattern_performance(client):
         assert client.call("pattern.performance.get", {"pattern": 0})["data"] == data
         write("history.undo", {"domain": "document"})
         assert client.call("pattern.performance.get", {"pattern": 0})["data"] == initial
+        assert client.call("graph.provenance.get", provenance_target)["data"]["sources"] == []
         write("history.redo", {"domain": "document"})
         assert client.call("pattern.performance.get", {"pattern": 0})["data"] == data
+        assert client.call("graph.provenance.get", provenance_target)["data"]["sources"] == command_sources
         write("history.undo", {"domain": "document"})
     finally:
         write("plugin.remove", {"slot": slot})
@@ -1875,9 +2065,13 @@ def main():
                 assert client.call("document.get")==before_preview
                 print("PASS preview destination socket: explicit channels, independent default, strict range/type validation, no audio start on release, unchanged document")
                 plugin_bypass(client)
+                detach_insert(client)
                 parameter_activity(client)
                 processing_groups(client)
                 song_processing_groups(client)
+                song_modulation(client)
+                follower_conversion(client)
+                graph_provenance(client)
                 navigation_pattern(client)
                 print("PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output")
             finally:

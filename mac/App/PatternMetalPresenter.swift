@@ -12,6 +12,35 @@ struct PatternRenderTiming {
   let timestamp:CFTimeInterval,deadline:CFTimeInterval,snapshotAgeMS:Double
   let generation:Int,starved:Bool
 }
+// Qualification-only, bounded correlation of one drawable through its complete
+// lifetime. GPU/presentation callbacks can arrive in either order. Keep their
+// timestamps together instead of inferring compositor behaviour from percentiles
+// of unrelated callback arrays. No serialization or main-thread work occurs here.
+final class PatternFrameTrace {
+  struct Entry {
+    let sequence:Int, generation:Int
+    let callback:Double, deadline:Double, presentationTarget:Double, geometryPrepared:Double
+    var committed=0.0, scheduled=0.0, gpuStart=0.0, gpuEnd=0.0, completed=0.0, presented=0.0, presentationCallback=0.0
+  }
+  private let lock=NSLock(),capacity:Int
+  private var entries:[Entry?],sequence=0
+  init(capacity:Int=8192){self.capacity=max(1,capacity);entries=Array(repeating:nil,count:max(1,capacity))}
+  func begin(generation:Int,callback:Double,deadline:Double,presentationTarget:Double,geometryPrepared:Double)->Int {
+    lock.lock();defer{lock.unlock()}
+    let index=sequence;sequence+=1
+    entries[index % capacity]=Entry(sequence:index,generation:generation,callback:callback,deadline:deadline,presentationTarget:presentationTarget,geometryPrepared:geometryPrepared)
+    return index
+  }
+  func update(_ index:Int,_ edit:(inout Entry)->Void) {
+    lock.lock();defer{lock.unlock()}
+    guard entries[index % capacity]?.sequence==index else{return}
+    edit(&entries[index % capacity]!)
+  }
+  func snapshot(generation:Int)->[Entry] {
+    lock.lock();defer{lock.unlock()}
+    return entries.compactMap{$0}.filter{$0.generation==generation}.sorted{$0.sequence<$1.sequence}
+  }
+}
 final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
   private let lock=NSLock()
   private var latest:PatternRenderSnapshot?,freeBuffers:[MTLBuffer]
@@ -22,6 +51,8 @@ final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
   private let request:()->PatternRenderSnapshot?
   private let timing:(PatternRenderTiming)->Void
   private let submitted:(Int,Double)->Void,completed:(Int,Double)->Void,presented:(Int,Double)->Void
+  let frameTrace=CommandLine.arguments.contains("--ui-test") ? PatternFrameTrace():nil
+  let runLoopTrace=QualificationRunLoopTrace.enabled ? QualificationRunLoopTrace():nil
   init(layer:CAMetalLayer,frameRate:Float=60,bufferLength:Int,queue:MTLCommandQueue,pipeline:MTLRenderPipelineState,atlas:MTLTexture,
        snapshot:@escaping()->PatternRenderSnapshot?,timing:@escaping(PatternRenderTiming)->Void,
        submitted:@escaping(Int,Double)->Void,completed:@escaping(Int,Double)->Void,presented:@escaping(Int,Double)->Void) {
@@ -35,6 +66,7 @@ final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
     let worker=Thread{[self] in
       autoreleasepool {
         let loop=CFRunLoopGetCurrent()!
+        runLoopTrace?.attach(to:loop)
         let keepAlive=Port()
         RunLoop.current.add(keepAlive,forMode:.default)
         let link=CAMetalDisplayLink(metalLayer:layer)
@@ -45,7 +77,7 @@ final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
         link.add(to:.current,forMode:.common)
         lock.lock();runLoop=loop;link.isPaused=paused;let exit=stopped;lock.unlock()
         if !exit {CFRunLoopRun()}
-        link.invalidate();displayLink=nil;keepAlive.invalidate()
+        runLoopTrace?.detach();link.invalidate();displayLink=nil;keepAlive.invalidate()
         lock.lock();runLoop=nil;latest=nil;thread=nil;lock.unlock()
       }
     }
@@ -96,6 +128,8 @@ final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
       guard let buffer else{return}
       let release={ [self] in lock.lock();freeBuffers.append(buffer);lock.unlock() }
       guard frame.bytes.count<=buffer.length else{release();return}
+      let trace=frameTrace,traceID=trace?.begin(generation:frame.generation,callback:now,deadline:update.targetTimestamp,
+        presentationTarget:update.targetPresentationTimestamp,geometryPrepared:frame.preparedAt)
       frame.bytes.withUnsafeBytes{if let p=$0.baseAddress{buffer.contents().copyMemory(from:p,byteCount:$0.count)}}
       let drawable=update.drawable,pass=MTLRenderPassDescriptor()
       pass.colorAttachments[0].texture=drawable.texture;pass.colorAttachments[0].loadAction = .clear
@@ -106,14 +140,16 @@ final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
       encoder.setVertexBytes(&size,length:MemoryLayout<SIMD2<Float>>.stride,index:1)
       encoder.setFragmentTexture(atlas,index:0);encoder.drawPrimitives(type:.triangle,vertexStart:0,vertexCount:frame.count);encoder.endEncoding()
       let generation=frame.generation,deadline=update.targetTimestamp
-      command.addScheduledHandler{[submitted] _ in let late=(CACurrentMediaTime()-deadline)*1000;DispatchQueue.main.async{submitted(generation,late)}}
+      command.addScheduledHandler{[submitted] _ in let time=CACurrentMediaTime();if let traceID{trace?.update(traceID){$0.scheduled=time}};let late=(time-deadline)*1000;DispatchQueue.main.async{submitted(generation,late)}}
       command.addCompletedHandler{[completed] command in
+        if let traceID {let time=CACurrentMediaTime();trace?.update(traceID){$0.gpuStart=command.gpuStartTime;$0.gpuEnd=command.gpuEndTime;$0.completed=time}}
         let ms=(command.gpuEndTime-command.gpuStartTime)*1000;release();DispatchQueue.main.async{completed(generation,ms)}
       }
-      drawable.addPresentedHandler{[presented] draw in let time=draw.presentedTime;DispatchQueue.main.async{presented(generation,time)}}
+      drawable.addPresentedHandler{[presented] draw in let time=draw.presentedTime;if let traceID {let callback=CACurrentMediaTime();trace?.update(traceID){$0.presented=time;$0.presentationCallback=callback}};DispatchQueue.main.async{presented(generation,time)}}
       // CAMetalDisplayLink assigns the drawable's presentation time. The
       // explicit atTime/afterMinimumDuration variants are invalid for it.
       command.present(drawable);command.commit()
+      if let traceID {let time=CACurrentMediaTime();trace?.update(traceID){$0.committed=time}}
     }
   }
 }

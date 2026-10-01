@@ -1,0 +1,15 @@
+{
+  "bundle": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/ui-layout-native-b64ebc01/ScreamSeq Frame QA.app",
+  "sha256": "c164e8d6c6119a2ba33bf49a4e91f03f363bba61594d7787ccea1658967111d2",
+  "sourceFingerprint": "90125bc71fb0b7df0ebd3e622d99b2b2f7fd2f101971dbd90abd05a4fe24e511",
+  "baseCoherentFingerprint": "6dec897ca3d83c375fbab441f3408caa76b341aaec672e898d53baf96841ce78",
+  "baseUIFingerprint": "e30b515374b4dd16fd363f0337f035d36a68fbd91fb2df306676145659a954d7",
+  "linkedArchiveHashes": {
+    "libTrackerMac.a": "829f5dd2773659867953e06ecbbf7e1a16aba21b5c0d3d1d03438d8e0af02ea3",
+    "hosted/libTrackerHosted.a": "75f2e35c9db08eaf8f2dfdf40cf0a7322fc10a79d28e5c22ecc929aa9c404b25",
+    "libTrackerEditor.a": "66b7a3a07ad6e1f7f7ba4587de3ee4460ed2b8998185a5031723addbc2970b49",
+    "libOpenMPTCore.a": "03ed63f2126fdde983565e76880aae27202658b9e5dd28b7e9cb6e2e82900800",
+    "libTrackerFLAC.a": "267dedd94f929d0bc9f3eb5a0802411f58f7fb57333434f03df86c5da950e713"
+  },
+  "experiment": "Layout/restoration candidate with native-screen refresh preference and preferredFrameLatency1. UI snapshots remain60Hz; all strict gates/fixture/C++ archives unchanged."
+}

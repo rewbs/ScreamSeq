@@ -7,6 +7,8 @@ final class WorkspacePanel: NSView {
   var pinned = false { didSet { pin.state = pinned ? .on : .off; pin.toolTip = pinned ? "Pinned target · click to follow the cursor" : "Pin this target"; onPin?(pinned) } }
   var onPin: ((Bool) -> Void)?, onFollow: (() -> Void)?, onReturn: (() -> Void)?
   var onPlace: ((String) -> Void)?
+  var onBack:(()->Void)? {didSet{back.isHidden=onBack==nil}}
+  private lazy var back=ActionButton("Back to graph",symbol:"arrow.left"){[weak self] in self?.onBack?()}
   private var pin: ActionButton!, placement: NSPopUpButton!
   private let header = NSView()
   private var focused = false
@@ -22,8 +24,8 @@ final class WorkspacePanel: NSView {
     let label = Theme.label(title, size: 11, weight: .semibold)
     label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     target.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-    stack(.horizontal, [label, target, NSView(), pin, options], spacing: 5).fill(header, inset: 4)
-    addSubview(header); addSubview(content)
+    stack(.horizontal, [label, target, NSView(), back, pin, options], spacing: 5).fill(header, inset: 4)
+    back.isHidden=true;addSubview(header); addSubview(content)
     if let height {
       let scroll = verticalScrollView(); scroll.hasHorizontalScroller = true; scroll.documentView = view; scroll.fill(content)
       view.translatesAutoresizingMaskIntoConstraints = false
@@ -41,6 +43,7 @@ final class WorkspacePanel: NSView {
   }
   func actionMenu() -> NSMenu {
     let menu = NSMenu(title: title + " panel"); menu.autoenablesItems = false
+    if onBack != nil{menu.addItem(ContextAction("Back to graph"){[weak self] in self?.onBack?()})}
     menu.addItem(ContextAction(pinned ? "Follow cursor" : "Pin current target") { [weak self] in self?.pinned.toggle() })
     menu.addItem(ContextAction("Inspect editing cursor") { [weak self] in self?.pinned = false; self?.onFollow?() })
     menu.addItem(ContextAction("Return to opening row") { [weak self] in self?.onReturn?() })
@@ -138,7 +141,7 @@ final class DockWorkspace: NSView, NSWindowDelegate {
     panel.removeFromSuperview(); floating[id]?.orderOut(nil); floating[id]?.contentView = nil
     locations[id] = destination
     if destination == "float" {
-      let win = floating[id] ?? NSWindow(contentRect: NSRect(x: 0,y: 0,width: 1060,height: 800),styleMask: [.titled,.closable,.resizable,.miniaturizable],backing: .buffered,defer: false)
+      let win = floating[id] ?? UIWorkTrace.window(contentRect: NSRect(x: 0,y: 0,width: 1060,height: 800),styleMask: [.titled,.closable,.resizable,.miniaturizable],backing: .buffered,defer: false)
       win.title = panel.title; win.contentView = panel; win.isReleasedWhenClosed = false; win.delegate = self; win.minSize = NSSize(width: 640,height: 400)
       if floating[id] == nil { win.center(); win.setFrameAutosaveName("ResonancePanel-" + id) }; floating[id] = win
       if select { win.makeKeyAndOrderFront(nil) }

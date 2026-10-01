@@ -402,6 +402,7 @@ bool NativeEffect::process(float *buffer, uint32_t frames, const float *sidechai
   if (frames > 4096 || (!buffer && frames)) return false;
   if(dynamics_ && frames && sidechainPresent_ != (sidechain!=nullptr)){sidechainPresent_=sidechain!=nullptr;if(value(9)==2)update(9);}
   rendered_ = rendered_ || frames != 0;
+  const bool automaticDetector=dynamics_&&value(9)==2;
   for (uint32_t i = 0; i < frames; ++i) {
     const double left = buffer[2 * i], right = buffer[2 * i + 1];
     if (!std::isfinite(left) || !std::isfinite(right)) return false;
@@ -450,7 +451,10 @@ bool NativeEffect::process(float *buffer, uint32_t frames, const float *sidechai
       const auto gain = ramps_[6].next(); l = selectedL * gain; r = selectedR * gain;
     }
     // Standalone processors own their dry path and control timing.
-    const std::array<double,2> key{sidechain ? sidechain[2*i] : 0,sidechain ? sidechain[2*i+1] : 0};
+    // Auto mode crossfades its detector selector. Once disconnected, both
+    // selector legs must carry program audio; fading from a silent external
+    // leg would briefly release compression and depend on callback boundaries.
+    const std::array<double,2> key{sidechain ? sidechain[2*i] : automaticDetector?left:0,sidechain ? sidechain[2*i+1] : automaticDetector?right:0};
     if (dynamics_ && (!std::isfinite(key[0]) || !std::isfinite(key[1]))) return false;
     const auto output = maximizer_ ? maximizer_->process({left,right}) : dynamics_ ? dynamics_->process({left,right},key) : cabinet_ ? cabinet_->process({left, right}) : distortion_ ? distortion_->process({left, right}) : lofi_ ? lofi_->process({left, right}) : std::array<double, 2>{left + wet * (l - left), right + wet * (r - right)};
     const auto outL = output[0], outR = output[1];

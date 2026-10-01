@@ -20,6 +20,14 @@ Native voice positions are published by `Renderer` through bounded atomic snapsh
 
 A non-master mixer bus may have output zero to disconnect its main route while retaining sends and processors. Such projects require native metadata 15; ordinary connected projects retain their existing metadata requirements. Deleting a disconnected group moves its retained inserts/plugin outputs to master and leaves formerly connected child main outputs disconnected.
 
+`NativeSong::masterID` reserves the Master identity during document construction,
+before routing is materialized. Implicit graph/mixer reads reuse that identity
+without allocating or adding history; unrelated graph creation, Undo/Redo and
+save/reopen cannot retarget a displayed Master. Both current metadata-17 codecs
+store it. When this optional field is absent, decoding adopts an existing Master
+or reserves one for an implicit song. Conflicting explicit identities are rejected.
+All mixer materialization paths use `NativeSong::ensureMixer`.
+
 Sample-instrument graphs are prepared independently per instrument/raw channel and feed the ordinary mixer through sample-only OpenMPT adapters. Their NNA voices keep their original routing. `NativeSignalGraph` handles both that stage and channel/group graphs with a shared 256-processor/256-MiB host-storage budget. Graph automation sources store per-pattern curves using stable IDs, compiled formulas and the shared evaluator. Both additions require native metadata 13. See `mac/GRAPH_WORKFLOW.md` for the current signal order, activity commands, editing semantics and limits.
 
 The current native project wrapper is a versioned binary property list containing an exact song snapshot, metadata and plugin state. Metadata and container versions are separate. `windows/Project/` implements the compatible portable codec and preservation-aware atomic saves. Plugin recipes use stable class identity; local paths are resolution hints. AU remains macOS-only. Missing platform plugins preserve opaque state and reject playback preparation rather than being replaced silently.
@@ -43,7 +51,7 @@ Quit must drain document/recovery work asynchronously, then call `TrackerSession
 ## Editing and API invariants
 
 - Native IDs are stable across insert/reorder; indices are transient views. Whole-collection API writes need read/merge/write.
-- Mutation requests carry `expectedRevision`; context changes also guard context revision. Document and plugin Undo domains are currently distinct.
+- Mutation requests carry `expectedRevision`; context changes also guard context revision. Document, plugin and recorded-automation edits share one chronological Undo history. The accepted `all`, `document` and `plugins` API domain names are aliases, not separate stacks exposed to the musician. Revision tokens still distinguish the underlying document and plugin revisions.
 - Precise notes and graph commands use 65536 units/row. Pattern automation points use 256 units/row. Beat offsets use the current pattern signature, not a fixed assumption of four rows/beat.
 - Scripted curves are precompiled bounded mathematical expressions. No general-purpose interpreter executes in the audio callback.
 - VST3 automation uses sample-offset parameter queues within normal blocks. Continuing tracker effects still follow ordinary ticks.
@@ -80,7 +88,7 @@ MIDI uses per-track key-off rather than the legacy cut's broad CC120/123 message
 Cut commands at a precise-note timestamp run after the note-on. Parameter/pitch
 runtimes ignore this command kind. Empty plugin trigger creation is exposed by
 `instrument.create(empty:true)`, with sample-only conversion preserving mappings;
-UI creation then assigns the new slot through the existing plugin history domain.
+UI creation then assigns the new slot as the next edit in unified chronological history.
 
 ## Unified pattern FX (current native format)
 
@@ -141,83 +149,104 @@ vendor-internal DSP modulation.
 
 The macOS Parameter activity inspector/API supplies source navigation and a
 revision-guarded recorded-point editor. Recorded point mutations reuse existing
-absolute automation storage and plugin Undo; no metadata version is added.
+absolute automation storage and the plugin-state portion of unified chronological
+Undo; no metadata version is added. These recorded-point mutations require stopped
+playback and reject without stopping an active transport. Viewing and navigating
+existing points does not require a live processor or stop playback.
 Monitor identities are document scoped externally and distinguish graph roles,
 bus uses, sample-instrument channels and the independent inspector copy.
 The shared monitor is available to Windows hosting; a Windows-native panel/API
 adapter has not been added by this macOS UI change.
 
-### Prepared live-routing transitions (partially enabled)
+### Prepared live routing and graph controls
 
-`editor/RealtimeTransition.hpp` provides a bounded single-producer/render-consumer
-exchange which retains outgoing and incoming plans until explicit render-thread
-retirement. Superseded pending preparations can be reclaimed on the control
-thread while a fade is in flight. Revisions reject stale preparations and expose
-requested versus rendered state. This differs from `RealtimePlan`, whose old
-plan can be reclaimed immediately after the next consume.
+`editor/RealtimeTransition.hpp` owns a bounded single-producer/render-consumer
+handoff. The control worker validates and prepares a candidate before committing
+the document, publishes without allocation, and retains outgoing state until the
+render thread releases it. Requested, rendered and failed revisions are distinct.
+Superseded pending candidates are reclaimed off the callback. `commitStopped`
+requires a quiescent device and is not a concurrent publication shortcut.
 
-`reusableMixerProcessors` in `MixerGraph.cpp` compares complete input expressions
-for old/new compiled mixers. Stable processor identity alone is insufficient:
-sidechains, fan-in order, gain, pre/post taps, latency compensation and changed
-upstream state all propagate. Explicit reset identities cover changed recipes
-and plugin state. Instruments retain their source identity when only destinations
-change. Comparison uses collision-free expression interning on the control thread.
+`MixerTransition` compiles the union of old/new dependencies. Retained vendors
+advance once per interval, with changed inputs interpolated before processing;
+changed outputs use a 10 ms sample-clock linear fade. Equivalent delay/fader
+histories retain state, including a prepared per-chunk cache so a delay cannot
+advance twice. `reusableMixerProcessors` and `MixerTransitionReuse` compare input
+expressions, stable identities, taps, gains, ports, latency and upstream state;
+identity alone does not prove two processing paths equivalent. The combined host
+storage is bounded. A cycle in the transition union, incompatible latency or an
+unprepared source/port change rejects before the document or transport changes.
 
-Neither component enables live topology publication by itself. The executor must
-retain equivalent delay/fader histories, cache shared processors so they advance
-once, prepare separate affected copies, handle latency/warm-up/tail transitions,
-and integrate MIDI routing, failure retention, pending UI state and chronological
-Undo. Most structural mutation paths still stop playback. Do not infer a complete live
-repatch capability from the ownership or dependency unit tests.
+The Mac host enables this path for supported effect Add/Remove, reorder,
+detach/insert and bus routing, including grouped Undo/Redo. Fixed OpenMPT source
+adapter slots and held instrument state remain stable while effect catalogs
+change. Disconnected effects continue processing silence. Prepared built-in
+detector inputs and AU input storage allow live auxiliary-input connection;
+unprepared VST3 bus activation and new outputs still require stopped preparation.
+Arbitrary latency changes, new instrument adapters and instrument-assignment
+changes have no seamless handoff yet. A rejected live edit leaves the previous
+audible plan playing and reports the reason; it does not silently stop/restart.
+Windows shares the executor, model and storage, but its structural-edit adapter
+still uses stopped preparation. Portable tests are not a Windows app qualification.
+
+Per-plan meter maps and the bounded append-only signal-port catalog publish
+stable identities and meter slots together. Failed preparation cannot publish
+orphan ports. The UI reads requested/rendered plan status and reports Preparing
+while the old plan remains active. Layout, filters and presentation-only frames
+never rebuild audio processing.
+
+`GraphControlPlan` publishes a complete fixed-topology recipe update across
+ordinary, row, persistent and sample-instrument copies, including inactive copies.
+Parameter values, modulation source settings/depths, existing audio-edge gains
+and compiled curves change together while note/envelope histories continue.
+Ordinary automation lanes can be part of the same atomic publication. Producer
+revisions prevent an older compound plan from overwriting a newer lane update.
+The host compares against the latest accepted control/routing state, not only
+its construction-time graph.
+
+`hosted/GraphPluginEndpoint` retains a stable logical recipe-processor target.
+An opaque preset update prepares replacement vendor instances off-thread for
+every affected copy, validates matching descriptor, ports, latency and parameter
+catalogs, then adopts all at one boundary with a 10 ms old/new vendor-output fade.
+Unchanged node vendors stay intact. Parameter ramps feed both sides during the
+fade, and producer-owned snapshots retain old instances until safe retirement.
+This handles hidden preset state as well as exposed values; it does not enable
+arbitrary recipe node/edge topology or incompatible vendor state changes. Recipe
+storage, replacement buffers and conservative tails remain budgeted off-thread.
+
+`hosted/SongModulationHost` evaluates song-level LFO, envelope, random, MIDI,
+amount, scoped note-envelope and current-block audio-follower sources against
+stable rack parameter IDs. Additive contributions remain separate from the
+unmodulated baseline, clamp once, and explicitly quantize discrete targets.
+AU/built-in delivery and VST3 sample-offset queues preserve sub-buffer timing.
+The document stores source definitions and edges; control snapshots prepare all
+lookup tables, curves and storage outside the callback.
+
+`editor/ParameterProvenance` projects existing envelopes, pattern FX bindings and
+recorded automation as bounded read-only source references. These retain their
+base-setting semantics and cannot be cut or repatched as additive graph wires.
+Both session adapters expose `graph.provenance.get`, even stopped or without a
+prepared vendor. The Mac graph loads one selected parameter's source cards
+lazily; exact editing links preserve a route back to the graph.
+
+Relevant regression suites include mixer-publication, native-mixer, precise-ramp,
+plugin-latency, song-modulation, signal-graph-session, unified-history and the
+portable Windows model/metadata suites. Rendered cases exercise callback
+partitions, held notes, opaque AU/VST presets, tails, failure retention and host
+allocation/free/lock auditing. Current measured results and unsupported cases
+belong in the dated qualification record; source support is not a claim that
+every third-party plugin or machine has passed live UI/audio qualification.
 
 
-`MixerTransitionReuse` also matches delay histories and smoothed bus controls.
-`MixerRuntime::retainHistory` is control-thread preparation: source bindings and
-ownership must remain stable until render activation. Compatible delay lines
-share a prepared output-chunk cache, so old/new plans cannot advance them twice.
-`activateHistory` runs after the outgoing plan begins a chunk and before either
-plan processes it; it copies only small ramp records. Both plans must use exactly
-the same chunk boundaries. A retained plan rejects rendering before activation.
-The hosted mixer now uses this activation path for supported live reroutes.
+### Pulling out a rack processor
 
-`hosted/RenderOnce` similarly shares one processor's current main output across
-compatible plans. Auxiliary buffers are consumed before either plan starts the
-next chunk. The wrapper itself must be shared; sharing only the vendor processor
-would still process it twice. Multi-bus and latency fixtures cover real AU/VST3
-processors. `mixer-transition` covers exact reference PCM, active ramp histories,
-PDC, sidechain/auxiliary fan-out, concurrent preparation/cancellation and retirement.
-`MixerTransition` owns the old/new plans, fills the incoming latency history from
-real ongoing sources, applies a 10 ms sample-clock linear fade, and collects
-retired plans off the callback. It bounds the combined host storage and rejects
-an incompatible catalog or total-latency change. A failed candidate retains the
-outgoing plan; failed request revisions are distinct from rendered revisions.
-`commitStopped` is only for a fully quiescent device (e.g. the existing latency
-refresh path); it must never be used concurrently with rendering.
-
-The native `PluginChain` uses this executor for normal mixer playback, preserving
-the fixed OpenMPT adapter/source indices. macOS mixer API edits and document
-Undo/Redo publish a prepared plan when existing bus kinds, source assignments,
-total latency and all processor input dependencies can be retained. Group/return
-buses can be added, removed or reordered within that constraint; track source
-adapters remain fixed. Bus meter maps belong to each prepared plan and resolve
-by stable identity. The bounded append-only signal-port catalogue publishes
-immutable identities and meter slots together, allowing telemetry readers and
-audio observation to continue while a new bus is prepared. Existing
-ordinary/row/persistent and sample-instrument graph copies are also retained
-when their processing and bus note-envelope membership stay unchanged. The
-control owner compares against the newest published graph-control snapshot;
-a combined routing/control Undo cannot silently skip restoring parameters.
-The rendered fixture reroutes a dry channel into another channel while an
-unaffected VST3 insert and all these graph copies keep running, with reference
-PCM checks at 17/512/4096-frame blocks and the realtime allocation/free/lock audit.
-Preparation finishes before the document transaction;
-publication is allocation-free. Busy transitions reject without editing the model.
-
-This is deliberately a partial host path. Changed processor inputs, recipe
-instances, source adapters, auxiliary port activation and differing latency
-still use stopped preparation. Affected copies, their automation/MIDI,
-full latency transitions and requested/rendered UI remain unfinished. Windows
-shares the executor and build sources; its API adapter has not enabled the live
-publication path. `mixer-publication` covers direct executor fades, failure
-retention and concurrent ownership; `native-mixer` covers actual hosted reroute
-and reverse transitions against continuously rendered reference audio.
+`mixer.inserts.detach` uses the shared `detachMixerInsert` transaction to remove
+one existing effect from its serial owner, heal that main path and retain the
+processor as explicitly disconnected. The existing `MixerGraph.detached` storage
+clocks it on silence; it cannot fall back onto Master. State, parameter bindings
+and identity survive, and optional dragged position belongs to the same Undo.
+Mac and Windows adapters expose the same strict guarded operation. Explicit
+auxiliary input/output routes reject without dropping branches. A disconnected
+multi-processor chain still needs a representation for its internal cables; this
+operation therefore accepts exactly one processor rather than silently splitting
+a selected chain. Recipe `graph.nodes.detach` remains the chain-capable path.

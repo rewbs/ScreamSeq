@@ -89,7 +89,7 @@ void nativeColumns() {
 	doc.annotate([&](NativeSong &n) {
 		const auto p = n.patterns.at(0).id, t = n.tracks.at(1).id, other = n.tracks.at(2).id;
 		n.preciseNotes = {{p, t, 2 * unit + 100, 1, 61, 100}, {p, t, 5 * unit + 7, 0, 255, 127}, {p, other, 2 * unit + 100, 1, 62, 100}, {p, t, 20 * unit, 1, 63, 100}};
-		const auto master = n.makeEntity().id;
+		const auto master = n.masterID;
 		for(const auto &[index, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
 		n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
 		n.signal.lanes[t] = 1; n.signal.lanes[other] = 1; n.signal.lanes[master] = 1;

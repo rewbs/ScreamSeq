@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <optional>
 #include <string>
 #include <vector>
 #include "editor/MixerRuntime.hpp"
@@ -37,6 +38,7 @@ struct PluginParameter {
   float step = 0;
   bool writable = true;
   bool continuous = true; // False for enumerated, read-only and program-selector controls.
+  std::optional<double> manualValue; // Control-owned manual/preset base; value remains latest effective value.
 };
 struct PluginInstrumentAlias {
   uint32_t instrument = 0, channel = 1; // One-based tracker instrument and MIDI channel.

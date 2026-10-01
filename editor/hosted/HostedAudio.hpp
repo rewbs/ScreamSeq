@@ -18,6 +18,7 @@
 #include "RenderOnce.hpp"
 #include "editor/NativeEffects.hpp"
 #include "editor/SignalGraph.hpp"
+#include "editor/SongModulation.hpp"
 namespace OpenMPT {class CSoundFile;struct ModInstrument;}
 namespace Tracker {
 class PatternCommandRuntime;
@@ -27,12 +28,43 @@ class SignalRuntime;
 struct SignalControls;
 class Renderer;
 struct NativeSong;
+struct PluginSongModulation {
+  SongModulationRuntime *runtime=nullptr;
+  SignalClock clock;
+  uint64_t frame=0;
+  struct Target {uint32_t parameter;size_t index;double minimum,maximum;};
+  std::vector<Target> targets;
+};
+// Borrowed for one synchronous processor call; at most64 targets with32
+// normalized values each. The graph runtime owns all sample arrays.
+struct PluginParameterSamples {uint32_t parameter=0;double minimum=0,maximum=1;std::span<const double> values;ParameterSource source;};
 class NativePlugin;
-struct GraphParameterUpdate { NativePlugin *plugin=nullptr;SignalRuntime *runtime=nullptr;uint64_t node=0;uint32_t parameter=0;double value=0;double *appliedBaseline=nullptr;double initialBaseline=0; };
+class GraphPluginEndpoint;
+struct GraphPluginState;
+struct TimedPluginParameter { uint32_t id; double value; uint64_t frame, sequence; uint64_t duration = 0; double target = 0; ParameterSource source; };
+using PluginParameterQueue = std::array<TimedPluginParameter,65536>;
+struct GraphParameterUpdate { NativePlugin *plugin=nullptr;SignalRuntime *runtime=nullptr;uint64_t node=0;uint32_t parameter=0;double value=0;double *appliedBaseline=nullptr;double initialBaseline=0;GraphPluginEndpoint *endpoint=nullptr;bool resetModulation=false; };
 struct GraphControlPlan {
+  uint64_t sourceRevision=0;
+  size_t preparationHeadroom=256u*1024u*1024u; // Producer-only, excludes already retained storage.
   // Producer-owned snapshot: routing publication must not accidentally accept
   // an Undo that changes these controls without also publishing them.
   SignalGraph signal;
+  struct Preset {GraphPluginEndpoint *endpoint;std::shared_ptr<GraphPluginState> state,previous;};
+  double renderedTail=0;
+  std::vector<std::pair<std::string,double>> graphTails;
+  std::vector<std::pair<uint64_t *,uint64_t>> tails; // Prepared per-instance tail limits.
+  struct Runtime {SignalRuntime **target;std::shared_ptr<SignalRuntime> initial,state;std::vector<std::shared_ptr<SignalRuntime>> predecessors;};
+  std::vector<Runtime> runtimeOwners; // Complete snapshot; audio borrows, producer retires.
+  struct Scheduling {std::shared_ptr<GraphPluginState> state;std::shared_ptr<PluginParameterQueue> queue;};
+  std::vector<Scheduling> scheduling;
+  struct Range {NativePlugin *plugin;uint32_t parameter;float minimum,maximum;};
+  std::vector<Range> ranges;
+  std::vector<Preset> presets; // Every later snapshot retains audible vendors; callback never frees.
+  // Complete requested state, including unchanged/inactive copies, so a newer
+  // publication can safely supersede an unconsumed bypass or preset edit.
+  std::vector<std::pair<GraphPluginEndpoint *,bool>> bypasses;
+  std::shared_ptr<void> musicalPublication; // Prepared HostedMixerPlan payload; lifetime follows every later control snapshot.
   std::vector<GraphParameterUpdate> updates;
   struct Reading {NativePlugin *plugin;uint32_t parameter;double value;};
   std::vector<Reading> readings; // Control-owned catalog baselines, not effective audio values.
@@ -53,8 +85,11 @@ class NativePlugin {
   std::unique_ptr<NativeEffect> builtin_;
   std::vector<PluginAudioBus> buses_;
   std::vector<uint32_t> auxiliaryInputs_, auxiliaryOutputs_;
+  uint64_t preparedInputs_=0,mainInputFallback_=0;
   std::array<std::unique_ptr<PluginAudioStorage>, 64> auxiliaryOutputBuffers_;
   std::array<const float *, 64> inputSources_{};
+  const float *autoDetectorSource_=nullptr;
+  std::unique_ptr<std::array<float,maximumFrames*2>> autoDetectorBuffer_;
   std::vector<float> outputDelay_;
   size_t outputDelayPosition_ = 0;
   std::vector<ParameterChange> automation_;
@@ -63,11 +98,19 @@ class NativePlugin {
   ParameterActivity *activity_ = nullptr;
   uint32_t activityProcessor_ = 0;
   bool activityAudible_ = true;
-  struct TimedParameter { uint32_t id; double value; uint64_t frame, sequence; uint64_t duration = 0; double target = 0; ParameterSource source; };
+  std::atomic<bool> musicalActive_{true};
   struct ActiveRamp { uint32_t id = 0; bool active = false; SampleRamp ramp; ParameterSource source; };
   std::array<ActiveRamp, 64> parameterRamps_{};
+  struct Baseline {uint32_t id;double value;ParameterSource source;bool overlaid=false;};
+  std::vector<Baseline> baselines_; // Immutable IDs; values are audio-owned.
+  const PluginSongModulation *processingModulation_=nullptr; // Only during process().
+  void prepareBaselines();
+  bool effectiveParameter(uint32_t,double,uint64_t,ParameterSource,uint32_t=0) noexcept;
+  bool modulationParameter(uint32_t) const noexcept;
+  double baselineAt(uint32_t,uint64_t) const noexcept;
   uint64_t musicalSequence_ = 0;
-  std::unique_ptr<std::array<TimedParameter, 65536>> musicalEvents_;
+  std::unique_ptr<PluginParameterQueue> initialMusicalEvents_; // Prepared before the first callback.
+  PluginParameterQueue *musicalEvents_=nullptr; // Audio-owned; later queues belong to GraphPluginState.
   size_t musicalCount_ = 0;
   struct TimedMIDI {uint64_t frame,sequence;uint8_t status,a,b;};
   std::unique_ptr<std::array<TimedMIDI,65536>> musicalMIDI_;
@@ -79,17 +122,27 @@ public:
   ~NativePlugin();
   NativePlugin(const NativePlugin &) = delete;
   bool process(float *interleaved, uint32_t frames, uint64_t position,
-               std::span<const PluginAudioInput> inputs = {}) noexcept;
+               std::span<const PluginAudioInput> inputs = {},const PluginSongModulation * = nullptr,std::span<const PluginParameterSamples> = {}) noexcept;
   void bypass(bool value) noexcept {bypassControl_.set(value);}
   bool bypassed() const noexcept {return bypassControl_.requested();}
   size_t bypassStorageBytes() const noexcept{return bypassControl_.storageBytes();}
+  size_t preparedStorageBytes() const noexcept {
+    size_t bytes=sizeof(NativePlugin)+bypassStorageBytes()+outputDelay_.capacity()*sizeof(float)+baselines_.capacity()*sizeof(Baseline);
+    if(autoDetectorBuffer_)bytes+=sizeof(*autoDetectorBuffer_);
+    if(initialMusicalEvents_)bytes+=sizeof(*initialMusicalEvents_);if(musicalMIDI_)bytes+=sizeof(*musicalMIDI_);
+    for(const auto &bus:auxiliaryOutputBuffers_)if(bus)bytes+=sizeof(*bus);
+    return bytes;
+  }
   const std::vector<PluginAudioBus> &buses() const { return buses_; }
+  uint64_t preparedAuxiliaryInputs() const noexcept {return preparedInputs_;}
+  uint64_t mainInputFallback() const noexcept {return mainInputFallback_;} // Prepared capability.
   const float *auxiliaryOutput(uint32_t bus) const noexcept {
     return bus < auxiliaryOutputBuffers_.size() && auxiliaryOutputBuffers_[bus]
       ? auxiliaryOutputBuffers_[bus]->interleaved.data() : nullptr;
   }
   bool parameter(uint32_t id, float value, uint32_t offset = 0) noexcept;
   bool appliedParameter(uint32_t id,double value,uint64_t frame,ParameterSource source,uint32_t offset=0) noexcept;
+  void editorParameter(uint32_t id,double value,uint64_t frame) noexcept; // Audio owner; backend already received the editor event.
   void observe(ParameterActivity *activity,uint32_t processor) noexcept {activity_=activity;activityProcessor_=processor;}
   void observedBaseline(uint32_t,double) noexcept; // Control owner only.
   void audible(bool value) noexcept {activityAudible_=value;}
@@ -118,9 +171,14 @@ public:
   void cancelScheduledParameter(uint32_t id) noexcept;
   void prepareMusicalMIDI() {if(!musicalMIDI_)musicalMIDI_=std::make_unique<std::array<TimedMIDI,65536>>();}
   bool scheduleMIDI(uint8_t status,uint8_t a,uint8_t b,uint64_t frame) noexcept;
+  void musicalActive(bool active) noexcept {musicalActive_.store(active,std::memory_order_release);}
+  bool musicalActive() const noexcept {return musicalActive_.load(std::memory_order_acquire);}
   void prepareMusicalAutomation() {
-    if (!musicalEvents_) musicalEvents_ = std::make_unique<std::array<TimedParameter, 65536>>();
+    if (!initialMusicalEvents_) initialMusicalEvents_ = std::make_unique<PluginParameterQueue>();
+    musicalEvents_=initialMusicalEvents_.get();
   }
+  bool initiallyScheduled() const noexcept {return bool(initialMusicalEvents_);} // Immutable after preparation.
+  void adoptScheduling(PluginParameterQueue *queue) noexcept {if(!musicalEvents_)musicalEvents_=queue;}
   uint64_t renderedThrough() const { return renderedThrough_; }
   void showEditor();
   void closeEditor();
@@ -136,7 +194,7 @@ public:
 };
 class PluginChain {
   struct MusicalLane {
-    size_t slot;
+    std::shared_ptr<NativePlugin> plugin;
     uint32_t parameter;
     float minimum, maximum;
     std::vector<AutomationPoint> points;
@@ -146,16 +204,21 @@ class PluginChain {
     uint64_t id=0;
   };
   struct MusicalPlan {
+    uint64_t revision=1;
     std::vector<std::vector<MusicalLane>> patterns;
-    std::vector<ParameterChange> reset;
+    struct Reset {std::shared_ptr<NativePlugin> plugin;uint32_t id;float value;};
+    std::vector<Reset> reset;
   };
   std::unique_ptr<MusicalPlan> initialMusicalPlan_;
   RealtimePlan<MusicalPlan> musicalUpdates_;
   const MusicalPlan *musicalPlan_ = nullptr;
   std::vector<std::vector<PluginParameter>> musicalCatalog_;
-  std::vector<std::pair<size_t,uint32_t>> musicalTargets_; // Control owner; includes retired lanes.
+  std::vector<std::pair<NativePlugin *,uint32_t>> musicalTargets_; // Control owner; includes retired lanes.
+  std::vector<MusicalAutomationLane> musicalSpec_; // Latest producer snapshot.
+  uint64_t musicalSerial_=1,musicalRenderedSerial_=1; // Separate producer/audio owners.
   std::unique_ptr<MusicalPlan> prepareMusicalPlan(const NativeSong &) const;
   void consumeMusicalPlan() noexcept;
+  void activateMusicalPlan(const MusicalPlan &) noexcept;
   std::shared_ptr<PatternCommandRuntime> commandRuntime_;
   std::shared_ptr<PatternPitchRuntime> pitchRuntime_;
   OpenMPT::CSoundFile *musicalSong_ = nullptr;
@@ -167,7 +230,23 @@ class PluginChain {
   struct ObservedProcessor {std::array<uint32_t,64> input{},output{};};
   std::vector<ObservedProcessor> processorObservations_;
   std::vector<std::array<uint32_t,2>> busObservations_;
+  // Construction-time sources stay immutable: core adapters and pattern command
+  // runtimes retain these exact objects. The control rack may reorder independently.
   std::vector<std::shared_ptr<NativePlugin>> plugins_;
+  struct RackEntry {
+    std::shared_ptr<NativePlugin> plugin;
+    PluginState baseline;
+    std::vector<PluginParameter> parameters;
+    ObservedProcessor ports;
+    uint32_t activity=0;
+  };
+  std::vector<std::shared_ptr<RackEntry>> rack_,retainedRack_; // Control owner only.
+  std::array<std::atomic<NativePlugin *>,256> publishedPlugins_{};
+  std::atomic<size_t> publishedPluginCount_{0}; // Append-only, endpoints outlive the chain.
+
+  std::shared_ptr<RackEntry> prepareRackEntry(const PluginState &);
+  PluginTransport currentTransport_; // Render owner, copied into newly added effects.
+
   std::vector<std::string> instances_;
   std::vector<std::pair<std::vector<uint32_t>,std::vector<uint32_t>>> explicitPorts_;
   void prepareRoutingPorts(const MixerGraph &);
@@ -181,12 +260,13 @@ class PluginChain {
   std::shared_ptr<NativeSignalGraph> signalGraph_,sampleSignalGraph_;
   SignalGraph preparedSignal_; // Immutable control-side construction baseline.
   RealtimePlan<GraphControlPlan> graphControlPlans_;
+  uint64_t graphControlRevision_=0;
   const GraphControlPlan *lastGraphControls_=nullptr; // Producer-only; newest published slot remains owned.
   struct SampleRoute {const OpenMPT::ModInstrument *instrument=nullptr;uint16_t channel=0,slot=0;size_t processor=0;uint64_t instrumentID=0,target=0,previewRemaining=0,previewTail=0;};
   std::vector<SampleRoute> sampleRoutes_;
   std::array<float,8192> sampleGraphBuffer_{};
   std::vector<bool> bypass_;
-  struct QueuedParameter {ParameterChange change;bool last=false,observed=false;};
+  struct QueuedParameter {ParameterChange change;bool last=false,observed=false;NativePlugin *plugin=nullptr;uint32_t activity=0;};
   std::array<QueuedParameter, 4096> queue_{};
   alignas(64) std::atomic<uint32_t> write_{0};
   alignas(64) std::atomic<uint32_t> read_{0};
@@ -196,6 +276,8 @@ class PluginChain {
   size_t automationPosition_ = 0;
   uint64_t position_ = 0;
   double latency_ = 0, tail_ = 0;
+  std::atomic<double> liveTail_{0},liveGraphTail_{0};
+  std::atomic<uint64_t> liveTailRevision_{0};
   std::vector<double> compiledTails_;
   void captureTails();
   // The executor owns immutable routing plans; this alias is render-thread
@@ -207,6 +289,7 @@ class PluginChain {
     std::shared_ptr<NativeSignalGraph> graph;
     size_t graphIndex=0;
     std::vector<uint32_t> outputs;
+    const PluginSongModulation *modulation=nullptr; // Set immediately before shared RenderOnce evaluation.
     bool process(float *,uint32_t,uint64_t,std::span<const PluginAudioInput>) noexcept;
     const float *output(uint32_t) const noexcept;
   };
@@ -214,9 +297,41 @@ class PluginChain {
     PluginChain *owner=nullptr;
     std::vector<std::shared_ptr<RenderOnce<MixerProcessor>>> processors;
     std::vector<std::array<uint32_t,2>> busObservations;
+    std::vector<SignalPortConfiguration> observationPlan;
+    std::array<std::vector<uint32_t>,5> routeObservations;
+    std::shared_ptr<SignalObservation::PreparedPorts> pendingPorts; // Producer-only metadata, appended only after publication.
+    std::vector<ObservedProcessor> processorObservations;
+    std::vector<std::shared_ptr<RackEntry>> rack;
+    struct SongControls;
+    std::shared_ptr<SongControls> song;
+    SignalGraph songSpec; // Producer snapshot; only song sources/links are populated.
+    std::shared_ptr<MusicalPlan> musical; // Retained by subsequent routing plans.
+    bool publishMusical=false;
+    uint64_t musicalSourceRevision=0;
+    std::vector<MusicalAutomationLane> musicalSpec;
+    std::vector<std::pair<NativePlugin *,uint32_t>> musicalTargets;
     static bool process(void *,MixerRuntime &,size_t,float *,uint32_t,uint64_t) noexcept;
+    static const float *output(void *,size_t,uint32_t) noexcept;
     static void observe(void *,size_t,bool,const float *,uint32_t,uint64_t) noexcept;
+    static void observeRoute(void *,MixerRuntime::RouteKind,size_t,const float *,uint32_t,uint64_t) noexcept;
+    static void begin(void *,uint32_t,uint64_t,bool) noexcept;
+    static void adopt(void *,void *) noexcept;
+    static void source(void *,size_t,uint32_t,const float *,uint32_t,uint64_t) noexcept;
   };
+  void prepareObservations(const MixerTransition::Plan &,HostedMixerPlan &);
+  void prepareRouteObservations(const MixerTransition::Plan &,HostedMixerPlan &,std::vector<SignalPortIdentity> &);
+  std::shared_ptr<HostedMixerPlan::SongControls> prepareSongControls(const NativeSong &,MixerTransition::Plan &,const HostedMixerPlan &);
+  HostedMixerPlan::SongControls *activeSongControls_=nullptr; // Current audio plan owns lifetime.
+  HostedMixerPlan *activeHostedMixer_=nullptr;
+  std::array<std::atomic<uint8_t>,128> songControllers_{};
+  SignalClock songClock_;
+  std::vector<std::pair<uint16_t,uint64_t>> songPatternIDs_;
+  void beginSongControls(HostedMixerPlan &,uint32_t,uint64_t,bool) noexcept;
+  void songFollower(HostedMixerPlan &,size_t,size_t,uint32_t,const float *,uint32_t,uint64_t) noexcept;
+  const PluginSongModulation *modulationFor(const HostedMixerPlan &,size_t) const noexcept;
+  void prepareRoutingMusical(const NativeSong &,HostedMixerPlan &,MixerTransition::Plan &);
+  bool acceptsRoutingMusical(const HostedMixerPlan &) const noexcept;
+  void commitRoutingMusical(HostedMixerPlan &) noexcept;
   struct MixerDirectInput {
     std::array<float,MixerRuntime::maximumFrames> left{},right{};
     bool captured=false;
@@ -242,6 +357,7 @@ public:
   bool graphController(uint8_t,uint8_t) noexcept;
   std::vector<SignalActivity> graphActivity() const;
   void routeInstrument(size_t processor, const float *buffer,uint32_t frames,uint64_t position) noexcept;
+  const PluginSongModulation *instrumentModulation(size_t) const noexcept;
   void processSampleGraph(size_t,const float *,const float *,uint32_t,float * = nullptr,float * = nullptr) noexcept;
   // Core adapters capture channel sources. The final adapter evaluates the
   // prepared graph order independently of fixed OpenMPT plugin-slot order.
@@ -253,9 +369,19 @@ public:
   // First live-routing path: unchanged processors, sources and total latency.
   // Null means the host needs a more extensive processor/adapter preparation.
   std::unique_ptr<MixerTransition::Plan> prepareMixerRouting(const NativeSong &);
+  struct RackPlan {
+    std::unique_ptr<MixerTransition::Plan> routing;
+    std::vector<std::shared_ptr<RackEntry>> rack,retained;
+    std::vector<ParameterProcessor> activity;
+    size_t activityBase=0;
+  };
+  std::unique_ptr<RackPlan> prepareRack(const std::vector<PluginState> &,const NativeSong &);
+  bool publishRack(std::unique_ptr<RackPlan> &) noexcept;
+  std::unique_ptr<MixerTransition::Plan> prepareMixerRouting(const NativeSong &,const std::vector<MixerProcessorInfo> &,std::shared_ptr<HostedMixerPlan>);
+
   bool publishMixerRouting(std::unique_ptr<MixerTransition::Plan> &) noexcept;
   std::unique_ptr<GraphControlPlan> prepareGraphControls(const NativeSong &);
-  bool publishGraphControls(std::unique_ptr<GraphControlPlan> plan) {const auto *published=plan.get();if(!graphControlPlans_.publish(std::move(plan)))return false;lastGraphControls_=published;for(const auto &r:published->readings)r.plugin->observedBaseline(r.parameter,r.value);return true;}
+  bool publishGraphControls(std::unique_ptr<GraphControlPlan> plan);
   void attachMusicalAutomation(Renderer &, const NativeSong &);
   void scheduleMusical(uint32_t pattern, double tickPosition, double unitsPerSample,
                        uint32_t samplesIntoTick, uint32_t frames, bool tickStart) noexcept;
@@ -277,9 +403,9 @@ public:
   std::vector<PluginState> states();
   void applyPending() noexcept;
   std::vector<PluginParameter> parameters(size_t slot) const;
-  std::vector<PluginProgram> programs(size_t slot) const { return slot < plugins_.size() ? plugins_[slot]->programs() : std::vector<PluginProgram>{}; }
-  std::optional<EffectMeters> meters(size_t slot) const { return slot < plugins_.size() ? plugins_[slot]->meters() : std::nullopt; }
-  std::vector<PluginAudioBus> buses(size_t slot) const { return slot < plugins_.size() ? plugins_[slot]->buses() : std::vector<PluginAudioBus>{}; }
+  std::vector<PluginProgram> programs(size_t slot) const { return slot < rack_.size() ? rack_[slot]->plugin->programs() : std::vector<PluginProgram>{}; }
+  std::optional<EffectMeters> meters(size_t slot) const { return slot < rack_.size() ? rack_[slot]->plugin->meters() : std::nullopt; }
+  std::vector<PluginAudioBus> buses(size_t slot) const;
   bool failed() const { return failed_.load(); }
   std::vector<PluginFailureEntry> failureDiagnostics() const; // Control owner only.
   bool latencyChangePending() const noexcept;

@@ -9,6 +9,7 @@ final class GraphListenControls:NSView {
   var onState:((String?)->Void)?,onError:((String)->Void)?
   private(set) var port:String?,pending=false
   private var queued:(port:String?,gain:Double)?,revision=""
+  private var publishedName:String?,hasPublishedState=false
   override init(frame:NSRect) {
     super.init(frame:frame);isHidden=true
     gain.fixed(width:48);gain.setAccessibilityLabel("Listen gain in dB");gain.target=self;gain.action=#selector(changeGain)
@@ -46,12 +47,24 @@ final class GraphListenControls:NSView {
   }
   func update(_ value:[String:Any]) {
     guard !pending else{return}
-    port=value["port"] as? String;isHidden=port==nil
-    let name=port.map{nameForPort?($0) ?? $0}
-    label.stringValue="Listening: "+(name ?? "Normal mix")+(value["pending"] as? Bool==true ? " · switching":"")
-    label.toolTip=port
-    if gain.currentEditor()==nil{gain.stringValue=String(format:"%.1f",value["gainDB"] as? Double ?? 0)}
-    onState?(name)
+    port=value["port"] as? String
+    if isHidden != (port==nil) {isHidden=port==nil}
+    let available=value["available"] as? Bool ?? true
+    let rawName=port.map{nameForPort?($0) ?? $0}
+    let name=rawName.map{$0+(available ? "":" · unavailable in current route")}
+    let text=available ? "Listening: "+(name ?? "Normal mix")+(value["pending"] as? Bool==true ? " · switching":"") : "Tap unavailable: "+(rawName ?? "Host port")+" · Stop listening to return to normal mix"
+    if gain.isEnabled != available {gain.isEnabled=available}
+    if label.stringValue != text {label.stringValue=text}
+    if label.toolTip != port {label.toolTip=port}
+    if gain.currentEditor()==nil {
+      let text=String(format:"%.1f",value["gainDB"] as? Double ?? 0)
+      if gain.stringValue != text {gain.stringValue=text}
+    }
+    // Telemetry arrives several times per second. Reassigning an unchanged
+    // AppKit control value can still invalidate its native layout/restoration.
+    if !hasPublishedState || publishedName != name {
+      hasPublishedState=true;publishedName=name;onState?(name)
+    }
   }
 }
 
@@ -112,9 +125,12 @@ final class GraphSignalScope:NSView {
       if observed != self.activePort {self.activePort=observed}
       if self.requestedPort != self.activePort {self.synchronize();return}
       guard self.requestedPort != nil else{return}
-      self.plot.spectrum=self.spectrum;self.plot.value=data
-      let rate=data["sampleRate"] as? Double ?? 48000,frames=data["frames"] as? Int ?? 0
-      let state=data["active"] as? Bool==true ? (frames>0 ? String(format:"%.1f ms",Double(frames)*1000/max(1,rate)):"Waiting for samples"):"Stopped · retained capture"
+      let available=data["available"] as? Bool ?? true,fresh=data["fresh"] as? Bool ?? true,active=data["active"] as? Bool==true
+      var display=data
+      if !available || !fresh {display["waveform"]=[];display["spectrum"]=[];display["frames"]=0;display["fftFrames"]=0}
+      self.plot.spectrum=self.spectrum;self.plot.value=display
+      let rate=data["sampleRate"] as? Double ?? 48000,frames=display["frames"] as? Int ?? 0
+      let state = !available ? "Tap unavailable in current route · choose another port or close" : !fresh ? (active ? "Waiting for current-route samples":"Stopped · no current capture") : active ? (frames>0 ? String(format:"%.1f ms",Double(frames)*1000/max(1,rate)):"Waiting for samples"):"Stopped · retained capture"
       self.detail.stringValue="\(state) · \(data["dropped"] ?? 0) dropped capture frames · \(data["invalid"] ?? 0) invalid samples"
       self.detail.toolTip=observed
     }
@@ -123,7 +139,7 @@ final class GraphSignalScope:NSView {
 
 final class GraphSignalPlot:NSView {
   var spectrum=false
-  var value=[String:Any]() {didSet{needsDisplay=true;setAccessibilityValue(value["active"] as? Bool==true ? "Live host-port capture":"Stopped host-port capture")}}
+  var value=[String:Any]() {didSet{needsDisplay=true;setAccessibilityValue(value["available"] as? Bool==false ? "Host port unavailable in current route":value["fresh"] as? Bool==false ? "Waiting for current-route capture":value["active"] as? Bool==true ? "Live host-port capture":"Stopped host-port capture")}}
   override init(frame:NSRect){super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.image);setAccessibilityLabel("Measured signal scope")}
   required init?(coder:NSCoder){fatalError()}
   override func draw(_ dirtyRect:NSRect) {

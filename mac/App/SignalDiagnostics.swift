@@ -1,41 +1,100 @@
 import AppKit
 
+// A route is a contribution to a destination, distinct from either endpoint's
+// aggregate port. Its opaque observation key comes from the adopted audio plan.
+struct GraphSignalRouteID:Hashable {
+  let kind:String,source:String,target:String,plugin:String,input:UInt32,output:UInt32
+  init?(_ value:[String:Any]) {
+    guard let kind=value["kind"] as? String else{return nil}
+    self.kind=kind;source=value["source"] as? String ?? "";target=value["target"] as? String ?? "";plugin=value["plugin"] as? String ?? ""
+    func number(_ key:String)->UInt32? {
+      guard let raw=value[key] else{return 0}
+      guard let n=raw as? NSNumber,n.doubleValue.isFinite,n.doubleValue>=0,n.doubleValue<=Double(UInt32.max),n.doubleValue.rounded()==n.doubleValue else{return nil}
+      return n.uint32Value
+    }
+    guard let input=number("input"),let output=number("output") else{return nil};self.input=input;self.output=output
+    switch kind {
+    case "output","send","graph-input","graph-output":guard !source.isEmpty && !target.isEmpty else{return nil}
+    case "plugin-input","insert":guard !source.isEmpty && !plugin.isEmpty else{return nil}
+    case "plugin-output":guard !plugin.isEmpty && !target.isEmpty else{return nil}
+    case "master-output":guard !source.isEmpty else{return nil}
+    default:return nil
+    }
+  }
+}
+struct GraphSignalRoute {
+  let identity:GraphSignalRouteID,tap:String,preFader:Bool,gainDB:Double?
+  init?(_ value:[String:Any]) {
+    guard let identity=GraphSignalRouteID(value),let tap=value["tap"] as? String,["post-gain","main-path","pre-master-fader"].contains(tap) else{return nil}
+    self.identity=identity;self.tap=tap;preFader=value["preFader"] as? Bool ?? false
+    gainDB=(value["gainDB"] as? Double).flatMap{$0.isFinite ? $0:nil}
+  }
+  var detail:String {
+    let busTap=["output","send","plugin-input","graph-input"].contains(identity.kind)
+    let point=tap=="main-path" ? "serial contribution before input summing":tap=="pre-master-fader" ? "before Main fader":"after route gain"+(busTap ? " · "+(preFader ? "pre-fader":"post-fader"):"")
+    return "Adopted route · "+point+(tap=="post-gain" ? " · "+(gainDB.map{String(format:"%+.1f dB",$0)} ?? "silent gain"):"")
+  }
+}
+
 struct GraphPortReading {
   let key:String,node:String,name:String,output:Bool,port:UInt32
-  let peak:Double,rms:Double,measured:Bool,clipped:Bool,invalid:Bool
+  let route:GraphSignalRoute?
+  let peak:Double,rms:Double,measured:Bool,clipped:Bool,invalid:Bool,available:Bool,fresh:Bool
   let through:Double,lastSignal:Double,channels:Int,latency:Double?,compensation:Double?
   init?(_ value:[String:Any]) {
     guard let key=value["key"] as? String,let node=value["node"] as? String,let number=(value["port"] as? NSNumber)?.uint32Value else{return nil}
+    if let descriptor=value["route"] {
+      guard let descriptor=descriptor as? [String:Any],let parsed=GraphSignalRoute(descriptor) else{return nil};route=parsed
+    }else{route=nil}
     self.key=key;self.node=node;self.name=value["name"] as? String ?? key;self.port=number;output=value["direction"] as? String=="output"
+    available=value["available"] as? Bool ?? true;fresh=value["fresh"] as? Bool ?? true
     let peaks=value["peak"] as? [Double] ?? [],rmsValues=value["rms"] as? [Double] ?? []
-    measured=value["measured"] as? Bool==true && peaks.count==2 && rmsValues.count==2 && (peaks+rmsValues).allSatisfy{$0.isFinite && $0>=0}
+    measured=available && fresh && value["measured"] as? Bool==true && peaks.count==2 && rmsValues.count==2 && (peaks+rmsValues).allSatisfy{$0.isFinite && $0>=0}
     peak=measured ? peaks.max() ?? 0:0;rms=measured ? rmsValues.max() ?? 0:0
     clipped=value["clipped"] as? Bool==true;invalid=value["nonFinite"] as? Bool==true
     through=value["through"] as? Double ?? 0;lastSignal=value["lastSignal"] as? Double ?? 0
-    channels=value["channels"] as? Int ?? 0;latency=value["processorLatency"] as? Double;compensation=value["compensation"] as? Double
+    channels=value["channels"] as? Int ?? 0;latency=value["processorLatency"] as? Double;compensation=(value["compensation"] as? Double).flatMap{$0.isFinite && $0>=0 ? $0:nil}
   }
   static func db(_ level:Double)->String{level>0 ? String(format:"%.1f dBFS",20*log10(level)):"−∞ dBFS"}
   func summary(active:Bool)->String {
     guard active else{return "Stopped · \(name)"}
+    guard available else{return "\(name) · Port unavailable in current route"}
+    guard fresh else{return "\(name) · Waiting for current-route measurement"}
     guard measured else{return "\(name) · Measurement unavailable"}
-    return "\(name) · peak \(Self.db(peak)) · RMS \(Self.db(rms)) · \(channels)ch"+(clipped ? " · CLIP":"")+(invalid ? " · Invalid output":"")
+    let routeDetail=route.map{" · "+$0.detail+(compensation.map{String(format:" · %.0f frames route delay",$0)} ?? "")} ?? ""
+    return "\(name) · peak \(Self.db(peak)) · RMS \(Self.db(rms)) · \(channels)ch"+routeDetail+(clipped ? " · over 0 dBFS (latched)":"")+(invalid ? " · Invalid output":"")
   }
 }
 struct GraphSignalReadings {
-  var ports=[GraphPortReading](),active=false,rate=48000.0
+  private(set) var ports=[GraphPortReading]()
+  var active=false,rate=48000.0
   var aliases=[GraphBoundaryPort:GraphRealPort]()
+  private var portIndices=[GraphBoundaryPort:Int](),nodeIndices=[String:[Int]](),routeIndices=[GraphSignalRouteID:Int]()
   mutating func update(_ value:[String:Any]) {
     active=value["active"] as? Bool==true
     let sampleRate=value["sampleRate"] as? Double ?? 48000;rate=sampleRate.isFinite && sampleRate>0 ? sampleRate:48000
     ports=(value["ports"] as? [[String:Any]] ?? []).compactMap(GraphPortReading.init)
+    portIndices.removeAll(keepingCapacity:true);nodeIndices.removeAll(keepingCapacity:true);routeIndices.removeAll(keepingCapacity:true)
+    for (index,port) in ports.enumerated(){
+      if let route=port.route {
+        if port.available{routeIndices[route.identity]=routeIndices[route.identity]==nil ? index:-1}
+        continue
+      }
+      let key=GraphBoundaryPort(node:port.node,number:port.port,output:port.output,modulation:false)
+      if portIndices[key]==nil{portIndices[key]=index}
+      nodeIndices[port.node,default:[]].append(index)
+    }
+  }
+  func route(_ identity:GraphSignalRouteID)->GraphPortReading? {
+    guard let index=routeIndices[identity],index>=0 else{return nil};return ports[index]
   }
   func port(_ node:String,output:Bool,number:UInt32=0)->GraphPortReading? {
     let real=aliases[GraphBoundaryPort(node:node,number:number,output:output,modulation:false)] ?? GraphRealPort(node:node,number:number)
-    return ports.first{$0.node==real.node && $0.output==output && $0.port==real.number}
+    return portIndices[GraphBoundaryPort(node:real.node,number:real.number,output:output,modulation:false)].map{ports[$0]}
   }
   func nodePorts(_ node:String,output:Bool?=nil)->[GraphPortReading] {
     let boundary=aliases.filter{$0.key.node==node && !$0.key.modulation && (output==nil || $0.key.output==output)}
-    guard !boundary.isEmpty else{return ports.filter{$0.node==node && (output==nil || $0.output==output)}}
+    guard !boundary.isEmpty else{return (nodeIndices[node] ?? []).compactMap{index in let port=ports[index];return output==nil || port.output==output ? port:nil}}
     let keys=Set(boundary.compactMap{port(node,output:$0.key.output,number:$0.key.number)?.key})
     return ports.filter{keys.contains($0.key)}
   }
@@ -47,45 +106,78 @@ struct GraphSignalReadings {
   }
 }
 extension SignalGraphEditor {
+  // Topology labels change with graph data, not with every audio meter sample.
+  // Retain the first owner/group semantics used by the displayed song graph.
+  func rebuildSignalNames() {
+    let plugins=rackPlugins,allBuses=buses,groups=data["groups"] as? [[String:Any]] ?? []
+    var owners=[String:String]()
+    for bus in allBuses {for plugin in effectiveInserts(bus) where owners[plugin]==nil {owners[plugin]=bus["name"] as? String ?? "Bus"}}
+    signalNamePrefixes=[:];signalPortNames=[:]
+    for plugin in plugins {
+      guard let id=plugin["id"] as? String else{continue};let node="plugin:"+id
+      var labels=[String](),group=groups.first{($0["nodes"] as? [String] ?? []).contains(node)},seen=Set<String>()
+      while let current=group,let id=current["id"] as? String,seen.insert(id).inserted {
+        labels.insert(current["name"] as? String ?? "Group",at:0)
+        group=groups.first{$0["id"] as? String==current["parent"] as? String}
+      }
+      if let owner=owners[id]{labels.insert(owner,at:0)}
+      labels.append(plugin["name"] as? String ?? "Processor");signalNamePrefixes[node]=labels
+    }
+  }
   func observedCablePort(_ index:Int)->GraphPortReading? {
-    guard graphID==nil,canvas.edges.indices.contains(index),songConnections.indices.contains(index) else{return nil}
-    let action=songConnections[index],edge=canvas.edges[index]
-    switch action["kind"] as? String {
-    case "insert":return signalReadings.port(edge.target,output:false,number:edge.input)
-    case "output":return (action["source"] as? String).flatMap{signalReadings.port($0,output:true)}
+    guard graphID==nil,canvas.edges.indices.contains(index),!canvas.edges[index].modulation,canvas.edges[index].enabled,songConnections.indices.contains(index) else{return nil}
+    let action=songConnections[index],kind=action["kind"] as? String ?? ""
+    var descriptor=action
+    switch kind {
     case "send":
-      guard let source=action["source"] as? String,let i=action["index"] as? Int,let sends=buses.first(where:{$0["id"] as? String==source})?["sends"] as? [[String:Any]],sends.indices.contains(i),sends[i]["preFader"] as? Bool != true else{return nil}
-      return signalReadings.port(source,output:true)
-    case "plugin-input","graph-input":
-      let routes=(action["kind"] as? String=="plugin-input" ? mixer["sidechains"]:data["inputs"]) as? [[String:Any]] ?? []
-      guard let i=action["index"] as? Int,routes.indices.contains(i),routes[i]["preFader"] as? Bool != true,let source=routes[i]["source"] as? String else{return nil}
-      return signalReadings.port(source,output:true)
-    case "plugin-output","master-output":return signalReadings.port(edge.source,output:true,number:edge.output)
+      guard let source=action["source"] as? String,let i=action["index"] as? Int,let sends=buses.first(where:{$0["id"] as? String==source})?["sends"] as? [[String:Any]],sends.indices.contains(i),sends[i]["enabled"] as? Bool != false else{return nil}
+      descriptor["target"]=sends[i]["target"]
+    case "plugin-input","graph-input","graph-output":
+      let routes=(kind=="plugin-input" ? mixer["sidechains"]:kind=="graph-input" ? data["inputs"]:data["outputs"]) as? [[String:Any]] ?? []
+      guard let i=action["index"] as? Int,routes.indices.contains(i) else{return nil}
+      descriptor=routes[i];descriptor["kind"]=kind
+    case "insert","output","plugin-output","master-output":break
     default:return nil
+    }
+    guard let identity=GraphSignalRouteID(descriptor) else{return nil}
+    return signalReadings.route(identity)
+  }
+  func signalRouteName(_ route:GraphSignalRouteID)->String {
+    func bus(_ id:String)->String {buses.first{$0["id"] as? String==id}.map(busLabel) ?? id}
+    func plugin(_ id:String)->String {(signalNamePrefixes["plugin:"+id] ?? [id]).joined(separator:" › ")}
+    switch route.kind {
+    case "send":return bus(route.source)+" → "+bus(route.target)+" · send"
+    case "output":return bus(route.source)+" → "+bus(route.target)+" · main route"
+    case "plugin-input":return bus(route.source)+" → "+plugin(route.plugin)+" · "+(route.input==0 ? "main input contribution":"input \(route.input) contribution")
+    case "graph-input":return bus(route.source)+" → "+bus(route.target)+" · recipe input \(route.input) contribution"
+    case "plugin-output":return plugin(route.plugin)+" · output \(route.output) → "+bus(route.target)
+    case "graph-output":return bus(route.source)+" · recipe output \(route.output) → "+bus(route.target)
+    case "insert":return bus(route.source)+" → "+plugin(route.plugin)+" · serial main contribution"
+    case "master-output":return bus(route.source)+" · processor output before final fader"
+    default:return "Route contribution"
     }
   }
   func openScope(spectrum:Bool) {
     if let port=canvas.scopeTarget(at:nil) {signalScope.show(port:port,spectrum:spectrum);return}
-    chooseTarget(title:spectrum ? "Spectrum of signal":"Scope signal",entries:signalReadings.ports.map {
-      .init(id:$0.key,title:$0.name,detail:$0.output ? "Audio output":"Audio input",keywords:$0.node)
+    if canvas.selectedEdge != nil {status.stringValue="Measurement unavailable for this cable in the adopted route · select another measured cable or port";return}
+    chooseTarget(title:spectrum ? "Spectrum of signal":"Scope signal",entries:signalReadings.ports.filter(\.available).map {
+      .init(id:$0.key,title:$0.name,detail:$0.route?.detail ?? ($0.output ? "Audio output":"Audio input"),keywords:$0.node)
     }) {[weak self] port in self?.signalScope.show(port:port,spectrum:spectrum)}
   }
   func showSignals(_ value:[String:Any]) {
     var named=value
-    let songGroups=data["groups"] as? [[String:Any]] ?? []
+    var retainedNames=[String:(node:String,raw:String,shown:String)]()
     named["ports"]=(value["ports"] as? [[String:Any]] ?? []).map { port -> [String:Any] in
-      guard let node=port["node"] as? String,node.hasPrefix("plugin:"),
-        let plugin=rackPlugins.first(where:{"plugin:\($0["id"] as? String ?? "")"==node}) else{return port}
-      let owner=buses.first{effectiveInserts($0).contains(plugin["id"] as? String ?? "")}
-      var labels=[String](),group=songGroups.first{($0["nodes"] as? [String] ?? []).contains(node)},seen=Set<String>()
-      while let current=group,let id=current["id"] as? String,seen.insert(id).inserted {
-        labels.insert(current["name"] as? String ?? "Group",at:0)
-        group=songGroups.first{$0["id"] as? String==current["parent"] as? String}
-      }
-      if let owner{labels.insert(owner["name"] as? String ?? "Bus",at:0)}
-      labels += [plugin["name"] as? String ?? "Processor",port["name"] as? String ?? "Port"]
-      var result=port;result["name"]=labels.joined(separator:" › ");return result
+      guard let node=port["node"] as? String else{return port}
+      let route=(port["route"] as? [String:Any]).flatMap(GraphSignalRouteID.init)
+      guard route != nil || signalNamePrefixes[node] != nil else{return port}
+      let raw=port["name"] as? String ?? "Port",key=port["key"] as? String ?? node+"/"+raw
+      let previous=signalPortNames[key]
+      let shown=previous?.node==node && previous?.raw==raw ? previous!.shown:route.map(signalRouteName) ?? ((signalNamePrefixes[node] ?? [])+[raw]).joined(separator:" › ")
+      retainedNames[key]=(node,raw,shown)
+      var result=port;result["name"]=shown;return result
     }
+    signalPortNames=retainedNames
     signalReadings.update(named)
     signalReadings.aliases=boundaryPorts
     canvas.signalReadings=graphID==nil ? signalReadings:GraphSignalReadings()
@@ -99,13 +191,17 @@ extension SignalGraphEditor {
     if routingStatus.stringValue != message {routingStatus.stringValue=message;routingStatus.isHidden=message.isEmpty}
   }
   func listenSelected() {
+    if let edge=canvas.selectedEdge {
+      guard let port=observedCablePort(edge),port.output else{status.stringValue="Measurement unavailable for this cable in the adopted route";return}
+      listenControls.select(port.key==listenControls.port ? nil:port.key);return
+    }
     if let id=canvas.selected,let port=signalReadings.primaryPort(id,output:true),graphID==nil {
       listenControls.select(port.key==listenControls.port ? nil:port.key);return
     }
     let selected=canvas.selected.map{signalReadings.nodePorts($0,output:true)} ?? []
-    let choices=graphID==nil && !selected.isEmpty ? selected:signalReadings.ports.filter(\.output)
+    let choices=graphID==nil && !selected.isEmpty ? selected:signalReadings.ports.filter{$0.output && $0.available}
     chooseTarget(title:"Listen to output",entries:choices.map {
-      .init(id:$0.key,title:$0.name,detail:"Temporary monitor · output \($0.port)",keywords:$0.node)
+      .init(id:$0.key,title:$0.name,detail:$0.route?.detail ?? "Temporary monitor · output \($0.port)",keywords:$0.node)
     }) {[weak self] port in self?.listenControls.select(port)}
   }
   func revealObservedNode(_ id:String) {

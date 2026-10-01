@@ -650,6 +650,8 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
         if (controller->getParameterInfo(i, p) != kResultOk)
           continue;
         metadata.push_back({p.id, utf8(p.title), 0, 1, float(controller->getParamNormalized(p.id)), 0});
+        if(p.stepCount<0)throw std::runtime_error("Invalid VST3 parameter step count");
+        metadata.back().step=p.stepCount?1.f/p.stepCount:0.f;
         metadata.back().writable = !(p.flags & ParameterInfo::kIsReadOnly);
         metadata.back().continuous = p.stepCount == 0 && !(p.flags & (ParameterInfo::kIsReadOnly | ParameterInfo::kIsProgramChange));
       }

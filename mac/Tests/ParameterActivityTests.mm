@@ -47,8 +47,15 @@ static void graphCopies(const PluginDescriptor &descriptor) {
   activity->watch(activity->processors[1].key,7,1);activity->begin(0);activity->clock(0,0,0,0,1);
   ClockState clock;clock.m_nMusicSpeed=1;clock.m_nSamplesPerTick=256;clock.m_nBufferCount=256;clock.m_nPattern=0;clock.m_nRow=0;clock.m_nTickCount=0;clock.m_nCurrentOrder=0;
   std::array<float,256> first{},second{};first.fill(.25f);second.fill(.25f);tracker_audit_begin();graph.begin(clock,128,0,{120,0,0,4,true});bool okay=graph.process(0,first.data(),128,0,{})&&graph.process(1,second.data(),128,0,{});uint64_t a,f,l;tracker_audit_end(&a,&f,&l);check(okay&&a+f+l==0,"Observed graph render fails realtime audit");
-  bool final=false,contribution=false;for(const auto &p:activity->history()){if(p.source.kind==ParameterOrigin::Graph){final=true;check(std::abs(p.value-.8)<1e-6&&p.audible,"Graph monitor captured another copy's value");}if(p.source.kind==ParameterOrigin::GraphSource&&p.source.id==1){contribution=true;check(std::abs(p.value-.8)<1e-6,"Incorrect normalized graph source contribution");}}
+  bool final=false,contribution=false;for(const auto &p:activity->history()){if(p.source.kind==ParameterOrigin::Graph){final=true;check(std::abs(p.value-.8)<1e-6&&p.audible,"Graph monitor captured another copy's value");}if(p.source.kind==ParameterOrigin::GraphSource&&p.source.id==104){contribution=true;check(std::abs(p.value-.8)<1e-6,"Incorrect normalized graph source contribution");}}
   check(final&&contribution,"Graph trace omitted output or sources");check(std::abs(second[0]-.2)<1e-6&&std::abs(first[0]-.05)<1e-6,"Monitor changed graph audio");
+  auto next=native;next.signal.library[0].nodes.push_back({105,SignalNodeKind::Amount,"New earlier contribution"});next.signal.library[0].modulation.insert(next.signal.library[0].modulation.begin(),{105,102,7,0,0,0,true});GraphControlPlan prepared;graph.prepareParameters(next.signal,prepared);
+  activity->begin(128);tracker_audit_begin();for(const auto &owner:prepared.runtimeOwners){owner.state->inheritState(**owner.target);*owner.target=owner.state.get();}for(const auto &[runtime,controls]:prepared.runtimes)runtime->controls(*controls);second.fill(.25f);graph.begin(clock,128,128,{120,0,0,4,true});okay=graph.process(1,second.data(),128,128,{});tracker_audit_end(&a,&f,&l);check(okay&&a+f+l==0,"Live provenance source insertion remains realtime-safe");
+  bool historical=false,retained=false,added=false;for(const auto &point:activity->history())if(point.source.kind==ParameterOrigin::GraphSource&&point.source.id){
+    check(point.source.id==104||point.source.id==105,"Source contribution identity must never be a mutable vector index");
+    historical|=point.frame<128&&point.source.id==104;retained|=point.frame>=128&&point.source.id==104&&std::abs(point.value-.8)<1e-6;added|=point.frame>=128&&point.source.id==105&&point.value==0;
+  }
+  check(historical&&retained&&added,"Adding a preceding source cannot relabel retained or historical contribution points");
 }
 static void bounded() {
   auto a=std::make_unique<ParameterActivity>(48000);ParameterProcessor target;target.key="test";target.parameters={{7,"Gain",0,1,1}};a->add(target);a->watch("test",7,1);a->begin(0);a->clock(0,0,0,0,1);

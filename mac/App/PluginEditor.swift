@@ -57,6 +57,7 @@ final class ParameterSlider: NSSlider {
 final class ParameterValueField: NSTextField, NSTextFieldDelegate {
   var commit: ((String) -> Void)?
   var editingText: (() -> String)?
+  weak var returnFocus:NSView?
   private var displayed: String?
   init() {
     super.init(frame: .zero)
@@ -72,6 +73,10 @@ final class ParameterValueField: NSTextField, NSTextFieldDelegate {
   }
   required init?(coder: NSCoder) { fatalError() }
   @objc func submit() { commit?(stringValue) }
+  func control(_ control:NSControl,textView:NSTextView,doCommandBy commandSelector:Selector)->Bool {
+    guard commandSelector==#selector(NSResponder.insertNewline(_:)),let returnFocus else{return false}
+    submit();window?.makeFirstResponder(returnFocus);return true
+  }
   func prepareEditing() { if currentEditor() == nil, let text = editingText?() { stringValue = text } }
   override func becomeFirstResponder() -> Bool { prepareEditing(); return super.becomeFirstResponder() }
   override func mouseDown(with event: NSEvent) { prepareEditing(); super.mouseDown(with: event) }

@@ -59,6 +59,12 @@ extension InterfaceTests {
     }
     contextual.collect()
     try require(!contextual.handleAdditionalShortcut(event("a",.command,code:0)), "Inferred context-menu shortcuts must not steal Select All from a text field")
+    let unavailable=GraphCommand.parent.item("Parent graph",reason:"Already at the song graph"){ran="unavailable action"}
+    try require(!contextual.isAvailable(unavailable,from:nil),"Palette must honor a contextual action's disabled state even though its invoke selector exists")
+    contextual.table.dataSource=contextual
+    contextual.filtered=[.init(item:unavailable,path:"Graph / Parent graph")];contextual.table.reloadData();contextual.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    contextual.run()
+    try require(ran != "unavailable action" && contextual.status.stringValue=="Already at the song graph","Unavailable palette actions explain their precise reason and cannot execute")
     let graphCatalog=WorkspaceCommandPalette()
     graphCatalog.additionalMenus={
       let menu=NSMenu(title:"Graph")

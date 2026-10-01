@@ -12,6 +12,13 @@ int main() {
   @autoreleasepool {
     try {
       Document doc;
+      const auto masterIdentity=doc.native().masterID;
+      check(masterIdentity>0 && masterIdentity<doc.native().nextID && !doc.native().mixer.active(),"Master identity is reserved before routing is materialized");
+      const auto initialNative=doc.native();auto projected=initialNative;projected.ensureMixer();
+      check(projected.nextID==initialNative.nextID && projected.mixer.buses.back().id==masterIdentity && doc.native()==initialNative,"Implicit graph projection never allocates or changes the document");
+      doc.annotate([](NativeSong &n){n.ensureMixer();});doc.undo();
+      check(doc.native().masterID==masterIdentity && !doc.native().mixer.active(),"Undo materialization retains the reserved Master");
+      doc.redo();check(doc.native().mixer.buses.back().id==masterIdentity,"Redo reuses Master identity");doc.undo();
       auto firstID = doc.native().sequences[0].orders[0].id;
       auto patternID = doc.native().patterns.at(0).id;
       doc.annotate([](NativeSong &n) { n.sequences[0].orders[0].name = "Intro"; n.patterns.at(0).annotation = "Shared notes"; });
@@ -146,6 +153,14 @@ int main() {
         }
         auto arrangement = call(@"arrangement.get", @{});
         auto original = [session snapshot:0];
+        auto readMaster=[&]() -> NSString * {return [(NSArray *)call(@"mixer.get",@{@"includeImplicit":@YES})[@"buses"] lastObject][@"id"];};
+        NSString *reservedMaster=readMaster(),*readRevision=session.automationRevision;
+        auto graphView=call(@"graph.get",@{@"includeImplicitMixer":@YES});
+        check([[(NSArray *)graphView[@"mixer"][@"buses"] lastObject][@"id"] isEqual:reservedMaster] && [readRevision isEqual:session.automationRevision],"Mixer and graph implicit reads agree without editing history");
+        call(@"graph.create",@{},true);
+        check([readMaster() isEqual:reservedMaster],"Unrelated graph allocations cannot change the displayed implicit Master");
+        call(@"history.undo",@{@"domain":@"document"},true);
+        check([readMaster() isEqual:reservedMaster],"Undo and further read projections preserve Master");
         NSString *slot = arrangement[@"orders"][0][@"id"];
         call(@"song.annotate", @{@"id": slot, @"name": @"Intro 🎹", @"color": @0x52cdb4}, true);
         NSString *revision = session.automationRevision;
@@ -159,6 +174,7 @@ int main() {
         auto before = [session snapshot:0];
         check([session openPath:path error:&error], error.localizedDescription.UTF8String ?: "Reopen native metadata");
         auto after = [session snapshot:0];
+        check([readMaster() isEqual:reservedMaster],"Reserved implicit Master persists through native save/reopen");
         for (NSString *key in @[@"orderMetadata", @"patterns", @"tracks", @"samples", @"instruments", @"cells"])
           check([before[key] isEqual:after[key]], "Project metadata/identities/cells survive reopen");
         NSArray *sections = call(@"arrangement.get", @{})[@"sections"];
@@ -190,6 +206,7 @@ int main() {
           check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Historical native metadata is rejected atomically");
         }
         call(@"mixer.enable", @{}, true);
+        check([readMaster() isEqual:reservedMaster],"First routing edit materializes the same Master shown in the implicit view");
         NSString *busID = call(@"mixer.get", @{})[@"buses"][0][@"id"];
         call(@"mixer.bus.set", @{@"bus": busID, @"prePan": @0.375}, true);
         check([session savePath:path error:&error] && [session openPath:path error:&error], "Input balance saves/reopens over every source format");
@@ -200,6 +217,25 @@ int main() {
         call(@"mixer.bus.set", @{@"bus": busID, @"prePan": @0}, true);
         auto compatible = [NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil];
         check([compatible[@"native"][@"version"] intValue] == 17, "Clearing input balance retains the same current metadata format");
+        check([compatible[@"native"][@"masterID"] isEqual:reservedMaster],"Current native metadata stores the reserved Master explicitly");
+        auto conflicting=[compatible mutableCopy];auto conflictingNative=[compatible[@"native"] mutableCopy];
+        conflictingNative[@"masterID"]=busID;conflicting[@"native"]=conflictingNative;write(conflicting);revision=session.automationRevision;
+        check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Conflicting saved Master identity is rejected atomically");
+        auto currentWithoutField=[compatible mutableCopy];auto missingNative=[compatible[@"native"] mutableCopy];
+        [missingNative removeObjectForKey:@"masterID"];currentWithoutField[@"native"]=missingNative;write(currentWithoutField);
+        check([session openPath:path error:&error]&&[readMaster() isEqual:reservedMaster],"Current metadata without the optional field derives the existing Master identity");
+        auto songControls=[compatible mutableCopy];auto controlsNative=[compatible[@"native"] mutableCopy];auto controlsGraph=[controlsNative[@"signalGraph"] mutableCopy];
+        const auto sourceNumber=[controlsNative[@"nextID"] unsignedLongLongValue];NSString *sourceID=[NSString stringWithFormat:@"n%llu",sourceNumber];
+        controlsNative[@"nextID"]=@(sourceNumber+1);
+        controlsGraph[@"songSources"]=@[@{@"id":sourceID,@"kind":@"lfo",@"name":@"Rack motion",@"rate":@.5,@"phase":@.125,@"amount":@.75}];
+        controlsGraph[@"songModulation"]=@[@{@"source":sourceID,@"plugin":@"unresolved-stable-target",@"parameter":@17,@"minimum":@(-.2),@"maximum":@.3,@"quantized":@YES}];
+        controlsNative[@"signalGraph"]=controlsGraph;songControls[@"native"]=controlsNative;write(songControls);
+        check([session openPath:path error:&error],"Current project loads song-level control metadata independently of reusable recipes");
+        auto controlsBefore=call(@"graph.get",@{});check([controlsBefore[@"songSources"] count]==1&&[controlsBefore[@"songModulation"] count]==1,"Song-level source/target metadata appears in the graph projection");
+        check([session savePath:path error:&error]&&[session openPath:path error:&error],"Song-level control metadata saves and reopens");
+        auto controlsAfter=call(@"graph.get",@{});check([controlsBefore[@"songSources"] isEqual:controlsAfter[@"songSources"]]&&[controlsBefore[@"songModulation"] isEqual:controlsAfter[@"songModulation"]],"Song-level controls retain stable IDs, ranges and explicit quantization through persistence");
+        auto duplicate=[controlsGraph mutableCopy];duplicate[@"songSources"]=@[controlsGraph[@"songSources"][0],controlsGraph[@"songSources"][0]];controlsNative[@"signalGraph"]=duplicate;songControls[@"native"]=controlsNative;write(songControls);revision=session.automationRevision;
+        check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Duplicate song control identities reject without replacing the document");
       }
       [[NSFileManager defaultManager] removeItemAtPath:folder error:nil];
       std::cout << "PASS native song identities, metadata, order/section history, no-op/invalid atomicity, all five module formats, current project roundtrip, historical version rejection and loss prevention\n";

@@ -7,6 +7,7 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
     var id: String, title: String, detail: String, keywords: String
     var payload: [String: Any] = [:]
     var unavailable: String? = nil
+    var toolTip: String? = nil
   }
   let search = NSSearchField(), table = DirectActionTable()
   let context = Theme.label("", size: 11, color: Theme.muted)
@@ -71,8 +72,13 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
     guard filtered.indices.contains(row) else { return nil }
     let item = filtered[row]
     let name = Theme.label(item.title, size: 12, weight: .medium)
-    let detail = Theme.label(item.unavailable ?? item.detail, size: 10, color: Theme.muted)
-    let cell = stack(.vertical, [name, detail], spacing: 1); cell.setAccessibilityLabel(item.title + ". " + detail.stringValue)
+    // An unavailable target still needs its owner/role to distinguish copies.
+    let summary=[item.detail,item.unavailable].compactMap{$0}.filter{!$0.isEmpty}.joined(separator:" · ")
+    let detail = Theme.label(summary, size: 10, color: Theme.muted)
+    detail.lineBreakMode = .byTruncatingTail;detail.maximumNumberOfLines=1
+    let cell = stack(.vertical, [name, detail], spacing: 1); cell.setAccessibilityLabel(item.title + ". " + summary)
+    let tip=[item.toolTip ?? (item.title+"\n"+item.detail),item.unavailable].compactMap{$0}.joined(separator:"\n")
+    cell.toolTip=tip;name.toolTip=tip;detail.toolTip=tip
     return cell
   }
   func choose() {

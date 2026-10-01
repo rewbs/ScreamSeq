@@ -12,6 +12,7 @@ final class GraphBusControls:NSView {
   private(set) var identity:String?
   private var revision="",saved=[String:Any](),draft=[String:Any]()
   private var pending=false,finish=false,previewed=false
+  private var shownLevel:Double?
   var implicit=false
   private var nextContext:([String:Any]?,String)?
   var editing:Bool {pending || !draft.isEmpty || gain.slider.trackingGesture || gain.editingValue}
@@ -33,9 +34,15 @@ final class GraphBusControls:NSView {
     let targetChanged=identity != bus?["id"] as? String
     identity=bus?["id"] as? String;saved=bus ?? [:];self.revision=revision
     let level=(saved["gainDB"] as? NSNumber)?.doubleValue ?? 0
-    if gain.value.currentEditor()==nil || gain.slider.doubleValue != level {gain.set(level)}
-    mute.state=saved["mute"] as? Bool==true ? .on:.off;solo.state=saved["solo"] as? Bool==true ? .on:.off
-    gain.slider.isEnabled=identity != nil;gain.value.isEnabled=identity != nil;mute.isEnabled=identity != nil;solo.isEnabled=identity != nil
+    // Pattern edits advance the revision without changing mixer controls. Do
+    // not invalidate native slider/button layout or replace accepted text on
+    // those refreshes; still consume the new revision for the next edit.
+    if shownLevel != level || gain.slider.doubleValue != level {gain.set(level);shownLevel=level}
+    let muted:NSControl.StateValue=saved["mute"] as? Bool==true ? .on:.off
+    let soloed:NSControl.StateValue=saved["solo"] as? Bool==true ? .on:.off
+    if mute.state != muted{mute.state=muted};if solo.state != soloed{solo.state=soloed}
+    let enabled=identity != nil
+    for control in [gain.slider,gain.value,mute,solo] as [NSControl] where control.isEnabled != enabled{control.isEnabled=enabled}
     if targetChanged{message.stringValue=""}
   }
   @objc private func toggleMute(){change("mute",value:mute.state == .on,final:true)}

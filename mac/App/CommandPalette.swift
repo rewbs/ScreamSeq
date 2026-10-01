@@ -72,11 +72,14 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
     guard filtered.indices.contains(row) else{return nil};let entry=filtered[row],mask=entry.item.keyEquivalentModifierMask
     let shortcut=(mask.contains(.control) ? "⌃" : "")+(mask.contains(.option) ? "⌥" : "")+(mask.contains(.shift) ? "⇧" : "")+(mask.contains(.command) ? "⌘" : "")+entry.item.keyEquivalent.uppercased()
     let label=tableView.makeView(withIdentifier:.init("command"),owner:self) as? NSTextField ?? Theme.label("",size:12)
-    let sequence=sequences.bindings[entry.id]?.map(\.encoded).joined(separator:" → ");label.identifier = .init("command");label.stringValue=entry.path+(sequence.map{"     "+$0} ?? (entry.item.keyEquivalent.isEmpty ? "" : "     "+shortcut));return label
+    let sequence=sequences.bindings[entry.id]?.map(\.encoded).joined(separator:" → ");label.identifier = .init("command");label.stringValue=entry.path+(sequence.map{"     "+$0} ?? (entry.item.keyEquivalent.isEmpty ? "" : "     "+shortcut));label.textColor=entry.item.isEnabled ? Theme.text:Theme.muted;label.toolTip=entry.item.toolTip;return label
   }
   // Menu items are only validated when their menu opens, so isEnabled can be
   // stale. Ask the object that would receive the action, as the menu would.
   func isAvailable(_ item:NSMenuItem,from responder:NSResponder?)->Bool {
+    // Context actions capture their availability when the menu is built. Unlike
+    // responder-chain menu items, they have no later Cocoa validator to call.
+    if item is ContextAction && !item.isEnabled{return false}
     guard let action=item.action else{return false}
     var receiver:AnyObject?=item.target
     if receiver == nil {
@@ -92,7 +95,7 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
     return true
   }
   @objc func run(){guard filtered.indices.contains(table.selectedRow) else{return};let item=filtered[table.selectedRow].item
-    guard let action=item.action,isAvailable(item,from:previousResponder ?? previousWindow) else{NSSound.beep();status.stringValue="\(item.title) is not available right now";return}
+    guard let action=item.action,isAvailable(item,from:previousResponder ?? previousWindow) else{NSSound.beep();status.stringValue=item.toolTip ?? "\(item.title) is not available right now";return}
     close();NSApp.sendAction(action,to:item.target,from:item)}
   private func bind(_ event:NSEvent){
     guard filtered.indices.contains(table.selectedRow),let key=event.charactersIgnoringModifiers?.lowercased(),key.count==1 else{return}

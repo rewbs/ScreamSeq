@@ -1,0 +1,202 @@
+-- Configuring done (0.2s)
+-- Generating done (1.0s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+[  7%] Built target TrackerFLAC
+[ 39%] Built target OpenMPTCore
+[ 48%] Built target TrackerEditor
+[ 51%] Built target TrackerHosted
+[ 53%] Built target TrackerMac
+[ 53%] Built target tracker-core-tests
+[ 53%] Built target plugin-preset-tests
+[ 54%] Built target RealtimeAudit
+[ 55%] Built target ResonanceFixture
+[ 55%] Built target precise-ramp-tests
+[ 56%] Built target precise-note-tests
+[ 56%] Building OBJCXX object CMakeFiles/pattern-pitch-tests.dir/Tests/FixtureAU.mm.o
+[ 56%] Linking CXX executable pattern-pitch-tests
+[ 57%] Built target pattern-pitch-tests
+[ 57%] Building OBJCXX object CMakeFiles/record-nudge-tests.dir/Tests/RecordNudgeTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/RecordNudgeTests.mm:97:5: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   97 |     auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/RecordNudgeTests.mm:105:9: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+  105 |   const auto expected=call(@"pattern.effects.get",@{@"pattern":@0})[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/RecordNudgeTests.mm:109:5: warning: 'auto' deduced as 'id' in declaration of 'c' [-Wauto-var-id]
+  109 |     auto c=[commands[0] mutableCopy];[c addEntriesFromDictionary:invalid];NSError *failure=nil;
+      |     ^~~~~~
+3 warnings generated.
+[ 57%] Linking CXX executable record-nudge-tests
+[ 57%] Built target record-nudge-tests
+[ 57%] Building OBJCXX object CMakeFiles/unified-effects-tests.dir/Tests/UnifiedEffectsTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/UnifiedEffectsTests.mm:100:84: warning: 'auto' deduced as 'id' in declaration of 'q' [-Wauto-var-id]
+  100 |   auto call=[&](NSString *method,NSDictionary *p,bool write=false)->NSDictionary *{auto q=[p mutableCopy];if(write)q[@"expectedRevision"]=session.automationRevision;auto reply=[session automationMethod:method params:q error:&error];if(!reply)throw std::runtime_error(error.localizedDescription.UTF8String);return reply[@"data"];};
+      |                                                                                    ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/UnifiedEffectsTests.mm:116:49: warning: 'auto' deduced as 'id' in declaration of 'relative' [-Wauto-var-id]
+  116 |   for(NSDictionary *c in expected[@"commands"]){auto relative=[c mutableCopy];relative[@"position"]=@([c[@"position"] unsignedIntValue]-2*65536);[clipboard addObject:relative];}
+      |                                                 ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/UnifiedEffectsTests.mm:118:3: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+  118 |   auto preview=[paste mutableCopy];preview[@"dryRun"]=@YES;rev=session.automationRevision;
+      |   ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/UnifiedEffectsTests.mm:131:3: warning: 'auto' deduced as 'id' in declaration of 'pc' [-Wauto-var-id]
+  131 |   auto pc=call(@"pattern.get",@{@"pattern":@0,@"startRow":@0,@"rowCount":@1,@"startChannel":@0,@"channelCount":@1})[@"cells"];
+      |   ^~~~~~~
+4 warnings generated.
+[ 58%] Linking CXX executable unified-effects-tests
+[ 58%] Built target unified-effects-tests
+[ 58%] Building OBJCXX object CMakeFiles/pattern-performance-tests.dir/Tests/PatternPerformanceTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:23:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   23 |     auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:32:49: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+   32 |   NSString *revision=session.automationRevision;auto preview=[set mutableCopy];preview[@"dryRun"]=@YES;
+      |                                                 ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:35:9: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   35 |   const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:40:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   40 |     auto request=[params mutableCopy];request[@"expectedRevision"]=session.automationRevision;NSString *before=session.automationRevision;
+      |     ^~~~~~~~~~~~
+4 warnings generated.
+[ 58%] Linking CXX executable pattern-performance-tests
+[ 58%] Built target pattern-performance-tests
+[ 59%] Built target plugin-scanner
+[ 60%] Building OBJCXX object CMakeFiles/plugin-program-tests.dir/Tests/PluginProgramTests.mm.o
+[ 60%] Building OBJCXX object CMakeFiles/plugin-program-tests.dir/Tests/FixtureAU.mm.o
+[ 60%] Linking CXX executable plugin-program-tests
+[ 60%] Built target plugin-program-tests
+[ 60%] Building OBJCXX object CMakeFiles/plugin-preset-session-tests.dir/Tests/PluginPresetSessionTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:53:9: warning: 'auto' deduced as 'id' in declaration of 'inspected' [-Wauto-var-id]
+   53 |         auto inspected = call(@"plugin.preset.inspect", @{@"path": path})[@"data"];
+      |         ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:59:11: warning: 'auto' deduced as 'id' in declaration of 'instrument' [-Wauto-var-id]
+   59 |           auto instrument = call(@"instrument.create", @{}, true)[@"data"][@"instrument"];
+      |           ^~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:65:9: warning: 'auto' deduced as 'id' in declaration of 'envelope' [-Wauto-var-id]
+   65 |         auto envelope = call(@"automation.pattern.get", @{@"pattern": @0})[@"data"];
+      |         ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:67:9: warning: 'auto' deduced as 'id' in declaration of 'beforePorts' [-Wauto-var-id]
+   67 |         auto beforePorts = call(@"plugin.buses.get", @{@"slot": @0})[@"data"];
+      |         ^~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:68:9: warning: 'auto' deduced as 'id' in declaration of 'touched' [-Wauto-var-id]
+   68 |         auto touched = call(@"automation.target.get", @{})[@"data"][@"token"];
+      |         ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:83:9: warning: 'auto' deduced as 'id' in declaration of 'stale' [-Wauto-var-id]
+   83 |         auto stale = [load mutableCopy]; stale[@"expectedRevision"] = revision;
+      |         ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:92:9: warning: 'auto' deduced as 'id' in declaration of 'neighbor' [-Wauto-var-id]
+   92 |         auto neighbor = call(@"plugin.parameters.get", @{@"slot": @0})[@"data"];
+      |         ^~~~~~~~~~~~~
+7 warnings generated.
+[ 61%] Linking CXX executable plugin-preset-session-tests
+[ 61%] Built target plugin-preset-session-tests
+[ 62%] Built target recovery-session-tests
+[ 62%] Built target instrument-envelope-tests
+[ 63%] Built target instrument-envelope-session-tests
+[ 64%] Built target plugin-alias-tests
+[ 64%] Built target song-timing-session-tests
+[ 64%] Built target song-timing-tests
+[ 65%] Built target native-reverse-loop-tests
+[ 66%] Built target sample-loop-tests
+[ 66%] Built target sample-crossfade-project-tests
+[ 67%] Built target sample-crossfade-tests
+[ 68%] Built target sample-snap-tests
+[ 68%] Built target sample-drawing-tests
+[ 69%] Built target sample-copy-tests
+[ 69%] Built target sample-clipboard-tests
+[ 70%] Built target sample-archive-tests
+[ 70%] Built target sample-processing-tests
+[ 71%] Built target sample-project-tests
+[ 71%] Built target sample-session-tests
+[ 71%] Built target sample-import-tests
+[ 71%] Built target automation-tools-tests
+[ 72%] Built target pattern-tools-tests
+[ 72%] Built target pattern-commands-tests
+[ 72%] Built target render-audit
+[ 73%] Built target plugin-tests
+[ 73%] Built target native-effects-tests
+[ 73%] Built target eq-effects-tests
+[ 73%] Built target comb-tests
+[ 73%] Built target filter-tests
+[ 74%] Built target oversampling-tests
+[ 74%] Built target distortion-tests
+[ 74%] Built target lofi-tests
+[ 75%] Built target cabinet-tests
+[ 75%] Built target dynamics-tests
+[ 75%] Built target maximizer-tests
+[ 75%] Built target bus-compressor-tests
+[ 75%] Built target session-tests
+[ 76%] Built target native-song-tests
+[ 77%] Built target device-tests
+[ 78%] Built target loopback-tests
+[ 79%] Built target midi-tests
+[ 80%] Built target export-tests
+[ 81%] Built target stress-tests
+[ 81%] Built target routing-prototype-tests
+[ 82%] Built target mixer-graph-tests
+[ 82%] Built target mixer-runtime-tests
+[ 83%] Built target mixer-transition-tests
+[ 83%] Built target mixer-publication-tests
+[ 84%] Built target realtime-transition-tests
+[ 85%] Built target native-mixer-tests
+[ 85%] Built target sidechain-tests
+[ 85%] Built target multi-bus-tests
+[ 85%] Built target rack-tests
+[ 85%] Built target mixer-device-tests
+[ 86%] Built target qualification-fixture
+[ 86%] Built target native-plugin-tests
+[ 86%] Built target plugin-robustness-tests
+[ 86%] Built target plugin-latency-tests
+[ 87%] Built target musical-automation-tests
+[ 88%] Built target automation-tests
+[ 88%] Built target plugin-trust-tests
+[ 89%] Built target plugin-inventory-tests
+[ 89%] Built target plugin-lifecycle-tests
+[ 89%] Built target plugin-shutdown-tests
+[ 89%] Built target note-track-tests
+[ 90%] Built target plugin-library-tests
+[ 90%] Built target automation-target-tests
+[ 91%] Built target signal-graph-tests
+[ 92%] Built target song-modulation-tests
+[ 92%] Built target native-signal-graph-tests
+[ 92%] Built target signal-graph-session-tests
+[ 92%] Built target effect-auxiliary-tests
+[ 92%] Built target signal-routing-tests
+[ 93%] Built target signal-graph-performance
+[ 93%] Built target playback-region-tests
+[ 93%] Built target curve-formula-tests
+[ 94%] Built target curve-formula-session-tests
+[ 95%] Built target envelope-bank-tests
+[ 95%] Built target playback-display-tests
+[ 95%] Built target parameter-activity-tests
+[ 95%] Built target unified-history-tests
+[ 96%] Built target document-history-allocation-tests
+[ 97%] Built target windows-graph-document-tests
+[ 98%] Built target windows-native-metadata-tests
+[ 99%] Built target windows-mixer-document-tests
+[100%] Built target parameter-provenance-tests
+Swift/ErrorType.swift:254: Fatal error: Error raised at top level: Error Domain=NSCocoaErrorDomain Code=640 "You can’t save the file “ScreamSeq.icns” because the volume “Macintosh HD” is out of space." UserInfo={NSFilePath=/Users/rewbs/code/openmpt/bin/mac-graph-fluency/ScreamSeq.app/Contents/Resources/ScreamSeq.icns, NSURL=file:///Users/rewbs/code/openmpt/bin/mac-graph-fluency/ScreamSeq.app/Contents/Resources/ScreamSeq.icns, NSUnderlyingError=0x7b40a4d80 {Error Domain=NSPOSIXErrorDomain Code=28 "No space left on device"}}
+Stack dump:
+0.	Program arguments: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -interpret mac/Tools/Icon.swift -Xllvm -aarch64-use-tbi -enable-objc-interop -stack-check -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -no-color-diagnostics -Xcc -fno-color-diagnostics -new-driver-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-driver -empty-abi-descriptor -no-auto-bridging-header-chaining -module-name Icon -disable-clang-spi -target-sdk-version 26.5 -target-sdk-name macosx26.5 -external-plugin-path /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server -external-plugin-path /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/local/lib/swift/host/plugins#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server -in-process-plugin-server-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/libSwiftInProcPluginServer.dylib -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/local/lib/swift/host/plugins -- /Users/rewbs/code/openmpt/bin/mac-graph-fluency/ScreamSeq.app/Contents/Resources/ScreamSeq.icns
+1.	Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101)
+2.	Compiling with effective version 5.10
+3.	While running user code "mac/Tools/Icon.swift"
+Stack dump without symbol names (ensure you have llvm-symbolizer in your PATH or set the environment var `LLVM_SYMBOLIZER_PATH` to point to it):
+0  swift-frontend           0x000000010afc0a30 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) + 56
+1  swift-frontend           0x000000010afbded0 llvm::sys::RunSignalHandlers() + 172
+2  swift-frontend           0x000000010afc1020 SignalHandler(int, __siginfo*, void*) + 356
+3  libsystem_platform.dylib 0x000000018413b744 _sigtramp + 56
+4  libswiftCore.dylib       0x0000000197950cc8 $ss17_assertionFailure__4file4line5flagss5NeverOs12StaticStringV_SSAHSus6UInt32VtF + 172
+5  libswiftCore.dylib       0x0000000197831258 swift_errorInMain + 632
+6  (error)                  0x000000011b418830
+7  swift-frontend           0x0000000104cb4c48 llvm::orc::runAsMain(int (*)(int, char**), llvm::ArrayRef<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>>, std::__1::optional<llvm::StringRef>) + 908
+8  swift-frontend           0x0000000104bb1f94 swift::SwiftJIT::runMain(llvm::ArrayRef<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>>) + 636
+9  swift-frontend           0x0000000104bbe23c swift::RunImmediately(swift::CompilerInstance&, std::__1::vector<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>, std::__1::allocator<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>>> const&, swift::IRGenOptions const&, swift::SILOptions const&, std::__1::unique_ptr<swift::SILModule, std::__1::default_delete<swift::SILModule>>&&) + 964
+10 swift-frontend           0x0000000104b320d0 processCommandLineAndRunImmediately(swift::CompilerInstance&, std::__1::unique_ptr<swift::SILModule, std::__1::default_delete<swift::SILModule>>&&, llvm::PointerUnion<swift::ModuleDecl*, swift::SourceFile*>, swift::FrontendObserver*, int&) + 484
+11 swift-frontend           0x0000000104b2b89c performCompileStepsPostSILGen(swift::CompilerInstance&, std::__1::unique_ptr<swift::SILModule, std::__1::default_delete<swift::SILModule>>, llvm::PointerUnion<swift::ModuleDecl*, swift::SourceFile*>, swift::PrimarySpecificPaths const&, int&, swift::FrontendObserver*, llvm::ArrayRef<char const*>) + 2068
+12 swift-frontend           0x0000000104b2aecc swift::performCompileStepsPostSema(swift::CompilerInstance&, int&, swift::FrontendObserver*, llvm::ArrayRef<char const*>) + 4560
+13 swift-frontend           0x0000000104b303a0 performCompile(swift::CompilerInstance&, int&, swift::FrontendObserver*, llvm::ArrayRef<char const*>) + 4028
+14 swift-frontend           0x0000000104b2c818 swift::performFrontend(llvm::ArrayRef<char const*>, char const*, void*, swift::FrontendObserver*) + 3308
+15 swift-frontend           0x0000000104aac424 swift::mainEntry(int, char const**) + 5224
+16 dyld                     0x0000000183d73e00 start + 6992
+mac/build.sh: line 30: 34396 Trace/BPT trap: 5          xcrun swift mac/Tools/Icon.swift "$tracker_app/Contents/Resources/ScreamSeq.icns"

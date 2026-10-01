@@ -201,7 +201,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
       song.Order().SetDefaultTempoInt(125); song.Order().SetDefaultSpeed(6);
     });
     doc.annotate([&](NativeSong &n) {
-      const auto master = n.makeEntity().id;
+      const auto master = n.masterID;
       for (const auto &[channel, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
       n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
       MusicalAutomationLane lane{n.makeEntity().id, n.patterns.at(0).id, synth.instanceID, 7, true,

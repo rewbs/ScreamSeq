@@ -24,13 +24,18 @@ while another panel has focus; disable it to type text normally.
 2. Add… searches the cached plugin catalogue alongside groups and sources. An effect is inserted into the
    selected node's single main connection, or before Output when unambiguous.
    More complex routing can be connected manually.
+   At song level, selecting a channel or its cable sets the insertion destination.
+   With no destination selected, Add places an **Unconnected** effect at the
+   pointer. Drag it onto a channel wire, or drag a channel output to its main
+   input, to insert it in that path. The disconnected state and placement are
+   saved, and each Add or insertion is one Undo action.
 3. Select an effect to see its searchable parameter controls. Parameter values use the plugin's native
    units. Named audio sockets and port menus come from its bus catalog. Hollow auxiliary
-   sockets enable automatically when connected. AU and VST3 custom interfaces edit a separate library draft;
-   Apply plugin settings saves that draft in one document Undo.
+   sockets activate as part of connecting a supported route. AU and VST3 custom interfaces edit a separate library draft;
+   Update template from custom interface saves that draft in one document Undo.
 4. Add sources such as Automation, Amount, LFO, follower, note envelope, random or MIDI CC.
-   Choose Modulation, its source, destination and stable parameter ID. The
-   Modulate button beside a loaded parameter supplies that ID. Ranges use
+   Expose a parameter from its menu and drag a source socket onto it, or drag a
+   source card directly onto the parameter in the inspector. Ranges use
    normalized values; descending ranges invert a source. Contributions add to a
    shared base and clamp to 0…1. Use the parameter menu to expose a named parameter socket, then drag a gold source socket to it. Drag a parameter socket to blank canvas to create a compatible source with zero initial depth. Audio uses separate green sockets for each supported bus.
 5. Return to Song graph. Select a channel or group and assign an ordinary graph,
@@ -76,7 +81,10 @@ For **Channel 1 → Compressor**, drag Channel 1's Main out to the compressor's
 **Main in**, or select those endpoints and ports then Connect. This moves the
 compressor and its following inserts onto Channel 1. For **Channel 2 → detector**,
 drag Channel 2's Main out to **Detector sidechain**, or pick that named input in
-the connection form. The detector port enables at playback preparation. New built-in compressors use
+the connection form. Built-in detector inputs and already-prepared AU inputs can
+connect during playback. A vendor bus that cannot activate live reports the
+reason and keeps the existing graph playing; stop and retry that connection.
+New built-in compressors use
 Auto detector mode; for an existing compressor forced to Internal, select it and
 click **Use connected detector (Auto)**. Third-party plugins may also require
 their own External/Sidechain switch in the custom interface. Channel
@@ -90,6 +98,14 @@ share one processed output. **Option-drag** to an insert's Main in, or choose
 main input instead of moving the chain. Main/auxiliary plugin output fan-out is
 independent of its normal serial path. Mono and stereo buses are supported;
 unsupported multichannel layouts are not offered as destinations.
+
+Live effect Add/Remove, reordering and repatching prepare the candidate while the
+old route plays, then crossfade supported changes. The host retains unchanged
+processors and their state. Some latency, port, source or union-cycle changes
+cannot transition safely yet; those edits reject without silently restarting
+transport. Recipe parameters and supported preset updates reach every prepared
+copy together. Creating/changing a recipe's processor topology still needs
+stopped preparation. Layout-only changes never interrupt playback.
 
 Shift-click or Command-click toggles nodes in the selection; dragging empty
 canvas draws a selection rectangle. Drag or use arrow keys to move the selection
@@ -128,6 +144,33 @@ retains the processors. Save to subgraph library makes an independent recipe cop
 when the selected chain has a valid exposed boundary. Editing a reusable recipe
 changes all its channel/instrument/pattern uses; the inspector states that scope.
 These groups are distinct from a summing mixer group bus.
+
+Add also offers visual frames and comments. They can organize a selection without
+changing the sound or processor ownership. Collapsing a frame retains reachable
+boundary ports. Cable reroute points shape a wire without changing its route.
+Focused channel views show labeled boundary links for omitted branches; click
+one to reveal that dependency without changing the song or its Undo history.
+
+## Parameters and their sources
+
+Ordinary rack parameters accept song-level modulation directly. Select a plugin,
+search its parameter list and drag a source card onto the desired control. New
+connections begin at zero depth, with their amount field focused. Continuous
+parameters use smooth values; a discrete parameter requires an explicit
+quantized connection. Read-only parameters remain inspectable.
+
+The editable control represents the manual baseline. The separately labeled
+effective reading is a snapshot of the delivered value; Parameter activity shows
+its measured history and contributions. A reusable definition has independent
+playing copies, so its template has no single effective value; use Inspect
+effective value to select the relevant instance.
+
+A parameter's menu offers Show existing automation sources in graph. Envelope,
+pattern-command and recorded sources appear as **Sets base** references to their
+original data. They are not additional modulation, and cutting a reference wire
+does not delete the source. Double-click a source or choose Edit source to open
+the exact editor, then Back returns to the graph. The bounded view pages sources
+for one parameter; it does not fill the canvas with every automation lane.
 
 ## Drawn automation inside a graph
 
@@ -312,3 +355,38 @@ New built-in Compressor, Gate and Bus Compressor instances default to **Auto (us
 Supported plugin buses appear individually with their native names. Hollow sockets are available but inactive; a connection activates them on the playback copy. Outputs can feed multiple destinations and several sources can sum into one input. The song view uses channel/bus sources for insert sidechains; route a plugin output through a bus to use it as a detector source. Reusable graphs allow direct internal plugin-to-plugin wiring. Audio buses currently support mono/stereo, not surround layouts. Master remains the final sink; move its effects onto a track or return before branching them downstream.
 
 **Shift-click** or **Command-click** toggles nodes in the selection. Drag a rectangle from blank canvas to select a group; arrows or a node drag move it together. Drop a selected effect, or a contiguous serial chain of effects, onto a highlighted audio wire to insert it there. The old main path reconnects automatically; internal chain order is preserved. Position and routing changes make one Undo step. A branched or disconnected selection cannot be inserted as a serial chain and is rejected without changing the song.
+
+### Socket menus and keyboard patching
+
+Right-click a socket for **Connect to…**, **Add compatible node…**, and its sources
+or targets. **Patch by keyboard…** in More / ⌘K first chooses a socket, then searches
+its exposed opposite endpoints by node name, port name, signal type or stable ID.
+The list includes filter-hidden channels at the current group depth. Unsupported
+signal types and read-only parameters explain why they cannot be connected.
+For a rack effect’s Main input, choose **Move chain here** or **Add / sum input**
+explicitly; these are the same ownership and additive operations as the normal
+and Option socket gestures. Parameter targets retain the explicit discrete-value
+choice; an audio-to-parameter connection offers an envelope follower.
+
+**Show cable source / target** follows the selected wire without moving any saved
+cards. **Back to connection** restores the previous viewport, filters and stable
+wire selection. These are navigation, so they add no document Undo step. A stale
+revision, changed group context or remapped boundary socket cancels the captured
+connection intention. **Advanced numeric patching…** retains the From/To form.
+
+## Following a custom plugin knob
+
+For a song-rack plugin, move the desired knob in its custom interface, then use
+Graph → Parameters → **Show last touched plugin parameter** (also in Cmd-K).
+The graph selects the stable processor, exposes that exact parameter socket,
+and shows its host controls. Drag a source onto the socket or host control to
+connect modulation. This does not depend on the vendor supporting pointer
+hit-testing. **Back from last touched parameter** restores the original graph
+depth, instance context, selection and zoom. These navigation actions do not
+add document history. A missing or removed parameter is explained explicitly.
+
+Reusable template custom editors remain separate drafts: use their searchable
+host parameter list to expose a parameter. The last-touched bridge identifies
+song-rack instances, rather than guessing which shared template copy a knob
+belongs to. Real text edits keep normal text Undo/Redo; an untouched field
+focused by a graph gesture lets Cmd-Z reach the unified document history.

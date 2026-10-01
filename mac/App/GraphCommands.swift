@@ -6,8 +6,11 @@ enum GraphCommand:String,CaseIterable {
   case add,parent,fit,traceSilence,findOverload,clearOverloads,scope,spectrum
   case openPlugin,bypass,listen,stopListening,frameSelection,showPattern,newGroup,cloneGroup
   case sourceAutomation,sourceLFO,sourceFollower,sourceRandom,sourceNote,sourceMIDI,sourceAmount
-  case patch,cut,detach,deleteHeal,arrange,zoomIn,zoomOut,reload
-  case groupSelection,ungroup,exportGroup
+  case patch,advancedPatch,portAdd,portSources,portTargets,cableSource,cableTarget,backToCable,cut,detach,deleteHeal,arrange,zoomIn,zoomOut,reload
+  case groupSelection,ungroup,exportGroup,revealHidden
+  case parameterAutomate,parameterActivity,parameterExpose,parameterValue,parameterSources,parameterLastTouched,returnFromLastTouched,editProvenance,hideProvenance,returnFromSource,nextProvenancePage
+  case visualFrame,visualComment,visualReroute,visualCollapse,visualRemove
+  case findNode,openNode,removeNode,arrangeSelection
   var id:String {"graph."+rawValue}
   // Canvas-only defaults must yield to the same persisted overrides used by
   // the command palette. Otherwise removing/remapping M still bypasses audio.
@@ -49,6 +52,23 @@ enum GraphCommand:String,CaseIterable {
 }
 
 extension SignalGraphEditor {
+  func withVisibleNode(title:String,action:@escaping(String)->Void) {
+    if data.isEmpty || loading {prepareCommand{[weak self] in self?.withVisibleNode(title:title,action:action)};return}
+    if let id=canvas.selected ?? selectedID,canvas.nodes.contains(where:{$0.id==id}){action(id);return}
+    chooseVisibleNode(title:title,action:action)
+  }
+  func chooseVisibleNode(title:String="Find node",action:((String)->Void)?=nil) {
+    if data.isEmpty || loading {prepareCommand{[weak self] in self?.chooseVisibleNode(title:title,action:action)};return}
+    chooseTarget(title:title,entries:canvas.nodes.map{node in
+      let ambiguous=canvas.nodes.contains{$0.id != node.id && $0.title==node.title && $0.detail==node.detail}
+      return .init(id:node.id,title:node.title,detail:node.detail+(ambiguous ? " · "+node.id:""),keywords:node.kind+" "+(node.role ?? "")+" "+node.id)
+    }){[weak self] id in
+      guard let self,self.canvas.nodes.contains(where:{$0.id==id})else{return}
+      self.canvas.selectedEdge=nil;self.manualConnection=false;self.selectedID=id;self.canvas.selected=id
+      self.inspect();self.configureConnectionInspector();self.frameSelection();self.window?.makeFirstResponder(self.canvas)
+      action?(id)
+    }
+  }
   func prepareCommand(_ action:@escaping()->Void) {
     // One deferred user intention, shared with any already-running graph read.
     // Reveal can start that read synchronously through workspace selection.
@@ -92,8 +112,14 @@ extension SignalGraphEditor {
     }
   }
   func openSelectedPlugin() {
-    if graphID != nil,let selectedID,nodes.contains(where:{$0["id"] as? String==selectedID && $0["kind"] as? String=="plugin"}) {
-      openNode(selectedID);return
+    if let graph=graphID {
+      let processors=nodes.filter{$0["kind"] as? String=="plugin"}
+      if let selectedID,processors.contains(where:{$0["id"] as? String==selectedID}){openNode(selectedID);return}
+      chooseTarget(title:"Open group processor",entries:processors.compactMap{node in
+        guard let id=node["id"] as? String else{return nil}
+        return .init(id:id,title:node["name"] as? String ?? "Plugin",detail:"Shared definition",keywords:"interface effect")
+      }){[weak self] id in guard self?.graphID==graph else{return};self?.openNode(id)}
+      return
     }
     withSongPlugin(title:"Open plugin interface") {[weak self] id in self?.onPlugin?(id)}
   }

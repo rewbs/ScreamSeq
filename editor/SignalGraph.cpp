@@ -13,6 +13,19 @@ bool text(const std::string &s, size_t limit) { return s.size() <= limit && s.fi
 bool audioSource(SignalNodeKind k) { return k == SignalNodeKind::Input || k == SignalNodeKind::Plugin; }
 bool audioTarget(SignalNodeKind k) { return k == SignalNodeKind::Output || k == SignalNodeKind::Plugin || k == SignalNodeKind::Follower; }
 bool modSource(SignalNodeKind k) { return k >= SignalNodeKind::LFO && k <= SignalNodeKind::Automation; }
+void validateSourceSettings(const SignalNode &n) {
+  require(text(n.name,1024) && finite(n.x,-100000,100000) && finite(n.y,-100000,100000),"Invalid graph node label or position");
+  require(finite(n.rate,.0001,1024) && finite(n.phase,0,1) && finite(n.attack,.00001,60) && finite(n.release,.00001,60) && n.controller<=127,"Invalid modulation source settings");
+  require(n.kind==SignalNodeKind::Automation || n.envelopes.empty(),"Only automation sources contain pattern curves");
+  require(n.envelopes.size()<=1024,"Too many graph pattern curves");
+  std::set<uint64_t> patterns;
+  for(const auto &lane:n.envelopes){
+    require(lane.pattern&&patterns.insert(lane.pattern).second&&!lane.points.empty()&&lane.points.size()<=4096,"Graph curves need a distinct pattern and 1..4096 points");
+    uint32_t previous=0;bool first=true;
+    for(const auto &point:lane.points){require((first||point.position>previous)&&finite(point.value,0,1)&&uint8_t(point.curve)<=uint8_t(AutomationCurve::Scripted),"Invalid or unordered graph automation point");
+      require(point.curve!=AutomationCurve::Scripted||!point.formula.source().empty(),"Scripted graph points need a formula");previous=point.position;first=false;}
+  }
+}
 void validateGroups(const SignalDefinition &d) {
   require(d.groups.size()<=64,"Use at most 64 processing groups per definition");
   std::map<uint64_t,const SignalGroup *> groups;
@@ -91,7 +104,7 @@ void ungroupSongSignalNodes(SignalGraph &graph,uint64_t id) {
   auto g=std::find_if(next.groups.begin(),next.groups.end(),[&](const auto &g){return g.id==id;});require(g!=next.groups.end(),"Song processing group does not exist");
   if(g->parent){auto &parent=*std::find_if(next.groups.begin(),next.groups.end(),[&](const auto &p){return p.id==g->parent;});parent.nodes.insert(parent.nodes.end(),g->nodes.begin(),g->nodes.end());}
   for(auto &child:next.groups)if(child.parent==id)child.parent=g->parent;
-  next.groups.erase(g);validateSongSignalGroups(next);graph=std::move(next);
+  removeSignalPresentationNode(next.presentation,"n"+std::to_string(id));next.groups.erase(g);validateSongSignalGroups(next);graph=std::move(next);
 }
 void moveSongSignalGroup(SignalGraph &graph,uint64_t id,double x,double y) {
   auto next=graph;validateSongSignalGroups(next);const auto descendants=songGroupDescendants(next,id);
@@ -103,8 +116,10 @@ void moveSongSignalGroup(SignalGraph &graph,uint64_t id,double x,double y) {
   validateSongSignalGroups(next);graph=std::move(next);
 }
 void pruneSongSignalGroups(SignalGraph &graph,const std::vector<std::string> &available) {
+  const auto previous=graph.groups;
   for(auto &g:graph.groups)std::erase_if(g.nodes,[&](const auto &key){return std::find(available.begin(),available.end(),key)==available.end();});
   while(true){std::set<uint64_t> parents;for(const auto &g:graph.groups)parents.insert(g.parent);if(!std::erase_if(graph.groups,[&](const auto &g){return g.nodes.empty()&&!parents.contains(g.id);}))break;}
+  for(const auto &g:previous)if(std::none_of(graph.groups.begin(),graph.groups.end(),[&](const auto &v){return v.id==g.id;}))removeSignalPresentationNode(graph.presentation,"n"+std::to_string(g.id));
 }
 SignalDefinition extractSongSignalGroup(const SignalGraph &graph,const MixerGraph &mixer,uint64_t groupID,
     const std::vector<std::pair<std::string,GraphPluginRecipe>> &effects,const std::function<uint64_t()> &allocate) {
@@ -117,7 +132,7 @@ SignalDefinition extractSongSignalGroup(const SignalGraph &graph,const MixerGrap
   std::set<std::string> assigned;for(const auto &bus:mixer.buses)assigned.insert(bus.inserts.begin(),bus.inserts.end());
   for(const auto &bus:mixer.buses) {
     auto inserts=bus.inserts;
-    if(bus.kind==MixerBusKind::Master)for(const auto &[key,recipe]:effects)if(!assigned.contains(key))inserts.push_back(key);
+    if(bus.kind==MixerBusKind::Master)for(const auto &[key,recipe]:effects)if(!assigned.contains(key)&&std::find(mixer.detached.begin(),mixer.detached.end(),key)==mixer.detached.end())inserts.push_back(key);
     const auto count=std::count_if(inserts.begin(),inserts.end(),[&](const auto &id){return selected.contains(id);});
     if(count){require(!owner&&size_t(count)==selected.size(),"Save a contiguous chain from one channel; split this cross-channel group before exporting");owner=&bus;order=std::move(inserts);}
   }
@@ -160,21 +175,24 @@ SignalDefinition extractSongSignalGroup(const SignalGraph &graph,const MixerGrap
   compileSignal(result);return result;
 }
 size_t SignalDefinition::bytes() const {
-  size_t n = sizeof(*this) + name.size() + audio.size()*sizeof(SignalAudioEdge) + modulation.size()*sizeof(SignalModulation);
+  size_t n = presentation.bytes() + sizeof(*this) + name.size() + audio.size()*sizeof(SignalAudioEdge) + modulation.size()*sizeof(SignalModulation);
   for(const auto &v:nodes) n += sizeof(v)+v.name.size()+v.plugin.format.size()+v.plugin.name.size()+v.plugin.path.size()+v.plugin.classID.size()+v.plugin.state.size()+v.plugin.parameters.size()*(sizeof(std::pair<const uint32_t,double>)+3*sizeof(void *))+(v.plugin.inputs.size()+v.plugin.outputs.size())*sizeof(uint32_t);
   for(const auto &node:nodes)for(const auto &lane:node.envelopes){n+=sizeof(lane)+lane.points.size()*sizeof(AutomationPoint);for(const auto &point:lane.points)n+=point.formula.bytes();}
   for(const auto &group:groups)n+=sizeof(group)+group.name.size()+group.nodes.size()*sizeof(uint64_t);
   return n;
 }
 size_t SignalGraph::bytes() const {
-  size_t n = sizeof(*this)+inputs.size()*sizeof(SignalInputRoute)+outputs.size()*sizeof(SignalOutputRoute)+(assignments.size()+instrumentAssignments.size())*sizeof(SignalAssignment)+commands.size()*sizeof(SignalCommand)+lanes.size()*sizeof(std::pair<uint64_t,uint8_t>);
+  size_t n = presentation.bytes() + sizeof(*this)+inputs.size()*sizeof(SignalInputRoute)+outputs.size()*sizeof(SignalOutputRoute)+(assignments.size()+instrumentAssignments.size())*sizeof(SignalAssignment)+commands.size()*sizeof(SignalCommand)+lanes.size()*sizeof(std::pair<uint64_t,uint8_t>);
   for(const auto &[key,position]:layout)n+=key.size()+sizeof(position);
   for(const auto &d:library)n += d.bytes();
+  for(const auto &s:songSources){n+=sizeof(s)+s.node.name.size()+s.audioPlugin.size();
+    for(const auto &lane:s.node.envelopes){n+=sizeof(lane)+lane.points.size()*sizeof(AutomationPoint);for(const auto &point:lane.points)n+=point.formula.bytes();}}
+  for(const auto &m:songModulation)n+=sizeof(m)+m.plugin.size();
   for(const auto &g:groups){n+=sizeof(g)+g.name.size();for(const auto &key:g.nodes)n+=sizeof(key)+key.size();}
   return n;
 }
 SignalPlan compileSignal(const SignalDefinition &d, const std::vector<SignalProcessorInfo> &processors) {
-  validateGroups(d);
+  validateGroups(d);d.presentation.validate();
   require(d.id && d.number && d.number <= 999 && text(d.name,1024),"Subgraphs need a stable identity, number 1..999 and valid name");
   require(d.nodes.size() >= 2 && d.nodes.size() <= 64 && d.audio.size() <= 256 && d.modulation.size() <= 256,"Subgraph exceeds node or connection limits");
   SignalPlan p; p.arrival.resize(d.nodes.size());p.latency.resize(d.nodes.size());
@@ -183,17 +201,7 @@ SignalPlan compileSignal(const SignalDefinition &d, const std::vector<SignalProc
   for(size_t i=0;i<d.nodes.size();++i) {
     const auto &n=d.nodes[i];
     require(n.id && indices.emplace(n.id,i).second && uint8_t(n.kind)<=uint8_t(SignalNodeKind::Automation),"Invalid or duplicate graph node identity");
-    require(text(n.name,1024) && finite(n.x,-100000,100000) && finite(n.y,-100000,100000),"Invalid graph node label or position");
-    require(finite(n.rate,.0001,1024) && finite(n.phase,0,1) && finite(n.attack,.00001,60) && finite(n.release,.00001,60) && n.controller<=127,"Invalid modulation source settings");
-    require(n.kind==SignalNodeKind::Automation || n.envelopes.empty(),"Only automation sources contain pattern curves");
-    require(n.envelopes.size()<=1024,"Too many graph pattern curves");
-    std::set<uint64_t> patterns;
-    for(const auto &lane:n.envelopes){
-      require(lane.pattern&&patterns.insert(lane.pattern).second&&!lane.points.empty()&&lane.points.size()<=4096,"Graph curves need a distinct pattern and 1..4096 points");
-      uint32_t previous=0;bool first=true;
-      for(const auto &point:lane.points){require((first||point.position>previous)&&finite(point.value,0,1)&&uint8_t(point.curve)<=uint8_t(AutomationCurve::Scripted),"Invalid or unordered graph automation point");
-        require(point.curve!=AutomationCurve::Scripted||!point.formula.source().empty(),"Scripted graph points need a formula");previous=point.position;first=false;}
-    }
+    validateSourceSettings(n);
     if(n.kind==SignalNodeKind::Input){p.input=i;++inputs;}
     if(n.kind==SignalNodeKind::Output){p.output=i;++outputs;}
     if(n.kind==SignalNodeKind::Plugin) {
@@ -221,6 +229,7 @@ SignalPlan compileSignal(const SignalDefinition &d, const std::vector<SignalProc
   }
   std::set<std::tuple<uint64_t,uint64_t,uint32_t>> modulation;
   std::map<std::pair<uint64_t,uint32_t>,double> bases;
+  std::map<std::pair<uint64_t,uint32_t>,bool> quantization;
   std::map<uint64_t,std::set<uint32_t>> parameters;
   for(const auto &e:d.modulation) {
     require(indices.contains(e.source)&&indices.contains(e.target),"Modulation connection references a missing node");
@@ -229,7 +238,7 @@ SignalPlan compileSignal(const SignalDefinition &d, const std::vector<SignalProc
     require(modulation.emplace(e.source,e.target,e.parameter).second,"Duplicate modulation connection");
     parameters[e.target].insert(e.parameter);require(parameters[e.target].size()<=64,"Use at most 64 modulated parameters per processor");
     auto key=std::pair{e.target,e.parameter};require(!bases.contains(key)||bases.at(key)==e.base,"Modulation connections to a parameter must share one base value");bases[key]=e.base;
-    if(e.enabled)dependencies[b].insert(a);
+    if(e.enabled){require(!quantization.contains(key)||quantization.at(key)==e.quantized,"Enabled modulation sources must share the target quantization mode");quantization[key]=e.quantized;dependencies[b].insert(a);}
   }
   std::vector<bool> done(d.nodes.size());
   while(p.order.size()<d.nodes.size()) {
@@ -241,7 +250,7 @@ SignalPlan compileSignal(const SignalDefinition &d, const std::vector<SignalProc
       require(arrival+p.latency[i]<=1048576,"Subgraph latency exceeds supported delay");
       p.arrival[i]=uint32_t(arrival);p.order.push_back(i);done[i]=true;progress=true;
     }
-    require(progress,"Graph contains a feedback cycle; use an explicit feedback effect instead");
+    require(progress,"Graph contains a feedback cycle. Feedback routing is not supported; an ordinary delay effect does not make the cycle safe.");
   }
   for(auto &e:p.edges)e.delay=p.arrival[e.target]-p.arrival[e.source]-p.latency[e.source];
   uint64_t delayFrames=0;for(const auto &e:p.edges)delayFrames+=e.delay;require(delayFrames<=8*1024*1024,"Subgraph compensation exceeds 64 MB delay budget");
@@ -350,7 +359,18 @@ void ungroupSignalNodes(SignalDefinition &definition,uint64_t id) {
     parent.nodes.insert(parent.nodes.end(),group->nodes.begin(),group->nodes.end());
   }
   for(auto &child:next.groups)if(child.parent==id)child.parent=group->parent;
-  next.groups.erase(group);validateGroups(next);definition=std::move(next);
+  removeSignalPresentationNode(next.presentation,"n"+std::to_string(id));next.groups.erase(group);validateGroups(next);definition=std::move(next);
+}
+void reconcileSignalPresentation(SignalDefinition &definition,const SignalDefinition &previous) {
+  auto refs=[](const SignalDefinition &d){std::vector<SignalCableGeometry> result;for(const auto &e:d.audio)result.push_back({"n"+std::to_string(e.source),"n"+std::to_string(e.target),e.output,e.input,false});for(const auto &e:d.modulation)result.push_back({"n"+std::to_string(e.source),"n"+std::to_string(e.target),0,e.parameter,true});return result;};
+  const auto before=refs(previous),after=refs(definition);
+  auto same=[](const auto &a,const auto &b){return a.source==b.source&&a.target==b.target&&a.output==b.output&&a.input==b.input&&a.modulation==b.modulation;};
+  for(const auto &old:before)if(std::none_of(after.begin(),after.end(),[&](const auto &n){return same(old,n);})) {
+    std::vector<SignalCableGeometry> candidates;
+    for(const auto &n:after)if(n.modulation==old.modulation&&((n.source==old.source&&n.output==old.output)||(n.target==old.target&&n.input==old.input))&&std::none_of(before.begin(),before.end(),[&](const auto &v){return same(n,v);}))candidates.push_back(n);
+    if(candidates.size()==1)retargetSignalCableGeometry(definition.presentation,old,candidates.front());
+  }
+  pruneSignalGroups(definition);
 }
 void pruneSignalGroups(SignalDefinition &definition) {
   for(auto &group:definition.groups)std::erase_if(group.nodes,[&](auto id){return std::none_of(definition.nodes.begin(),definition.nodes.end(),[&](const auto &n){return n.id==id;});});
@@ -361,6 +381,12 @@ void pruneSignalGroups(SignalDefinition &definition) {
     const auto count=std::erase_if(definition.groups,[&](const auto &g){return g.nodes.empty()&&!parents.contains(g.id);});
     if(!count)break;
   }
+  std::set<std::string> available;for(const auto &n:definition.nodes)available.insert("n"+std::to_string(n.id));for(const auto &g:definition.groups)available.insert("n"+std::to_string(g.id));
+  pruneSignalPresentation(definition.presentation,available);
+  std::erase_if(definition.presentation.cables,[&](const auto &c){
+    if(c.modulation)return std::none_of(definition.modulation.begin(),definition.modulation.end(),[&](const auto &e){return c.source=="n"+std::to_string(e.source)&&c.target=="n"+std::to_string(e.target)&&c.output==0&&c.input==e.parameter;});
+    return std::none_of(definition.audio.begin(),definition.audio.end(),[&](const auto &e){return c.source=="n"+std::to_string(e.source)&&c.target=="n"+std::to_string(e.target)&&c.output==e.output&&c.input==e.input;});
+  });
 }
 void moveSignalGroup(SignalDefinition &definition,uint64_t id,double x,double y) {
   auto next=definition;
@@ -404,6 +430,10 @@ SignalDefinition extractSignalGroup(const SignalDefinition &definition,uint64_t 
   compileSignal(copy);return copy;
 }
 bool sameSignalProcessing(const SignalGraph &a,const SignalGraph &b) {
+  if(a.songModulation!=b.songModulation || a.songSources.size()!=b.songSources.size())return false;
+  for(size_t i=0;i<a.songSources.size();++i){const auto &x=a.songSources[i],&y=b.songSources[i];const auto &n=x.node,&m=y.node;
+    if(n.id!=m.id||n.kind!=m.kind||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes||x.audioBus!=y.audioBus||x.audioPlugin!=y.audioPlugin||x.output!=y.output||x.preFader!=y.preFader||x.noteTarget!=y.noteTarget||x.noteInstrument!=y.noteInstrument||x.amount!=y.amount)return false;
+  }
   if(a.instrumentAssignments!=b.instrumentAssignments||a.inputs!=b.inputs||a.outputs!=b.outputs||a.assignments!=b.assignments||a.commands!=b.commands)return false;
   std::set<uint64_t> used;
   for(const auto &assignment:a.assignments)used.insert(assignment.graph);
@@ -429,12 +459,26 @@ bool sameSignalParameterLayout(SignalGraph a,SignalGraph b) {
   return sameSignalProcessing(a,b);
 }
 bool sameSignalControlLayout(SignalGraph a,SignalGraph b) {
+  for(auto *graph:{&a,&b}){
+    for(auto &s:graph->songSources){auto &n=s.node;n.rate=1;n.phase=0;n.attack=.01;n.release=.1;n.controller=1;n.envelopes.clear();s.amount=1;}
+    for(auto &m:graph->songModulation)m.minimum=m.maximum=0;
+  }
   for(auto *graph:{&a,&b})for(auto &d:graph->library){
-    for(auto &n:d.nodes){n.plugin.parameters.clear();n.rate=1;n.phase=0;n.attack=.01;n.release=.1;n.controller=1;n.envelopes.clear();}
-    for(auto &m:d.modulation)m.base=m.minimum=m.maximum=0;
+    for(auto &n:d.nodes){n.plugin.parameters.clear();n.plugin.bypass=false;n.rate=1;n.phase=0;n.attack=.01;n.release=.1;n.controller=1;n.envelopes.clear();}
+    for(auto &m:d.modulation){m.base=m.minimum=m.maximum=0;m.quantized=false;}
     for(auto &e:d.audio)e.gain=1;
   }
   return sameSignalProcessing(a,b);
+}
+bool sameSignalSourceLayout(SignalGraph a,SignalGraph b) {
+  for(auto *graph:{&a,&b})for(auto &d:graph->library){
+    std::set<uint64_t> followers;
+    for(const auto &n:d.nodes)if(n.kind==SignalNodeKind::Follower)followers.insert(n.id);
+    std::erase_if(d.audio,[&](const auto &e){return followers.contains(e.target);});
+    std::erase_if(d.nodes,[](const auto &n){return n.kind==SignalNodeKind::LFO||n.kind==SignalNodeKind::Follower||n.kind==SignalNodeKind::Random||n.kind==SignalNodeKind::MIDI||n.kind==SignalNodeKind::Amount||n.kind==SignalNodeKind::Automation;});
+    d.modulation.clear();
+  }
+  return sameSignalControlLayout(std::move(a),std::move(b));
 }
 std::string signalBusIdentity(uint64_t bus){return "signal-bus-"+std::to_string(bus);}
 MixerGraph signalRoutingGraph(MixerGraph mixer,const SignalGraph &signal){
@@ -447,6 +491,7 @@ MixerGraph signalRoutingGraph(MixerGraph mixer,const SignalGraph &signal){
 void SignalGraph::validate(const std::vector<uint64_t> &targets,const std::map<uint64_t,uint32_t> &patterns,const std::vector<uint64_t> &instruments) const {
   validateSongSignalGroups(*this);
   require(library.size()<=128 && commands.size()<=65536 && bytes()<=16*1024*1024,"Graph library exceeds document limits");
+  presentation.validate();for(const auto &d:library)d.presentation.validate();
   require(layout.size()<=8192,"Too many saved graph positions");for(const auto &[key,p]:layout)require(!key.empty()&&text(key,256)&&finite(p[0],0,100000)&&finite(p[1],0,100000),"Invalid saved graph position");
   std::set<uint64_t> definitions;std::set<uint16_t> numbers;
   for(const auto &d:library){require(definitions.insert(d.id).second&&numbers.insert(d.number).second,"Subgraph identities and numbers must be unique");compileSignal(d);
@@ -454,6 +499,27 @@ void SignalGraph::validate(const std::vector<uint64_t> &targets,const std::map<u
       for(const auto &point:lane.points)require(uint64_t(point.position)<uint64_t(patterns.at(lane.pattern))*256,"Graph automation point is outside its pattern");}
   }
   auto target=[&](uint64_t id){return std::find(targets.begin(),targets.end(),id)!=targets.end();};
+  require(songSources.size()<=64&&songModulation.size()<=256,"Song modulation exceeds source or connection limits");
+  std::set<uint64_t> songSourceIDs;
+  for(const auto &s:songSources){const auto &n=s.node;
+    require(n.id&&songSourceIDs.insert(n.id).second&&modSource(n.kind),"Song sources need distinct identities and a control-source kind");
+    validateSourceSettings(n);
+    require(n.plugin==GraphPluginRecipe{},"Song modulation sources cannot contain a plugin recipe");
+    require(finite(s.amount,0,1)&&s.output<64&&text(s.audioPlugin,256),"Invalid song modulation input or amount");
+    require(!(s.audioBus&&!s.audioPlugin.empty())&&(!s.audioBus||target(s.audioBus)),"Choose one existing bus or plugin follower input");
+    require(n.kind==SignalNodeKind::Follower||(!s.audioBus&&s.audioPlugin.empty()&&!s.output&&!s.preFader),"Only followers accept an audio tap");
+    require(s.audioPlugin.empty()||!s.preFader,"Pre-fader applies to a mixer bus tap, not a plugin output");
+    require(!s.audioBus||!s.output,"Mixer bus taps have one stereo output");
+    require(n.kind==SignalNodeKind::NoteEnvelope||(!s.noteTarget&&!s.noteInstrument),"Only note envelopes accept a note scope");
+    require(!(s.noteTarget&&s.noteInstrument)&&(!s.noteTarget||target(s.noteTarget))&&(!s.noteInstrument||std::find(instruments.begin(),instruments.end(),s.noteInstrument)!=instruments.end()),"Choose one existing note channel or instrument");
+    for(const auto &lane:n.envelopes){require(patterns.contains(lane.pattern),"Song modulation envelope references an unknown pattern");for(const auto &point:lane.points)require(uint64_t(point.position)<uint64_t(patterns.at(lane.pattern))*256,"Song modulation point is outside its pattern");}
+  }
+  std::set<std::tuple<uint64_t,std::string,uint32_t>> songEdges;
+  std::map<std::pair<std::string,uint32_t>,bool> quantization;
+  for(const auto &m:songModulation){
+    require(songSourceIDs.contains(m.source)&&!m.plugin.empty()&&text(m.plugin,256)&&finite(m.minimum,-1,1)&&finite(m.maximum,-1,1)&&songEdges.emplace(m.source,m.plugin,m.parameter).second,"Invalid or duplicate song modulation connection");
+    if(m.enabled){auto [q,inserted]=quantization.emplace(std::make_pair(m.plugin,m.parameter),m.quantized);require(inserted||q->second==m.quantized,"All sources for a parameter must use the same quantization mode");}
+  }
   std::set<uint64_t> assigned;
   for(const auto &a:assignments)require(target(a.target)&&definitions.contains(a.graph)&&assigned.insert(a.target).second&&finite(a.amount,0,1)&&finite(a.wet,0,1),"Invalid or duplicate ordinary subgraph assignment");
   assigned.clear();require(instrumentAssignments.size()<=128,"Use at most 128 instrument graphs");

@@ -53,6 +53,20 @@ extension SignalGraphEditor {
     let rect=chosen.dropFirst().reduce(first.rect){$0.union($1.rect)}.insetBy(dx:-30,dy:-30)
     frameCanvas(rect,maximumScale:1.5)
   }
+  @discardableResult func recoverEmptyViewport()->Bool {
+    guard window != nil,!hasDraft,!canvas.nodes.isEmpty else{return false}
+    layoutSubtreeIfNeeded();scroll.layoutSubtreeIfNeeded()
+    let visible=scroll.documentVisibleRect
+    guard visible.width>80,visible.height>60,!canvas.nodes.contains(where:{$0.rect.intersects(visible)})else{return false}
+    // Context changes can keep a scroll origin whose last visible card was
+    // filtered out. Reveal one existing card without moving saved positions,
+    // changing selection, or zooming out to fit a distant entire song.
+    let preferred=canvas.nodes.first{$0.id==selectedID} ?? canvas.nodes.min{a,b in
+      hypot(a.rect.midX-visible.midX,a.rect.midY-visible.midY)<hypot(b.rect.midX-visible.midX,b.rect.midY-visible.midY)
+    }!
+    frameCanvas(preferred.rect.insetBy(dx:-24,dy:-24),maximumScale:scroll.magnification)
+    return true
+  }
   func frameCanvas(_ rect:NSRect,maximumScale:CGFloat) {
     // Selecting a diagnostic can reveal a different inspector. Resolve that
     // layout before calculating the canvas viewport, then centre in document
@@ -74,7 +88,22 @@ extension SignalGraphEditor {
         if ["insert","output","master-output"].contains(kind) {return(action["source"] as? String,kind=="insert" ? action["plugin"] as? String:nil,nil)}
       }
     }
-    return(selectedID.flatMap{songNodeBus[$0]} ?? filterID,nil,nil)
+    if let bus=selectedID.flatMap({songNodeBus[$0]}) {return(bus,nil,nil)}
+    // Inside a processing group, use its last insert when its descendants share
+    // one bus. Do not guess a destination for a boundary spanning several buses.
+    if let group=processingGroupID ?? selectedProcessingGroup?["id"] as? String {
+      let members=expandedProcessingSelection([group])
+      let owners=Set(members.compactMap{songNodeBus[$0]})
+      if owners.count==1,let owner=owners.first,let bus=buses.first(where:{$0["id"] as? String==owner}) {
+        let inserts=bus["inserts"] as? [String] ?? []
+        if let last=inserts.lastIndex(where:{members.contains("plugin:"+$0)}) {
+          return(owner,last+1<inserts.count ? inserts[last+1]:nil,nil)
+        }
+        return(owner,nil,nil)
+      }
+      return(nil,nil,nil)
+    }
+    return(filterID,nil,nil)
   }
   func freePosition(near point:NSPoint)->NSPoint {
     let origin=NSPoint(x:max(8,point.x),y:max(8,point.y))
@@ -97,7 +126,12 @@ extension SignalGraphEditor {
     return origin
   }
   func revealAddedNode() {
-    guard let id=selectedID,let node=canvas.nodes.first(where:{$0.id==id}) else{return}
+    guard let id=selectedID else{return}
+    // Add may create an unconnected bus/source outside the focused path. Treat
+    // it like an explicit hidden-branch reveal until the user changes filters.
+    graphFilterState.prepare(filterContext);graphFilterState.revealed.insert(id)
+    if !canvas.nodes.contains(where:{$0.id==id}){rebuild();selectedID=id;canvas.selected=id;inspect();configureConnectionInspector()}
+    guard let node=canvas.nodes.first(where:{$0.id==id})else{return}
     canvas.scrollToVisible(node.rect.insetBy(dx:-16,dy:-16));window?.makeFirstResponder(canvas)
   }
   func revealCableAmount() {
@@ -116,13 +150,18 @@ extension SignalGraphEditor {
       if graphID != nil && instrument {continue}
       let format=p["format"] as? String ?? "",title=p["name"] as? String ?? "Plugin"
       let identity=[format,p["classID"] as? String ?? "",String(describing:p["type"] ?? 0),String(describing:p["subtype"] ?? 0),String(describing:p["manufacturer"] ?? 0)].joined(separator:":")
-      entries.append(.init(id:"plugin:"+identity,title:title,detail:"\(format) · \(instrument ? "Instrument" : "Effect")",keywords:instrument ? "synth sampler instrument" : "audio effect insert",payload:["kind":"plugin","descriptor":p],unavailable:graphID==nil && bus==nil && !instrument ? "Select a channel or cable, then Add to place this effect":nil))
+      entries.append(.init(id:"plugin:"+identity,title:title,detail:"\(format) · \(instrument ? "Instrument" : graphID==nil && bus==nil ? "Unconnected effect":"Effect")",keywords:instrument ? "synth sampler instrument" : "audio effect insert",payload:["kind":"plugin","descriptor":p]))
     }
     for (title,kind) in [("LFO","lfo"),("Pattern envelope","automation"),("Envelope follower","follower"),("Random","random"),("Note envelope","note-envelope"),("MIDI controller","midi"),("Amount macro","amount")] {
-      entries.append(.init(id:"source:"+kind,title:title,detail:"Modulation source",keywords:"modulator control "+kind,payload:["kind":kind],unavailable:graphID==nil ? "Enter a processing group to add this modulation source":nil))
+      entries.append(.init(id:"source:"+kind,title:title,detail:"Modulation source",keywords:"modulator control "+kind,payload:["kind":kind],unavailable:nil))
     }
+    entries.append(.init(id:"visual-frame",title:"Visual frame",detail:"Labeled region · move contents together · sound unchanged",keywords:"annotation organize frame",payload:["kind":"visual-frame"]))
+    entries.append(.init(id:"visual-comment",title:"Comment",detail:"Text annotation · sound unchanged",keywords:"note text annotate comment",payload:["kind":"visual-comment"]))
+    entries.append(.init(id:"visual-reroute",title:"Cable reroute point",detail:"Reshape an existing cable · sound unchanged",keywords:"wire bend path reroute",payload:["kind":"visual-reroute"],unavailable:canvas.edges.contains{$0.readOnlyReason==nil} ? nil:"Connect an editable cable first"))
     entries.append(.init(id:"new-group",title:"New reusable group",detail:"Input → Output · edit its shared definition",keywords:"subgraph chain library",payload:["kind":"new-group"]))
     if graphID==nil {
+      entries.append(.init(id:"existing-automation",title:"Existing automation sources…",detail:"Reveal pattern FX, envelopes or recorded points · no new lane",keywords:"existing source provenance pattern recorded envelope",payload:["kind":"existing-automation"],unavailable:rackPlugins.isEmpty ? "Add a rack processor before choosing its automation sources":nil))
+      for id in provenance.ordered {if let source=provenance.sources[id]{entries.append(.init(id:id,title:provenanceTitle(source),detail:"Existing source · "+provenanceDetail(source),keywords:"existing automation source provenance",payload:["kind":"existing-reference","node":id]))}}
       for kind in ["return","group"] {entries.append(.init(id:"bus:"+kind,title:kind=="return" ? "Return bus" : "Group bus",detail:"Summing bus → Master",keywords:"send routing bus",payload:["kind":"bus","busKind":kind]))}
       for d in definitions {guard let id=d["id"] as? String else{continue};entries.append(.init(id:"group:"+id,title:d["name"] as? String ?? "Group",detail:"Reusable group \(d["number"] ?? 0) · ordinary stage",keywords:"subgraph library chain",payload:["kind":"use-group","graph":id],unavailable:bus==nil ? "Select a channel for this group":nil))}
     }
@@ -132,7 +171,7 @@ extension SignalGraphEditor {
         if c.port.modulation {return !c.output && ["lfo","automation","random","note-envelope","midi","amount"].contains(kind)}
         let effect=kind=="plugin" && (item.payload["descriptor"] as? [String:Any])?["isInstrument"] as? Bool != true
         if graphID != nil {return effect || (c.output && kind=="follower")}
-        return c.output && c.port.number==0 && (effect || (kind=="bus" && item.payload["busKind"] as? String=="return"))
+        return c.output && (kind=="follower" || (c.port.number==0 && (effect || (kind=="bus" && item.payload["busKind"] as? String=="return"))))
       }
     }
     return entries
@@ -142,13 +181,13 @@ extension SignalGraphEditor {
     guard !loading,!hasDraft else {status.stringValue="Finish the current edit before adding a node";return}
     onReveal?()
     let position=freePosition(near:point ?? canvas.nodes.first(where:{$0.id==selectedID}).map{NSPoint(x:$0.rect.maxX+30,y:$0.y)} ?? NSPoint(x:canvas.visibleRect.midX,y:canvas.visibleRect.midY))
-    let insertion=addDestination,target=insertion.target
-    var title=definition.map{"\($0["name"] ?? "Group") · shared definition, all uses"} ?? buses.first{$0["id"] as? String==target}.map{"\($0["name"] ?? "Channel") › inserts"} ?? "Song · select an insertion destination"
+    let insertion=connection.flatMap{connectedAddDestination($0)} ?? addDestination,target=insertion.target
+    var title=definition.map{"\($0["name"] ?? "Group") · shared definition, all uses"} ?? buses.first{$0["id"] as? String==target}.map{"\($0["name"] ?? "Channel") › inserts"} ?? "Song · unconnected effect"
     if let connection {title=(canvas.nodes.first{$0.id==connection.node}?.title ?? "Node")+" / "+connection.port.label+(connection.output ? " → new node":" ← new node")}
-    let capturedGraph=graphID,capturedRevision=revision,capturedNode=selectedID
+    let capturedGraph=graphID,capturedRevision=revision,capturedNode=selectedID,capturedGroup=processingGroupID
     addGeneration+=1;let generation=addGeneration
     addMenu.show(in:canvas,at:position,title:title,entries:addEntries(connecting:connection)){[weak self] item in
-      guard let self,self.graphID==capturedGraph,self.revision==capturedRevision else{self?.status.stringValue="The graph changed while Add was open. Reopen Add to use the current graph.";return}
+      guard let self,self.graphID==capturedGraph,self.processingGroupID==capturedGroup,self.revision==capturedRevision else{self?.status.stringValue="The graph changed while Add was open. Reopen Add to use the current graph.";return}
       self.addEntry(item,graph:capturedGraph,target:target,node:capturedNode,position:position,before:insertion.before,edge:connection==nil ? insertion.edge:nil,connecting:connection)
     }
     if !addCatalogLoaded {
@@ -161,6 +200,12 @@ extension SignalGraphEditor {
   }
   func addEntry(_ entry:GraphAddMenu.Entry,graph:String?,target:String?,node:String?,position:NSPoint,before:String?=nil,edge:Int?=nil,connecting connection:GraphAddConnection?=nil) {
     let kind=entry.payload["kind"] as? String ?? ""
+    if kind=="visual-frame" || kind=="visual-comment"{addVisualRegion(comment:kind=="visual-comment",at:position);return}
+    if kind=="visual-reroute"{addReroute();return}
+    if kind=="existing-automation"{chooseGraphParameter(.parameterSources);return}
+    if kind=="existing-reference",let id=entry.payload["node"] as? String,provenance.sources[id] != nil {
+      graphFilterState.prepare(filterContext);graphFilterState.revealed.insert(id);selectedID=id;canvas.selectedEdge=nil;rebuild();canvas.selected=id;inspect();configureConnectionInspector();frameSelection();return
+    }
     if kind=="new-group" {mutate("graph.create",["name":"New group"]);return}
     if kind=="bus" {
       var params:[String:Any]=["kind":entry.payload["busKind"] ?? "return","position":["x":position.x,"y":position.y]]
@@ -174,13 +219,18 @@ extension SignalGraphEditor {
     if kind=="use-group",let target {mutate("graph.assign",["target":target,"graph":entry.payload["graph"] ?? ""]);return}
     if kind=="plugin",let descriptor=entry.payload["descriptor"] as? [String:Any],graph==nil {
       var params:[String:Any]=["descriptor":descriptor]
-      if descriptor["isInstrument"] as? Bool != true {guard let target else{return};params["target"]=target;params["position"]=["x":position.x,"y":position.y];if let before{params["before"]=before}}
+      if descriptor["isInstrument"] as? Bool != true {
+        params["position"]=["x":Double(position.x),"y":Double(position.y)]
+        if let target{params["target"]=target;if let before{params["before"]=before}}
+        else{params["detached"]=true}
+      }
+      if target != nil,descriptor["isInstrument"] as? Bool != true,let parent=processingGroupID ?? selectedProcessingGroup?["id"] as? String {params["parent"]=parent}
       mutate("plugin.add",params){[weak self] result in
         guard let self,let slot=(result["data"] as? [String:Any])?["slot"] as? Int,let id=self.rackPlugins.first(where:{$0["slot"] as? Int==slot})?["id"] as? String else{return}
         self.selectedID="plugin:"+id;self.canvas.selected=self.selectedID;self.inspect();self.revealAddedNode()
       };return
     }
-    guard let graph else{return}
+    guard let graph else{addSongSource(kind:kind,name:entry.title,position:position,connecting:connection);return}
     var params:[String:Any]=["graph":graph,"kind":kind,"name":entry.title,"x":max(8,position.x),"y":max(8,position.y)]
     if kind=="plugin",let descriptor=entry.payload["descriptor"] as? [String:Any] {
       params["plugin"]=descriptor.filter{["format","name","path","classID","type","subtype","manufacturer"].contains($0.key)}
@@ -194,11 +244,15 @@ extension SignalGraphEditor {
       if c.port.modulation {endpoint["base"]=modulationBase(node:real.node,parameter:real.number)}
       params["connect"]=endpoint
     }
-    mutate("graph.node.add",params){[weak self] _ in
+    let create:([String:Any])->Void={[weak self] params in self?.mutate("graph.node.add",params){[weak self] _ in
       guard let self else{return};self.revealAddedNode()
       if let c=connection,c.port.modulation,let source=self.selectedID,let edge=self.canvas.edges.firstIndex(where:{$0.source==source && $0.target==c.node && $0.input==c.port.number}) {
         self.selectConnection(edge);self.revealCableAmount();self.focusConnectionValue(self.maximum)
       }
-    }
+    }}
+    if let c=connection,c.port.modulation {
+      let real=realPort(c.node,c.port.number,output:c.output,modulation:true)
+      withRecipeParameterMode(node:real.node,parameter:real.number){quantized in var ready=params;var endpoint=ready["connect"] as? [String:Any] ?? [:];endpoint["quantized"]=quantized;ready["connect"]=endpoint;create(ready)}
+    }else{create(params)}
   }
 }

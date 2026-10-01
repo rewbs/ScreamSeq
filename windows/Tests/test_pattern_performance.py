@@ -407,6 +407,8 @@ class PatternPerformanceTests(unittest.TestCase):
                        command=dict(kind='parameter-slide', binding=7, value=.2, duration=65536))
         self.assertEqual(self.doc(), before)
         self.write('history.undo', domain='plugins')
+        self.assertFalse(self.read('pattern.effects.get', pattern=0)['bindings'][0]['resolved'])
+        self.write('history.undo', domain='all')
         self.assertTrue(self.read('pattern.effects.get', pattern=0)['bindings'][0]['resolved'])
 
     def test_precise_note_offsets_local_effects_order_noop_clear_and_reopen(self):

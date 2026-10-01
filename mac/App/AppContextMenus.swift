@@ -55,10 +55,14 @@ extension AppController {
       }
       if let canvas=hit as? SignalCanvas {
         if event.modifierFlags.contains(.control){return event}
-        canvas.selectForContext(event)
+        if let socket=canvas.socket(at:canvas.convert(event.locationInWindow,from:nil)) {
+          let key=GraphBoundaryPort(node:socket.node,number:socket.port.number,output:socket.output,modulation:socket.port.modulation)
+          canvas.selected=socket.node;canvas.selectedEdge=nil;canvas.onSelect?(socket.node)
+          self.signalGraphEditor.appendPortCommands(to:menu,socket:key);menu.addItem(.separator())
+        }else{canvas.selectForContext(event)}
         if let node=canvas.selected,self.signalGraphEditor.songNodePlugin[node] != nil {
           menu.addItem(GraphCommand.openPlugin.item("Open plugin interface",key:"\r"){[weak canvas] in canvas?.onOpen?(node)})
-          menu.addItem(GraphCommand.bypass.item("Toggle bypass",key:"m"){[weak canvas] in canvas?.onBypass?()})
+          menu.addItem(GraphCommand.bypass.item(self.signalGraphEditor.bypassActionTitle,key:"m",reason:self.signalGraphEditor.bypassUnavailableReason){[weak canvas] in canvas?.onBypass?()})
           menu.addItem(.separator())
         }
         if let edge=canvas.selectedEdge {

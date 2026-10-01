@@ -73,6 +73,18 @@ existing project wrapper and plugin history. Paginated reads recheck captured
 identity/revision; dense drawing aggregates transitions by display column and
 retains exact values independently. See `../ABSOLUTE_AUTOMATION_PROGRESS.md`.
 
+Document and plugin edits now use one chronological Undo/Redo sequence in
+`DocumentController` and `PluginOperations`; `all`, `document` and `plugins` are
+API aliases for that same history. A new edit in either area forks both redo
+branches. Adding a rack effect with `target` / `before` / `position` / `parent`
+and removing a batch of stable plugin IDs group the rack state and native
+routing/group metadata into one operation. Grouped history validates and
+allocates both sides before stopping, then publishes the native edit and
+prepared rack together. Removed-plugin pattern bindings and musical automation
+remain unresolved until Undo restores the original identity. The Windows
+`document-controller-unified-plugin-history` regression covers these paths;
+this change still requires a Windows-native build/run qualification.
+
 `SampleDetailWindow.hpp` connects the sample dock and command palette to the
 existing sample operations. Its stable captured target/revision and generation
 guard waveform reads and edits. It retains at most 4096 peak bins and 4096

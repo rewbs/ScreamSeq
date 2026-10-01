@@ -10,6 +10,7 @@ class NativeSignalGraph {
   struct Bus;
   std::vector<std::unique_ptr<Bus>> buses_;
   double rate_;
+  bool offline_=false;
   size_t storageBytes_=0,processors_=0;
   std::map<uint16_t,uint64_t> patternIDs_;
   MixerGraph routedMixer_;
@@ -28,6 +29,9 @@ public:
   void prepareParameters(const SignalGraph &,GraphControlPlan &,const GraphControlPlan *previous=nullptr) const;
   void begin(const OpenMPT::PlayState &,uint32_t frames,uint64_t position,PluginTransport,uint32_t patternRows=64) noexcept;
   void tail() noexcept;
+  uint64_t tailFrames(size_t) const noexcept; // Audio owner.
+  double tailGrowth() const noexcept;
+  uint64_t tailRevision() const noexcept;
   std::vector<SignalActivity> activity() const;
   std::span<const uint32_t> outputs(size_t index) const noexcept;
   const float *output(size_t index,uint32_t port) const noexcept;

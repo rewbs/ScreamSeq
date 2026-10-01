@@ -8,12 +8,15 @@
         require(node!=definition->nodes.end()&&node->kind==SignalNodeKind::Plugin,"Select a graph plugin node");
                 auto make=[&](const GraphPluginRecipe &r){{const auto hint=_pluginPathHints.graph.find({graphID,nodeID});const auto issue=pluginLocationIssue({r.type,r.subtype,r.manufacturer,r.name,r.format,r.path,r.classID,false},hint==_pluginPathHints.graph.end()?nullptr:&hint->second,_pluginInventory->cached());if(!issue.empty())throw std::runtime_error(issue);}PluginState state;state.descriptor={r.type,r.subtype,r.manufacturer,r.name,r.format,r.path,r.classID,false};state.state=r.state;state.auxiliaryInputs=r.inputs;state.auxiliaryOutputs=r.outputs;
           auto plugin=std::make_unique<NativePlugin>(state,_audio->sampleRate(),false);require(!plugin->isInstrument(),"Graph nodes require effect plugins");const auto catalog=plugin->parameters();for(const auto &[id,value]:r.parameters){const auto parameter=std::find_if(catalog.begin(),catalog.end(),[&](const auto &p){return p.id==id;});require(parameter!=catalog.end()&&parameter->writable&&value>=parameter->min&&value<=parameter->max&&plugin->parameter(id,float(value)),"Graph parameter baseline is unavailable or outside its range");}return plugin;};
-        auto baseline=[&](const PluginParameter &v){for(const auto &edge:definition->modulation)if(edge.enabled&&edge.target==nodeID&&edge.parameter==v.id)return float(v.min+(v.max-v.min)*edge.base);return v.value;};
-        auto metadata=[&](NativePlugin &plugin){NSMutableArray *parameters=[NSMutableArray array];for(const auto &v:plugin.parameters()){NSMutableArray *choices=[NSMutableArray array];for(const auto &choice:v.choices)[choices addObject:@(choice.c_str())];[parameters addObject:@{@"id":@(v.id),@"name":@(v.name.c_str()),@"min":@(v.min),@"max":@(v.max),@"value":@(baseline(v)),@"writable":@(v.writable),@"canSlide":@(v.continuous),@"choices":choices,@"unitLabel":@(v.unitLabel.c_str()),@"step":@(v.step),@"displayScale":v.logarithmic?@"logarithmic":@"linear"}];}
-          return @{@"parameters":parameters,@"buses":pluginBusDictionaries(plugin.buses()),@"latency":@(plugin.latency()),@"tail":@(plugin.tail())};};
+        auto baseline=[&](const PluginParameter &v){return float(signalManualParameterValue(*definition,nodeID,v.id,v.min,v.max,v.value));};
+        auto metadata=[&](NativePlugin &plugin){NSMutableArray *parameters=[NSMutableArray array];for(const auto &v:plugin.parameters()){NSMutableArray *choices=[NSMutableArray array];for(const auto &choice:v.choices)[choices addObject:@(choice.c_str())];[parameters addObject:@{@"id":@(v.id),@"name":@(v.name.c_str()),@"min":@(v.min),@"max":@(v.max),@"value":@(baseline(v)),@"manualValue":@(baseline(v)),@"effectiveValue":NSNull.null,@"valueRole":@"manual-template",@"writable":@(v.writable),@"canSlide":@(v.continuous),@"choices":choices,@"unitLabel":@(v.unitLabel.c_str()),@"step":@(v.step),@"displayScale":v.logarithmic?@"logarithmic":@"linear"}];}
+          return @{@"parameters":parameters,@"buses":pluginBusDictionaries(plugin.buses()),@"latency":@(plugin.latency()),@"tail":@(plugin.tail()),@"bypass":@(node->plugin.bypass)};};
         bool commit=false,dry=false;NSString *gesture=nil;uint32_t gestureParameter=0;
         if([method isEqual:@"graph.plugin.get"]){allowed(@[@"graph",@"node"]);auto plugin=make(node->plugin);result=metadata(*plugin);}
-        else if([method isEqual:@"graph.plugin.set"]){
+        else if([method isEqual:@"graph.plugin.bypass"]){
+          allowed(@[@"graph",@"node",@"bypass",@"dryRun"]);dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
+          node->plugin.bypass=boolean(p[@"bypass"]);result=@{@"bypass":@(node->plugin.bypass)};commit=true;
+        } else if([method isEqual:@"graph.plugin.set"]){
           allowed(@[@"graph",@"node",@"parameters",@"inputs",@"outputs",@"dryRun",@"gesture"]);dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
           if(p[@"gesture"]){gesture=string(p[@"gesture"],80);require(gesture.length>0&&!p[@"inputs"]&&!p[@"outputs"]&&array(p[@"parameters"],1024).count==1,"A parameter gesture requires exactly one parameter and no bus changes");gestureParameter=uint32_t(integer(object(array(p[@"parameters"],1024)[0])[@"id"],0,UINT32_MAX));}
           auto plugin=make(node->plugin);const auto buses=plugin->buses();const auto previousInputs=node->plugin.inputs,previousOutputs=node->plugin.outputs;
@@ -24,20 +27,21 @@
             if(found->max>found->min)for(auto &m:definition->modulation)if(m.target==nodeID&&m.parameter==id)m.base=(float(amount)-found->min)/(found->max-found->min);}
           result=metadata(*plugin);commit=true;
         } else if([method isEqual:@"graph.plugin.editor.open"]){
-          allowed(@[@"graph",@"node"]);auto plugin=make(node->plugin);plugin->showEditor();_graphEditorPlugin=std::move(plugin);_graphEditorRecipe=node->plugin;_graphEditorGraph=graphID;_graphEditorNode=nodeID;_graphEditorDocument=_automationDocumentID;_graphEditorID=NSUUID.UUID.UUIDString;
-          result=@{@"editor":_graphEditorID,@"message":@"Edit this library recipe, then Apply plugin settings. Playback copies use it on the next start."};
+          allowed(@[@"graph",@"node"]);auto plugin=make(node->plugin);for(const auto &parameter:plugin->parameters()){const auto value=baseline(parameter);if(value!=parameter.value)require(parameter.writable&&plugin->parameter(parameter.id,value),"Plugin rejected the configured manual baseline");}plugin->showEditor();_graphEditorPlugin=std::move(plugin);_graphEditorRecipe=node->plugin;_graphEditorGraph=graphID;_graphEditorNode=nodeID;_graphEditorDocument=_automationDocumentID;_graphEditorID=NSUUID.UUID.UUIDString;
+          result=@{@"editor":_graphEditorID,@"message":@"Edit this library recipe, then Apply plugin settings. All uses update together during playback when ports and latency remain unchanged."};
         } else if([method isEqual:@"graph.plugin.editor.commit"]){
           allowed(@[@"graph",@"node",@"editor",@"dryRun"]);dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
           require(_graphEditorPlugin&&[string(p[@"editor"],100) isEqual:_graphEditorID]&&[_graphEditorDocument isEqual:_automationDocumentID]&&_graphEditorGraph==graphID&&_graphEditorNode==nodeID,"Graph plugin editor has changed");
           require(node->plugin==_graphEditorRecipe,"Plugin recipe changed; reopen its interface before applying settings");
-          node->plugin.state=_graphEditorPlugin->state().state;node->plugin.parameters.clear();commit=true;result=metadata(*_graphEditorPlugin);
+          captureSignalParameterBases(*definition,nodeID,_graphEditorPlugin->parameters());node->plugin.state=_graphEditorPlugin->state().state;node->plugin.parameters.clear();commit=true;result=metadata(*_graphEditorPlugin);
         } else throw Error(-32601,"Unknown graph plugin method");
         if(commit){try{next.validate(song);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}if(!dry&&next!=_document->native()){
-          const bool controls=next.mixer==_document->native().mixer&&sameSignalControlLayout(_document->native().signal,next.signal);
+          const bool controls=next.mixer==_document->native().mixer;
           auto plan=controls?_audio->prepareGraphControls(next):nullptr;
-          if(!controls||(_audio->active()&&!plan))_audio->stop();
+          auto routing=!plan?_audio->prepareMixerRouting(next):nullptr;
+          if(!plan && !routing){if(_audio->active())throw Error(-32002,"This plugin recipe or port edit cannot yet be prepared during playback; stop playback and retry");_audio->stop();}
           const bool merge=gesture&&[gesture isEqual:_graphParameterGesture]&&[_automationDocumentID isEqual:_graphParameterGestureDocument]&&graphID==_graphParameterGestureGraph&&nodeID==_graphParameterGestureNode&&gestureParameter==_graphParameterGestureID;
-          _document->annotate([&](NativeSong &n){n=next;},[&]{if(plan)require(_audio->publishGraphControls(std::move(plan)),"Graph parameter queue is busy; retry the edit");},merge?_graphParameterGestureSequence:0);
+          _document->annotate([&](NativeSong &n){n=next;},[&]{if(plan)require(_audio->publishGraphControls(std::move(plan)),"Graph parameter queue is busy; retry the edit");if(routing&&!_audio->publishMixerRouting(routing))throw Error(-32002,"Routing publication is busy; retry the edit");},merge?_graphParameterGestureSequence:0);
           _graphParameterGesture=gesture;_graphParameterGestureDocument=_automationDocumentID;_graphParameterGestureGraph=graphID;_graphParameterGestureNode=nodeID;_graphParameterGestureID=gestureParameter;_graphParameterGestureSequence=_document->historySequence();
         }if(!dry&&[method isEqual:@"graph.plugin.editor.commit"])_graphEditorRecipe=node->plugin;}
       }

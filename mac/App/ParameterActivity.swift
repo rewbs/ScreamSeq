@@ -12,6 +12,7 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
   var onRequest:((String,[String:Any],@escaping([String:Any])->Void)->Void)?
   var onCapture:(()->Void)?
   var onOpen:(([String:Any])->Void)?,onContext:(()->PatternModel)?
+  var onRecordedNames:((String,Int)->(plugin:String?,parameter:String?))?
   private(set) var targets=[[String:Any]](),parameters=[[String:Any]](),filtered=[[String:Any]](),sources=[[String:Any]](),recorded=[[String:Any]]()
   private(set) var samples=[ParameterTraceSample](),audit=[ParameterTraceSample](),contributions=[String:Double]()
   private(set) var targetKey="",parameterID:Int?,pending=false,token="",cursor:UInt64=0,revision=""
@@ -21,7 +22,8 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
   private var recordedOffset=0,recordedTotal=0
   private var passes=[(label:String,samples:[ParameterTraceSample])](),displayPass=0
   private var selectedSource:[String:Any]?
-  var target:[String:Any]? {targets.first{$0["key"] as? String==targetKey}}
+  private var recordedInspection:[String:Any]?,preferredRecording:(plugin:String,parameter:Int)?
+  var target:[String:Any]? {recordedInspection ?? targets.first{$0["key"] as? String==targetKey}}
   override init(frame:NSRect){super.init(frame:frame)
     processor.target=self;processor.action = #selector(selectProcessor);processor.setAccessibilityLabel("Parameter activity processor copy")
     parameter.target=self;parameter.action = #selector(selectParameter);parameter.setAccessibilityLabel("Parameter activity parameter")
@@ -42,10 +44,10 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
     recordBar=stack(.horizontal,[Theme.label("Seconds",size:11),pointTime,Theme.label("Value",size:11),pointValue,ActionButton("Add / update"){[weak self] in self?.addPoint()},ActionButton("Delete point"){[weak self] in self?.deletePoint()},loadMore!],spacing:6)
     recordBar.isHidden=true
     let content=stack(.vertical,[
-      stack(.horizontal,[Theme.label("Parameter activity",size:20,weight:.semibold),NSView(),ActionButton("Last touched"){[weak self] in self?.lastTouched()},ActionButton("Refresh copies"){[weak self] in self?.reloadTargets()}]),
+      stack(.horizontal,[Theme.label("Parameter activity",size:20,weight:.semibold),NSView(),ActionButton("Last touched"){[weak self] in self?.lastTouched()},ActionButton("Refresh copies"){[weak self] in self?.recordedInspection=nil;self?.reloadTargets()}]),
       processor,stack(.horizontal,[search,parameter]),stack(.horizontal,[reading,NSView(),freezeButton!,clear]),
       stack(.horizontal,[viewMode,pass,NSView(),ActionButton("Play / capture pattern"){[weak self] in guard let self,!self.pending else{return};self.onCapture?()},ActionButton("−"){[weak self] in self?.trace.zoom(0.5)},ActionButton("+"){[weak self] in self?.trace.zoom(2)},ActionButton("Fit"){[weak self] in self?.trace.fit()}]),trace,
-      stack(.horizontal,[detailMode,NSView(),ActionButton("Edit mapping…"){[weak self] in guard let self,var source=self.selectedSource,source["connection"] != nil else{return};source["editConnection"]=true;self.onOpen?(source)},ActionButton("Open source…"){[weak self] in self?.openSelected()}]),scroll,recordBar!,rule,status
+      stack(.horizontal,[detailMode,NSView(),ActionButton("Edit mapping…"){[weak self] in self?.openSelectedMapping()},ActionButton("Open source…"){[weak self] in self?.openSelected()}]),scroll,recordBar!,rule,status
     ],spacing:8);content.stretchAcrossAxis();content.fill(self,inset:12)
     for p in [processor,parameter,pass]{p.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
     reading.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
@@ -59,9 +61,30 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
       self.revision=result["revision"] as? String ?? self.revision;done(data)
     }
   }
-  func inspect(plugin:String,parameter:Int?=nil){if parameter != nil{search.stringValue=""};preferredTarget="rack/"+plugin;preferredParameter=parameter;preferredGraph=nil;preferredNode=nil;if !pending{reloadTargets()}}
-  func inspect(graph:String,node:String,parameter:Int){search.stringValue="";preferredTarget=nil;preferredGraph=graph;preferredNode=node;preferredParameter=parameter;if !pending{reloadTargets()}}
+  func inspect(plugin:String,parameter:Int?=nil){recordedInspection=nil;preferredRecording=nil;if parameter != nil{search.stringValue=""};preferredTarget="rack/"+plugin;preferredParameter=parameter;preferredGraph=nil;preferredNode=nil;if !pending{reloadTargets()}}
+  func inspect(graph:String,node:String,parameter:Int){recordedInspection=nil;preferredRecording=nil;search.stringValue="";preferredTarget=nil;preferredGraph=graph;preferredNode=node;preferredParameter=parameter;if !pending{reloadTargets()}}
+  func inspectRecorded(plugin:String,parameter:Int){
+    generation+=1;preferredRecording=(plugin,parameter);recordedInspection=nil
+    if !pending{openPreferredRecording()}
+  }
+  private func openPreferredRecording(){
+    guard let wanted=preferredRecording,!pending else{return};preferredRecording=nil
+    let named=onRecordedNames?(wanted.plugin,wanted.parameter)
+    let pluginName=named?.plugin ?? targets.first{$0["plugin"] as? String==wanted.plugin}?["name"] as? String ?? onContext?().nativePlugins.first{$0["instanceID"] as? String==wanted.plugin}?["name"] as? String ?? wanted.plugin
+    let parameterName=named?.parameter ?? (target?["plugin"] as? String==wanted.plugin ? parameters.first{$0["id"] as? Int==wanted.parameter}?["name"] as? String:nil) ?? "Parameter \(wanted.parameter)"
+    preferredTarget=nil;preferredGraph=nil;preferredNode=nil;preferredParameter=nil
+    processor.isEnabled=false;parameter.isEnabled=false;search.isEnabled=false
+    recordedInspection=["plugin":wanted.plugin,"key":"recorded/"+wanted.plugin];parameterID=wanted.parameter;targetKey=""
+    parameters=[];filtered=[];sources=[];samples=[];audit=[];recorded=[];contributions=[:];token="";trace.samples=[]
+    processor.removeAllItems();processor.addItem(withTitle:pluginName+" · recorded song data");processor.toolTip=wanted.plugin
+    parameter.removeAllItems();parameter.addItem(withTitle:parameterName);parameter.toolTip="Parameter ID \(wanted.parameter)";search.stringValue=""
+    reading.stringValue="Recorded song-time points";rule.stringValue="Existing recorded base automation. A live processor is only needed for capture and parameter validation when editing."
+    detailMode.selectedSegment=2;changeDetail()
+  }
   func reloadTargets(){
+    if recordedInspection != nil{return}
+    processor.isEnabled=true;parameter.isEnabled=true;search.isEnabled=true
+    processor.toolTip=nil;parameter.toolTip=nil
     request("parameter.activity.targets"){[weak self] data in guard let self else{return};self.lastCatalog=ProcessInfo.processInfo.systemUptime
       let next=(data["engine"] as? NSNumber)?.uint64Value ?? 0,changed=next != self.engine;self.engine=next
       self.targets=data["targets"] as? [[String:Any]] ?? [];self.processor.removeAllItems()
@@ -76,14 +99,14 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
       if changed || key != self.targetKey || explicit || self.preferredParameter != nil || self.parameters.isEmpty {self.targetKey=key;self.preferredTarget=nil;self.preferredGraph=nil;self.preferredNode=nil;self.loadParameters()}
     }
   }
-  @objc func selectProcessor(){guard targets.indices.contains(processor.indexOfSelectedItem)else{return};generation+=1;targetKey=targets[processor.indexOfSelectedItem]["key"] as? String ?? "";parameterID=nil;preferredParameter=nil;parameters=[];samples=[];audit=[];token="";trace.samples=[];if !pending{loadParameters()}}
+  @objc func selectProcessor(){guard recordedInspection==nil else{return};recordedInspection=nil;preferredRecording=nil;guard targets.indices.contains(processor.indexOfSelectedItem)else{return};generation+=1;targetKey=targets[processor.indexOfSelectedItem]["key"] as? String ?? "";parameterID=nil;preferredParameter=nil;parameters=[];samples=[];audit=[];token="";trace.samples=[];if !pending{loadParameters()}}
   func loadParameters(){request("parameter.activity.parameters",["target":targetKey]){[weak self] data in guard let self else{return};self.parameters=data["parameters"] as? [[String:Any]] ?? [];self.filterParameters();self.watch()}}
   func filterParameters(){let wanted=preferredParameter ?? parameterID;filtered=parameters.filter{search.stringValue.isEmpty || ($0["name"] as? String ?? "").localizedCaseInsensitiveContains(search.stringValue)};parameter.removeAllItems();parameter.addItems(withTitles:filtered.map{"\($0["name"] as? String ?? "Parameter") · \($0["id"] ?? 0)"});if let wanted,let i=filtered.firstIndex(where:{$0["id"] as? Int==wanted}){parameter.selectItem(at:i)};if let wanted,search.stringValue.isEmpty,!filtered.contains(where:{$0["id"] as? Int==wanted}) {parameter.select(nil);status.stringValue="The requested parameter is unavailable in this processor."};preferredParameter=nil;parameterID=filtered.indices.contains(parameter.indexOfSelectedItem) ? filtered[parameter.indexOfSelectedItem]["id"] as? Int:nil}
   func controlTextDidChange(_ obj:Notification){if obj.object as? NSSearchField === search {generation+=1;token="";filterParameters();if !pending{watch()}}}
   @objc func selectParameter(){generation+=1;token="";parameterID=filtered.indices.contains(parameter.indexOfSelectedItem) ? filtered[parameter.indexOfSelectedItem]["id"] as? Int:nil;if !pending{watch()}}
-  func watch(clear:Bool=false){guard let id=parameterID,!targetKey.isEmpty else{return};request("parameter.activity.watch",["target":targetKey,"parameter":id,"clear":clear]){[weak self] data in guard let self else{return};let token=data["token"] as? String ?? "";if token != self.token {self.token=token;self.cursor=0;self.samples=[];self.audit=[];self.contributions=[:];self.passes=[];self.selectedSource=nil;self.trace.samples=[]};self.lastSourceRevision="";self.loadSources()}}
+  func watch(clear:Bool=false){if recordedInspection != nil{status.stringValue="Select Refresh copies to capture a live processor.";return};guard let id=parameterID,!targetKey.isEmpty else{return};request("parameter.activity.watch",["target":targetKey,"parameter":id,"clear":clear]){[weak self] data in guard let self else{return};let token=data["token"] as? String ?? "";if token != self.token {self.token=token;self.cursor=0;self.samples=[];self.audit=[];self.contributions=[:];self.passes=[];self.selectedSource=nil;self.trace.samples=[]};self.lastSourceRevision="";self.loadSources()}}
   func loadSources(){guard let id=parameterID else{return};request("parameter.activity.sources",["target":targetKey,"parameter":id]){[weak self] data in guard let self else{return};let sources=data["sources"] as? [[String:Any]] ?? [];let changed = !(self.sources as NSArray).isEqual(sources as NSArray);self.sources=sources;var rule=data["rule"] as? String ?? "";self.lastSourceRevision=self.revision;let omitted=data["omitted"] as? Int ?? 0;if omitted>0{rule+=" · \(omitted) further command sources omitted; trace links remain available."};if self.rule.stringValue != rule {self.rule.stringValue=rule};if changed && self.detailMode.selectedSegment==0 {self.table.reloadData()};if self.detailMode.selectedSegment==2{self.loadRecorded()}}}
-  func poll(){let now=ProcessInfo.processInfo.systemUptime;guard !pending,table.editedRow<0,now-lastPoll>=0.1 else{return};lastPoll=now
+  func poll(){if preferredRecording != nil{if !pending{openPreferredRecording()};return};if recordedInspection != nil{return};let now=ProcessInfo.processInfo.systemUptime;guard !pending,table.editedRow<0,now-lastPoll>=0.1 else{return};lastPoll=now
     if preferredTarget != nil || preferredGraph != nil || parameters.isEmpty || now-lastCatalog>2 {reloadTargets();return}
     guard parameterID != nil else{return}
     if token.isEmpty {watch();return}
@@ -109,7 +132,7 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
     if passes.count>16{passes.removeFirst(passes.count-16)}
     let titles=["Latest pass"]+passes.dropLast().reversed().map(\.label)
     if pass.itemTitles != titles {pass.removeAllItems();pass.addItems(withTitles:titles)};if displayPass>=pass.numberOfItems{displayPass=0};pass.selectItem(at:displayPass)
-    if samples.last?.kind=="graph" {let sum=contributions.values.reduce(0,+);if sum<0 || sum>1 {reading.stringValue+=String(format:" · clamped from %.3f",sum)}}
+    if samples.last?.kind=="graph",let sum=unclampedModulationValue,sum<0 || sum>1 {reading.stringValue+=String(format:" · clamped from %.3f",sum)}
     updateTrace();if detailMode.selectedSegment==1 || (detailMode.selectedSegment==0 && !contributions.isEmpty){table.reloadData()}
   }
   func updateTrace(){trace.patternMode=viewMode.selectedSegment==0;pass.isHidden = !trace.patternMode
@@ -117,11 +140,11 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
   }
   @objc func changeView(){trace.viewStart=0;trace.viewEnd=nil;updateTrace();trace.fit()}
   @objc func selectPass(){displayPass=pass.indexOfSelectedItem;if displayPass>0{frozen=true;freezeButton.title="Resume view"};updateTrace()}
-  @objc func changeDetail(){selectedSource=nil;recordBar.isHidden=detailMode.selectedSegment != 2;table.reloadData();for c in table.tableColumns{c.isEditable=detailMode.selectedSegment==2};if detailMode.selectedSegment==2{recordedOffset=0;loadRecorded()}}
+  @objc func changeDetail(){if let selected=recordedInspection,detailMode.selectedSegment != 2,let plugin=selected["plugin"] as? String,let id=parameterID{recordedInspection=nil;inspect(plugin:plugin,parameter:id)};selectedSource=nil;recordBar.isHidden=detailMode.selectedSegment != 2;table.reloadData();for c in table.tableColumns{c.isEditable=detailMode.selectedSegment==2};if detailMode.selectedSegment==2{recordedOffset=0;loadRecorded()}}
   func numberOfRows(in tableView:NSTableView)->Int {detailMode.selectedSegment==0 ? sources.count:detailMode.selectedSegment==1 ? audit.count:recorded.count}
   func tableView(_ tableView:NSTableView,objectValueFor column:NSTableColumn?,row:Int)->Any? {
     let value=column?.identifier.rawValue=="value"
-    if detailMode.selectedSegment==0 {guard sources.indices.contains(row)else{return nil};let s=sources[row];if value {if let n=contributions[s["id"] as? String ?? ""],s["kind"] as? String=="graph-source"{return String(format:"%+.5f normalized",n)};return s["enabled"] as? Bool == false ? "Inactive":"Enabled"};return s["title"]}
+    if detailMode.selectedSegment==0 {guard sources.indices.contains(row)else{return nil};let s=sources[row];if value {if s["enabled"] as? Bool == false{return "Inactive"};if let n=contributions[s["id"] as? String ?? ""],s["kind"] as? String=="graph-source"{return String(format:"%+.5f normalized",n)};return "Enabled"};return s["title"]}
     if detailMode.selectedSegment==1 {guard audit.indices.contains(row)else{return nil};let s=audit[audit.count-1-row];return value ? String(format:"%.7g",s.value):String(format:"%.3fs · ",s.seconds)+parameterOriginName(s.kind)+" · P\(s.pattern) R\(String(format:"%.3f",s.position/256))"}
     guard recorded.indices.contains(row)else{return nil};return value ? "\(recorded[row]["value"] ?? 0)":String(format:"%.7f",(recorded[row]["frame"] as? Double ?? 0)/48000)
   }
@@ -136,8 +159,19 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
   }
   func tableView(_ tableView:NSTableView,setObjectValue object:Any?,for column:NSTableColumn?,row:Int){guard detailMode.selectedSegment==2,recorded.indices.contains(row),let n=Double("\(object ?? "")"),n.isFinite,n>=0 || column?.identifier.rawValue=="value" else{return};var params:[String:Any]=["frame":recorded[row]["frame"] ?? 0,"value":recorded[row]["value"] ?? 0];if column?.identifier.rawValue=="value"{params["value"]=n}else{params["newFrame"]=(n*48000).rounded()};editRecorded(params)}
   func tableViewSelectionDidChange(_ notification:Notification){let row=table.selectedRow;selectedSource=nil;if detailMode.selectedSegment==0,sources.indices.contains(row){selectedSource=sources[row];selectedSource?["parameter"]=parameterID;selectedSource?["plugin"]=target?["plugin"]}else if detailMode.selectedSegment==1,audit.indices.contains(row){selectedSource=link(audit[audit.count-1-row])}else if detailMode.selectedSegment==2,recorded.indices.contains(row){pointTime.stringValue=String(format:"%.7f",(recorded[row]["frame"] as? Double ?? 0)/48000);pointValue.stringValue="\(recorded[row]["value"] ?? 0)"}}
+  var unclampedModulationValue:Double? {
+    let active=sources.filter{$0["kind"] as? String=="graph-source" && $0["enabled"] as? Bool != false}
+    guard !active.isEmpty else{return nil}
+    var sum=0.0
+    for source in active {guard let id=source["id"] as? String,let value=contributions[id] else{return nil};sum+=value}
+    return sum
+  }
   func link(_ sample:ParameterTraceSample)->[String:Any]{var source=sample.source
-    if sample.kind=="graph" || sample.kind=="graph-source" {source["graph"]=target?["graph"];source["node"]=target?["node"];source["kind"]="graph"}
+    if sample.kind=="graph-source",let contribution=sources.first(where:{$0["kind"] as? String=="graph-source" && $0["id"] as? String==source["id"] as? String}) {source=contribution}
+    else if sample.kind=="graph" || sample.kind=="graph-source" {
+      source["graph"]=target?["graph"];source["node"]=target?["node"];source["kind"]="graph"
+      if let plugin=target?["plugin"] as? String,!plugin.isEmpty {source["scope"]="song";source["graph"]=NSNull();source["node"]=nil}
+    }
     if sample.kind=="envelope",let lane=sources.first(where:{$0["kind"] as? String=="envelope" && $0["id"] as? String==source["id"] as? String}){source=lane}
     if sample.kind=="recorded" {source["kind"]="recorded"};source["plugin"]=target?["plugin"];source["parameter"]=parameterID;return source}
   func showPositions(editPattern:Int,row:Int,playPattern:Int?,position:Double?) {
@@ -146,7 +180,11 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
     if trace.editRow != edit || trace.playRow != play {trace.editRow=edit;trace.playRow=play}
   }
   @objc func openSelected(){guard let source=selectedSource else{status.stringValue="Select a source, recent change, or point on the trace.";return};if source["kind"] as? String=="recorded" {detailMode.selectedSegment=2;changeDetail()}else{onOpen?(source)}}
-  func loadRecorded(){guard let plugin=target?["plugin"] as? String,!plugin.isEmpty,let id=parameterID else{recorded=[];table.reloadData();status.stringValue="Recorded automation belongs to rack plugins. Graph copies use graph sources.";return};request("automation.recorded.get",["plugin":plugin,"parameter":id,"offset":recordedOffset,"limit":512]){[weak self] data in guard let self else{return};self.recorded=data["points"] as? [[String:Any]] ?? [];self.recordedTotal=data["total"] as? Int ?? 0;self.loadMore.title=self.recordedTotal==0 ? "No recorded points":"\(self.recordedOffset+1)…\(self.recordedOffset+self.recorded.count) / \(self.recordedTotal) · Next";self.loadMore.isEnabled=self.recordedTotal>512;self.table.reloadData();self.status.stringValue="Edit time or value directly. Recorded points use song time, not pattern time. Edits stop playback and support plugin Undo."}}
+  func openSelectedMapping(){
+    guard var source=selectedSource,source["connection"] != nil || (source["scope"] as? String=="song" && source["node"] as? String != nil) else{status.stringValue="Select a modulation contribution to edit its range.";return}
+    source["editConnection"]=true;onOpen?(source)
+  }
+  func loadRecorded(){guard let plugin=target?["plugin"] as? String,!plugin.isEmpty,let id=parameterID else{recorded=[];table.reloadData();status.stringValue="Recorded automation belongs to rack plugins. Graph copies use graph sources.";return};request("automation.recorded.get",["plugin":plugin,"parameter":id,"offset":recordedOffset,"limit":512]){[weak self] data in guard let self else{return};self.recorded=data["points"] as? [[String:Any]] ?? [];self.recordedTotal=data["total"] as? Int ?? 0;self.loadMore.title=self.recordedTotal==0 ? "No recorded points":"\(self.recordedOffset+1)…\(self.recordedOffset+self.recorded.count) / \(self.recordedTotal) · Next";self.loadMore.isEnabled=self.recordedTotal>512;self.table.reloadData();self.status.stringValue="Edit time or value directly. Recorded points use song time, not pattern time. Stop playback to edit recorded points. Changes support Undo."}}
   func editRecorded(_ changes:[String:Any]){guard let plugin=target?["plugin"] as? String,!plugin.isEmpty,let id=parameterID else{return};var p=changes;p["plugin"]=plugin;p["parameter"]=id;p["expectedRevision"]=revision;sendRecordedEdit(p,generation:generation)}
   private func sendRecordedEdit(_ params:[String:Any],generation expected:Int,attempt:Int=0){
     guard generation==expected else{return}

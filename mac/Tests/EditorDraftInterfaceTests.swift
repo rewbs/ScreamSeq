@@ -1,5 +1,10 @@
 import AppKit
 
+private final class HistoryTextView: NSTextView {
+  let history = UndoManager()
+  override var undoManager: UndoManager? { history }
+}
+
 // Regressions for popups mapped by index, reloads that overwrote drafts, and
 // related editor faults found in review.
 extension InterfaceTests {
@@ -19,13 +24,54 @@ extension InterfaceTests {
   private static func wait(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
 
   static func editorDraftChecks() throws {
+    try textHistoryChecks()
     try popupIdentityChecks()
     try mixerDraftChecks()
     try graphDraftChecks()
+    try songGraphEnvelopeChecks()
     try automationDraftChecks()
     try pluginDraftChecks()
     try envelopeBankDraftChecks()
     print("PASS editor drafts: popups resolve stable IDs, reloads keep drafts, busy edits retry, Tab leaves canvases")
+  }
+
+  static func textHistoryChecks() throws {
+    let text = HistoryTextView(frame:NSRect(x:0,y:0,width:300,height:80))
+    text.isEditable=true;text.allowsUndo=true;text.isFieldEditor=true;text.string="0"
+    try require(!EditorHistory.performTextHistory(in:text,redo:false) && !EditorHistory.performTextHistory(in:text,redo:true),
+      "An untouched automatically focused field lets Undo and Redo reach the document")
+    text.insertText("2",replacementRange:NSRange(location:0,length:1));text.breakUndoCoalescing()
+    try require(text.string=="2" && EditorHistory.performTextHistory(in:text,redo:false) && text.string=="0",
+      "A real field edit consumes Undo locally and restores its text")
+    try require(EditorHistory.performTextHistory(in:text,redo:true) && text.string=="2",
+      "Redo restores a real text edit rather than changing song history")
+    text.history.removeAllActions()
+    text.setMarkedText("x",selectedRange:NSRange(location:1,length:0),replacementRange:NSRange(location:0,length:1))
+    try require(text.hasMarkedText() && EditorHistory.performTextHistory(in:text,redo:false) && text.hasMarkedText(),
+      "An active input-method composition cannot fall through to song Undo")
+    text.unmarkText();text.isEditable=false
+    try require(!EditorHistory.performTextHistory(in:text,redo:false) && !EditorHistory.performTextHistory(in:nil,redo:false),
+      "Read-only text and ordinary graph focus use document history")
+  }
+
+  static func songGraphEnvelopeChecks() throws {
+    let editor=GraphEnvelopeEditor(frame:NSRect(x:0,y:0,width:850,height:260))
+    var calls=[(String,[String:Any])](),pending:[([String:Any])->Void]=[]
+    editor.onRequest={method,params,reply in
+      calls.append((method,params))
+      if method=="graph.automation.get" {reply(["result":["revision":"song:1","data":["rows":64,"points":[["position":0,"value":0.5,"curve":"linear"]]]]])}
+      else if method=="graph.automation.set" {pending.append(reply)}
+    }
+    editor.context(graph:nil,node:["id":"n20","kind":"automation","name":"Song curve"],patterns:[["index":0]],revision:"song:1")
+    try require(!editor.isHidden && editor.node=="n20" && calls.last?.1["graph"] is NSNull,"Song source opens the shared curve editor with an explicit null graph")
+    editor.canvas.selected=0;editor.canvas.replaceSelected(position:128,value:0.3,curve:"smooth");editor.apply()
+    try require(calls.last?.0=="graph.automation.set" && calls.last?.1["graph"] is NSNull && calls.last?.1["node"] as? String=="n20","Song curve gesture retains the stable root source and null graph")
+    pending.removeFirst()(["result":["revision":"song:2","data":[:]]])
+    editor.showBank()
+    try require(calls.contains{call in call.0=="envelope.bank.list" && (call.1["target"] as? [String:Any])?["graph"] is NSNull && (call.1["target"] as? [String:Any])?["node"] as? String=="n20"},"Root curves can load and link song-bank templates")
+    editor.bankWindow?.close();editor.resetDocument()
+    try require(editor.isHidden && editor.node==nil && !editor.hasDraft,"Reset closes root source context without retaining a draft")
+    editor.onRequest=nil
   }
 
   static func popupIdentityChecks() throws {
@@ -120,9 +166,15 @@ extension InterfaceTests {
     mixer.control("gainDB", value: -3.27, final: true)
     try require(calls.last?.1["preview"] as? Bool == false && calls.last?.1["gainDB"] as? Double == -3.27, "Release commits the exact fader value")
     let sentBefore = calls.count
-    busy(); wait(0.05)
+    func waitForRetry(_ condition:()->Bool) {
+      let deadline=Date().addingTimeInterval(1)
+      while !condition(),Date()<deadline {RunLoop.current.run(until:min(deadline,Date().addingTimeInterval(0.01)))}
+    }
+    busy();waitForRetry{calls.count>=sentBefore+1}
     try require(calls.count == sentBefore + 1 && calls.last?.1["gainDB"] as? Double == -3.27 && mixer.hasPendingControls, "A busy reply retries the same commit and keeps it pending")
-    busy(); wait(0.05); busy(); wait(0.05)
+    busy();waitForRetry{calls.count>=sentBefore+2}
+    try require(calls.count==sentBefore+2 && replies.count==1,"The second busy retry sends exactly one pending commit")
+    busy();waitForRetry{mixer.status.stringValue.contains("kept")}
     try require(replies.isEmpty && mixer.hasPendingControls && mixer.status.stringValue.contains("kept"), "Exhausted busy retries keep the fader commit instead of discarding it")
     mixer.synchronize("r0")
     try require(replies.isEmpty, "The deferred retry waits before asking again")

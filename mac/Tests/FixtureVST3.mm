@@ -44,9 +44,18 @@ extern "C" __attribute__((visibility("default"))) int ResonanceFixtureLatency(ui
 }
 static std::atomic<bool> fixtureChannelWeights{false};
 static bool fixturePitchMode=false;
-static bool fixtureLargeCatalog=false;
+static bool fixtureLargeCatalog=false,fixtureStepped=false;
+static std::atomic<uint64_t> fixtureSingleSampleCalls{0};
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureStepped(bool enabled){fixtureStepped=enabled;fixtureSingleSampleCalls=0;}
+extern "C" __attribute__((visibility("default"))) uint64_t ResonanceFixtureSingleSampleCalls(){return fixtureSingleSampleCalls.load();}
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureLargeCatalog(bool enabled){fixtureLargeCatalog=enabled;}
 static bool fixtureEffectDelay=false;
+static bool fixtureEffectAuxiliary=false;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureEffectAuxiliary(bool enabled){fixtureEffectAuxiliary=enabled;}
+static float fixtureHiddenGain=1;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureHiddenGain(float value){fixtureHiddenGain=value;}
+static uint64_t fixtureCreated=0;
+extern "C" __attribute__((visibility("default"))) uint64_t ResonanceFixtureCreated(){return fixtureCreated;}
 static std::atomic<uint64_t> fixtureObservedFrames{0},fixtureClockErrors{0};
 static bool fixtureObserve=false;
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureEffectDelay(bool enabled){fixtureEffectDelay=enabled;}
@@ -179,6 +188,7 @@ public:
 class Fixture final : public IComponent, public IAudioProcessor, public IEditController, public IUnitInfo, public IMidiMapping, public IConnectionPoint {
   std::atomic<uint32> refs{1};
   bool instrument, delayed, programs;
+  const bool effectAuxiliary=fixtureEffectAuxiliary;
   bool initialized = false, active = false, processing = false;
   std::array<float,2> programValues{}, unitGains{.25f,.25f};
   std::array<bool, 32> outputsActive{};
@@ -189,12 +199,13 @@ class Fixture final : public IComponent, public IAudioProcessor, public IEditCon
   std::array<float, 256> dynamicDelay{};
   uint32_t appliedLatency = 0, dynamicPosition = 0;
   std::atomic<float> gain{0.5};
+  float hiddenGain=fixtureHiddenGain;
   IComponentHandler *handler = nullptr;
   std::array<uint16_t, 16 * 128> notes{};
   std::array<float,16> pitchWheels{};
 
 public:
-  explicit Fixture(bool i, bool d = false, bool p = false) : instrument(i), delayed(d||(!i&&fixtureEffectDelay)), programs(p) {pitchWheels.fill(8192.f/16383); ++liveInstances;}
+  explicit Fixture(bool i, bool d = false, bool p = false) : instrument(i), delayed(d||(!i&&fixtureEffectDelay)), programs(p) {pitchWheels.fill(8192.f/16383); ++liveInstances;++fixtureCreated;}
   ~Fixture() {
     if (initialized || active || processing || ![NSThread isMainThread]) ++lifecycleErrors;
     setComponentHandler(nullptr); --liveInstances;
@@ -232,7 +243,7 @@ public:
   tresult PLUGIN_API getControllerClassId(TUID) override { return kResultFalse; }
   tresult PLUGIN_API setIoMode(IoMode) override { return kResultOk; }
   int32 PLUGIN_API getBusCount(MediaType type, BusDirection dir) override {
-    return type == kAudio ? (dir == kOutput ? (instrument ? 32 : 1) : (instrument ? 0 : 2))
+    return type == kAudio ? (dir == kOutput ? (instrument ? 32 : effectAuxiliary ? 2 : 1) : (instrument ? 0 : 2))
                           : (instrument && dir == kInput ? 1 : 0);
   }
   tresult PLUGIN_API getBusInfo(MediaType type, BusDirection dir, int32 index, BusInfo &b) override {
@@ -274,12 +285,14 @@ public:
     if (programs) {
       if (s->read(programValues.data(),8,&n)!=kResultOk || n!=8 || s->read(unitGains.data(),8,&n)!=kResultOk || n!=8) return kResultFalse;
     }
+    float hidden=1;if(s->read(&hidden,4,&n)==kResultOk&&n==4)hiddenGain=hidden;
     return kResultOk;
   }
   tresult PLUGIN_API getState(IBStream *s) override {
     float value = gain;
     if (s->write(&value,4)!=kResultOk) return kResultFalse;
     if (programs && (s->write(programValues.data(),8)!=kResultOk || s->write(unitGains.data(),8)!=kResultOk)) return kResultFalse;
+    if(s->write(&hiddenGain,4)!=kResultOk)return kResultFalse;
     return kResultOk;
   }
   tresult PLUGIN_API setBusArrangements(SpeakerArrangement *in, int32 ni, SpeakerArrangement *out, int32 no) override {
@@ -302,6 +315,7 @@ public:
   tresult PLUGIN_API setProcessing(TBool value) override { processing = value; return kResultOk; }
   uint32 PLUGIN_API getTailSamples() override { return delayed&&!instrument?32:0; }
   tresult PLUGIN_API process(ProcessData &d) override {
+    if(d.numSamples==1)fixtureSingleSampleCalls.fetch_add(1,std::memory_order_relaxed);
     if (d.numOutputs != getBusCount(kAudio, kOutput) || d.numInputs != getBusCount(kAudio, kInput) || !outputsActive[0])
       return kResultFalse;
     for (int i = 1; i < d.numOutputs; ++i) {
@@ -352,6 +366,7 @@ public:
       any |= active; if (active) channels += float(channel + 1) / 16;
     }
     float scale=1;
+    scale *= hiddenGain;
     if (programs) scale *= unitGains[0]*unitGains[1];
     if (instrument && fixturePitchMode) scale *= 1 + (std::lround(pitchWheels[0]*16383)-8192)/8192.f;
     if (fixtureChannelWeights.load(std::memory_order_relaxed)) scale *= channels;
@@ -376,7 +391,7 @@ public:
       }
       for (int bus = 1; bus < d.numOutputs; ++bus) if (outputsActive[bus])
         for (int ch = 0; ch < d.outputs[bus].numChannels; ++ch)
-          d.outputs[bus].channelBuffers32[ch][i] = value * float(bus + 1) * float(ch ? -.5 : 1);
+          d.outputs[bus].channelBuffers32[ch][i] = (instrument ? value : d.outputs[0].channelBuffers32[ch][i]) * float(bus + 1) * float(ch ? -.5 : 1);
     }
     return kResultOk;
   }
@@ -385,11 +400,11 @@ public:
   tresult PLUGIN_API getParameterInfo(int32 i, ParameterInfo &p) override {
     if(i<0 || i>=getParameterCount()) return kInvalidArgument;
     p = {};
-    if(i && fixtureLargeCatalog && !instrument && !programs){p.id=20000+i;p.defaultNormalizedValue=0;p.flags=ParameterInfo::kCanAutomate;std::copy_n(u"Extra control",14,p.title);return kResultOk;}
+    if(i && fixtureLargeCatalog && !instrument && !programs){p.id=20000+i;p.stepCount=fixtureStepped?4:0;p.defaultNormalizedValue=0;p.flags=ParameterInfo::kCanAutomate;std::copy_n(u"Extra control",14,p.title);return kResultOk;}
     if(i && instrument && fixturePitchMode){p.id=999+i;p.defaultNormalizedValue=8192./16383;p.flags=ParameterInfo::kCanAutomate | ParameterInfo::kIsHidden;std::copy_n(u"Pitch wheel",12,p.title);return kResultOk;}
     if(i) {p.id=99+i;p.unitId=i==1?0:7;p.stepCount=2;p.flags=ParameterInfo::kIsProgramChange | (fixtureProgramMode==2 ? ParameterInfo::kIsReadOnly : 0);
       std::copy_n(u"Program",8,p.title);return kResultOk;}
-    p.id = 7;
+    p.id = 7;p.stepCount=fixtureStepped?4:0;
     std::copy_n(u"Gain", 5, p.title);
     p.defaultNormalizedValue = .5;
     p.flags = ParameterInfo::kCanAutomate;
