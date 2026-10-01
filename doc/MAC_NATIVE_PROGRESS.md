@@ -1,0 +1,77 @@
+# Native implementation progress — 19 September 2026
+
+Resonance is a working native macOS application with a portable editable OpenMPT core and repeatable audio tests. Implementation now spans stages 1–5. **The original release gates are not all complete:** the ten-minute combined UI/audio run failed, and corrected visible reruns have been interrupted or blocked by an unavailable desktop/capture surface.
+
+## Delivered implementation
+
+| Stage | Working local implementation | Remaining qualification or scope |
+|---|---|---|
+| 1. Playable preview | AppKit shell, Metal pattern grid, direct Core Audio, transport/seek, meters/following, sample audition, device settings and lifecycle listeners | Sustained combined performance gate; broader physical-device/OS coverage |
+| 2. Composing | Pattern/volume/effect entry, selection/clipboard, transpose/row operations, undo/redo, complete order arranger, sequence selection, native saves, WAV export and recovery | Broader real-song corpus and sustained integrated qualification |
+| 3. Samples/instruments | Sample import/replacement/rename, waveform selection, loop/rate/pan/volume tools, offline processing, ITI/XI import, envelopes/keymaps/NNA/DCT, CoreMIDI recording | Structural changes stop playback safely; continuous playing-asset swaps and finer MIDI timing remain future work |
+| 4. Daily-use groundwork | Format limits/import reports, configurable keyboard input, accessible native controls, 3-generation recovery, compatibility matrix, packaged app/guide/notices, sanitizer and performance tooling | Broader accessibility/device/corpus checks and public distribution qualification |
+| 5. Native plugins | AU/VST3 stereo master effects and tracker instruments, isolated bounded scanning, custom/native controls, state recall, bypass/reordering, rack undo/redo, parameter automation, missing-plugin preservation/repair and latency/tail-aware export | Per-channel/bus graphs, sidechains, auxiliary outputs, AUv3 custom views, broad vendor qualification and sustained combined performance remain open |
+
+Live pattern edits, native plugin parameter changes and project saves retain playback. Structural sample/instrument/order/plugin changes stop transport before replacing assets. The host supports eight plugins shared between serial stereo master effects and tracker instruments. It does not claim full OpenMPT parity.
+
+## Audio and correctness evidence
+
+- The stock portable suite passes alongside the new editor, session, effect, recovery, interface, export and stress suites.
+- **30 exact reference-render comparisons pass**, with matching frame counts and zero sample difference: MOD/XM/S3M/IT/MPTM, loop/instrument fixtures, a later-order seek and both sequences of a generated multi-sequence song, at 44.1/48/96 kHz. Each render is capped at approximately 30 seconds. Non-finite samples fail the comparison.
+- Core callback instrumentation reports zero intercepted allocations, releases or pthread locks, including first use. The three qualified Apple effects pass the same checks. The interposer proves its own detection before measuring.
+- Dense 60-second offline rendering with 127 channels, 1,024 rows and concurrent edit/audition/panic reached up to 250 voices. Recorded offline runs reached 248–250 voices, with no intercepted allocation/release/lock calls. Wall-clock maxima varied from 158.25 µs to 6,892.71 µs under host scheduling; these accelerated, non-real-time runs establish resource safety, not the device deadline gate.
+- **Five-minute actual Core Audio + AULowpass stress passed:** 127 channels, concurrent edits/audition, 112,504 callbacks at 48 kHz / 128 frames, 1,751.54 µs maximum, p99.9 ≤150 µs, zero measured deadline overruns. This was an audio-only workload, not the required 30-minute combined UI/audio gate.
+- Repeated start/stop, live AU rendering and uninterrupted project saving pass. Callback execution timing is not hardware loopback or a complete device xrun count.
+- Actual virtual-device output/capture testing now passes: dry and AULowpass each matched 96,000 stereo frames exactly at 48 kHz / 512 frames through BlackHole 2ch, with no timestamp gaps or callback overruns. The test preserves default routing and device configuration. This is automated live-route fidelity, not physical hardware latency qualification.
+- AU automation is buffer-independent at three rates. Export tests compare dry WAV exactly with the core and limiter/delay output with independently scheduled native effects; latency trimming, complete reported tails, RIFF lengths and failed-export preservation pass.
+- Session tests cover effect-chain history/state/automation, independence from pattern history, order insert/assign/move/remove, sequences in playback/save/export, malformed projects, failed-open retention, missing-plugin repair, envelope persistence and bounded concurrent MIDI queues, explicit contention/drop accounting and overflow quarantine so a lost release cannot replay stale note-ons.
+- A real CoreMIDI virtual-source loopback test passes channel/velocity, running status, interleaved clock, explicit/zero-velocity note releases, timestamps and source disconnect.
+- AddressSanitizer and UndefinedBehaviorSanitizer pass the core, session, export and CoreMIDI loopback suites. These runs are correctness checks and are excluded from performance figures.
+- AppKit interface tests cover keyboard transport/remapping/repeat suppression, paired note release, large sample indices, undo routing, deferred bulk edits, selection bounds, envelope node editing/deletion, 5,000-order reachability and compact editor layouts with long asset names.
+
+The tests have caught actual defects: AU automation dependent on block size, an extra song cycle after seeking, missing transport-key wiring, stretched/clipped asset layouts, long sample names expanding the instrument editor and unsafe MIDI overflow ordering. These are fixed and regression-tested.
+
+## Visible UI evidence and unresolved performance gate
+
+The running application was inspected in the pattern, sample, instrument and effects views. Sample controls were checked at approximately the minimum window size. Creating an instrument, applying an ADSR envelope, adding AULowpass, changing its cutoff, saving a project through the native panel and reopening it with the retained parameter were exercised through the UI. Subsequent inspection verified Space transport, numeric envelope-node edits and deletion, effect removal/undo restoring the 4,200 Hz cutoff, and order insertion/move/removal/undo. Auxiliary windows now restore main-window focus. Later inspection occasionally timed out after closing the arranger, but a process sample showed a responsive main event loop and Command-O opened the native file dialog. Sequence 2 → 1 switching was verified to change the order’s pattern from 1 → 0. Opening the selected MPTM through the native file picker succeeded and restored sequence 2 / pattern 1.
+
+A **60-second visible combined workload passed its then-current checks**: 127 channels, AULowpass, 300 live edits, 15 undo/redo cycles and 3 uninterrupted saves; 59.948 mean presented fps, p99 presentation interval 16.667 ms, p99 CPU 0.651 ms, p99 GPU 0.237 ms, 3 missed presentations among 3,449 measured intervals, and zero audio overruns. This is useful smoke-test evidence, not the ten-minute release gate.
+
+The subsequent **600-second run failed**. The Mac locked during it; the window became hidden, presentation measurements became incomplete, and drawable acquisition stalled. The run also recorded **one audio callback at 2,910.541 µs**, above the 2,667 µs deadline. That audio failure remains recorded and is not waived because the display locked. Both reports are retained in [the qualification evidence](mac-native-qualification/2026-09-19/README.md).
+
+A later corrected-metric attempt ended after 46.6 seconds when its window became hidden. It had zero audio overruns but failed visibility, presentation and maximum main-thread drawing checks. Two further attempts could not establish stable visibility; all failed reports are retained.
+
+The current workload waits for stable visibility, temporarily keeps its test window above ordinary windows and prevents idle display sleep, aborts if the window becomes hidden, ignores invalid presentation timestamps, and records drawable wait separately from CPU frame preparation and total main-thread drawing. Lightweight progress is serialized off the main thread. Startup timeouts are explicitly reported as prerequisites failing before measurement. It also measures selection/scroll/edit/undo/save work and checks audio p99.9. Each new report identifies the process and exact source fingerprint.
+
+Desktop access is intermittent: accessibility-based actions can succeed, while coordinate/scroll actions fail with no-window or screen-capture errors. The application cannot establish a stable visible presentation surface and its visible status reports 0 fps even after raising the window and starting playback. This is a blocked graphics qualification, not a demonstrated application hang. The file picker now leaves format detection to the engine; after native validation completed, opening a workspace copy succeeded. The initial disabled Open state is not proven to have been caused by format filtering. Launching through macOS Launch Services reproduced the same blocker on the final packaged build: the window exists and is neither hidden nor minimized, but is fully occluded, the app is inactive and the renderer is paused. The root cause of the desktop state is unconfirmed. The corrected ten-minute run and 30-minute combined soak must be completed before claiming the original smoothness/audio release gates.
+
+## Reproduce and resume
+
+See `mac/README.md` and `mac/COMPATIBILITY.md`. With an unlocked, visible display, run `bash mac/ui-test.sh 600`, inspect the latest controls, then run `bash mac/ui-test.sh 1800 --no-build`. Investigate any failed threshold before widening the supported workload. Hardware listening/loopback, multiple devices/displays/OS versions, a wider module/plugin corpus and notarized public distribution remain unqualified.
+
+Source is maintained as an independent local derivative. No upstream submission was made.
+
+
+## Native plugin expansion — 19 September 2026
+
+Implemented macOS VST3 hosting alongside AU effects and instruments; tracker-instrument assignments; native AU Cocoa/VST3 NSView editors; parameter recording from custom and native controls; sample-position automation playback/export; processor/controller and project state persistence; instrument/sample latency alignment; and tempo/transport callbacks. VST3 SDK interface sources are vendored with pinned revisions and MIT notices. The graph remains bounded at eight plugins with stereo main outputs and in-process runtime hosting. No Windows plugin support was added.
+
+The test fixture is a real, separately compiled macOS VST3 bundle with effect, instrument, delayed-instrument and custom-view behavior. Tests caught and fixed preview-note release, delayed-instrument alignment, custom-window lifetime and state/automation separation. Native parameter controls are now searchable and virtualized, with coverage for 4,096 parameters. The core/audio/GUI checks and reproducible commands are documented in `mac/README.md` and `mac/COMPATIBILITY.md`.
+
+The new live virtual loopback covers dry audio, AU effects/instruments and VST3 effects/instruments with automation. All five paths matched 96,000 stereo frames exactly at 48 kHz / 512 frames with no measured callback overruns or capture timestamp gaps. Direct UI inspection opened the plugin rack, restored an instrument assignment and opened a plugin-owned VST3 interface. Installed Bite and FM8 also passed isolated render/state probes. Further visible performance results are recorded separately; earlier failed UI runs remain part of the evidence and are not overwritten.
+
+The final plugin checks pass all seven CTest suites, AddressSanitizer/UndefinedBehaviorSanitizer, custom-editor recording and project persistence. Callback allocation checks run separately without sanitizer interposition. The VST3 60-second visible attempt failed its prerequisite before measurement, and the UI tool explicitly confirmed a locked Mac. The plugin build's 60 fps check and original longer combined gates remain open. Current evidence is preserved in [the plugin qualification record](mac-native-qualification/2026-09-19-plugins/README.md); earlier five-minute device and UI figures above describe earlier builds.
+
+## Local automation API — 19 September 2026
+
+The open document is now accessible to local applications through an opt-in, same-user Unix socket and versioned JSON-RPC request interface. It exposes cursor/selection context, song inventories, atomic pattern patches and dry runs, samples including paginated PCM, instruments and envelopes/keymaps, AU/VST3 parameters and opaque baseline state, and editable plugin automation lanes. Mutations require an optimistic revision token, use existing undo histories and refresh the native document. Socket I/O and JSON processing stay off the audio callback. The supplied Python client and method schema are bundled with the app; its crescendo drum-roll example works from the current cursor and commits as one undo step.
+
+Eight CTest suites pass, including the new API boundary suite. Tests cover malformed requests, partial-batch rejection, native-edit revision conflicts, PCM replacement/undo, AU/VST3 state restoration, lane preservation and saving/reopening. A real socket/client test and the packaged application in hidden test mode both pass the cursor-driven drum roll, dry run, preserved neighboring cells/effects, one-step undo, duplicate request handling and competing writers. These checks use disposable demo documents and neither activate a window nor start audio. AddressSanitizer/UndefinedBehaviorSanitizer also pass the API suite. They do not replace the outstanding visible performance gates.
+
+See [the API guide](../mac/AUTOMATION.md), [request schema](../mac/Tools/resonance-api.schema.json), and [qualification evidence](mac-native-qualification/2026-09-19-api/README.md).
+
+## Plugin inventory and Battery 4 loading (2026-09-19)
+
+Implemented a persistent AU/VST3 discovery cache with explicit picker/API rescan, schema/architecture validation, bounded cache reads and atomic replacement. Cache hits bypass the scanner; per-add validation remains isolated. Fixed Battery 4 AU's documented background-thread HIToolbox assertion by dispatching native lifecycle/state/property work to the main thread. Fixed Battery VST3 rejection by supporting bounded larger bus layouts and sending complete active/inactive bus arrays to the processor. Render callbacks retain preallocated storage and no main-thread dispatch.
+
+Added cache failure/restart tests, an AU main-thread lifecycle fixture, a 32-output VST3 regression fixture, hidden plugin-picker layout checks, and an optional installed-Battery test that launches only disposable hidden app instances. Ten CTest suites and ASan/UBSan checks pass; both Battery formats pass scanner and actual-app load/restore/remove checks. Inventory timing: 30.507 s explicit scan, 1.536 ms warm cache, 285.249 ms after app restart. No visible windows or speaker output were needed for the Battery qualification. Evidence: `doc/mac-native-qualification/2026-09-19-battery/`.

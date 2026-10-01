@@ -1,0 +1,6 @@
+PASS Core Audio start/stop 0: 751 callbacks, 287.791 us maximum, 0 overruns, 48000 Hz / 128 frames, p99.9 <= 290 us
+PASS Core Audio start/stop 1: 753 callbacks, 29.25 us maximum, 0 overruns, 48000 Hz / 128 frames, p99.9 <= 30 us
+PASS Core Audio start/stop 2: 750 callbacks, 22.208 us maximum, 0 overruns, 48000 Hz / 128 frames, p99.9 <= 30 us
+PASS live AU/Core Audio: 752 callbacks, 27.958 us maximum, 0 overruns
+PASS 300-second Core Audio/AU soak, 127 channels, concurrent edits/audition: 112506 callbacks, 1534.04 us maximum, 0 overruns
+Callback duration p99.9 <= 150 us (10 us histogram buckets)

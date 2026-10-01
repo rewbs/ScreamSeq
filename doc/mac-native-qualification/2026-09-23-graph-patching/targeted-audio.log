@@ -1,0 +1,17 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-patching
+    Start 54: multi-bus
+    Start 52: native-mixer
+1/6 Test #54: multi-bus ........................   Passed    1.86 sec
+    Start 69: signal-graph-session
+2/6 Test #52: native-mixer .....................   Passed    2.04 sec
+    Start 42: dynamics
+3/6 Test #69: signal-graph-session .............   Passed    0.53 sec
+    Start 44: bus-compressor
+4/6 Test #42: dynamics .........................   Passed    1.47 sec
+    Start 53: sidechains
+5/6 Test #53: sidechains .......................   Passed    0.36 sec
+6/6 Test #44: bus-compressor ...................   Passed    1.58 sec
+
+100% tests passed, 0 tests failed out of 6
+
+Total Test time (real) =   3.97 sec

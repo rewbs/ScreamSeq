@@ -1,0 +1,471 @@
+{
+  "transport.get": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 7663,
+      "fault": false,
+      "frames": 3923456,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "persistent",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 2,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n24"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n17"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n18"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n19"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n21"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n22"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n23"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n24"
+        }
+      ],
+      "left": 0.06627276539802551,
+      "loop": true,
+      "maxMicros": 5000.583,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 1940,
+      "pattern": 0,
+      "patternPosition": 9273.536022061358,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.06627077609300613,
+      "routing": {
+        "active": true,
+        "available": true,
+        "failedPlan": 0,
+        "latencyPending": false,
+        "renderedPlan": 1,
+        "requestedPlan": 1,
+        "state": "stable"
+      },
+      "row": 36,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 198
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 225
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 254
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 28
+        },
+        {
+          "channel": 4,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 61
+        },
+        {
+          "channel": 5,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 95
+        },
+        {
+          "channel": 6,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 131
+        },
+        {
+          "channel": 7,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 169
+        },
+        {
+          "channel": 8,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 210
+        },
+        {
+          "channel": 9,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 252
+        },
+        {
+          "channel": 10,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 42
+        },
+        {
+          "channel": 11,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 90
+        },
+        {
+          "channel": 12,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 141
+        },
+        {
+          "channel": 13,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 195
+        },
+        {
+          "channel": 14,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 253
+        },
+        {
+          "channel": 15,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 170,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 57
+        }
+      ],
+      "voices": 16
+    },
+    "documentId": "BED31A00-44D5-49D9-A1D5-054DCC10E3D3",
+    "playbackStopped": false,
+    "revision": "BED31A00-44D5-49D9-A1D5-054DCC10E3D3:2:0:0"
+  },
+  "context.get": {
+    "changed": false,
+    "contextChanged": false,
+    "data": {
+      "autosave": {
+        "enabled": true,
+        "error": null,
+        "generations": 10,
+        "intervalSeconds": 10,
+        "lastCopy": null,
+        "lastSavedAt": null,
+        "saving": false
+      },
+      "channel": 0,
+      "column": 0,
+      "contextRevision": "0:0:0:0:1:0:0:0:0:1:4:1",
+      "dirty": true,
+      "editor": "patterns",
+      "file": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/controls-refresh-4dc48f3e/Controls refresh.screamseq",
+      "following": true,
+      "instrument": 1,
+      "octave": 4,
+      "order": 0,
+      "pattern": 0,
+      "playback": {
+        "pattern": 0,
+        "playing": true,
+        "row": 36
+      },
+      "row": 0,
+      "sampleSelection": {
+        "channels": "both",
+        "end": 256,
+        "sample": 1,
+        "start": 0
+      },
+      "sampleViewport": {
+        "channels": "both",
+        "drawing": false,
+        "end": 256,
+        "loaded": false,
+        "precise": false,
+        "sample": 1,
+        "start": 0
+      },
+      "selection": {
+        "endChannel": 0,
+        "endRow": 0,
+        "startChannel": 0,
+        "startRow": 0
+      },
+      "step": 1
+    },
+    "playbackStopped": false,
+    "revision": "BED31A00-44D5-49D9-A1D5-054DCC10E3D3:2:0:0"
+  }
+}

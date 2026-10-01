@@ -1,0 +1,26 @@
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-native
+[  1%] Built target RealtimeAudit
+[ 14%] Built target TrackerFLAC
+[ 18%] Built target TrackerPlugins
+[ 18%] Built target ResonanceFixture
+[ 20%] Built target plugin-tests
+[ 20%] Built target plugin-scanner
+[ 86%] Built target OpenMPTCore
+[ 87%] Built target TrackerEditor
+[ 88%] Built target tracker-core-tests
+[ 89%] Built target render-audit
+[ 90%] Built target stress-tests
+[ 91%] Built target qualification-fixture
+[ 94%] Built target TrackerMac
+[ 95%] Built target loopback-tests
+[ 96%] Built target midi-tests
+[ 97%] Built target device-tests
+[ 98%] Built target session-tests
+[ 99%] Built target automation-tests
+[100%] Built target export-tests
+[100%] Built target native-plugin-tests
+bin/mac-native/Resonance.app/Contents/MacOS/plugin-scanner: replacing existing signature
+bin/mac-native/Resonance.app: replacing existing signature
+Built bin/mac-native/Resonance.app

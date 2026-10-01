@@ -1,0 +1,10 @@
+Unity 44100 native-group=0 legacy-to-mixer=9.31323e-07
+Unity 48000 native-group=0 legacy-to-mixer=7.52509e-07
+Unity 96000 native-group=0 legacy-to-mixer=0
+PASS note tracks: stable grouping, atomic rejection, structural Undo, five-format native roundtrip, column mutes, unity audio at three rates and callback audit
+PASS native song identities, metadata, order/section history, no-op/invalid atomicity, all five module formats, project v4 roundtrip, v1/v2/v3 migration and loss prevention
+Native mixer unity at 44100 Hz: 1.49012e-08
+Native mixer unity at 48000 Hz: 1.49012e-08
+Native mixer unity at 96000 Hz: 1.49012e-08
+Mixer WAV fader check: signal 42101.7, maximum difference 9.10299e-09, legacy sample-mode difference 1.18464e-06
+PASS native mixer: sample/NNA fidelity, groups, track effects, instruments, automation, seeks, PDC, tails, realtime safety, API validation, undo and persistence

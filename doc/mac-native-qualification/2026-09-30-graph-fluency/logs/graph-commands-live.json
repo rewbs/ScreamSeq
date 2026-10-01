@@ -1,0 +1,456 @@
+{
+  "pid": 80223,
+  "afterCancelRevision": "E0BFABA6-1A2D-4F93-8E4B-71B4F7EF33C0:0:0:0",
+  "commands": [
+    {
+      "id": "graph.add",
+      "keys": [
+        "shift+a"
+      ],
+      "name": "Audio & modulation graph / Graph / Add node\u2026"
+    },
+    {
+      "id": "graph.parent",
+      "keys": [
+        "opt+up"
+      ],
+      "name": "Audio & modulation graph / Graph / Parent graph"
+    },
+    {
+      "id": "graph.fit",
+      "keys": [
+        "\uf729"
+      ],
+      "name": "Audio & modulation graph / Graph / Fit graph"
+    },
+    {
+      "id": "graph.traceSilence",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Trace silence"
+    },
+    {
+      "id": "graph.findOverload",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Find next overload"
+    },
+    {
+      "id": "graph.clearOverloads",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Clear overload indicators"
+    },
+    {
+      "id": "graph.scope",
+      "keys": [
+        "q"
+      ],
+      "name": "Audio & modulation graph / Graph / Scope selected signal"
+    },
+    {
+      "id": "graph.spectrum",
+      "keys": [
+        "shift+q"
+      ],
+      "name": "Audio & modulation graph / Graph / Spectrum of selected signal"
+    },
+    {
+      "id": "graph.openPlugin",
+      "keys": [
+        "return"
+      ],
+      "name": "Audio & modulation graph / Graph / Open plugin interface"
+    },
+    {
+      "id": "graph.bypass",
+      "keys": [
+        "m"
+      ],
+      "name": "Audio & modulation graph / Graph / Toggle plugin bypass"
+    },
+    {
+      "id": "graph.listen",
+      "keys": [
+        "l"
+      ],
+      "name": "Audio & modulation graph / Graph / Listen here"
+    },
+    {
+      "id": "graph.stopListening",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Stop listening"
+    },
+    {
+      "id": "graph.frameSelection",
+      "keys": [
+        "f"
+      ],
+      "name": "Audio & modulation graph / Graph / Frame selection"
+    },
+    {
+      "id": "graph.showPattern",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Show in pattern"
+    },
+    {
+      "id": "graph.newGroup",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / New subgraph\u2026"
+    },
+    {
+      "id": "graph.cloneGroup",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Clone subgraph"
+    },
+    {
+      "id": "graph.sourceAutomation",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Add modulation source / Pattern envelope"
+    },
+    {
+      "id": "graph.sourceLFO",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Add modulation source / LFO"
+    },
+    {
+      "id": "graph.sourceFollower",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Add modulation source / Audio follower"
+    },
+    {
+      "id": "graph.sourceRandom",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Add modulation source / Random"
+    },
+    {
+      "id": "graph.sourceNote",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Add modulation source / Note envelope"
+    },
+    {
+      "id": "graph.sourceMIDI",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Add modulation source / MIDI controller"
+    },
+    {
+      "id": "graph.sourceAmount",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Add modulation source / Amount"
+    },
+    {
+      "id": "graph.patch",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Patch by keyboard\u2026"
+    },
+    {
+      "id": "graph.cut",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Cut cables\u2026"
+    },
+    {
+      "id": "graph.detach",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Detach and reconnect"
+    },
+    {
+      "id": "graph.deleteHeal",
+      "keys": [
+        "ctrl+x"
+      ],
+      "name": "Audio & modulation graph / Graph / Delete and reconnect"
+    },
+    {
+      "id": "graph.arrange",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Arrange nodes"
+    },
+    {
+      "id": "graph.zoomIn",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Zoom in"
+    },
+    {
+      "id": "graph.zoomOut",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Zoom out"
+    },
+    {
+      "id": "graph.reload",
+      "keys": [],
+      "name": "Audio & modulation graph / Graph / Reload graph"
+    }
+  ],
+  "configuredShortcut": "cmd+ctrl+opt+b",
+  "beforeBypass": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 789,
+      "fault": false,
+      "frames": 403968,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.11073774844408035,
+      "loop": true,
+      "maxMicros": 3157.958,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 3160,
+      "pattern": 0,
+      "patternPosition": 1440.1654601861428,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.1107453852891922,
+      "row": 5,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 18,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 131
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 5,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 121
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 17,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 10518
+        }
+      ],
+      "voices": 3
+    },
+    "documentId": "E0BFABA6-1A2D-4F93-8E4B-71B4F7EF33C0",
+    "playbackStopped": false,
+    "revision": "E0BFABA6-1A2D-4F93-8E4B-71B4F7EF33C0:0:0:0"
+  },
+  "afterUndo": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 2796,
+      "fault": false,
+      "frames": 1431552,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.12542471289634705,
+      "loop": true,
+      "maxMicros": 3157.958,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 3100,
+      "pattern": 0,
+      "patternPosition": 14011.962771458118,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.12542326748371124,
+      "row": 54,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 62,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 36
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 16,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 64
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 62,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 2130
+        }
+      ],
+      "voices": 3
+    },
+    "documentId": "E0BFABA6-1A2D-4F93-8E4B-71B4F7EF33C0",
+    "playbackStopped": false,
+    "revision": "E0BFABA6-1A2D-4F93-8E4B-71B4F7EF33C0:0:2:0"
+  },
+  "pluginAfterUndo": [
+    {
+      "audioBuses": [
+        {
+          "active": true,
+          "channels": 2,
+          "direction": "input",
+          "index": 0,
+          "name": "Stereo input",
+          "supported": true
+        },
+        {
+          "active": true,
+          "channels": 2,
+          "direction": "output",
+          "index": 0,
+          "name": "Stereo output",
+          "supported": true
+        }
+      ],
+      "bypass": false,
+      "classID": "resonance.distortion.v1",
+      "format": "Built-in",
+      "id": "5C7C53DF-146B-43C8-B916-E34797F24441",
+      "instruments": [],
+      "isInstrument": false,
+      "manufacturer": 0,
+      "name": "Distortion",
+      "path": "",
+      "slot": 1,
+      "subtype": 0,
+      "type": 0
+    }
+  ],
+  "afterGroupCancel": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 18651,
+      "fault": false,
+      "frames": 9549312,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.12248878926038742,
+      "loop": true,
+      "maxMicros": 3295.458,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 3120,
+      "pattern": 0,
+      "patternPosition": 11741.584281282316,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.12248560786247253,
+      "row": 45,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 412,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 28
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 103,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 30
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 411,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 11214
+        }
+      ],
+      "voices": 3
+    },
+    "documentId": "E0BFABA6-1A2D-4F93-8E4B-71B4F7EF33C0",
+    "playbackStopped": false,
+    "revision": "E0BFABA6-1A2D-4F93-8E4B-71B4F7EF33C0:0:2:0"
+  }
+}

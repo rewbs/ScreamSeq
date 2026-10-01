@@ -1,0 +1,2 @@
+FAIL: InterfaceFailure(message: "Tool setting labels cannot look or act like editable values")
+Mixer strip diagnostic: 240 buses, 600 meter updates 179.5 ms, 9 control sets allocated through full traversal (not display cadence)

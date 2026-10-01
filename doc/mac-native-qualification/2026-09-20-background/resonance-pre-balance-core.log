@@ -1,0 +1,20 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-background
+    Start 30: native-song
+1/4 Test #30: native-song ......................   Passed    0.57 sec
+    Start 35: mixer-runtime
+2/4 Test #35: mixer-runtime ....................***Failed    0.40 sec
+Input balance reference: rate 48000 block 1 balance 0.7 live 1 sample 149 actual 0.225653,0.493558 expected 0.225653,0.493557
+FAIL Independent sample reference verifies pre-insert balance, output balance, pre-fader return and sidechain
+
+    Start 36: native-mixer
+3/4 Test #36: native-mixer .....................   Passed    1.20 sec
+    Start 40: mixer-graph
+4/4 Test #40: mixer-graph ......................   Passed    0.00 sec
+
+75% tests passed, 1 tests failed out of 4
+
+Total Test time (real) =   2.17 sec
+
+The following tests FAILED:
+	 35 - mixer-runtime (Failed)
+Errors while running CTest

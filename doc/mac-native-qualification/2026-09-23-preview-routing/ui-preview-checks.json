@@ -1,0 +1,20 @@
+[
+  {
+    "test": "ui-pattern-silent",
+    "observations": 769,
+    "activeObservations": 312,
+    "activePeak": 0,
+    "maxVoices": 1,
+    "overruns": 0,
+    "faults": 0
+  },
+  {
+    "test": "ui-sample-audition-button",
+    "observations": 774,
+    "activeObservations": 774,
+    "activePeak": 0.03749370574951172,
+    "maxVoices": 1,
+    "overruns": 0,
+    "faults": 0
+  }
+]

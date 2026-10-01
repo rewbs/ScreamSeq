@@ -34,6 +34,9 @@ struct ModSample
 	uint16 nVolume;							// Default volume, 0...256 (ignored if uFlags[SMP_NODEFAULTVOLUME] is set)
 	uint16 nGlobalVol;						// Global volume (sample volume is multiplied by this), 0...64
 	SampleFlags uFlags;						// Sample flags (see ChannelFlags enum)
+#ifdef OPENMPT_EDITOR_CORE
+	uint8 nativeReverseLoops = 0;  // Bit 0: normal; bit 1: sustain. Native snapshots only.
+#endif
 	int8   RelativeTone;					// Relative note to middle c (for MOD/XM)
 	int8   nFineTune;						// Finetune period (for MOD/XM), -128...127, unit is 1/128th of a semitone
 	VibratoType nVibType;					// Auto vibrato type

@@ -1,0 +1,378 @@
+{
+  "before": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 21632,
+      "fault": false,
+      "frames": 11075584,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.12514165043830872,
+      "loop": true,
+      "maxMicros": 3155.333,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 3050,
+      "pattern": 0,
+      "patternPosition": 13548.85074112375,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.12513497471809387,
+      "row": 52,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 478,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 176
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 120,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 192
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 477,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 8486
+        }
+      ],
+      "voices": 3
+    },
+    "documentId": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676",
+    "playbackStopped": false,
+    "revision": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676:0:2:0"
+  },
+  "save": {
+    "changed": false,
+    "data": {
+      "format": "screamseq",
+      "path": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/bypass-save-undo.screamseq",
+      "projectVersion": 6,
+      "written": true
+    },
+    "documentId": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676",
+    "playbackStopped": false,
+    "revision": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676:0:2:0"
+  },
+  "afterSave": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 21633,
+      "fault": false,
+      "frames": 11076096,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.12517638504505157,
+      "loop": true,
+      "maxMicros": 3155.333,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 3050,
+      "pattern": 0,
+      "patternPosition": 13571.441571871768,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.12517192959785461,
+      "row": 53,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 478,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 169
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 120,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 105
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 477,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 8742
+        }
+      ],
+      "voices": 3
+    },
+    "documentId": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676",
+    "playbackStopped": false,
+    "revision": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676:0:2:0"
+  },
+  "afterUndo": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 27053,
+      "fault": false,
+      "frames": 13851136,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.11757868528366089,
+      "loop": true,
+      "maxMicros": 3155.333,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 3040,
+      "pattern": 0,
+      "patternPosition": 4941.744226128921,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.11753856390714645,
+      "row": 19,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 597,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 236
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 150,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 246
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 299,
+          "instrument": 0,
+          "sample": 3,
+          "sampleFrame": 9584
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 597,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 3782
+        }
+      ],
+      "voices": 4
+    },
+    "documentId": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676",
+    "playbackStopped": false,
+    "revision": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676:0:3:0"
+  },
+  "stateAfterUndo": {
+    "changed": false,
+    "data": {
+      "data": "UkZYUwEAAAAXAAAAcmVzb25hbmNlLmRpc3RvcnRpb24udjEHAAAAAAAAAAAAgD8BAAAAAAAQQQIAAAAAAAAAAwAAAAAAAAAEAAAAAAAAAAUAAAAAAMhCBgAAAAAAwMA=",
+      "descriptor": {
+        "classID": "resonance.distortion.v1",
+        "format": "Built-in",
+        "isInstrument": false,
+        "manufacturer": 0,
+        "name": "Distortion",
+        "path": "",
+        "subtype": 0,
+        "type": 0
+      },
+      "kind": "saved-baseline"
+    },
+    "documentId": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676",
+    "playbackStopped": false,
+    "revision": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676:0:3:0"
+  },
+  "afterRedo": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 43645,
+      "fault": false,
+      "frames": 22346240,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.1221279501914978,
+      "loop": true,
+      "maxMicros": 3155.333,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 3040,
+      "pattern": 0,
+      "patternPosition": 2936.80799724233,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.12211776524782181,
+      "row": 11,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 963,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 203
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 241,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 178
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 482,
+          "instrument": 0,
+          "sample": 3,
+          "sampleFrame": 10072
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 963,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 4270
+        }
+      ],
+      "voices": 4
+    },
+    "documentId": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676",
+    "playbackStopped": false,
+    "revision": "8C1D8D95-6A1B-4C07-ACF1-7EBD3E60C676:0:4:0"
+  }
+}

@@ -1,0 +1,1416 @@
+{
+  "afterRedo": {
+    "changed": false,
+    "data": {
+      "activity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "persistent",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 2,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n24"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n17"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n18"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n19"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n21"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n22"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n23"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n24"
+        }
+      ],
+      "assignments": [
+        {
+          "amount": 1,
+          "graph": "n26",
+          "target": "n2",
+          "wet": 1
+        },
+        {
+          "amount": 0.3,
+          "graph": "n26",
+          "target": "n5",
+          "wet": 0.5
+        },
+        {
+          "amount": 0.3,
+          "graph": "n26",
+          "target": "n9",
+          "wet": 0.5
+        },
+        {
+          "amount": 0.3,
+          "graph": "n26",
+          "target": "n20",
+          "wet": 0.5
+        },
+        {
+          "amount": 0.3,
+          "graph": "n26",
+          "target": "n24",
+          "wet": 0.5
+        }
+      ],
+      "commands": [
+        {
+          "amount": 0.4,
+          "column": 0,
+          "graph": "n26",
+          "kind": "start",
+          "pattern": "n1",
+          "position": 0,
+          "tails": false,
+          "target": "n5",
+          "wet": 0.3
+        },
+        {
+          "amount": 0.2,
+          "column": 1,
+          "graph": "n26",
+          "kind": "row",
+          "pattern": "n1",
+          "position": 1048576,
+          "tails": false,
+          "target": "n5",
+          "wet": 0.4
+        }
+      ],
+      "implicitMixer": false,
+      "inputs": [],
+      "instrumentAssignments": [
+        {
+          "amount": 0.2,
+          "graph": "n26",
+          "target": "n32",
+          "wet": 0.3
+        }
+      ],
+      "instruments": [
+        {
+          "id": "n32",
+          "index": 1,
+          "name": "Warm pulse",
+          "plugin": false
+        },
+        {
+          "id": "n33",
+          "index": 2,
+          "name": "Sub bass",
+          "plugin": false
+        },
+        {
+          "id": "n34",
+          "index": 3,
+          "name": "Soft kick",
+          "plugin": false
+        },
+        {
+          "id": "n35",
+          "index": 4,
+          "name": "Closed hat",
+          "plugin": false
+        }
+      ],
+      "lanes": [
+        {
+          "count": 2,
+          "target": "n5"
+        }
+      ],
+      "layout": [
+        {
+          "node": "n31",
+          "x": 885.416666666658,
+          "y": 589.3132716049141
+        },
+        {
+          "node": "plugin:F5DE4F80-361F-423A-9E11-ECA98A804903",
+          "x": 472.608024691358,
+          "y": 479.93827160486074
+        }
+      ],
+      "library": [
+        {
+          "audio": [
+            {
+              "gain": 1,
+              "input": 0,
+              "output": 0,
+              "source": "n29",
+              "target": "n28"
+            },
+            {
+              "gain": 1,
+              "input": 0,
+              "output": 0,
+              "source": "n27",
+              "target": "n29"
+            }
+          ],
+          "groups": [],
+          "id": "n26",
+          "modulation": [
+            {
+              "base": 0.42832523584365845,
+              "enabled": true,
+              "maximum": 0.25,
+              "minimum": 0,
+              "parameter": 2,
+              "source": "n30",
+              "target": "n29"
+            },
+            {
+              "base": 0.42832523584365845,
+              "enabled": true,
+              "maximum": 0.03,
+              "minimum": 0,
+              "parameter": 2,
+              "source": "n37",
+              "target": "n29"
+            }
+          ],
+          "name": "Filter movement",
+          "nodes": [
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n27",
+              "kind": "input",
+              "name": "Input",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 40,
+              "y": 100
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n28",
+              "kind": "output",
+              "name": "Output",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 620,
+              "y": 100
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n29",
+              "kind": "plugin",
+              "name": "Digital Filter",
+              "phase": 0,
+              "plugin": {
+                "classID": "resonance.digital-filter.v1",
+                "format": "Built-in",
+                "inputs": [],
+                "manufacturer": 0,
+                "name": "Digital Filter",
+                "outputs": [],
+                "parameters": [
+                  {
+                    "id": 2,
+                    "value": 8577.9384765625
+                  }
+                ],
+                "path": "",
+                "state": "",
+                "subtype": 0,
+                "type": 0
+              },
+              "rate": 1,
+              "release": 0.1,
+              "x": 280,
+              "y": 80
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n30",
+              "kind": "lfo",
+              "name": "LFO",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 339.5348837209233,
+              "y": 323.5142118862965
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n37",
+              "kind": "lfo",
+              "name": "Slow secondary motion",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 300,
+              "y": 100
+            }
+          ],
+          "number": 1
+        }
+      ],
+      "mixer": {
+        "buses": [
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n2",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Layer with a deliberately long duplicate name",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [
+              {
+                "enabled": true,
+                "gainDB": -18,
+                "preFader": false,
+                "target": "n36"
+              }
+            ],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n3",
+            "inserts": [
+              "3837CCDE-0CB4-459A-A660-FCE7CF77CD1D"
+            ],
+            "kind": "track",
+            "mute": false,
+            "name": "Layer with a deliberately long duplicate name",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n4",
+            "inserts": [
+              "F5DE4F80-361F-423A-9E11-ECA98A804903",
+              "5C7C53DF-146B-43C8-B916-E34797F24441"
+            ],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 3",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [
+              {
+                "enabled": true,
+                "gainDB": -12,
+                "preFader": false,
+                "target": "n31"
+              }
+            ],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n5",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 4",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [
+              {
+                "enabled": true,
+                "gainDB": -18,
+                "preFader": false,
+                "target": "n36"
+              }
+            ],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n6",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 5",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n7",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 6",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n8",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 7",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n9",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 8",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n16",
+            "inserts": [],
+            "kind": "master",
+            "mute": false,
+            "name": "Master",
+            "output": "",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n17",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 9",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n18",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 10",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n19",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 11",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n20",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 12",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n21",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 13",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n22",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 14",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n23",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 15",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n24",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 16",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n25",
+            "inserts": [],
+            "kind": "group",
+            "mute": false,
+            "name": "Rhythm group",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n31",
+            "inserts": [
+              "2D9DE253-62C4-444A-A57D-66B12DE0C16D"
+            ],
+            "kind": "return",
+            "mute": false,
+            "name": "Return",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n36",
+            "inserts": [
+              "77087F95-04FA-400D-BC2B-A5C87FBF5007"
+            ],
+            "kind": "return",
+            "mute": false,
+            "name": "Comb return",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          }
+        ],
+        "instruments": [],
+        "sidechains": [
+          {
+            "enabled": true,
+            "gainDB": 0,
+            "input": 1,
+            "plugin": "3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+            "preFader": false,
+            "source": "n4"
+          }
+        ]
+      },
+      "outputs": [],
+      "patterns": [
+        {
+          "id": "n1",
+          "index": 0,
+          "name": "",
+          "rows": 64,
+          "rowsPerBeat": 4
+        }
+      ],
+      "plugins": [
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Input 1",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Output 1",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "classID": "",
+          "format": "AU",
+          "id": "2D9DE253-62C4-444A-A57D-66B12DE0C16D",
+          "instruments": [],
+          "isInstrument": false,
+          "manufacturer": 1634758764,
+          "name": "Apple: AUReverb2",
+          "path": "",
+          "slot": 0,
+          "subtype": 1920361010,
+          "type": 1635083896
+        },
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Stereo input",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Stereo output",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "classID": "resonance.distortion.v1",
+          "format": "Built-in",
+          "id": "5C7C53DF-146B-43C8-B916-E34797F24441",
+          "instruments": [],
+          "isInstrument": false,
+          "manufacturer": 0,
+          "name": "Distortion",
+          "path": "",
+          "slot": 1,
+          "subtype": 0,
+          "type": 0
+        },
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Stereo input",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Stereo output",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 1,
+              "name": "Detector sidechain",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "classID": "resonance.compressor.v1",
+          "format": "Built-in",
+          "id": "3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+          "instruments": [],
+          "isInstrument": false,
+          "manufacturer": 0,
+          "name": "Compressor",
+          "path": "",
+          "slot": 2,
+          "subtype": 0,
+          "type": 0
+        },
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Stereo input",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Stereo output",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "classID": "resonance.eq5.v1",
+          "format": "Built-in",
+          "id": "F5DE4F80-361F-423A-9E11-ECA98A804903",
+          "instruments": [],
+          "isInstrument": false,
+          "manufacturer": 0,
+          "name": "EQ5",
+          "path": "",
+          "slot": 3,
+          "subtype": 0,
+          "type": 0
+        },
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Stereo input",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Stereo output",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "classID": "resonance.comb-filter.v1",
+          "format": "Built-in",
+          "id": "77087F95-04FA-400D-BC2B-A5C87FBF5007",
+          "instruments": [],
+          "isInstrument": false,
+          "manufacturer": 0,
+          "name": "Comb Filter",
+          "path": "",
+          "slot": 4,
+          "subtype": 0,
+          "type": 0
+        }
+      ],
+      "unitsPerRow": 65536
+    },
+    "documentId": "C9D7A393-7DD0-4720-AB11-CD226952B367",
+    "playbackStopped": false,
+    "revision": "C9D7A393-7DD0-4720-AB11-CD226952B367:4:0:0"
+  },
+  "transport": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 7178,
+      "fault": false,
+      "frames": 3675136,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "persistent",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 2,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n24"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n17"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n18"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n19"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n21"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n22"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n23"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n24"
+        }
+      ],
+      "left": 0.06682819873094559,
+      "loop": true,
+      "maxMicros": 6276.041,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 1970,
+      "pattern": 0,
+      "patternPosition": 14700.983109272665,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.06682097166776657,
+      "routing": {
+        "active": true,
+        "available": true,
+        "failedPlan": 0,
+        "latencyPending": false,
+        "renderedPlan": 1,
+        "requestedPlan": 1,
+        "state": "stable"
+      },
+      "row": 57,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 69
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 241
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 166
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 103
+        },
+        {
+          "channel": 4,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 51
+        },
+        {
+          "channel": 5,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 11
+        },
+        {
+          "channel": 6,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 240
+        },
+        {
+          "channel": 7,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 227
+        },
+        {
+          "channel": 8,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 228
+        },
+        {
+          "channel": 9,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 244
+        },
+        {
+          "channel": 10,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 21
+        },
+        {
+          "channel": 11,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 71
+        },
+        {
+          "channel": 12,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 139
+        },
+        {
+          "channel": 13,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 226
+        },
+        {
+          "channel": 14,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 77
+        },
+        {
+          "channel": 15,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 159,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 207
+        }
+      ],
+      "voices": 16
+    },
+    "documentId": "C9D7A393-7DD0-4720-AB11-CD226952B367",
+    "playbackStopped": false,
+    "revision": "C9D7A393-7DD0-4720-AB11-CD226952B367:4:0:0"
+  },
+  "build": {
+    "pid": 57014,
+    "bundle": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/direct-drag-29a8f2aa/ScreamSeq QA.app",
+    "identifier": "org.screamseq.tracker.qualification.6667b2406f374d9ab0ba3a625ba27000",
+    "executable": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/direct-drag-29a8f2aa/ScreamSeq QA.app/Contents/MacOS/ScreamSeq",
+    "sha256": "2e50898a035e551bdae8d1ec9eac8727a5839bfc335e6b378ce17b5337f71160",
+    "fixture": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/direct-drag-29a8f2aa/Direct controls.screamseq"
+  },
+  "actions": [
+    "Search freq",
+    "Drag thumb 2351,1529 to 2414,1529: 1000 to 8578",
+    "Canvas click and CmdZ: 1000",
+    "CmdShiftZ: 8578"
+  ],
+  "result": "pass"
+}

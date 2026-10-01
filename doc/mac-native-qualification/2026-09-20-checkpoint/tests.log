@@ -1,0 +1,1 @@
+PASS 800 independent reverse-loop PCM/unrolled-resampler/persistence/history/callback comparisons; 660000 absolute-time phase/tap checks; archive rejection, export guard, copy/splice/history and release coordinates

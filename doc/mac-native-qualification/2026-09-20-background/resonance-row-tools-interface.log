@@ -1,0 +1,2 @@
+FAIL: InterfaceFailure(message: "Control fits compact editor: PatternToolsPanel / NSButton (115.0, 512.0, 0.0, 16.0)")
+Plugin browser 4096-entry load and search: 28.22 ms (offscreen diagnostic, not a presentation gate)

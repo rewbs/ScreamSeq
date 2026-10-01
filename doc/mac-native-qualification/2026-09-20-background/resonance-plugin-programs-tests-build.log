@@ -1,0 +1,12 @@
+[ 12%] Built target TrackerFLAC
+[ 12%] Building OBJCXX object CMakeFiles/ResonanceFixture.dir/Tests/FixtureVST3.mm.o
+[ 75%] Built target OpenMPTCore
+[ 89%] Built target TrackerEditor
+[ 92%] Built target TrackerPlugins
+[ 95%] Built target TrackerMac
+[ 96%] Built target plugin-scanner
+[ 96%] Linking CXX CFBundle shared module test-plugins/ResonanceFixture.vst3/Contents/MacOS/ResonanceFixture
+[ 98%] Built target ResonanceFixture
+[ 98%] Building OBJCXX object CMakeFiles/plugin-program-tests.dir/Tests/PluginProgramTests.mm.o
+[ 98%] Linking CXX executable plugin-program-tests
+[100%] Built target plugin-program-tests

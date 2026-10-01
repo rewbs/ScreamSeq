@@ -1,0 +1,5 @@
+bin/mac-native/Resonance.app: replacing existing signature
+--prepared:/Users/rewbs/code/openmpt/bin/mac-native/Resonance.app/Contents/MacOS/plugin-scanner
+--validated:/Users/rewbs/code/openmpt/bin/mac-native/Resonance.app/Contents/MacOS/plugin-scanner
+bin/mac-native/Resonance.app: valid on disk
+bin/mac-native/Resonance.app: satisfies its Designated Requirement

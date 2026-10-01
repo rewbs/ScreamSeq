@@ -1,0 +1,217 @@
+-- Configuring done (0.1s)
+-- Generating done (0.2s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-background
+[  0%] Built target RealtimeAudit
+[  8%] Built target TrackerFLAC
+[ 10%] Built target plugin-inventory-tests
+[ 11%] Built target ResonanceFixture
+[ 12%] Built target plugin-library-tests
+[ 56%] Built target OpenMPTCore
+[ 65%] Built target TrackerEditor
+[ 65%] Building CXX object CMakeFiles/tracker-core-tests.dir/Tests/CoreTests.cpp.o
+[ 66%] Built target TrackerPlugins
+[ 66%] Building CXX object CMakeFiles/native-reverse-loop-tests.dir/Tests/NativeReverseLoopTests.cpp.o
+[ 67%] Linking CXX executable tracker-core-tests
+[ 67%] Linking CXX executable native-reverse-loop-tests
+[ 67%] Built target native-reverse-loop-tests
+[ 67%] Built target tracker-core-tests
+[ 67%] Building CXX object CMakeFiles/sample-crossfade-tests.dir/Tests/SampleCrossfadeTests.cpp.o
+[ 67%] Building CXX object CMakeFiles/sample-snap-tests.dir/Tests/SampleSnapTests.cpp.o
+[ 67%] Linking CXX executable sample-snap-tests
+[ 67%] Built target sample-snap-tests
+[ 67%] Building CXX object CMakeFiles/sample-drawing-tests.dir/Tests/SampleDrawingTests.cpp.o
+[ 68%] Linking CXX executable sample-crossfade-tests
+[ 68%] Built target sample-crossfade-tests
+[ 68%] Building CXX object CMakeFiles/sample-copy-tests.dir/Tests/SampleCopyTests.cpp.o
+[ 68%] Linking CXX executable sample-drawing-tests
+[ 68%] Built target sample-drawing-tests
+[ 69%] Building CXX object CMakeFiles/sample-clipboard-tests.dir/Tests/SampleClipboardTests.cpp.o
+[ 70%] Linking CXX executable sample-copy-tests
+[ 70%] Built target sample-copy-tests
+[ 70%] Building CXX object CMakeFiles/sample-archive-tests.dir/Tests/SampleArchiveTests.cpp.o
+[ 70%] Linking CXX executable sample-clipboard-tests
+[ 70%] Built target sample-clipboard-tests
+[ 70%] Linking CXX executable sample-archive-tests
+[ 70%] Building CXX object CMakeFiles/sample-processing-tests.dir/Tests/SampleProcessingTests.cpp.o
+[ 70%] Built target sample-archive-tests
+[ 71%] Building CXX object CMakeFiles/automation-tools-tests.dir/Tests/AutomationToolsTests.cpp.o
+[ 71%] Linking CXX executable automation-tools-tests
+[ 71%] Linking CXX executable sample-processing-tests
+[ 71%] Built target automation-tools-tests
+[ 71%] Built target sample-processing-tests
+[ 72%] Building CXX object CMakeFiles/pattern-tools-tests.dir/Tests/PatternToolsTests.cpp.o
+[ 72%] Building CXX object CMakeFiles/pattern-commands-tests.dir/Tests/PatternCommandsTests.cpp.o
+[ 72%] Linking CXX executable pattern-commands-tests
+[ 72%] Built target pattern-commands-tests
+[ 72%] Building CXX object CMakeFiles/render-audit.dir/Tests/RenderAudit.cpp.o
+[ 72%] Linking CXX executable pattern-tools-tests
+[ 72%] Built target pattern-tools-tests
+[ 73%] Built target plugin-scanner
+[ 73%] Building OBJCXX object CMakeFiles/plugin-tests.dir/Tests/PluginTests.mm.o
+[ 73%] Linking CXX executable render-audit
+[ 73%] Built target render-audit
+[ 73%] Linking CXX executable filter-tests
+[ 73%] Built target filter-tests
+[ 73%] Linking CXX executable oversampling-tests
+[ 74%] Built target oversampling-tests
+[ 75%] Building CXX object CMakeFiles/stress-tests.dir/Tests/StressTests.cpp.o
+[ 75%] Linking CXX executable plugin-tests
+[ 75%] Built target plugin-tests
+[ 76%] Building CXX object CMakeFiles/routing-prototype-tests.dir/Tests/RoutingPrototypeTests.cpp.o
+[ 76%] Linking CXX executable stress-tests
+[ 76%] Built target stress-tests
+[ 77%] Linking CXX executable mixer-graph-tests
+[ 77%] Built target mixer-graph-tests
+[ 77%] Building CXX object CMakeFiles/mixer-runtime-tests.dir/Tests/MixerRuntimeTests.cpp.o
+[ 77%] Linking CXX executable routing-prototype-tests
+[ 77%] Built target routing-prototype-tests
+[ 77%] Building CXX object CMakeFiles/sidechain-tests.dir/Tests/SidechainTests.cpp.o
+[ 77%] Linking CXX executable mixer-runtime-tests
+[ 77%] Built target mixer-runtime-tests
+[ 78%] Building CXX object CMakeFiles/qualification-fixture.dir/Tests/QualificationFixture.cpp.o
+[ 78%] Linking CXX executable sidechain-tests
+[ 78%] Built target sidechain-tests
+[ 78%] Building OBJCXX object CMakeFiles/plugin-lifecycle-tests.dir/Tests/PluginLifecycleTests.mm.o
+[ 78%] Linking CXX executable qualification-fixture
+[ 78%] Built target qualification-fixture
+[ 81%] Built target TrackerMac
+[ 82%] Building OBJCXX object CMakeFiles/sample-loop-tests.dir/Tests/SampleLoopTests.mm.o
+[ 82%] Linking CXX executable plugin-lifecycle-tests
+[ 82%] Built target plugin-lifecycle-tests
+[ 82%] Building OBJCXX object CMakeFiles/sample-crossfade-project-tests.dir/Tests/SampleCrossfadeProjectTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/SampleLoopTests.mm:84:78: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   84 |     auto call=[&](NSString *method,NSDictionary *params,bool mutation=false){auto p=[params mutableCopy];if(mutation)p[@"expectedRevision"]=session.automationRevision;auto r=[session automationMethod:method params:p error:&error];if(!r)throw std::runtime_error(error.localizedDescription.UTF8String);return r;};
+      |                                                                              ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SampleLoopTests.mm:85:5: warning: 'auto' deduced as 'id' in declaration of 'before' [-Wauto-var-id]
+   85 |     auto before=call(@"sample.get",@{@"sample":@1})[@"data"];
+      |     ^~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SampleLoopTests.mm:87:5: warning: 'auto' deduced as 'id' in declaration of 'previewParams' [-Wauto-var-id]
+   87 |     auto previewParams=[params mutableCopy];previewParams[@"dryRun"]=@YES;auto preview=call(@"sample.loops.set",previewParams,true);check(![preview[@"changed"] boolValue],"Loop API preview read-only");
+      |     ^~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SampleLoopTests.mm:89:5: warning: 'auto' deduced as 'id' in declaration of 'after' [-Wauto-var-id]
+   89 |     auto after=call(@"sample.get",@{@"sample":@1})[@"data"];
+      |     ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SampleLoopTests.mm:100:5: warning: 'auto' deduced as 'id' in declaration of 'renamed' [-Wauto-var-id]
+  100 |     auto renamed=[after mutableCopy];renamed[@"name"]=@"Renamed";
+      |     ^~~~~~~~~~~~
+5 warnings generated.
+[ 82%] Linking CXX executable sample-loop-tests
+[ 82%] Built target sample-loop-tests
+[ 83%] Building OBJCXX object CMakeFiles/sample-project-tests.dir/Tests/SampleProjectTests.mm.o
+[ 83%] Linking CXX executable sample-crossfade-project-tests
+[ 83%] Built target sample-crossfade-project-tests
+[ 83%] Building OBJCXX object CMakeFiles/sample-session-tests.dir/Tests/SampleSessionTests.mm.o
+[ 83%] Linking CXX executable sample-project-tests
+/Users/rewbs/code/openmpt/mac/Tests/SampleSessionTests.mm:258:7: warning: 'auto' deduced as 'id' in declaration of 'reversedLoops' [-Wauto-var-id]
+  258 |       auto reversedLoops = call(@"sample.get", @{@"sample":@1}, false)[@"data"];
+      |       ^~~~~~~~~~~~~~~~~~
+[ 83%] Built target sample-project-tests
+[ 83%] Building OBJCXX object CMakeFiles/native-effects-tests.dir/Tests/NativeEffectsTests.mm.o
+1 warning generated.
+[ 84%] Linking CXX executable sample-session-tests
+[ 84%] Built target sample-session-tests
+[ 84%] Building OBJCXX object CMakeFiles/eq-effects-tests.dir/Tests/EQEffectsTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/NativeEffectsTests.mm:146:5: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  146 |     auto p = [params mutableCopy]; if (write) p[@"expectedRevision"] = session.automationRevision;
+      |     ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/NativeEffectsTests.mm:165:3: warning: 'auto' deduced as 'id' in declaration of 'state' [-Wauto-var-id]
+  165 |   auto state = call(@"plugin.state.get", @{@"slot": @0})[@"data"];
+      |   ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/EQEffectsTests.mm:162:3: warning: 'auto' deduced as 'id' in declaration of 'state' [-Wauto-var-id]
+  162 |   auto state = call(@"plugin.state.get", @{@"slot": @0})[@"data"];
+      |   ^~~~~~~~~~
+2 warnings generated.
+[ 84%] Linking CXX executable native-effects-tests
+[ 84%] Built target native-effects-tests
+[ 85%] Building OBJCXX object CMakeFiles/comb-tests.dir/Tests/CombTests.mm.o
+1 warning generated.
+[ 85%] Linking CXX executable eq-effects-tests
+[ 85%] Built target eq-effects-tests
+[ 86%] Building OBJCXX object CMakeFiles/distortion-tests.dir/Tests/DistortionTests.mm.o
+[ 86%] Linking CXX executable comb-tests
+[ 86%] Built target comb-tests
+[ 87%] Building OBJCXX object CMakeFiles/lofi-tests.dir/Tests/LofiMatTests.mm.o
+[ 87%] Linking CXX executable lofi-tests
+[ 87%] Built target lofi-tests
+[ 87%] Building OBJCXX object CMakeFiles/cabinet-tests.dir/Tests/CabinetTests.mm.o
+[ 87%] Linking CXX executable distortion-tests
+[ 87%] Built target distortion-tests
+[ 87%] Building OBJCXX object CMakeFiles/dynamics-tests.dir/Tests/DynamicsTests.mm.o
+[ 88%] Linking CXX executable dynamics-tests
+[ 88%] Built target dynamics-tests
+[ 89%] Building OBJCXX object CMakeFiles/maximizer-tests.dir/Tests/MaximizerTests.mm.o
+[ 89%] Linking CXX executable cabinet-tests
+[ 89%] Built target cabinet-tests
+[ 90%] Linking CXX executable bus-compressor-tests
+[ 90%] Built target bus-compressor-tests
+[ 91%] Linking CXX executable session-tests
+[ 91%] Built target session-tests
+[ 92%] Linking CXX executable native-song-tests
+[ 92%] Built target native-song-tests
+[ 92%] Building CXX object CMakeFiles/device-tests.dir/Tests/DeviceTests.cpp.o
+/Users/rewbs/code/openmpt/mac/Tests/MaximizerTests.mm:200:3: warning: 'auto' deduced as 'id' in declaration of 'state' [-Wauto-var-id]
+  200 |   auto state=call(@"plugin.state.get",@{@"slot":@0})[@"data"];
+      |   ^~~~~~~~~~
+1 warning generated.
+[ 92%] Linking CXX executable maximizer-tests
+[ 92%] Built target maximizer-tests
+[ 92%] Building CXX object CMakeFiles/loopback-tests.dir/Tests/LoopbackTests.cpp.o
+[ 92%] Linking CXX executable device-tests
+[ 92%] Built target device-tests
+[ 93%] Linking CXX executable midi-tests
+[ 93%] Built target midi-tests
+[ 93%] Building OBJCXX object CMakeFiles/export-tests.dir/Tests/ExportTests.mm.o
+[ 93%] Linking CXX executable loopback-tests
+[ 93%] Built target loopback-tests
+[ 94%] Built target native-mixer-tests
+[ 95%] Building OBJCXX object CMakeFiles/multi-bus-tests.dir/Tests/MultiBusTests.mm.o
+[ 96%] Linking CXX executable export-tests
+[ 96%] Built target export-tests
+[ 96%] Building OBJCXX object CMakeFiles/rack-tests.dir/Tests/RackTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:170:7: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  170 |       auto p = [params mutableCopy]; if (write) p[@"expectedRevision"] = session.automationRevision;
+      |       ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:176:51: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  176 |       auto revision = session.automationRevision; auto p = [params mutableCopy]; p[@"expectedRevision"] = revision;
+      |                                                   ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:181:5: warning: 'auto' deduced as 'id' in declaration of 'info' [-Wauto-var-id]
+  181 |     auto info = call(@"plugin.buses.get", @{@"slot": @0})[@"data"];
+      |     ^~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:183:5: warning: 'auto' deduced as 'id' in declaration of 'id' [-Wauto-var-id]
+  183 |     auto id = info[@"plugin"];
+      |     ^~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:196:5: warning: 'auto' deduced as 'id' in declaration of 'graph' [-Wauto-var-id]
+  196 |     auto graph = call(@"mixer.get", @{})[@"data"]; auto bus = graph[@"buses"][1][@"id"];
+      |     ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:196:52: warning: 'auto' deduced as 'id' in declaration of 'bus' [-Wauto-var-id]
+  196 |     auto graph = call(@"mixer.get", @{})[@"data"]; auto bus = graph[@"buses"][1][@"id"];
+      |                                                    ^~~~~~~~
+6 warnings generated.
+[ 96%] Building OBJCXX object CMakeFiles/multi-bus-tests.dir/Tests/FixtureAU.mm.o
+[ 97%] Linking CXX executable rack-tests
+[ 97%] Built target rack-tests
+[ 97%] Building OBJCXX object CMakeFiles/mixer-device-tests.dir/Tests/MixerDeviceTests.mm.o
+[ 97%] Linking CXX executable multi-bus-tests
+[ 97%] Built target multi-bus-tests
+[ 97%] Building OBJCXX object CMakeFiles/native-plugin-tests.dir/Tests/NativePluginTests.mm.o
+[ 97%] Linking CXX executable mixer-device-tests
+[ 97%] Built target mixer-device-tests
+[ 98%] Building OBJCXX object CMakeFiles/musical-automation-tests.dir/Tests/MusicalAutomationTests.mm.o
+[ 99%] Linking CXX executable native-plugin-tests
+[ 99%] Built target native-plugin-tests
+[ 99%] Linking CXX executable automation-tests
+[ 99%] Built target automation-tests
+[ 99%] Building OBJCXX object CMakeFiles/note-track-tests.dir/Tests/NoteTrackTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/MusicalAutomationTests.mm:190:9: warning: 'auto' deduced as 'id' in declaration of 'actual' [-Wauto-var-id]
+  190 |         auto actual = call(@"automation.pattern.get", @{@"pattern":@0})[@"data"];
+      |         ^~~~~~~~~~~
+1 warning generated.
+[ 99%] Linking CXX executable musical-automation-tests
+[ 99%] Built target musical-automation-tests
+[ 99%] Linking CXX executable automation-target-tests
+[100%] Built target automation-target-tests
+[100%] Linking CXX executable note-track-tests
+[100%] Built target note-track-tests
+/Users/rewbs/code/openmpt/bin/mac-background/Resonance.app/Contents/MacOS/plugin-scanner: replacing existing signature
+/Users/rewbs/code/openmpt/bin/mac-background/Resonance.app: replacing existing signature
+Built /Users/rewbs/code/openmpt/bin/mac-background/Resonance.app

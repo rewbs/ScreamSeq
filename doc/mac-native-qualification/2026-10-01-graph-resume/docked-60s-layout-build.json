@@ -1,0 +1,15 @@
+{
+  "bundle": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/ui-layout-0ad3b9b6/ScreamSeq Frame QA.app",
+  "sha256": "9cdc834d9ca3fc6e885a7502e06c430b63c913d66ed5254d0ba54242ee80d97e",
+  "sourceFingerprint": "e30b515374b4dd16fd363f0337f035d36a68fbd91fb2df306676145659a954d7",
+  "baseCoherentFingerprint": "6dec897ca3d83c375fbab441f3408caa76b341aaec672e898d53baf96841ce78",
+  "baseUIFingerprint": "f2f294348a8f1b7f91c08637f1fda6f0c00bd860868e09e677a9be9725c68a9b",
+  "linkedArchiveHashes": {
+    "libTrackerMac.a": "829f5dd2773659867953e06ecbbf7e1a16aba21b5c0d3d1d03438d8e0af02ea3",
+    "hosted/libTrackerHosted.a": "75f2e35c9db08eaf8f2dfdf40cf0a7322fc10a79d28e5c22ecc929aa9c404b25",
+    "libTrackerEditor.a": "66b7a3a07ad6e1f7f7ba4587de3ee4460ed2b8998185a5031723addbc2970b49",
+    "libOpenMPTCore.a": "03ed63f2126fdde983565e76880aae27202658b9e5dd28b7e9cb6e2e82900800",
+    "libTrackerFLAC.a": "267dedd94f929d0bc9f3eb5a0802411f58f7fb57333434f03df86c5da950e713"
+  },
+  "experiment": "Skip unchanged listen UI labels/state and workspace graph target label; main and floating windows opt out of AppKit deep restoration (own workspace/frame persistence unchanged). Fixed60 latency2, all gates/workload/archives unchanged."
+}

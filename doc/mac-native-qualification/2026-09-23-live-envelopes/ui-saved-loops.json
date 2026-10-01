@@ -1,0 +1,100 @@
+{
+  "sample": {
+    "bits": 16,
+    "channels": 1,
+    "frames": 256,
+    "index": 1,
+    "loop": true,
+    "loopEnd": 224,
+    "loopStart": 45,
+    "name": "Warm pulse",
+    "pan": 128,
+    "pingpong": false,
+    "rate": 66976,
+    "reverseLoop": false,
+    "sustainEnd": 180,
+    "sustainLoop": true,
+    "sustainPingpong": false,
+    "sustainReverse": false,
+    "sustainStart": 64,
+    "volume": 32
+  },
+  "transport": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 66396,
+    "fault": false,
+    "frames": 8498688,
+    "graphActivity": [],
+    "left": 0.041561875492334366,
+    "loop": true,
+    "maxMicros": 1396.791,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 90,
+    "pattern": 0,
+    "patternPosition": 14537.199586349534,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0,
+    "region": {
+      "endRow": 64,
+      "loop": true,
+      "pattern": 0,
+      "startRow": 0
+    },
+    "right": 0.041561875492334366,
+    "row": 56,
+    "voicePositions": [
+      {
+        "channel": 0,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 367,
+        "instrument": 0,
+        "sample": 1,
+        "sampleFrame": 89
+      },
+      {
+        "channel": 1,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 92,
+        "instrument": 0,
+        "sample": 2,
+        "sampleFrame": 143
+      },
+      {
+        "channel": 2,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 184,
+        "instrument": 0,
+        "sample": 3,
+        "sampleFrame": 2280
+      },
+      {
+        "channel": 3,
+        "envelopeTicks": [
+          0,
+          0,
+          0
+        ],
+        "generation": 366,
+        "instrument": 0,
+        "sample": 4,
+        "sampleFrame": 8082
+      }
+    ],
+    "voices": 4
+  }
+}

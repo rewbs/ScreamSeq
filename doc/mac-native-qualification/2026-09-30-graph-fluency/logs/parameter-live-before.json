@@ -1,0 +1,33 @@
+{
+  "changed": false,
+  "data": {
+    "audioActive": true,
+    "audition": false,
+    "callbacks": 0,
+    "fault": false,
+    "frames": 0,
+    "graphActivity": [],
+    "left": 0,
+    "loop": true,
+    "maxMicros": 0,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 0,
+    "pattern": 0,
+    "patternPosition": 0,
+    "playing": true,
+    "pluginFailure": false,
+    "pluginLatency": 0.001875,
+    "region": {
+      "loop": true,
+      "pattern": 0
+    },
+    "right": 0,
+    "row": 0,
+    "voicePositions": [],
+    "voices": 0
+  },
+  "documentId": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2",
+  "playbackStopped": false,
+  "revision": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2:0:0:0"
+}

@@ -1,0 +1,10 @@
+{
+  "workload": "pattern-only-control",
+  "diagnostic": true,
+  "nativeGraphQualification": false,
+  "executableSHA256": "ca6fb9577d7954235d21242be2a7e20f2dc07b7d78dc4c666dc4f0db3c1c22c4",
+  "fixtureSHA256": "f4f86591d12e9ca8fad051d36fec7db3e64b37a6c6642ca0a8f1f7f6e41e48cf",
+  "template": "System Trace",
+  "seconds": 25,
+  "sourceChanges": []
+}

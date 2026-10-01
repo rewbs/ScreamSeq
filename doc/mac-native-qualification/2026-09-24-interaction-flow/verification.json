@@ -1,0 +1,21 @@
+{
+  "coreSuite": {
+    "passedFirstRun": 76,
+    "total": 78,
+    "failures": [
+      "session",
+      "rack"
+    ],
+    "resolution": "Updated obsolete separate-domain history expectations; both targeted reruns pass."
+  },
+  "interface": "PASS full final AppKit suite including graph parameter immediate commits, stable targets, duplicate end-edit suppression, and unselected plugin/graph command discovery.",
+  "socketAPI": "Passed full mac/Tests/test_automation.py suite.",
+  "beforePID": 96216,
+  "userSessionPID": 95116,
+  "testedAudioRoute": "BlackHole 2ch; system default unchanged",
+  "workspaceSocket": "PASS actual app workspace socket tests",
+  "startup": "PASS startup fixture and API readiness",
+  "displayQualification": "FAIL strict 60Hz presentation gates, both before and after. See performance-before.json and performance-after.json. No thresholds changed.",
+  "afterAudio": "60s graph+AU+VST3 fixture at 48kHz/512, 5625 callbacks, zero overruns, p99.9 2730us, no fault/plugin failure.",
+  "beforeAudio": "Same musical workload; one callback overrun. Baseline was sampled for 5s and default layout differs. Comparison is bounded evidence, not a causal benchmark."
+}

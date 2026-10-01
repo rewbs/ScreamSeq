@@ -1,0 +1,33 @@
+{
+  "sourceFingerprint": "a1324cc9a805be54618dfa437784b0cfeb668563b4360262740d113b00015ee9",
+  "files": {
+    "bin/mac-native/distribution/Resonance-0.1.0-arm64.zip": {
+      "sha256": "42a6ea3254e6e01f42039bf29b45aaa043b03f2539a02c55e7d3824cf5971482",
+      "bytes": 3617056
+    },
+    "bin/mac-native/Resonance.app/Contents/MacOS/Resonance": {
+      "sha256": "a799184f14fdc4e05974c28f8ffb5a7c8bcad1ceb6f33dc19ad9cda186c0d800",
+      "bytes": 4199312
+    },
+    "bin/mac-native/Resonance.app/Contents/MacOS/plugin-scanner": {
+      "sha256": "8646de1fa02b9b92c7501fbfac617bad8c95a77dae662888bc8e2492649c8c2a",
+      "bytes": 234992
+    },
+    "bin/mac-native/native-plugin-tests": {
+      "sha256": "60740bdf58581ff50d6dcfc3d040ec2176124e6a8afa0710aec4c2893fa6ec0a",
+      "bytes": 3319664
+    },
+    "bin/mac-native/loopback-tests": {
+      "sha256": "5e2d0ff6c08f95b7f74238b0384f9abd22fd2657dbf15fa1834a9e9c0a345f4f",
+      "bytes": 3142560
+    },
+    "bin/mac-native/interface-tests": {
+      "sha256": "91151650f2ee5faad70c4fd1bf0440dd5a2c1a010d73cede4ab0d1ac363706f5",
+      "bytes": 768720
+    },
+    "bin/mac-native/test-plugins/ResonanceFixture.vst3/Contents/MacOS/ResonanceFixture": {
+      "sha256": "c4bdbad8e78a3bab8f57a0626be7aac9c66a1cb0b1f7d2bcd6c924848407923f",
+      "bytes": 86496
+    }
+  }
+}

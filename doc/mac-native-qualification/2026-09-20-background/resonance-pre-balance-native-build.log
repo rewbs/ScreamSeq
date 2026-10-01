@@ -1,0 +1,27 @@
+[ 11%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 14%] Built target RealtimeAudit
+[ 78%] Built target OpenMPTCore
+[ 91%] Built target TrackerEditor
+[ 92%] Built target TrackerPlugins
+[ 94%] Built target plugin-scanner
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/native-mixer-tests.dir/Tests/NativeMixerTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/NativeMixerTests.mm:104:7: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  104 |       auto p = [params mutableCopy]; if (write) p[@"expectedRevision"] = session.automationRevision;
+      |       ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/NativeMixerTests.mm:111:7: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  111 |       auto p = [params mutableCopy]; p[@"expectedRevision"] = revision;
+      |       ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/NativeMixerTests.mm:125:5: warning: 'auto' deduced as 'id' in declaration of 'group' [-Wauto-var-id]
+  125 |     auto group = call(@"mixer.bus.add", @{@"kind": @"group", @"name": @"Rhythm"}, true)[@"data"][@"bus"];
+      |     ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/NativeMixerTests.mm:126:5: warning: 'auto' deduced as 'id' in declaration of 'space' [-Wauto-var-id]
+  126 |     auto space = call(@"mixer.bus.add", @{@"kind": @"return", @"name": @"Space"}, true)[@"data"][@"bus"];
+      |     ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/NativeMixerTests.mm:164:5: warning: 'auto' deduced as 'id' in declaration of 'loaded' [-Wauto-var-id]
+  164 |     auto loaded = call(@"mixer.get", @{})[@"data"];
+      |     ^~~~~~~~~~~
+5 warnings generated.
+[100%] Linking CXX executable native-mixer-tests
+[100%] Built target native-mixer-tests

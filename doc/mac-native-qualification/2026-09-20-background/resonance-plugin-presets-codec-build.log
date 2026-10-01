@@ -1,0 +1,27 @@
+Building OBJCXX object CMakeFiles/plugin-preset-tests.dir/Tests/PluginPresetTests.mm.o
+Building OBJCXX object CMakeFiles/plugin-preset-tests.dir/Plugins/PluginPreset.mm.o
+/Users/rewbs/code/openmpt/mac/Plugins/PluginPreset.mm:98:3: warning: 'auto' deduced as 'id' in declaration of 'result' [-Wauto-var-id]
+   98 |   auto result = [summary(decode(bytes)) mutableCopy]; result[@"path"] = path; result[@"written"] = @(!dryRun);
+      |   ^~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:44:7: warning: 'auto' deduced as 'id' in declaration of 'auOther' [-Wauto-var-id]
+   44 |       auto auOther = [au mutableCopy]; auOther[@"name"] = @"New name";
+      |       ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:50:7: warning: 'auto' deduced as 'id' in declaration of 'builtin' [-Wauto-var-id]
+   50 |       auto builtin = [plugin mutableCopy]; builtin[@"format"] = @"Built-in"; builtin[@"classID"] = @"resonance.gain";
+      |       ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:51:7: warning: 'auto' deduced as 'id' in declaration of 'otherBuiltin' [-Wauto-var-id]
+   51 |       auto otherBuiltin = [builtin mutableCopy]; otherBuiltin[@"classID"] = @"resonance.filter";
+      |       ^~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:53:7: warning: 'auto' deduced as 'id' in declaration of 'malformed' [-Wauto-var-id]
+   53 |       auto malformed = [NSPropertyListSerialization propertyListWithData:original options:NSPropertyListMutableContainers format:nil error:nil];
+      |       ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:58:7: warning: 'auto' deduced as 'id' in declaration of 'bad' [-Wauto-var-id]
+   58 |       auto bad = [malformed mutableCopy]; bad[@"version"] = @2; writeBad(bad);
+      |       ^~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetTests.mm:62:38: warning: 'auto' deduced as 'id' in declaration of 'badPlugin' [-Wauto-var-id]
+   62 |       bad = [malformed mutableCopy]; auto badPlugin = [plugin mutableCopy]; badPlugin[@"classID"] = @"bad"; bad[@"plugin"] = badPlugin; writeBad(bad);
+      |                                      ^~~~~~~~~~~~~~
+1 warning generated.
+6 warnings generated.
+Linking OBJCXX executable plugin-preset-tests
+Built target plugin-preset-tests

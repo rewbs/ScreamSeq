@@ -1,0 +1,9 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 55: native-mixer
+1/2 Test #55: native-mixer .....................   Passed    3.84 sec
+    Start 89: parameter-provenance
+2/2 Test #89: parameter-provenance .............   Passed    0.32 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   4.17 sec

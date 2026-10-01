@@ -1,0 +1,1357 @@
+-- The C compiler identification is AppleClang 21.0.0.21000101
+-- The CXX compiler identification is AppleClang 21.0.0.21000101
+-- The OBJCXX compiler identification is AppleClang 21.0.0.21000101
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Detecting OBJCXX compiler ABI info
+-- Detecting OBJCXX compiler ABI info - done
+-- Check for working OBJCXX compiler: /usr/bin/clang++ - skipped
+-- Configuring done (1.0s)
+-- Generating done (0.2s)
+-- Build files have been written to: /private/tmp/screamseq-graph-controls-20261001/bin/graph-controls-qa
+[  0%] Building OBJCXX object CMakeFiles/plugin-preset-tests.dir/Tests/PluginPresetTests.mm.o
+[  0%] Building OBJCXX object CMakeFiles/ResonanceFixture.dir/Tests/FixtureVST3.mm.o
+[  0%] Building OBJCXX object CMakeFiles/plugin-library-tests.dir/Tests/PluginLibraryTests.mm.o
+[  1%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/bitmath.c.o
+[  1%] Building OBJCXX object CMakeFiles/plugin-inventory-tests.dir/Tests/PluginInventoryTests.mm.o
+[  1%] Building CXX object CMakeFiles/RealtimeAudit.dir/Tests/RealtimeAudit.cpp.o
+[  2%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/bitreader.c.o
+[  2%] Linking CXX shared library libRealtimeAudit.dylib
+[  2%] Built target RealtimeAudit
+[  2%] Building OBJCXX object CMakeFiles/plugin-preset-tests.dir/Plugins/PluginPreset.mm.o
+[  2%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/bitwriter.c.o
+[  2%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/cpu.c.o
+[  2%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/crc.c.o
+[  3%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/fixed.c.o
+[  3%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/fixed_intrin_avx2.c.o
+[  3%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/fixed_intrin_sse2.c.o
+[  3%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/fixed_intrin_sse42.c.o
+[  3%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/fixed_intrin_ssse3.c.o
+[  4%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/float.c.o
+[  4%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/format.c.o
+[  4%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/lpc.c.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetTests.mm:47:7: warning: 'auto' deduced as 'id' in declaration of 'auOther' [-Wauto-var-id]
+   47 |       auto auOther = [au mutableCopy]; auOther[@"name"] = @"New name";
+      |       ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetTests.mm:53:7: warning: 'auto' deduced as 'id' in declaration of 'builtin' [-Wauto-var-id]
+   53 |       auto builtin = [plugin mutableCopy]; builtin[@"format"] = @"Built-in"; builtin[@"classID"] = @"resonance.gain";
+      |       ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetTests.mm:55:7: warning: 'auto' deduced as 'id' in declaration of 'otherBuiltin' [-Wauto-var-id]
+   55 |       auto otherBuiltin = [builtin mutableCopy]; otherBuiltin[@"classID"] = @"resonance.filter";
+      |       ^~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetTests.mm:57:7: warning: 'auto' deduced as 'id' in declaration of 'malformed' [-Wauto-var-id]
+   57 |       auto malformed = [NSPropertyListSerialization propertyListWithData:original options:NSPropertyListMutableContainers format:nil error:nil];
+      |       ^~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetTests.mm:62:7: warning: 'auto' deduced as 'id' in declaration of 'bad' [-Wauto-var-id]
+   62 |       auto bad = [malformed mutableCopy]; bad[@"version"] = @2; writeBad(bad);
+      |       ^~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetTests.mm:66:38: warning: 'auto' deduced as 'id' in declaration of 'badPlugin' [-Wauto-var-id]
+   66 |       bad = [malformed mutableCopy]; auto badPlugin = [plugin mutableCopy]; badPlugin[@"classID"] = @"bad"; bad[@"plugin"] = badPlugin; writeBad(bad);
+      |                                      ^~~~~~~~~~~~~~
+[  5%] Building OBJCXX object CMakeFiles/plugin-library-tests.dir/Plugins/PluginLibrary.mm.o
+[  5%] Building OBJCXX object CMakeFiles/plugin-inventory-tests.dir/Plugins/PluginInventory.mm.o
+[  5%] Building CXX object CMakeFiles/realtime-transition-tests.dir/Tests/RealtimeTransitionTests.cpp.o
+6 warnings generated.
+[  5%] Linking OBJCXX executable plugin-preset-tests
+[  5%] Built target plugin-preset-tests
+[  5%] Building CXX object CMakeFiles/ResonanceFixture.dir/ThirdParty/vst3/pluginterfaces/base/funknown.cpp.o
+[  5%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/lpc_intrin_avx2.c.o
+[  6%] Building CXX object CMakeFiles/ResonanceFixture.dir/ThirdParty/vst3/pluginterfaces/base/coreiids.cpp.o
+[  6%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/lpc_intrin_fma.c.o
+[  7%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/lpc_intrin_neon.c.o
+[  7%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/lpc_intrin_sse2.c.o
+[  7%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/lpc_intrin_sse41.c.o
+[  7%] Building CXX object CMakeFiles/ResonanceFixture.dir/ThirdParty/vst3/vstinitiids.cpp.o
+[  7%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/md5.c.o
+[  8%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/memory.c.o
+[  8%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/metadata_iterators.c.o
+[  8%] Linking CXX CFBundle shared module test-plugins/ResonanceFixture.vst3/Contents/MacOS/ResonanceFixture
+[  8%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/metadata_object.c.o
+[  8%] Built target ResonanceFixture
+[  8%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/stream_decoder.c.o
+[  8%] Linking OBJCXX executable plugin-library-tests
+[  9%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/stream_encoder.c.o
+[  9%] Linking CXX executable realtime-transition-tests
+[  9%] Built target realtime-transition-tests
+[ 10%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/stream_encoder_framing.c.o
+[ 10%] Built target plugin-library-tests
+[ 10%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/stream_encoder_intrin_avx2.c.o
+[ 11%] Linking OBJCXX executable plugin-inventory-tests
+[ 11%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/stream_encoder_intrin_sse2.c.o
+[ 11%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/stream_encoder_intrin_ssse3.c.o
+[ 12%] Building C object CMakeFiles/TrackerFLAC.dir/private/tmp/screamseq-graph-controls-20261001/include/flac/src/libFLAC/window.c.o
+[ 12%] Built target plugin-inventory-tests
+[ 12%] Linking C static library libTrackerFLAC.a
+[ 12%] Built target TrackerFLAC
+[ 12%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/common/ComponentManager.cpp.o
+[ 12%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/common/Logging.cpp.o
+[ 12%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/common/Profiler.cpp.o
+[ 12%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/common/mptRandom.cpp.o
+[ 12%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/common/mptFileType.cpp.o
+[ 13%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/common/mptPathString.cpp.o
+[ 13%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/common/mptStringBuffer.cpp.o
+[ 13%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/common/mptTime.cpp.o
+[ 13%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/common/serialization_utils.cpp.o
+[ 14%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/common/version.cpp.o
+[ 14%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/sounddsp/AGC.cpp.o
+[ 14%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/sounddsp/DSP.cpp.o
+[ 14%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/sounddsp/EQ.cpp.o
+/private/tmp/screamseq-graph-controls-20261001/common/version.cpp:150:3: warning: SVN revision unknown. Please check your build system. [-W#pragma-messages]
+  150 |                 MPT_WARNING_STATEMENT("SVN revision unknown. Please check your build system.");
+      |                 ^
+/private/tmp/screamseq-graph-controls-20261001/src/mpt/base/compiletime_warning.hpp:21:37: note: expanded from macro 'MPT_WARNING_STATEMENT'
+   21 | #define MPT_WARNING_STATEMENT(text) _Pragma(MPT_PP_STRINGIFY(GCC warning text))
+      |                                     ^
+<scratch space>:271:6: note: expanded from here
+  271 |  GCC warning "SVN revision unknown. Please check your build system."
+      |      ^
+[ 15%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/sounddsp/Reverb.cpp.o
+[ 15%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/AudioCriticalSection.cpp.o
+[ 15%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/ContainerMMCMP.cpp.o
+[ 15%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/ContainerPP20.cpp.o
+1 warning generated.
+[ 15%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/ContainerUMX.cpp.o
+[ 16%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/ContainerXPK.cpp.o
+[ 16%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Dlsbank.cpp.o
+[ 16%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Fastmix.cpp.o
+[ 16%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/ITCompression.cpp.o
+[ 16%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/ITTools.cpp.o
+[ 17%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/InstrumentExtensions.cpp.o
+[ 17%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/InstrumentSynth.cpp.o
+[ 17%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_667.cpp.o
+[ 17%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_669.cpp.o
+[ 18%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_amf.cpp.o
+[ 18%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_ams.cpp.o
+[ 18%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_cba.cpp.o
+[ 18%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_c67.cpp.o
+[ 18%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_dbm.cpp.o
+[ 19%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_digi.cpp.o
+[ 19%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_dmf.cpp.o
+[ 19%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_dsm.cpp.o
+[ 19%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_dsym.cpp.o
+[ 19%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_dtm.cpp.o
+[ 20%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_etx.cpp.o
+[ 20%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_far.cpp.o
+[ 20%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_fc.cpp.o
+[ 20%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_fmt.cpp.o
+[ 21%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_ftm.cpp.o
+[ 21%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_gdm.cpp.o
+[ 21%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_gmc.cpp.o
+[ 21%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_gt2.cpp.o
+[ 21%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_ice.cpp.o
+[ 22%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_imf.cpp.o
+[ 22%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_ims.cpp.o
+[ 22%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_it.cpp.o
+[ 22%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_itp.cpp.o
+[ 22%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_kris.cpp.o
+[ 23%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_mdl.cpp.o
+[ 23%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_med.cpp.o
+[ 23%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_mid.cpp.o
+[ 23%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_mo3.cpp.o
+[ 24%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_mod.cpp.o
+[ 24%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_mt2.cpp.o
+[ 24%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_mtm.cpp.o
+[ 24%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_mus_km.cpp.o
+[ 24%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_nru.cpp.o
+[ 25%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_okt.cpp.o
+[ 25%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_plm.cpp.o
+[ 25%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_psm.cpp.o
+[ 25%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_pt36.cpp.o
+[ 26%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_ptm.cpp.o
+[ 26%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_puma.cpp.o
+[ 26%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_rtm.cpp.o
+[ 26%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_s3m.cpp.o
+[ 26%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_sfx.cpp.o
+[ 27%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_ss.cpp.o
+[ 27%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_stk.cpp.o
+[ 27%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_stm.cpp.o
+[ 27%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_stp.cpp.o
+[ 27%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_symmod.cpp.o
+[ 28%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_tcb.cpp.o
+[ 28%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_uax.cpp.o
+[ 28%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_ult.cpp.o
+[ 28%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_unic.cpp.o
+[ 29%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_wav.cpp.o
+[ 29%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_xm.cpp.o
+[ 29%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Load_xmf.cpp.o
+[ 29%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/MIDIEvents.cpp.o
+[ 29%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/MIDIMacroParser.cpp.o
+[ 30%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/MIDIMacros.cpp.o
+[ 30%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/MODTools.cpp.o
+[ 30%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/MPEGFrame.cpp.o
+[ 30%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Message.cpp.o
+[ 30%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/MixFuncTable.cpp.o
+[ 31%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/MixerLoops.cpp.o
+[ 31%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/MixerSettings.cpp.o
+[ 31%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/ModChannel.cpp.o
+[ 31%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/ModInstrument.cpp.o
+[ 32%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/ModSample.cpp.o
+[ 32%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/ModSequence.cpp.o
+[ 32%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/OPL.cpp.o
+[ 32%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/OggStream.cpp.o
+[ 32%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Paula.cpp.o
+[ 33%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/PlayState.cpp.o
+[ 33%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/PlaybackTest.cpp.o
+[ 33%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/RowVisitor.cpp.o
+[ 33%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/S3MTools.cpp.o
+[ 33%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/SampleFormatBRR.cpp.o
+[ 34%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/SampleFormatFLAC.cpp.o
+[ 34%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/SampleFormatMP3.cpp.o
+[ 34%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/SampleFormatMediaFoundation.cpp.o
+[ 34%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/SampleFormatOpus.cpp.o
+[ 35%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/SampleFormatSFZ.cpp.o
+[ 35%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/SampleFormatVorbis.cpp.o
+[ 35%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/SampleFormats.cpp.o
+[ 35%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/SampleIO.cpp.o
+[ 35%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Snd_flt.cpp.o
+[ 36%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Snd_fx.cpp.o
+[ 36%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Sndfile.cpp.o
+[ 36%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Sndmix.cpp.o
+[ 36%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/SoundFilePlayConfig.cpp.o
+[ 37%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Tables.cpp.o
+[ 37%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/Tagging.cpp.o
+[ 37%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/TinyFFT.cpp.o
+[ 37%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/UMXTools.cpp.o
+[ 37%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/UpgradeModule.cpp.o
+[ 38%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/WAVTools.cpp.o
+[ 38%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/WindowedFIR.cpp.o
+[ 38%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/XMTools.cpp.o
+[ 38%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/load_j2b.cpp.o
+[ 38%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/mod_specifications.cpp.o
+[ 39%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/modcommand.cpp.o
+[ 39%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/modsmp_ctrl.cpp.o
+[ 39%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/pattern.cpp.o
+[ 39%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/patternContainer.cpp.o
+[ 40%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/DigiBoosterEcho.cpp.o
+[ 40%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/LFOPlugin.cpp.o
+[ 40%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/PlugInterface.cpp.o
+[ 40%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/PluginManager.cpp.o
+[ 40%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/SymMODEcho.cpp.o
+[ 41%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/Chorus.cpp.o
+[ 41%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/Compressor.cpp.o
+[ 41%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/DMOPlugin.cpp.o
+[ 41%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/DMOUtils.cpp.o
+[ 41%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/Distortion.cpp.o
+[ 42%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/Echo.cpp.o
+[ 42%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/Flanger.cpp.o
+[ 42%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/Gargle.cpp.o
+[ 42%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/I3DL2Reverb.cpp.o
+[ 43%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/ParamEq.cpp.o
+[ 43%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/plugins/dmo/WavesReverb.cpp.o
+[ 43%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/tuning.cpp.o
+[ 43%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/soundlib/tuningCollection.cpp.o
+[ 43%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/editor/Assert.cpp.o
+[ 44%] Building CXX object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/src/openmpt/soundfile_write/wav_write.cpp.o
+[ 44%] Building C object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/include/miniz/miniz.c.o
+[ 44%] Building C object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/include/minimp3/minimp3.c.o
+[ 44%] Building C object CMakeFiles/OpenMPTCore.dir/private/tmp/screamseq-graph-controls-20261001/include/stb_vorbis/stb_vorbis.c.o
+[ 44%] Linking CXX static library libOpenMPTCore.a
+[ 44%] Built target OpenMPTCore
+[ 45%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/PatternCommands.cpp.o
+[ 45%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/AutomationTools.cpp.o
+[ 45%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/TrackLayout.cpp.o
+[ 45%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/TrackerDocument.cpp.o
+[ 45%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/PatternTools.cpp.o
+[ 45%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/NativeSong.cpp.o
+[ 45%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/ArrangementTools.cpp.o
+[ 46%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/MixerGraph.cpp.o
+/private/tmp/screamseq-graph-controls-20261001/editor/TrackerDocument.cpp:123:35: warning: 'u8path<std::string, 0>' is deprecated [-Wdeprecated-declarations]
+  123 |         std::ifstream f(std::filesystem::u8path(path), std::ios::binary | std::ios::ate);
+      |                                          ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/u8path.h:73:23: note: 'u8path<std::string, 0>' has been explicitly marked deprecated here
+   73 | _LIBCPP_HIDE_FROM_ABI _LIBCPP_DEPRECATED_WITH_CHAR8_T path u8path(const _Source& __s) {
+      |                       ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:607:45: note: expanded from macro '_LIBCPP_DEPRECATED_WITH_CHAR8_T'
+  607 | #    define _LIBCPP_DEPRECATED_WITH_CHAR8_T _LIBCPP_DEPRECATED
+      |                                             ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:554:49: note: expanded from macro '_LIBCPP_DEPRECATED'
+  554 | #      define _LIBCPP_DEPRECATED __attribute__((__deprecated__))
+      |                                                 ^
+[ 46%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/MixerRuntime.cpp.o
+/private/tmp/screamseq-graph-controls-20261001/editor/TrackerDocument.cpp:659:38: warning: 'u8path<std::string, 0>' is deprecated [-Wdeprecated-declarations]
+  659 |         std::ifstream file(std::filesystem::u8path(path), std::ios::binary | std::ios::ate);
+      |                                             ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/u8path.h:73:23: note: 'u8path<std::string, 0>' has been explicitly marked deprecated here
+   73 | _LIBCPP_HIDE_FROM_ABI _LIBCPP_DEPRECATED_WITH_CHAR8_T path u8path(const _Source& __s) {
+      |                       ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:607:45: note: expanded from macro '_LIBCPP_DEPRECATED_WITH_CHAR8_T'
+  607 | #    define _LIBCPP_DEPRECATED_WITH_CHAR8_T _LIBCPP_DEPRECATED
+      |                                             ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:554:49: note: expanded from macro '_LIBCPP_DEPRECATED'
+  554 | #      define _LIBCPP_DEPRECATED __attribute__((__deprecated__))
+      |                                                 ^
+/private/tmp/screamseq-graph-controls-20261001/editor/TrackerDocument.cpp:673:38: warning: 'u8path<std::string, 0>' is deprecated [-Wdeprecated-declarations]
+  673 |         std::ifstream file(std::filesystem::u8path(path), std::ios::binary | std::ios::ate);
+      |                                             ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/u8path.h:73:23: note: 'u8path<std::string, 0>' has been explicitly marked deprecated here
+   73 | _LIBCPP_HIDE_FROM_ABI _LIBCPP_DEPRECATED_WITH_CHAR8_T path u8path(const _Source& __s) {
+      |                       ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:607:45: note: expanded from macro '_LIBCPP_DEPRECATED_WITH_CHAR8_T'
+  607 | #    define _LIBCPP_DEPRECATED_WITH_CHAR8_T _LIBCPP_DEPRECATED
+      |                                             ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:554:49: note: expanded from macro '_LIBCPP_DEPRECATED'
+  554 | #      define _LIBCPP_DEPRECATED __attribute__((__deprecated__))
+      |                                                 ^
+[ 46%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/NativeEffects.cpp.o
+[ 46%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/tracklib/SampleEdit.cpp.o
+[ 47%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/MixerTransition.cpp.o
+[ 47%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleImport.cpp.o
+[ 47%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SongTiming.cpp.o
+[ 47%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/PreciseNoteRuntime.cpp.o
+/private/tmp/screamseq-graph-controls-20261001/editor/SampleImport.cpp:15:72: warning: 'u8path<std::string, 0>' is deprecated [-Wdeprecated-declarations]
+   15 |     const auto path=std::filesystem::weakly_canonical(std::filesystem::u8path(paths[i]));
+      |                                                                        ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/u8path.h:73:23: note: 'u8path<std::string, 0>' has been explicitly marked deprecated here
+   73 | _LIBCPP_HIDE_FROM_ABI _LIBCPP_DEPRECATED_WITH_CHAR8_T path u8path(const _Source& __s) {
+      |                       ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:607:45: note: expanded from macro '_LIBCPP_DEPRECATED_WITH_CHAR8_T'
+  607 | #    define _LIBCPP_DEPRECATED_WITH_CHAR8_T _LIBCPP_DEPRECATED
+      |                                             ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__config:554:49: note: expanded from macro '_LIBCPP_DEPRECATED'
+  554 | #      define _LIBCPP_DEPRECATED __attribute__((__deprecated__))
+      |                                                 ^
+[ 47%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/RecordNudgeRuntime.cpp.o
+[ 48%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/NoteRecording.cpp.o
+[ 48%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/InstrumentEnvelopeTools.cpp.o
+3 warnings generated.
+[ 48%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/EnvelopeBank.cpp.o
+1 warning generated.
+[ 48%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/StateVariableFilter.cpp.o
+[ 49%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/FractionalDelay.cpp.o
+[ 49%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/Distortion.cpp.o
+[ 49%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/LofiMat.cpp.o
+[ 49%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/CabinetVoicing.cpp.o
+[ 49%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/CabinetSimulator.cpp.o
+[ 50%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/Dynamics.cpp.o
+[ 50%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/Maximizer.cpp.o
+[ 50%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleProcessing.cpp.o
+[ 50%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleWaveform.cpp.o
+[ 50%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleDocument.cpp.o
+[ 51%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleArchive.cpp.o
+[ 51%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleClipboard.cpp.o
+[ 51%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleSplice.cpp.o
+[ 51%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleCopy.cpp.o
+[ 52%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleDrawing.cpp.o
+[ 52%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleSnap.cpp.o
+[ 52%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SampleLoopCrossfade.cpp.o
+[ 52%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SignalGraph.cpp.o
+[ 52%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SignalRuntime.cpp.o
+[ 53%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/SongModulation.cpp.o
+[ 53%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/GraphPresentation.cpp.o
+[ 53%] Building CXX object CMakeFiles/TrackerEditor.dir/private/tmp/screamseq-graph-controls-20261001/editor/ParameterProvenance.cpp.o
+[ 53%] Linking CXX static library libTrackerEditor.a
+[ 53%] Built target TrackerEditor
+[ 53%] Building CXX object CMakeFiles/song-timing-tests.dir/Tests/SongTimingTests.cpp.o
+[ 53%] Building CXX object CMakeFiles/instrument-envelope-tests.dir/Tests/InstrumentEnvelopeTests.cpp.o
+[ 53%] Building CXX object CMakeFiles/tracker-core-tests.dir/Tests/CoreTests.cpp.o
+[ 53%] Building CXX object CMakeFiles/native-reverse-loop-tests.dir/Tests/NativeReverseLoopTests.cpp.o
+[ 53%] Building CXX object CMakeFiles/sample-crossfade-tests.dir/Tests/SampleCrossfadeTests.cpp.o
+[ 53%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/HostedAudio.cpp.o
+[ 53%] Linking CXX executable instrument-envelope-tests
+[ 53%] Linking CXX executable song-timing-tests
+[ 53%] Built target instrument-envelope-tests
+[ 53%] Built target song-timing-tests
+[ 53%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/PluginScheduling.cpp.o
+[ 53%] Building CXX object CMakeFiles/sample-snap-tests.dir/Tests/SampleSnapTests.cpp.o
+[ 53%] Linking CXX executable tracker-core-tests
+[ 53%] Built target tracker-core-tests
+[ 53%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/PluginChain.cpp.o
+[ 53%] Building CXX object CMakeFiles/sample-drawing-tests.dir/Tests/SampleDrawingTests.cpp.o
+[ 53%] Linking CXX executable native-reverse-loop-tests
+[ 54%] Linking CXX executable sample-crossfade-tests
+[ 54%] Built target native-reverse-loop-tests
+[ 54%] Building CXX object CMakeFiles/sample-copy-tests.dir/Tests/SampleCopyTests.cpp.o
+[ 54%] Built target sample-crossfade-tests
+[ 54%] Building CXX object CMakeFiles/sample-clipboard-tests.dir/Tests/SampleClipboardTests.cpp.o
+[ 55%] Linking CXX executable sample-snap-tests
+[ 55%] Built target sample-snap-tests
+[ 56%] Building CXX object CMakeFiles/sample-archive-tests.dir/Tests/SampleArchiveTests.cpp.o
+[ 57%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/SongModulationHost.cpp.o
+[ 57%] Linking CXX executable sample-drawing-tests
+[ 57%] Built target sample-drawing-tests
+[ 57%] Building CXX object CMakeFiles/sample-processing-tests.dir/Tests/SampleProcessingTests.cpp.o
+[ 57%] Linking CXX executable sample-clipboard-tests
+[ 57%] Built target sample-clipboard-tests
+[ 57%] Building CXX object CMakeFiles/automation-tools-tests.dir/Tests/AutomationToolsTests.cpp.o
+[ 57%] Linking CXX executable sample-archive-tests
+[ 58%] Linking CXX executable sample-copy-tests
+[ 58%] Built target sample-copy-tests
+[ 58%] Built target sample-archive-tests
+[ 58%] Building CXX object CMakeFiles/pattern-tools-tests.dir/Tests/PatternToolsTests.cpp.o
+[ 58%] Building CXX object CMakeFiles/pattern-commands-tests.dir/Tests/PatternCommandsTests.cpp.o
+[ 58%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/GraphPluginEndpoint.cpp.o
+[ 58%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/Audio/PluginAssignments.cpp.o
+[ 58%] Linking CXX executable pattern-commands-tests
+[ 58%] Built target pattern-commands-tests
+[ 59%] Building CXX object CMakeFiles/render-audit.dir/Tests/RenderAudit.cpp.o
+[ 59%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/Audio/NativeInstrument.cpp.o
+[ 59%] Linking CXX executable sample-processing-tests
+[ 59%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/Audio/NativeSignalGraph.cpp.o
+[ 59%] Built target sample-processing-tests
+[ 59%] Building CXX object CMakeFiles/filter-tests.dir/Tests/FilterTests.cpp.o
+[ 59%] Linking CXX executable filter-tests
+[ 59%] Linking CXX executable automation-tools-tests
+[ 59%] Linking CXX executable render-audit
+[ 59%] Built target filter-tests
+[ 59%] Building CXX object CMakeFiles/oversampling-tests.dir/Tests/OversamplingTests.cpp.o
+[ 59%] Built target automation-tools-tests
+[ 59%] Built target render-audit
+[ 60%] Building CXX object CMakeFiles/stress-tests.dir/Tests/StressTests.cpp.o
+[ 60%] Building CXX object CMakeFiles/routing-prototype-tests.dir/Tests/RoutingPrototypeTests.cpp.o
+[ 61%] Linking CXX executable oversampling-tests
+[ 62%] Linking CXX executable pattern-tools-tests
+[ 62%] Built target oversampling-tests
+[ 62%] Building CXX object CMakeFiles/mixer-graph-tests.dir/Tests/MixerGraphTests.cpp.o
+[ 62%] Built target pattern-tools-tests
+[ 62%] Building CXX object CMakeFiles/mixer-runtime-tests.dir/Tests/MixerRuntimeTests.cpp.o
+[ 62%] Linking CXX executable stress-tests
+[ 62%] Linking CXX executable routing-prototype-tests
+[ 62%] Built target routing-prototype-tests
+[ 62%] Built target stress-tests
+[ 62%] Building CXX object CMakeFiles/mixer-transition-tests.dir/Tests/MixerTransitionTests.cpp.o
+[ 62%] Building CXX object CMakeFiles/mixer-publication-tests.dir/Tests/MixerPublicationTests.cpp.o
+[ 63%] Linking CXX executable mixer-graph-tests
+[ 63%] Built target mixer-graph-tests
+[ 63%] Building CXX object CMakeFiles/sidechain-tests.dir/Tests/SidechainTests.cpp.o
+[ 64%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/Audio/PatternCommandRuntime.cpp.o
+[ 64%] Linking CXX executable mixer-transition-tests
+[ 64%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/Audio/PatternPitchRuntime.cpp.o
+[ 65%] Linking CXX executable mixer-runtime-tests
+[ 65%] Built target mixer-transition-tests
+[ 65%] Built target mixer-runtime-tests
+[ 66%] Building CXX object CMakeFiles/qualification-fixture.dir/Tests/QualificationFixture.cpp.o
+[ 66%] Building CXX object CMakeFiles/signal-graph-tests.dir/Tests/SignalGraphTests.cpp.o
+[ 66%] Linking CXX executable mixer-publication-tests
+[ 66%] Built target mixer-publication-tests
+[ 66%] Building CXX object CMakeFiles/song-modulation-tests.dir/private/tmp/screamseq-graph-controls-20261001/editor/Tests/SongModulationTests.cpp.o
+[ 66%] Linking CXX executable sidechain-tests
+[ 66%] Built target sidechain-tests
+[ 66%] Building CXX object CMakeFiles/effect-auxiliary-tests.dir/Tests/EffectAuxiliaryTests.cpp.o
+[ 66%] Building OBJCXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/Audio/AudioUnitHost.mm.o
+[ 66%] Linking CXX executable qualification-fixture
+[ 66%] Built target qualification-fixture
+[ 66%] Building CXX object CMakeFiles/playback-region-tests.dir/Tests/PlaybackRegionTests.cpp.o
+[ 66%] Linking CXX executable effect-auxiliary-tests
+[ 66%] Building OBJCXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/Audio/VST3Host.mm.o
+[ 66%] Built target effect-auxiliary-tests
+[ 66%] Building CXX object CMakeFiles/curve-formula-tests.dir/Tests/CurveFormulaTests.cpp.o
+[ 67%] Linking CXX executable song-modulation-tests
+[ 67%] Built target song-modulation-tests
+[ 67%] Building CXX object CMakeFiles/document-history-allocation-tests.dir/private/tmp/screamseq-graph-controls-20261001/editor/Tests/DocumentHistoryAllocationTests.cpp.o
+[ 67%] Linking CXX executable curve-formula-tests
+[ 68%] Linking CXX executable signal-graph-tests
+[ 68%] Built target curve-formula-tests
+[ 68%] Building CXX object CMakeFiles/windows-graph-document-tests.dir/private/tmp/screamseq-graph-controls-20261001/windows/Tests/GraphOperations/GraphOperationsTests.cpp.o
+[ 68%] Built target signal-graph-tests
+[ 68%] Building CXX object CMakeFiles/windows-native-metadata-tests.dir/private/tmp/screamseq-graph-controls-20261001/windows/Tests/ProjectNative/NativeMetadataTests.cpp.o
+[ 68%] Linking CXX executable playback-region-tests
+[ 68%] Built target playback-region-tests
+[ 68%] Building CXX object CMakeFiles/parameter-provenance-tests.dir/private/tmp/screamseq-graph-controls-20261001/editor/Tests/ParameterProvenanceTests.cpp.o
+[ 69%] Building OBJCXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/Plugins/PluginInventory.mm.o
+[ 69%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/ThirdParty/vst3/pluginterfaces/base/funknown.cpp.o
+[ 69%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/ThirdParty/vst3/pluginterfaces/base/coreiids.cpp.o
+[ 69%] Building CXX object hosted/CMakeFiles/TrackerHosted.dir/private/tmp/screamseq-graph-controls-20261001/mac/ThirdParty/vst3/vstinitiids.cpp.o
+[ 70%] Building CXX object CMakeFiles/windows-graph-document-tests.dir/private/tmp/screamseq-graph-controls-20261001/windows/Session/GraphOperations.cpp.o
+[ 70%] Linking CXX static library libTrackerHosted.a
+[ 70%] Built target TrackerHosted
+[ 70%] Building CXX object CMakeFiles/windows-native-metadata-tests.dir/private/tmp/screamseq-graph-controls-20261001/windows/Project/NativeMetadata.cpp.o
+[ 71%] Linking CXX executable document-history-allocation-tests
+[ 71%] Built target document-history-allocation-tests
+[ 72%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Plugins/PluginPreset.mm.o
+[ 73%] Linking CXX executable parameter-provenance-tests
+[ 73%] Built target parameter-provenance-tests
+[ 74%] Building OBJCXX object CMakeFiles/plugin-scanner.dir/Plugins/Scanner.mm.o
+[ 74%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Plugins/PluginLibrary.mm.o
+[ 74%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 74%] Linking CXX executable plugin-scanner
+[ 74%] Built target plugin-scanner
+[ 74%] Building OBJCXX object CMakeFiles/plugin-tests.dir/Tests/PluginTests.mm.o
+[ 74%] Building CXX object CMakeFiles/windows-graph-document-tests.dir/private/tmp/screamseq-graph-controls-20261001/windows/Project/NativeMetadata.cpp.o
+[ 75%] Linking CXX executable plugin-tests
+[ 75%] Built target plugin-tests
+In file included from /private/tmp/screamseq-graph-controls-20261001/mac/Bridge/TrackerSession.mm:2342:
+/private/tmp/screamseq-graph-controls-20261001/mac/Bridge/TrackerSessionAPI.inc:116:9: warning: 'auto' deduced as 'id' in declaration of 'command' [-Wauto-var-id]
+  116 |         auto command=[object(p[@"command"]) mutableCopy];
+      |         ^~~~~~~~~~~~
+[ 75%] Building OBJCXX object CMakeFiles/plugin-lifecycle-tests.dir/Tests/PluginLifecycleTests.mm.o
+In file included from /private/tmp/screamseq-graph-controls-20261001/mac/Bridge/TrackerSession.mm:2342:
+In file included from /private/tmp/screamseq-graph-controls-20261001/mac/Bridge/TrackerSessionAPI.inc:314:
+/private/tmp/screamseq-graph-controls-20261001/mac/Bridge/MixerAPI.inc:150:30: warning: 'auto' deduced as 'id' in declaration of 'raw' [-Wauto-var-id]
+  150 |         if(p[@"targets"])for(auto raw:array(p[@"targets"],128)){auto id=findBus(raw).id;require(std::find(targets.begin(),targets.end(),id)==targets.end(),"Duplicate output destination");targets.push_back(id);}
+      |                              ^
+In file included from /private/tmp/screamseq-graph-controls-20261001/mac/Bridge/TrackerSession.mm:2342:
+In file included from /private/tmp/screamseq-graph-controls-20261001/mac/Bridge/TrackerSessionAPI.inc:316:
+/private/tmp/screamseq-graph-controls-20261001/mac/Bridge/SignalGraphAPI.inc:30:13: warning: 'auto' deduced as 'id' in declaration of 'port' [-Wauto-var-id]
+   30 |       const auto port=observation&&capture.token&&capture.token<=observation->ports.size()?@(observation->ports[capture.token-1].key.c_str()):(id)NSNull.null;
+      |       ~~~~~~^~~~~~~~~
+In file included from /private/tmp/screamseq-graph-controls-20261001/mac/Bridge/TrackerSession.mm:2342:
+In file included from /private/tmp/screamseq-graph-controls-20261001/mac/Bridge/TrackerSessionAPI.inc:316:
+In file included from /private/tmp/screamseq-graph-controls-20261001/mac/Bridge/SignalGraphAPI.inc:76:
+/private/tmp/screamseq-graph-controls-20261001/mac/Bridge/SongModulationAPI.inc:35:54: warning: 'auto' deduced as 'id' in declaration of 'spec' [-Wauto-var-id]
+   35 |           allowed(@[@"source",@"connect",@"dryRun"]);auto spec=[object(p[@"source"]) mutableCopy];
+      |                                                      ^~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Bridge/SongModulationAPI.inc:44:11: warning: 'auto' deduced as 'id' in declaration of 'spec' [-Wauto-var-id]
+   44 |           auto spec=[encodeSongSource(s) mutableCopy];[spec addEntriesFromDictionary:patch];auto updated=decodeSongSource(spec);validateScope(updated);s=std::move(updated);
+      |           ^~~~~~~~~
+In file included from /private/tmp/screamseq-graph-controls-20261001/mac/Bridge/TrackerSession.mm:2342:
+In file included from /private/tmp/screamseq-graph-controls-20261001/mac/Bridge/TrackerSessionAPI.inc:978:
+/private/tmp/screamseq-graph-controls-20261001/mac/Bridge/InstrumentEnvelopeToolsAPI.inc:13:57: warning: 'auto' deduced as 'id' in declaration of 'value' [-Wauto-var-id]
+   13 |       auto info=[&](const InstrumentEnvelope &envelope){auto value=[instrumentEnvelopeInfo(envelope,maximum) mutableCopy];
+      |                                                         ^~~~~~~~~~
+[ 76%] Linking CXX executable windows-native-metadata-tests
+[ 76%] Built target windows-native-metadata-tests
+[ 76%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioDevice.mm.o
+[ 76%] Linking CXX executable plugin-lifecycle-tests
+[ 76%] Built target plugin-lifecycle-tests
+[ 76%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/MidiInput.mm.o
+[ 77%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioExport.mm.o
+[ 77%] Linking CXX executable windows-graph-document-tests
+[ 77%] Built target windows-graph-document-tests
+6 warnings generated.
+[ 77%] Linking CXX static library libTrackerMac.a
+[ 77%] Built target TrackerMac
+[ 77%] Building OBJCXX object CMakeFiles/unified-effects-tests.dir/Tests/UnifiedEffectsTests.mm.o
+[ 78%] Building OBJCXX object CMakeFiles/precise-ramp-tests.dir/Tests/PreciseRampTests.mm.o
+[ 78%] Building OBJCXX object CMakeFiles/record-nudge-tests.dir/Tests/RecordNudgeTests.mm.o
+[ 78%] Building OBJCXX object CMakeFiles/pattern-pitch-tests.dir/Tests/PatternPitchTests.mm.o
+[ 78%] Building OBJCXX object CMakeFiles/pattern-performance-tests.dir/Tests/PatternPerformanceTests.mm.o
+[ 78%] Building OBJCXX object CMakeFiles/precise-note-tests.dir/Tests/PreciseNoteTests.mm.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedEffectsTests.mm:100:84: warning: 'auto' deduced as 'id' in declaration of 'q' [-Wauto-var-id]
+  100 |   auto call=[&](NSString *method,NSDictionary *p,bool write=false)->NSDictionary *{auto q=[p mutableCopy];if(write)q[@"expectedRevision"]=session.automationRevision;auto reply=[session automationMethod:method params:q error:&error];if(!reply)throw std::runtime_error(error.localizedDescription.UTF8String);return reply[@"data"];};
+      |                                                                                    ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedEffectsTests.mm:116:49: warning: 'auto' deduced as 'id' in declaration of 'relative' [-Wauto-var-id]
+  116 |   for(NSDictionary *c in expected[@"commands"]){auto relative=[c mutableCopy];relative[@"position"]=@([c[@"position"] unsignedIntValue]-2*65536);[clipboard addObject:relative];}
+      |                                                 ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedEffectsTests.mm:118:3: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+  118 |   auto preview=[paste mutableCopy];preview[@"dryRun"]=@YES;rev=session.automationRevision;
+      |   ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedEffectsTests.mm:131:3: warning: 'auto' deduced as 'id' in declaration of 'pc' [-Wauto-var-id]
+  131 |   auto pc=call(@"pattern.get",@{@"pattern":@0,@"startRow":@0,@"rowCount":@1,@"startChannel":@0,@"channelCount":@1})[@"cells"];
+      |   ^~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/RecordNudgeTests.mm:97:5: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   97 |     auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/RecordNudgeTests.mm:105:9: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+  105 |   const auto expected=call(@"pattern.effects.get",@{@"pattern":@0})[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/RecordNudgeTests.mm:109:5: warning: 'auto' deduced as 'id' in declaration of 'c' [-Wauto-var-id]
+  109 |     auto c=[commands[0] mutableCopy];[c addEntriesFromDictionary:invalid];NSError *failure=nil;
+      |     ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PatternPitchTests.mm:39:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   39 |     auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PatternPitchTests.mm:45:47: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+   45 |   NSString *before=session.automationRevision;auto preview=[request mutableCopy];preview[@"dryRun"]=@YES;
+      |                                               ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PatternPitchTests.mm:48:9: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   48 |   const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PatternPitchTests.mm:51:5: warning: 'auto' deduced as 'id' in declaration of 'command' [-Wauto-var-id]
+   51 |     auto command=[bend mutableCopy];[command addEntriesFromDictionary:invalid];
+      |     ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PatternPerformanceTests.mm:23:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   23 |     auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PatternPerformanceTests.mm:32:49: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+   32 |   NSString *revision=session.automationRevision;auto preview=[set mutableCopy];preview[@"dryRun"]=@YES;
+      |                                                 ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PatternPerformanceTests.mm:35:9: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   35 |   const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PatternPerformanceTests.mm:40:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   40 |     auto request=[params mutableCopy];request[@"expectedRevision"]=session.automationRevision;NSString *before=session.automationRevision;
+      |     ^~~~~~~~~~~~
+[ 78%] Building OBJCXX object CMakeFiles/precise-ramp-tests.dir/Tests/FixtureAU.mm.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PreciseNoteTests.mm:299:89: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+  299 |   auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+      |                                                                                         ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PreciseNoteTests.mm:301:3: warning: 'auto' deduced as 'id' in declaration of 'patternBefore' [-Wauto-var-id]
+  301 |   auto patternBefore=call(@"pattern.get",@{@"pattern":@0})[@"data"];
+      |   ^~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PreciseNoteTests.mm:303:58: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+  303 |   auto creation=@{@"empty":@YES,@"name":@"Lead trigger"};auto preview=[creation mutableCopy];preview[@"dryRun"]=@YES;
+      |                                                          ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PreciseNoteTests.mm:304:3: warning: 'auto' deduced as 'id' in declaration of 'index' [-Wauto-var-id]
+  304 |   auto index=call(@"instrument.create",preview,true)[@"data"][@"instrument"];
+      |   ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PreciseNoteTests.mm:307:9: warning: 'auto' deduced as 'id' in declaration of 'info' [-Wauto-var-id]
+  307 |   const auto info=call(@"instrument.get",@{@"instrument":index})[@"data"];
+      |   ~~~~~~^~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PreciseNoteTests.mm:318:3: warning: 'auto' deduced as 'id' in declaration of 'dry' [-Wauto-var-id]
+  318 |   auto dry=[request mutableCopy];dry[@"dryRun"]=@YES;revision=session.automationRevision;call(@"pattern.performance.set",dry,true);
+      |   ^~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PreciseNoteTests.mm:320:55: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+  320 |   call(@"pattern.performance.set",request,true);const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+      |                                                 ~~~~~~^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PreciseNoteTests.mm:323:5: warning: 'auto' deduced as 'id' in declaration of 'c' [-Wauto-var-id]
+  323 |     auto c=[command mutableCopy];[c addEntriesFromDictionary:bad];auto r=[request mutableCopy];r[@"commands"]=@[c];r[@"expectedRevision"]=session.automationRevision;revision=session.automationRevision;
+      |     ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PreciseNoteTests.mm:323:67: warning: 'auto' deduced as 'id' in declaration of 'r' [-Wauto-var-id]
+  323 |     auto c=[command mutableCopy];[c addEntriesFromDictionary:bad];auto r=[request mutableCopy];r[@"commands"]=@[c];r[@"expectedRevision"]=session.automationRevision;revision=session.automationRevision;
+      |                                                                   ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PreciseNoteTests.mm:334:3: warning: 'auto' deduced as 'id' in declaration of 'project' [-Wauto-var-id]
+  334 |   auto project=[NSPropertyListSerialization propertyListWithData:[session serializedData] options:NSPropertyListMutableContainers format:nil error:&error];
+      |   ^~~~~~~~~~~~
+4 warnings generated.
+[ 79%] Linking CXX executable unified-effects-tests
+[ 79%] Built target unified-effects-tests
+[ 79%] Building OBJCXX object CMakeFiles/plugin-program-tests.dir/Tests/PluginProgramTests.mm.o
+4 warnings generated.
+[ 79%] Building OBJCXX object CMakeFiles/pattern-pitch-tests.dir/Tests/FixtureAU.mm.o
+3 warnings generated.
+[ 79%] Linking CXX executable record-nudge-tests
+[ 79%] Built target record-nudge-tests
+[ 79%] Building OBJCXX object CMakeFiles/precise-note-tests.dir/Tests/FixtureAU.mm.o
+[ 79%] Linking CXX executable precise-ramp-tests
+[ 79%] Built target precise-ramp-tests
+[ 79%] Building OBJCXX object CMakeFiles/plugin-preset-session-tests.dir/Tests/PluginPresetSessionTests.mm.o
+4 warnings generated.
+[ 79%] Linking CXX executable pattern-performance-tests
+[ 79%] Built target pattern-performance-tests
+[ 79%] Building OBJCXX object CMakeFiles/recovery-session-tests.dir/Tests/RecoverySessionTests.mm.o
+10 warnings generated.
+[ 80%] Building OBJCXX object CMakeFiles/plugin-program-tests.dir/Tests/FixtureAU.mm.o
+[ 80%] Building OBJCXX object CMakeFiles/instrument-envelope-session-tests.dir/Tests/InstrumentEnvelopeSessionTests.mm.o
+[ 80%] Linking CXX executable pattern-pitch-tests
+[ 80%] Built target pattern-pitch-tests
+[ 81%] Building OBJCXX object CMakeFiles/plugin-alias-tests.dir/Tests/PluginAliasTests.mm.o
+[ 82%] Linking CXX executable precise-note-tests
+[ 82%] Built target precise-note-tests
+[ 82%] Building OBJCXX object CMakeFiles/song-timing-session-tests.dir/Tests/SongTimingSessionTests.mm.o
+[ 82%] Linking CXX executable recovery-session-tests
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetSessionTests.mm:53:9: warning: 'auto' deduced as 'id' in declaration of 'inspected' [-Wauto-var-id]
+   53 |         auto inspected = call(@"plugin.preset.inspect", @{@"path": path})[@"data"];
+      |         ^~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetSessionTests.mm:59:11: warning: 'auto' deduced as 'id' in declaration of 'instrument' [-Wauto-var-id]
+   59 |           auto instrument = call(@"instrument.create", @{}, true)[@"data"][@"instrument"];
+      |           ^~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetSessionTests.mm:65:9: warning: 'auto' deduced as 'id' in declaration of 'envelope' [-Wauto-var-id]
+   65 |         auto envelope = call(@"automation.pattern.get", @{@"pattern": @0})[@"data"];
+      |         ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetSessionTests.mm:67:9: warning: 'auto' deduced as 'id' in declaration of 'beforePorts' [-Wauto-var-id]
+   67 |         auto beforePorts = call(@"plugin.buses.get", @{@"slot": @0})[@"data"];
+      |         ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetSessionTests.mm:68:9: warning: 'auto' deduced as 'id' in declaration of 'touched' [-Wauto-var-id]
+   68 |         auto touched = call(@"automation.target.get", @{})[@"data"][@"token"];
+      |         ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetSessionTests.mm:83:9: warning: 'auto' deduced as 'id' in declaration of 'stale' [-Wauto-var-id]
+   83 |         auto stale = [load mutableCopy]; stale[@"expectedRevision"] = revision;
+      |         ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginPresetSessionTests.mm:92:9: warning: 'auto' deduced as 'id' in declaration of 'neighbor' [-Wauto-var-id]
+   92 |         auto neighbor = call(@"plugin.parameters.get", @{@"slot": @0})[@"data"];
+      |         ^~~~~~~~~~~~~
+[ 82%] Built target recovery-session-tests
+[ 83%] Building OBJCXX object CMakeFiles/sample-loop-tests.dir/Tests/SampleLoopTests.mm.o
+7 warnings generated.
+[ 84%] Linking CXX executable plugin-preset-session-tests
+[ 84%] Built target plugin-preset-session-tests
+[ 84%] Building OBJCXX object CMakeFiles/sample-crossfade-project-tests.dir/Tests/SampleCrossfadeProjectTests.mm.o
+[ 84%] Linking CXX executable plugin-program-tests
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/InstrumentEnvelopeSessionTests.mm:21:75: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   21 |     auto call=[&](NSString *method,NSDictionary *params,bool write=false){auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;
+      |                                                                           ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/InstrumentEnvelopeSessionTests.mm:23:80: warning: 'auto' deduced as 'id' in declaration of 'before' [-Wauto-var-id]
+   23 |     NSDictionary *target=@{@"instrument":identity,@"envelope":@"volume"};const auto before=call(@"instrument.envelope.get",target)[@"data"];
+      |                                                                          ~~~~~~^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/InstrumentEnvelopeSessionTests.mm:25:5: warning: 'auto' deduced as 'id' in declaration of 'dry' [-Wauto-var-id]
+   25 |     auto dry=[params mutableCopy];dry[@"dryRun"]=@YES;NSString *revision=session.automationRevision;
+      |     ^~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/InstrumentEnvelopeSessionTests.mm:26:11: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+   26 |     const auto preview=call(@"instrument.envelope.transform",dry,true)[@"data"];
+      |     ~~~~~~^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/InstrumentEnvelopeSessionTests.mm:28:56: warning: 'auto' deduced as 'id' in declaration of 'after' [-Wauto-var-id]
+   28 |     call(@"instrument.envelope.transform",params,true);auto after=call(@"instrument.envelope.get",target)[@"data"];
+      |                                                        ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/InstrumentEnvelopeSessionTests.mm:30:5: warning: 'auto' deduced as 'id' in declaration of 'noop' [-Wauto-var-id]
+   30 |     auto noop=[params mutableCopy];noop[@"operation"]=@"scale";noop[@"options"]=@{@"amount":@1};
+      |     ^~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/InstrumentEnvelopeSessionTests.mm:44:5: warning: 'auto' deduced as 'id' in declaration of 'malformed' [-Wauto-var-id]
+   44 |     auto malformed=[params mutableCopy];malformed[@"operation"]=@"shift";malformed[@"options"]=@{@"amount":@1};malformed[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~~~~
+[ 84%] Built target plugin-program-tests
+[ 84%] Building OBJCXX object CMakeFiles/sample-project-tests.dir/Tests/SampleProjectTests.mm.o
+7 warnings generated.
+[ 85%] Linking CXX executable instrument-envelope-session-tests
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SongTimingSessionTests.mm:17:73: warning: 'auto' deduced as 'id' in declaration of 'params' [-Wauto-var-id]
+   17 |     auto call=[&](NSString *method,NSDictionary *p,bool mutation=false){auto params=[p mutableCopy];if(mutation)params[@"expectedRevision"]=session.automationRevision;
+      |                                                                         ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SongTimingSessionTests.mm:19:5: warning: 'auto' deduced as 'id' in declaration of 'before' [-Wauto-var-id]
+   19 |     auto before=call(@"document.timing.get",@{})[@"data"];
+      |     ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SongTimingSessionTests.mm:21:45: warning: 'auto' deduced as 'id' in declaration of 'edited' [-Wauto-var-id]
+   21 |     call(@"document.timing.set",patch,true);auto edited=call(@"document.timing.get",@{})[@"data"];
+      |                                             ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SongTimingSessionTests.mm:34:75: warning: 'auto' deduced as 'id' in declaration of 'bad' [-Wauto-var-id]
+   34 |       auto damaged=packSongSnapshot(parts.module,parts.samples,malformed);auto bad=[root mutableCopy];bad[@"module"]=[NSData dataWithBytes:damaged.data() length:damaged.size()];
+      |                                                                           ^~~~~~~~
+[ 85%] Built target instrument-envelope-session-tests
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginAliasTests.mm:73:7: warning: 'auto' deduced as 'id' in declaration of 'root' [-Wauto-var-id]
+   73 |       auto root=[[NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil] mutableCopy];
+      |       ^~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginAliasTests.mm:74:7: warning: 'auto' deduced as 'id' in declaration of 'item' [-Wauto-var-id]
+   74 |       auto item=[dictionary(descriptor) mutableCopy];const auto captured=probe.state();item[@"state"]=[NSData dataWithBytes:captured.state.data() length:captured.state.size()];
+      |       ^~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginAliasTests.mm:82:78: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   82 |     auto call=[&](NSString *method,NSDictionary *values,bool mutation=false){auto p=[values mutableCopy];if(mutation)p[@"expectedRevision"]=session.automationRevision;
+      |                                                                              ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginAliasTests.mm:89:5: warning: 'auto' deduced as 'id' in declaration of 'routing' [-Wauto-var-id]
+   89 |     auto routing=call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"];
+      |     ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginAliasTests.mm:130:5: warning: 'auto' deduced as 'id' in declaration of 'broken' [-Wauto-var-id]
+  130 |     auto broken=[root mutableCopy];broken[@"version"]=@4;[[NSPropertyListSerialization dataWithPropertyList:broken format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:file atomically:YES];
+      |     ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginAliasTests.mm:133:7: warning: 'auto' deduced as 'id' in declaration of 'malformed' [-Wauto-var-id]
+  133 |       auto malformed=[root mutableCopy];auto plugin=[root[@"plugins"][0] mutableCopy];
+      |       ^~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PluginAliasTests.mm:133:41: warning: 'auto' deduced as 'id' in declaration of 'plugin' [-Wauto-var-id]
+  133 |       auto malformed=[root mutableCopy];auto plugin=[root[@"plugins"][0] mutableCopy];
+      |                                         ^~~~~~~~~~~
+[ 85%] Building OBJCXX object CMakeFiles/sample-session-tests.dir/Tests/SampleSessionTests.mm.o
+4 warnings generated.
+[ 85%] Linking CXX executable song-timing-session-tests
+[ 85%] Built target song-timing-session-tests
+[ 85%] Building OBJCXX object CMakeFiles/sample-import-tests.dir/Tests/SampleImportTests.mm.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SampleLoopTests.mm:108:78: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  108 |     auto call=[&](NSString *method,NSDictionary *params,bool mutation=false){auto p=[params mutableCopy];if(mutation)p[@"expectedRevision"]=session.automationRevision;auto r=[session automationMethod:method params:p error:&error];if(!r)throw std::runtime_error(error.localizedDescription.UTF8String);return r;};
+      |                                                                              ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SampleLoopTests.mm:109:5: warning: 'auto' deduced as 'id' in declaration of 'before' [-Wauto-var-id]
+  109 |     auto before=call(@"sample.get",@{@"sample":@1})[@"data"];
+      |     ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SampleLoopTests.mm:111:5: warning: 'auto' deduced as 'id' in declaration of 'previewParams' [-Wauto-var-id]
+  111 |     auto previewParams=[params mutableCopy];previewParams[@"dryRun"]=@YES;auto preview=call(@"sample.loops.set",previewParams,true);check(![preview[@"changed"] boolValue],"Loop API preview read-only");
+      |     ^~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SampleLoopTests.mm:113:5: warning: 'auto' deduced as 'id' in declaration of 'after' [-Wauto-var-id]
+  113 |     auto after=call(@"sample.get",@{@"sample":@1})[@"data"];
+      |     ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SampleLoopTests.mm:124:5: warning: 'auto' deduced as 'id' in declaration of 'renamed' [-Wauto-var-id]
+  124 |     auto renamed=[after mutableCopy];renamed[@"name"]=@"Renamed";
+      |     ^~~~~~~~~~~~
+7 warnings generated.
+[ 85%] Building OBJCXX object CMakeFiles/plugin-alias-tests.dir/Tests/FixtureAU.mm.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SampleSessionTests.mm:259:7: warning: 'auto' deduced as 'id' in declaration of 'reversedLoops' [-Wauto-var-id]
+  259 |       auto reversedLoops = call(@"sample.get", @{@"sample":@1}, false)[@"data"];
+      |       ^~~~~~~~~~~~~~~~~~
+[ 86%] Linking CXX executable sample-project-tests
+5 warnings generated.
+[ 86%] Linking CXX executable sample-loop-tests
+[ 86%] Built target sample-project-tests
+[ 86%] Linking CXX executable sample-crossfade-project-tests
+[ 86%] Building OBJCXX object CMakeFiles/native-effects-tests.dir/Tests/NativeEffectsTests.mm.o
+[ 86%] Built target sample-loop-tests
+[ 86%] Building OBJCXX object CMakeFiles/eq-effects-tests.dir/Tests/EQEffectsTests.mm.o
+[ 86%] Built target sample-crossfade-project-tests
+[ 86%] Building OBJCXX object CMakeFiles/comb-tests.dir/Tests/CombTests.mm.o
+1 warning generated.
+[ 86%] Linking CXX executable sample-session-tests
+[ 86%] Built target sample-session-tests
+[ 86%] Building OBJCXX object CMakeFiles/distortion-tests.dir/Tests/DistortionTests.mm.o
+[ 86%] Linking CXX executable plugin-alias-tests
+[ 86%] Built target plugin-alias-tests
+[ 86%] Building OBJCXX object CMakeFiles/lofi-tests.dir/Tests/LofiMatTests.mm.o
+[ 86%] Linking CXX executable sample-import-tests
+[ 86%] Built target sample-import-tests
+[ 86%] Building OBJCXX object CMakeFiles/cabinet-tests.dir/Tests/CabinetTests.mm.o
+[ 86%] Linking CXX executable comb-tests
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeEffectsTests.mm:146:5: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  146 |     auto p = [params mutableCopy]; if (write) p[@"expectedRevision"] = session.automationRevision;
+      |     ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeEffectsTests.mm:165:3: warning: 'auto' deduced as 'id' in declaration of 'state' [-Wauto-var-id]
+  165 |   auto state = call(@"plugin.state.get", @{@"slot": @0})[@"data"];
+      |   ^~~~~~~~~~
+[ 86%] Built target comb-tests
+[ 86%] Building OBJCXX object CMakeFiles/dynamics-tests.dir/Tests/DynamicsTests.mm.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EQEffectsTests.mm:162:3: warning: 'auto' deduced as 'id' in declaration of 'state' [-Wauto-var-id]
+  162 |   auto state = call(@"plugin.state.get", @{@"slot": @0})[@"data"];
+      |   ^~~~~~~~~~
+[ 87%] Linking CXX executable lofi-tests
+[ 87%] Built target lofi-tests
+[ 87%] Building OBJCXX object CMakeFiles/maximizer-tests.dir/Tests/MaximizerTests.mm.o
+2 warnings generated.
+[ 87%] Linking CXX executable native-effects-tests
+1 warning generated.
+[ 87%] Linking CXX executable eq-effects-tests
+[ 87%] Built target native-effects-tests
+[ 87%] Building OBJCXX object CMakeFiles/bus-compressor-tests.dir/Tests/BusCompressorTests.mm.o
+[ 87%] Built target eq-effects-tests
+[ 87%] Building OBJCXX object CMakeFiles/session-tests.dir/Tests/SessionTests.mm.o
+[ 87%] Linking CXX executable distortion-tests
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/MaximizerTests.mm:200:3: warning: 'auto' deduced as 'id' in declaration of 'state' [-Wauto-var-id]
+  200 |   auto state=call(@"plugin.state.get",@{@"slot":@0})[@"data"];
+      |   ^~~~~~~~~~
+[ 87%] Linking CXX executable dynamics-tests
+[ 87%] Built target distortion-tests
+[ 88%] Linking CXX executable bus-compressor-tests
+[ 89%] Building OBJCXX object CMakeFiles/native-song-tests.dir/Tests/NativeSongTests.mm.o
+[ 89%] Linking CXX executable session-tests
+[ 89%] Built target dynamics-tests
+[ 89%] Built target bus-compressor-tests
+[ 90%] Building CXX object CMakeFiles/device-tests.dir/Tests/DeviceTests.cpp.o
+[ 90%] Building CXX object CMakeFiles/loopback-tests.dir/Tests/LoopbackTests.cpp.o
+[ 90%] Built target session-tests
+[ 91%] Building CXX object CMakeFiles/midi-tests.dir/Tests/MidiTests.cpp.o
+1 warning generated.
+[ 91%] Linking CXX executable maximizer-tests
+[ 91%] Linking CXX executable cabinet-tests
+[ 91%] Built target maximizer-tests
+[ 91%] Built target cabinet-tests
+[ 92%] Building OBJCXX object CMakeFiles/export-tests.dir/Tests/ExportTests.mm.o
+[ 93%] Building OBJCXX object CMakeFiles/native-mixer-tests.dir/Tests/NativeMixerTests.mm.o
+[ 93%] Linking CXX executable midi-tests
+[ 93%] Built target midi-tests
+[ 93%] Building OBJCXX object CMakeFiles/multi-bus-tests.dir/Tests/MultiBusTests.mm.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:199:11: warning: 'auto' deduced as 'id' in declaration of 'oldRoot' [-Wauto-var-id]
+  199 |           auto oldRoot=[root mutableCopy];oldRoot[@"version"]=@(old);write(oldRoot);
+      |           ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:204:11: warning: 'auto' deduced as 'id' in declaration of 'oldRoot' [-Wauto-var-id]
+  204 |           auto oldRoot=[root mutableCopy];auto metadata=[root[@"native"] mutableCopy];metadata[@"version"]=@(old);oldRoot[@"native"]=metadata;write(oldRoot);
+      |           ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:204:43: warning: 'auto' deduced as 'id' in declaration of 'metadata' [-Wauto-var-id]
+  204 |           auto oldRoot=[root mutableCopy];auto metadata=[root[@"native"] mutableCopy];metadata[@"version"]=@(old);oldRoot[@"native"]=metadata;write(oldRoot);
+      |                                           ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:218:9: warning: 'auto' deduced as 'id' in declaration of 'compatible' [-Wauto-var-id]
+  218 |         auto compatible = [NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil];
+      |         ^~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:221:9: warning: 'auto' deduced as 'id' in declaration of 'conflicting' [-Wauto-var-id]
+  221 |         auto conflicting=[compatible mutableCopy];auto conflictingNative=[compatible[@"native"] mutableCopy];
+      |         ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:221:51: warning: 'auto' deduced as 'id' in declaration of 'conflictingNative' [-Wauto-var-id]
+  221 |         auto conflicting=[compatible mutableCopy];auto conflictingNative=[compatible[@"native"] mutableCopy];
+      |                                                   ^~~~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:224:9: warning: 'auto' deduced as 'id' in declaration of 'currentWithoutField' [-Wauto-var-id]
+  224 |         auto currentWithoutField=[compatible mutableCopy];auto missingNative=[compatible[@"native"] mutableCopy];
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:224:59: warning: 'auto' deduced as 'id' in declaration of 'missingNative' [-Wauto-var-id]
+  224 |         auto currentWithoutField=[compatible mutableCopy];auto missingNative=[compatible[@"native"] mutableCopy];
+      |                                                           ^~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:227:9: warning: 'auto' deduced as 'id' in declaration of 'songControls' [-Wauto-var-id]
+  227 |         auto songControls=[compatible mutableCopy];auto controlsNative=[compatible[@"native"] mutableCopy];auto controlsGraph=[controlsNative[@"signalGraph"] mutableCopy];
+      |         ^~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:227:52: warning: 'auto' deduced as 'id' in declaration of 'controlsNative' [-Wauto-var-id]
+  227 |         auto songControls=[compatible mutableCopy];auto controlsNative=[compatible[@"native"] mutableCopy];auto controlsGraph=[controlsNative[@"signalGraph"] mutableCopy];
+      |                                                    ^~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:227:108: warning: 'auto' deduced as 'id' in declaration of 'controlsGraph' [-Wauto-var-id]
+  227 |         auto songControls=[compatible mutableCopy];auto controlsNative=[compatible[@"native"] mutableCopy];auto controlsGraph=[controlsNative[@"signalGraph"] mutableCopy];
+      |                                                                                                            ^~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeSongTests.mm:237:9: warning: 'auto' deduced as 'id' in declaration of 'duplicate' [-Wauto-var-id]
+  237 |         auto duplicate=[controlsGraph mutableCopy];duplicate[@"songSources"]=@[controlsGraph[@"songSources"][0],controlsGraph[@"songSources"][0]];controlsNative[@"signalGraph"]=duplicate;songControls[@"native"]=controlsNative;write(songControls);revision=session.automationRevision;
+      |         ^~~~~~~~~~~~~~
+[ 93%] Linking CXX executable device-tests
+[ 93%] Built target device-tests
+[ 93%] Building OBJCXX object CMakeFiles/rack-tests.dir/Tests/RackTests.mm.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeMixerTests.mm:609:7: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  609 |       auto p = [params mutableCopy]; if (write) p[@"expectedRevision"] = session.automationRevision;
+      |       ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeMixerTests.mm:616:7: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  616 |       auto p = [params mutableCopy]; p[@"expectedRevision"] = revision;
+      |       ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeMixerTests.mm:630:5: warning: 'auto' deduced as 'id' in declaration of 'group' [-Wauto-var-id]
+  630 |     auto group = call(@"mixer.bus.add", @{@"kind": @"group", @"name": @"Rhythm"}, true)[@"data"][@"bus"];
+      |     ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeMixerTests.mm:631:5: warning: 'auto' deduced as 'id' in declaration of 'space' [-Wauto-var-id]
+  631 |     auto space = call(@"mixer.bus.add", @{@"kind": @"return", @"name": @"Space"}, true)[@"data"][@"bus"];
+      |     ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeMixerTests.mm:669:5: warning: 'auto' deduced as 'id' in declaration of 'loaded' [-Wauto-var-id]
+  669 |     auto loaded = call(@"mixer.get", @{})[@"data"];
+      |     ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeMixerTests.mm:715:5: warning: 'auto' deduced as 'id' in declaration of 'inventory' [-Wauto-var-id]
+  715 |     auto inventory=call(@"mixer.get",@{})[@"data"];
+      |     ^~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeMixerTests.mm:723:5: warning: 'auto' deduced as 'id' in declaration of 'chainBuses' [-Wauto-var-id]
+  723 |     auto chainBuses=call(@"mixer.get",@{})[@"data"][@"buses"];
+      |     ^~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeMixerTests.mm:737:5: warning: 'auto' deduced as 'id' in declaration of 'sideBefore' [-Wauto-var-id]
+  737 |     auto sideBefore=call(@"mixer.get",@{})[@"data"];
+      |     ^~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/NativeMixerTests.mm:738:5: warning: 'auto' deduced as 'id' in declaration of 'second' [-Wauto-var-id]
+  738 |     auto second=sideBefore[@"buses"][1][@"id"];
+      |     ^~~~~~~~~~~
+[ 93%] Linking CXX executable export-tests
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/MultiBusTests.mm:184:7: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  184 |       auto p = [params mutableCopy]; if (write) p[@"expectedRevision"] = session.automationRevision;
+      |       ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/MultiBusTests.mm:190:51: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  190 |       auto revision = session.automationRevision; auto p = [params mutableCopy]; p[@"expectedRevision"] = revision;
+      |                                                   ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/MultiBusTests.mm:195:5: warning: 'auto' deduced as 'id' in declaration of 'info' [-Wauto-var-id]
+  195 |     auto info = call(@"plugin.buses.get", @{@"slot": @0})[@"data"];
+      |     ^~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/MultiBusTests.mm:197:5: warning: 'auto' deduced as 'id' in declaration of 'id' [-Wauto-var-id]
+  197 |     auto id = info[@"plugin"];
+      |     ^~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/MultiBusTests.mm:210:5: warning: 'auto' deduced as 'id' in declaration of 'graph' [-Wauto-var-id]
+  210 |     auto graph = call(@"mixer.get", @{})[@"data"]; auto bus = graph[@"buses"][1][@"id"];
+      |     ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/MultiBusTests.mm:210:52: warning: 'auto' deduced as 'id' in declaration of 'bus' [-Wauto-var-id]
+  210 |     auto graph = call(@"mixer.get", @{})[@"data"]; auto bus = graph[@"buses"][1][@"id"];
+      |                                                    ^~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/MultiBusTests.mm:230:5: warning: 'auto' deduced as 'id' in declaration of 'inactivePreview' [-Wauto-var-id]
+  230 |     auto inactivePreview=[side mutableCopy];inactivePreview[@"dryRun"]=@YES;check([call(@"mixer.sidechains.set",inactivePreview,true)[@"data"][@"wouldChange"] boolValue],"Supported inactive detector is directly routable");
+      |     ^~~~~~~~~~~~~~~~~~~~
+[ 93%] Built target export-tests
+[ 93%] Building OBJCXX object CMakeFiles/mixer-device-tests.dir/Tests/MixerDeviceTests.mm.o
+12 warnings generated.
+[ 93%] Linking CXX executable native-song-tests
+[ 93%] Built target native-song-tests
+[ 93%] Building OBJCXX object CMakeFiles/native-plugin-tests.dir/Tests/NativePluginTests.mm.o
+[ 93%] Linking CXX executable loopback-tests
+[ 93%] Built target loopback-tests
+7 warnings generated.
+[ 93%] Building OBJCXX object CMakeFiles/native-mixer-tests.dir/Tests/FixtureAU.mm.o
+[ 93%] Building OBJCXX object CMakeFiles/multi-bus-tests.dir/Tests/FixtureAU.mm.o
+[ 93%] Linking CXX executable rack-tests
+[ 93%] Built target rack-tests
+[ 93%] Building OBJCXX object CMakeFiles/plugin-robustness-tests.dir/Tests/PluginRobustnessTests.mm.o
+[ 93%] Building OBJCXX object CMakeFiles/plugin-latency-tests.dir/Tests/PluginLatencyTests.mm.o
+[ 94%] Linking CXX executable multi-bus-tests
+[ 94%] Built target multi-bus-tests
+[ 94%] Building OBJCXX object CMakeFiles/musical-automation-tests.dir/Tests/MusicalAutomationTests.mm.o
+[ 94%] Linking CXX executable mixer-device-tests
+[ 94%] Built target mixer-device-tests
+[ 95%] Building OBJCXX object CMakeFiles/automation-tests.dir/Tests/AutomationTests.mm.o
+[ 96%] Linking CXX executable native-plugin-tests
+[ 96%] Built target native-plugin-tests
+[ 96%] Building OBJCXX object CMakeFiles/plugin-trust-tests.dir/Tests/PluginTrustTests.mm.o
+[ 96%] Linking CXX executable automation-tests
+9 warnings generated.
+[ 96%] Linking CXX executable native-mixer-tests
+[ 96%] Built target automation-tests
+[ 96%] Built target native-mixer-tests
+[ 96%] Building OBJCXX object CMakeFiles/plugin-shutdown-tests.dir/Tests/PluginShutdownTests.mm.o
+[ 96%] Building OBJCXX object CMakeFiles/note-track-tests.dir/Tests/NoteTrackTests.mm.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/MusicalAutomationTests.mm:245:9: warning: 'auto' deduced as 'id' in declaration of 'actual' [-Wauto-var-id]
+  245 |         auto actual = call(@"automation.pattern.get", @{@"pattern":@0})[@"data"];
+      |         ^~~~~~~~~~~
+[ 96%] Linking CXX executable plugin-robustness-tests
+[ 96%] Linking CXX executable plugin-trust-tests
+[ 96%] Built target plugin-robustness-tests
+[ 96%] Building OBJCXX object CMakeFiles/automation-target-tests.dir/Tests/AutomationTargetTests.mm.o
+[ 96%] Built target plugin-trust-tests
+[ 96%] Building OBJCXX object CMakeFiles/native-signal-graph-tests.dir/Tests/NativeSignalGraphTests.mm.o
+[ 96%] Linking CXX executable plugin-shutdown-tests
+[ 96%] Built target plugin-shutdown-tests
+[ 96%] Building OBJCXX object CMakeFiles/signal-graph-session-tests.dir/Tests/SignalGraphSessionTests.mm.o
+[ 96%] Linking CXX executable automation-target-tests
+[ 96%] Linking CXX executable plugin-latency-tests
+[ 96%] Built target automation-target-tests
+[ 96%] Built target plugin-latency-tests
+[ 96%] Building OBJCXX object CMakeFiles/signal-routing-tests.dir/Tests/SignalRoutingTests.mm.o
+[ 97%] Building OBJCXX object CMakeFiles/signal-graph-performance.dir/Tests/SignalGraphPerformance.mm.o
+1 warning generated.
+[ 97%] Linking CXX executable musical-automation-tests
+[ 97%] Built target musical-automation-tests
+[ 98%] Building OBJCXX object CMakeFiles/curve-formula-session-tests.dir/Tests/CurveFormulaSessionTests.mm.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/CurveFormulaSessionTests.mm:7:90: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+    7 |   auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary * {auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;NSError *e=nil;auto r=[session automationMethod:method params:p error:&e];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+e.localizedDescription.UTF8String);return r;};
+      |                                                                                          ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/CurveFormulaSessionTests.mm:9:3: warning: 'auto' deduced as 'id' in declaration of 'plugin' [-Wauto-var-id]
+    9 |   auto plugin=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+      |   ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/CurveFormulaSessionTests.mm:21:39: warning: 'auto' deduced as 'id' in declaration of 'metadata' [-Wauto-var-id]
+   21 |   auto saved=[session serializedData];auto metadata=[NSPropertyListSerialization propertyListWithData:saved options:0 format:nil error:nil];
+      |                                       ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/CurveFormulaSessionTests.mm:26:42: warning: 'auto' deduced as 'id' in declaration of 'invalid' [-Wauto-var-id]
+   26 |   auto before=session.automationRevision;auto invalid=[points mutableCopy];invalid[0]=@{@"position":@0,@"value":@0.2,@"curve":@"scripted",@"formula":@"unknown(t)"};
+      |                                          ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/CurveFormulaSessionTests.mm:28:3: warning: 'auto' deduced as 'id' in declaration of 'lane' [-Wauto-var-id]
+   28 |   auto lane=call(@"automation.pattern.get",@{@"pattern":@0})[@"data"][@"lanes"][0][@"id"];
+      |   ^~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/CurveFormulaSessionTests.mm:29:3: warning: 'auto' deduced as 'id' in declaration of 'clip' [-Wauto-var-id]
+   29 |   auto clip=call(@"automation.pattern.copy",@{@"lane":lane,@"start":@0,@"end":@512})[@"data"];
+      |   ^~~~~~~~~
+6 warnings generated.
+[ 98%] Linking CXX executable curve-formula-session-tests
+[ 98%] Built target curve-formula-session-tests
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:9:93: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+    9 |   auto call=[&](NSString *method,NSDictionary *parameters,bool write=false)->NSDictionary *{auto p=[parameters mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;auto response=[session automationMethod:method params:p error:&error];if(!response)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);return response;};
+      |                                                                                             ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:11:3: warning: 'auto' deduced as 'id' in declaration of 'empty' [-Wauto-var-id]
+   11 |   auto empty=data();NSString *revision=session.automationRevision;
+      |   ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:28:3: warning: 'auto' deduced as 'id' in declaration of 'metadata' [-Wauto-var-id]
+   28 |   auto metadata=call(@"graph.plugin.get",@{@"graph":graph,@"node":node})[@"data"];
+      |   ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:34:3: warning: 'auto' deduced as 'id' in declaration of 'parameters' [-Wauto-var-id]
+   34 |   auto parameters=call(@"graph.plugin.get",@{@"graph":graph,@"node":node})[@"data"][@"parameters"];
+      |   ^~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:37:9: warning: 'auto' deduced as 'id' in declaration of 'parameterState' [-Wauto-var-id]
+   37 |   const auto parameterState=data();revision=session.automationRevision;
+      |   ~~~~~~^~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:45:34: warning: 'auto' deduced as 'id' in declaration of 'dragState' [-Wauto-var-id]
+   45 |   call(@"history.redo",@{},true);auto dragState=data();
+      |                                  ^~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:46:97: warning: 'auto' deduced as 'id' in declaration of 'interleavedState' [-Wauto-var-id]
+   46 |   call(@"graph.layout.set",@{@"positions":@[@{@"node":@"gesture-break",@"x":@1,@"y":@2}]},true);auto interleavedState=data();
+      |                                                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:70:3: warning: 'auto' deduced as 'id' in declaration of 'modulatedDefinition' [-Wauto-var-id]
+   70 |   auto modulatedDefinition=[data()[@"library"][0] mutableCopy];
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:71:3: warning: 'auto' deduced as 'id' in declaration of 'graphParameters' [-Wauto-var-id]
+   71 |   auto graphParameters=call(@"graph.plugin.get",@{@"graph":graph,@"node":node})[@"data"][@"parameters"];
+      |   ^~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:81:3: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   81 |   auto expected=data();revision=session.automationRevision;
+      |   ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:82:62: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   82 |   auto reject=[&](NSString *method,NSDictionary *parameters){auto p=[parameters mutableCopy];p[@"expectedRevision"]=session.automationRevision;NSError *failure=nil;check(![session automationMethod:method params:p error:&failure],"Invalid graph edit accepted");check([revision isEqual:session.automationRevision]&&[expected isEqual:data()],"Rejected graph edit partially committed");};
+      |                                                              ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:94:68: warning: 'auto' deduced as 'id' in declaration of 'copied' [-Wauto-var-id]
+   94 |   call(@"graph.clone",@{@"graph":graph,@"name":@"Echo copy"},true);auto copied=data()[@"library"][1];check(![copied[@"id"] isEqual:graph]&&![copied[@"nodes"][0][@"id"] isEqual:expected[@"library"][0][@"nodes"][0][@"id"]],"Cloned graph reused identities");
+      |                                                                    ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:96:3: warning: 'auto' deduced as 'id' in declaration of 'patchBefore' [-Wauto-var-id]
+   96 |   auto patchBefore=data();revision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:98:3: warning: 'auto' deduced as 'id' in declaration of 'patchPreview' [-Wauto-var-id]
+   98 |   auto patchPreview=[patch mutableCopy];patchPreview[@"dryRun"]=@YES;call(@"graph.nodes.insert",patchPreview,true);
+      |   ^~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:100:42: warning: 'auto' deduced as 'id' in declaration of 'patchAfter' [-Wauto-var-id]
+  100 |   call(@"graph.nodes.insert",patch,true);auto patchAfter=data();
+      |                                          ^~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:104:3: warning: 'auto' deduced as 'id' in declaration of 'badPatch' [-Wauto-var-id]
+  104 |   auto badPatch=[patch mutableCopy];badPatch[@"expectedRevision"]=session.automationRevision;badPatch[@"edge"]=@255;NSError *patchError=nil;
+      |   ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:109:125: warning: 'auto' deduced as 'id' in declaration of 'detached' [-Wauto-var-id]
+  109 |   call(@"graph.nodes.detach",@{@"graph":graph,@"nodes":@[extra],@"positions":@[@{@"node":extra,@"x":@600,@"y":@300}]},true);auto detached=data();
+      |                                                                                                                             ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:117:3: warning: 'auto' deduced as 'id' in declaration of 'addBefore' [-Wauto-var-id]
+  117 |   auto addBefore=data();auto addRevision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:119:3: warning: 'auto' deduced as 'id' in declaration of 'newPreview' [-Wauto-var-id]
+  119 |   auto newPreview=[insertNew mutableCopy];newPreview[@"dryRun"]=@YES;call(@"graph.node.add",newPreview,true);
+      |   ^~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:122:3: warning: 'auto' deduced as 'id' in declaration of 'addAfter' [-Wauto-var-id]
+  122 |   auto addAfter=data(),oldEdge=addBefore[@"library"][0][@"audio"][0],newEdge=addAfter[@"library"][0][@"audio"][0];
+      |   ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:122:3: warning: 'auto' deduced as 'id' in declaration of 'oldEdge' [-Wauto-var-id]
+  122 |   auto addAfter=data(),oldEdge=addBefore[@"library"][0][@"audio"][0],newEdge=addAfter[@"library"][0][@"audio"][0];
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:122:3: warning: 'auto' deduced as 'id' in declaration of 'newEdge' [-Wauto-var-id]
+  122 |   auto addAfter=data(),oldEdge=addBefore[@"library"][0][@"audio"][0],newEdge=addAfter[@"library"][0][@"audio"][0];
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:126:3: warning: 'auto' deduced as 'id' in declaration of 'invalidAdd' [-Wauto-var-id]
+  126 |   auto invalidAdd=[insertNew mutableCopy];invalidAdd[@"insertEdge"]=@255;invalidAdd[@"expectedRevision"]=session.automationRevision;NSError *addError=nil;
+      |   ^~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:129:3: warning: 'auto' deduced as 'id' in declaration of 'connectBefore' [-Wauto-var-id]
+  129 |   auto connectBefore=data();
+      |   ^~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:131:3: warning: 'auto' deduced as 'id' in declaration of 'source' [-Wauto-var-id]
+  131 |   auto source=call(@"graph.node.add",newSource,true)[@"data"][@"node"];
+      |   ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:132:3: warning: 'auto' deduced as 'id' in declaration of 'connected' [-Wauto-var-id]
+  132 |   auto connected=data();auto mod=[connected[@"library"][0][@"modulation"] lastObject];
+      |   ^~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:132:25: warning: 'auto' deduced as 'id' in declaration of 'mod' [-Wauto-var-id]
+  132 |   auto connected=data();auto mod=[connected[@"library"][0][@"modulation"] lastObject];
+      |                         ^~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:135:3: warning: 'auto' deduced as 'id' in declaration of 'returnBefore' [-Wauto-var-id]
+  135 |   auto returnBefore=data();auto send=call(@"mixer.bus.add",@{@"kind":@"return",@"sendFrom":target,@"position":@{@"x":@800,@"y":@120}},true)[@"data"][@"bus"];
+      |   ^~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:135:28: warning: 'auto' deduced as 'id' in declaration of 'send' [-Wauto-var-id]
+  135 |   auto returnBefore=data();auto send=call(@"mixer.bus.add",@{@"kind":@"return",@"sendFrom":target,@"position":@{@"x":@800,@"y":@120}},true)[@"data"][@"bus"];
+      |                            ^~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:136:3: warning: 'auto' deduced as 'id' in declaration of 'returnAfter' [-Wauto-var-id]
+  136 |   auto returnAfter=data();NSArray *sends=returnAfter[@"mixer"][@"buses"][0][@"sends"];
+      |   ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:139:3: warning: 'auto' deduced as 'id' in declaration of 'groupingBefore' [-Wauto-var-id]
+  139 |   auto groupingBefore=data();NSString *groupingRevision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:143:3: warning: 'auto' deduced as 'id' in declaration of 'groupingAfter' [-Wauto-var-id]
+  143 |   auto groupingAfter=data();
+      |   ^~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:148:3: warning: 'auto' deduced as 'id' in declaration of 'nestedAfter' [-Wauto-var-id]
+  148 |   auto nestedAfter=data();groupingRevision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:155:3: warning: 'auto' deduced as 'id' in declaration of 'groupedCopy' [-Wauto-var-id]
+  155 |   auto groupedCopy=[data()[@"library"] lastObject];
+      |   ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:159:3: warning: 'auto' deduced as 'id' in declaration of 'remaining' [-Wauto-var-id]
+  159 |   auto remaining=data()[@"library"][0][@"groups"];
+      |   ^~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:165:3: warning: 'auto' deduced as 'id' in declaration of 'exportBefore' [-Wauto-var-id]
+  165 |   auto exportBefore=data();revision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:169:3: warning: 'auto' deduced as 'id' in declaration of 'exportAfter' [-Wauto-var-id]
+  169 |   auto exportAfter=data();auto exported=[exportAfter[@"library"] lastObject];
+      |   ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:169:27: warning: 'auto' deduced as 'id' in declaration of 'exported' [-Wauto-var-id]
+  169 |   auto exportAfter=data();auto exported=[exportAfter[@"library"] lastObject];
+      |                           ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:178:3: warning: 'auto' deduced as 'id' in declaration of 'songGroupBefore' [-Wauto-var-id]
+  178 |   auto songGroupBefore=data();revision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:180:3: warning: 'auto' deduced as 'id' in declaration of 'groupPreview' [-Wauto-var-id]
+  180 |   auto groupPreview=[groupRequest mutableCopy];groupPreview[@"dryRun"]=@YES;call(@"graph.song.group.create",groupPreview,true);
+      |   ^~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:183:3: warning: 'auto' deduced as 'id' in declaration of 'songGroupAfter' [-Wauto-var-id]
+  183 |   auto songGroupAfter=data();check([songGroupAfter[@"groups"] count]==1&&[songGroupAfter[@"plugins"] isEqual:songGroupBefore[@"plugins"]]&&[songGroupAfter[@"mixer"] isEqual:songGroupBefore[@"mixer"]],"Song group wraps existing rack identities without cha[ 99%] Building OBJCXX object CMakeFiles/envelope-bank-tests.dir/Tests/EnvelopeBankTests.mm.o
+nging their routing");
+      |   ^~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:187:3: warning: 'auto' deduced as 'id' in declaration of 'songGroupMoved' [-Wauto-var-id]
+  187 |   auto songGroupMoved=data();bool moved=false;for(NSDictionary *position in songGroupMoved[@"layout"])if([position[@"node"] isEqual:rackKey])moved=[position[@"x"] doubleValue]==400&&[position[@"y"] doubleValue]==200;check(moved,"Song boundary move retains relative processor positions");
+      |   ^~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:188:63: warning: 'auto' deduced as 'id' in declaration of 'songGroupExported' [-Wauto-var-id]
+  188 |   call(@"graph.song.group.export",@{@"group":songGroup},true);auto songGroupExported=data();check([[songGroupExported[@"library"] lastObject][@"nodes"] count]==3,"Song group exports a real independent recipe");
+      |                                                               ^~~~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:193:3: warning: 'auto' deduced as 'id' in declaration of 'cutBefore' [-Wauto-var-id]
+  193 |   auto cutBefore=data();revision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:199:3: warning: 'auto' deduced as 'id' in declaration of 'invalidCuts' [-Wauto-var-id]
+  199 |   auto invalidCuts=[cuts mutableCopy];[invalidCuts addObject:@{@"kind":@"insert",@"plugin":@"fixed-chain"}];
+      |   ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:203:65: warning: 'auto' deduced as 'id' in declaration of 'cutAfter' [-Wauto-var-id]
+  203 |   call(@"graph.connections.remove",@{@"connections":cuts},true);auto cutAfter=data();
+      |                                                                 ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:211:90: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  211 |     auto api=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=scoped.automationRevision;auto r=[scoped automationMethod:method params:p error:&problem];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+problem.localizedDescription.UTF8String);return r[@"data"];};
+      |                                                                                          ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:229:90: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  229 |     auto api=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=loose.automationRevision;auto r=[loose automationMethod:method params:p error:&problem];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+problem.localizedDescription.UTF8String);return r[@"data"];};
+      |                                                                                          ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:247:44: warning: 'auto' deduced as 'id' in declaration of 'bad' [-Wauto-var-id]
+  247 |     auto revision=loose.automationRevision;auto bad=[add mutableCopy];bad[@"target"]=target;bad[@"expectedRevision"]=revision;
+      |                                            ^~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:254:90: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  254 |     auto api=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=mod.automationRevision;auto r=[mod automationMethod:method params:p error:&problem];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+problem.localizedDescription.UTF8String);return r[@"data"];};
+      |                                                                                          ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:260:5: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+  260 |     auto preview=[add mutableCopy];preview[@"dryRun"]=@YES;api(@"graph.song.source.add",preview,true);
+      |     ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:272:5: warning: 'auto' deduced as 'id' in declaration of 'activitySources' [-Wauto-var-id]
+  272 |     auto activitySources=api(@"parameter.activity.sources",@{@"target":activityKey,@"parameter":@1})[@"sources"];
+      |     ^~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:280:59: warning: 'auto' deduced as 'id' in declaration of 'guarded' [-Wauto-var-id]
+  280 |     auto rejectSong=[&](NSString *method,NSDictionary *p){auto guarded=[p mutableCopy];guarded[@"expectedRevision"]=mod.automationRevision;NSError *failure=nil;auto state=snapshot();auto revision=mod.automationRevision;
+      |                                                           ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:295:5: warning: 'auto' deduced as 'id' in declaration of 'rerouted' [-Wauto-var-id]
+  295 |     auto rerouted=snapshot()[@"songModulation"];check([rerouted count]==1&&[rerouted[0][@"source"] isEqual:curveSource]&&[rerouted[0][@"minimum"] doubleValue]==-.2&&[rerouted[0][@"maximum"] doubleValue]==.3,"Endpoint reroute must retain the old depth and remove only its old identity");
+      |     ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:312:5: warning: 'auto' deduced as 'id' in declaration of 'shape' [-Wauto-var-id]
+  312 |     auto shape=[api(@"envelope.bank.list",@{@"target":curveTarget})[@"shape"] mutableCopy];
+      |     ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:313:5: warning: 'auto' deduced as 'id' in declaration of 'points' [-Wauto-var-id]
+  313 |     auto points=[shape[@"points"] mutableCopy];auto point=[points[0] mutableCopy];point[@"value"]=@.6;points[0]=point;shape[@"points"]=points;
+      |     ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:313:48: warning: 'auto' deduced as 'id' in declaration of 'point' [-Wauto-var-id]
+  313 |     auto points=[shape[@"points"] mutableCopy];auto point=[points[0] mutableCopy];point[@"value"]=@.6;points[0]=point;shape[@"points"]=points;
+      |                                                ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:331:90: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  331 |     auto api=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=visual.automationRevision;auto r=[visual automationMethod:method params:p error:&problem];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+problem.localizedDescription.UTF8String);return r[@"data"];};
+      |                                                                                          ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:343:90: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  343 |     auto api=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=provenance.automationRevision;auto r=[provenance automationMethod:method params:p error:&problem];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+problem.localizedDescription.UTF8String);return r[@"data"];};
+      |                                                                                          ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/SignalGraphSessionTests.mm:349:5: warning: 'auto' deduced as 'id' in declaration of 'plugin' [-Wauto-var-id]
+  349 |     auto plugin=result[@"plugin"];if(![plugin isKindOfClass:NSString.class])plugin=api(@"graph.get",@{})[@"plugins"][0][@"id"];
+      |     ^~~~~~~~~~~
+[ 99%] Linking CXX executable note-track-tests
+[ 99%] Built target note-track-tests
+[ 99%] Building OBJCXX object CMakeFiles/playback-display-tests.dir/Tests/PlaybackDisplayTests.mm.o
+60 warnings generated.
+[ 99%] Linking CXX executable signal-graph-session-tests
+[ 99%] Linking CXX executable native-signal-graph-tests
+[ 99%] Linking CXX executable signal-graph-performance
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:11:88: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   11 |  auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;NSError *e=nil;auto r=[session automationMethod:method params:p error:&e];if(!r)throw std::runtime_error([[NSString stringWithFormat:@"%@: %@",method,e.localizedDescription] UTF8String]);return r;};
+      |                                                                                        ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:12:57: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   12 |  auto reject=[&](NSString *method,NSDictionary *params){auto p=[params mutableCopy];if(!p[@"expectedRevision"])p[@"expectedRevision"]=session.automationRevision;NSString *revision=session.automationRevision;auto before=[session serializedData];check(![session automationMethod:method params:p error:&error],"Invalid bank write accepted");check([revision isEqual:session.automationRevision]&&[before isEqual:[session serializedData]],"Rejected edit changed song");};
+      |                                                         ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:17:101: warning: 'auto' deduced as 'id' in declaration of 'dry' [-Wauto-var-id]
+   17 |  NSDictionary *saved=@{@"name":@"Pluck",@"target":it};NSString *revision=session.automationRevision;auto dry=[saved mutableCopy];dry[@"dryRun"]=@YES;call(@"envelope.bank.save",dry,true);check([revision isEqual:session.automationRevision]&&[bank()[@"entries"] count]==0,"Dry run mutated bank");
+      |                                                                                                     ^~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:18:74: warning: 'auto' deduced as 'id' in declaration of 'shape' [-Wauto-var-id]
+   18 |  NSString *master=call(@"envelope.bank.save",saved,true)[@"data"][@"id"];auto shape=bank()[@"entries"][0][@"shape"];
+      |                                                                          ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:21:2: warning: 'auto' deduced as 'id' in declaration of 'original' [-Wauto-var-id]
+   21 |  auto original=call(@"instrument.envelope.get",@{@"instrument":instrument,@"envelope":@"volume"})[@"data"];
+      |  ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:24:86: warning: 'auto' deduced as 'id' in declaration of 'independent' [-Wauto-var-id]
+   24 |  call(@"envelope.bank.apply",@{@"template":master,@"target":it2,@"linked":@NO},true);auto independent=call(@"instrument.envelope.get",@{@"instrument":second,@"envelope":@"volume"})[@"data"];
+      |                                                                                      ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:28:2: warning: 'auto' deduced as 'id' in declaration of 'graphBefore' [-Wauto-var-id]
+   28 |  auto graphBefore=call(@"graph.automation.get",@{@"graph":graph,@"node":node,@"pattern":@0})[@"data"];
+      |  ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:29:2: warning: 'auto' deduced as 'id' in declaration of 'modified' [-Wauto-var-id]
+   29 |  auto modified=[shape mutableCopy];NSMutableArray *points=[NSMutableArray array];for(NSDictionary *p in shape[@"points"]){auto p2=[p mutableCopy];p2[@"value"]=@(1-[p[@"value"] doubleValue]);[points addObject:p2];}modified[@"points"]=points;
+      |  ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:29:123: warning: 'auto' deduced as 'id' in declaration of 'p2' [-Wauto-var-id]
+   29 |  auto modified=[shape mutableCopy];NSMutableArray *points=[NSMutableArray array];for(NSDictionary *p in shape[@"points"]){auto p2=[p mutableCopy];p2[@"value"]=@(1-[p[@"value"] doubleValue]);[points addObject:p2];}modified[@"points"]=points;
+      |                                                                                                                           ^~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:31:2: warning: 'auto' deduced as 'id' in declaration of 'linkedAfter' [-Wauto-var-id]
+   31 |  auto linkedAfter=call(@"instrument.envelope.get",@{@"instrument":instrument,@"envelope":@"volume"})[@"data"];
+      |  ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:35:2: warning: 'auto' deduced as 'id' in declaration of 'catalogue' [-Wauto-var-id]
+   35 |  auto catalogue=call(@"envelope.catalogue.list",@{})[@"data"];NSString *catalogueID=call(@"envelope.catalogue.publish",@{@"template":master,@"expectedCatalogueRevision":catalogue[@"revision"]},true)[@"data"][@"id"];catalogue=call(@"envelope.catalogue.list",@{})[@"data"];auto catalogueSnapshot=catalogue;
+      |  ^~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:35:272: warning: 'auto' deduced as 'id' in declaration of 'catalogueSnapshot' [-Wauto-var-id]
+   35 |  auto catalogue=call(@"envelope.catalogue.list",@{})[@"data"];NSString *catalogueID=call(@"envelope.catalogue.publish",@{@"template":master,@"expectedCatalogueRevision":catalogue[@"revision"]},true)[@"data"][@"id"];catalogue=call(@"envelope.catalogue.list",@{})[@"data"];auto catalogueSnapshot=catalogue;
+      |                                                                                                                                                                                                                                                                                ^~~~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:37:2: warning: 'auto' deduced as 'id' in declaration of 'imported' [-Wauto-var-id]
+   37 |  auto imported=call(@"envelope.catalogue.import",@{@"catalogueID":catalogueID,@"expectedCatalogueRevision":catalogue[@"revision"]},true)[@"data"][@"id"];check(![master isEqual:imported]&&[bank()[@"entries"] count]==2,"Catalogue import reused song identity");
+      |  ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:39:2: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   39 |  auto expected=bank();NSString *project=[folder stringByAppendingPathComponent:@"bank.screamseq"];if(![session savePath:project error:&error]||![session openPath:project error:&error])throw std::runtime_error(error.localizedDescription.UTF8String);check([expected isEqual:bank()],"Native bank roundtrip lost templates or links");
+      |  ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:43:72: warning: 'auto' deduced as 'id' in declaration of 'plugin' [-Wauto-var-id]
+   43 |  call(@"plugin.add",@{@"descriptor":[session builtInPlugins][0]},true);auto plugin=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+      |                                                                        ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/EnvelopeBankTests.mm:45:2: warning: 'auto' deduced as 'id' in declaration of 'lane' [-Wauto-var-id]
+   45 |  auto lane=call(@"automation.pattern.get",@{@"pattern":@0})[@"data"][@"lanes"][0];check([lane[@"points"][0][@"value"] doubleValue]==1,"Bank did not create parameter lane");
+      |  ^~~~~~~~~
+[ 99%] Built target signal-graph-session-tests
+[ 99%] Built target native-signal-graph-tests
+[ 99%] Built target signal-graph-performance
+[ 99%] Building OBJCXX object CMakeFiles/parameter-activity-tests.dir/Tests/ParameterActivityTests.mm.o
+[ 99%] Building OBJCXX object CMakeFiles/unified-history-tests.dir/Tests/UnifiedHistoryTests.mm.o
+[ 99%] Building CXX object CMakeFiles/windows-mixer-document-tests.dir/private/tmp/screamseq-graph-controls-20261001/windows/Tests/MixerOperationsTests.cpp.o
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PlaybackDisplayTests.mm:39:89: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   39 |   auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;auto r=[session automationMethod:method params:p error:&error];if(!r)throw std::runtime_error(error.localizedDescription.UTF8String);return r[@"data"];};
+      |                                                                                         ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PlaybackDisplayTests.mm:40:3: warning: 'auto' deduced as 'id' in declaration of 'times' [-Wauto-var-id]
+   40 |   auto times=call(@"pattern.timeline.get",@{@"pattern":@0,@"order":@1})[@"positions"];
+      |   ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PlaybackDisplayTests.mm:44:3: warning: 'auto' deduced as 'id' in declaration of 'buses' [-Wauto-var-id]
+   44 |   auto buses=call(@"mixer.get",@{})[@"buses"];auto bus=buses[0][@"id"];
+      |   ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PlaybackDisplayTests.mm:44:47: warning: 'auto' deduced as 'id' in declaration of 'bus' [-Wauto-var-id]
+   44 |   auto buses=call(@"mixer.get",@{})[@"buses"];auto bus=buses[0][@"id"];
+      |                                               ^~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PlaybackDisplayTests.mm:46:39: warning: 'auto' deduced as 'id' in declaration of 'project' [-Wauto-var-id]
+   46 |   auto saved=[session serializedData];auto project=[NSPropertyListSerialization propertyListWithData:saved options:0 format:nil error:&error];
+      |                                       ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/PlaybackDisplayTests.mm:52:3: warning: 'auto' deduced as 'id' in declaration of 'detachedProject' [-Wauto-var-id]
+   52 |   auto detachedProject=[NSPropertyListSerialization propertyListWithData:[session serializedData] options:NSPropertyListMutableContainers format:nil error:&error];
+      |   ^~~~~~~~~~~~~~~~~~~~
+16 warnings generated.
+[ 99%] Linking CXX executable envelope-bank-tests
+6 warnings generated.
+[ 99%] Linking CXX executable playback-display-tests
+[ 99%] Built target envelope-bank-tests
+[ 99%] Building CXX object CMakeFiles/windows-mixer-document-tests.dir/private/tmp/screamseq-graph-controls-20261001/windows/Session/MixerOperations.cpp.o
+[ 99%] Built target playback-display-tests
+[100%] Building CXX object CMakeFiles/windows-mixer-document-tests.dir/private/tmp/screamseq-graph-controls-20261001/windows/Project/NativeMetadata.cpp.o
+[100%] Linking CXX executable signal-routing-tests
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:16:5: warning: 'auto' deduced as 'id' in declaration of 'params' [-Wauto-var-id]
+   16 |     auto params=[values mutableCopy];if(write)params[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:20:9: warning: 'auto' deduced as 'id' in declaration of 'target' [-Wauto-var-id]
+   20 |   const auto target=call(@"mixer.get",@{@"includeImplicit":@YES},false)[@"data"][@"buses"][2][@"id"];
+      |   ~~~~~~^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:35:9: warning: 'auto' deduced as 'id' in declaration of 'source' [-Wauto-var-id]
+   35 |   const auto source=call(@"graph.song.source.add",@{@"source":@{@"kind":@"amount",@"name":@"Live implicit source",@"amount":@.2}})[@"data"][@"node"];settled();
+      |   ~~~~~~^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:44:9: warning: 'auto' deduced as 'id' in declaration of 'first' [-Wauto-var-id]
+   44 |   const auto first=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+      |   ~~~~~~^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:47:9: warning: 'auto' deduced as 'id' in declaration of 'second' [-Wauto-var-id]
+   47 |   const auto second=[session snapshot:0][@"nativePlugins"][1][@"instanceID"];
+      |   ~~~~~~^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:66:3: warning: 'auto' deduced as 'id' in declaration of 'shape' [-Wauto-var-id]
+   66 |   auto shape=[oldCurve[@"shape"] mutableCopy];auto points=[shape[@"points"] mutableCopy];auto point=[points[0] mutableCopy];point[@"value"]=@.6;points[0]=point;shape[@"points"]=points;
+      |   ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:66:47: warning: 'auto' deduced as 'id' in declaration of 'points' [-Wauto-var-id]
+   66 |   auto shape=[oldCurve[@"shape"] mutableCopy];auto points=[shape[@"points"] mutableCopy];auto point=[points[0] mutableCopy];point[@"value"]=@.6;points[0]=point;shape[@"points"]=points;
+      |                                               ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:66:90: warning: 'auto' deduced as 'id' in declaration of 'point' [-Wauto-var-id]
+   66 |   auto shape=[oldCurve[@"shape"] mutableCopy];auto points=[shape[@"points"] mutableCopy];auto point=[points[0] mutableCopy];point[@"value"]=@.6;points[0]=point;shape[@"points"]=points;
+      |                                                                                          ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:75:3: warning: 'auto' deduced as 'id' in declaration of 'recipeShape' [-Wauto-var-id]
+   75 |   auto recipeShape=[call(@"envelope.bank.list",@{@"target":recipeTarget},false)[@"data"][@"shape"] mutableCopy];auto recipePoints=[recipeShape[@"points"] mutableCopy];auto recipePoint=[recipePoints[0] mutableCopy];recipePoint[@"value"]=@.35;recipePoints[0]=recipePoint;recipeShape[@"points"]=recipePoints;
+      |   ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:75:113: warning: 'auto' deduced as 'id' in declaration of 'recipePoints' [-Wauto-var-id]
+   75 |   auto recipeShape=[call(@"envelope.bank.list",@{@"target":recipeTarget},false)[@"data"][@"shape"] mutableCopy];auto recipePoints=[recipeShape[@"points"] mutableCopy];auto recipePoint=[recipePoints[0] mutableCopy];recipePoint[@"value"]=@.35;recipePoints[0]=recipePoint;recipeShape[@"points"]=recipePoints;
+      |                                                                                                                 ^~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:75:168: warning: 'auto' deduced as 'id' in declaration of 'recipePoint' [-Wauto-var-id]
+   75 |   auto recipeShape=[call(@"envelope.bank.list",@{@"target":recipeTarget},false)[@"data"][@"shape"] mutableCopy];auto recipePoints=[recipeShape[@"points"] mutableCopy];auto recipePoint=[recipePoints[0] mutableCopy];recipePoint[@"value"]=@.35;recipePoints[0]=recipePoint;recipeShape[@"points"]=recipePoints;
+      |                                                                                                                                                                        ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:98:3: warning: 'auto' deduced as 'id' in declaration of 'definition' [-Wauto-var-id]
+   98 |   auto definition=[call(@"graph.get",@{},false)[@"data"][@"library"][0] mutableCopy];auto nodes=[definition[@"nodes"] mutableCopy];
+      |   ^~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:98:86: warning: 'auto' deduced as 'id' in declaration of 'nodes' [-Wauto-var-id]
+   98 |   auto definition=[call(@"graph.get",@{},false)[@"data"][@"library"][0] mutableCopy];auto nodes=[definition[@"nodes"] mutableCopy];
+      |                                                                                      ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:99:85: warning: 'auto' deduced as 'id' in declaration of 'node' [-Wauto-var-id]
+   99 |   for(NSUInteger i=0;i<[nodes count];++i)if([nodes[i][@"id"] isEqual:recipePlugin]){auto node=[nodes[i] mutableCopy];auto plugin=[node[@"plugin"] mutableCopy];plugin[@"state"]=[[NSData dataWithBytes:saved.data() length:saved.size()] base64EncodedStringWithOptions:0];plugin[@"parameters"]=@[];node[@"plugin"]=plugin;nodes[i]=node;}definition[@"nodes"]=nodes;
+      |                                                                                     ^~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:99:118: warning: 'auto' deduced as 'id' in declaration of 'plugin' [-Wauto-var-id]
+   99 |   for(NSUInteger i=0;i<[nodes count];++i)if([nodes[i][@"id"] isEqual:recipePlugin]){auto node=[nodes[i] mutableCopy];auto plugin=[node[@"plugin"] mutableCopy];plugin[@"state"]=[[NSData dataWithBytes:saved.data() length:saved.size()] base64EncodedStringWithOptions:0];plugin[@"parameters"]=@[];node[@"plugin"]=plugin;nodes[i]=node;}definition[@"nodes"]=nodes;
+      |                                                                                                                      ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:113:41: warning: 'auto' deduced as 'id' in declaration of 'beforeGraph' [-Wauto-var-id]
+  113 |   const auto priorManual=manual();const auto beforeGraph=call(@"graph.get",@{},false)[@"data"];
+      |                                   ~~~~~~^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:119:9: warning: 'auto' deduced as 'id' in declaration of 'afterGraph' [-Wauto-var-id]
+  119 |   const auto afterGraph=call(@"graph.get",@{},false)[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~~~
+[100%] Built target signal-routing-tests
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/ParameterActivityTests.mm:60:89: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   60 |   auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;auto r=[session automationMethod:method params:p error:&error];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);return r;};
+      |                                                                                         ^~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/ParameterActivityTests.mm:65:3: warning: 'auto' deduced as 'id' in declaration of 'dry' [-Wauto-var-id]
+   65 |   auto dry=[edit mutableCopy];dry[@"dryRun"]=@YES;call(@"automation.recorded.edit",dry,true);check([revision isEqual:session.automationRevision],"Recorded dry run changes song");call(@"automation.recorded.edit",edit,true);
+      |   ^~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/ParameterActivityTests.mm:68:3: warning: 'auto' deduced as 'id' in declaration of 'invalid' [-Wauto-var-id]
+   68 |   auto invalid=[edit mutableCopy];invalid[@"value"]=@999;invalid[@"expectedRevision"]=session.automationRevision;check(![session automationMethod:@"automation.recorded.edit" params:invalid error:&error]&&[lane() count]==1,"Invalid value partially replaced recording");
+      |   ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:155:5: warning: 'auto' deduced as 'id' in declaration of 'params' [-Wauto-var-id]
+  155 |     auto params=[values mutableCopy];if(write)params[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:184:3: warning: 'auto' deduced as 'id' in declaration of 'routing' [-Wauto-var-id]
+  184 |   auto routing=call(@"mixer.get",@{@"includeImplicit":@YES})[@"data"];
+      |   ^~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:187:3: warning: 'auto' deduced as 'id' in declaration of 'target' [-Wauto-var-id]
+  187 |   auto target=routing[@"buses"][2][@"id"];
+      |   ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:195:3: warning: 'auto' deduced as 'id' in declaration of 'firstPlugin' [-Wauto-var-id]
+  195 |   auto firstPlugin=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+      |   ^~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:198:3: warning: 'auto' deduced as 'id' in declaration of 'groupedPlugin' [-Wauto-var-id]
+  198 |   auto groupedPlugin=[session snapshot:0][@"nativePlugins"][1][@"instanceID"];
+      |   ^~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:199:3: warning: 'auto' deduced as 'id' in declaration of 'groupedGraph' [-Wauto-var-id]
+  199 |   auto groupedGraph=call(@"graph.get",@{})[@"data"];
+      |   ^~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:204:3: warning: 'auto' deduced as 'id' in declaration of 'beforeRemoveGraph' [-Wauto-var-id]
+  204 |   auto beforeRemoveGraph=call(@"graph.get",@{})[@"data"],beforeRemoveMixer=call(@"mixer.get",@{})[@"data"];
+      |   ^~~~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:204:3: warning: 'auto' deduced as 'id' in declaration of 'beforeRemoveMixer' [-Wauto-var-id]
+  204 |   auto beforeRemoveGraph=call(@"graph.get",@{})[@"data"],beforeRemoveMixer=call(@"mixer.get",@{})[@"data"];
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:219:3: warning: 'auto' deduced as 'id' in declaration of 'insertedPlugin' [-Wauto-var-id]
+  219 |   auto insertedPlugin=[session snapshot:0][@"nativePlugins"][1][@"instanceID"];
+      |   ^~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:220:3: warning: 'auto' deduced as 'id' in declaration of 'insertedRouting' [-Wauto-var-id]
+  220 |   auto insertedRouting=call(@"mixer.get",@{})[@"data"];
+      |   ^~~~~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:230:3: warning: 'auto' deduced as 'id' in declaration of 'original' [-Wauto-var-id]
+  230 |   auto original=[[session snapshot:0][@"nativePlugins"] valueForKey:@"instanceID"];
+      |   ^~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:232:3: warning: 'auto' deduced as 'id' in declaration of 'moved' [-Wauto-var-id]
+  232 |   auto moved=[[session snapshot:0][@"nativePlugins"] valueForKey:@"instanceID"];
+      |   ^~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:235:3: warning: 'auto' deduced as 'id' in declaration of 'stable' [-Wauto-var-id]
+  235 |   auto stable=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+      |   ^~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:241:3: warning: 'auto' deduced as 'id' in declaration of 'invalidBatch' [-Wauto-var-id]
+  241 |   auto invalidBatch=[@{@"plugin":stable,@"values":@[@{@"id":@1,@"value":@-2},@{@"id":@999999,@"value":@1}],@"expectedRevision":session.automationRevision} mutableCopy];
+      |   ^~~~~~~~~~~~~~~~~
+/private/tmp/screamseq-graph-controls-20261001/mac/Tests/UnifiedHistoryTests.mm:252:3: warning: 'auto' deduced as 'id' in declaration of 'identityValues' [-Wauto-var-id]
+  252 |   auto identityValues=call(@"plugin.parameters.get",@{@"plugin":stable})[@"data"];
+      |   ^~~~~~~~~~~~~~~~~~~
+32 warnings generated.
+[100%] Linking CXX executable unified-history-tests
+3 warnings generated.
+[100%] Linking CXX executable parameter-activity-tests
+[100%] Built target unified-history-tests
+[100%] Built target parameter-activity-tests
+[100%] Linking CXX executable windows-mixer-document-tests
+[100%] Built target windows-mixer-document-tests
+/private/tmp/screamseq-graph-controls-20261001/bin/graph-controls-qa/ScreamSeq.app/Contents/MacOS/plugin-scanner: replacing existing signature
+/private/tmp/screamseq-graph-controls-20261001/bin/graph-controls-qa/ScreamSeq.app: replacing existing signature
+Built /private/tmp/screamseq-graph-controls-20261001/bin/graph-controls-qa/ScreamSeq.app

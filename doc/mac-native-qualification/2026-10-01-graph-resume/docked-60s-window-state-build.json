@@ -1,0 +1,15 @@
+{
+  "bundle": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/ui-window-state-0a8e8dad/ScreamSeq Frame QA.app",
+  "sha256": "62324d21333644a28c3a6c28bbd062d516d66c1efab5f71814454d55150c171f",
+  "sourceFingerprint": "d348267bcb9b7effb200f01fd2ae84ab443eb7a610368d39cfa81c8f24b47272",
+  "baseCoherentFingerprint": "6dec897ca3d83c375fbab441f3408caa76b341aaec672e898d53baf96841ce78",
+  "baseUIFingerprint": "e30b515374b4dd16fd363f0337f035d36a68fbd91fb2df306676145659a954d7",
+  "linkedArchiveHashes": {
+    "libTrackerMac.a": "829f5dd2773659867953e06ecbbf7e1a16aba21b5c0d3d1d03438d8e0af02ea3",
+    "hosted/libTrackerHosted.a": "75f2e35c9db08eaf8f2dfdf40cf0a7322fc10a79d28e5c22ecc929aa9c404b25",
+    "libTrackerEditor.a": "66b7a3a07ad6e1f7f7ba4587de3ee4460ed2b8998185a5031723addbc2970b49",
+    "libOpenMPTCore.a": "03ed63f2126fdde983565e76880aae27202658b9e5dd28b7e9cb6e2e82900800",
+    "libTrackerFLAC.a": "267dedd94f929d0bc9f3eb5a0802411f58f7fb57333434f03df86c5da950e713"
+  },
+  "experiment": "Fixed60 latency2 layout candidate plus bounded app-active/window-key/occlusion/activity-token observations at transitions and each50ms workload tick. No activation behavior or acceptance gate changes."
+}

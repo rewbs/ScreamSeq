@@ -1,0 +1,6 @@
+{
+  "bin/mac-checkpoints/2026-09-20-sample-browser/Resonance.app/Contents/MacOS/Resonance": "e05ed4c7b67bb513a4ab6840bd70a8539a16769c0a7e28d8bf5157f356bc9c88",
+  "bin/mac-checkpoints/2026-09-20-note-offset-audit/Resonance.app/Contents/MacOS/Resonance": "04eec0b21e11ff3eb015e781aca7c2cbe8a4cdafa8728c77d932ca62f056271e",
+  "bin/mac-checkpoints/2026-09-20-crash-recovery/Resonance.app/Contents/MacOS/Resonance": "a1093b0ecb34fe968bae22930426dfe58d888618919c68b6ec8c7f85c5d2804b",
+  "bin/mac-checkpoints/2026-09-20-crash-recovery/Recovered song before 19-00 crash.resonance": "af931af47500442f1eb3fe969c1f8c8179aea8ee65464c0b26cc3ecbe8d3eaf8"
+}

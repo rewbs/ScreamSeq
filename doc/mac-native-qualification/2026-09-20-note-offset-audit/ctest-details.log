@@ -1,0 +1,1043 @@
+Start testing: Sep 20 20:37 AEST
+----------------------------------------------------------
+1/59 Testing: plugin-presets
+1/59 Test: plugin-presets
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/plugin-preset-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"plugin-presets" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS plugin preset files: lossless binary state, portable identity, strict validation, revisions, dry-run/atomic overwrite and bounded regular-file I/O
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"plugin-presets" end time: Sep 20 20:37 AEST
+"plugin-presets" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/59 Testing: precise-ramps
+2/59 Test: precise-ramps
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/precise-ramp-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"precise-ramps" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS precise host ramps: independent every-sample AU/VST3 main/aux audio at three rates/four buffers, interruptions/order/endpoints, strict bounds, zero RT allocations/frees/locks; 0.0643922s offline diagnostic (not hardware qualification)
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"precise-ramps" end time: Sep 20 20:37 AEST
+"precise-ramps" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/59 Testing: precise-notes
+3/59 Test: precise-notes
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/precise-note-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"precise-notes" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+Offset workflow: row 0, units 0, measured delay 0 frames at 48000 Hz
+Offset workflow: row 0, units 1, measured delay 1 frames at 48000 Hz
+Offset workflow: row 0, units 1234, measured delay 109 frames at 48000 Hz
+Offset workflow: row 0, units 16384, measured delay 1440 frames at 48000 Hz
+Offset workflow: row 0, units 32768, measured delay 2880 frames at 48000 Hz
+Offset workflow: row 0, units 49152, measured delay 4320 frames at 48000 Hz
+Offset workflow: row 0, units 65535, measured delay 5760 frames at 48000 Hz
+Offset workflow: row 1, units 0, measured delay 0 frames at 48000 Hz
+Offset workflow: row 1, units 1, measured delay 1 frames at 48000 Hz
+Offset workflow: row 1, units 1234, measured delay 109 frames at 48000 Hz
+Offset workflow: row 1, units 16384, measured delay 1440 frames at 48000 Hz
+Offset workflow: row 1, units 32768, measured delay 2880 frames at 48000 Hz
+Offset workflow: row 1, units 49152, measured delay 4320 frames at 48000 Hz
+Offset workflow: row 1, units 65535, measured delay 5760 frames at 48000 Hz
+PASS sample/AU/VST3 precise note timing, same-row releases, repeat, tempo/groove, callback partitions, timestamp capture, realtime audit, API offset workflow and project recall
+<end of output>
+Test time =   1.20 sec
+----------------------------------------------------------
+Test Passed.
+"precise-notes" end time: Sep 20 20:37 AEST
+"precise-notes" time elapsed: 00:00:01
+----------------------------------------------------------
+
+4/59 Testing: pattern-pitch
+4/59 Test: pattern-pitch
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/pattern-pitch-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"pattern-pitch" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS sub-tick sample phase, continuous pitch interpolation, AU/VST3 MIDI pitch at every sample, interruption, repeated patterns, three rates, four callback sizes and realtime audit
+<end of output>
+Test time =   1.24 sec
+----------------------------------------------------------
+Test Passed.
+"pattern-pitch" end time: Sep 20 20:37 AEST
+"pattern-pitch" time elapsed: 00:00:01
+----------------------------------------------------------
+
+5/59 Testing: pattern-performance
+5/59 Test: pattern-performance
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/pattern-performance-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"pattern-performance" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS native command reference audio, exact fractional starts, interruption, column precedence, repeats, seek, rack identity, tempo/groove, callback partition, realtime audit, document history, guarded API, conflict rejection and saved project recall
+<end of output>
+Test time =   0.72 sec
+----------------------------------------------------------
+Test Passed.
+"pattern-performance" end time: Sep 20 20:37 AEST
+"pattern-performance" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/59 Testing: plugin-programs
+6/59 Test: plugin-programs
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/plugin-program-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"plugin-programs" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS factory programs: AU/VST3 lists, unit-specific selectors, processor delivery, parameter refresh, exact offline audio, guarded API, routing preservation, history and recall
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"plugin-programs" end time: Sep 20 20:37 AEST
+"plugin-programs" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/59 Testing: plugin-preset-session
+7/59 Test: plugin-preset-session
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/plugin-preset-session-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"plugin-preset-session" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS preset session: built-in/AU/VST3 effects/instruments, manual baseline, dry runs, song/file revisions, stable identity, type rejection, plugin Undo/Redo and no touch learning
+<end of output>
+Test time =   0.14 sec
+----------------------------------------------------------
+Test Passed.
+"plugin-preset-session" end time: Sep 20 20:37 AEST
+"plugin-preset-session" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/59 Testing: recovery-session
+8/59 Test: recovery-session
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/recovery-session-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"recovery-session" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS recovery snapshot: active take isolation, exact recall, stopped restore, commit/undo, incompatible and malformed takes
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"recovery-session" end time: Sep 20 20:37 AEST
+"recovery-session" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/59 Testing: instrument-envelopes
+9/59 Test: instrument-envelopes
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/instrument-envelope-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"instrument-envelopes" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS instrument envelopes: shared deterministic transforms, native integer quantization, retained/replaced anchors, clipboard/repeat/insert, empty generators, limits and three-format persistence/history
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"instrument-envelopes" end time: Sep 20 20:37 AEST
+"instrument-envelopes" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/59 Testing: instrument-envelope-session
+10/59 Test: instrument-envelope-session
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/instrument-envelope-session-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"instrument-envelope-session" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS instrument envelope sessions: independent preview/history/native recall, complete three-format WAV equality and rejected edits
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"instrument-envelope-session" end time: Sep 20 20:37 AEST
+"instrument-envelope-session" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/59 Testing: plugin-aliases
+11/59 Test: plugin-aliases
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/plugin-alias-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"plugin-aliases" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS shared instrument aliases: AU/VST3 channel-weighted audio, one processor/adapter, note-off and mute ownership, same-channel overlap, buffer/rate invariance, realtime audit, state persistence, previews/history and project version guards
+<end of output>
+Test time =   0.40 sec
+----------------------------------------------------------
+Test Passed.
+"plugin-aliases" end time: Sep 20 20:37 AEST
+"plugin-aliases" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/59 Testing: song-timing-session
+12/59 Test: song-timing-session
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/song-timing-session-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"song-timing-session" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS timing sessions: five-format project save/reopen, actual complete WAV equality, fractional payload, one-step Undo and atomic malformed-project rejection
+<end of output>
+Test time =   0.18 sec
+----------------------------------------------------------
+Test Passed.
+"song-timing-session" end time: Sep 20 20:37 AEST
+"song-timing-session" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/59 Testing: song-timing
+13/59 Test: song-timing
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/song-timing-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"song-timing" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS musical timing: five-format fractional tempo/groove snapshots, optional payload validation, loss-safe exports, structural Undo/Redo, independent sample timing and callback-size audio (peak delta below 1e-6) at three sample rates; no callback allocations/frees/locks
+<end of output>
+Test time =   0.25 sec
+----------------------------------------------------------
+Test Passed.
+"song-timing" end time: Sep 20 20:37 AEST
+"song-timing" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/59 Testing: native-reverse-loops
+14/59 Test: native-reverse-loops
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/native-reverse-loop-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"native-reverse-loops" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 800 independent reverse-loop PCM/unrolled-resampler/persistence/history/callback comparisons; 660000 absolute-time phase/tap checks; archive rejection, export guard, copy/splice/history and release coordinates
+<end of output>
+Test time =   1.21 sec
+----------------------------------------------------------
+Test Passed.
+"native-reverse-loops" end time: Sep 20 20:37 AEST
+"native-reverse-loops" time elapsed: 00:00:01
+----------------------------------------------------------
+
+15/59 Testing: sample-loops
+15/59 Test: sample-loops
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-loop-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-loops" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 320 loop mode/layout/format history and audio cases; 80 API/native-project/whole-WAV references; compact history, no-op, stale/foreign/tampered and invalid input checks
+<end of output>
+Test time =   1.96 sec
+----------------------------------------------------------
+Test Passed.
+"sample-loops" end time: Sep 20 20:37 AEST
+"sample-loops" time elapsed: 00:00:01
+----------------------------------------------------------
+
+16/59 Testing: sample-crossfade-project
+16/59 Test: sample-crossfade-project
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-crossfade-project-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-crossfade-project" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 40 crossfade API/native save/reopen/full WAV comparisons: five formats, normal/sustain, preserve/overlap and linear/equal-power
+<end of output>
+Test time =   0.79 sec
+----------------------------------------------------------
+Test Passed.
+"sample-crossfade-project" end time: Sep 20 20:37 AEST
+"sample-crossfade-project" time elapsed: 00:00:00
+----------------------------------------------------------
+
+17/59 Testing: sample-crossfade
+17/59 Test: sample-crossfade
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-crossfade-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-crossfade" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 400 independent crossfade PCM/curve/layout cases; exact previews, normal/sustain loop history, five-format persistence/audio, no-ops and stale/tampered rejection
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"sample-crossfade" end time: Sep 20 20:37 AEST
+"sample-crossfade" time elapsed: 00:00:00
+----------------------------------------------------------
+
+18/59 Testing: sample-snap
+18/59 Test: sample-snap
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-snap-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-snap" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 78432 independent boundary snaps: zero/grid, directions/ties/endpoints, stereo isolation, limits and document neutrality
+<end of output>
+Test time =   0.06 sec
+----------------------------------------------------------
+Test Passed.
+"sample-snap" end time: Sep 20 20:37 AEST
+"sample-snap" time elapsed: 00:00:00
+----------------------------------------------------------
+
+19/59 Testing: sample-drawing
+19/59 Test: sample-drawing
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-drawing-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-drawing" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 80 independent drawing interpolation/layout/channel cases, exact previews/clipping, history/native persistence/audio, bounded waveform updates and invalid/stale/foreign/tampered rejection
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"sample-drawing" end time: Sep 20 20:37 AEST
+"sample-drawing" time elapsed: 00:00:00
+----------------------------------------------------------
+
+20/59 Testing: sample-copy
+20/59 Test: sample-copy
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-copy-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-copy" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 50 independent copy-to-new layout/range/settings/audio cases, loops/cues, native identity/persistence, compact history, stale/foreign/tampered rejection and safe full-inventory reuse
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"sample-copy" end time: Sep 20 20:37 AEST
+"sample-copy" time elapsed: 00:00:00
+----------------------------------------------------------
+
+21/59 Testing: sample-clipboard
+21/59 Test: sample-clipboard
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-clipboard-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-clipboard" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 448 independent PCM paste cases, channel copy, exact loop/cue/history/persistence, bounded waveform edits and resampling; maximum analytic error 1.13715, alias 0 PCM units
+<end of output>
+Test time =   0.15 sec
+----------------------------------------------------------
+Test Passed.
+"sample-clipboard" end time: Sep 20 20:37 AEST
+"sample-clipboard" time elapsed: 00:00:00
+----------------------------------------------------------
+
+22/59 Testing: sample-archive
+22/59 Test: sample-archive
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-archive-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-archive" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS exact native samples across 20 format/layout cases, trim and mixed history, XM maps, OPL, sparse storage, audio and malformed snapshots
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"sample-archive" end time: Sep 20 20:37 AEST
+"sample-archive" time elapsed: 00:00:00
+----------------------------------------------------------
+
+23/59 Testing: sample-processing
+23/59 Test: sample-processing
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-processing-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-processing" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 1568 independent 8/16-bit mono/stereo processing cases; exact range/channel waveform oracle
+PASS prepared edit identity/revision checks, exact mixed history and persistence in five module formats
+PASS million-frame cache reuse/local invalidation, one-frame exact silence and bounded history
+PASS full-scale/silent normalization, fade exponent boundaries and exact rendered audio against independent processed PCM
+<end of output>
+Test time =   0.23 sec
+----------------------------------------------------------
+Test Passed.
+"sample-processing" end time: Sep 20 20:37 AEST
+"sample-processing" time elapsed: 00:00:00
+----------------------------------------------------------
+
+24/59 Testing: sample-project
+24/59 Test: sample-project
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-project-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-project" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS API trim/undo, native sample persistence and identity in five formats, checked module export, exact independently rendered WAV and malformed project atomicity
+<end of output>
+Test time =   0.73 sec
+----------------------------------------------------------
+Test Passed.
+"sample-project" end time: Sep 20 20:37 AEST
+"sample-project" time elapsed: 00:00:00
+----------------------------------------------------------
+
+25/59 Testing: sample-session
+25/59 Test: sample-session
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sample-session-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sample-session" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS sample session processing/clipboard preview/no-op/error/read revisions, fixed/structural edit/undo/redo
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"sample-session" end time: Sep 20 20:37 AEST
+"sample-session" time elapsed: 00:00:00
+----------------------------------------------------------
+
+26/59 Testing: tracker-core
+26/59 Test: tracker-core
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/tracker-core-tests" "/Users/rewbs/code/openmpt"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"tracker-core" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS atomic edits, grouped undo, sample processing/rollback, pattern/order undo, exact native roundtrip, bounded queue, loop termination at 44.1/48/96 kHz; max callback 347.792 us
+PASS fixture test.mod
+PASS fixture test.xm
+PASS fixture test.s3m
+PASS fixture test.mptm
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"tracker-core" end time: Sep 20 20:37 AEST
+"tracker-core" time elapsed: 00:00:00
+----------------------------------------------------------
+
+27/59 Testing: automation-tools
+27/59 Test: automation-tools
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/automation-tools-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"automation-tools" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 65480 reversed-curve reference values; clipboard/repeat/insert, scoped transforms, deterministic humanization, collisions, bounds and five-format native history
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"automation-tools" end time: Sep 20 20:37 AEST
+"automation-tools" time elapsed: 00:00:00
+----------------------------------------------------------
+
+28/59 Testing: pattern-tools
+28/59 Test: pattern-tools
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/pattern-tools-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"pattern-tools" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 450 five-format masked row splice references, range/loss guards, exact history and separate envelope preservation
+PASS pattern tools: exact curves, masks, ranges, deterministic generation, data-loss guards, paste modes, format checks, preview/undo/redo/save
+<end of output>
+Test time =   0.15 sec
+----------------------------------------------------------
+Test Passed.
+"pattern-tools" end time: Sep 20 20:37 AEST
+"pattern-tools" time elapsed: 00:00:00
+----------------------------------------------------------
+
+29/59 Testing: pattern-commands
+29/59 Test: pattern-commands
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/pattern-commands-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"pattern-commands" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS 250 format-filtered command entries; complete effect/volume coverage, prefixes, suggestions and MOD/XM/IT distinctions
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"pattern-commands" end time: Sep 20 20:37 AEST
+"pattern-commands" time elapsed: 00:00:00
+----------------------------------------------------------
+
+30/59 Testing: plugins
+30/59 Test: plugins
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/plugin-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"plugins" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS Apple AU subtype 1819304307: state recall, stereo render, live/offline parity, finite output, latency 0 s
+PASS Apple AU subtype 1752195443: state recall, stereo render, live/offline parity, finite output, latency 0 s
+PASS Apple AU subtype 1819112562: state recall, stereo render, live/offline parity, finite output, latency 0.0122 s
+PASS sample-timed AU automation at 44100 Hz across 128/512-frame buffers
+PASS sample-timed AU automation at 48000 Hz across 128/512-frame buffers
+PASS sample-timed AU automation at 96000 Hz across 128/512-frame buffers
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"plugins" end time: Sep 20 20:37 AEST
+"plugins" time elapsed: 00:00:00
+----------------------------------------------------------
+
+31/59 Testing: native-effects
+31/59 Test: native-effects
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/native-effects-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"native-effects" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+Built-in saved-project WAV gain maximum difference 3.72381e-09
+PASS all built-in devices (utilities, filters/EQ, comb, distortion and LofiMat): gain/balance/polarity, 5 Hz DC response, manual correction, mono/width/all-pass, 5 ms smoothing, exact callback/live/offline and musical automation, RT audit, versioned state, API/history/persistence/export
+<end of output>
+Test time =   7.17 sec
+----------------------------------------------------------
+Test Passed.
+"native-effects" end time: Sep 20 20:37 AEST
+"native-effects" time elapsed: 00:00:07
+----------------------------------------------------------
+
+32/59 Testing: eq-effects
+32/59 Test: eq-effects
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/eq-effects-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"eq-effects" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+EQ saved WAV added tail 14.6044 seconds, final 100 ms peak 9.80366e-16
+PASS Digital Filter/EQ5/EQ10/Mixer EQ: response, inverse gain, exact flat/bypass, L/R/M/S, warm histories, automated tails, RT audit, API/units/history/state and saved WAV
+<end of output>
+Test time =   1.23 sec
+----------------------------------------------------------
+Test Passed.
+"eq-effects" end time: Sep 20 20:37 AEST
+"eq-effects" time elapsed: 00:00:01
+----------------------------------------------------------
+
+33/59 Testing: comb
+33/59 Test: comb
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/comb-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"comb" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+Delay polynomial error 8.88178e-16, fundamental phase error 0.00368637 rad, maximum gain 1
+Comb rapid-modulation peak 0.100043, extreme decay residual 1.56608e-10
+Comb saved WAV maximum error 7.42307e-09
+PASS fractional delay/Comb Filter: eight-tap interpolation, signed echo train, musical transpose, note quantization, channel isolation, rapid retuning, long decay, RT audit and API/history/persistence
+<end of output>
+Test time =   0.39 sec
+----------------------------------------------------------
+Test Passed.
+"comb" end time: Sep 20 20:37 AEST
+"comb" time elapsed: 00:00:00
+----------------------------------------------------------
+
+34/59 Testing: filters
+34/59 Test: filters
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/filter-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"filters" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+PASS state-variable filter prototype: 8 shapes, independent RBJ impulse comparison maximum 2.04876e-11, 8/44.1/48/96/192 kHz, cutoff/Q/gain boundaries, silent/reset/channel isolation, no RT allocation/free/lock; rapid automation peak 2.46566; estimated tail residual 2.39075e-09
+<end of output>
+Test time =   0.13 sec
+----------------------------------------------------------
+Test Passed.
+"filters" end time: Sep 20 20:37 AEST
+"filters" time elapsed: 00:00:00
+----------------------------------------------------------
+
+35/59 Testing: oversampling
+35/59 Test: oversampling
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/oversampling-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"oversampling" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+Soft clipping reference RMS 1.09938e-06, improvement 107.584 dB
+Hard clipping reference RMS 0.000297425, improvement 60.5155 dB
+PASS 2x/4x/8x/16x stereo oversampling: independent convolution error 2.88658e-15, passband error 8.71485e-06, worst image rejection -107.424 dB; exact latency/support, reset, isolation and RT audit
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"oversampling" end time: Sep 20 20:37 AEST
+"oversampling" time elapsed: 00:00:00
+----------------------------------------------------------
+
+36/59 Testing: distortion
+36/59 Test: distortion
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/distortion-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"distortion" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+Distortion independent nonlinear/automation reference maximum 5.96037e-08
+Distortion extreme peak 26.2805, release residual 1.25917e-14
+Distortion interrupted automation peak 31.5898
+Distortion saved WAV/latency maximum 0
+PASS Distortion: four independently checked curves, tone, aligned dry/mix/output controls, warm bypass, control timing, stereo isolation, extreme releases, mixer compensation, API/history/persistence and saved WAV
+<end of output>
+Test time =   1.63 sec
+----------------------------------------------------------
+Test Passed.
+"distortion" end time: Sep 20 20:37 AEST
+"distortion" time elapsed: 00:00:01
+----------------------------------------------------------
+
+37/59 Testing: lofi
+37/59 Test: lofi
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/lofi-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"lofi" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+LofiMat quantizer maximum error 2.94455e-08; exact rate clocks from 8 to 384 kHz
+LofiMat noise means 0.00241822/-0.000694901, stereo covariance -0.00234088
+LofiMat release residual 3.87864e-11, interrupted automation peak 31.6886
+LofiMat independent saved WAV maximum 7.44321e-09
+PASS LofiMat: amplitude quantization, exact rational clocks, deterministic stereo noise, smoothing phase, clock-preserving sweeps, warm bypass, extreme controls, finite decay, API/history/persistence and independent saved audio
+<end of output>
+Test time =   0.16 sec
+----------------------------------------------------------
+Test Passed.
+"lofi" end time: Sep 20 20:37 AEST
+"lofi" time elapsed: 00:00:00
+----------------------------------------------------------
+
+38/59 Testing: cabinet
+38/59 Test: cabinet
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/cabinet-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"cabinet" start time: Sep 20 20:37 AEST
+Output:
+----------------------------------------------------------
+Cabinet models: independent error 1.89114e-13, interrupted morph peak 0.110899
+Cabinet preamp reference error 5.9601e-08
+Cabinet six-route linear reference error 1.49008e-08
+Cabinet interrupted peak 41.6926, release residual 1.40806e-31, six warm routes CPU 14.4292% of one 48 kHz core (informational)
+Cabinet saved WAV independent reference error 1.0551e-08
+Cabinet interrupted routing error 5.5631e-08
+PASS Cabinet Simulator independent models/preamp/EQ, six routing orders, adaptive latency, aligned automation, exact bypass/mono, extremes, tails, and realtime audit
+<end of output>
+Test time =  38.12 sec
+----------------------------------------------------------
+Test Passed.
+"cabinet" end time: Sep 20 20:38 AEST
+"cabinet" time elapsed: 00:00:38
+----------------------------------------------------------
+
+39/59 Testing: dynamics
+39/59 Test: dynamics
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/dynamics-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"dynamics" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+Compressor static/closed-form envelope maximum 7.69784e-09
+Compressor RMS reference maximum 6.73632e-09
+Gate envelope reference maximum 1.49011e-08
+Dynamics detector filter reference maximum 7.44864e-09
+Dynamics interrupted peak 1.3503, detector-listen release residual 7.00143e-19
+resonance.compressor.v1 saved WAV reference maximum 3.50616e-09
+resonance.gate.v1 saved WAV reference maximum 3.50616e-09
+resonance.bus-compressor.v1 saved WAV reference maximum 3.50616e-09
+Compressor steady 1 kHz non-fundamental ratio 5.71921e-06
+PASS Compressor/Gate/Bus shared integration and Compressor/Gate independent curves, envelope timing, RMS, stereo linking, hysteresis/hold/duck, detector filters, native sidechains/offsets, meters, extremes/tails and realtime audit
+<end of output>
+Test time =   0.67 sec
+----------------------------------------------------------
+Test Passed.
+"dynamics" end time: Sep 20 20:38 AEST
+"dynamics" time elapsed: 00:00:00
+----------------------------------------------------------
+
+40/59 Testing: maximizer
+40/59 Test: maximizer
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/maximizer-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"maximizer" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+Maximizer closed-form peak/release maximum 2.9759e-08
+Maximizer automated independent reference maximum 2.24708e-07
+Maximizer steady 1 kHz non-fundamental ratio 1.48099e-08
+Maximizer independent saved WAV maximum 2.98023e-08
+PASS Maximizer: independent ceiling/dual-release/lookahead proof, interrupted controls, bypass, stereo preservation, extremes, PDC, API/history/persistence/export and realtime audit
+<end of output>
+Test time =   1.32 sec
+----------------------------------------------------------
+Test Passed.
+"maximizer" end time: Sep 20 20:38 AEST
+"maximizer" time elapsed: 00:00:01
+----------------------------------------------------------
+
+41/59 Testing: bus-compressor
+41/59 Test: bus-compressor
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/bus-compressor-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"bus-compressor" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+Bus feedback solver 90720 cases, independent bisection maximum 2.27374e-13
+Bus feedback static/closed-form maximum 7.45048e-09
+Bus feedforward RMS convolution maximum 9.29617e-10
+Bus adaptive/mode/control independent reference maximum 5.77868e-08
+Bus steady 1 kHz non-fundamental ratio 4.48484e-08
+Bus compressed saved WAV independent maximum 1.44948e-08
+PASS Bus Compressor independent implicit feedback, closed-form time/knees, RMS, adaptive/forced response, aligned interrupted automation, saved audio and realtime audit
+<end of output>
+Test time =   0.74 sec
+----------------------------------------------------------
+Test Passed.
+"bus-compressor" end time: Sep 20 20:38 AEST
+"bus-compressor" time elapsed: 00:00:00
+----------------------------------------------------------
+
+42/59 Testing: session
+42/59 Test: session
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/session-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"session" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS isolated AU scan; project/module/state roundtrip; loss-prevention; offline effect render; effect history/state/automation restoration; bounded concurrent MIDI queue
+<end of output>
+Test time =   0.16 sec
+----------------------------------------------------------
+Test Passed.
+"session" end time: Sep 20 20:38 AEST
+"session" time elapsed: 00:00:00
+----------------------------------------------------------
+
+43/59 Testing: native-song
+43/59 Test: native-song
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/native-song-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"native-song" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS native song identities, metadata, order/section history, no-op/invalid atomicity, all five module formats, project v4 roundtrip, v1/v2/v3 migration and loss prevention
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"native-song" end time: Sep 20 20:38 AEST
+"native-song" time elapsed: 00:00:00
+----------------------------------------------------------
+
+44/59 Testing: export
+44/59 Test: export
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/export-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"export" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS AU export 1819112562: 97 latency frames trimmed, 4800 tail frames, max difference 0
+PASS AU export 1684368505: 0 latency frames trimmed, 1004716 tail frames, max difference 0
+PASS dry WAV fidelity, exact export duration, latency, tail and failed-export preservation
+<end of output>
+Test time =   0.15 sec
+----------------------------------------------------------
+Test Passed.
+"export" end time: Sep 20 20:38 AEST
+"export" time elapsed: 00:00:00
+----------------------------------------------------------
+
+45/59 Testing: routing-prototype
+45/59 Test: routing-prototype
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/routing-prototype-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"routing-prototype" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+Routing unity at 44100 Hz, max difference 0
+Routing unity at 48000 Hz, max difference 0
+Routing unity at 96000 Hz, max difference 0
+PASS native track routing prototype: independent stems/meters, sample/NNA fidelity, silent bus and realtime audit
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"routing-prototype" end time: Sep 20 20:38 AEST
+"routing-prototype" time elapsed: 00:00:00
+----------------------------------------------------------
+
+46/59 Testing: mixer-runtime
+46/59 Test: mixer-runtime
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/mixer-runtime-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"mixer-runtime" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS mixer runtime: exact routing/PDC, instrument and preview inputs, timing offsets, pre/post sends, mute/solo, smooth controls, meters and realtime audit
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"mixer-runtime" end time: Sep 20 20:38 AEST
+"mixer-runtime" time elapsed: 00:00:00
+----------------------------------------------------------
+
+47/59 Testing: native-mixer
+47/59 Test: native-mixer
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/native-mixer-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"native-mixer" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+Native mixer unity at 44100 Hz: 1.49012e-08
+Native mixer unity at 48000 Hz: 1.49012e-08
+Native mixer unity at 96000 Hz: 1.49012e-08
+Mixer WAV fader check: signal 42101.7, maximum difference 9.10299e-09, legacy sample-mode difference 1.18464e-06
+PASS native mixer: sample/NNA fidelity, groups, track effects, instruments, automation, seeks, PDC, tails, realtime safety, API validation, undo and persistence
+<end of output>
+Test time =   0.82 sec
+----------------------------------------------------------
+Test Passed.
+"native-mixer" end time: Sep 20 20:38 AEST
+"native-mixer" time elapsed: 00:00:00
+----------------------------------------------------------
+
+48/59 Testing: sidechains
+48/59 Test: sidechains
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/sidechain-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"sidechains" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS sidechains: cycle/duplicate validation, deterministic topology, multiple sources, insert-position PDC, exact impulses, pre/post/mute/solo, dormant routes and RT audit
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"sidechains" end time: Sep 20 20:38 AEST
+"sidechains" time elapsed: 00:00:00
+----------------------------------------------------------
+
+49/59 Testing: multi-bus
+49/59 Test: multi-bus
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/multi-bus-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"multi-bus" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+Aux graph sums 44100: 30469.9 / 3046.99 ratio 10 sum residual -0.00177751
+Hosted VST3 sidechain at 44100 Hz, reference difference 1.49012e-08
+Aux graph sums 48000: 33168.7 / 3316.87 ratio 10 sum residual -0.0019411
+Hosted VST3 sidechain at 48000 Hz, reference difference 1.49012e-08
+Aux graph sums 96000: 66341.5 / 6634.15 ratio 10 sum residual -0.00386533
+Hosted VST3 sidechain at 96000 Hz, reference difference 1.49012e-08
+Aux graph sums 44100: 30469.9 / 3046.99 ratio 10 sum residual -0.00177751
+Hosted AU sidechain at 44100 Hz, reference difference 1.49012e-08
+Aux graph sums 48000: 33168.7 / 3316.87 ratio 10 sum residual -0.0019411
+Hosted AU sidechain at 48000 Hz, reference difference 1.49012e-08
+Aux graph sums 96000: 66341.5 / 6634.15 ratio 10 sum residual -0.00386533
+Hosted AU sidechain at 96000 Hz, reference difference 1.49012e-08
+PASS multi-bus host and native graph: mono/stereo outputs through port 31, side input buffers, timed parameters, musical automation, independent faders, 44.1/48/96 kHz, 17/128/512/4096 frames, RT audit, API validation, history and persistence
+<end of output>
+Test time =   0.45 sec
+----------------------------------------------------------
+Test Passed.
+"multi-bus" end time: Sep 20 20:38 AEST
+"multi-bus" time elapsed: 00:00:00
+----------------------------------------------------------
+
+50/59 Testing: rack
+50/59 Test: rack
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/rack-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"rack" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS 64-device rack: compact high-slot instruments, all 250 adapters, atomic capacity validation including cross-domain Undo, exact audio, realtime audit, high-slot automation/persistence/reorder/history
+<end of output>
+Test time =   0.23 sec
+----------------------------------------------------------
+Test Passed.
+"rack" end time: Sep 20 20:38 AEST
+"rack" time elapsed: 00:00:00
+----------------------------------------------------------
+
+51/59 Testing: mixer-graph
+51/59 Test: mixer-graph
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/mixer-graph-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"mixer-graph" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS mixer graph validation, deterministic topology, insert ownership, sends/groups, solo paths, latency and intentional timing offsets
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"mixer-graph" end time: Sep 20 20:38 AEST
+"mixer-graph" time elapsed: 00:00:00
+----------------------------------------------------------
+
+52/59 Testing: native-plugins
+52/59 Test: native-plugins
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/native-plugin-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"native-plugins" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS VST3 discovery, gain, processor/controller state, sample-timed automation at 44.1/48/96k, zero callback allocations/frees/locks
+PASS VST3 tracker instrument notes, row note-off, automation, live/offline parity, zero callback allocations/frees/locks
+PASS instrument latency alignment with sample voices
+PASS VST3 keyboard preview and release
+PASS Apple AU instrument note-on, output, note-off and state recall
+PASS VST3 project save/reopen, instrument assignment, parameter persistence and WAV fidelity
+<end of output>
+Test time =   0.14 sec
+----------------------------------------------------------
+Test Passed.
+"native-plugins" end time: Sep 20 20:38 AEST
+"native-plugins" time elapsed: 00:00:00
+----------------------------------------------------------
+
+53/59 Testing: musical-automation
+53/59 Test: musical-automation
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/musical-automation-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"musical-automation" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS pattern automation curves, exact knots, callback-size independence, repeats, seek, stable plugin identity, realtime audit, API preview, no-op history and project persistence
+<end of output>
+Test time =   0.38 sec
+----------------------------------------------------------
+Test Passed.
+"musical-automation" end time: Sep 20 20:38 AEST
+"musical-automation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+54/59 Testing: automation
+54/59 Test: automation
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/automation-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"automation" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS automation API: atomic/dry-run patterns, validation, optimistic revisions, native edits, undo, PCM, instruments, AU/VST3 state/parameters, automation and project persistence; no audio output
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"automation" end time: Sep 20 20:38 AEST
+"automation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+55/59 Testing: plugin-inventory
+55/59 Test: plugin-inventory
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/plugin-inventory-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"plugin-inventory" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS plugin cache: cold/warm/restart, explicit rescan, empty inventory, invalid/truncated cache, failed rescan preservation, unwritable cache
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"plugin-inventory" end time: Sep 20 20:38 AEST
+"plugin-inventory" time elapsed: 00:00:00
+----------------------------------------------------------
+
+56/59 Testing: plugin-lifecycle
+56/59 Test: plugin-lifecycle
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/plugin-lifecycle-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"plugin-lifecycle" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS AU worker lifecycle: main-thread create/configure/initialize/state/restore/dispose, failure cleanup, worker render; no windows or devices
+<end of output>
+Test time =   0.13 sec
+----------------------------------------------------------
+Test Passed.
+"plugin-lifecycle" end time: Sep 20 20:38 AEST
+"plugin-lifecycle" time elapsed: 00:00:00
+----------------------------------------------------------
+
+57/59 Testing: note-track
+57/59 Test: note-track
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/note-track-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"note-track" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+Unity 44100 native-group=0 legacy-to-mixer=9.31323e-07
+Unity 48000 native-group=0 legacy-to-mixer=7.52509e-07
+Unity 96000 native-group=0 legacy-to-mixer=0
+PASS note tracks: stable grouping, atomic rejection, structural Undo, five-format native roundtrip, column mutes, unity audio at three rates and callback audit
+<end of output>
+Test time =   0.21 sec
+----------------------------------------------------------
+Test Passed.
+"note-track" end time: Sep 20 20:38 AEST
+"note-track" time elapsed: 00:00:00
+----------------------------------------------------------
+
+58/59 Testing: plugin-library
+58/59 Test: plugin-library
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/plugin-library-tests"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"plugin-library" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS plugin library: stable identities, favorites/category defaults, dry-run/no-op, persistent multi-document revision checks, bounded validation, nonblocking locking and corruption preservation
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"plugin-library" end time: Sep 20 20:38 AEST
+"plugin-library" time elapsed: 00:00:00
+----------------------------------------------------------
+
+59/59 Testing: automation-target
+59/59 Test: automation-target
+Command: "/Users/rewbs/code/openmpt/bin/mac-background/automation-target-tests" "/Users/rewbs/code/openmpt/bin/mac-background/test-plugins/ResonanceFixture.vst3"
+Directory: /Users/rewbs/code/openmpt/bin/mac-background
+"automation-target" start time: Sep 20 20:38 AEST
+Output:
+----------------------------------------------------------
+PASS automation target: native/API/VST3 gestures, identity across rack/history, read isolation, session reset; no windows or audio output
+<end of output>
+Test time =   0.06 sec
+----------------------------------------------------------
+Test Passed.
+"automation-target" end time: Sep 20 20:38 AEST
+"automation-target" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Sep 20 20:38 AEST

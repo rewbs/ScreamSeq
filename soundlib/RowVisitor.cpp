@@ -61,6 +61,51 @@ RowVisitor::RowVisitor(const CSoundFile &sndFile, SEQUENCEINDEX sequence)
 	Initialize(true);
 }
 
+#if defined(OPENMPT_EDITOR_CORE)
+void RowVisitor::PrepareRealtime()
+{
+	m_realtimeOffsets.clear();
+	m_realtimeOffsets.push_back(0);
+	for(auto pattern : Order())
+		m_realtimeOffsets.push_back(m_realtimeOffsets.back() + VisitedRowsVectorSize(pattern));
+	if(m_realtimeOffsets.back() > 2 * 1024 * 1024)
+		throw std::length_error("Song exceeds the live playback row limit");
+	m_realtimeRows.assign(m_realtimeOffsets.back(), 0);
+	m_realtimeEntries.assign(1 << 18, {});
+	m_realtimeGeneration = 1;
+	m_realtimeExhausted = false;
+	// GetLength has already recorded rows before a seek target. Transfer that
+	// history so reaching the restart order does not play an extra song cycle.
+	auto remember = [&](ORDERINDEX order, ROWINDEX row, uint64 hash)
+	{
+		const uint32 key = (uint32(order) << 16) | row;
+		const size_t mask = m_realtimeEntries.size() - 1;
+		size_t index = (hash ^ (uint64(key) * 0x9e3779b97f4a7c15ULL)) & mask;
+		for(size_t probe = 0; probe < 128; ++probe, index = (index + 1) & mask)
+		{
+			auto &entry = m_realtimeEntries[index];
+			if(entry.generation != m_realtimeGeneration)
+			{
+				entry = {m_realtimeGeneration, hash, key};
+				m_realtimeRows[m_realtimeOffsets[order] + row] = m_realtimeGeneration;
+				return;
+			}
+		}
+		throw std::length_error("Seek exceeds the live playback loop-state limit");
+	};
+	for(size_t order = 0; order < m_visitedRows.size() && order + 1 < m_realtimeOffsets.size(); ++order)
+		for(size_t row = 0; row < m_visitedRows[order].size() && row < m_realtimeOffsets[order + 1] - m_realtimeOffsets[order]; ++row)
+		{
+			if(!m_visitedRows[order][row]) continue;
+			const auto loops = m_visitedLoopStates.find({ORDERINDEX(order), ROWINDEX(row)});
+			if(loops == m_visitedLoopStates.end() || loops->second.empty())
+				remember(ORDERINDEX(order), ROWINDEX(row), LoopState{}.Hash());
+			else
+				for(const auto &state : loops->second) remember(ORDERINDEX(order), ROWINDEX(row), state.Hash());
+		}
+}
+#endif
+
 
 void RowVisitor::MoveVisitedRowsFrom(RowVisitor &other) noexcept
 {
@@ -82,6 +127,13 @@ const ModSequence &RowVisitor::Order() const
 // If reset is true, the vector is not only resized to the required dimensions, but also completely cleared (i.e. all visited rows are reset).
 void RowVisitor::Initialize(bool reset)
 {
+#if defined(OPENMPT_EDITOR_CORE)
+	if(!m_realtimeEntries.empty())
+	{
+		if(reset) { ++m_realtimeGeneration; m_rowsSpentInLoops = 0; }
+		return;
+	}
+#endif
 	auto &order = Order();
 	const ORDERINDEX endOrder = order.GetLengthTailTrimmed();
 	bool reserveLoopStates = true;
@@ -167,6 +219,35 @@ void RowVisitor::Initialize(bool reset)
 // Mark an order/row combination as visited and returns true if it was visited before.
 bool RowVisitor::Visit(ORDERINDEX ord, ROWINDEX row, const ChannelStates &chnState, bool ignoreRow)
 {
+#if defined(OPENMPT_EDITOR_CORE)
+	if(!m_realtimeEntries.empty())
+	{
+		if(ord + size_t(1) >= m_realtimeOffsets.size() || row >= m_realtimeOffsets[ord + 1] - m_realtimeOffsets[ord])
+		{
+			m_realtimeExhausted = true;
+			return true;
+		}
+		LoopState state{chnState.first(m_sndFile.GetNumChannels()), ignoreRow};
+		if(state.HasLoops()) ++m_rowsSpentInLoops;
+		const uint32 key = (uint32(ord) << 16) | row;
+		const uint64 hash = state.Hash();
+		const size_t mask = m_realtimeEntries.size() - 1;
+		size_t index = (hash ^ (uint64(key) * 0x9e3779b97f4a7c15ULL)) & mask;
+		for(size_t probe = 0; probe < 128; ++probe, index = (index + 1) & mask)
+		{
+			auto &entry = m_realtimeEntries[index];
+			if(entry.generation != m_realtimeGeneration)
+			{
+				entry = {m_realtimeGeneration, hash, key};
+				m_realtimeRows[m_realtimeOffsets[ord] + row] = m_realtimeGeneration;
+				return false;
+			}
+			if(entry.hash == hash && entry.orderRow == key) return true;
+		}
+		m_realtimeExhausted = true;
+		return true;
+	}
+#endif
 	auto &order = Order();
 	if(ord >= order.size() || row >= VisitedRowsVectorSize(order[ord]))
 		return false;
@@ -224,6 +305,21 @@ ROWINDEX RowVisitor::VisitedRowsVectorSize(PATTERNINDEX pattern) const noexcept
 // Function returns true on success.
 bool RowVisitor::GetFirstUnvisitedRow(ORDERINDEX &ord, ROWINDEX &row, bool onlyUnplayedPatterns) const
 {
+#if defined(OPENMPT_EDITOR_CORE)
+	if(!m_realtimeEntries.empty())
+	{
+		for(size_t o = 0; o + 1 < m_realtimeOffsets.size(); ++o)
+		{
+			if(!Order().IsValidPat(static_cast<ORDERINDEX>(o))) continue;
+			const auto begin = m_realtimeRows.begin() + m_realtimeOffsets[o];
+			const auto end = m_realtimeRows.begin() + m_realtimeOffsets[o + 1];
+			const auto found = std::find_if(begin, end, [&](uint64 generation) { return generation != m_realtimeGeneration; });
+			if(found != end && (!onlyUnplayedPatterns || std::none_of(begin, end, [&](uint64 generation) { return generation == m_realtimeGeneration; })))
+			{ ord = static_cast<ORDERINDEX>(o); row = static_cast<ROWINDEX>(found - begin); return true; }
+		}
+		ord = ORDERINDEX_INVALID; row = ROWINDEX_INVALID; return false;
+	}
+#endif
 	const auto &order = Order();
 	const ORDERINDEX endOrder = order.GetLengthTailTrimmed();
 	for(ORDERINDEX o = 0; o < endOrder; o++)

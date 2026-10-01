@@ -1,0 +1,122 @@
+-- Configuring done (0.5s)
+-- Generating done (2.1s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-background
+[  1%] Built target plugin-preset-tests
+[ 10%] Built target TrackerFLAC
+[ 11%] Built target ResonanceFixture
+[ 12%] Built target RealtimeAudit
+[ 13%] Built target plugin-inventory-tests
+[ 14%] Built target plugin-library-tests
+[ 56%] Built target OpenMPTCore
+[ 65%] Built target TrackerEditor
+[ 66%] Linking CXX executable tracker-core-tests
+[ 68%] Built target TrackerPlugins
+[ 68%] Built target song-timing-tests
+[ 68%] Linking CXX executable native-reverse-loop-tests
+[ 68%] Built target native-reverse-loop-tests
+[ 68%] Built target tracker-core-tests
+[ 68%] Linking CXX executable sample-snap-tests
+[ 69%] Linking CXX executable sample-crossfade-tests
+[ 69%] Built target sample-snap-tests
+[ 69%] Built target sample-crossfade-tests
+[ 69%] Linking CXX executable sample-drawing-tests
+[ 70%] Linking CXX executable sample-copy-tests
+[ 70%] Built target sample-drawing-tests
+[ 70%] Built target sample-copy-tests
+[ 71%] Linking CXX executable sample-clipboard-tests
+[ 71%] Linking CXX executable sample-archive-tests
+[ 71%] Built target sample-archive-tests
+[ 71%] Built target sample-clipboard-tests
+[ 71%] Linking CXX executable automation-tools-tests
+[ 71%] Linking CXX executable sample-processing-tests
+[ 71%] Built target automation-tools-tests
+[ 71%] Built target sample-processing-tests
+[ 71%] Linking CXX executable pattern-tools-tests
+[ 71%] Linking CXX executable pattern-commands-tests
+[ 71%] Built target pattern-commands-tests
+[ 72%] Built target pattern-tools-tests
+[ 72%] Linking CXX executable render-audit
+[ 73%] Linking CXX executable plugin-tests
+[ 73%] Built target render-audit
+[ 74%] Linking CXX executable filter-tests
+[ 74%] Built target plugin-tests
+[ 74%] Built target filter-tests
+[ 74%] Linking CXX executable oversampling-tests
+[ 74%] Linking CXX executable stress-tests
+[ 75%] Built target oversampling-tests
+[ 75%] Linking CXX executable routing-prototype-tests
+[ 76%] Built target stress-tests
+[ 76%] Linking CXX executable mixer-graph-tests
+[ 77%] Built target routing-prototype-tests
+[ 78%] Built target mixer-graph-tests
+[ 78%] Linking CXX executable mixer-runtime-tests
+[ 78%] Linking CXX executable sidechain-tests
+[ 78%] Built target mixer-runtime-tests
+[ 78%] Linking CXX executable qualification-fixture
+[ 78%] Built target sidechain-tests
+[ 78%] Linking CXX executable plugin-lifecycle-tests
+[ 78%] Built target qualification-fixture
+[ 78%] Built target plugin-lifecycle-tests
+[ 80%] Built target TrackerMac
+[ 80%] Built target plugin-scanner
+[ 81%] Built target song-timing-session-tests
+[ 81%] Linking CXX executable sample-loop-tests
+[ 81%] Linking CXX executable sample-crossfade-project-tests
+[ 82%] Built target sample-loop-tests
+[ 82%] Built target sample-crossfade-project-tests
+[ 82%] Linking CXX executable sample-project-tests
+[ 83%] Linking CXX executable sample-session-tests
+[ 84%] Built target sample-project-tests
+[ 84%] Built target sample-session-tests
+[ 84%] Linking CXX executable native-effects-tests
+[ 84%] Linking CXX executable eq-effects-tests
+[ 84%] Built target native-effects-tests
+[ 84%] Built target eq-effects-tests
+[ 84%] Linking CXX executable comb-tests
+[ 84%] Linking CXX executable distortion-tests
+[ 84%] Built target comb-tests
+[ 84%] Built target distortion-tests
+[ 84%] Linking CXX executable lofi-tests
+[ 85%] Linking CXX executable cabinet-tests
+[ 85%] Built target lofi-tests
+[ 85%] Built target cabinet-tests
+[ 85%] Linking CXX executable dynamics-tests
+[ 85%] Linking CXX executable maximizer-tests
+[ 86%] Built target dynamics-tests
+[ 86%] Built target maximizer-tests
+[ 86%] Linking CXX executable bus-compressor-tests
+[ 87%] Linking CXX executable session-tests
+[ 88%] Built target bus-compressor-tests
+[ 89%] Linking CXX executable native-song-tests
+[ 89%] Built target session-tests
+[ 90%] Linking CXX executable device-tests
+[ 90%] Built target native-song-tests
+[ 91%] Linking CXX executable loopback-tests
+[ 91%] Built target device-tests
+[ 91%] Linking CXX executable midi-tests
+[ 91%] Built target loopback-tests
+[ 91%] Linking CXX executable export-tests
+[ 92%] Built target midi-tests
+[ 92%] Linking CXX executable native-mixer-tests
+[ 93%] Built target export-tests
+[ 93%] Linking CXX executable multi-bus-tests
+[ 94%] Built target native-mixer-tests
+[ 94%] Linking CXX executable rack-tests
+[ 95%] Built target multi-bus-tests
+[ 95%] Linking CXX executable mixer-device-tests
+[ 96%] Built target rack-tests
+[ 97%] Linking CXX executable native-plugin-tests
+[ 97%] Built target mixer-device-tests
+[ 98%] Built target musical-automation-tests
+[ 98%] Built target native-plugin-tests
+[ 98%] Linking CXX executable automation-tests
+[ 98%] Linking CXX executable note-track-tests
+[ 99%] Built target automation-tests
+[ 99%] Built target note-track-tests
+[ 99%] Linking CXX executable automation-target-tests
+[100%] Linking CXX executable plugin-preset-session-tests
+[100%] Built target automation-target-tests
+[100%] Built target plugin-preset-session-tests
+/Users/rewbs/code/openmpt/bin/mac-background/Resonance.app/Contents/MacOS/plugin-scanner: replacing existing signature
+/Users/rewbs/code/openmpt/bin/mac-background/Resonance.app: replacing existing signature
+Built /Users/rewbs/code/openmpt/bin/mac-background/Resonance.app

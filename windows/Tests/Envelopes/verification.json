@@ -1,0 +1,242 @@
+{
+  "suite": "windows/Tests/Envelopes",
+  "configuration": "MSVC 19.44.35229 ARM64 Release; Windows SDK 10.0.26100.0; verified ARM64 PE machine 0xaa64 and 8388608-byte stack reserve; heap-owned Document",
+  "passed": 22,
+  "failed": 0,
+  "skipped": 0,
+  "ctest_command": "ctest.exe --test-dir bin/windows-envelope-json -C Release --output-on-failure --output-junit final-results.xml",
+  "binary": "bin/windows-envelope-json/Release/envelope-tests.exe",
+  "core_library_directory": "bin/windows-envelope-json/core/Release",
+  "source_provenance": {
+    "manifest": "bin/windows-envelope-json/final-source-inputs.json",
+    "inputs": 3689,
+    "changed_during_final_build_and_test": [],
+    "scope": "Fresh task-owned core build, then incrementally rebuilt concurrent PreciseNotes/Vorbis/SFZ owner changes; final source hashes checked before and after build/tests. This qualifies the recorded binaries and source hashes, not future concurrent edits. Codec sources compiled directly into the standalone test executable."
+  },
+  "changed_repository_files": [
+    "windows/Session/EnvelopeOperations.cpp",
+    "windows/Tests/Envelopes/EnvelopeTests.cpp",
+    "windows/Tests/Envelopes/JsonCatalogueTests.inc",
+    "windows/Tests/Envelopes/catalogue_oracle.py",
+    "windows/Tests/Envelopes/CMakeLists.txt",
+    "windows/Tests/Envelopes/README.md",
+    "windows/Tests/Envelopes/verification.json"
+  ],
+  "unchanged_interfaces": "EnvelopeOperations.hpp, both read methods and six write methods, constructor/invoke/reads/writes signatures, all invoke/musical behavior, GUID/hash helpers and CatalogueLock are unchanged; helper and invoke byte comparisons performed against captured original source.",
+  "original_catalogue_cpp_sha256": "4c164abfd917654b9b7f6fd5432fdb61d19c5c3e43e5f58984288b16f99ed7c6",
+  "format_policy": {
+    "new_file": "UTF-8 JSON regardless of suffix",
+    "existing_json": "JSON remains JSON",
+    "existing_bplist00": "binary plist remains binary plist",
+    "invalid": "reject without conversion or replacement",
+    "revision": "public catalogue:<SHA-256(actual file bytes)>; stored generation token separate and regenerated only on changed publication"
+  },
+  "json_bounds": {
+    "input_output_list_response_bytes": 16777216,
+    "entries": 256,
+    "values_including_keys": 250000,
+    "members_or_elements_per_ordinary_container": 65536,
+    "depth_root_is_one": 128,
+    "allocation_work_ledger_bytes": 134217728,
+    "ledger_policy": "512 bytes per value/key + 4x decoded string bytes + 2x input bytes; conservative work ledger, not exact RSS"
+  },
+  "preservation": "Complete unknown root values retained; nested replacement fields fail closed. JSON preserves integer/real distinction, 64-bit integer boundaries, finite binary64 bits and negative zero including bare -0 normalized to -0.0. Oversized integers, non-finite values and nonzero underflow reject. Unknown root acceptance is broader than current strict Mac reader, not proof of Mac acceptance.",
+  "red_regressions": [
+    {
+      "log": "bin/windows-envelope-json/red.log",
+      "observed": "Original implementation: JSON read/import/publish fail Binary plist: header; missing file incorrectly writes binary plist."
+    },
+    {
+      "log": "bin/windows-envelope-json/red-strict.log",
+      "observed": "Initial JSON implementation accepted duplicate keys and excessive depth."
+    },
+    {
+      "log": "bin/windows-envelope-json/red-output.log",
+      "observed": "Initial writer accepted a candidate beyond the read-side value budget."
+    },
+    {
+      "log": "bin/windows-envelope-json/red-signed-zero.log",
+      "observed": "Independent oracle found bare -0 changed from negative real zero to integer zero."
+    },
+    {
+      "log": "bin/windows-envelope-json/red-underflow.log",
+      "observed": "Nonzero 1e-999 silently underflowed to zero before the guard."
+    }
+  ],
+  "tests": [
+    {
+      "name": "envelope-bankHistory",
+      "seconds": 0.0615746,
+      "passed": true
+    },
+    {
+      "name": "envelope-linkedUses",
+      "seconds": 0.0490069,
+      "passed": true
+    },
+    {
+      "name": "envelope-catalogueCopies",
+      "seconds": 0.0927006,
+      "passed": true
+    },
+    {
+      "name": "envelope-strictShapesAndTargets",
+      "seconds": 0.0648306,
+      "passed": true
+    },
+    {
+      "name": "envelope-parameterHooks",
+      "seconds": 0.0368462,
+      "passed": true
+    },
+    {
+      "name": "envelope-instrumentBaking",
+      "seconds": 0.0460848,
+      "passed": true
+    },
+    {
+      "name": "envelope-refitAndIndependentCopies",
+      "seconds": 0.0413343,
+      "passed": true
+    },
+    {
+      "name": "envelope-capacityBeforePlayback",
+      "seconds": 0.0716603,
+      "passed": true
+    },
+    {
+      "name": "envelope-catalogueValidation",
+      "seconds": 0.228803,
+      "passed": true
+    },
+    {
+      "name": "envelope-catalogueWriters",
+      "seconds": 0.358163,
+      "passed": true
+    },
+    {
+      "name": "envelope-bankPersistence",
+      "seconds": 0.06888,
+      "passed": true
+    },
+    {
+      "name": "envelope-jsonRead",
+      "seconds": 0.0539644,
+      "passed": true
+    },
+    {
+      "name": "envelope-jsonImport",
+      "seconds": 0.0516474,
+      "passed": true
+    },
+    {
+      "name": "envelope-jsonPublish",
+      "seconds": 0.0544519,
+      "passed": true
+    },
+    {
+      "name": "envelope-jsonDefault",
+      "seconds": 0.0497735,
+      "passed": true
+    },
+    {
+      "name": "envelope-jsonStrict",
+      "seconds": 0.117956,
+      "passed": true
+    },
+    {
+      "name": "envelope-jsonLimits",
+      "seconds": 0.542477,
+      "passed": true
+    },
+    {
+      "name": "envelope-jsonOutputBudget",
+      "seconds": 1.34991,
+      "passed": true
+    },
+    {
+      "name": "envelope-jsonGuards",
+      "seconds": 0.132319,
+      "passed": true
+    },
+    {
+      "name": "envelope-plistWriters",
+      "seconds": 0.338669,
+      "passed": true
+    },
+    {
+      "name": "envelope-jsonResponseBudget",
+      "seconds": 0.268525,
+      "passed": true
+    },
+    {
+      "name": "envelope-catalogueOracle",
+      "seconds": 0.366182,
+      "passed": true
+    }
+  ],
+  "independent_oracles": {
+    "test_only_python": "3.11.16 json and plistlib; no application dependency",
+    "fixtures": [
+      "generated schema-conformant JSON",
+      "generated future-root JSON extension",
+      "generated legacy plist with opaque date/UID/data"
+    ],
+    "curves_per_fixture": 9,
+    "assertions": "Complete typed-tree equality after changed publication, floating-point bits, no-op bytes/mtime and dry-run preservation; C++ reopens too. JSON unknown-root extension is not accepted-schema evidence for Mac."
+  },
+  "concurrency": "Real child-process busy/successful writers for JSON and legacy plist, exact/dot/ASCII-case aliases, lock held through import stop callback; forced atomic replacement failure and staging cleanup.",
+  "isolation": "Each C++ invocation and Python subprocess verifies TMPDIR/TEMP/TMP equal Hermes cache/scratch. All fixtures generated by tests and removed; zero envelope scratch leftovers after final run. No user catalogue, preferences, clipboard, network, audio or app instance accessed.",
+  "qualification_flags": {
+    "actual_mac_produced_catalogue": false,
+    "mac_application_reopen": false,
+    "full_app_socket_ui_integration": false,
+    "audio_or_real_plugin_host": false,
+    "arbitrary_precision_json_numbers": false,
+    "generated_format_and_real_model_tests": true
+  },
+  "logs": {
+    "initial_core_build": "bin/windows-envelope-json/core-build.log",
+    "final_core_build": "bin/windows-envelope-json/core-final-build.log",
+    "final_build": "bin/windows-envelope-json/final-build.log",
+    "ctest": "bin/windows-envelope-json/final-ctest.log",
+    "junit": "bin/windows-envelope-json/final-results.xml"
+  },
+  "build_notes": [
+    "No commits/reset/stash. Other owners retained all shared/App/Controller/Api/Project/hosted changes.",
+    "Initial fresh core build emitted existing SVN-revision and MixerRuntime conversion warnings; catalogue and final builds had no new warnings/errors. Test include-order compile error was corrected before RED runs."
+  ],
+  "sha256": {
+    "windows/Session/EnvelopeOperations.cpp": "2158890953da6292fc5a83efc05e19f9855d94783e03a82db5a49ae6f3bbcc00",
+    "windows/Session/EnvelopeOperations.hpp": "95f6d05137897239b35fd33ba66813ba2ceac1fed3db66c7fd09b4e7beb3b4ea",
+    "windows/Tests/Envelopes/EnvelopeTests.cpp": "398c4a9b31937e15363ef9dba6335cbf6e07b33ec06e608bc6858936a6ea935a",
+    "windows/Tests/Envelopes/JsonCatalogueTests.inc": "1fae3f154730a5ca351d7dd206406d19c2428220b30f751b18c0868031b92ecf",
+    "windows/Tests/Envelopes/catalogue_oracle.py": "10f005540663c28ccd8a4157942af58b8695a0fd88ac003bea61aa12f346e6d2",
+    "windows/Tests/Envelopes/CMakeLists.txt": "3ca97320b2bcd1db38a7a2d9fd53ef7e836abb5db5d32d545c655b05e561d0db",
+    "windows/Tests/Envelopes/README.md": "2734d2f7ec4041deda4de93b1844e3bf84d68b82fa639d9bcca9039c2b215067",
+    "windows/Project/BinaryPlist.cpp": "df446fca5a88977b7318b6893eb6964b02c0db414724013687fbb4bf73bdc695",
+    "windows/Project/BinaryPlist.hpp": "d5ab70c9faee79730e169d522c5e7572b6e4adc7e07a938b9a42c1cfbf5882fe",
+    "windows/Project/NativeMetadata.cpp": "135842c40203e51eeea642a69b8af80b856cef00cc9a8cc22f4c9c3d1b9dc4c3",
+    "windows/Project/NativeMetadata.hpp": "de4181d473c31b36b903bdcc327cd7cb23d344deed0ebde8756284aa75ad0504",
+    "windows/Project/ProjectIO.hpp": "880140ee9f0847efbbad1ef1137e62c780483a3ab9e0a7204ea909866e18071a",
+    "windows/Api/SessionAdapter.hpp": "bee7a2ab2c66b1b59be060b728a1867fe05fa7c8e1da5622110a7aa210c3954a",
+    "editor/SampleArchive.cpp": "6d5124857ca7505f9a0933babcbaf222f8c3f47b09214e43425a510e7ed771aa",
+    "editor/SampleArchive.hpp": "32219e47b1d6cacec58ebccb154a86ca11bffe1fdde4866f24e2262d153991fa",
+    "editor/SampleImport.cpp": "b9be1a1d09aae0ea91a9c8eab77b7ce5e1ee7546436e8ef763751e1621babbf5",
+    "editor/TrackerDocument.cpp": "53b2604addb2e7a2954aafdccdd90b619a317e6e787db50c53e8c5d6117e2ea2",
+    "editor/TrackerDocument.hpp": "485e51e901172540eac4756007596ed637dd15e2372bc9bb83f4b5c406460ccb",
+    "editor/PreciseNotes.hpp": "75ec42fcbfa5bf40055f781b8a04d82db265db925ea752096c42b926a08e23bb",
+    "soundlib/SampleFormatVorbis.cpp": "b8bc13633bc8d8a8bd13669f34b17b0167a045402abfdf51a4e3b1bb1de07537",
+    "soundlib/SampleFormatSFZ.cpp": "c71b195c6c3ed28c1d3ff85aa42f6ae408500b045fa754b308f7504d43d6316f",
+    "mac/Bridge/EnvelopeCatalogue.inc": "91698f47e2ee766d74325719ad68c29e475d32226eda84f1a5fbced49c433f0e",
+    "bin/windows-envelope-json/core/Release/OpenMPTCore.lib": "5b8afb561d550c1fa3d7f62a7f8204175a86694f027f49a81e23baef29d412d3",
+    "bin/windows-envelope-json/core/Release/TrackerEditor.lib": "403400c2c045787dd201aec571f61d3f433b09e61d44df60cdbeeac18e9c8e48",
+    "bin/windows-envelope-json/core/Release/TrackerFLAC.lib": "12e4c0ad1b2b4c3fb880a9a25fb48e184da5a0fcd145d06718c442d4044f3da0",
+    "bin/windows-envelope-json/Release/envelope-tests.exe": "aaee5187948db797bdb9b128c5112a5d18fd41ff3a1ccbf734327ab35158bbb4",
+    "bin/windows-envelope-json/final-source-inputs.json": "e0acba72d1889f3e741ce58170fe05eba293c69bc25879e23c4fda449d9dab17",
+    "bin/windows-envelope-json/final-ctest.log": "299a1b57a1ecb98e607239ee28ee1a1dbc6a141ae9ca9bd29308b6df11730923",
+    "bin/windows-envelope-json/final-results.xml": "88620ad1cc90c6370f3ac905916c8e04a317418b55dfaed819a938e6a955efb5",
+    "bin/windows-envelope-json/core-final-build.log": "907a14555b6ee1b98875b3d60abc55215415b16e2f4b54f3cd6f554cabaa9b17",
+    "bin/windows-envelope-json/final-build.log": "57b3f90fa37f96e331475997af7aedab76ee5189333ca81f7b59accd9bacfb47"
+  }
+}

@@ -9,6 +9,8 @@
 
 
 #include "stdafx.h"
+#include "../common/FileReader.h"
+#include <cfloat>
 #include "Sndfile.h"
 #ifdef MODPLUG_TRACKER
 #include "../mptrack/TrackerSettings.h"
@@ -671,6 +673,9 @@ bool CSoundFile::ReadSFZInstrument(INSTRUMENTINDEX nInstr, FileReader &file)
 						} else
 						{
 							AddToLog(LogWarning, U_("Unable to load include file: ") + filename.ToUnicode());
+#ifdef OPENMPT_EDITOR_CORE
+							return false;
+#endif
 						}
 					} else
 					{
@@ -775,12 +780,24 @@ bool CSoundFile::ReadSFZInstrument(INSTRUMENTINDEX nInstr, FileReader &file)
 	{
 		uint8 keyLo = region.keyLo, keyHi = region.keyHi;
 		if(keyLo > keyHi)
+		{
+#ifdef OPENMPT_EDITOR_CORE
+			return false;
+#else
 			continue;
+#endif
+		}
 		Clamp<uint8, uint8>(keyLo, 0, NOTE_MAX - NOTE_MIN);
 		Clamp<uint8, uint8>(keyHi, 0, NOTE_MAX - NOTE_MIN);
 		SAMPLEINDEX smp = GetNextFreeSample(nInstr, prevSmp + 1);
 		if(smp == SAMPLEINDEX_INVALID)
+		{
+#ifdef OPENMPT_EDITOR_CORE
+			return false;
+#else
 			break;
+#endif
+		}
 		prevSmp = smp;
 
 		ModSample &sample = Samples[smp];
@@ -808,6 +825,9 @@ bool CSoundFile::ReadSFZInstrument(INSTRUMENTINDEX nInstr, FileReader &file)
 			} else
 			{
 				AddToLog(LogWarning, U_("Unknown sample type: ") + mpt::ToUnicode(mpt::Charset::UTF8, std::string(synthSample)));
+#ifdef OPENMPT_EDITOR_CORE
+				return false;
+#endif
 				prevSmp--;
 				continue;
 			}
@@ -839,6 +859,9 @@ bool CSoundFile::ReadSFZInstrument(INSTRUMENTINDEX nInstr, FileReader &file)
 			if(!ReadSampleFromFile(smp, smpFile, false))
 			{
 				AddToLog(LogWarning, U_("Unable to load sample: ") + filename.ToUnicode());
+#ifdef OPENMPT_EDITOR_CORE
+				return false;
+#endif
 				prevSmp--;
 				continue;
 			}
@@ -848,6 +871,13 @@ bool CSoundFile::ReadSFZInstrument(INSTRUMENTINDEX nInstr, FileReader &file)
 
 			sample.uFlags.set(SMP_KEEPONDISK, sample.HasSampleData());
 		}
+
+		// Native imports run on a Document transaction/candidate. Reject incomplete
+		// regions there; retain upstream OpenMPT's best-effort import workflow.
+#ifdef OPENMPT_EDITOR_CORE
+		if(!sample.HasSampleData() || !sample.nLength)
+			return false;
+#endif
 
 		if(!region.regionName.empty())
 			m_szNames[smp] = mpt::ToCharset(GetCharsetInternal(), mpt::Charset::UTF8, region.regionName);
@@ -1126,8 +1156,13 @@ bool CSoundFile::SaveSFZInstrument(INSTRUMENTINDEX nInstr, std::ostream &f, cons
 	const mpt::PathString sampleBaseName = mpt::PathString::FromNative(mpt::trim(filename.GetFilenameBase().AsNative(), whitespaceDirName));
 	const mpt::PathString sampleDirName = (sampleBaseName.empty() ? P_("Samples") : sampleBaseName)  + P_("/");
 	const mpt::PathString sampleBasePath = filename.GetDirectoryWithDrive() + sampleDirName;
-	if(!mpt::native_fs{}.is_directory(sampleBasePath) && !::CreateDirectory(sampleBasePath.AsNative().c_str(), nullptr))
-		return false;
+	#if defined(OPENMPT_EDITOR_CORE) && !MPT_OS_WINDOWS
+    std::error_code directoryError;
+    if(!std::filesystem::is_directory(sampleBasePath.ToUTF8(),directoryError) && !std::filesystem::create_directory(sampleBasePath.ToUTF8(),directoryError))return false;
+#else
+    if(!mpt::native_fs{}.is_directory(sampleBasePath) && !::CreateDirectory(sampleBasePath.AsNative().c_str(), nullptr))
+        return false;
+#endif
 
 	const double tickDuration = m_PlayState.m_nSamplesPerTick / static_cast<double>(m_MixerSettings.gdwMixingFreq);
 

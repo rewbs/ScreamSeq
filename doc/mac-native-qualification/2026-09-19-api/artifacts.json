@@ -1,0 +1,24 @@
+{
+  "sourceFingerprint": "1dc043b0c40c42cf134e4ba9b6c5f26d9e31739ec73ceccb3a38438a85a32ad2",
+  "zipIntegrity": "pass",
+  "bundledClientSchemaGuide": true,
+  "testExecutablesExcludedFromApp": true,
+  "artifacts": {
+    "bin/mac-native/distribution/Resonance-0.1.0-arm64.zip": {
+      "sha256": "992e87a08de36199a1462caa46e90fe60b49f037ac4fff8d7f7e3eaee843b942",
+      "bytes": 3731759
+    },
+    "bin/mac-native/Resonance.app/Contents/MacOS/Resonance": {
+      "sha256": "6fdcc145b2b9ab05b2c15ceea996a5fa433060d7e2079eb4ab06264fb86d32db",
+      "bytes": 4342624
+    },
+    "bin/mac-native/automation-tests": {
+      "sha256": "e8eab718bcda2359810c2beb4f4be5d7f06f8d38d3b41ae339f9e464b96698c9",
+      "bytes": 3363104
+    },
+    "bin/mac-native/automation-test-host": {
+      "sha256": "0579c05190fb3e3faad13344ac062fd66ad7c3f7449199ada6375cd1a7649d2c",
+      "bytes": 3423992
+    }
+  }
+}

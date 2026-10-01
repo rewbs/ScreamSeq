@@ -1,0 +1,108 @@
+{
+  "transport": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 6897,
+      "fault": false,
+      "frames": 3531264,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.1497567892074585,
+      "loop": true,
+      "maxMicros": 3099.166,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 3010,
+      "pattern": 0,
+      "patternPosition": 8352.959669079628,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.14984041452407837,
+      "row": 32,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 153,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 114
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 39,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 185
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 77,
+          "instrument": 0,
+          "sample": 3,
+          "sampleFrame": 1824
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 152,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 7626
+        }
+      ],
+      "voices": 4
+    },
+    "documentId": "E11EA667-47D0-4185-A892-09D0FE356C26",
+    "playbackStopped": false,
+    "revision": "E11EA667-47D0-4185-A892-09D0FE356C26:0:2:0"
+  },
+  "plugin": {
+    "bypass": false,
+    "classID": "resonance.distortion.v1",
+    "format": "Built-in",
+    "instanceID": "5C7C53DF-146B-43C8-B916-E34797F24441",
+    "instrument": 0,
+    "instrumentAssignments": [],
+    "isInstrument": false,
+    "manufacturer": 0,
+    "name": "Distortion",
+    "path": "",
+    "subtype": 0,
+    "type": 0
+  }
+}

@@ -1,0 +1,13 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-sanitized
+    Start  3: song-timing-session
+1/4 Test  #3: song-timing-session ..............   Passed    1.65 sec
+    Start  4: song-timing
+2/4 Test  #4: song-timing ......................   Passed    2.26 sec
+    Start 13: sample-archive
+3/4 Test #13: sample-archive ...................   Passed    1.39 sec
+    Start 46: musical-automation
+4/4 Test #46: musical-automation ...............   Passed    5.50 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =  10.81 sec

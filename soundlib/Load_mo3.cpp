@@ -1925,35 +1925,58 @@ bool CSoundFile::ReadMO3(FileReader &file, ModLoadingFlags loadFlags)
 			// beginning. MO3 files with this property are yet to be spotted in the
 			// wild, thus, this behaviour is currently not problematic.
 
+			// Keep both direct stb entry points away from null/short pinned views.
+			if(initialRead < sizeof(Ogg::PageHeader) || !headerChunk.ReadMagic("OggS"))
+			{
+				unsupportedSamples = true;
+				continue;
+			}
+			headerChunk.Rewind();
 			int consumed = 0, error = 0;
-			stb_vorbis *vorb = nullptr;
+			std::unique_ptr<stb_vorbis, decltype(&stb_vorbis_close)> vorb(nullptr, &stb_vorbis_close);
 			if(sharedHeader)
 			{
 				FileReader::PinnedView headChunkView = headerChunk.GetPinnedView(initialRead);
-				vorb = stb_vorbis_open_pushdata(mpt::byte_cast<const unsigned char *>(headChunkView.data()), mpt::saturate_cast<int>(headChunkView.size()), &consumed, &error, nullptr);
-				headerChunk.Skip(consumed);
+				vorb.reset(stb_vorbis_open_pushdata(mpt::byte_cast<const unsigned char *>(headChunkView.data()), mpt::saturate_cast<int>(headChunkView.size()), &consumed, &error, nullptr));
+				if(vorb && consumed > 0 && static_cast<std::size_t>(consumed) <= headChunkView.size())
+					headerChunk.Skip(consumed);
+				else
+					vorb.reset();
 			}
 			FileReader::PinnedView sampleDataView = sampleData.GetPinnedView();
 			const std::byte *data = sampleDataView.data();
 			std::size_t dataLeft = sampleDataView.size();
 			if(!sharedHeader)
 			{
-				vorb = stb_vorbis_open_pushdata(mpt::byte_cast<const unsigned char *>(data), mpt::saturate_cast<int>(dataLeft), &consumed, &error, nullptr);
-				sampleData.Skip(consumed);
-				data += consumed;
-				dataLeft -= consumed;
+				vorb.reset(stb_vorbis_open_pushdata(mpt::byte_cast<const unsigned char *>(data), mpt::saturate_cast<int>(dataLeft), &consumed, &error, nullptr));
+				if(vorb && consumed > 0 && static_cast<std::size_t>(consumed) <= dataLeft)
+				{
+					sampleData.Skip(consumed);
+					data += consumed;
+					dataLeft -= consumed;
+				} else
+				{
+					vorb.reset();
+				}
 			}
 			if(vorb)
 			{
 				// Header has been read, proceed to reading the sample data
 				sample.AllocateSample();
 				SmpLength offset = 0;
-				while((error == VORBIS__no_error || (error == VORBIS_need_more_data && dataLeft > 0))
+				while(dataLeft > 0 && (error == VORBIS__no_error || error == VORBIS_need_more_data)
 				      && offset < sample.nLength && sample.HasSampleData())
 				{
 					int channels = 0, decodedSamples = 0;
 					float **output;
-					consumed = stb_vorbis_decode_frame_pushdata(vorb, mpt::byte_cast<const unsigned char *>(data), mpt::saturate_cast<int>(dataLeft), &channels, &output, &decodedSamples);
+					consumed = stb_vorbis_decode_frame_pushdata(vorb.get(), mpt::byte_cast<const unsigned char *>(data), mpt::saturate_cast<int>(dataLeft), &channels, &output, &decodedSamples);
+					// Complete input is already pinned; retrying unchanged truncated
+					// data cannot make progress. Retain the module's best-effort load.
+					if(consumed <= 0 || static_cast<std::size_t>(consumed) > dataLeft)
+					{
+						unsupportedSamples = true;
+						break;
+					}
 					sampleData.Skip(consumed);
 					data += consumed;
 					dataLeft -= consumed;
@@ -1969,9 +1992,8 @@ bool CSoundFile::ReadMO3(FileReader &file, ModLoadingFlags loadFlags)
 						}
 					}
 					offset += decodedSamples;
-					error = stb_vorbis_get_error(vorb);
+					error = stb_vorbis_get_error(vorb.get());
 				}
-				stb_vorbis_close(vorb);
 			} else
 			{
 				unsupportedSamples = true;

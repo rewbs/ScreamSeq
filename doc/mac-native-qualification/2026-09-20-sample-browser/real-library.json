@@ -1,0 +1,95 @@
+{
+  "count": 22387,
+  "scanAndCacheSeconds": 4.48389095813036,
+  "warnings": [],
+  "searches": [
+    {
+      "query": "808 \"bass drum\"",
+      "matches": 331,
+      "roundTripMilliseconds": 74.04554262757301
+    },
+    {
+      "query": "Junos chords",
+      "matches": 82,
+      "roundTripMilliseconds": 66.89799949526787
+    },
+    {
+      "query": "snare -maschine",
+      "matches": 1255,
+      "roundTripMilliseconds": 74.6210003271699
+    },
+    {
+      "query": "\"From Mars\" WAV",
+      "matches": 21856,
+      "roundTripMilliseconds": 79.39683273434639
+    }
+  ],
+  "previews": [
+    {
+      "path": "/Users/rewbs/samples/808 From Mars/WAV/01. Individual Hits/01. Bass Drum/Clean/Digital/A/BD A 808 Decay A 01.wav",
+      "rate": 44100,
+      "channels": 1,
+      "seconds": 0.12201814058956915,
+      "previewSeconds": 0.12201814058956915,
+      "decodeRoundTripMilliseconds": 5.576583556830883
+    },
+    {
+      "path": "/Users/rewbs/samples/808 From Mars/WAV/01. Individual Hits/01. Bass Drum/Clean/Digital/A/BD A 808 Decay A 02.wav",
+      "rate": 44100,
+      "channels": 1,
+      "seconds": 0.12206349206349207,
+      "previewSeconds": 0.12206349206349207,
+      "decodeRoundTripMilliseconds": 1.5317080542445183
+    },
+    {
+      "path": "/Users/rewbs/samples/Junos From Mars/WAV/05. Chords/Beam Down Junos Emaj7.wav",
+      "rate": 44100,
+      "channels": 2,
+      "seconds": 2.6861904761904762,
+      "previewSeconds": 2.6861904761904762,
+      "decodeRoundTripMilliseconds": 6.112292408943176
+    },
+    {
+      "path": "/Users/rewbs/samples/Junos From Mars/WAV/05. Chords/Beam Short Junos Emaj7.wav",
+      "rate": 44100,
+      "channels": 2,
+      "seconds": 0.9683673469387755,
+      "previewSeconds": 0.9683673469387755,
+      "decodeRoundTripMilliseconds": 2.9346253722906113
+    },
+    {
+      "path": "/Users/rewbs/samples/@notonutuu - E$$ENTIAL DRUMK1T/!! live drums/!!livedrums - snare 1 - @notonutuu.wav",
+      "rate": 48000,
+      "channels": 2,
+      "seconds": 0.5982083333333333,
+      "previewSeconds": 0.5982083333333333,
+      "decodeRoundTripMilliseconds": 3.6895833909511566
+    },
+    {
+      "path": "/Users/rewbs/samples/@notonutuu - E$$ENTIAL DRUMK1T/!! live drums/!!livedrums - snare 2 - @notonutuu.wav",
+      "rate": 48000,
+      "channels": 2,
+      "seconds": 0.8392916666666667,
+      "previewSeconds": 0.8392916666666667,
+      "decodeRoundTripMilliseconds": 10.79699955880642
+    },
+    {
+      "path": "/Users/rewbs/samples/101 Drums From Mars/Ableton Live 9.7/101 Drums From Mars Project/Samples/Imported/34_OneShots_SH101_A#0-9SJQ.wav",
+      "rate": 44100,
+      "channels": 1,
+      "seconds": 1.1494557823129252,
+      "previewSeconds": 1.1494557823129252,
+      "decodeRoundTripMilliseconds": 5.618458613753319
+    },
+    {
+      "path": "/Users/rewbs/samples/101 Drums From Mars/Ableton Live 9.7/101 Drums From Mars Project/Samples/Imported/37_OneShots_SH101_C#1-08D0.wav",
+      "rate": 44100,
+      "channels": 1,
+      "seconds": 4.718662131519275,
+      "previewSeconds": 4.718662131519275,
+      "decodeRoundTripMilliseconds": 8.127541281282902
+    }
+  ],
+  "songUnchanged": true,
+  "physicalAudio": false
+}

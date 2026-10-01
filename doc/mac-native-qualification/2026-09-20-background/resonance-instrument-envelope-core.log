@@ -1,0 +1,15 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-background
+    Start  3: instrument-envelopes
+1/2 Test  #3: instrument-envelopes .............***Failed    0.46 sec
+XM/IT/MPT snapshot retains transformed nodes and anchors
+
+    Start 20: automation-tools
+2/2 Test #20: automation-tools .................   Passed    0.43 sec
+
+50% tests passed, 1 tests failed out of 2
+
+Total Test time (real) =   0.89 sec
+
+The following tests FAILED:
+	  3 - instrument-envelopes (Failed)
+Errors while running CTest

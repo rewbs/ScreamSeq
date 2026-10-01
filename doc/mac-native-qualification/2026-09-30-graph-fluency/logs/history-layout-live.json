@@ -1,0 +1,541 @@
+{
+  "pid": 88193,
+  "transport": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 9590,
+      "fault": false,
+      "frames": 4910080,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "persistent",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 2,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n24"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n17"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n18"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n19"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n21"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n22"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n23"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n24"
+        }
+      ],
+      "left": 0.06543103605508804,
+      "loop": true,
+      "maxMicros": 5711.875,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 2040,
+      "pattern": 0,
+      "patternPosition": 3654.0668734918995,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.06541895866394043,
+      "row": 14,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 249
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 11
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 45
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 96
+        },
+        {
+          "channel": 4,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 165
+        },
+        {
+          "channel": 5,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 254
+        },
+        {
+          "channel": 6,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 107
+        },
+        {
+          "channel": 7,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 238
+        },
+        {
+          "channel": 8,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 136
+        },
+        {
+          "channel": 9,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 59
+        },
+        {
+          "channel": 10,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 7
+        },
+        {
+          "channel": 11,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 238
+        },
+        {
+          "channel": 12,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 243
+        },
+        {
+          "channel": 13,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 22
+        },
+        {
+          "channel": 14,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 90
+        },
+        {
+          "channel": 15,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 212,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 192
+        }
+      ],
+      "voices": 16
+    },
+    "documentId": "F46554F3-8C30-4CEA-8EEE-473D3CC7E882",
+    "playbackStopped": false,
+    "revision": "F46554F3-8C30-4CEA-8EEE-473D3CC7E882:0:0:0"
+  },
+  "meters": {
+    "changed": false,
+    "data": {
+      "meters": [
+        {
+          "bus": "n2",
+          "left": 0.011963293887674809,
+          "right": 0.011963293887674809
+        },
+        {
+          "bus": "n3",
+          "left": 0.019041001796722412,
+          "right": 0.019041001796722412
+        },
+        {
+          "bus": "n4",
+          "left": 0.01246012095361948,
+          "right": 0.01246012095361948
+        },
+        {
+          "bus": "n5",
+          "left": 0.019035909324884415,
+          "right": 0.019035909324884415
+        },
+        {
+          "bus": "n6",
+          "left": 0.011961530894041061,
+          "right": 0.011961530894041061
+        },
+        {
+          "bus": "n7",
+          "left": 0.019041001796722412,
+          "right": 0.019041001796722412
+        },
+        {
+          "bus": "n8",
+          "left": 0.011960846371948719,
+          "right": 0.011960846371948719
+        },
+        {
+          "bus": "n9",
+          "left": 0.019036564975976944,
+          "right": 0.019036564975976944
+        },
+        {
+          "bus": "n16",
+          "left": 0.10720793157815933,
+          "right": 0.1072104200720787
+        },
+        {
+          "bus": "n17",
+          "left": 0.011959082446992397,
+          "right": 0.011959082446992397
+        },
+        {
+          "bus": "n18",
+          "left": 0.019041001796722412,
+          "right": 0.019041001796722412
+        },
+        {
+          "bus": "n19",
+          "left": 0.011956960894167423,
+          "right": 0.011956960894167423
+        },
+        {
+          "bus": "n20",
+          "left": 0.01903422921895981,
+          "right": 0.01903422921895981
+        },
+        {
+          "bus": "n21",
+          "left": 0.011955943889915943,
+          "right": 0.011955943889915943
+        },
+        {
+          "bus": "n22",
+          "left": 0.019041001796722412,
+          "right": 0.019041001796722412
+        },
+        {
+          "bus": "n23",
+          "left": 0.011952264234423637,
+          "right": 0.011952264234423637
+        },
+        {
+          "bus": "n24",
+          "left": 0.019029567018151283,
+          "right": 0.019029567018151283
+        },
+        {
+          "bus": "n25",
+          "left": 0.06770338863134384,
+          "right": 0.06770338863134384
+        },
+        {
+          "bus": "n31",
+          "left": 0.0031190006993710995,
+          "right": 0.00312183890491724
+        },
+        {
+          "bus": "n36",
+          "left": 0.002116754651069641,
+          "right": 0.002116754651069641
+        }
+      ],
+      "playing": true
+    },
+    "documentId": "F46554F3-8C30-4CEA-8EEE-473D3CC7E882",
+    "playbackStopped": false,
+    "revision": "F46554F3-8C30-4CEA-8EEE-473D3CC7E882:0:0:0"
+  },
+  "revision": "F46554F3-8C30-4CEA-8EEE-473D3CC7E882:0:0:0",
+  "busIDs": [
+    "n2",
+    "n3",
+    "n4",
+    "n5",
+    "n6",
+    "n7",
+    "n8",
+    "n9",
+    "n16",
+    "n17",
+    "n18",
+    "n19",
+    "n20",
+    "n21",
+    "n22",
+    "n23",
+    "n24",
+    "n25",
+    "n31",
+    "n36"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "path": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/dense-graph-fixture.screamseq",
+  "sha256": "17cc9d87ed2b2abb578482655a910a4ddb836640aa7d8c3ebac20c284b006df8",
+  "sampleRate": 48000,
+  "bufferFrames": 512,
+  "device": "BlackHole 2ch",
+  "channels": 16,
+  "soundingInstrumentSlots": [
+    1,
+    2
+  ],
+  "returns": 2,
+  "groupBuses": 1,
+  "ordinaryAssignments": 5,
+  "sampleInstrumentAssignments": 1,
+  "patternGraphs": [
+    "row",
+    "persistent"
+  ],
+  "overlappingLFOs": 2
+}

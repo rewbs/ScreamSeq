@@ -1,0 +1,1 @@
+PASS musical timing: five-format fractional tempo/groove snapshots, optional payload validation, loss-safe exports, structural Undo/Redo, independent sample timing and callback-size audio (peak delta below 1e-6) at three sample rates; no callback allocations/frees/locks

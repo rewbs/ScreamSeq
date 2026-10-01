@@ -1,0 +1,8 @@
+{
+  "baseRevision": "d5d376fa0ced527cc901d8555076cadbf98d75d4",
+  "builtAtUTC": "2026-09-23T02:31:05.514768+00:00",
+  "sourceFingerprint": "be14f47d5f247d0ff418dcf97bad2d004a89ba7f1334fcf396fcd63e23b78694",
+  "sourceFilesVerified": 480,
+  "executableSHA256": "9d8319fedac972692ef2b98ee8a2098084f3f1c3f125b24eafde03cd695e0d72",
+  "signature": "codesign --verify --deep --strict passed"
+}

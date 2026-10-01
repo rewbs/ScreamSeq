@@ -1,0 +1,44 @@
+{
+  "qaPID": 72707,
+  "scratch": [
+    {
+      "binding": 0,
+      "channel": 0,
+      "column": 0,
+      "duration": 24576,
+      "effect": 0,
+      "kind": "nudge-reverse",
+      "parameter": 0,
+      "pitchRange": 2,
+      "position": 0,
+      "value": 0.625
+    }
+  ],
+  "audio": [
+    {
+      "gain": 1,
+      "input": 0,
+      "output": 0,
+      "source": "n18",
+      "target": "n20"
+    },
+    {
+      "gain": 1,
+      "input": 0,
+      "output": 0,
+      "source": "n20",
+      "target": "n19"
+    }
+  ],
+  "modulationAfterSaveDeleteUndo": [
+    {
+      "base": 0.2,
+      "enabled": true,
+      "maximum": 0.8,
+      "minimum": 0.3,
+      "parameter": 1,
+      "source": "n21",
+      "target": "n20"
+    }
+  ]
+}

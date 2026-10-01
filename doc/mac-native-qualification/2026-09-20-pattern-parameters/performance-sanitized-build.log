@@ -1,0 +1,57 @@
+[ 12%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 77%] Built target OpenMPTCore
+[ 79%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/TrackerDocument.cpp.o
+[ 79%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/TrackLayout.cpp.o
+[ 80%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/PatternTools.cpp.o
+[ 80%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/NativeSong.cpp.o
+[ 80%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/ArrangementTools.cpp.o
+[ 82%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleDocument.cpp.o
+[ 84%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleSplice.cpp.o
+[ 84%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleCopy.cpp.o
+[ 84%] Linking CXX static library libTrackerEditor.a
+[ 92%] Built target TrackerEditor
+[ 92%] Building CXX object CMakeFiles/TrackerPlugins.dir/Audio/PluginAssignments.cpp.o
+[ 92%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/AudioUnitHost.mm.o
+[ 92%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/VST3Host.mm.o
+[ 92%] Linking CXX static library libTrackerPlugins.a
+[ 93%] Built target TrackerPlugins
+[ 93%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 93%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioDevice.mm.o
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:1517:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:732:
+/Users/rewbs/code/openmpt/mac/Bridge/InstrumentEnvelopeToolsAPI.inc:13:57: warning: 'auto' deduced as 'id' in declaration of 'value' [-Wauto-var-id]
+   13 |       auto info=[&](const InstrumentEnvelope &envelope){auto value=[instrumentEnvelopeInfo(envelope,maximum) mutableCopy];
+      |                                                         ^~~~~~~~~~
+[ 95%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioExport.mm.o
+[ 95%] Building CXX object CMakeFiles/TrackerMac.dir/Audio/NativeInstrument.cpp.o
+[ 95%] Building CXX object CMakeFiles/TrackerMac.dir/Audio/PatternCommandRuntime.cpp.o
+1 warning generated.
+[ 96%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/precise-ramp-tests.dir/Tests/FixtureAU.mm.o
+[100%] Building OBJCXX object CMakeFiles/precise-ramp-tests.dir/Tests/PreciseRampTests.mm.o
+[100%] Linking CXX executable precise-ramp-tests
+[100%] Built target precise-ramp-tests
+[ 12%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 77%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 93%] Built target TrackerPlugins
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/pattern-performance-tests.dir/Tests/PatternPerformanceTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:22:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   22 |     auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:31:49: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+   31 |   NSString *revision=session.automationRevision;auto preview=[set mutableCopy];preview[@"dryRun"]=@YES;
+      |                                                 ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:34:9: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   34 |   const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:39:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   39 |     auto request=[params mutableCopy];request[@"expectedRevision"]=session.automationRevision;NSString *before=session.automationRevision;
+      |     ^~~~~~~~~~~~
+4 warnings generated.
+[100%] Linking CXX executable pattern-performance-tests
+[100%] Built target pattern-performance-tests

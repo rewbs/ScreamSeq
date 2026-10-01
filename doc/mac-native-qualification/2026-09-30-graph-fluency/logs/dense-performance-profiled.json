@@ -1,0 +1,479 @@
+{
+  "applicationActive": true,
+  "applicationHidden": false,
+  "artifacts": "/var/folders/_l/wc099tqn2kvfk697dlrd02hr0000gn/T/resonance-ui-qualification-30ABAF3B-3435-4E6E-9395-533AFBC51A95",
+  "audioActive": true,
+  "audition": false,
+  "automationPoints": 0,
+  "baseRevision": "d5d376fa0ced527cc901d8555076cadbf98d75d4",
+  "bufferSize": 512,
+  "bufferStarvations": 0,
+  "callbacks": 5599,
+  "displayLinkCallbacks": 3549,
+  "displayMaximumFPS": 120,
+  "durationSeconds": 60.00674295425415,
+  "executable": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/ui-run-ShJuiE/ScreamSeq QA.app/Contents/MacOS/ScreamSeq",
+  "failures": [
+    "Missed presentation deadlines exceed 0.1%",
+    "Presentation stall exceeded two 60 Hz periods",
+    "Presented pattern geometry became stale for more than two periods",
+    "Audio callback exceeded its deadline",
+    "Audio callback p99.9 exceeded half the buffer period"
+  ],
+  "fault": false,
+  "frames": 2866688,
+  "framesPresented": 3516,
+  "graphActivity": [
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 1,
+      "role": "ordinary",
+      "tail": false,
+      "target": "n2"
+    },
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 1,
+      "role": "persistent",
+      "tail": false,
+      "target": "n5"
+    },
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 2,
+      "role": "ordinary",
+      "tail": false,
+      "target": "n5"
+    },
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 1,
+      "role": "ordinary",
+      "tail": false,
+      "target": "n9"
+    },
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 1,
+      "role": "ordinary",
+      "tail": false,
+      "target": "n20"
+    },
+    {
+      "graph": "n26",
+      "instrument": "",
+      "order": 1,
+      "role": "ordinary",
+      "tail": false,
+      "target": "n24"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n2"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n3"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n4"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n5"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n6"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n7"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n8"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n9"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n17"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n18"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n19"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n20"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n21"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n22"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n23"
+    },
+    {
+      "graph": "n26",
+      "instrument": "n32",
+      "order": 1,
+      "role": "instrument",
+      "tail": false,
+      "target": "n24"
+    }
+  ],
+  "graphViewportHeight": 202,
+  "graphVisible": true,
+  "graphVisibleNodes": 9,
+  "lastFPS": 60.040431906649026,
+  "left": 0.11927561461925507,
+  "liveEdits": 296,
+  "liveSaves": 3,
+  "loop": true,
+  "maxCPUFrameMS": 24.026036262512207,
+  "maxDisplayLinkIntervalMS": 154.7453750099521,
+  "maxGeometrySnapshotAgeMS": 154.66974998707883,
+  "maxGPUFrameMS": 7.792166667059064,
+  "maximumSoundingTrackMeters": 16,
+  "maxMainThreadDrawMS": 24.026036262512207,
+  "maxMicros": 149747.541,
+  "maxPresentMS": 174.99845832935534,
+  "maxRenderQueueWaitMS": 0,
+  "meanPresentedFPS": 58.63185890370562,
+  "measurementStarted": true,
+  "metalDrawableHeight": 502,
+  "metalDrawableWidth": 1128,
+  "missedPresentations": 79,
+  "missedSubmissionDeadlines": 1,
+  "order": 0,
+  "outOfOrderPresentations": 0,
+  "overruns": 4,
+  "p01DisplayLinkLeadMS": 15.554749988950789,
+  "p99CPUFrameMS": 0.13494491577148438,
+  "p99DisplayLinkIntervalMS": 29.156333330320194,
+  "p99DrawableWaitMS": 0,
+  "p99GeometrySnapshotAgeMS": 18.727416667388752,
+  "p99GPUFrameMS": 2.9439166537486017,
+  "p99MainThreadDrawMS": 0.13494491577148438,
+  "p99PresentMS": 33.333041676087305,
+  "p99RenderQueueWaitMS": 0,
+  "p99SubmissionLatenessMS": -14.924333343515173,
+  "p999Micros": 6420,
+  "passed": false,
+  "pattern": 0,
+  "patternPosition": 11798.061358152361,
+  "playing": true,
+  "pluginFailure": false,
+  "pluginLatency": 0.001875,
+  "presentationCallbacks": 3546,
+  "presentationSamples": 3395,
+  "presentsWithTransaction": false,
+  "processID": 56364,
+  "region": {
+    "order": 0
+  },
+  "rendererPaused": false,
+  "requestedSeconds": 60,
+  "requestedVST3": false,
+  "right": 0.11927837878465652,
+  "routing": {
+    "active": true,
+    "available": true,
+    "failedPlan": 0,
+    "latencyPending": false,
+    "renderedPlan": 1,
+    "requestedPlan": 1,
+    "state": "stable"
+  },
+  "row": 46,
+  "sampleRate": 48000,
+  "sortedMaxPresentMS": 174.99845832935534,
+  "sortedP99PresentMS": 33.333041676087305,
+  "sortedPresentationSamples": 3395,
+  "sourceFingerprint": "8c0b08e95241a3a62ed940a472c20f89f43498d81665966e1ebf64dcf63e642e",
+  "submittedFrames": 3549,
+  "timestamp": "2026-09-30T06:44:57Z",
+  "undoRedoCycles": 14,
+  "unpresentedDrawables": 30,
+  "usesExistingGraph": true,
+  "usesGraph": true,
+  "usesVST3": false,
+  "voicePositions": [
+    {
+      "channel": 0,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 154,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 126
+    },
+    {
+      "channel": 1,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 154,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 121
+    },
+    {
+      "channel": 2,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 156,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 131
+    },
+    {
+      "channel": 3,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 156,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 157
+    },
+    {
+      "channel": 4,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 150,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 199
+    },
+    {
+      "channel": 5,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 152,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 3
+    },
+    {
+      "channel": 6,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 153,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 83
+    },
+    {
+      "channel": 7,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 156,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 182
+    },
+    {
+      "channel": 8,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 151,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 46
+    },
+    {
+      "channel": 9,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 124,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 188
+    },
+    {
+      "channel": 10,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 124,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 99
+    },
+    {
+      "channel": 11,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 124,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 34
+    },
+    {
+      "channel": 12,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 124,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 252
+    },
+    {
+      "channel": 13,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 124,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 242
+    },
+    {
+      "channel": 14,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 124,
+      "instrument": 1,
+      "sample": 1,
+      "sampleFrame": 6
+    },
+    {
+      "channel": 15,
+      "envelopeTicks": [
+        0,
+        0,
+        0
+      ],
+      "generation": 124,
+      "instrument": 2,
+      "sample": 2,
+      "sampleFrame": 58
+    }
+  ],
+  "voices": 16,
+  "windowLevel": 0,
+  "windowMiniaturized": false,
+  "windowOccluded": false,
+  "windowVisible": true
+}

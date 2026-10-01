@@ -1,0 +1,242 @@
+[
+  {
+    "method": "mixer.bus.set",
+    "params": {
+      "bus": "n3",
+      "gainDB": -6,
+      "expectedRevision": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461:0:0:0"
+    },
+    "response": {
+      "changed": true,
+      "data": {
+        "bus": "n3",
+        "controlsOnly": false,
+        "mixer": {
+          "buses": [
+            {
+              "color": 0,
+              "gainDB": 0,
+              "id": "n2",
+              "inserts": [],
+              "kind": "track",
+              "mute": false,
+              "name": "Track 1",
+              "output": "n16",
+              "pan": 0,
+              "preGainDB": 0,
+              "prePan": 0,
+              "sends": [],
+              "solo": false,
+              "timingMS": 0,
+              "width": 1
+            },
+            {
+              "color": 0,
+              "gainDB": -6,
+              "id": "n3",
+              "inserts": [],
+              "kind": "track",
+              "mute": false,
+              "name": "Track 2",
+              "output": "n16",
+              "pan": 0,
+              "preGainDB": 0,
+              "prePan": 0,
+              "sends": [],
+              "solo": false,
+              "timingMS": 0,
+              "width": 1
+            },
+            {
+              "color": 0,
+              "gainDB": 0,
+              "id": "n4",
+              "inserts": [],
+              "kind": "track",
+              "mute": false,
+              "name": "Track 3",
+              "output": "n16",
+              "pan": 0,
+              "preGainDB": 0,
+              "prePan": 0,
+              "sends": [],
+              "solo": false,
+              "timingMS": 0,
+              "width": 1
+            },
+            {
+              "color": 0,
+              "gainDB": 0,
+              "id": "n5",
+              "inserts": [],
+              "kind": "track",
+              "mute": false,
+              "name": "Track 4",
+              "output": "n16",
+              "pan": 0,
+              "preGainDB": 0,
+              "prePan": 0,
+              "sends": [],
+              "solo": false,
+              "timingMS": 0,
+              "width": 1
+            },
+            {
+              "color": 0,
+              "gainDB": 0,
+              "id": "n6",
+              "inserts": [],
+              "kind": "track",
+              "mute": false,
+              "name": "Track 5",
+              "output": "n16",
+              "pan": 0,
+              "preGainDB": 0,
+              "prePan": 0,
+              "sends": [],
+              "solo": false,
+              "timingMS": 0,
+              "width": 1
+            },
+            {
+              "color": 0,
+              "gainDB": 0,
+              "id": "n7",
+              "inserts": [],
+              "kind": "track",
+              "mute": false,
+              "name": "Track 6",
+              "output": "n16",
+              "pan": 0,
+              "preGainDB": 0,
+              "prePan": 0,
+              "sends": [],
+              "solo": false,
+              "timingMS": 0,
+              "width": 1
+            },
+            {
+              "color": 0,
+              "gainDB": 0,
+              "id": "n8",
+              "inserts": [],
+              "kind": "track",
+              "mute": false,
+              "name": "Track 7",
+              "output": "n16",
+              "pan": 0,
+              "preGainDB": 0,
+              "prePan": 0,
+              "sends": [],
+              "solo": false,
+              "timingMS": 0,
+              "width": 1
+            },
+            {
+              "color": 0,
+              "gainDB": 0,
+              "id": "n9",
+              "inserts": [],
+              "kind": "track",
+              "mute": false,
+              "name": "Track 8",
+              "output": "n16",
+              "pan": 0,
+              "preGainDB": 0,
+              "prePan": 0,
+              "sends": [],
+              "solo": false,
+              "timingMS": 0,
+              "width": 1
+            },
+            {
+              "color": 0,
+              "gainDB": 0,
+              "id": "n16",
+              "inserts": [],
+              "kind": "master",
+              "mute": false,
+              "name": "Master",
+              "output": "",
+              "pan": 0,
+              "preGainDB": 0,
+              "prePan": 0,
+              "sends": [],
+              "solo": false,
+              "timingMS": 0,
+              "width": 1
+            }
+          ],
+          "instruments": [],
+          "sidechains": []
+        },
+        "preview": false,
+        "wouldChange": true
+      },
+      "documentId": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461",
+      "playbackStopped": false,
+      "revision": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461:1:0:0"
+    }
+  },
+  {
+    "method": "plugin.add",
+    "params": {
+      "descriptor": {
+        "format": "Built-in",
+        "classID": "resonance.digital-filter.v1",
+        "type": 0,
+        "subtype": 0,
+        "manufacturer": 0
+      },
+      "target": "n4",
+      "expectedRevision": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461:1:0:0"
+    },
+    "response": {
+      "changed": true,
+      "data": {
+        "slot": 0
+      },
+      "documentId": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461",
+      "playbackStopped": false,
+      "revision": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461:2:1:0"
+    }
+  },
+  {
+    "method": "document.save",
+    "params": {
+      "path": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/live-route-fixture.screamseq",
+      "expectedRevision": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461:2:1:0"
+    },
+    "response": {
+      "changed": false,
+      "data": {
+        "format": "screamseq",
+        "path": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/live-route-fixture.screamseq",
+        "projectVersion": 6,
+        "written": true
+      },
+      "documentId": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461",
+      "playbackStopped": false,
+      "revision": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461:2:1:0"
+    }
+  },
+  {
+    "method": "transport.play",
+    "params": {
+      "loop": true,
+      "expectedRevision": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461:2:1:0"
+    },
+    "response": {
+      "changed": false,
+      "data": {
+        "playing": true,
+        "region": {
+          "loop": true
+        }
+      },
+      "documentId": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461",
+      "playbackStopped": false,
+      "revision": "4F7D9BDA-07B6-40E8-9450-A9F0C0956461:2:1:0"
+    }
+  }
+]

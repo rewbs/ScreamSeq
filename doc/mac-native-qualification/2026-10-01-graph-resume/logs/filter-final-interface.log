@@ -1,0 +1,11 @@
+PASS editor drafts: popups resolve stable IDs, reloads keep drafts, busy edits retry, Tab leaves canvases
+PASS parameter activity UI: stable target selection, source links, retired replies and trace zoom
+Mixer strip diagnostic: 240 buses, 600 meter updates 358.1 ms, 9 control sets allocated through full traversal (not display cadence)
+PASS connected workspace: retained panels/pins, focus layout, placement, saved layout, compact automation, changed-field asset apply, restored dividers
+PASS shared graph UI: distinct audio/modulation edges, channel context, compact canvas and revision-checked errors
+PASS multisample review: full family, octave correction/bounds, visible name, dry run, stale guard and duplicate dispatch
+PASS sample browser: stale searches, inherited folder filters, keyboard preview, multi-selection and one-shot bulk dispatch
+PASS envelope UI: completion snippets, stale formula previews, retained formulas, linked status, target guards and explicit copy/link requests
+PASS pattern grid: modifier-safe typing, busy key queue, audition release, repeat handling, clamped navigation, plus-key shortcuts, palette validation, apply reporting, background paste
+Plugin browser 4096-entry load and search: 44.31 ms (offscreen diagnostic, not a presentation gate)
+PASS editor layouts and native keyboard transport/remapping, note lifecycle, safe sample indices, undo routing, deferred bulk edits, selection bounds and envelope node editing

@@ -1,0 +1,58 @@
+{
+  "plugins": [
+    {
+      "bypass": true,
+      "classID": "resonance.distortion.v1",
+      "format": "Built-in",
+      "instanceID": "35C7F8F9-3C6F-42EE-B6B3-B707F075E789",
+      "instrument": 0,
+      "instrumentAssignments": [],
+      "isInstrument": false,
+      "manufacturer": 0,
+      "name": "Distortion",
+      "path": "",
+      "subtype": 0,
+      "type": 0
+    },
+    {
+      "bypass": false,
+      "classID": "resonance.compressor.v1",
+      "format": "Built-in",
+      "instanceID": "49C242AA-FF1D-42EA-89EA-800F0584FB8E",
+      "instrument": 0,
+      "instrumentAssignments": [],
+      "isInstrument": false,
+      "manufacturer": 0,
+      "name": "Compressor",
+      "path": "",
+      "subtype": 0,
+      "type": 0
+    },
+    {
+      "bypass": true,
+      "classID": "resonance.distortion.v1",
+      "format": "Built-in",
+      "instanceID": "6E750309-8732-4C9B-8B1C-15062FB73416",
+      "instrument": 0,
+      "instrumentAssignments": [],
+      "isInstrument": false,
+      "manufacturer": 0,
+      "name": "Distortion",
+      "path": "",
+      "subtype": 0,
+      "type": 0
+    }
+  ],
+  "cell": [
+    {
+      "channel": 0,
+      "effect": 0,
+      "instrument": 0,
+      "note": 0,
+      "parameter": 0,
+      "row": 11,
+      "volume": 0,
+      "volumeCommand": 0
+    }
+  ]
+}

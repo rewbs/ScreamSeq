@@ -1,0 +1,81 @@
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-native
+[  1%] Built target RealtimeAudit
+[ 14%] Built target TrackerFLAC
+[ 16%] Built target ResonanceFixture
+[ 19%] Built target TrackerPlugins
+[ 20%] Built target plugin-tests
+[ 21%] Built target plugin-scanner
+[ 87%] Built target OpenMPTCore
+[ 89%] Built target TrackerEditor
+[ 91%] Built target qualification-fixture
+[ 91%] Built target stress-tests
+[ 92%] Built target tracker-core-tests
+[ 93%] Built target render-audit
+[ 95%] Built target TrackerMac
+[ 97%] Built target midi-tests
+[ 97%] Built target device-tests
+[ 98%] Built target loopback-tests
+[ 99%] Built target export-tests
+[100%] Built target session-tests
+[100%] Built target native-plugin-tests
+bin/mac-native/Resonance.app/Contents/MacOS/plugin-scanner: replacing existing signature
+bin/mac-native/Resonance.app: replacing existing signature
+Built bin/mac-native/Resonance.app
+PASS atomic edits, grouped undo, sample processing/rollback, pattern/order undo, exact native roundtrip, bounded queue, loop termination at 44.1/48/96 kHz; max callback 419.375 us
+PASS fixture test.mod
+PASS fixture test.xm
+PASS fixture test.s3m
+PASS fixture test.mptm
+PASS Apple AU subtype 1819304307: state recall, stereo render, live/offline parity, finite output, latency 0 s
+PASS Apple AU subtype 1752195443: state recall, stereo render, live/offline parity, finite output, latency 0 s
+PASS Apple AU subtype 1819112562: state recall, stereo render, live/offline parity, finite output, latency 0.0122 s
+PASS sample-timed AU automation at 44100 Hz across 128/512-frame buffers
+PASS sample-timed AU automation at 48000 Hz across 128/512-frame buffers
+PASS sample-timed AU automation at 96000 Hz across 128/512-frame buffers
+PASS VST3 discovery, gain, processor/controller state, sample-timed automation at 44.1/48/96k, zero callback allocation/locks
+PASS VST3 tracker instrument notes, row note-off, automation, live/offline parity, zero callback allocation/locks
+PASS instrument latency alignment with sample voices
+PASS VST3 keyboard preview and release
+PASS Apple AU instrument note-on, output, note-off and state recall
+PASS VST3 project save/reopen, instrument assignment, parameter persistence and WAV fidelity
+PASS isolated AU scan; project/module/state roundtrip; loss-prevention; offline effect render; effect history/state/automation restoration; bounded concurrent MIDI queue
+PASS CoreMIDI loopback, running status, clock interleave, note releases, timestamps and disconnect
+PASS recovery generations, newest selection across documents, failed-write retention, document-scoped cleanup
+PASS editor layouts and native keyboard transport/remapping, note lifecycle, safe sample indices, undo routing, deferred bulk edits, selection bounds and envelope node editing
+PASS AU export 1819112562: 97 latency frames trimmed, 4800 tail frames, max difference 0
+PASS AU export 1684368505: 0 latency frames trimmed, 1004716 tail frames, max difference 0
+PASS dry WAV fidelity, exact export duration, latency, tail and failed-export preservation
+PASS 60-second, 127-channel/1024-row render with concurrent editing/audition/panic: 379 batches, 0 safely rejected, 249 peak voices, 167.167 us max, zero intercepted allocations/releases/locks
+{"file": "test.mod", "order": 0, "sequence": 0, "rate": 44100, "maxError": 0.0, "rmsError": 0.0, "frames": 94374, "callbacks": 186, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 112.084}
+{"file": "test.mod", "order": 0, "sequence": 0, "rate": 48000, "maxError": 0.0, "rmsError": 0.0, "frames": 102720, "callbacks": 202, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 44.291}
+{"file": "test.mod", "order": 0, "sequence": 0, "rate": 96000, "maxError": 0.0, "rmsError": 0.0, "frames": 205440, "callbacks": 403, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 25.958}
+{"file": "test.xm", "order": 0, "sequence": 0, "rate": 44100, "maxError": 0.0, "rmsError": 0.0, "frames": 308985, "callbacks": 605, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 33.708}
+{"file": "test.xm", "order": 0, "sequence": 0, "rate": 48000, "maxError": 0.0, "rmsError": 0.0, "frames": 336310, "callbacks": 658, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 28.625}
+{"file": "test.xm", "order": 0, "sequence": 0, "rate": 96000, "maxError": 0.0, "rmsError": 0.0, "frames": 672621, "callbacks": 1315, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 41.542}
+{"file": "test.s3m", "order": 0, "sequence": 0, "rate": 44100, "maxError": 0.0, "rmsError": 0.0, "frames": 1323008, "callbacks": 2584, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 54.542}
+{"file": "test.s3m", "order": 0, "sequence": 0, "rate": 48000, "maxError": 0.0, "rmsError": 0.0, "frames": 1440256, "callbacks": 2813, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 55.042}
+{"file": "test.s3m", "order": 0, "sequence": 0, "rate": 96000, "maxError": 0.0, "rmsError": 0.0, "frames": 2880000, "callbacks": 5625, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 48.542}
+{"file": "demo.mptm", "order": 0, "sequence": 0, "rate": 44100, "maxError": 0.0, "rmsError": 0.0, "frames": 687162, "callbacks": 1344, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 71.208}
+{"file": "demo.mptm", "order": 0, "sequence": 0, "rate": 48000, "maxError": 0.0, "rmsError": 0.0, "frames": 747456, "callbacks": 1461, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 51.083}
+{"file": "demo.mptm", "order": 0, "sequence": 0, "rate": 96000, "maxError": 0.0, "rmsError": 0.0, "frames": 1495680, "callbacks": 2923, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 50.583}
+{"file": "demo.it", "order": 0, "sequence": 0, "rate": 44100, "maxError": 0.0, "rmsError": 0.0, "frames": 345786, "callbacks": 677, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 67}
+{"file": "demo.it", "order": 0, "sequence": 0, "rate": 48000, "maxError": 0.0, "rmsError": 0.0, "frames": 376128, "callbacks": 736, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 25.834}
+{"file": "demo.it", "order": 0, "sequence": 0, "rate": 96000, "maxError": 0.0, "rmsError": 0.0, "frames": 752640, "callbacks": 1471, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 29.167}
+{"file": "loops.mptm", "order": 0, "sequence": 0, "rate": 44100, "maxError": 0.0, "rmsError": 0.0, "frames": 601818, "callbacks": 1177, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 50.083}
+{"file": "loops.mptm", "order": 0, "sequence": 0, "rate": 48000, "maxError": 0.0, "rmsError": 0.0, "frames": 654624, "callbacks": 1280, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 37.042}
+{"file": "loops.mptm", "order": 0, "sequence": 0, "rate": 96000, "maxError": 0.0, "rmsError": 0.0, "frames": 1309920, "callbacks": 2560, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 45.375}
+{"file": "test.mptm", "order": 0, "sequence": 0, "rate": 44100, "maxError": 0.0, "rmsError": 0.0, "frames": 270722, "callbacks": 530, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 37.333}
+{"file": "test.mptm", "order": 0, "sequence": 0, "rate": 48000, "maxError": 0.0, "rmsError": 0.0, "frames": 294663, "callbacks": 577, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 13.667}
+{"file": "test.mptm", "order": 0, "sequence": 0, "rate": 96000, "maxError": 0.0, "rmsError": 0.0, "frames": 589327, "callbacks": 1153, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 14.042}
+{"file": "demo.mptm", "order": 1, "sequence": 0, "rate": 44100, "maxError": 0.0, "rmsError": 0.0, "frames": 345786, "callbacks": 677, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 25.416}
+{"file": "demo.mptm", "order": 1, "sequence": 0, "rate": 48000, "maxError": 0.0, "rmsError": 0.0, "frames": 376128, "callbacks": 736, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 27.167}
+{"file": "demo.mptm", "order": 1, "sequence": 0, "rate": 96000, "maxError": 0.0, "rmsError": 0.0, "frames": 752640, "callbacks": 1471, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 31.75}
+{"file": "sequences.mptm", "order": 0, "sequence": 0, "rate": 44100, "maxError": 0.0, "rmsError": 0.0, "frames": 345786, "callbacks": 677, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 49.333}
+{"file": "sequences.mptm", "order": 0, "sequence": 0, "rate": 48000, "maxError": 0.0, "rmsError": 0.0, "frames": 376128, "callbacks": 736, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 48.875}
+{"file": "sequences.mptm", "order": 0, "sequence": 0, "rate": 96000, "maxError": 0.0, "rmsError": 0.0, "frames": 752640, "callbacks": 1471, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 26.083}
+{"file": "sequences.mptm", "order": 0, "sequence": 1, "rate": 44100, "maxError": 0.0, "rmsError": 0.0, "frames": 445242, "callbacks": 871, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 70}
+{"file": "sequences.mptm", "order": 0, "sequence": 1, "rate": 48000, "maxError": 0.0, "rmsError": 0.0, "frames": 484800, "callbacks": 948, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 26.084}
+{"file": "sequences.mptm", "order": 0, "sequence": 1, "rate": 96000, "maxError": 0.0, "rmsError": 0.0, "frames": 969600, "callbacks": 1895, "allocations": 0, "deallocations": 0, "locks": 0, "maxMicros": 36.333}
+PASS 30 render comparisons; zero intercepted allocation, release or mutex calls. /Users/rewbs/code/openmpt/bin/mac-native/audio-test-results.json

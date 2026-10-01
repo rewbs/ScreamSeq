@@ -1,0 +1,170 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-interaction-flow
+      Start 52: native-mixer
+      Start  9: plugin-preset-session
+ 1/78 Test  #9: plugin-preset-session ............   Passed    0.25 sec
+      Start 59: musical-automation
+ 2/78 Test #59: musical-automation ...............   Passed    0.83 sec
+      Start 51: mixer-runtime
+ 3/78 Test #51: mixer-runtime ....................   Passed    0.04 sec
+      Start  1: plugin-presets
+ 4/78 Test  #1: plugin-presets ...................   Passed    0.02 sec
+      Start 78: unified-history
+ 5/78 Test #78: unified-history ..................   Passed    0.06 sec
+      Start 56: mixer-graph
+ 6/78 Test #56: mixer-graph ......................   Passed    0.01 sec
+      Start  2: precise-ramps
+ 7/78 Test  #2: precise-ramps ....................   Passed    0.48 sec
+      Start  3: precise-notes
+ 8/78 Test #52: native-mixer .....................   Passed    1.88 sec
+      Start  4: pattern-pitch
+ 9/78 Test  #3: precise-notes ....................   Passed    2.18 sec
+      Start  5: record-nudge
+10/78 Test  #4: pattern-pitch ....................   Passed    2.45 sec
+      Start  6: unified-effects
+11/78 Test  #5: record-nudge .....................   Passed    1.86 sec
+      Start  7: pattern-performance
+12/78 Test  #6: unified-effects ..................   Passed    1.64 sec
+      Start  8: plugin-programs
+13/78 Test  #8: plugin-programs ..................   Passed    0.75 sec
+      Start 10: recovery-session
+14/78 Test  #7: pattern-performance ..............   Passed    1.08 sec
+      Start 11: instrument-envelopes
+15/78 Test #10: recovery-session .................   Passed    0.49 sec
+      Start 12: instrument-envelope-session
+16/78 Test #11: instrument-envelopes .............   Passed    0.77 sec
+      Start 13: plugin-aliases
+17/78 Test #12: instrument-envelope-session ......   Passed    0.86 sec
+      Start 14: song-timing-session
+18/78 Test #14: song-timing-session ..............   Passed    1.39 sec
+      Start 15: song-timing
+19/78 Test #13: plugin-aliases ...................   Passed    2.16 sec
+      Start 16: native-reverse-loops
+20/78 Test #15: song-timing ......................   Passed    0.94 sec
+      Start 17: sample-loops
+21/78 Test #16: native-reverse-loops .............   Passed    2.44 sec
+      Start 18: sample-crossfade-project
+22/78 Test #17: sample-loops .....................   Passed    3.14 sec
+      Start 19: sample-crossfade
+23/78 Test #18: sample-crossfade-project .........   Passed    1.47 sec
+      Start 20: sample-snap
+24/78 Test #19: sample-crossfade .................   Passed    0.53 sec
+      Start 21: sample-drawing
+25/78 Test #20: sample-snap ......................   Passed    0.77 sec
+      Start 22: sample-copy
+26/78 Test #21: sample-drawing ...................   Passed    0.73 sec
+      Start 23: sample-clipboard
+27/78 Test #22: sample-copy ......................   Passed    0.91 sec
+      Start 24: sample-archive
+28/78 Test #23: sample-clipboard .................   Passed    0.96 sec
+      Start 25: sample-processing
+29/78 Test #24: sample-archive ...................   Passed    0.78 sec
+      Start 26: sample-project
+30/78 Test #25: sample-processing ................   Passed    0.90 sec
+      Start 27: sample-session
+31/78 Test #27: sample-session ...................   Passed    0.75 sec
+      Start 28: sample-import
+32/78 Test #26: sample-project ...................   Passed    1.52 sec
+      Start 29: tracker-core
+33/78 Test #28: sample-import ....................   Passed    0.58 sec
+      Start 30: automation-tools
+34/78 Test #29: tracker-core .....................   Passed    0.84 sec
+      Start 31: pattern-tools
+35/78 Test #30: automation-tools .................   Passed    0.75 sec
+      Start 32: pattern-commands
+36/78 Test #31: pattern-tools ....................   Passed    0.80 sec
+      Start 33: plugins
+37/78 Test #32: pattern-commands .................   Passed    0.77 sec
+      Start 34: native-effects
+38/78 Test #33: plugins ..........................   Passed    0.69 sec
+      Start 35: eq-effects
+39/78 Test #35: eq-effects .......................   Passed    2.33 sec
+      Start 36: comb
+40/78 Test #36: comb .............................   Passed    0.86 sec
+      Start 37: filters
+41/78 Test #37: filters ..........................   Passed    0.74 sec
+      Start 38: oversampling
+42/78 Test #38: oversampling .....................   Passed    1.15 sec
+      Start 39: distortion
+43/78 Test #39: distortion .......................   Passed    3.90 sec
+      Start 40: lofi
+44/78 Test #40: lofi .............................   Passed    1.07 sec
+      Start 41: cabinet
+45/78 Test #34: native-effects ...................   Passed   13.86 sec
+      Start 42: dynamics
+46/78 Test #42: dynamics .........................   Passed    1.32 sec
+      Start 43: maximizer
+47/78 Test #43: maximizer ........................   Passed    2.09 sec
+      Start 44: bus-compressor
+48/78 Test #44: bus-compressor ...................   Passed    1.36 sec
+      Start 45: session
+49/78 Test #45: session ..........................***Failed    0.61 sec
+FAIL: module undo preserves the native effect graph
+
+      Start 46: native-song
+50/78 Test #46: native-song ......................   Passed    0.58 sec
+      Start 47: midi
+51/78 Test #47: midi .............................   Passed    0.48 sec
+      Start 48: export
+52/78 Test #48: export ...........................   Passed    0.61 sec
+      Start 49: stress
+53/78 Test #49: stress ...........................   Passed    0.80 sec
+      Start 50: routing-prototype
+54/78 Test #50: routing-prototype ................   Passed    0.52 sec
+      Start 53: sidechains
+55/78 Test #53: sidechains .......................   Passed    0.36 sec
+      Start 54: multi-bus
+56/78 Test #54: multi-bus ........................   Passed    1.01 sec
+      Start 55: rack
+57/78 Test #55: rack .............................***Failed    0.76 sec
+FAIL Native Undo disables a pending graph incompatible with current instrument assignments
+
+      Start 57: native-plugins
+58/78 Test #57: native-plugins ...................   Passed    0.59 sec
+      Start 58: plugin-latency
+59/78 Test #58: plugin-latency ...................   Passed    0.48 sec
+      Start 60: automation
+60/78 Test #60: automation .......................   Passed    0.70 sec
+      Start 61: plugin-inventory
+61/78 Test #61: plugin-inventory .................   Passed    0.40 sec
+      Start 62: plugin-lifecycle
+62/78 Test #62: plugin-lifecycle .................   Passed    0.96 sec
+      Start 63: plugin-shutdown
+63/78 Test #63: plugin-shutdown ..................   Passed    1.59 sec
+      Start 64: note-track
+64/78 Test #64: note-track .......................   Passed    0.76 sec
+      Start 65: plugin-library
+65/78 Test #65: plugin-library ...................   Passed    0.36 sec
+      Start 66: automation-target
+66/78 Test #66: automation-target ................   Passed    0.50 sec
+      Start 67: signal-graph
+67/78 Test #67: signal-graph .....................   Passed    0.35 sec
+      Start 68: native-signal-graph
+68/78 Test #68: native-signal-graph ..............   Passed    0.46 sec
+      Start 69: signal-graph-session
+69/78 Test #69: signal-graph-session .............   Passed    0.48 sec
+      Start 70: effect-auxiliary
+70/78 Test #70: effect-auxiliary .................   Passed    0.38 sec
+      Start 71: signal-routing
+71/78 Test #71: signal-routing ...................   Passed    0.92 sec
+      Start 72: playback-regions
+72/78 Test #72: playback-regions .................   Passed    0.62 sec
+      Start 73: curve-formulas
+73/78 Test #73: curve-formulas ...................   Passed    0.37 sec
+      Start 74: curve-formula-session
+74/78 Test #74: curve-formula-session ............   Passed    0.50 sec
+      Start 75: envelope-bank
+75/78 Test #75: envelope-bank ....................   Passed    0.63 sec
+      Start 76: playback-display
+76/78 Test #76: playback-display .................   Passed    0.72 sec
+      Start 77: parameter-activity
+77/78 Test #77: parameter-activity ...............   Passed    0.55 sec
+78/78 Test #41: cabinet ..........................   Passed   45.50 sec
+
+97% tests passed, 2 tests failed out of 78
+
+Total Test time (real) =  75.52 sec
+
+The following tests FAILED:
+	 45 - session (Failed)
+	 55 - rack (Failed)
+Errors while running CTest

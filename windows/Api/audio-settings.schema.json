@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScreamSeq Windows output device requests",
+  "description": "Native session output preferences. Revisions and settings are independent of document history. Empty endpoint selects the current multimedia default; device IDs are opaque. Requested periods may be negotiated to supported values. Settings are retained for this session.",
+  "type": "object",
+  "properties": {
+    "jsonrpc": { "const": "2.0" },
+    "id": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "method": { "enum": ["audio.devices.get", "audio.settings.get", "audio.settings.set"] },
+    "params": { "type": "object" }
+  },
+  "required": ["jsonrpc", "id", "method", "params"],
+  "additionalProperties": false,
+  "allOf": [{
+    "if": { "properties": { "method": { "const": "audio.settings.set" } } },
+    "then": {
+      "properties": {
+        "params": {
+          "properties": {
+            "endpoint": { "type": "string", "maxLength": 4096, "pattern": "^[^\\u0000]*$" },
+            "periodFrames": { "enum": [0, 64, 128, 256, 512] },
+            "expectedAudioRevision": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "dryRun": { "type": "boolean" }
+          },
+          "required": ["endpoint", "periodFrames", "expectedAudioRevision"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "else": { "properties": { "params": { "maxProperties": 0 } } }
+  }]
+}

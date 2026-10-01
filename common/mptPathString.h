@@ -24,6 +24,12 @@
 #endif
 
 #include "mptString.h"
+#if defined(OPENMPT_EDITOR_CORE)
+#include <filesystem>
+#if MPT_OS_WINDOWS
+#include "mpt/fs/fs.hpp"
+#endif
+#endif
 
 #if defined(MODPLUG_TRACKER) && MPT_OS_WINDOWS
 #include <windows.h>
@@ -71,6 +77,14 @@ inline mpt::ustring ToUString(const T &x)
 }
 
 
+
+#if defined(OPENMPT_EDITOR_CORE)
+#if !MPT_OS_WINDOWS
+struct native_fs {bool is_file(const PathString &p){std::error_code ec;return std::filesystem::is_regular_file(p.ToUTF8(),ec);} };
+#endif
+mpt::PathString AbsolutePathToRelative(const mpt::PathString &p,const mpt::PathString &relativeTo);
+mpt::PathString RelativePathToAbsolute(const mpt::PathString &p,const mpt::PathString &relativeTo);
+#endif
 
 #if defined(MODPLUG_TRACKER)
 

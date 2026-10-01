@@ -1,0 +1,26 @@
+[ 12%] Built target TrackerFLAC
+[ 13%] Built target RealtimeAudit
+[ 15%] Built target ResonanceFixture
+[ 78%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 93%] Building CXX object CMakeFiles/TrackerPlugins.dir/Audio/PluginAssignments.cpp.o
+[ 93%] Linking CXX static library libTrackerPlugins.a
+[ 95%] Built target TrackerPlugins
+[ 95%] Linking CXX executable plugin-scanner
+[ 95%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+[ 95%] Built target plugin-scanner
+[ 95%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/plugin-alias-tests.dir/Tests/PluginAliasTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:71:78: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   71 |     auto call=[&](NSString *method,NSDictionary *values,bool mutation=false){auto p=[values mutableCopy];if(mutation)p[@"expectedRevision"]=session.automationRevision;
+      |                                                                              ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:78:5: warning: 'auto' deduced as 'id' in declaration of 'routing' [-Wauto-var-id]
+   78 |     auto routing=call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"];
+      |     ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:88:5: warning: 'auto' deduced as 'id' in declaration of 'broken' [-Wauto-var-id]
+   88 |     auto broken=[root mutableCopy];broken[@"version"]=@4;[[NSPropertyListSerialization dataWithPropertyList:broken format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:file atomically:YES];
+      |     ^~~~~~~~~~~
+3 warnings generated.
+[100%] Linking CXX executable plugin-alias-tests
+[100%] Built target plugin-alias-tests

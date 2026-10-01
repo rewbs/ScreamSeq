@@ -1,0 +1,12 @@
+{
+  "AU": {
+    "CFBundleShortVersionString": "4.3.0",
+    "CFBundleVersion": "4.3.0 (R0), Copyright \u00a9 2023 Native Instruments GmbH",
+    "CFBundleIdentifier": "Battery 4.MusicDevice.component"
+  },
+  "VST3": {
+    "CFBundleShortVersionString": "4.3.0",
+    "CFBundleVersion": "4.3.0 (R0), Copyright \u00a9 2023 Native Instruments GmbH",
+    "CFBundleIdentifier": "Battery 4.vst3"
+  }
+}

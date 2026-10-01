@@ -1,0 +1,8 @@
+Mixer strip diagnostic: 240 buses, 600 meter updates 201.4 ms, 9 control sets allocated through full traversal (not display cadence)
+PASS connected workspace: retained panels/pins, focus layout, placement, saved layout, compact automation
+PASS shared graph UI: distinct audio/modulation edges, channel context, compact canvas and revision-checked errors
+PASS multisample review: full family, octave correction/bounds, visible name, dry run, stale guard and duplicate dispatch
+PASS sample browser: stale searches, inherited folder filters, keyboard preview, multi-selection and one-shot bulk dispatch
+PASS envelope UI: completion snippets, stale formula previews, retained formulas, linked status, target guards and explicit copy/link requests
+Plugin browser 4096-entry load and search: 33.61 ms (offscreen diagnostic, not a presentation gate)
+PASS editor layouts and native keyboard transport/remapping, note lifecycle, safe sample indices, undo routing, deferred bulk edits, selection bounds and envelope node editing

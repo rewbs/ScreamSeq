@@ -20,7 +20,7 @@ inline namespace MPT_INLINE_NS {
 struct default_formatter {
 	template <typename Tstring, typename T>
 	static inline Tstring format(const T & value) {
-		using namespace mpt;
+		using namespace ::mpt;
 		return format_value_default<Tstring>(value);
 	}
 };

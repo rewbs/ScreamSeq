@@ -1,0 +1,8 @@
+{
+  "baseRevision": "d5d376fa0ced527cc901d8555076cadbf98d75d4",
+  "builtAtUTC": "2026-09-22T13:34:39.695659+00:00",
+  "sourceFingerprint": "edab8334f467a78a9ecc8d6e71d6dccf69f80495007b470c83e94372d1e88968",
+  "executableSHA256": "dc4d1a4c2bb90e5b7f14628b1c49af52039a0680807a1bb7e0977f85fe46e486",
+  "build": "bin/mac-background/ScreamSeq.app",
+  "liveUI": "Separate QA bundle; same Swift application sources, inspected before the final C++ interpolation fast-path optimization."
+}

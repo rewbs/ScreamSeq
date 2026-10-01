@@ -1,0 +1,10 @@
+[ 12%] Built target TrackerFLAC
+[ 83%] Built target OpenMPTCore
+[ 83%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/PatternTools.cpp.o
+[ 85%] Linking CXX static library libTrackerEditor.a
+[ 98%] Built target TrackerEditor
+[100%] Building CXX object CMakeFiles/pattern-tools-tests.dir/Tests/PatternToolsTests.cpp.o
+[100%] Linking CXX executable pattern-tools-tests
+[100%] Built target pattern-tools-tests
+PASS 450 five-format masked row splice references, range/loss guards, exact history and separate envelope preservation
+PASS pattern tools: exact curves, masks, ranges, deterministic generation, data-loss guards, paste modes, format checks, preview/undo/redo/save

@@ -1,0 +1,6 @@
+[ 13%] Built target TrackerFLAC
+[ 84%] Built target OpenMPTCore
+[100%] Built target TrackerEditor
+[100%] Building CXX object CMakeFiles/instrument-envelope-tests.dir/Tests/InstrumentEnvelopeTests.cpp.o
+[100%] Linking CXX executable instrument-envelope-tests
+[100%] Built target instrument-envelope-tests

@@ -1,0 +1,10 @@
+objc[19481]: Class RendezvousService is implemented in both /System/Library/Frameworks/CoreAudioKit.framework/Versions/A/CoreAudioKit (0x2a8bed100) and /System/Library/Components/CoreAudio.component/Contents/PlugIns/CoreAudioAUUI.bundle/Contents/MacOS/CoreAudioAUUI (0x1121f66d8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[19481]: Class NetServiceDirectory is implemented in both /System/Library/Frameworks/CoreAudioKit.framework/Versions/A/CoreAudioKit (0x2a8bed150) and /System/Library/Components/CoreAudio.component/Contents/PlugIns/CoreAudioAUUI.bundle/Contents/MacOS/CoreAudioAUUI (0x1121f6728). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+PASS VST3 discovery, gain, processor/controller state, sample-timed automation at 44.1/48/96k, zero callback allocations/frees/locks
+PASS VST3 tracker instrument notes, row note-off, automation, live/offline parity, zero callback allocations/frees/locks
+PASS instrument latency alignment with sample voices
+PASS VST3 keyboard preview and release
+PASS Apple AU instrument note-on, output, note-off and state recall
+PASS VST3 project save/reopen, instrument assignment, parameter persistence and WAV fidelity
+PASS native AU/VST3 editor attachment, close/reopen, and VST3 custom control-to-audio callback
+PASS custom-interface automation recording, initial-state preservation, restart/reopen and project persistence via virtual output

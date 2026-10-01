@@ -1,0 +1,25 @@
+[ 15%] Built target TrackerFLAC
+[ 86%] Built target OpenMPTCore
+[100%] Built target TrackerEditor
+[100%] Building CXX object CMakeFiles/instrument-envelope-tests.dir/Tests/InstrumentEnvelopeTests.cpp.o
+[100%] Linking CXX executable instrument-envelope-tests
+[100%] Built target instrument-envelope-tests
+[ 15%] Built target TrackerFLAC
+[ 85%] Built target OpenMPTCore
+[ 98%] Built target TrackerEditor
+[ 98%] Building CXX object CMakeFiles/automation-tools-tests.dir/Tests/AutomationToolsTests.cpp.o
+[100%] Linking CXX executable automation-tools-tests
+[100%] Built target automation-tools-tests
+[ 14%] Built target TrackerFLAC
+[ 80%] Built target OpenMPTCore
+[ 93%] Built target TrackerEditor
+[ 96%] Built target TrackerPlugins
+[ 98%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:1502:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:718:
+/Users/rewbs/code/openmpt/mac/Bridge/InstrumentEnvelopeToolsAPI.inc:13:57: warning: 'auto' deduced as 'id' in declaration of 'value' [-Wauto-var-id]
+   13 |       auto info=[&](const InstrumentEnvelope &envelope){auto value=[instrumentEnvelopeInfo(envelope,maximum) mutableCopy];
+      |                                                         ^~~~~~~~~~
+1 warning generated.
+[ 98%] Linking CXX static library libTrackerMac.a
+[100%] Built target TrackerMac

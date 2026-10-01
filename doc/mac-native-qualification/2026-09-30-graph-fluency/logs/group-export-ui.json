@@ -1,0 +1,2728 @@
+{
+  "transport": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 10255,
+      "fault": false,
+      "frames": 5250560,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "persistent",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 2,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n24"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n17"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n18"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n19"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n21"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n22"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n23"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n24"
+        }
+      ],
+      "left": 0.05141216516494751,
+      "loop": true,
+      "maxMicros": 5811.958,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 1930,
+      "pattern": 0,
+      "patternPosition": 2292.9693209238194,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.0514143630862236,
+      "routing": {
+        "active": true,
+        "available": true,
+        "failedPlan": 0,
+        "latencyPending": false,
+        "renderedPlan": 1,
+        "requestedPlan": 1,
+        "state": "stable"
+      },
+      "row": 8,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 144
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 3
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 125
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 255
+        },
+        {
+          "channel": 4,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 136
+        },
+        {
+          "channel": 5,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 25
+        },
+        {
+          "channel": 6,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 178
+        },
+        {
+          "channel": 7,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 85
+        },
+        {
+          "channel": 8,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 2
+        },
+        {
+          "channel": 9,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 185
+        },
+        {
+          "channel": 10,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 122
+        },
+        {
+          "channel": 11,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 71
+        },
+        {
+          "channel": 12,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 33
+        },
+        {
+          "channel": 13,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 7
+        },
+        {
+          "channel": 14,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 251
+        },
+        {
+          "channel": 15,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 227,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 254
+        }
+      ],
+      "voices": 16
+    },
+    "documentId": "C10FFB56-ADEF-4F38-B5C9-459B38EE988F",
+    "playbackStopped": false,
+    "revision": "C10FFB56-ADEF-4F38-B5C9-459B38EE988F:4:0:0"
+  },
+  "graph": {
+    "changed": false,
+    "data": {
+      "activity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "persistent",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 2,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n24"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n17"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n18"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n19"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n21"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n22"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n23"
+        },
+        {
+          "graph": "n26",
+          "instrument": "n32",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n24"
+        }
+      ],
+      "assignments": [
+        {
+          "amount": 1,
+          "graph": "n26",
+          "target": "n2",
+          "wet": 1
+        },
+        {
+          "amount": 0.3,
+          "graph": "n26",
+          "target": "n5",
+          "wet": 0.5
+        },
+        {
+          "amount": 0.3,
+          "graph": "n26",
+          "target": "n9",
+          "wet": 0.5
+        },
+        {
+          "amount": 0.3,
+          "graph": "n26",
+          "target": "n20",
+          "wet": 0.5
+        },
+        {
+          "amount": 0.3,
+          "graph": "n26",
+          "target": "n24",
+          "wet": 0.5
+        }
+      ],
+      "commands": [
+        {
+          "amount": 0.4,
+          "column": 0,
+          "graph": "n26",
+          "kind": "start",
+          "pattern": "n1",
+          "position": 0,
+          "tails": false,
+          "target": "n5",
+          "wet": 0.3
+        },
+        {
+          "amount": 0.2,
+          "column": 1,
+          "graph": "n26",
+          "kind": "row",
+          "pattern": "n1",
+          "position": 1048576,
+          "tails": false,
+          "target": "n5",
+          "wet": 0.4
+        }
+      ],
+      "implicitMixer": false,
+      "inputs": [],
+      "instrumentAssignments": [
+        {
+          "amount": 0.2,
+          "graph": "n26",
+          "target": "n32",
+          "wet": 0.3
+        }
+      ],
+      "instruments": [
+        {
+          "id": "n32",
+          "index": 1,
+          "name": "Warm pulse",
+          "plugin": false
+        },
+        {
+          "id": "n33",
+          "index": 2,
+          "name": "Sub bass",
+          "plugin": false
+        },
+        {
+          "id": "n34",
+          "index": 3,
+          "name": "Soft kick",
+          "plugin": false
+        },
+        {
+          "id": "n35",
+          "index": 4,
+          "name": "Closed hat",
+          "plugin": false
+        }
+      ],
+      "lanes": [
+        {
+          "count": 2,
+          "target": "n5"
+        }
+      ],
+      "layout": [
+        {
+          "node": "n31",
+          "x": 885.416666666658,
+          "y": 589.3132716049141
+        },
+        {
+          "node": "plugin:F5DE4F80-361F-423A-9E11-ECA98A804903",
+          "x": 472.608024691358,
+          "y": 479.93827160486074
+        }
+      ],
+      "library": [
+        {
+          "audio": [
+            {
+              "gain": 1,
+              "input": 0,
+              "output": 0,
+              "source": "n29",
+              "target": "n28"
+            },
+            {
+              "gain": 1,
+              "input": 0,
+              "output": 0,
+              "source": "n27",
+              "target": "n29"
+            }
+          ],
+          "groups": [
+            {
+              "id": "n38",
+              "name": "Animated filter",
+              "nodes": [
+                "n29",
+                "n30",
+                "n37"
+              ],
+              "parent": "",
+              "x": 280,
+              "y": 80
+            }
+          ],
+          "id": "n26",
+          "modulation": [
+            {
+              "base": 0.04904904904904905,
+              "enabled": true,
+              "maximum": 0.25,
+              "minimum": 0,
+              "parameter": 2,
+              "source": "n30",
+              "target": "n29"
+            },
+            {
+              "base": 0.04904904904904905,
+              "enabled": true,
+              "maximum": 0.03,
+              "minimum": 0,
+              "parameter": 2,
+              "source": "n37",
+              "target": "n29"
+            }
+          ],
+          "name": "Filter movement",
+          "nodes": [
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n27",
+              "kind": "input",
+              "name": "Input",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 40,
+              "y": 100
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n28",
+              "kind": "output",
+              "name": "Output",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 620,
+              "y": 100
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n29",
+              "kind": "plugin",
+              "name": "Digital Filter",
+              "phase": 0,
+              "plugin": {
+                "classID": "resonance.digital-filter.v1",
+                "format": "Built-in",
+                "inputs": [],
+                "manufacturer": 0,
+                "name": "Digital Filter",
+                "outputs": [],
+                "path": "",
+                "state": "",
+                "subtype": 0,
+                "type": 0
+              },
+              "rate": 1,
+              "release": 0.1,
+              "x": 280,
+              "y": 80
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n30",
+              "kind": "lfo",
+              "name": "LFO",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 339.5348837209233,
+              "y": 323.5142118862965
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n37",
+              "kind": "lfo",
+              "name": "Slow secondary motion",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 300,
+              "y": 100
+            }
+          ],
+          "number": 1
+        },
+        {
+          "audio": [
+            {
+              "gain": 1,
+              "input": 0,
+              "output": 0,
+              "source": "n43",
+              "target": "n46"
+            },
+            {
+              "gain": 1,
+              "input": 0,
+              "output": 0,
+              "source": "n42",
+              "target": "n43"
+            }
+          ],
+          "groups": [],
+          "id": "n41",
+          "modulation": [
+            {
+              "base": 0.04904904904904905,
+              "enabled": true,
+              "maximum": 0.25,
+              "minimum": 0,
+              "parameter": 2,
+              "source": "n44",
+              "target": "n43"
+            },
+            {
+              "base": 0.04904904904904905,
+              "enabled": true,
+              "maximum": 0.03,
+              "minimum": 0,
+              "parameter": 2,
+              "source": "n45",
+              "target": "n43"
+            }
+          ],
+          "name": "Animated filter",
+          "nodes": [
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n42",
+              "kind": "input",
+              "name": "Input",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 32,
+              "y": 32
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n43",
+              "kind": "plugin",
+              "name": "Digital Filter",
+              "phase": 0,
+              "plugin": {
+                "classID": "resonance.digital-filter.v1",
+                "format": "Built-in",
+                "inputs": [],
+                "manufacturer": 0,
+                "name": "Digital Filter",
+                "outputs": [],
+                "path": "",
+                "state": "",
+                "subtype": 0,
+                "type": 0
+              },
+              "rate": 1,
+              "release": 0.1,
+              "x": 267,
+              "y": 32
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n44",
+              "kind": "lfo",
+              "name": "LFO",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 32,
+              "y": 154
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n45",
+              "kind": "lfo",
+              "name": "Slow secondary motion",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 32,
+              "y": 276
+            },
+            {
+              "attack": 0.01,
+              "controller": 1,
+              "id": "n46",
+              "kind": "output",
+              "name": "Output",
+              "phase": 0,
+              "rate": 1,
+              "release": 0.1,
+              "x": 502,
+              "y": 32
+            }
+          ],
+          "number": 2
+        }
+      ],
+      "mixer": {
+        "buses": [
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n2",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Layer with a deliberately long duplicate name",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [
+              {
+                "enabled": true,
+                "gainDB": -18,
+                "preFader": false,
+                "target": "n36"
+              }
+            ],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n3",
+            "inserts": [
+              "3837CCDE-0CB4-459A-A660-FCE7CF77CD1D"
+            ],
+            "kind": "track",
+            "mute": false,
+            "name": "Layer with a deliberately long duplicate name",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n4",
+            "inserts": [
+              "F5DE4F80-361F-423A-9E11-ECA98A804903",
+              "5C7C53DF-146B-43C8-B916-E34797F24441"
+            ],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 3",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [
+              {
+                "enabled": true,
+                "gainDB": -12,
+                "preFader": false,
+                "target": "n31"
+              }
+            ],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n5",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 4",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [
+              {
+                "enabled": true,
+                "gainDB": -18,
+                "preFader": false,
+                "target": "n36"
+              }
+            ],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n6",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 5",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n7",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 6",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n8",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 7",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n9",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Track 8",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n16",
+            "inserts": [],
+            "kind": "master",
+            "mute": false,
+            "name": "Master",
+            "output": "",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n17",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 9",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n18",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 10",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n19",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 11",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n20",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 12",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n21",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 13",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n22",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 14",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n23",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 15",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n24",
+            "inserts": [],
+            "kind": "track",
+            "mute": false,
+            "name": "Column 16",
+            "output": "n25",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n25",
+            "inserts": [],
+            "kind": "group",
+            "mute": false,
+            "name": "Rhythm group",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n31",
+            "inserts": [
+              "2D9DE253-62C4-444A-A57D-66B12DE0C16D"
+            ],
+            "kind": "return",
+            "mute": false,
+            "name": "Return",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          },
+          {
+            "color": 0,
+            "gainDB": 0,
+            "id": "n36",
+            "inserts": [
+              "77087F95-04FA-400D-BC2B-A5C87FBF5007"
+            ],
+            "kind": "return",
+            "mute": false,
+            "name": "Comb return",
+            "output": "n16",
+            "pan": 0,
+            "preGainDB": 0,
+            "prePan": 0,
+            "sends": [],
+            "solo": false,
+            "timingMS": 0,
+            "width": 1
+          }
+        ],
+        "instruments": [],
+        "sidechains": [
+          {
+            "enabled": true,
+            "gainDB": 0,
+            "input": 1,
+            "plugin": "3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+            "preFader": false,
+            "source": "n4"
+          }
+        ]
+      },
+      "outputs": [],
+      "patterns": [
+        {
+          "id": "n1",
+          "index": 0,
+          "name": "",
+          "rows": 64,
+          "rowsPerBeat": 4
+        }
+      ],
+      "plugins": [
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Input 1",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Output 1",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "classID": "",
+          "format": "AU",
+          "id": "2D9DE253-62C4-444A-A57D-66B12DE0C16D",
+          "instruments": [],
+          "isInstrument": false,
+          "manufacturer": 1634758764,
+          "name": "Apple: AUReverb2",
+          "path": "",
+          "slot": 0,
+          "subtype": 1920361010,
+          "type": 1635083896
+        },
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Stereo input",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Stereo output",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "classID": "resonance.distortion.v1",
+          "format": "Built-in",
+          "id": "5C7C53DF-146B-43C8-B916-E34797F24441",
+          "instruments": [],
+          "isInstrument": false,
+          "manufacturer": 0,
+          "name": "Distortion",
+          "path": "",
+          "slot": 1,
+          "subtype": 0,
+          "type": 0
+        },
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Stereo input",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Stereo output",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 1,
+              "name": "Detector sidechain",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "classID": "resonance.compressor.v1",
+          "format": "Built-in",
+          "id": "3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+          "instruments": [],
+          "isInstrument": false,
+          "manufacturer": 0,
+          "name": "Compressor",
+          "path": "",
+          "slot": 2,
+          "subtype": 0,
+          "type": 0
+        },
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Stereo input",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Stereo output",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "classID": "resonance.eq5.v1",
+          "format": "Built-in",
+          "id": "F5DE4F80-361F-423A-9E11-ECA98A804903",
+          "instruments": [],
+          "isInstrument": false,
+          "manufacturer": 0,
+          "name": "EQ5",
+          "path": "",
+          "slot": 3,
+          "subtype": 0,
+          "type": 0
+        },
+        {
+          "audioBuses": [
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "input",
+              "index": 0,
+              "name": "Stereo input",
+              "supported": true
+            },
+            {
+              "active": true,
+              "channels": 2,
+              "direction": "output",
+              "index": 0,
+              "name": "Stereo output",
+              "supported": true
+            }
+          ],
+          "bypass": false,
+          "classID": "resonance.comb-filter.v1",
+          "format": "Built-in",
+          "id": "77087F95-04FA-400D-BC2B-A5C87FBF5007",
+          "instruments": [],
+          "isInstrument": false,
+          "manufacturer": 0,
+          "name": "Comb Filter",
+          "path": "",
+          "slot": 4,
+          "subtype": 0,
+          "type": 0
+        }
+      ],
+      "unitsPerRow": 65536
+    },
+    "documentId": "C10FFB56-ADEF-4F38-B5C9-459B38EE988F",
+    "playbackStopped": false,
+    "revision": "C10FFB56-ADEF-4F38-B5C9-459B38EE988F:4:0:0"
+  },
+  "signal": {
+    "changed": false,
+    "data": {
+      "active": true,
+      "listen": {
+        "gainDB": 0,
+        "pending": false,
+        "port": null,
+        "transitionFrames": 240
+      },
+      "peakDecaySeconds": 0.2,
+      "playing": true,
+      "ports": [
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "plugin:2D9DE253-62C4-444A-A57D-66B12DE0C16D/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Input 1",
+          "node": "plugin:2D9DE253-62C4-444A-A57D-66B12DE0C16D",
+          "nonFinite": false,
+          "peak": [
+            0.0031424700282514095,
+            0.0031424700282514095
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.0023896906059235334,
+            0.0023896906059235334
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "plugin:2D9DE253-62C4-444A-A57D-66B12DE0C16D/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Output 1",
+          "node": "plugin:2D9DE253-62C4-444A-A57D-66B12DE0C16D",
+          "nonFinite": false,
+          "peak": [
+            0.0031349987257272005,
+            0.003127987962216139
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.0023817680776119232,
+            0.002377494005486369
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "plugin:5C7C53DF-146B-43C8-B916-E34797F24441/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Stereo input",
+          "node": "plugin:5C7C53DF-146B-43C8-B916-E34797F24441",
+          "nonFinite": false,
+          "peak": [
+            0.011965315788984299,
+            0.011965315788984299
+          ],
+          "port": 0,
+          "processorLatency": 90,
+          "rms": [
+            0.009921499527990818,
+            0.009921499527990818
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "plugin:5C7C53DF-146B-43C8-B916-E34797F24441/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Stereo output",
+          "node": "plugin:5C7C53DF-146B-43C8-B916-E34797F24441",
+          "nonFinite": false,
+          "peak": [
+            0.012510399334132671,
+            0.012510399334132671
+          ],
+          "port": 0,
+          "processorLatency": 90,
+          "rms": [
+            0.00951352994889021,
+            0.00951352994889021
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Stereo input",
+          "node": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+          "nonFinite": false,
+          "peak": [
+            0.019030272960662842,
+            0.019030272960662842
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.011795616708695889,
+            0.011795616708695889
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Stereo output",
+          "node": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+          "nonFinite": false,
+          "peak": [
+            0.019030272960662842,
+            0.019030272960662842
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.011795616708695889,
+            0.011795616708695889
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D/in/1",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Detector sidechain",
+          "node": "plugin:3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+          "nonFinite": false,
+          "peak": [
+            0.012510399334132671,
+            0.012510399334132671
+          ],
+          "port": 1,
+          "processorLatency": 0,
+          "rms": [
+            0.00951352994889021,
+            0.00951352994889021
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "plugin:F5DE4F80-361F-423A-9E11-ECA98A804903/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Stereo input",
+          "node": "plugin:F5DE4F80-361F-423A-9E11-ECA98A804903",
+          "nonFinite": false,
+          "peak": [
+            0.011965315788984299,
+            0.011965315788984299
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009921499527990818,
+            0.009921499527990818
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "plugin:F5DE4F80-361F-423A-9E11-ECA98A804903/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Stereo output",
+          "node": "plugin:F5DE4F80-361F-423A-9E11-ECA98A804903",
+          "nonFinite": false,
+          "peak": [
+            0.011965315788984299,
+            0.011965315788984299
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009921499527990818,
+            0.009921499527990818
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "plugin:77087F95-04FA-400D-BC2B-A5C87FBF5007/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Stereo input",
+          "node": "plugin:77087F95-04FA-400D-BC2B-A5C87FBF5007",
+          "nonFinite": false,
+          "peak": [
+            0.0033743821550160646,
+            0.0033743821550160646
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.0007966228295117617,
+            0.0007966228295117617
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "plugin:77087F95-04FA-400D-BC2B-A5C87FBF5007/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Stereo output",
+          "node": "plugin:77087F95-04FA-400D-BC2B-A5C87FBF5007",
+          "nonFinite": false,
+          "peak": [
+            0.001974844839423895,
+            0.001974844839423895
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.00037369923666119576,
+            0.00037369923666119576
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n2/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Layer with a deliberately long duplicate name input",
+          "node": "n2",
+          "nonFinite": false,
+          "peak": [
+            0.01196512021124363,
+            0.01196512021124363
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.010867157950997353,
+            0.010867157950997353
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n2/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Layer with a deliberately long duplicate name output",
+          "node": "n2",
+          "nonFinite": false,
+          "peak": [
+            0.011964956298470497,
+            0.011964956298470497
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.010852794162929058,
+            0.010852794162929058
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 90,
+          "direction": "input",
+          "key": "n3/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Layer with a deliberately long duplicate name input",
+          "node": "n3",
+          "nonFinite": false,
+          "peak": [
+            0.019030272960662842,
+            0.019030272960662842
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.011795616708695889,
+            0.011795616708695889
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n3/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Layer with a deliberately long duplicate name output",
+          "node": "n3",
+          "nonFinite": false,
+          "peak": [
+            0.019030272960662842,
+            0.019030272960662842
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.011795616708695889,
+            0.011795616708695889
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n4/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 3 input",
+          "node": "n4",
+          "nonFinite": false,
+          "peak": [
+            0.011965315788984299,
+            0.011965315788984299
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009921499527990818,
+            0.009921499527990818
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n4/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 3 output",
+          "node": "n4",
+          "nonFinite": false,
+          "peak": [
+            0.012510399334132671,
+            0.012510399334132671
+          ],
+          "port": 0,
+          "processorLatency": 90,
+          "rms": [
+            0.00951352994889021,
+            0.00951352994889021
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n5/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 4 input",
+          "node": "n5",
+          "nonFinite": false,
+          "peak": [
+            0.019041001796722412,
+            0.019041001796722412
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.014600399881601334,
+            0.014600399881601334
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n5/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 4 output",
+          "node": "n5",
+          "nonFinite": false,
+          "peak": [
+            0.019040077924728394,
+            0.019040077924728394
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.014578398317098618,
+            0.014578398317098618
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n6/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 5 input",
+          "node": "n6",
+          "nonFinite": false,
+          "peak": [
+            0.011965257115662098,
+            0.011965257115662098
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.010368935763835907,
+            0.010368935763835907
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n6/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 5 output",
+          "node": "n6",
+          "nonFinite": false,
+          "peak": [
+            0.011965257115662098,
+            0.011965257115662098
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.010368935763835907,
+            0.010368935763835907
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n7/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 6 input",
+          "node": "n7",
+          "nonFinite": false,
+          "peak": [
+            0.019041001796722412,
+            0.019041001796722412
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.013849577866494656,
+            0.013849577866494656
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n7/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 6 output",
+          "node": "n7",
+          "nonFinite": false,
+          "peak": [
+            0.019041001796722412,
+            0.019041001796722412
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.013849577866494656,
+            0.013849577866494656
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n8/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 7 input",
+          "node": "n8",
+          "nonFinite": false,
+          "peak": [
+            0.011964624747633934,
+            0.011964624747633934
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009635622613132,
+            0.009635622613132
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n8/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 7 output",
+          "node": "n8",
+          "nonFinite": false,
+          "peak": [
+            0.011964624747633934,
+            0.011964624747633934
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009635622613132,
+            0.009635622613132
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n9/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 8 input",
+          "node": "n9",
+          "nonFinite": false,
+          "peak": [
+            0.019041001796722412,
+            0.019041001796722412
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.013523776084184647,
+            0.013523776084184647
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n9/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Track 8 output",
+          "node": "n9",
+          "nonFinite": false,
+          "peak": [
+            0.019040334969758987,
+            0.019040334969758987
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.01352556049823761,
+            0.01352556049823761
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 90,
+          "direction": "input",
+          "key": "n16/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Master input",
+          "node": "n16",
+          "nonFinite": false,
+          "peak": [
+            0.13037928938865662,
+            0.1303783655166626
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.034542813897132874,
+            0.034546226263046265
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n16/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Master output",
+          "node": "n16",
+          "nonFinite": false,
+          "peak": [
+            0.13037928938865662,
+            0.1303783655166626
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.034542813897132874,
+            0.034546226263046265
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n17/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 9 input",
+          "node": "n17",
+          "nonFinite": false,
+          "peak": [
+            0.011964090168476105,
+            0.011964090168476105
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009382958523929119,
+            0.009382958523929119
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n17/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 9 output",
+          "node": "n17",
+          "nonFinite": false,
+          "peak": [
+            0.011964090168476105,
+            0.011964090168476105
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009382958523929119,
+            0.009382958523929119
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n18/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 10 input",
+          "node": "n18",
+          "nonFinite": false,
+          "peak": [
+            0.019041895866394043,
+            0.019041895866394043
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.014263108372688293,
+            0.014263108372688293
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n18/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 10 output",
+          "node": "n18",
+          "nonFinite": false,
+          "peak": [
+            0.019041895866394043,
+            0.019041895866394043
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.014263108372688293,
+            0.014263108372688293
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n19/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 11 input",
+          "node": "n19",
+          "nonFinite": false,
+          "peak": [
+            0.011964512057602406,
+            0.011964512057602406
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009123620577156544,
+            0.009123620577156544
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n19/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 11 output",
+          "node": "n19",
+          "nonFinite": false,
+          "peak": [
+            0.011964512057602406,
+            0.011964512057602406
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009123620577156544,
+            0.009123620577156544
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n20/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 12 input",
+          "node": "n20",
+          "nonFinite": false,
+          "peak": [
+            0.019041001796722412,
+            0.019041001796722412
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.013838991522789001,
+            0.013838991522789001
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n20/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 12 output",
+          "node": "n20",
+          "nonFinite": false,
+          "peak": [
+            0.019039973616600037,
+            0.019039973616600037
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.013868005014955997,
+            0.013868005014955997
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n21/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 13 input",
+          "node": "n21",
+          "nonFinite": false,
+          "peak": [
+            0.01196349784731865,
+            0.01196349784731865
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009902840480208397,
+            0.009902840480208397
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n21/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 13 output",
+          "node": "n21",
+          "nonFinite": false,
+          "peak": [
+            0.01196349784731865,
+            0.01196349784731865
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.009902840480208397,
+            0.009902840480208397
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n22/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 14 input",
+          "node": "n22",
+          "nonFinite": false,
+          "peak": [
+            0.019041001796722412,
+            0.019041001796722412
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.013729732483625412,
+            0.013729732483625412
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n22/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 14 output",
+          "node": "n22",
+          "nonFinite": false,
+          "peak": [
+            0.019041001796722412,
+            0.019041001796722412
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.013729732483625412,
+            0.013729732483625412
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n23/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 15 input",
+          "node": "n23",
+          "nonFinite": false,
+          "peak": [
+            0.01196290086954832,
+            0.01196290086954832
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.00955954659730196,
+            0.00955954659730196
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n23/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 15 output",
+          "node": "n23",
+          "nonFinite": false,
+          "peak": [
+            0.01196290086954832,
+            0.01196290086954832
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.00955954659730196,
+            0.00955954659730196
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n24/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 16 input",
+          "node": "n24",
+          "nonFinite": false,
+          "peak": [
+            0.01904010772705078,
+            0.01904010772705078
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.013793851248919964,
+            0.013793851248919964
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n24/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Column 16 output",
+          "node": "n24",
+          "nonFinite": false,
+          "peak": [
+            0.019038688391447067,
+            0.019038688391447067
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.013755717314779758,
+            0.013755717314779758
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n25/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Rhythm group input",
+          "node": "n25",
+          "nonFinite": false,
+          "peak": [
+            0.09749428927898407,
+            0.09749428927898407
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.046702973544597626,
+            0.046702973544597626
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n25/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Rhythm group output",
+          "node": "n25",
+          "nonFinite": false,
+          "peak": [
+            0.09749428927898407,
+            0.09749428927898407
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.046702973544597626,
+            0.046702973544597626
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 90,
+          "direction": "input",
+          "key": "n31/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Return input",
+          "node": "n31",
+          "nonFinite": false,
+          "peak": [
+            0.0031424700282514095,
+            0.0031424700282514095
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.0023896906059235334,
+            0.0023896906059235334
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n31/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Return output",
+          "node": "n31",
+          "nonFinite": false,
+          "peak": [
+            0.0031349987257272005,
+            0.003127987962216139
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.0023817680776119232,
+            0.002377494005486369
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "input",
+          "key": "n36/in/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Comb return input",
+          "node": "n36",
+          "nonFinite": false,
+          "peak": [
+            0.0033743821550160646,
+            0.0033743821550160646
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.0007966228295117617,
+            0.0007966228295117617
+          ],
+          "through": 5250810
+        },
+        {
+          "channels": 2,
+          "clipped": false,
+          "compensation": 0,
+          "direction": "output",
+          "key": "n36/out/0",
+          "lastSignal": 5250810,
+          "measured": true,
+          "name": "Comb return output",
+          "node": "n36",
+          "nonFinite": false,
+          "peak": [
+            0.001974844839423895,
+            0.001974844839423895
+          ],
+          "port": 0,
+          "processorLatency": 0,
+          "rms": [
+            0.00037369923666119576,
+            0.00037369923666119576
+          ],
+          "through": 5250810
+        }
+      ],
+      "routing": {
+        "active": true,
+        "available": true,
+        "failedPlan": 0,
+        "latencyPending": false,
+        "renderedPlan": 1,
+        "requestedPlan": 1,
+        "state": "stable"
+      },
+      "sampleRate": 48000,
+      "scope": "Host mixer and rack audio ports; reusable graph internals are not included",
+      "silenceThreshold": 1e-07
+    },
+    "documentId": "C10FFB56-ADEF-4F38-B5C9-459B38EE988F",
+    "playbackStopped": false,
+    "revision": "C10FFB56-ADEF-4F38-B5C9-459B38EE988F:4:0:0"
+  }
+}

@@ -719,8 +719,14 @@ bool CSoundFile::ReadIT(FileReader &file, ModLoadingFlags loadFlags)
 	}
 
 	// Read mix plugins information
+	const auto pluginChunkOffset = file.GetPosition();
 	FileReader pluginChunk = file.ReadChunk((minPtr >= file.GetPosition()) ? minPtr - file.GetPosition() : file.BytesLeft());
 	const auto [hasPluginChunks, isBeRoTracker] = LoadMixPlugins(pluginChunk, false);
+	// A sampleless song with only empty (zero-offset) patterns has no later
+	// payload from which to locate its extensions. LoadMixPlugins already stops
+	// at the extension marker; preserve that position in the parent reader.
+	const auto extensionCandidate = pluginChunkOffset + pluginChunk.GetPosition();
+	const bool hasInlineSongExtensions = pluginChunk.ReadMagic("STPM") || pluginChunk.ReadMagic("XTPM");
 	if(hasPluginChunks)
 		hasModPlugExtensions = true;
 
@@ -776,7 +782,7 @@ bool CSoundFile::ReadIT(FileReader &file, ModLoadingFlags loadFlags)
 	// In order to properly compute the position, in file, of eventual extended settings
 	// such as "attack" we need to keep the "real" size of the last sample as those extra
 	// setting will follow this sample in the file
-	FileReader::pos_type lastSampleOffset = 0;
+	FileReader::pos_type lastSampleOffset = hasInlineSongExtensions ? extensionCandidate : 0;
 	if(fileHeader.smpnum > 0)
 	{
 		lastSampleOffset = smpPos[fileHeader.smpnum - 1] + sizeof(ITSample);

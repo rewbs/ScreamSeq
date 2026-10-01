@@ -1,0 +1,78 @@
+-- Configuring done (0.1s)
+-- Generating done (0.3s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-sanitized
+[ 13%] Built target TrackerFLAC
+[ 84%] Built target OpenMPTCore
+[ 84%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/AutomationTools.cpp.o
+[ 84%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/TrackerDocument.cpp.o
+[ 84%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/InstrumentEnvelopeTools.cpp.o
+[ 84%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleArchive.cpp.o
+[ 84%] Linking CXX static library libTrackerEditor.a
+[100%] Built target TrackerEditor
+[100%] Building CXX object CMakeFiles/instrument-envelope-tests.dir/Tests/InstrumentEnvelopeTests.cpp.o
+[100%] Linking CXX executable instrument-envelope-tests
+[100%] Built target instrument-envelope-tests
+[ 12%] Built target TrackerFLAC
+[ 76%] Built target OpenMPTCore
+[ 90%] Built target TrackerEditor
+[ 93%] Built target TrackerPlugins
+[ 93%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:1502:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:722:
+/Users/rewbs/code/openmpt/mac/Bridge/InstrumentEnvelopeToolsAPI.inc:13:57: warning: 'auto' deduced as 'id' in declaration of 'value' [-Wauto-var-id]
+   13 |       auto info=[&](const InstrumentEnvelope &envelope){auto value=[instrumentEnvelopeInfo(envelope,maximum) mutableCopy];
+      |                                                         ^~~~~~~~~~
+1 warning generated.
+[ 93%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/instrument-envelope-session-tests.dir/Tests/InstrumentEnvelopeSessionTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/InstrumentEnvelopeSessionTests.mm:21:75: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   21 |     auto call=[&](NSString *method,NSDictionary *params,bool write=false){auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;
+      |                                                                           ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/InstrumentEnvelopeSessionTests.mm:23:80: warning: 'auto' deduced as 'id' in declaration of 'before' [-Wauto-var-id]
+   23 |     NSDictionary *target=@{@"instrument":identity,@"envelope":@"volume"};const auto before=call(@"instrument.envelope.get",target)[@"data"];
+      |                                                                          ~~~~~~^~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/InstrumentEnvelopeSessionTests.mm:25:5: warning: 'auto' deduced as 'id' in declaration of 'dry' [-Wauto-var-id]
+   25 |     auto dry=[params mutableCopy];dry[@"dryRun"]=@YES;NSString *revision=session.automationRevision;
+      |     ^~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/InstrumentEnvelopeSessionTests.mm:26:11: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+   26 |     const auto preview=call(@"instrument.envelope.transform",dry,true)[@"data"];
+      |     ~~~~~~^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/InstrumentEnvelopeSessionTests.mm:28:56: warning: 'auto' deduced as 'id' in declaration of 'after' [-Wauto-var-id]
+   28 |     call(@"instrument.envelope.transform",params,true);auto after=call(@"instrument.envelope.get",target)[@"data"];
+      |                                                        ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/InstrumentEnvelopeSessionTests.mm:30:5: warning: 'auto' deduced as 'id' in declaration of 'noop' [-Wauto-var-id]
+   30 |     auto noop=[params mutableCopy];noop[@"operation"]=@"scale";noop[@"options"]=@{@"amount":@1};
+      |     ^~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/InstrumentEnvelopeSessionTests.mm:44:5: warning: 'auto' deduced as 'id' in declaration of 'malformed' [-Wauto-var-id]
+   44 |     auto malformed=[params mutableCopy];malformed[@"operation"]=@"shift";malformed[@"options"]=@{@"amount":@1};malformed[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~~~~
+7 warnings generated.
+[100%] Linking CXX executable instrument-envelope-session-tests
+[100%] Built target instrument-envelope-session-tests
+[ 13%] Built target TrackerFLAC
+[ 84%] Built target OpenMPTCore
+[100%] Built target TrackerEditor
+[100%] Building CXX object CMakeFiles/automation-tools-tests.dir/Tests/AutomationToolsTests.cpp.o
+[100%] Linking CXX executable automation-tools-tests
+[100%] Built target automation-tools-tests
+[ 13%] Built target TrackerFLAC
+[ 83%] Built target OpenMPTCore
+[ 98%] Built target TrackerEditor
+[ 98%] Building CXX object CMakeFiles/sample-archive-tests.dir/Tests/SampleArchiveTests.cpp.o
+[100%] Linking CXX executable sample-archive-tests
+[100%] Built target sample-archive-tests
+[ 12%] Built target TrackerFLAC
+[ 77%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 95%] Built target TrackerPlugins
+[100%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/sample-project-tests.dir/Tests/SampleProjectTests.mm.o
+[100%] Linking CXX executable sample-project-tests
+[100%] Built target sample-project-tests
+[ 13%] Built target TrackerFLAC
+[ 83%] Built target OpenMPTCore
+[ 98%] Built target TrackerEditor
+[100%] Building CXX object CMakeFiles/native-reverse-loop-tests.dir/Tests/NativeReverseLoopTests.cpp.o
+[100%] Linking CXX executable native-reverse-loop-tests
+[100%] Built target native-reverse-loop-tests

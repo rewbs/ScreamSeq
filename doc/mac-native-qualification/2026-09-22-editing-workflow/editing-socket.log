@@ -1,0 +1,1 @@
+PASS real socket: guarded input, malformed/stale atomicity, precise cut/paste, dry run, no-op, Undo/Redo, native save/reopen and fractional BPM

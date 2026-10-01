@@ -1,0 +1,19 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 51: mixer-runtime
+1/7 Test #51: mixer-runtime ....................   Passed    0.41 sec
+    Start 52: mixer-transition
+2/7 Test #52: mixer-transition .................   Passed    0.36 sec
+    Start 53: realtime-transition
+3/7 Test #53: realtime-transition ..............   Passed    0.01 sec
+    Start 54: native-mixer
+4/7 Test #54: native-mixer .....................   Passed    3.03 sec
+    Start 56: multi-bus
+5/7 Test #56: multi-bus ........................   Passed    1.57 sec
+    Start 58: mixer-graph
+6/7 Test #58: mixer-graph ......................   Passed    0.16 sec
+    Start 60: plugin-latency
+7/7 Test #60: plugin-latency ...................   Passed    0.37 sec
+
+100% tests passed, 0 tests failed out of 7
+
+Total Test time (real) =   5.91 sec

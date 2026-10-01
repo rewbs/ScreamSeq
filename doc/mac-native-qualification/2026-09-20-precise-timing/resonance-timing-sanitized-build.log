@@ -1,0 +1,213 @@
+[ 12%] Built target TrackerFLAC
+[ 12%] Building OBJCXX object CMakeFiles/ResonanceFixture.dir/Tests/FixtureVST3.mm.o
+[ 12%] Linking CXX CFBundle shared module test-plugins/ResonanceFixture.vst3/Contents/MacOS/ResonanceFixture
+[ 14%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/ContainerMMCMP.cpp.o
+[ 15%] Built target ResonanceFixture
+[ 15%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/ContainerPP20.cpp.o
+[ 15%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/ContainerUMX.cpp.o
+[ 15%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/ContainerXPK.cpp.o
+[ 17%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Dlsbank.cpp.o
+[ 17%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Fastmix.cpp.o
+[ 19%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/ITTools.cpp.o
+[ 19%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/InstrumentExtensions.cpp.o
+[ 19%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/InstrumentSynth.cpp.o
+[ 19%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_667.cpp.o
+[ 20%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_669.cpp.o
+[ 20%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_amf.cpp.o
+[ 20%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_ams.cpp.o
+[ 20%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_c67.cpp.o
+[ 22%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_cba.cpp.o
+[ 22%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_dbm.cpp.o
+[ 22%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_digi.cpp.o
+[ 22%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_dmf.cpp.o
+[ 23%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_dsm.cpp.o
+[ 23%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_dsym.cpp.o
+[ 23%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_dtm.cpp.o
+[ 23%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_etx.cpp.o
+[ 25%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_far.cpp.o
+[ 25%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_fc.cpp.o
+[ 25%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_fmt.cpp.o
+[ 25%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_ftm.cpp.o
+[ 26%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_gdm.cpp.o
+[ 26%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_gmc.cpp.o
+[ 26%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_gt2.cpp.o
+[ 28%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_ice.cpp.o
+[ 28%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_imf.cpp.o
+[ 28%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_ims.cpp.o
+[ 28%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_it.cpp.o
+[ 30%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_itp.cpp.o
+[ 30%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_kris.cpp.o
+[ 30%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_mdl.cpp.o
+[ 30%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_med.cpp.o
+[ 31%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_mid.cpp.o
+[ 31%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_mo3.cpp.o
+[ 31%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_mod.cpp.o
+[ 31%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_mt2.cpp.o
+[ 33%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_mtm.cpp.o
+[ 33%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_mus_km.cpp.o
+[ 33%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_nru.cpp.o
+[ 33%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_okt.cpp.o
+[ 34%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_plm.cpp.o
+[ 34%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_psm.cpp.o
+[ 34%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_pt36.cpp.o
+[ 34%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_ptm.cpp.o
+[ 36%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_puma.cpp.o
+[ 36%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_rtm.cpp.o
+[ 36%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_s3m.cpp.o
+[ 38%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_sfx.cpp.o
+[ 38%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_ss.cpp.o
+[ 38%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_stk.cpp.o
+[ 38%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_stm.cpp.o
+[ 39%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_stp.cpp.o
+[ 39%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_symmod.cpp.o
+[ 39%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_tcb.cpp.o
+[ 39%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_uax.cpp.o
+[ 41%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_ult.cpp.o
+[ 41%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_unic.cpp.o
+[ 41%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_wav.cpp.o
+[ 41%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_xm.cpp.o
+[ 42%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Load_xmf.cpp.o
+[ 42%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/MIDIMacroParser.cpp.o
+[ 44%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/MODTools.cpp.o
+[ 44%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/ModChannel.cpp.o
+[ 44%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/ModSample.cpp.o
+[ 46%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/ModInstrument.cpp.o
+[ 46%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/ModSequence.cpp.o
+[ 46%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/PlayState.cpp.o
+[ 47%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/RowVisitor.cpp.o
+[ 47%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/S3MTools.cpp.o
+[ 47%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/SampleFormatBRR.cpp.o
+[ 47%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/SampleFormatFLAC.cpp.o
+[ 49%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/SampleFormatMP3.cpp.o
+[ 49%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/SampleFormatMediaFoundation.cpp.o
+[ 49%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/SampleFormatOpus.cpp.o
+[ 49%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/SampleFormatSFZ.cpp.o
+[ 50%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/SampleFormatVorbis.cpp.o
+[ 50%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/SampleFormats.cpp.o
+[ 50%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/SampleIO.cpp.o
+[ 50%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Snd_flt.cpp.o
+[ 52%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Snd_fx.cpp.o
+[ 52%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Sndfile.cpp.o
+[ 52%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Sndmix.cpp.o
+[ 52%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/Tables.cpp.o
+[ 53%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/UMXTools.cpp.o
+[ 53%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/UpgradeModule.cpp.o
+[ 53%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/WAVTools.cpp.o
+[ 55%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/XMTools.cpp.o
+[ 55%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/load_j2b.cpp.o
+[ 55%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/modcommand.cpp.o
+[ 57%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/modsmp_ctrl.cpp.o
+[ 57%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/pattern.cpp.o
+[ 57%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/patternContainer.cpp.o
+[ 57%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/DigiBoosterEcho.cpp.o
+[ 58%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/LFOPlugin.cpp.o
+[ 58%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/PlugInterface.cpp.o
+[ 58%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/PluginManager.cpp.o
+[ 58%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/SymMODEcho.cpp.o
+[ 60%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/dmo/Chorus.cpp.o
+[ 60%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/dmo/Compressor.cpp.o
+[ 61%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/dmo/DMOUtils.cpp.o
+[ 61%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/dmo/Distortion.cpp.o
+[ 61%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/dmo/Echo.cpp.o
+[ 61%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/dmo/Flanger.cpp.o
+[ 63%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/dmo/Gargle.cpp.o
+[ 63%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/dmo/I3DL2Reverb.cpp.o
+[ 63%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/dmo/ParamEq.cpp.o
+[ 63%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/plugins/dmo/WavesReverb.cpp.o
+[ 63%] Building CXX object CMakeFiles/OpenMPTCore.dir/Users/rewbs/code/openmpt/soundlib/tuningCollection.cpp.o
+[ 63%] Linking CXX static library libOpenMPTCore.a
+[ 76%] Built target OpenMPTCore
+[ 77%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/TrackLayout.cpp.o
+[ 77%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/PatternCommands.cpp.o
+[ 77%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/TrackerDocument.cpp.o
+[ 79%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/PatternTools.cpp.o
+[ 79%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/NativeSong.cpp.o
+[ 79%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/ArrangementTools.cpp.o
+[ 79%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/tracklib/SampleEdit.cpp.o
+[ 79%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SongTiming.cpp.o
+[ 80%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/PreciseNoteRuntime.cpp.o
+[ 80%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/NoteRecording.cpp.o
+[ 80%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleDocument.cpp.o
+[ 80%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleArchive.cpp.o
+[ 80%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleSplice.cpp.o
+[ 80%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleCopy.cpp.o
+[ 80%] Linking CXX static library libTrackerEditor.a
+[ 90%] Built target TrackerEditor
+[ 90%] Building CXX object CMakeFiles/TrackerPlugins.dir/Audio/PluginAssignments.cpp.o
+[ 90%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/AudioUnitHost.mm.o
+[ 92%] Building OBJCXX object CMakeFiles/TrackerPlugins.dir/Audio/VST3Host.mm.o
+[ 93%] Linking CXX static library libTrackerPlugins.a
+[ 93%] Built target TrackerPlugins
+[ 93%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioDevice.mm.o
+[ 93%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:1553:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:743:
+/Users/rewbs/code/openmpt/mac/Bridge/InstrumentEnvelopeToolsAPI.inc:13:57: warning: 'auto' deduced as 'id' in declaration of 'value' [-Wauto-var-id]
+   13 |       auto info=[&](const InstrumentEnvelope &envelope){auto value=[instrumentEnvelopeInfo(envelope,maximum) mutableCopy];
+      |                                                         ^~~~~~~~~~
+[ 93%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Audio/AudioExport.mm.o
+[ 93%] Building CXX object CMakeFiles/TrackerMac.dir/Audio/NativeInstrument.cpp.o
+[ 93%] Building CXX object CMakeFiles/TrackerMac.dir/Audio/PatternCommandRuntime.cpp.o
+[ 95%] Building CXX object CMakeFiles/TrackerMac.dir/Audio/PatternPitchRuntime.cpp.o
+1 warning generated.
+[ 95%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[ 98%] Building OBJCXX object CMakeFiles/precise-note-tests.dir/Tests/PreciseNoteTests.mm.o
+[ 98%] Building OBJCXX object CMakeFiles/precise-note-tests.dir/Tests/FixtureAU.mm.o
+[100%] Linking CXX executable precise-note-tests
+[100%] Built target precise-note-tests
+[ 12%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 77%] Built target OpenMPTCore
+[ 91%] Built target TrackerEditor
+[ 95%] Built target TrackerPlugins
+[100%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/pattern-pitch-tests.dir/Tests/PatternPitchTests.mm.o
+[100%] Building OBJCXX object CMakeFiles/pattern-pitch-tests.dir/Tests/FixtureAU.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PatternPitchTests.mm:38:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   38 |     auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPitchTests.mm:44:47: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+   44 |   NSString *before=session.automationRevision;auto preview=[request mutableCopy];preview[@"dryRun"]=@YES;
+      |                                               ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPitchTests.mm:47:9: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   47 |   const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPitchTests.mm:50:5: warning: 'auto' deduced as 'id' in declaration of 'command' [-Wauto-var-id]
+   50 |     auto command=[bend mutableCopy];[command addEntriesFromDictionary:invalid];
+      |     ^~~~~~~~~~~~
+4 warnings generated.
+[100%] Linking CXX executable pattern-pitch-tests
+[100%] Built target pattern-pitch-tests
+[ 12%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 76%] Built target OpenMPTCore
+[ 90%] Built target TrackerEditor
+[ 93%] Built target TrackerPlugins
+[ 98%] Built target TrackerMac
+[ 98%] Building OBJCXX object CMakeFiles/precise-ramp-tests.dir/Tests/PreciseRampTests.mm.o
+[ 98%] Building OBJCXX object CMakeFiles/precise-ramp-tests.dir/Tests/FixtureAU.mm.o
+[100%] Linking CXX executable precise-ramp-tests
+[100%] Built target precise-ramp-tests
+[ 12%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 76%] Built target OpenMPTCore
+[ 90%] Built target TrackerEditor
+[ 93%] Built target TrackerPlugins
+[ 98%] Built target TrackerMac
+[ 98%] Building OBJCXX object CMakeFiles/pattern-performance-tests.dir/Tests/PatternPerformanceTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:22:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   22 |     auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:31:49: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+   31 |   NSString *revision=session.automationRevision;auto preview=[set mutableCopy];preview[@"dryRun"]=@YES;
+      |                                                 ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:34:9: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   34 |   const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:39:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   39 |     auto request=[params mutableCopy];request[@"expectedRevision"]=session.automationRevision;NSString *before=session.automationRevision;
+      |     ^~~~~~~~~~~~
+4 warnings generated.
+[100%] Linking CXX executable pattern-performance-tests
+[100%] Built target pattern-performance-tests

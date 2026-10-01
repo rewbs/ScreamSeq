@@ -1,0 +1,17 @@
+{
+  "family": "Clav Junos",
+  "files": 109,
+  "octaveShift": 2,
+  "trackerRootRange": [
+    1,
+    109
+  ],
+  "dryRunSeconds": 0.20646283403038979,
+  "importSeconds": 0.17330725025385618,
+  "projectBytes": 29575651,
+  "instrument": 5,
+  "undoRedo": true,
+  "nativeRelaunch": true,
+  "sourceFilesModified": false,
+  "physicalAudio": false
+}

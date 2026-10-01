@@ -1,0 +1,239 @@
+import AppKit
+
+// A panel owns its view and context even while detached or behind another tab.
+final class WorkspacePanel: NSView {
+  let id: String, title: String, content = NSView()
+  let target = Theme.label("", size: 10, color: Theme.muted)
+  var pinned = false { didSet { pin.state = pinned ? .on : .off; pin.toolTip = pinned ? "Pinned target · click to follow the cursor" : "Pin this target"; onPin?(pinned) } }
+  var onPin: ((Bool) -> Void)?, onFollow: (() -> Void)?, onReturn: (() -> Void)?
+  var onPlace: ((String) -> Void)?
+  var onBack:(()->Void)? {didSet{back.isHidden=onBack==nil}}
+  private lazy var back=ActionButton("Back to graph",symbol:"arrow.left"){[weak self] in self?.onBack?()}
+  private var pin: ActionButton!, placement: NSPopUpButton!
+  private let header = NSView()
+  private var focused = false
+  init(id: String, title: String, view: NSView, height: CGFloat? = nil) {
+    self.id = id; self.title = title; super.init(frame: .zero)
+    wantsLayer = true; layer?.backgroundColor = Theme.bg.cgColor; layer?.borderColor = Theme.accent.cgColor
+    setAccessibilityLabel(title + " panel")
+    pin = ActionButton("", symbol: "pin") { [weak self] in guard let self else { return }; self.pinned.toggle(); if !self.pinned { self.onFollow?() } }
+    pin.toolTip = "Pin this panel's target independently of other panels"
+    pin.setAccessibilityLabel("Pin " + title)
+    let options = ActionMenuButton("…") { [weak self] in self?.actionMenu() ?? NSMenu() }
+    options.setAccessibilityLabel(title + " panel actions")
+    let label = Theme.label(title, size: 11, weight: .semibold)
+    label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    target.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    stack(.horizontal, [label, target, NSView(), back, pin, options], spacing: 5).fill(header, inset: 4)
+    back.isHidden=true;addSubview(header); addSubview(content)
+    if let height {
+      let scroll = verticalScrollView(); scroll.hasHorizontalScroller = true; scroll.documentView = view; scroll.fill(content)
+      view.translatesAutoresizingMaskIntoConstraints = false
+      NSLayoutConstraint.activate([view.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+        view.topAnchor.constraint(equalTo: scroll.contentView.topAnchor), view.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+        view.heightAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.heightAnchor), view.heightAnchor.constraint(greaterThanOrEqualToConstant: height)])
+    } else { view.fill(content) }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override var isFlipped: Bool { true }
+  override func layout() { super.layout(); header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 32); content.frame = NSRect(x: 0, y: 33, width: bounds.width, height: max(0,bounds.height-33)) }
+  func showFocus(_ value: Bool) {
+    guard focused != value else { return }
+    focused=value; layer?.borderWidth=value ? 1 : 0
+  }
+  func actionMenu() -> NSMenu {
+    let menu = NSMenu(title: title + " panel"); menu.autoenablesItems = false
+    if onBack != nil{menu.addItem(ContextAction("Back to graph"){[weak self] in self?.onBack?()})}
+    menu.addItem(ContextAction(pinned ? "Follow cursor" : "Pin current target") { [weak self] in self?.pinned.toggle() })
+    menu.addItem(ContextAction("Inspect editing cursor") { [weak self] in self?.pinned = false; self?.onFollow?() })
+    menu.addItem(ContextAction("Return to opening row") { [weak self] in self?.onReturn?() })
+    menu.addItem(.separator())
+    for (label, destination) in [("Dock right", "right"), ("Dock below", "bottom"), ("Float", "float"), ("Hide", "hide")] {
+      menu.addItem(ContextAction(label) { [weak self] in self?.onPlace?(destination) })
+    }
+    return menu
+  }
+  @objc private func place() { let action = ["", "right", "bottom", "float", "hide"][placement.indexOfSelectedItem]; placement.selectItem(at: 0); if !action.isEmpty { onPlace?(action) } }
+}
+
+enum InspectorTabs {
+  static let items: [(id:String, label:String, key:String)] = [
+    ("notes","Notes","1"), ("samples","Samples","2"), ("instruments","Instruments","3"),
+    ("plugins","Plugins","4"), ("mixer","Mixer","5"), ("graph","Graph","6"),
+    ("graphPlugins","FX library","7"), ("graphCommands","Graph lanes","8"), ("automation","Automation","9"), ("parameterActivity","Param activity","0")]
+}
+final class WorkspaceTabs: NSView {
+  let tabScroll = NSScrollView(), tabRow = NSView(), host = NSView()
+  private(set) var buttons = [ActionButton]()
+  var shortcutLabel:((String)->String)?
+  var panels = [WorkspacePanel](), selected: String?, onSelect: ((String) -> Void)?
+  override init(frame: NSRect) {
+    super.init(frame: frame); addSubview(tabScroll); addSubview(host)
+    tabScroll.documentView=tabRow; tabScroll.drawsBackground=false
+    tabScroll.hasHorizontalScroller=true; tabScroll.autohidesScrollers=true
+    tabScroll.scrollerStyle = .overlay
+    tabScroll.setAccessibilityLabel("Inspector tabs")
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override var isFlipped: Bool { true }
+  override func layout() {
+    super.layout(); tabScroll.frame=NSRect(x:0,y:0,width:bounds.width,height:33)
+    host.frame=NSRect(x:0,y:34,width:bounds.width,height:max(0,bounds.height-34))
+    var x:CGFloat=4
+    for button in buttons { let width=max(76,button.intrinsicContentSize.width+8); button.frame=NSRect(x:x,y:3,width:width,height:27);x+=width+3 }
+    tabRow.frame=NSRect(x:0,y:0,width:max(bounds.width,x),height:33)
+  }
+  func reload() {
+    for b in buttons { b.removeFromSuperview() }; buttons=[]
+    for panel in panels {
+      let info=InspectorTabs.items.first{$0.id==panel.id}
+      let shortcut=shortcutLabel?(panel.id) ?? (info.map{"⌃⌥"+$0.key} ?? "")
+      let label=info?.label ?? panel.title
+      let button=ActionButton(label){[weak self] in self?.choose(panel.id)}
+      button.setButtonType(.toggle);button.bezelStyle = .rounded
+      button.setAccessibilityLabel(panel.title + (shortcut.isEmpty ? "" : " · "+shortcut))
+      button.toolTip=panel.title + (shortcut.isEmpty ? "" : " · "+shortcut) + " · Scroll for more inspectors"
+      tabRow.addSubview(button);buttons.append(button)
+    }
+    if !panels.contains(where:{$0.id==selected}){selected=panels.first?.id}
+    needsLayout=true;showSelected()
+  }
+  func choose(_ id:String) { selected=id;showSelected();onSelect?(id) }
+  func showSelected() {
+    for (i,button) in buttons.enumerated(){let active=panels[i].id==selected;button.state=active ? .on : .off;button.selectionIndicator=active;button.bezelColor=active ? Theme.selectionFill : nil;button.contentTintColor=active ? Theme.text : Theme.muted;button.setAccessibilityValue(active ? "Selected" : "Not selected")}
+    if let current=host.subviews.first as? WorkspacePanel,current.id==selected{return}
+    for child in host.subviews{child.removeFromSuperview()}
+    if let index=panels.firstIndex(where:{$0.id==selected}){panels[index].fill(host);layoutSubtreeIfNeeded();buttons[index].scrollToVisible(buttons[index].bounds)}
+  }
+}
+
+final class DockWorkspace: NSView, NSWindowDelegate {
+  let vertical = NSSplitView(), upper = NSSplitView(), lower = NSSplitView()
+  let pattern = NSView(), right = WorkspaceTabs(), bottom = WorkspaceTabs(), secondary = WorkspaceTabs()
+  private(set) var panels = [String: WorkspacePanel](), locations = [String: String]()
+  private var floating = [String: NSWindow]()
+  private(set) var focusLayout = false
+  // Invalidates a preset's deferred default divider positions once a later
+  // preset or restored layout has replaced it.
+  private var layoutGeneration = 0
+  var onSelection: ((String) -> Void)?, onLayout: (() -> Void)?
+  init(patternView: NSView) {
+    super.init(frame: .zero)
+    vertical.isVertical = false; upper.isVertical = true; lower.isVertical = true
+    for (split, name) in [(vertical,"vertical"),(upper,"upper"),(lower,"lower")] { split.dividerStyle = .thin; split.autosaveName = "ResonanceWorkspace-" + name }
+    upper.addArrangedSubview(pattern); upper.addArrangedSubview(right)
+    lower.addArrangedSubview(bottom); lower.addArrangedSubview(secondary)
+    vertical.addArrangedSubview(upper); vertical.addArrangedSubview(lower); vertical.fill(self)
+    patternView.fill(pattern)
+    for tabs in [right,bottom,secondary] { tabs.onSelect = { [weak self] id in self?.onSelection?(id) } }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func register(_ panel: WorkspacePanel, location: String) {
+    panels[panel.id] = panel; panel.onPlace = { [weak self, weak panel] whereTo in if let panel { self?.place(panel.id, at: whereTo) } }
+    place(panel.id, at: location, select: false)
+  }
+  func place(_ id: String, at destination: String, select: Bool = true) {
+    guard let panel = panels[id] else { return }
+    let revealLower=select && (destination=="bottom" || destination=="secondary") &&
+      (lower.isHidden || (destination=="bottom" ? bottom:secondary).isHidden)
+    if select && destination != "float" && destination != "hide" && focusLayout {setFocusLayout(false)}
+    for tabs in [right,bottom,secondary] { tabs.panels.removeAll { $0.id == id }; tabs.reload() }
+    panel.removeFromSuperview(); floating[id]?.orderOut(nil); floating[id]?.contentView = nil
+    locations[id] = destination
+    if destination == "float" {
+      let win = floating[id] ?? UIWorkTrace.window(contentRect: NSRect(x: 0,y: 0,width: 1060,height: 800),styleMask: [.titled,.closable,.resizable,.miniaturizable],backing: .buffered,defer: false)
+      win.title = panel.title; win.contentView = panel; win.isReleasedWhenClosed = false; win.delegate = self; win.minSize = NSSize(width: 640,height: 400)
+      if floating[id] == nil { win.center(); win.setFrameAutosaveName("ResonancePanel-" + id) }; floating[id] = win
+      if select { win.makeKeyAndOrderFront(nil) }
+    } else if destination != "hide" {
+      let tabs = destination == "right" ? right : destination == "secondary" ? secondary : bottom
+      tabs.panels.append(panel); if select { tabs.selected = id }; tabs.reload()
+      if select {tabs.isHidden=false}
+      if destination == "right" { right.isHidden = false } else { lower.isHidden = false }
+      vertical.adjustSubviews(); upper.adjustSubviews(); lower.adjustSubviews()
+      if revealLower {revealLowerPanel(id)}
+      if select { window?.makeKeyAndOrderFront(nil) }
+    }
+    if select { onSelection?(id) }; onLayout?()
+  }
+  func show(_ id: String, focus: Bool = false) {
+    guard let panel = panels[id] else { return }
+    if focusLayout && locations[id] != "float" { setFocusLayout(false) }
+    if locations[id] == "float" { floating[id]?.makeKeyAndOrderFront(nil) }
+    else {
+      let revealLower = lower.isHidden && ["bottom", "secondary"].contains(locations[id] ?? "")
+      if revealLower { bottom.isHidden = true; secondary.isHidden = true }
+      if locations[id] == "hide" { place(id, at: "right") }
+      for tabs in [right,bottom,secondary] where tabs.panels.contains(where: { $0.id == id }) {
+        tabs.isHidden = false; if tabs !== right { lower.isHidden = false }; tabs.selected = id; tabs.showSelected()
+      }
+      vertical.adjustSubviews(); upper.adjustSubviews(); lower.adjustSubviews()
+      if revealLower { revealLowerPanel(id) }
+      window?.makeKeyAndOrderFront(nil)
+    }
+    if focus { focusFirst(in: panel) }; onSelection?(id)
+  }
+  private func revealLowerPanel(_ id:String) {
+    let height=vertical.bounds.height
+    // The graph's navigation and filters must leave an actual working canvas.
+    // Apply this only when revealing the lower dock, not on later edits/refreshes.
+    let position=id=="graph" ? max(height*0.44,min(height*0.62,height-340)):height*0.62
+    vertical.setPosition(position,ofDividerAt:0)
+  }
+  func focusFirst(in view: NSView) {
+    func find(_ root: NSView) -> NSView? {
+      for child in root.subviews { if child.acceptsFirstResponder && !(child is NSScrollView) { return child }; if let found = find(child) { return found } }; return nil
+    }
+    view.window?.makeFirstResponder(find((view as? WorkspacePanel)?.content ?? view) ?? view)
+  }
+  var visibleIDs: [String] { [focusLayout || right.isHidden ? nil : right.selected, focusLayout || lower.isHidden || bottom.isHidden ? nil : bottom.selected, focusLayout || lower.isHidden || secondary.isHidden ? nil : secondary.selected].compactMap{$0} + floating.filter { $0.value.isVisible }.map(\.key) }
+  func containsFocus(_ id: String) -> Bool {
+    guard let panel = panels[id], let responder = panel.window?.firstResponder as? NSView else { return false }
+    // Field editors belong to the window; their delegate identifies the edited control.
+    if let field = responder as? NSTextView, let delegate = field.delegate as? NSView { return delegate.isDescendant(of: panel) }
+    return responder.isDescendant(of: panel)
+  }
+  func focusedPanel() -> WorkspacePanel? { panels.values.first { containsFocus($0.id) } }
+  func refreshFocus() { for panel in panels.values { panel.showFocus(containsFocus(panel.id)) } }
+  func setFocusLayout(_ focused: Bool) {
+    focusLayout = focused
+    if focused {
+      upper.removeArrangedSubview(right); right.removeFromSuperview()
+      vertical.removeArrangedSubview(lower); lower.removeFromSuperview()
+    } else {
+      if right.superview == nil { upper.addArrangedSubview(right) }
+      if lower.superview == nil { vertical.addArrangedSubview(lower) }
+      right.isHidden = false; lower.isHidden = false
+    }
+    vertical.adjustSubviews(); upper.adjustSubviews()
+  }
+  func preset(_ name: String) {
+    setFocusLayout(name == "Pattern focus")
+    if focusLayout { onLayout?(); return }
+    if name == "Sound design" { show("samples"); show("automation") }
+    if name == "Compose" { show("notes"); lower.isHidden = true }
+    vertical.adjustSubviews(); upper.adjustSubviews(); lower.adjustSubviews()
+    layoutGeneration += 1; let generation = layoutGeneration
+    DispatchQueue.main.async { [weak self] in
+      guard let self, !self.focusLayout, generation == self.layoutGeneration else { return }
+      if name != "Compose" { self.vertical.setPosition(self.bounds.height * 0.60, ofDividerAt: 0) }
+      self.upper.setPosition(max(400,self.bounds.width * (name == "Compose" ? 0.68 : 0.55)),ofDividerAt: 0); self.lower.setPosition(self.bounds.width * 0.55,ofDividerAt: 0)
+    }
+    onLayout?()
+  }
+  var state: [String: Any] { ["locations":locations,"right":right.selected ?? "","bottom":bottom.selected ?? "","secondary":secondary.selected ?? "",
+    "pins":panels.mapValues(\.pinned),"focusLayout":focusLayout,"bottomHidden":lower.isHidden,
+    "vertical":upper.frame.height/max(1,vertical.bounds.height),"upper":pattern.frame.width/max(1,upper.bounds.width),"lower":bottom.frame.width/max(1,lower.bounds.width)] }
+  func restore(_ state: [String: Any]) {
+    layoutGeneration += 1
+    if let places = state["locations"] as? [String:String] { for (id,place) in places where ["right","bottom","secondary","float","hide"].contains(place) { self.place(id,at:place,select:false) } }
+    for (id,pin) in state["pins"] as? [String:Bool] ?? [:] { panels[id]?.pinned = pin }
+    for (tabs,key) in [(right,"right"),(bottom,"bottom"),(secondary,"secondary")] { tabs.selected = state[key] as? String; tabs.reload() }
+    let focus = state["focusLayout"] as? Bool ?? false; setFocusLayout(focus)
+    if !focus { lower.isHidden = state["bottomHidden"] as? Bool ?? false }
+    vertical.adjustSubviews(); upper.adjustSubviews(); lower.adjustSubviews()
+    for (split,key) in [(vertical,"vertical"),(upper,"upper"),(lower,"lower")] where split.arrangedSubviews.count > 1 { let value = max(0.15,min(0.85,state[key] as? Double ?? 0.6)); split.setPosition((split.isVertical ? split.bounds.width : split.bounds.height) * value,ofDividerAt:0) }
+    for win in floating.values where win.contentView != nil { win.orderFront(nil) }
+  }
+  func windowShouldClose(_ sender: NSWindow) -> Bool { if let id = floating.first(where: { $0.value === sender })?.key { place(id,at:"right",select:false) }; return false }
+}

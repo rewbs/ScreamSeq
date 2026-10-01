@@ -1,0 +1,12 @@
+[ 13%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 16%] Built target RealtimeAudit
+[ 79%] Built target OpenMPTCore
+[ 92%] Built target TrackerEditor
+[ 95%] Built target TrackerPlugins
+[ 95%] Built target plugin-scanner
+[ 95%] Building CXX object CMakeFiles/TrackerMac.dir/Audio/NativeInstrument.cpp.o
+[ 95%] Linking CXX static library libTrackerMac.a
+[ 98%] Built target TrackerMac
+[ 98%] Linking CXX executable musical-automation-tests
+[100%] Built target musical-automation-tests

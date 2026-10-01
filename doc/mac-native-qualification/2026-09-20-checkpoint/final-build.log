@@ -1,0 +1,117 @@
+-- Configuring done (0.1s)
+-- Generating done (0.3s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-native
+[  0%] Built target RealtimeAudit
+[  9%] Built target TrackerFLAC
+[ 11%] Built target ResonanceFixture
+[ 12%] Built target plugin-inventory-tests
+[ 58%] Built target OpenMPTCore
+[ 58%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SampleArchive.cpp.o
+[ 58%] Linking CXX static library libTrackerEditor.a
+[ 66%] Built target TrackerEditor
+[ 66%] Linking CXX executable sample-drawing-tests
+[ 66%] Linking CXX executable native-reverse-loop-tests
+[ 67%] Linking CXX executable tracker-core-tests
+[ 68%] Linking CXX executable sample-clipboard-tests
+[ 68%] Linking CXX executable sample-snap-tests
+[ 68%] Linking CXX executable sample-copy-tests
+[ 68%] Linking CXX executable sample-crossfade-tests
+[ 70%] Built target TrackerPlugins
+[ 70%] Built target native-reverse-loop-tests
+[ 70%] Built target tracker-core-tests
+[ 70%] Built target sample-clipboard-tests
+[ 71%] Built target sample-snap-tests
+[ 71%] Built target sample-copy-tests
+[ 72%] Built target sample-drawing-tests
+[ 72%] Built target sample-crossfade-tests
+[ 72%] Linking CXX executable sample-archive-tests
+[ 72%] Linking CXX executable sample-processing-tests
+[ 72%] Linking CXX executable pattern-tools-tests
+[ 72%] Linking CXX executable filter-tests
+[ 72%] Linking CXX executable render-audit
+[ 72%] Linking CXX executable plugin-scanner
+[ 73%] Linking CXX executable oversampling-tests
+[ 73%] Linking CXX executable plugin-tests
+[ 74%] Built target sample-archive-tests
+[ 74%] Built target sample-processing-tests
+[ 74%] Built target filter-tests
+[ 75%] Built target render-audit
+[ 75%] Built target oversampling-tests
+[ 75%] Built target pattern-tools-tests
+[ 75%] Linking CXX executable stress-tests
+[ 75%] Linking CXX executable routing-prototype-tests
+[ 76%] Linking CXX executable mixer-runtime-tests
+[ 76%] Linking CXX executable mixer-graph-tests
+[ 76%] Linking CXX executable sidechain-tests
+[ 77%] Linking CXX executable qualification-fixture
+[ 77%] Built target mixer-runtime-tests
+[ 77%] Built target plugin-scanner
+[ 77%] Built target routing-prototype-tests
+[ 78%] Built target stress-tests
+[ 79%] Built target mixer-graph-tests
+[ 79%] Built target sidechain-tests
+[ 79%] Built target qualification-fixture
+[ 80%] Built target plugin-tests
+[ 81%] Linking CXX executable plugin-lifecycle-tests
+[ 83%] Built target TrackerMac
+[ 83%] Built target plugin-lifecycle-tests
+[ 83%] Linking CXX executable sample-project-tests
+[ 83%] Linking CXX executable sample-crossfade-project-tests
+[ 84%] Linking CXX executable comb-tests
+[ 84%] Building OBJCXX object CMakeFiles/sample-session-tests.dir/Tests/SampleSessionTests.mm.o
+[ 84%] Linking CXX executable eq-effects-tests
+[ 86%] Linking CXX executable native-effects-tests
+[ 86%] Linking CXX executable sample-loop-tests
+[ 86%] Linking CXX executable distortion-tests
+[ 87%] Built target sample-project-tests
+[ 87%] Built target comb-tests
+[ 88%] Built target sample-crossfade-project-tests
+[ 88%] Built target native-effects-tests
+[ 88%] Built target sample-loop-tests
+[ 89%] Built target eq-effects-tests
+[ 89%] Linking CXX executable lofi-tests
+[ 89%] Linking CXX executable dynamics-tests
+[ 89%] Linking CXX executable cabinet-tests
+[ 90%] Built target distortion-tests
+[ 90%] Linking CXX executable maximizer-tests
+[ 90%] Linking CXX executable bus-compressor-tests
+[ 91%] Linking CXX executable session-tests
+[ 91%] Linking CXX executable native-song-tests
+[ 92%] Built target lofi-tests
+[ 92%] Built target bus-compressor-tests
+[ 92%] Built target dynamics-tests
+[ 92%] Built target session-tests
+[ 93%] Built target native-song-tests
+[ 94%] Built target maximizer-tests
+[ 95%] Built target cabinet-tests
+[ 95%] Linking CXX executable loopback-tests
+[ 96%] Linking CXX executable midi-tests
+[ 96%] Linking CXX executable device-tests
+[ 97%] Linking CXX executable export-tests
+[ 97%] Linking CXX executable native-mixer-tests
+[ 97%] Linking CXX executable multi-bus-tests
+[ 97%] Linking CXX executable rack-tests
+[ 97%] Built target loopback-tests
+[ 97%] Built target device-tests
+[ 97%] Built target native-mixer-tests
+[ 97%] Built target midi-tests
+[ 97%] Built target export-tests
+[ 97%] Linking CXX executable mixer-device-tests
+[ 97%] Built target rack-tests
+[ 97%] Built target multi-bus-tests
+[ 97%] Linking CXX executable native-plugin-tests
+[ 97%] Linking CXX executable musical-automation-tests
+[ 97%] Linking CXX executable automation-tests
+[ 97%] Built target mixer-device-tests
+[ 98%] Built target native-plugin-tests
+[ 99%] Built target automation-tests
+[100%] Built target musical-automation-tests
+/Users/rewbs/code/openmpt/mac/Tests/SampleSessionTests.mm:258:7: warning: 'auto' deduced as 'id' in declaration of 'reversedLoops' [-Wauto-var-id]
+  258 |       auto reversedLoops = call(@"sample.get", @{@"sample":@1}, false)[@"data"];
+      |       ^~~~~~~~~~~~~~~~~~
+1 warning generated.
+[100%] Linking CXX executable sample-session-tests
+[100%] Built target sample-session-tests
+bin/mac-native/Resonance.app/Contents/MacOS/plugin-scanner: replacing existing signature
+bin/mac-native/Resonance.app: replacing existing signature
+Built bin/mac-native/Resonance.app

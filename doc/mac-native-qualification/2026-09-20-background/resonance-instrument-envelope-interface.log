@@ -1,0 +1,3 @@
+FAIL: InterfaceFailure(message: "Control fits compact editor: InstrumentEnvelopeToolsEditor / NSTextField  (540.0, 271.0, 0.0, 24.0)")
+Mixer strip diagnostic: 240 buses, 600 meter updates 188.9 ms, 9 control sets allocated through full traversal (not display cadence)
+Plugin browser 4096-entry load and search: 30.85 ms (offscreen diagnostic, not a presentation gate)

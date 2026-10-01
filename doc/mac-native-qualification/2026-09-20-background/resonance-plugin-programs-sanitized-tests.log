@@ -1,0 +1,13 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-sanitized
+    Start  2: plugin-programs
+1/4 Test  #2: plugin-programs ..................   Passed    2.43 sec
+    Start  3: plugin-preset-session
+2/4 Test  #3: plugin-preset-session ............   Passed    1.42 sec
+    Start 46: multi-bus
+3/4 Test #46: multi-bus ........................   Passed    4.96 sec
+    Start 49: native-plugins
+4/4 Test #49: native-plugins ...................   Passed    1.11 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =   9.93 sec

@@ -1,0 +1,61 @@
+{
+  "process": 71802,
+  "kind": "intermediate native UI walk; pre-Master-reservation executable",
+  "branchReveal": {
+    "actions": 1,
+    "revisionUnchanged": true,
+    "visibleNodesBefore": 10,
+    "visibleNodesAfter": 12
+  },
+  "groupAdd": {
+    "actions": 3,
+    "membershipCount": 3,
+    "playbackContinued": false
+  },
+  "deleteUndo": {
+    "actions": 2,
+    "restored": {
+      "groups": true,
+      "mixer": true,
+      "plugins": true
+    }
+  },
+  "audio": {
+    "audioActive": false,
+    "audition": false,
+    "callbacks": 2094,
+    "fault": false,
+    "frames": 0,
+    "graphActivity": [],
+    "left": 0.027500860393047333,
+    "loop": true,
+    "maxMicros": 4918.166,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 4380,
+    "pattern": 0,
+    "patternPosition": 0,
+    "playing": false,
+    "pluginFailure": false,
+    "pluginLatency": 0.001875,
+    "region": {
+      "endRow": 64,
+      "loop": true,
+      "pattern": 0,
+      "startRow": 0
+    },
+    "right": 0.0274958536028862,
+    "routing": {
+      "active": false,
+      "available": false,
+      "failedPlan": 0,
+      "latencyPending": false,
+      "renderedPlan": 0,
+      "requestedPlan": 0,
+      "state": "stopped"
+    },
+    "row": 0,
+    "voicePositions": [],
+    "voices": 0
+  }
+}

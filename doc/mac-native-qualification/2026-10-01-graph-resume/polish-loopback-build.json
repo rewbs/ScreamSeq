@@ -1,0 +1,10 @@
+{
+  "checkpoint": "3416926cde21748d01565b0309ad9508a2a279a4292c04a62708b525df201956",
+  "testDelta": "Loopback harness uses existing FixtureTrust helper for only the explicitly supplied bundle; compiled as ObjC++ with ARC. Shared audio libraries and visible QA app unchanged.",
+  "testSource": {
+    "mac/Tests/LoopbackTests.cpp": "0a987bf4eb559d8a48a33d1307b9aa40689e2b4af71dee97141e268a5c0bc881",
+    "mac/CMakeLists.txt": "92514910da48ef8930110454f559f68ffcc94eb2063c8fe2df913d6563af1aea"
+  },
+  "executableSha256": "8babc66e92bec4b77bc793dc9f65824a1ee609a5966165c735c49776b29cbe0e",
+  "result": "6/6 actual Core Audio output/capture comparisons PASS; max/RMS error0; zerooverruns; 48kHz/512; graph480000frames"
+}

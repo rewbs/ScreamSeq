@@ -1,0 +1,9 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 75: signal-graph-session
+1/2 Test #75: signal-graph-session .............   Passed    0.54 sec
+    Start 84: unified-history
+2/2 Test #84: unified-history ..................   Passed    0.42 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.97 sec
