@@ -20,6 +20,13 @@ int main(){try{
   MixerGraph mixer;MixerBus main;main.id=50;main.kind=MixerBusKind::Master;main.inserts={"a","b"};mixer.buses={main};SignalGraph song;song.groups={{70,0,"Rack",0,0,{"plugin:a","plugin:b"}}};song.groups[0].bypass=true;
   const auto songBoundary=signalSongGroupBoundary(song,mixer,{"a","b"},70);CHECK(songBoundary.inputs.size()==1&&songBoundary.outputs.size()==1);CHECK(resolvedSongGroupDryRoutes(song,mixer,{"a","b"},70).size()==1);
   uint64_t freshID=200;GraphPluginRecipe gain;gain.classID="resonance.gainer.v1";auto songExport=extractSongSignalGroup(song,mixer,70,{{"a",gain},{"b",gain}},[&]{return freshID++;});songExport.number=1;CHECK(songExport.groups.size()==1&&songExport.groups[0].bypass);compileSignal(songExport);
+  SignalSongSource control;control.node.id=80;control.node.kind=SignalNodeKind::LFO;control.node.x=20;control.node.y=40;song.songSources.push_back(control);
+  groupSongSignalNodes(song,{"source:n80"},{},81,0,"Control boundary");validateSongSignalGroups(song);CHECK(song.groups.back().nodes==std::vector<std::string>{"source:n80"});
+  moveSongSignalGroup(song,81,120,140);CHECK((song.layout.at("source:n80")==std::array<double,2>{120,140}));
+  CHECK(resolvedSongGroupDryRoutes(song,mixer,{"a","b"},81).empty());
+  rejects([&]{groupSongSignalNodes(song,{"source:n999"},{},82,0,"Invalid");});
+  rejects([&]{extractSongSignalGroup(song,mixer,81,{{"a",gain},{"b",gain}},[&]{return freshID++;});});
+  auto membership=song;membership.songSources.clear();rejects([&]{validateSongSignalGroups(membership);});
   SignalGraph a;a.library={recipe()};a.assignments={{50,1,1,1}};auto c=a;c.library[0].groups[0].name="Label only";c.library[0].groups[0].x=50;CHECK(sameSignalProcessing(a,c));c.library[0].groups[0].bypass=true;CHECK(!sameSignalProcessing(a,c)&&sameSignalControlLayout(a,c));c.library[0].groups[0].nodes={3};CHECK(!sameSignalControlLayout(a,c)&&!sameSignalSourceLayout(a,c));
   std::cout<<"PASS group dry boundaries: exact ingress/egress, explicit branches, nested members, silence, dry-cycle rejection and live-control classification\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

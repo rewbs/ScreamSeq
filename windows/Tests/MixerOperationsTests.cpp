@@ -62,6 +62,49 @@ int main() {
     wrong=detach;wrong["positions"][0]["node"]="plugin:missing";reject("mixer.inserts.detach",wrong);
     document.undo();CHECK(native()==inserted);document.redo();CHECK(native()==pulled);document.undo();CHECK(native()==inserted);
 
+    {
+      auto storage2=std::make_unique<Document>(MOD_TYPE_MPT,4);auto &d=*storage2;auto second=effect;second.instanceID="second";
+      MixerHostHooks h;h.plugins={effect,second};h.buses=[](size_t,bool){return std::vector<PluginAudioBus>{{0,2,"Main",true,true,true},{1,2,"Detector",true,true,true},{0,2,"Main",false,true,true},{1,2,"Aux",false,true,true}};};
+      MixerOperations m(d,[]{},h);m.invoke("mixer.inserts.move",{{"plugins",{"loose-effect","second"}},{"target",track}});
+      const auto attached=d.native();const Json chainDetach={{"plugins",{"loose-effect","second"}}};auto preview=chainDetach;preview["dryRun"]=true;m.invoke("mixer.inserts.detach",preview);CHECK(d.native()==attached);
+      m.invoke("mixer.inserts.detach",chainDetach);const auto detached=d.native();CHECK(detached.mixer.detachedChains.size()==1&&detached.mixer.buses[0].inserts.empty());
+      CHECK(Project::decodeNativeMetadata(Project::encodeNativeMetadata(detached))==detached);
+      const auto r=d.revision;m.invoke("mixer.inserts.detach",chainDetach);CHECK(d.revision==r);
+      d.undo();auto expected=attached;expected.nextID=d.native().nextID;CHECK(d.native()==expected);d.redo();CHECK(d.native()==detached);
+      const auto chain=detached.mixer.detachedChains[0].id;
+      d.annotate([&](NativeSong &n){removeSongConnections(n,{{SongConnectionKind::Insert,chain,0,"second"},{SongConnectionKind::MasterOutput,n.masterID}}, {},{"loose-effect","second"});});
+      m.invoke("mixer.inserts.move",{{"plugins",{"second"}},{"target","n"+std::to_string(chain)},{"before","second"}});CHECK(d.native().mixer.disconnectedMainInputs.empty()&&d.native().mixer.masterOutputDisconnected);
+      m.invoke("mixer.bus.set",{{"bus",master},{"mainOutputConnected",true}});CHECK(!d.native().mixer.masterOutputDisconnected);
+      const auto beforeRestore=d.native();d.undo();CHECK(d.native().mixer.masterOutputDisconnected);d.redo();CHECK(d.native()==beforeRestore);
+      m.invoke("mixer.inserts.move",{{"plugins",{"loose-effect","second"}},{"target",track}});CHECK(d.native().mixer.detachedChains.empty());
+    }
+
+    {
+      auto storage3=std::make_unique<Document>(MOD_TYPE_MPT,4);auto &d=*storage3;
+      MixerHostHooks h;for(const auto *name:{"A","B","C","synth"}){auto p=effect;p.instanceID=name;p.descriptor.instrument=p.instanceID=="synth";h.plugins.push_back(p);}
+      h.buses=[](size_t,bool){return std::vector<PluginAudioBus>{{0,2,"Main",true,true,true},{1,2,"Detector",true,true,true},{0,2,"Main",false,true,true},{2,2,"Aux slice",false,false,true}};};
+      MixerOperations m(d,[]{},h);auto view=m.invoke("mixer.get",{{"includeImplicit",true}});auto &bs=view["buses"];
+      for(size_t i=0;i<3;++i)m.invoke("mixer.inserts.move",{{"plugins",Json::array({h.plugins[i].instanceID})},{"target",bs[i]["id"]}});
+      const auto initial=d.native();const auto rev=d.revision;
+      Json route={{"source","A"},{"output",2},{"target","B"},{"input",1},{"gainDB",-7},{"enabled",false}};
+      auto preview=route;preview["dryRun"]=true;m.invoke("mixer.plugin.connection.set",preview);CHECK(d.native()==initial&&d.revision==rev);
+      m.invoke("mixer.plugin.connection.set",route);const auto added=d.native();CHECK(added.mixer.pluginConnections.size()==1&&added.mixer.pluginConnections[0].gainDB==-7&&!added.mixer.pluginConnections[0].enabled);
+      CHECK(Project::decodeNativeMetadata(Project::encodeNativeMetadata(added))==added);
+      const auto noop=d.revision;m.invoke("mixer.plugin.connection.set",route);CHECK(d.revision==noop);
+      auto rejectDirect=[&](Json value){const auto prior=d.native();const auto revision=d.revision;bool rejected=false;try{m.invoke("mixer.plugin.connection.set",value);}catch(const Api::ApiError &){rejected=true;}CHECK(rejected&&d.native()==prior&&d.revision==revision);};
+      for(const auto *field:{"source","target","output","input","gainDB","enabled","extra"}){auto bad=route;if(std::string(field)=="source")bad[field]="missing";else if(std::string(field)=="target")bad[field]="synth";else if(std::string(field)=="enabled")bad[field]=1;else bad[field]=99;rejectDirect(bad);}
+      m.invoke("mixer.plugin.connection.set",{{"source","A"},{"output",0},{"target","B"},{"input",1}}); // Independent fan-in from another slice.
+      const auto two=d.native();
+      auto collision=route;collision["output"]=0;collision["replace"]={{"source","A"},{"output",2},{"target","B"},{"input",1}};rejectDirect(collision);
+      auto stale=route;stale["replace"]={{"source","A"},{"output",1},{"target","B"},{"input",1}};rejectDirect(stale);
+      m.invoke("mixer.plugin.connection.set",{{"source","synth"},{"output",0},{"target","C"},{"input",0},{"replace",{{"source","A"},{"output",2},{"target","B"},{"input",1}}}});
+      CHECK(d.native().mixer.pluginConnections.size()==2&&d.native().mixer.pluginConnections[0].source=="synth"&&d.native().mixer.pluginConnections[0].gainDB==-7&&!d.native().mixer.pluginConnections[0].enabled);
+      d.undo();CHECK(d.native()==two);d.redo();
+      const auto beforeCut=d.native();SongConnectionRef cut{SongConnectionKind::PluginConnection};cut.sourcePlugin="synth";cut.plugin="C";
+      d.annotate([&](NativeSong &n){removeSongConnections(n,{cut},{"synth"},{"A","B","C"});});CHECK(d.native().mixer.pluginConnections.size()==1&&d.native().mixer.buses[2].inserts==std::vector<std::string>{"C"});d.undo();CHECK(d.native()==beforeCut);
+      const auto beforeDelete=d.native();d.annotate([](NativeSong &n){n.removePluginRoutes("B");});CHECK(d.native().mixer.pluginConnections.size()==1);d.undo();CHECK(d.native()==beforeDelete);
+    }
+
     const auto beforeReturn=native();
     const Json add={{"kind","return"},{"name","Quiet return"},{"sendFrom",track},{"position",{{"x",720},{"y",400}}}};
     dry=add;dry["dryRun"]=true;api.invoke("mixer.bus.add",dry);CHECK(native()==beforeReturn);

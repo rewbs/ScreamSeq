@@ -592,14 +592,11 @@ public:
         frameRequested=false;
         auditionWasAnimating=auditionOnly&&auditionAnimating();
         if(!busy && device.running() && preparedPlayback && preparedPlayback->chain().latencyChangePending()) {
-            const auto generation=stopGeneration;
-            device.stop();
             try {
+                // A busy audio handoff returns false; a later draw retries.
+                // The worker prepares delays while the device keeps rendering.
                 await(controller->refreshPlaybackLatencies());
-                // await pumps Stop and close messages. A stopped transport must
-                // never restart just because its latency refresh completed.
-                if(generation==stopGeneration && !device.start()) throw std::runtime_error("Cannot resume WASAPI after latency maintenance");
-            } catch(const std::exception &e) {stop();status=wide(e.what());}
+            } catch(const std::exception &e) {status=wide(e.what());}
         }
         if(device.running() && preparedPlayback && preparedPlayback->failed()) {stop();status=L"Playback stopped: audio processor reported a fault";}
 		auto begin = ScreamSeq::ticks();

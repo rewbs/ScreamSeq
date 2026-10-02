@@ -8,7 +8,16 @@ struct SignalSampleSource {uint64_t target=0;const OpenMPT::ModInstrument *instr
 class NativeSignalGraph {
   struct Instance;
   struct Bus;
-  std::vector<std::unique_ptr<Bus>> buses_;
+  std::vector<std::shared_ptr<Bus>> buses_; // Initial snapshot owns stopped preparation.
+public:
+  struct CopySet; // Producer-owned membership/commands/buffers; audio borrows.
+private:
+  std::shared_ptr<CopySet> initialCopies_,controlCopies_;
+  CopySet *audioCopies_=nullptr;
+  std::atomic<CopySet *> publishedCopies_{nullptr};
+  const std::vector<std::shared_ptr<Bus>> &controlBuses() const noexcept;
+  const std::vector<std::shared_ptr<Bus>> &audioBuses() const noexcept;
+  const std::vector<std::shared_ptr<Bus>> &publishedBuses() const noexcept;
   double rate_;
   bool offline_=false;
   ParameterActivity *activity_=nullptr;
@@ -26,9 +35,17 @@ public:
   size_t storageBytes() const {return storageBytes_;}
   size_t processors() const {return processors_;}
   void compile(MixerGraph &,std::vector<MixerProcessorInfo> &);
+  std::shared_ptr<CopySet> prepareCopies(const NativeSong &,GraphControlPlan &,const GraphControlPlan *,std::span<const SignalSampleSource> = {}) const;
+  void compileCopies(const CopySet &,MixerGraph &,std::vector<MixerProcessorInfo> &) const;
+  size_t copyIndex(const CopySet &,uint64_t target) const noexcept;
+  std::span<const uint32_t> copyOutputs(const CopySet &,size_t index) const noexcept;
+  size_t copyStorageBytes(const CopySet &) const noexcept;
+  size_t copyProcessors(const CopySet &) const noexcept;
+  void acceptCopies(std::shared_ptr<CopySet>) noexcept; // Control owner, after publication.
+  void activateCopies(CopySet &) noexcept; // Quiet boundary, before new rendering.
   // Control thread reads only immutable membership, never live note watches.
   bool sameNoteMembership(const NativeSong &) const;
-  void prepareParameters(const SignalGraph &,GraphControlPlan &,const GraphControlPlan *previous=nullptr) const;
+  void prepareParameters(const SignalGraph &,GraphControlPlan &,const GraphControlPlan *previous=nullptr,const CopySet *copies=nullptr) const;
   void begin(const OpenMPT::PlayState &,uint32_t frames,uint64_t position,PluginTransport,uint32_t patternRows=64) noexcept;
   void tail() noexcept;
   uint64_t tailFrames(size_t) const noexcept; // Audio owner.

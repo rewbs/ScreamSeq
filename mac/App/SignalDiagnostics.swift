@@ -14,7 +14,7 @@ struct GraphSignalRouteID:Hashable {
     }
     guard let input=number("input"),let output=number("output") else{return nil};self.input=input;self.output=output
     switch kind {
-    case "output","send","graph-input","graph-output","graph-audio","graph-modulation":guard !source.isEmpty && !target.isEmpty else{return nil}
+    case "output","send","graph-input","graph-output","graph-audio","graph-modulation","plugin-connection":guard !source.isEmpty && !target.isEmpty else{return nil}
     case "plugin-input","insert":guard !source.isEmpty && !plugin.isEmpty else{return nil}
     case "plugin-output":guard !plugin.isEmpty && !target.isEmpty else{return nil}
     case "master-output":guard !source.isEmpty else{return nil}
@@ -36,7 +36,17 @@ struct GraphSignalRoute {
   }
 }
 
+struct GraphNoteGateReading {
+  let held:Bool,on:UInt64,off:UInt64,retrigger:UInt64
+  init?(_ data:[String:Any]) {
+    guard data["scope"] as? String=="aggregate-envelope-gate",let held=data["held"] as? Bool,
+          let on=data["on"] as? NSNumber,let off=data["off"] as? NSNumber,let retrigger=data["retrigger"] as? NSNumber else{return nil}
+    self.held=held;self.on=on.uint64Value;self.off=off.uint64Value;self.retrigger=retrigger.uint64Value
+  }
+  var summary:String {"Gate \(held ? "held":"released") · \(on) opens / \(off) closes / \(retrigger) retriggers"}
+}
 struct GraphPortReading {
+  let noteGate:GraphNoteGateReading?
   let key:String,node:String,name:String,output:Bool,port:UInt32
   let kind:String,value:Double?
   let route:GraphSignalRoute?
@@ -48,6 +58,7 @@ struct GraphPortReading {
       guard let descriptor=descriptor as? [String:Any],let parsed=GraphSignalRoute(descriptor) else{return nil};route=parsed
     }else{route=nil}
     kind=value["kind"] as? String ?? "audio";self.value=(value["value"] as? Double).flatMap{$0.isFinite ? $0:nil}
+    noteGate=(value["noteGate"] as? [String:Any]).flatMap(GraphNoteGateReading.init)
     self.key=key;self.node=node;self.name=value["name"] as? String ?? key;self.port=number;output=value["direction"] as? String=="output"
     available=value["available"] as? Bool ?? true;fresh=value["fresh"] as? Bool ?? true
     let peaks=value["peak"] as? [Double] ?? [],rmsValues=value["rms"] as? [Double] ?? []
@@ -63,7 +74,7 @@ struct GraphPortReading {
     guard available else{return "\(name) · Port unavailable in current route"}
     guard fresh else{return "\(name) · Waiting for current-route measurement"}
     guard measured else{return "\(name) · Measurement unavailable"}
-    if kind=="control" {return name+" · "+(value.map{String(format:"%.5g",$0)} ?? "Value unavailable")+" · exact selected copy at frame \(String(format:"%.0f",through))"}
+    if kind=="control" {return name+" · "+(value.map{String(format:"%.5g",$0)} ?? "Value unavailable")+(noteGate.map{" · "+$0.summary+" (envelope gate)"} ?? "")+" · exact selected copy at frame \(String(format:"%.0f",through))"}
     let routeDetail=route.map{" · "+$0.detail+(compensation.map{String(format:" · %.0f frames route delay",$0)} ?? "")} ?? ""
     return "\(name) · peak \(Self.db(peak)) · RMS \(Self.db(rms)) · \(channels)ch"+routeDetail+(clipped ? " · over 0 dBFS (latched)":"")+(invalid ? " · Invalid output":"")
   }
@@ -146,6 +157,9 @@ extension SignalGraphEditor {
     case "send":
       guard let source=action["source"] as? String,let i=action["index"] as? Int,let sends=buses.first(where:{$0["id"] as? String==source})?["sends"] as? [[String:Any]],sends.indices.contains(i),sends[i]["enabled"] as? Bool != false else{return nil}
       descriptor["target"]=sends[i]["target"]
+    case "plugin-connection":
+      guard let i=action["index"] as? Int,let all=mixer["pluginConnections"] as? [[String:Any]],all.indices.contains(i),all[i]["enabled"] as? Bool != false else{return nil}
+      descriptor=all[i];descriptor["kind"]=kind;descriptor["source"]="plugin:"+(all[i]["source"] as? String ?? "");descriptor["target"]="plugin:"+(all[i]["target"] as? String ?? "")
     case "plugin-input","graph-input","graph-output":
       let routes=(kind=="plugin-input" ? mixer["sidechains"]:kind=="graph-input" ? data["inputs"]:data["outputs"]) as? [[String:Any]] ?? []
       guard let i=action["index"] as? Int,routes.indices.contains(i) else{return nil}
@@ -162,6 +176,7 @@ extension SignalGraphEditor {
     switch route.kind {
     case "send":return bus(route.source)+" → "+bus(route.target)+" · send"
     case "output":return bus(route.source)+" → "+bus(route.target)+" · main route"
+    case "plugin-connection":return plugin(String(route.source.dropFirst(7)))+" · output \(route.output) → "+plugin(String(route.target.dropFirst(7)))+" · input \(route.input) contribution"
     case "plugin-input":return bus(route.source)+" → "+plugin(route.plugin)+" · "+(route.input==0 ? "main input contribution":"input \(route.input) contribution")
     case "graph-input":return bus(route.source)+" → "+bus(route.target)+" · recipe input \(route.input) contribution"
     case "plugin-output":return plugin(route.plugin)+" · output \(route.output) → "+bus(route.target)
@@ -179,6 +194,10 @@ extension SignalGraphEditor {
     }) {[weak self] port in self?.signalScope.show(port:port,spectrum:spectrum)}
   }
   func showSignals(_ value:[String:Any]) {
+    if (value["active"] as? Bool ?? false) != (lastSignalData["active"] as? Bool ?? false) ||
+       (value["playing"] as? Bool ?? false) != (lastSignalData["playing"] as? Bool ?? false) {
+      rackControls.refreshSnapshot();pluginControls.parametersView.refreshSnapshot()
+    }
     var named=value
     var retainedNames=[String:(node:String,raw:String,shown:String)]()
     named["ports"]=(value["ports"] as? [[String:Any]] ?? []).map { port -> [String:Any] in

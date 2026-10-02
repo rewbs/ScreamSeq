@@ -404,13 +404,15 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
   // when two earlier rack slots disappear together.
   add();const auto third=plugin(2);
   invoke(c,"automation.replaceLane",{{"slot",2},{"id",1},{"points",Json::array({{{"frame",0},{"value",-6}}})}});
+  const auto groupSource=invoke(c,"graph.song.source.add",{{"source",{{"kind","lfo"},{"name","Grouped motion"}}}}).at("node");
+  invoke(c,"graph.song.group.create",{{"nodes",Json::array({"source:"+groupSource.get<std::string>()})},{"parent",group}});
   const auto beforeRemove=graph();const auto beforeRemoveView=c.view();
-  invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})},{"dryRun",true}});
+  invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})},{"sources",Json::array({groupSource})},{"dryRun",true}});
   need(c.view()==beforeRemoveView&&graph()==beforeRemove,"Batch removal dry run changed native history");
   rejected=false;try{invoke(c,"plugin.remove",{{"plugins",Json::array({first,"absent"})}});}catch(const Api::ApiError &){rejected=true;}
   need(rejected&&c.view()==beforeRemoveView,"Invalid batch removal deleted an earlier valid member");
-  invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})}});
-  auto removed=graph();need(rack().size()==1&&plugin(0)==third&&removed.at("groups").empty()&&removed.at("mixer").at("buses")[0].at("inserts").empty(),"Batch removal retained dead insert or empty group references");
+  invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})},{"sources",Json::array({groupSource})}});
+  auto removed=graph();need(removed.at("songSources").empty(),"Mixed group removal retained a selected control source");need(rack().size()==1&&plugin(0)==third&&removed.at("groups").empty()&&removed.at("mixer").at("buses")[0].at("inserts").empty(),"Batch removal retained dead insert or empty group references");
   need(call(c,"automation.get",Json::object()).at("points")[0].at("slot")==0,"Batch removal lost/remapped the retained plugin's recorded automation incorrectly");
   undo("document");need(rack().size()==3&&graph()==beforeRemove,"Grouped removal Undo failed to restore exact routing and plugin identities");
   redo("plugins");need(rack().size()==1&&graph()==removed,"Grouped removal Redo did not restore the exact disconnected native state");

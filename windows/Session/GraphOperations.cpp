@@ -217,22 +217,25 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
       for(const auto &c:array(field(p,"connections"),512)) {
         const auto kind=text(field(c,"kind"),32);SongConnectionRef ref{};
         if(kind=="output"||kind=="send") {keys(c,{"kind","source","target"});ref.kind=kind=="output"?SongConnectionKind::Output:SongConnectionKind::Send;ref.source=identity(field(c,"source"));ref.target=identity(field(c,"target"));}
+        else if(kind=="insert") {keys(c,{"kind","source","plugin"});ref.kind=SongConnectionKind::Insert;ref.source=identity(field(c,"source"));ref.plugin=text(field(c,"plugin"),128);}
+        else if(kind=="master-output") {keys(c,{"kind","source"});ref.kind=SongConnectionKind::MasterOutput;ref.source=identity(field(c,"source"));}
         else if(kind=="graph-input"||kind=="graph-output") {const bool input=kind=="graph-input";if(input)keys(c,{"kind","source","target","input"});else keys(c,{"kind","source","target","output"});ref.kind=input?SongConnectionKind::GraphInput:SongConnectionKind::GraphOutput;ref.source=identity(field(c,"source"));ref.target=identity(field(c,"target"));ref.port=uint32_t(integer(field(c,input?"input":"output"),1,63));}
+        else if(kind=="plugin-connection") {keys(c,{"kind","source","output","target","input"});ref.kind=SongConnectionKind::PluginConnection;ref.sourcePlugin=text(field(c,"source"),128);ref.plugin=text(field(c,"target"),128);ref.output=uint32_t(integer(field(c,"output"),0,63));ref.port=uint32_t(integer(field(c,"input"),0,63));}
         else if(kind=="plugin-input") {keys(c,{"kind","source","plugin","input"});ref.kind=SongConnectionKind::PluginInput;ref.source=identity(field(c,"source"));ref.plugin=text(field(c,"plugin"),256);ref.port=uint32_t(integer(field(c,"input"),0,63));}
         else if(kind=="plugin-output") {keys(c,{"kind","target","plugin","output"});ref.kind=SongConnectionKind::PluginOutput;ref.target=identity(field(c,"target"));ref.plugin=text(field(c,"plugin"),256);ref.port=uint32_t(integer(field(c,"output"),0,63));}
         else if(kind=="note") {keys(c,{"kind","route","instrument"});require(c.contains("route")!=c.contains("instrument"),"Choose an explicit note route or implicit instrument assignment");ref.kind=SongConnectionKind::Note;if(c.contains("route"))ref.source=identity(c.at("route"));else ref.target=identity(c.at("instrument"));}
         else if(kind=="modulation") {keys(c,{"kind","source","plugin","parameter"});ref.kind=SongConnectionKind::Modulation;ref.source=identity(field(c,"source"));ref.plugin=text(field(c,"plugin"),256);ref.port=uint32_t(integer(field(c,"parameter"),0,UINT32_MAX));}
         else if(kind=="follower-input") {keys(c,{"kind","node","source","plugin","output","preFader"});ref.kind=SongConnectionKind::FollowerInput;ref.target=identity(field(c,"node"));if(c.contains("source"))ref.source=identity(c.at("source"));if(c.contains("plugin"))ref.plugin=text(c.at("plugin"),256);ref.port=c.contains("output")?uint32_t(integer(c.at("output"),0,63)):0;ref.preFader=c.contains("preFader")?boolean(c.at("preFader")):false;}
-        else throw Api::ApiError(-32602,"Only explicit song routes can be cut; fixed rack-chain wires require moving or deleting their processors");
+        else throw Api::ApiError(-32602,"Unknown song cable kind");
         cables.push_back(std::move(ref));
       }
-      std::vector<std::string> instruments;for(const auto &r:host_.rack?host_.rack():host_.cachedRack)if(r.descriptor.value("isInstrument",false))instruments.push_back(r.id);
-      removeSongConnections(next,cables,instruments);
+      std::vector<std::string> instruments,effects;for(const auto &r:host_.rack?host_.rack():host_.cachedRack)(r.descriptor.value("isInstrument",false)?instruments:effects).push_back(r.id);
+      removeSongConnections(next,cables,instruments,effects);
     } else if(method.starts_with("graph.song.group.")) {
       if(method=="graph.song.group.create") {
         keys(p,{"nodes","groups","parent","name","positions","dryRun"});std::vector<std::string> members;std::vector<uint64_t> children;
         const auto rack=host_.rack?host_.rack():host_.cachedRack;
-        if(p.contains("nodes")) for(const auto &raw:array(p.at("nodes"),240)){const auto key=text(raw,256);require(std::any_of(rack.begin(),rack.end(),[&](const auto &r){return key=="plugin:"+r.id&&!r.descriptor.value("isInstrument",false);}),"Select existing rack effects; instruments and mixer buses are separate boundaries");members.push_back(key);}
+        if(p.contains("nodes")) for(const auto &raw:array(p.at("nodes"),240)){const auto key=text(raw,256);require(std::any_of(graph.songSources.begin(),graph.songSources.end(),[&](const auto &source){return key=="source:n"+std::to_string(source.node.id);})||std::any_of(rack.begin(),rack.end(),[&](const auto &r){return key=="plugin:"+r.id&&!r.descriptor.value("isInstrument",false);}),"Select existing rack effects or modulation sources; instruments and mixer buses are separate boundaries");members.push_back(key);}
         if(p.contains("groups")) for(const auto &raw:array(p.at("groups"),128))children.push_back(identity(raw));
         if(p.contains("positions")) for(const auto &v:array(p.at("positions"),240)){keys(v,{"node","x","y"});const auto key=text(field(v,"node"),256);require(std::find(members.begin(),members.end(),key)!=members.end(),"Position must belong to a selected processor");next.signal.layout[key]={number(field(v,"x"),0,100000),number(field(v,"y"),0,100000)};}
         groupID=allocate(next);groupSongSignalNodes(next.signal,members,children,groupID,!p.contains("parent")||p.at("parent").is_null()?0:identity(p.at("parent")),text(p.value("name","Group"),256));
@@ -487,13 +490,13 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
       envelopes=std::move(previous);
     } else if(method=="graph.nodes.detach") {
       keys(p,{"graph","nodes","remove","positions","heal","dryRun"});auto &d=definition(next,field(p,"graph"));affected=d.id;
-      std::vector<uint64_t> moving;for(const auto &v:array(field(p,"nodes"),32))moving.push_back(identity(v));
+      std::vector<uint64_t> moving;for(const auto &v:array(field(p,"nodes"),64))moving.push_back(identity(v));
       const bool remove=p.contains("remove")?boolean(p.at("remove")):false;
       require(!remove||!p.contains("positions"),"Removed nodes cannot have positions");
       std::optional<SignalHealPath> heal;if(p.contains("heal")){const auto &h=p.at("heal");keys(h,{"incoming","outgoing"});heal.emplace();if(h.contains("incoming")&&!h.at("incoming").is_null())heal->incoming=size_t(integer(h.at("incoming"),0,255));if(h.contains("outgoing")&&!h.at("outgoing").is_null())heal->outgoing=size_t(integer(h.at("outgoing"),0,255));}
       detachSignalNodes(d,moving,remove,heal);
       const auto positions=p.value("positions",Json::array());
-      for(const auto &v:array(positions,32)){keys(v,{"node","x","y"});auto id=identity(field(v,"node"));require(std::find(moving.begin(),moving.end(),id)!=moving.end(),"Position must belong to a detached node");auto &n=*std::find_if(d.nodes.begin(),d.nodes.end(),[&](const auto &n){return n.id==id;});n.x=number(field(v,"x"),0,100000);n.y=number(field(v,"y"),0,100000);}
+      for(const auto &v:array(positions,64)){keys(v,{"node","x","y"});auto id=identity(field(v,"node"));const auto x=number(field(v,"x"),0,100000),y=number(field(v,"y"),0,100000);if(std::any_of(d.groups.begin(),d.groups.end(),[&](const auto &g){return g.id==id;})){const auto members=signalGroupMembers(d,id);require(std::all_of(members.begin(),members.end(),[&](auto node){return std::find(moving.begin(),moving.end(),node)!=moving.end();}),"Positioned group must be entirely selected");moveSignalGroup(d,id,x,y);}else{require(std::find(moving.begin(),moving.end(),id)!=moving.end(),"Position must belong to a detached node");auto &n=*std::find_if(d.nodes.begin(),d.nodes.end(),[&](const auto &n){return n.id==id;});n.x=x;n.y=y;}}
     } else if(method=="graph.nodes.insert") {
       keys(p,{"graph","nodes","edge","positions","dryRun"});auto &d=definition(next,field(p,"graph"));affected=d.id;
       std::vector<uint64_t> moving;for(const auto &v:array(field(p,"nodes"),32))moving.push_back(identity(v));

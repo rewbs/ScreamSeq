@@ -54,7 +54,7 @@ public:
     std::vector<PluginState> states;
     std::vector<ParameterChange> automation;
   };
-  std::unique_ptr<LiveRackPlan> prepareLiveRack(const std::vector<PluginState> &,const std::vector<ParameterChange> &,const NativeSong &);
+  std::unique_ptr<LiveRackPlan> prepareLiveRack(const std::vector<PluginState> &,const std::vector<ParameterChange> &,const NativeSong &,std::span<const std::string> presets={});
   bool publishLiveRack(std::unique_ptr<LiveRackPlan> &) noexcept;
   struct LiveRecordedPlan {
     std::unique_ptr<RecordedAutomationPlan> hosted;
@@ -99,7 +99,7 @@ public:
   SignalObservation *signalObservation() {return plugins_?&plugins_->signalObservation():nullptr;}
   bool pluginFailed() const { return plugins_ && plugins_->failed(); }
   bool pluginLatencyChanged() const noexcept { return plugins_ && plugins_->latencyChangePending(); }
-  void refreshPluginLatencies();
+  void refreshPluginLatencies(const NativeSong &);
   void updateMusicalAutomation(const NativeSong &native) {if(active()&&plugins_)plugins_->updateMusicalAutomation(native);}
 
   bool mixerControls(const std::vector<MixerControls> &controls) { return !active() || (plugins_ && plugins_->mixerControls(controls)); }

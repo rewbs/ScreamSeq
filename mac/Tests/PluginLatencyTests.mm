@@ -19,6 +19,7 @@ static void enable(Document &doc) {
     n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});
   });
 }
+#include "editor/Tests/LiveLatencyChecks.hpp"
 int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleasepool { try {
   check(argc == 2, "Pass fixture bundle");
   auto descriptors = NativePlugin::discoverVST3(argv[1]);
@@ -149,6 +150,8 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
     try{p.refreshLatency();}catch(const std::exception&){rejected=true;}
     check(rejected,"Excessive plugin latency remains rejected");
   }
+  auto activations=reinterpret_cast<uint64_t(*)()>(dlsym(module,"ResonanceFixtureActivationCalls"));check(activations,"Latency activation counter");
+  liveLatencyChecks(effect,latency,activations);
   latency(0);check(lifecycle(0)==0 && lifecycle(3)==0,"Balanced plugin reactivation and destruction");
   dlclose(module);
   std::cout<<"PASS dynamic VST3 latency: notification, pending-edit save, reactivation, audio, rack/mixer/subgraph compensation, retained transport, 44.1/48/96 kHz and realtime audit\n";

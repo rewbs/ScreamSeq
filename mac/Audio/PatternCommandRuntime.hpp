@@ -22,15 +22,18 @@ class PatternCommandRuntime {
     size_t next=0;
     Curve curve;
     uint16_t activeChannel=UINT16_MAX;
-    bool used=false;
+    bool used=false,initialized=false;
     ParameterSource source;
   };
   std::vector<Target> targets_;
   uint32_t pattern_=UINT32_MAX,order_=UINT32_MAX;
   double previousPosition_=0;
+  double throughPosition_=0;
 public:
   PatternCommandRuntime(const NativeSong &, const std::vector<std::shared_ptr<NativePlugin>> &,
                         const std::vector<std::string> &,const std::vector<bool> &,const std::vector<ParameterChange> &);
   bool render(const OpenMPT::PlayState &,uint32_t frames,uint64_t absoluteFrame) noexcept;
+  void inheritState(const PatternCommandRuntime &) noexcept;
+  size_t storageBytes() const noexcept;
 };
 }

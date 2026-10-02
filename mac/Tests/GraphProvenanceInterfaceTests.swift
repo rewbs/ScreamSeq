@@ -45,6 +45,13 @@ extension InterfaceTests {
     var returns=0;editor.onReveal={returns+=1};editor.returnToProvenance();try require(returns==1,"Back reveals the retained graph context")
     editor.hideParameterProvenance();try require(!editor.canvas.nodes.contains{$0.kind=="provenance"},"Source projections can be hidden without removing any underlying song edits")
     editor.returnToProvenance();try require(returns==2,"A retained panel Back button still opens the graph after its transient source view was hidden")
+    let bookmark=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1100,height:700));bookmark.update(data)
+    bookmark.filterID="track";bookmark.nodeSearch.stringValue="Gain";bookmark.selectedID="plugin:stable";bookmark.canvas.selected=bookmark.selectedID;bookmark.rebuild();bookmark.rememberPanelReturn()
+    bookmark.filterID=nil;bookmark.nodeSearch.stringValue="Master";bookmark.selectedID="master";bookmark.canvas.selected="master";bookmark.rebuild();bookmark.restorePanelReturn()
+    try require(bookmark.filterID=="track" && bookmark.nodeSearch.stringValue=="Gain" && bookmark.selectedID=="plugin:stable" && bookmark.canvas.selection==["plugin:stable"],"Back from parameter activity restores the captured channel filter, search and stable processor selection")
+    bookmark.onRequest={method,_,reply in if method=="graph.get"{reply(["result":["revision":"new-document:1","data":data]])}}
+    bookmark.load()
+    try require(bookmark.panelReturn==nil,"Opening another document discards graph return targets even if local IDs happen to match")
     let reveal=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1100,height:700))
     var saved=data;saved["layout"]=[["node":"plugin:stable","x":400.0,"y":1400.0],["node":"provenance:envelope:n23","x":150.0,"y":2300.0]]
     reveal.update(saved);reveal.nodeCategory.selectItem(at:2);reveal.changeNodeFilter()

@@ -35,3 +35,54 @@ The final walkthrough records the exact build/source fingerprint, private fixtur
 explicit device, transport state, action sequence, visible feedback, screenshot,
 and any failure/retry. Capability retained in context menus or the command palette
 must be exercised there at least once; a passing model/API test is insufficient.
+
+## Native rewalk in progress — checkpoint 0e55851e1
+
+Private bundle `ScreamSeq Graph Completion QA`, PID 33092, launched with
+`--inspection --automation`. Device explicitly selected through Audio settings:
+BlackHole 2ch at 48 kHz / 512 frames; system default was not changed. Fixture is
+the disposable Midnight Circuit demo. This is an interim checkpoint; remaining
+runtime edits are not covered by it.
+
+- Show Graph through Cmd-K (search `graph`, Return); select Track 3 in its filter.
+- Add compressor: Add, type `compressor`, Return — **3 actions / 0 switches /
+  0 redundant confirms**, after selecting the channel. The inspector opens inline.
+- Edit threshold from -18 to -24 in place, then toggle bypass on/off. Including
+  one Space playback start, the add/tweak/compare path is **7 actions / 0 switches /
+  0 redundant confirms** under this ledger's numeric-entry convention. Separate
+  setup is the 2-click channel filter and initial Graph panel opening.
+- Native UI and API both confirm manual -24 and bypass changes. The song ended
+  naturally during the first pass; loop was then enabled for subsequent live walks.
+- Found a placement regression: an automatically inserted Compressor is right of
+  the implicit Master, causing a backward output cable. This is being fixed while
+  preserving explicit layouts. Screenshot `channel3-inline-comparison.png` is a
+  failure record, not final presentation approval.
+- Inline parameter `Effective` text is a cached host read. It remained -18 after
+  the manual value changed although a fresh API read returns -24; its tooltip
+  explains the snapshot, but the visible label is too easy to mistake for current
+  data. Further inspection is required before completing diagnostics qualification.
+
+QA evidence currently lives under the separate ignored build directory
+`bin/mac-graph-fluency/qualification/copy-notes-1e9c1630/`; final accepted images
+will be copied into this report's gallery after the affected paths are rechecked.
+
+### Additional checkpoint walks (not final acceptance)
+
+- Keyboard Main/Sidechain patching while looped verified routing and unified
+  Cmd-Z / Cmd-Shift-Z without stopping. Search ranked a hidden node ID ahead
+  of the visible Track 2 title; choosing the second result added one action.
+  Title-first search ranking now has a passing copied AppKit regression.
+- Threshold → Inspect opened Parameter activity with the correct parameter and
+  live value. Its narrow dock truncated mode/value controls and lacked a clear
+  return action. The new split rows and context-preserving Back to graph passed
+  copied AppKit tests; the rebuilt native presentation is still pending.
+- Save plugin preset from Track 3 succeeded through More → Save → the native
+  save panel. Added a second compressor on Track 4 in three actions.
+- Reusing that preset during playback correctly retained the old audio but
+  rejected the edit as stopped-only. This is an unfinished live workflow, not
+  a successful preset journey. Compatible rack preset replacement is underway.
+- An earlier preset-path error was an automation-tool targeting error: clicking
+  the AX item selected a different visible file. Choosing the exact preset via
+  the native Go to Folder field reached the genuine stopped-only rejection.
+  No file-path application defect was established. Pointer qualification remains
+  pending a fresh UI-control mapping; keyboard actions were reliable.

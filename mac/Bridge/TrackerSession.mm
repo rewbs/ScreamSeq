@@ -964,6 +964,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       @"clipped":@(value.clipped),@"nonFinite":@(value.nonFinite)} mutableCopy];
     entry[@"kind"]=@(port.kind.c_str());
     if(port.kind=="control"){entry[@"value"]=@(value.value);entry[@"first"]=@(value.first);entry[@"minimum"]=@(std::min(value.first,value.value));entry[@"maximum"]=@(std::max(value.first,value.value));}
+    if(value.noteGate){const auto &g=*value.noteGate;entry[@"noteGate"]=@{@"held":@(g.held),@"on":@(g.on),@"off":@(g.off),@"retrigger":@(g.retrigger),@"lastFrame":g.hasEvent?(id)@(g.lastFrame):(id)NSNull.null,@"scope":@"aggregate-envelope-gate"};}
     if(port.copy){const auto &c=*port.copy;entry[@"copy"]=@{@"graph":nativeID(c.graph),@"target":c.target?(id)nativeID(c.target):NSNull.null,@"role":@[@"row",@"persistent",@"ordinary",@"instrument"][c.role],@"instrument":c.instrument?(id)nativeID(c.instrument):NSNull.null,@"channel":c.channel==UINT16_MAX?(id)NSNull.null:@(c.channel)};}
     if(port.route) {
       const auto &route=*port.route;
@@ -1697,9 +1698,8 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 // replacement is a different operation and must not silently discard editor state.
 - (std::unique_ptr<AudioDevice::LiveRackPlan>)prepareLivePlugins:(const std::vector<PluginState> &)states
               automation:(const std::vector<ParameterChange> &)automation native:(const NativeSong &)native {
-  const bool topology=states.size()!=_plugins.size() || !std::equal(states.begin(),states.end(),_plugins.begin(),[](const auto &a,const auto &b){return a.instanceID==b.instanceID;});
-  if(!topology && native.mixer==_document->native().mixer)
-    throw std::runtime_error("Replacing plugin state requires a stopped transport; playback was preserved");
+  std::vector<std::string> presets;
+  for(const auto &state:states)if(const auto old=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==state.instanceID;});old!=_plugins.end()&&old->state!=state.state)presets.push_back(state.instanceID);
   // Recorded automation is attached to stable processors. A topology edit may
   // remap rack indexes or remove targets, but cannot replace a retained timeline.
   for(const auto &state:states) {
@@ -1711,7 +1711,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     for(auto p:automation)if(p.slot==newSlot){p.slot=0;b.push_back(p);}
     if(a!=b)throw std::runtime_error("Replacing recorded automation requires a stopped transport; playback was preserved");
   }
-  return _audio->prepareLiveRack(states,automation,native);
+  return _audio->prepareLiveRack(states,automation,native,presets);
 }
 // Editing an unresolved project must still allow removing missing effects one by one.
 // Keep its graph inactive and all remaining opaque states intact until it can instantiate.
@@ -1997,6 +1997,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   return [self removePlugins:@[@(_plugins[slot].instanceID.c_str())] error:error];
 }
 - (BOOL)removePlugins:(NSArray<NSString *> *)identifiers error:(NSError **)error {
+  return [self removePlugins:identifiers sources:std::vector<uint64_t>{} dryRun:NO error:error];
+}
+- (BOOL)removePlugins:(NSArray<NSString *> *)identifiers sources:(const std::vector<uint64_t> &)sources dryRun:(BOOL)dryRun error:(NSError **)error {
   try {
     std::set<std::string> removed;
     for(NSString *raw in identifiers) {
@@ -2005,10 +2008,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
         throw std::invalid_argument("Select distinct existing plugins");
     }
     if(removed.empty())throw std::invalid_argument("Select at least one plugin");
+    auto next=_document->native();next.removeSongSources(sources);
+    for(const auto &id:removed)next.removePluginRoutes(id);
+    next.validate(_document->song());
+    if(dryRun)return YES;
     [self commitManualParameters];
     auto states = (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
-    auto next=_document->native();
-    for(const auto &id:removed)next.removePluginRoutes(id);
     std::vector<size_t> slots(states.size(),SIZE_MAX);size_t index=0;
     for(size_t i=0;i<states.size();++i)if(!removed.contains(states[i].instanceID))slots[i]=index++;
     std::erase_if(states,[&](const auto &p){return removed.contains(p.instanceID);});
@@ -2227,7 +2232,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)pluginLatencyChanged { return _audio->pluginLatencyChanged(); }
 - (BOOL)refreshPluginLatencies:(NSError **)error {
-  try { _audio->refreshPluginLatencies(); return YES; }
+  try { _audio->refreshPluginLatencies(_document->native()); return YES; }
   catch (const std::exception &e) { failure(error, e); return NO; }
 }
 - (BOOL)refreshDevice:(NSError **)error {

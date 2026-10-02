@@ -127,7 +127,9 @@ int main(){try{
   check(grouped.nodes==patch.nodes&&grouped.audio==patch.audio&&grouped.modulation==patch.modulation,"Grouping preserves processor state, automation identities and every boundary cable");
   SignalGraph beforeGroup,afterGroup;beforeGroup.library={patch};afterGroup.library={grouped};
   beforeGroup.assignments={{10,patch.id}};afterGroup.assignments=beforeGroup.assignments;
-  check(sameSignalProcessing(beforeGroup,afterGroup),"A processing boundary never restarts or recompiles DSP");
+  check(!sameSignalProcessing(beforeGroup,afterGroup)&&!sameSignalControlLayout(beforeGroup,afterGroup),"A new processing boundary prepares dry-path buffers while retaining hosted processor identities");
+  auto renamedGroup=afterGroup;renamedGroup.library[0].groups[0].name="Renamed";renamedGroup.library[0].groups[0].x+=10;check(sameSignalProcessing(afterGroup,renamedGroup),"Group labels and movement remain presentation-only");
+  auto bypassedGroup=afterGroup;bypassedGroup.library[0].groups[0].bypass=true;check(!sameSignalProcessing(afterGroup,bypassedGroup)&&sameSignalControlLayout(afterGroup,bypassedGroup),"Existing group bypass uses prepared controls without recompiling the boundary");
   groupSignalNodes(grouped,{4},201,200,"Nested");
   check(grouped.groups[0].nodes==std::vector<uint64_t>{5}&&grouped.groups[1].nodes==std::vector<uint64_t>{4}&&grouped.groups[1].parent==200,"Nested groups own only their immediate members");
   const auto groupedBefore=grouped;
@@ -158,7 +160,8 @@ int main(){try{
   groupSongSignalNodes(songGroups,{"plugin:a","plugin:b"},{},501,0,"Rack pair");
   groupSongSignalNodes(songGroups,{"plugin:c"},{501},502,0,"Nested rack");
   check(songGroups.groups.size()==2&&songGroups.groups[0].parent==502,"Song groups keep rack identities and support nesting");
-  check(sameSignalProcessing(songGroups,ungroupedSong),"Presentation grouping must not rebuild or change audio processing");
+  check(!sameSignalProcessing(songGroups,ungroupedSong)&&!sameSignalControlLayout(songGroups,ungroupedSong),"A song processing boundary prepares its exact-route wrapper without replacing rack identities");
+  auto movedSongGroup=songGroups;moveSongSignalGroup(movedSongGroup,502,350,180);check(sameSignalProcessing(songGroups,movedSongGroup),"Moving song group presentation does not recompile DSP");
   const auto beforeBadGroup=songGroups;rejects([&]{groupSongSignalNodes(songGroups,{"plugin:a"},{},503,0,"Wrong depth");});check(songGroups==beforeBadGroup,"Rejected song grouping is atomic");
   rejects([&]{groupSongSignalNodes(songGroups,{"plugin:a","plugin:a"},{},503,501,"Duplicate");});
   moveSongSignalGroup(songGroups,502,250,150);check(songGroups.layout.at("plugin:a")==std::array<double,2>{250,150}&&songGroups.layout.at("plugin:c")==std::array<double,2>{750,150},"Song group drag moves every descendant");

@@ -2,6 +2,7 @@
 #include "SignalScope.hpp"
 #include "SignalListen.hpp"
 #include "editor/SignalRouteIdentity.hpp"
+#include "editor/SignalRuntimeObserver.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -33,6 +34,7 @@ struct SignalPortReading {
   int64_t processorLatency=-1,compensation=-1;
   double routeGain=1;bool preFader=false;
   double value=0,first=0;
+  std::optional<SignalNoteGate> noteGate;
 };
 // Immutable identities are prepared by the control owner. Each meter has one
 // audio writer; readers touch atomics only. No vendor callbacks or allocations
@@ -61,6 +63,8 @@ private:
     std::atomic<uint32_t> clear{0};
     uint32_t cleared = 0;
     std::atomic<double> value{0},first{0};
+    std::atomic<uint64_t> noteVersion{0},noteGeneration{0},noteOn{0},noteOff{0},noteRetrigger{0},noteFrame{0};
+    std::atomic<bool> noteHeld{false},noteHasEvent{false};
   };
   // The audio owner resets history before the first write in an adopted
   // generation. Explicit Clear only resets diagnostic latches, as before.
@@ -142,6 +146,13 @@ public:
   }
   // Prepared numeric metadata only. Called at actual plan adoption, including
   // rollback, or while stopped; neither allocations nor catalogue mutation.
+  uint32_t domainCount() const noexcept {return nextDomain_;} // Control owner only.
+  uint32_t prepareDomain(uint32_t offset) const {
+    if(offset>=maximumDomains-nextDomain_-1)throw std::invalid_argument("Signal copy observation capacity exceeded");
+    return nextDomain_+offset+1;
+  }
+  bool canPublishDomains(uint32_t base,uint32_t count) const noexcept {return base==nextDomain_&&count<maximumDomains-base;}
+  void publishDomains(uint32_t base,uint32_t count) noexcept {nextDomain_=base+count;}
   uint32_t newDomain() {if(nextDomain_+1>=maximumDomains)throw std::invalid_argument("Signal copy observation capacity exceeded");return ++nextDomain_;}
   uint64_t domainGeneration(uint32_t domain) const noexcept {return domain<maximumDomains?domains_[domain].load(std::memory_order_acquire):0;}
   void activate(std::span<const SignalPortConfiguration> ports) noexcept {activateDomain(0,ports);}
@@ -206,6 +217,16 @@ public:
     m.through.store(position+frames,std::memory_order_release);m.generation.store(generation,std::memory_order_release);m.measured.store(true,std::memory_order_release);
     audioThrough_=std::max(audioThrough_,position+frames);through_.store(audioThrough_,std::memory_order_release);
   }
+  void observeNoteGate(uint32_t token,const SignalNoteGate &gate) noexcept {
+    if(!available(token))return;
+    const auto domain=(*configuration_)[token-1].domain.load(std::memory_order_acquire);
+    const auto generation=domains_[domain].load(std::memory_order_acquire);
+    auto &m=*meters_[token-1];m.noteVersion.fetch_add(1,std::memory_order_acq_rel);
+    m.noteHeld.store(gate.held,std::memory_order_release);m.noteHasEvent.store(gate.hasEvent,std::memory_order_release);
+    m.noteOn.store(gate.on,std::memory_order_release);m.noteOff.store(gate.off,std::memory_order_release);
+    m.noteRetrigger.store(gate.retrigger,std::memory_order_release);m.noteFrame.store(gate.lastFrame,std::memory_order_release);
+    m.noteGeneration.store(generation,std::memory_order_release);m.noteVersion.fetch_add(1,std::memory_order_release);
+  }
   SignalPortReading read(uint32_t token) const noexcept {
     if(!token || token>ports.size())return {};
     const auto &config=(*configuration_)[token-1];const auto domain=config.domain.load(std::memory_order_acquire);
@@ -223,12 +244,22 @@ public:
     result.rmsLeft=m.rmsLeft.load(std::memory_order_relaxed);result.rmsRight=m.rmsRight.load(std::memory_order_relaxed);
     result.lastSignal=m.lastSignal.load(std::memory_order_relaxed);result.clipped=m.clip.load(std::memory_order_relaxed);result.nonFinite=m.nonFinite.load(std::memory_order_relaxed);
     result.value=m.value.load(std::memory_order_relaxed);result.first=m.first.load(std::memory_order_relaxed);
+    // Bounded read: a simultaneous render can omit this one diagnostic sample,
+    // but cannot expose counters from different events or a retired generation.
+    const auto noteVersion=m.noteVersion.load(std::memory_order_acquire);
+    if(noteVersion&&!(noteVersion&1)&&m.noteGeneration.load(std::memory_order_acquire)==generation){
+      SignalNoteGate gate;gate.held=m.noteHeld.load(std::memory_order_acquire);gate.hasEvent=m.noteHasEvent.load(std::memory_order_acquire);
+      gate.on=m.noteOn.load(std::memory_order_acquire);gate.off=m.noteOff.load(std::memory_order_acquire);
+      gate.retrigger=m.noteRetrigger.load(std::memory_order_acquire);gate.lastFrame=m.noteFrame.load(std::memory_order_acquire);
+      if(m.noteVersion.load(std::memory_order_acquire)==noteVersion)result.noteGate=gate;
+    }
     // An adopted but not-yet-rendered generation has no measurements. Retained
     // slots must not expose its predecessor's overload or last-signal history.
     if(!measured||measuredGeneration!=generation){
       result.peakLeft=result.peakRight=result.rmsLeft=result.rmsRight=0;
       result.through=result.lastSignal=0;result.clipped=result.nonFinite=false;
       result.value=result.first=0;
+      result.noteGate.reset();
     }
     if(domains_[domain].load(std::memory_order_acquire)!=generation || config.domain.load(std::memory_order_acquire)!=domain || (generation&&config.generation.load(std::memory_order_acquire)!=generation))return {};
     return result;

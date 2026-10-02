@@ -76,7 +76,10 @@ void SignalRuntime::inheritState(SignalRuntime &previous) noexcept {
   midi_=previous.midi_;amount_=previous.amount_;gate_=previous.gate_;
   if(groups_&&previous.groups_)groups_->inheritState(*previous.groups_);
   for(const auto &[id,index]:nodeIndex_){const auto found=std::lower_bound(previous.nodeIndex_.begin(),previous.nodeIndex_.end(),std::pair{id,size_t(0)});
-    if(found!=previous.nodeIndex_.end()&&found->first==id&&definition_.nodes[index].kind==previous.definition_.nodes[found->second].kind)nodes_[index].envelope=previous.nodes_[found->second].envelope;
+    if(found!=previous.nodeIndex_.end()&&found->first==id&&definition_.nodes[index].kind==previous.definition_.nodes[found->second].kind){
+      auto &node=nodes_[index];const auto &old=previous.nodes_[found->second];
+      node.envelope=old.envelope;node.noteGate=old.noteGate;node.pendingNoteEvent=old.pendingNoteEvent;
+    }
   }
   for(const auto &[identity,index]:edgeIndex_){const auto found=std::lower_bound(previous.edgeIndex_.begin(),previous.edgeIndex_.end(),std::pair{identity,size_t(0)});
     if(found!=previous.edgeIndex_.end()&&found->first==identity){auto &a=edges_[index],&b=previous.edges_[found->second];
@@ -98,8 +101,13 @@ void SignalRuntime::parameterBase(uint64_t node,uint32_t parameter,double value)
   for(auto &target:targets_)if(definition_.nodes[target.node].id==node&&target.parameter==parameter)target.base=value;
 }
 void SignalRuntime::note(bool gate,bool retrigger) noexcept {
+  for(size_t i=0;i<nodes_.size();++i)if(controls_->nodes[i].kind==SignalNodeKind::NoteEnvelope){
+    auto &node=nodes_[i];auto &events=node.noteGate;
+    const auto increment=[](uint64_t &value)noexcept{if(value<UINT64_MAX)++value;};
+    if(gate!=gate_){if(gate)increment(events.on);else increment(events.off);node.pendingNoteEvent=true;}
+    if(retrigger){increment(events.retrigger);node.pendingNoteEvent=true;node.envelope=0;}
+  }
   gate_=gate;
-  if(retrigger)for(size_t i=0;i<nodes_.size();++i)if(controls_->nodes[i].kind==SignalNodeKind::NoteEnvelope)nodes_[i].envelope=0;
 }
 const SignalPatternEnvelope *SignalRuntime::envelope(size_t index,uint64_t pattern) const noexcept {
   const auto &lanes=controls_->nodes[index].envelopes;
@@ -197,6 +205,7 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
         if(!cb.process||!cb.process(cb.context,spec.id,out,count,position+offset,n.auxiliary))return false;
         for(auto &p:n.outputs)if(p->index){const auto *from=cb.output?cb.output(cb.context,spec.id,p->index):nullptr;if(!from)return false;std::copy_n(from,count*2,p->samples.data());}
       } else if(spec.kind==SignalNodeKind::Follower||spec.kind==SignalNodeKind::NoteEnvelope){
+        if(spec.kind==SignalNodeKind::NoteEnvelope){n.noteGate.held=gate_;if(n.pendingNoteEvent){n.noteGate.lastFrame=position+offset;n.noteGate.hasEvent=true;n.pendingNoteEvent=false;}}
         for(uint32_t f=0;f<count;++f){const double target=spec.kind==SignalNodeKind::Follower?std::min(1.f,std::max(std::abs(in[f*2]),std::abs(in[f*2+1]))):double(gate_);
           const double coefficient=(target>n.envelope?n.attackCoefficient:n.releaseCoefficient);
           n.envelope=target+coefficient*(n.envelope-target);if(f==0)n.first=n.envelope;if(discrete)n.sampled[f]=n.envelope;}
@@ -206,6 +215,7 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
       if(observer_){
         if(spec.kind==SignalNodeKind::Input||spec.kind==SignalNodeKind::Plugin)for(const auto &p:n.outputs)observer_->audio(spec.id,true,p->index,p->samples.data(),count,position+offset);
         else if(spec.kind!=SignalNodeKind::Output){observer_->control(spec.id,n.first,n.last,count,position+offset);
+          if(spec.kind==SignalNodeKind::NoteEnvelope)observer_->noteGate(spec.id,n.noteGate);
           for(size_t m=0;m<controls_->modulation.size();++m){const auto &edge=controls_->modulation[m];if(edge.source==spec.id){const bool audible=edge.enabled&&!spec.muted;observer_->contribution(uint32_t(m),audible?(edge.minimum+(edge.maximum-edge.minimum)*n.first)*(groups_?groups_->modulation(m,0):1):0,audible?(edge.minimum+(edge.maximum-edge.minimum)*n.last)*(groups_?groups_->modulation(m,count-1):1):0,count,position+offset);}}
         }
       }

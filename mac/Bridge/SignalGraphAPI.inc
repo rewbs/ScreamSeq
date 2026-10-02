@@ -111,22 +111,25 @@
         for(id raw:array(p[@"connections"],512)) {
           auto c=object(raw);auto kind=string(c[@"kind"],32);SongConnectionRef ref{};
           if([kind isEqual:@"output"]||[kind isEqual:@"send"]) {keys(c,@[@"kind",@"source",@"target"]);ref.kind=[kind isEqual:@"output"]?SongConnectionKind::Output:SongConnectionKind::Send;ref.source=decodeNativeID(c[@"source"]);ref.target=decodeNativeID(c[@"target"]);}
+          else if([kind isEqual:@"insert"]) {keys(c,@[@"kind",@"source",@"plugin"]);ref.kind=SongConnectionKind::Insert;ref.source=decodeNativeID(c[@"source"]);ref.plugin=string(c[@"plugin"],128).UTF8String;}
+          else if([kind isEqual:@"master-output"]) {keys(c,@[@"kind",@"source"]);ref.kind=SongConnectionKind::MasterOutput;ref.source=decodeNativeID(c[@"source"]);}
           else if([kind isEqual:@"graph-input"]||[kind isEqual:@"graph-output"]) {const bool input=[kind isEqual:@"graph-input"];keys(c,input?@[@"kind",@"source",@"target",@"input"]:@[@"kind",@"source",@"target",@"output"]);ref.kind=input?SongConnectionKind::GraphInput:SongConnectionKind::GraphOutput;ref.source=decodeNativeID(c[@"source"]);ref.target=decodeNativeID(c[@"target"]);ref.port=uint32_t(integer(c[input?@"input":@"output"],1,63));}
+          else if([kind isEqual:@"plugin-connection"]) {keys(c,@[@"kind",@"source",@"output",@"target",@"input"]);ref.kind=SongConnectionKind::PluginConnection;ref.sourcePlugin=string(c[@"source"],128).UTF8String;ref.plugin=string(c[@"target"],128).UTF8String;ref.output=uint32_t(integer(c[@"output"],0,63));ref.port=uint32_t(integer(c[@"input"],0,63));}
           else if([kind isEqual:@"plugin-input"]) {keys(c,@[@"kind",@"source",@"plugin",@"input"]);ref.kind=SongConnectionKind::PluginInput;ref.source=decodeNativeID(c[@"source"]);ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"input"],0,63));}
           else if([kind isEqual:@"plugin-output"]) {keys(c,@[@"kind",@"target",@"plugin",@"output"]);ref.kind=SongConnectionKind::PluginOutput;ref.target=decodeNativeID(c[@"target"]);ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"output"],0,63));}
           else if([kind isEqual:@"note"]) {keys(c,@[@"kind",@"route",@"instrument"]);require(bool(c[@"route"])!=bool(c[@"instrument"]),"Choose an explicit note route or implicit instrument assignment");ref.kind=SongConnectionKind::Note;if(c[@"route"])ref.source=decodeNativeID(c[@"route"]);else ref.target=decodeNativeID(c[@"instrument"]);}
           else if([kind isEqual:@"modulation"]) {keys(c,@[@"kind",@"source",@"plugin",@"parameter"]);ref.kind=SongConnectionKind::Modulation;ref.source=decodeNativeID(c[@"source"]);ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"parameter"],0,UINT32_MAX));}
           else if([kind isEqual:@"follower-input"]) {keys(c,@[@"kind",@"node",@"source",@"plugin",@"output",@"preFader"]);ref.kind=SongConnectionKind::FollowerInput;ref.target=decodeNativeID(c[@"node"]);if(c[@"source"])ref.source=decodeNativeID(c[@"source"]);if(c[@"plugin"])ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"output"]?:@0,0,63));ref.preFader=c[@"preFader"]?boolean(c[@"preFader"]):false;}
-          else throw Error(-32602,"Only explicit song routes can be cut; fixed rack-chain wires require moving or deleting their processors");
+          else throw Error(-32602,"Unknown song cable kind");
           cables.push_back(std::move(ref));
         }
-        std::vector<std::string> instruments;for(const auto &p:_plugins)if(p.descriptor.instrument||p.descriptor.type==kAudioUnitType_MusicDevice)instruments.push_back(p.instanceID);
-        try{removeSongConnections(next,cables,instruments);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+        std::vector<std::string> instruments,effects;for(const auto &p:_plugins)(p.descriptor.instrument||p.descriptor.type==kAudioUnitType_MusicDevice?instruments:effects).push_back(p.instanceID);
+        try{removeSongConnections(next,cables,instruments,effects);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
       } else if([method hasPrefix:@"graph.song.group."]) {
         if([method isEqual:@"graph.song.group.create"]) {
           allowed(@[@"nodes",@"groups",@"parent",@"name",@"positions",@"dryRun"]);
           std::vector<std::string> members;std::vector<uint64_t> children;
-          for(id raw:array(p[@"nodes"]?:@[],240)){const auto key=std::string(string(raw,256).UTF8String);require(std::any_of(_plugins.begin(),_plugins.end(),[&](const auto &plugin){return key=="plugin:"+plugin.instanceID&&!plugin.descriptor.instrument&&plugin.descriptor.type!=kAudioUnitType_MusicDevice;}),"Select existing rack effects; instruments and mixer buses are separate boundaries");members.push_back(key);}
+          for(id raw:array(p[@"nodes"]?:@[],240)){const auto key=std::string(string(raw,256).UTF8String);require(std::any_of(graph.songSources.begin(),graph.songSources.end(),[&](const auto &source){return key=="source:n"+std::to_string(source.node.id);})||std::any_of(_plugins.begin(),_plugins.end(),[&](const auto &plugin){return key=="plugin:"+plugin.instanceID&&!plugin.descriptor.instrument&&plugin.descriptor.type!=kAudioUnitType_MusicDevice;}),"Select existing rack effects or modulation sources; instruments and mixer buses are separate boundaries");members.push_back(key);}
           for(id raw:array(p[@"groups"]?:@[],128))children.push_back(decodeNativeID(raw));
           for(id raw:array(p[@"positions"]?:@[],240)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);auto key=std::string(string(v[@"node"],256).UTF8String);require(std::find(members.begin(),members.end(),key)!=members.end(),"Position must belong to a selected processor");graph.layout[key]={number(v[@"x"],0,100000),number(v[@"y"],0,100000)};}
           groupID=next.makeEntity().id;const auto parent=!p[@"parent"]||p[@"parent"]==NSNull.null?0:decodeNativeID(p[@"parent"]);
@@ -261,12 +264,12 @@
         d.nodes.push_back(std::move(n));
       } else if([method isEqual:@"graph.nodes.detach"]) {
         allowed(@[@"graph",@"nodes",@"remove",@"positions",@"heal",@"dryRun"]);auto &d=definition(p[@"graph"]);affected=d.id;
-        std::vector<uint64_t> moving;for(id raw:array(p[@"nodes"],32))moving.push_back(decodeNativeID(raw));
+        std::vector<uint64_t> moving;for(id raw:array(p[@"nodes"],64))moving.push_back(decodeNativeID(raw));
         const bool remove=p[@"remove"]?boolean(p[@"remove"]):false;
         require(!remove||!p[@"positions"],"Removed nodes cannot have positions");
         std::optional<SignalHealPath> heal;if(p[@"heal"]){auto h=object(p[@"heal"]);keys(h,@[@"incoming",@"outgoing"]);heal.emplace();if(h[@"incoming"]&&h[@"incoming"]!=NSNull.null)heal->incoming=size_t(integer(h[@"incoming"],0,255));if(h[@"outgoing"]&&h[@"outgoing"]!=NSNull.null)heal->outgoing=size_t(integer(h[@"outgoing"],0,255));}
         try{detachSignalNodes(d,moving,remove,heal);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
-        for(id raw:array(p[@"positions"]?:@[],32)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);const auto id=decodeNativeID(v[@"node"]);require(std::find(moving.begin(),moving.end(),id)!=moving.end(),"Position must belong to a detached node");auto &node=*std::find_if(d.nodes.begin(),d.nodes.end(),[&](const auto &n){return n.id==id;});node.x=number(v[@"x"],0,100000);node.y=number(v[@"y"],0,100000);}
+        for(id raw:array(p[@"positions"]?:@[],64)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);const auto id=decodeNativeID(v[@"node"]);const auto x=number(v[@"x"],0,100000),y=number(v[@"y"],0,100000);if(std::any_of(d.groups.begin(),d.groups.end(),[&](const auto &g){return g.id==id;})){const auto members=signalGroupMembers(d,id);require(std::all_of(members.begin(),members.end(),[&](auto node){return std::find(moving.begin(),moving.end(),node)!=moving.end();}),"Positioned group must be entirely selected");moveSignalGroup(d,id,x,y);}else{require(std::find(moving.begin(),moving.end(),id)!=moving.end(),"Position must belong to a detached node");auto &node=*std::find_if(d.nodes.begin(),d.nodes.end(),[&](const auto &n){return n.id==id;});node.x=x;node.y=y;}}
       } else if([method isEqual:@"graph.nodes.insert"]) {
         allowed(@[@"graph",@"nodes",@"edge",@"positions",@"dryRun"]);auto &d=definition(p[@"graph"]);affected=d.id;
         std::vector<uint64_t> moving;for(id raw:array(p[@"nodes"],32))moving.push_back(decodeNativeID(raw));

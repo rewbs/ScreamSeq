@@ -1,6 +1,8 @@
 #include "HostedAudio.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "editor/SongGroupRuntime.hpp"
 #include "soundlib/Sndfile.h"
+#include "mac/Audio/PatternCommandRuntime.hpp"
 #include <algorithm>
 #include <stdexcept>
 
@@ -20,6 +22,7 @@ struct PluginChain::HostedMixerPlan::SongControls {
   std::vector<Notes> notes;
   std::array<uint8_t,128> controllers{};
   SignalClock clock;
+  std::array<float,8192> groupFollower{};
 };
 
 std::shared_ptr<PluginChain::HostedMixerPlan::SongControls> PluginChain::prepareSongControls(
@@ -86,8 +89,23 @@ std::shared_ptr<PluginChain::HostedMixerPlan::SongControls> PluginChain::prepare
   return result;
 }
 
+void PluginChain::prepareSongGroups(const NativeSong &native,MixerTransition::Plan &plan,HostedMixerPlan &hosted) {
+  hosted.groups.reset();if(native.signal.groups.empty())return;
+  hosted.groups=std::make_shared<SongGroupRuntime>(native.signal,plan.runtime->graph(),plan.runtime->plan(),plan.catalog,sampleRate_);
+  hosted.groups->runtime(plan.runtime.get());
+  for(const auto &dependency:hosted.groups->dependencies())plan.dependencies.push_back(dependency);
+  plan.processorStorage+=hosted.groups->storageBytes();plan.runtime->routeTransform(HostedMixerPlan::transformRoute,&hosted);
+  if(hosted.song)hosted.song->runtime->contributionGain([](void *p,uint64_t source,const std::string &target,uint64_t frame)noexcept {
+    return static_cast<SongGroupRuntime *>(p)->modulation(source,target,frame);
+  },hosted.groups.get());
+}
+void PluginChain::HostedMixerPlan::transformRoute(void *opaque,MixerRuntime::RouteKind kind,size_t index,float *samples,uint32_t frames,uint64_t position) noexcept {
+  auto &hosted=*static_cast<HostedMixerPlan *>(opaque);if(!hosted.groups)return;
+  hosted.groups->route(kind,index,samples,frames,position);if(hosted.groups->failed())hosted.owner->failed_=true;
+}
 void PluginChain::HostedMixerPlan::adopt(void *opaque,void *previous) noexcept {
   auto &next=*static_cast<HostedMixerPlan *>(opaque);
+  if(next.sampleBindings)next.owner->adoptSampleBindings(*next.sampleBindings);
   if(next.instrumentBindings)next.owner->adoptInstrumentBindings(*next.instrumentBindings);
   if(next.noteRouting)next.owner->adoptNoteRouting(*next.noteRouting);
   if(previous && next.song){const auto &old=*static_cast<HostedMixerPlan *>(previous);if(old.song){next.song->runtime->inheritState(*old.song->runtime);next.song->controllers=old.song->controllers;
@@ -97,10 +115,15 @@ void PluginChain::HostedMixerPlan::adopt(void *opaque,void *previous) noexcept {
   next.owner->observation_->activate(next.observationPlan);
   next.owner->activeHostedMixer_=&next;next.owner->activeSongControls_=next.song.get();
   if(next.musical)next.owner->activateMusicalPlan(*next.musical);
+  if(next.commands&&next.owner->activeCommands_!=next.commands.get()){
+    if(next.owner->activeCommands_)next.commands->inheritState(*next.owner->activeCommands_);
+    next.owner->activeCommands_=next.commands.get();
+  }
 }
 void PluginChain::HostedMixerPlan::begin(void *opaque,uint32_t frames,uint64_t position,bool current) noexcept {
   auto &plan=*static_cast<HostedMixerPlan *>(opaque);
   if(current&&plan.noteRouting)plan.owner->adoptNoteRouting(*plan.noteRouting);
+  if(plan.groups)plan.groups->begin(frames,position);
   plan.owner->beginSongControls(plan,frames,position,current);
 }
 void PluginChain::beginSongControls(HostedMixerPlan &hosted,uint32_t frames,uint64_t position,bool current) noexcept {
@@ -128,7 +151,9 @@ void PluginChain::songFollower(HostedMixerPlan &hosted,size_t bus,size_t process
   if(!hosted.song)return;auto &song=*hosted.song;
   for(const auto &tap:song.taps)if(tap.bus==bus && tap.processor==processor && tap.output==output){
     double existing;if(song.runtime->contribution(tap.source,position,existing))continue;
-    if(!song.runtime->renderSource(tap.source,frames,position,song.clock,samples))failed_=true;
+    const float *input=samples;
+    if(hosted.groups){if(samples)std::copy_n(samples,frames*2,song.groupFollower.data());else std::fill_n(song.groupFollower.data(),frames*2,0.f);hosted.groups->follower(tap.source,song.groupFollower.data(),frames,position);if(hosted.groups->failed())failed_=true;input=song.groupFollower.data();}
+    if(!song.runtime->renderSource(tap.source,frames,position,song.clock,input))failed_=true;
   }
 }
 void PluginChain::HostedMixerPlan::source(void *opaque,size_t processor,uint32_t output,const float *samples,uint32_t frames,uint64_t position) noexcept {
@@ -144,14 +169,28 @@ const PluginSongModulation *PluginChain::instrumentModulation(size_t processor) 
 }
 void PluginChain::prepareRoutingMusical(const NativeSong &native,HostedMixerPlan &hosted,MixerTransition::Plan &routing) {
   hosted.publishMusical=false;hosted.musicalSpec.clear();hosted.musicalTargets.clear();
-  if(native.automation!=musicalSpec_){
+  hosted.commandTargets.clear();for(const auto &entry:hosted.rack)hosted.commandTargets.emplace_back(entry->baseline.instanceID,entry->plugin.get());
+  const bool changedRack=hosted.commandTargets!=commandTargets_;
+  if(!hosted.commands)hosted.commands=publishedCommands_;
+  if(changedRack){
+    std::vector<std::shared_ptr<NativePlugin>> plugins;std::vector<std::string> identities;std::vector<bool> bypass;
+    for(const auto &entry:hosted.rack){plugins.push_back(entry->plugin);identities.push_back(entry->baseline.instanceID);bypass.push_back(false);}
+    std::vector<ParameterChange> recorded;
+    for(auto point:automation_)if(point.slot<instances_.size()){
+      const auto id=std::find(identities.begin(),identities.end(),instances_[point.slot]);if(id!=identities.end()){point.slot=uint32_t(id-identities.begin());recorded.push_back(point);}
+    }
+    hosted.commands=std::make_shared<PatternCommandRuntime>(native,plugins,identities,bypass,recorded);
+  }
+  if(native.automation!=musicalSpec_||changedRack){
     if(!musicalSong_ || musicalSerial_==UINT64_MAX)throw std::runtime_error("Musical automation cannot be prepared");
-    auto plan=prepareMusicalPlan(native);plan->revision=musicalSerial_+1;
+    auto plan=prepareMusicalPlan(native,hosted.rack);plan->revision=musicalSerial_+1;
     hosted.musicalSourceRevision=musicalSerial_;hosted.musicalSpec=native.automation;hosted.musicalTargets=musicalTargets_;
     for(const auto &p:plan->reset)hosted.musicalTargets.emplace_back(p.plugin.get(),p.id);
     std::sort(hosted.musicalTargets.begin(),hosted.musicalTargets.end());hosted.musicalTargets.erase(std::unique(hosted.musicalTargets.begin(),hosted.musicalTargets.end()),hosted.musicalTargets.end());
     hosted.musical=std::move(plan);hosted.publishMusical=true;
   }
+  if(hosted.commands)routing.processorStorage+=hosted.commands->storageBytes();
+  routing.processorStorage+=hosted.commandTargets.capacity()*sizeof(hosted.commandTargets[0]);for(const auto &p:hosted.commandTargets)routing.processorStorage+=p.first.capacity();
   if(hosted.musical){const auto &plan=*hosted.musical;
     routing.processorStorage+=sizeof(MusicalPlan)+plan.reset.capacity()*sizeof(MusicalPlan::Reset)+plan.patterns.capacity()*sizeof(plan.patterns[0]);
     for(const auto &pattern:plan.patterns){routing.processorStorage+=pattern.capacity()*sizeof(MusicalLane);for(const auto &lane:pattern){routing.processorStorage+=lane.points.capacity()*sizeof(AutomationPoint);for(const auto &point:lane.points)routing.processorStorage+=point.formula.bytes();}}
@@ -165,5 +204,6 @@ bool PluginChain::acceptsRoutingMusical(const HostedMixerPlan &hosted) const noe
 void PluginChain::commitRoutingMusical(HostedMixerPlan &hosted) noexcept {
   if(!hosted.publishMusical)return;
   musicalSerial_=hosted.musical->revision;musicalSpec_.swap(hosted.musicalSpec);musicalTargets_.swap(hosted.musicalTargets);hasMusicalControls_.store(true,std::memory_order_relaxed);
+  publishedCommands_=hosted.commands;commandTargets_.swap(hosted.commandTargets);
 }
 } // namespace Tracker

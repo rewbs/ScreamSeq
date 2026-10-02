@@ -25,7 +25,7 @@ extension AppController {
     } else {
       let panel = NSOpenPanel(); panel.allowedContentTypes = [type, UTType(filenameExtension: "resonance-preset", conformingTo: .data) ?? .data]; panel.allowsMultipleSelection = false
       panel.canChooseDirectories = false; panel.title = "Load plugin preset"
-      panel.message = "Choose settings for \(name). Loading stops playback and can be undone with Undo."
+      panel.message = "Choose settings for \(name). Undo restores the previous sound."
       panel.beginSheetModal(for: window) { [weak self] response in
         guard response == .OK, let url = panel.url else { return }
         DispatchQueue.main.async { self?.presetWorkflow.load(path: url.path, plugin: identity, revision: revision) }

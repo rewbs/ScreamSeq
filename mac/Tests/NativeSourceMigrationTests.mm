@@ -105,11 +105,13 @@ static void generatorChurn(const PluginDescriptor &descriptor){
     check(okay&&!renderer.faulted()&&allocations+frees+locks==0,"Reclaimed source generator corrupted playback or realtime ownership");
   }
 }
+#include "NativeSourceAutomationChecks.inc"
 int main(int argc,char **argv){trustFixtureArguments(argc,argv);try{
   check(argc==2,"Fixture bundle required");void *handle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW|RTLD_LOCAL);check(handle,"Load fixture");
   auto weighted=reinterpret_cast<void(*)(bool)>(dlsym(handle,"ResonanceFixtureChannelWeights"));check(weighted,"Channel weight hook");weighted(true);setFixtureAUChannelWeights(true);
   const auto vst=NativePlugin::discoverVST3(argv[1]),au=registerFixtureAUs();
   for(const auto &descriptor:{vst[1],au[1]})for(bool assignments:{false,true}){const auto reference=render(descriptor,17,assignments);for(auto block:{128u,512u,4096u})check(render(descriptor,block,assignments)==reference,"Live source migration depends on callback partition");}
   for(const auto &descriptor:{vst[1],au[1]}){for(auto block:{17u,4096u})orphan(descriptor,block);generatorChurn(descriptor);}
+  for(const auto &descriptor:{vst[1],au[1]})for(bool envelope:{false,true}){const auto expected=sourceAutomation(descriptor,17,envelope);for(auto block:{128u,4096u}){const auto actual=sourceAutomation(descriptor,block,envelope);for(size_t i=0;i<actual.size();++i)check(std::abs(actual[i]-expected[i])<1e-7,"Migrated parameter targets depend on callback partition");}}
   std::cout<<"PASS new AU/VST3 endpoints, unassigned routed destinations, live alias rebind/restore, held releases, partition-independent PCM and realtime audit\n";
 }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}return 0;}

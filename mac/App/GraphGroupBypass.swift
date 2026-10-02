@@ -52,6 +52,9 @@ extension SignalGraphEditor {
     let plugin=endpoint["plugin"] as? String ?? "",kind=endpoint["kind"] as? String ?? ""
     if kind=="insert"{return "Main path → "+label("plugin:"+plugin)}
     let source=endpoint["source"] as? String ?? "",target=endpoint["target"] as? String ?? ""
+    if kind=="plugin-connection"{return label(source)+" / output \(endpoint["output"] as? Int ?? 0) → "+label(target)+" / input \(endpoint["input"] as? Int ?? 0)"}
+    if kind=="plugin-input"{return label(source)+" → "+label("plugin:"+plugin)+" / input \(endpoint["input"] as? Int ?? 0)"}
+    if kind=="plugin-output"{return label("plugin:"+plugin)+" / output \(endpoint["output"] as? Int ?? 0) → "+label(target)}
     return (source.isEmpty ? label("plugin:"+plugin):label(source))+" → "+(target.isEmpty ? label("plugin:"+plugin):label(target))+" · "+kind
   }
 }

@@ -6,8 +6,30 @@ struct GraphAddConnection {
 struct GraphViewState {
   var origin:NSPoint, scale:CGFloat, selection:String?, filter:String?, search:String, category:Int
 }
+struct GraphPanelReturn {
+  var document:String,graph:String?,group:String?,origin:String?,target:String?
+  var view:GraphViewState,selection:Set<String>,edge:SignalCanvasEdge?
+}
 
 extension SignalGraphEditor {
+  func rememberPanelReturn() {
+    rememberGraphView()
+    guard let view=graphViewStates[graphViewKey] else{return}
+    panelReturn=GraphPanelReturn(document:projectionDocument,graph:graphID,group:processingGroupID,origin:graphOrigin,target:graphTarget,view:view,selection:canvas.selection,edge:canvas.selectedEdge.flatMap{canvas.edges.indices.contains($0) ? canvas.edges[$0]:nil})
+    provenance.hasReturn=true
+  }
+  func restorePanelReturn() {
+    guard let saved=panelReturn,saved.document==projectionDocument else{return}
+    guard !hasDraft else{status.stringValue="Finish the current graph edit before returning";return}
+    graphID=saved.graph;processingGroupID=saved.group;graphOrigin=saved.origin;graphTarget=saved.target
+    filterID=saved.view.filter;nodeSearch.stringValue=saved.view.search;nodeCategory.selectItem(at:saved.view.category)
+    selectedID=saved.view.selection;canvas.selected=selectedID;canvas.selectedEdge=nil;update(data)
+    let retained=saved.selection.intersection(Set(canvas.nodes.map(\.id)))
+    canvas.selectNodes(retained,primary:retained.contains(saved.view.selection ?? "") ? saved.view.selection:nil);selectedID=canvas.selected
+    if let edge=saved.edge,let index=canvas.edges.firstIndex(where:{$0.source==edge.source&&$0.target==edge.target&&$0.output==edge.output&&$0.input==edge.input&&$0.modulation==edge.modulation&&$0.connection==edge.connection}){selectConnection(index)}
+    else{inspect();configureConnectionInspector()}
+    layoutSubtreeIfNeeded();scroll.magnification=saved.view.scale;canvas.scroll(saved.view.origin)
+  }
   var graphViewKey:String { (graphID ?? "song")+(processingGroupID.map{"/"+$0} ?? "") }
   func rememberGraphView() {
     graphViewStates[graphViewKey]=GraphViewState(origin:scroll.contentView.bounds.origin,scale:scroll.magnification,selection:selectedID,filter:filterID,search:nodeSearch.stringValue,category:nodeCategory.indexOfSelectedItem)

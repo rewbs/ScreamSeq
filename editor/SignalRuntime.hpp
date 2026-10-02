@@ -34,6 +34,8 @@ class SignalRuntime {
     std::vector<MixerAudioInput> auxiliary;
     double envelope = 0, first = 0, last = 0, attackCoefficient = 0, releaseCoefficient = 0;
     std::array<double,quantum> sampled{};
+    SignalNoteGate noteGate;
+    bool pendingNoteEvent=false;
   };
   struct Edge {
     const SignalAudioEdge *spec = nullptr;

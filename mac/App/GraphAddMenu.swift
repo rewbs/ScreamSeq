@@ -18,7 +18,7 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
   private weak var responder: NSResponder?
   var onChoose: ((Entry) -> Void)?
   private var keyMonitor: Any?
-  private var verb="adds"
+  private var verb="adds",filteredQuery=""
 
   func show(in view: NSView, at point: NSPoint, title: String, entries: [Entry], verb:String="adds", choose: @escaping (Entry) -> Void) {
     close(); owner = view.window; responder = view.window?.firstResponder; onChoose = choose
@@ -59,9 +59,18 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
   }
   func replace(_ values: [Entry]) { entries = values; filter() }
   func filter() {
-    let selected = filtered.indices.contains(table.selectedRow) ? filtered[table.selectedRow].id : nil
-    let terms = search.stringValue.lowercased().split(whereSeparator: \.isWhitespace)
-    filtered = entries.filter { entry in terms.allSatisfy { (entry.title + " " + entry.detail + " " + entry.keywords).lowercased().contains($0) } }
+    let query=search.stringValue.lowercased().trimmingCharacters(in:.whitespacesAndNewlines)
+    let selected = query==filteredQuery && filtered.indices.contains(table.selectedRow) ? filtered[table.selectedRow].id : nil
+    filteredQuery=query
+    let terms=query.split(whereSeparator: \.isWhitespace)
+    // A musician searching "Track 2" means the visible channel label first.
+    // Stable IDs remain searchable, but n2 must not outrank the title Track 2.
+    filtered=entries.enumerated().compactMap { index,entry -> (Int,Int,Entry)? in
+      let title=entry.title.lowercased(),visible=title+" "+entry.detail.lowercased(),all=visible+" "+entry.keywords.lowercased()
+      guard terms.allSatisfy({all.contains($0)})else{return nil}
+      let rank=terms.allSatisfy({title.contains($0)}) ? 0:terms.allSatisfy({visible.contains($0)}) ? 1:2
+      return (rank,index,entry)
+    }.sorted{$0.0==$1.0 ? $0.1<$1.1:$0.0<$1.0}.map{$0.2}
     table.reloadData()
     if !filtered.isEmpty { table.selectRowIndexes(IndexSet(integer: filtered.firstIndex { $0.id == selected } ?? 0), byExtendingSelection: false) }
     hint.stringValue = filtered.isEmpty ? "No matching targets · Escape returns to the graph" : "↑↓ choose · Return \(verb) · Esc cancels"

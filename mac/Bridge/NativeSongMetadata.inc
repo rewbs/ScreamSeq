@@ -93,13 +93,20 @@ NSDictionary *encodeMixer(const MixerGraph &graph) {
   for (const auto &side : graph.sidechains) [sidechains addObject:@{@"source": nativeID(side.source), @"plugin": @(side.plugin.c_str()),
     @"input": @(side.input), @"gainDB": @(side.gainDB), @"preFader": @(side.preFader), @"enabled": @(side.enabled)}];
   NSMutableArray *detached=[NSMutableArray array];for(const auto &plugin:graph.detached)[detached addObject:@(plugin.c_str())];
-  return @{@"buses": buses, @"instruments": instruments, @"sidechains": sidechains, @"detached":detached};
+  NSMutableArray *chains=[NSMutableArray array],*cuts=[NSMutableArray array];
+  for(const auto &chain:graph.detachedChains){NSMutableArray *plugins=[NSMutableArray array];for(const auto &id:chain.plugins)[plugins addObject:@(id.c_str())];[chains addObject:@{@"id":nativeID(chain.id),@"plugins":plugins}];}
+  for(const auto &id:graph.disconnectedMainInputs)[cuts addObject:@(id.c_str())];
+  NSMutableArray *connections=[NSMutableArray array];for(const auto &r:graph.pluginConnections)[connections addObject:@{@"source":@(r.source.c_str()),@"output":@(r.output),@"target":@(r.target.c_str()),@"input":@(r.input),@"gainDB":@(r.gainDB),@"enabled":@(r.enabled)}];
+  return @{@"pluginConnections":connections,@"buses": buses, @"instruments": instruments, @"sidechains": sidechains, @"detached":detached,@"detachedChains":chains,@"disconnectedMainInputs":cuts,@"masterOutputDisconnected":@(graph.masterOutputDisconnected)};
 }
 MixerGraph decodeMixer(id raw) {
   using namespace Automation;
-  auto value = object(raw); keys(value, @[@"buses", @"instruments", @"sidechains", @"detached"]);
+  auto value = object(raw); keys(value, @[@"buses", @"instruments", @"sidechains", @"detached",@"detachedChains",@"disconnectedMainInputs",@"masterOutputDisconnected",@"pluginConnections"]);
   MixerGraph graph;
   for(id raw:array(value[@"detached"]?:@[],240))graph.detached.push_back(string(raw,128).UTF8String);
+  for(id raw:array(value[@"detachedChains"]?:@[],64)){auto v=object(raw);keys(v,@[@"id",@"plugins"]);MixerDetachedChain chain;chain.id=decodeNativeID(v[@"id"]);for(id id:array(v[@"plugins"],32))chain.plugins.push_back(string(id,128).UTF8String);graph.detachedChains.push_back(std::move(chain));}
+  for(id id:array(value[@"disconnectedMainInputs"]?:@[],240))graph.disconnectedMainInputs.push_back(string(id,128).UTF8String);
+  graph.masterOutputDisconnected=value[@"masterOutputDisconnected"]?boolean(value[@"masterOutputDisconnected"]):false;
   for (id rawBus in array(value[@"buses"], 240)) {
     auto v = object(rawBus);
     keys(v, @[@"id", @"kind", @"name", @"color", @"output", @"preGainDB", @"prePan", @"gainDB", @"pan", @"width", @"timingMS", @"mute", @"solo", @"inserts", @"sends"]);
@@ -124,8 +131,9 @@ MixerGraph decodeMixer(id raw) {
   for (id rawSide in array(value[@"sidechains"], 128)) {
     auto side = object(rawSide); keys(side, @[@"source", @"plugin", @"input", @"gainDB", @"preFader", @"enabled"]);
     graph.sidechains.push_back({decodeNativeID(side[@"source"]), string(side[@"plugin"], 128).UTF8String,
-      uint32_t(integer(side[@"input"], 1, 63)), number(side[@"gainDB"], -96, 12), boolean(side[@"preFader"]), boolean(side[@"enabled"])});
+      uint32_t(integer(side[@"input"], 0, 63)), number(side[@"gainDB"], -96, 12), boolean(side[@"preFader"]), boolean(side[@"enabled"])});
   }
+  for(id raw:array(value[@"pluginConnections"]?:@[],256)){auto r=object(raw);keys(r,@[@"source",@"output",@"target",@"input",@"gainDB",@"enabled"]);graph.pluginConnections.push_back({string(r[@"source"],128).UTF8String,uint32_t(integer(r[@"output"],0,63)),string(r[@"target"],128).UTF8String,uint32_t(integer(r[@"input"],0,63)),number(r[@"gainDB"],-96,12),boolean(r[@"enabled"])});}
   return graph;
 }
 #include "EnvelopeBankMetadata.inc"

@@ -70,6 +70,35 @@ std::vector<float> render(MixerGraph graph, uint32_t block, uint32_t rate) {
   check(mixer->meters().size() == 5 && mixer->meters()[4].left > 0, "Meters are independently readable after rendering");
   return output;
 }
+void detachedAndCutRoutes() {
+  for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u})for(unsigned scenario=0;scenario<5;++scenario){
+    MixerGraph graph;graph.buses={{1,10,MixerBusKind::Track,"Track"},{2,10,MixerBusKind::Track,"Detector"},{10,0,MixerBusKind::Master,"Main"}};
+    graph.buses[0].inserts={"a","b"};
+    if(scenario==1||scenario==2)graph.disconnectedMainInputs={"b"};
+    if(scenario==2)graph.sidechains={{2,"b",0,0,false,true}};
+    if(scenario>=3){graph.buses[0].inserts.clear();graph.detachedChains={{20,{"a","b"}}};graph.sidechains={{2,"a",0,0,false,true}};graph.instruments={{"b",10,0}};}
+    if(scenario==4)graph.masterOutputDisconnected=true;
+    const std::vector<MixerProcessorInfo> catalog{{"a",0,0},{"b",0,0}};
+    auto runtime=std::make_unique<MixerRuntime>(graph,compileMixer(graph,{1,2},catalog,rate),rate);
+    struct State {std::array<uint64_t,2> through{};bool fault=false;} state;
+    const auto process=[](void *p,size_t index,float *audio,uint32_t frames,uint64_t position)noexcept{
+      auto &s=*static_cast<State *>(p);if(index>=2||s.through[index]!=position){s.fault=true;return false;}
+      s.through[index]=position+frames;for(uint32_t i=0;i<frames*2;++i)audio[i]*=index?3.f:2.f;return true;
+    };
+    std::array<float,4096> left{},right{};uint64_t allocations=0,frees=0,locks=0;
+    const float expected=scenario==0?1.625f:scenario==1?.125f:scenario==2?.5f:1.125f;
+    for(uint32_t position=0;position<5000;){const auto count=std::min(block,5000-position);
+      tracker_audit_begin();runtime->begin(count,position);
+      for(auto bus:runtime->plan().order){const float direct=bus==0?.25f:bus==1?.125f:0.f;std::fill_n(left.data(),count,direct);std::fill_n(right.data(),count,direct);runtime->process(bus,left.data(),right.data(),process,&state);}
+      runtime->complete();tracker_audit_end(&allocations,&frees,&locks);
+      check(allocations+frees+locks==0&&!runtime->failed()&&!state.fault,"Detached/cut rendering must remain allocation-free and clock every vendor once");
+      for(uint32_t i=0;i<count*2;++i){check(runtime->busOutput(runtime->plan().master)[i]==expected,"A main cut must not heal or discard explicit summed input; detached chains retain order and branches");check(runtime->masterOutput()[i]==(scenario==4?0.f:expected),"Master cut must silence only terminal output");}
+      position+=count;
+    }
+    check(state.through[0]==5000&&state.through[1]==5000,"Cut and detached processors remain continuously warm");
+    if(scenario==4)check(runtime->meters()[runtime->plan().master].left>0,"Disconnected Master keeps meaningful wet meters");
+  }
+}
 void liveMeterRegistration() {
   auto observation=std::make_unique<SignalObservation>(48000);
   const auto first=observation->add({"first","first","First",true});
@@ -536,6 +565,7 @@ int main() {
       [](void *, size_t, float *data, uint32_t frames, uint64_t) noexcept { std::fill_n(data, frames * 2, std::numeric_limits<float>::max()); return true; }, nullptr);
     guard->complete();
     check(guard->failed() && silenced[0] == 0 && silenced[1] == 0, "Post-fader overflow is silenced before reaching the integer output mixer");
+    detachedAndCutRoutes();
     liveMeterRegistration();
     currentPlanMeters();
     exactRouteTaps();

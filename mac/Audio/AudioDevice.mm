@@ -213,10 +213,10 @@ void AudioDevice::setPlugins(const std::vector<PluginState> &states, const std::
   pluginStates_ = states;
   automation_ = automation;
 }
-std::unique_ptr<AudioDevice::LiveRackPlan> AudioDevice::prepareLiveRack(const std::vector<PluginState> &states,const std::vector<ParameterChange> &automation,const NativeSong &native) {
+std::unique_ptr<AudioDevice::LiveRackPlan> AudioDevice::prepareLiveRack(const std::vector<PluginState> &states,const std::vector<ParameterChange> &automation,const NativeSong &native,std::span<const std::string> presets) {
   if(!active()||!plugins_)throw std::runtime_error("Live rack processing is unavailable");
   auto plan=std::make_unique<LiveRackPlan>();plan->states=states;plan->automation=automation;
-  auto prepared=native;prepared.ensureMixer();plan->hosted=plugins_->prepareRack(states,prepared);return plan;
+  auto prepared=native;prepared.ensureMixer();plan->hosted=plugins_->prepareRack(states,prepared,presets);return plan;
 }
 bool AudioDevice::publishLiveRack(std::unique_ptr<LiveRackPlan> &plan) noexcept {
   if(!plan||!plugins_||!plugins_->publishRack(plan->hosted))return false;
@@ -245,14 +245,13 @@ void AudioDevice::stop() {
   if (unit_)
     AudioOutputUnitStop(unit_);
 }
-void AudioDevice::refreshPluginLatencies() {
-  const bool resume = active();
-  stop(); // Quiesces the callback before touching processor state or delay storage.
-  if (plugins_) plugins_->refreshLatencies();
-  if (resume && unit_) {
-    check(AudioOutputUnitStart(unit_), "Cannot resume playback after plugin latency update");
-    playing_ = true;
-  }
+void AudioDevice::refreshPluginLatencies(const NativeSong &native) {
+  if(!plugins_)return;
+  if(active()) {
+    // Preparation can wait behind an accepted transition. The existing plan
+    // remains audible; the pending vendor serial makes the next UI poll retry.
+    auto prepared=native;prepared.ensureMixer();plugins_->refreshLatencies(prepared);
+  } else plugins_->refreshLatencies();
 }
 OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const AudioTimeStamp *timestamp, UInt32, UInt32 frames,
                                AudioBufferList *buffers) {
@@ -261,7 +260,7 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
   for (UInt32 i = 0; i < buffers->mNumberBuffers; ++i)
     if (buffers->mBuffers[i].mData)
       std::memset(buffers->mBuffers[i].mData, 0, buffers->mBuffers[i].mDataByteSize);
-  if (self.playing_.load(std::memory_order_relaxed) && !self.pluginLatencyChanged() && self.renderer_ && buffers->mNumberBuffers == 1 &&
+  if (self.playing_.load(std::memory_order_relaxed) && self.renderer_ && buffers->mNumberBuffers == 1 &&
       buffers->mBuffers[0].mData && buffers->mBuffers[0].mDataByteSize >= frames * 8) {
     auto *const callbackOutput = static_cast<float *>(buffers->mBuffers[0].mData);
     const UInt32 callbackFrames = frames;
@@ -270,8 +269,7 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
     // A device may deliver more frames than it negotiated, or more than the
     // 4096 prepared by every plugin, mixer and graph buffer. Render such a
     // callback as consecutive blocks: results do not depend on the partition.
-    for (UInt32 done = 0; done < callbackFrames && self.playing_.load(std::memory_order_relaxed) &&
-                          (!done || !self.pluginLatencyChanged());) {
+    for (UInt32 done = 0; done < callbackFrames && self.playing_.load(std::memory_order_relaxed);) {
       const UInt32 frames = std::min<UInt32>(callbackFrames - done, maximumBlockFrames);
       auto *const output = callbackOutput + size_t(done) * 2;
       const UInt32 blockStart = done;

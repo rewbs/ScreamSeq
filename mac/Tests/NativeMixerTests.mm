@@ -107,15 +107,15 @@ static void liveRouting(const PluginState &effect,uint32_t block,bool graphCopie
   }
   check(changedAudio && liveChain.mixerRoutingReady(),"Live fixture has an audible routing difference and completed handoffs");
   auto affected=after;affected.mixer.buses[0].output=before.mixer.buses[2].id;
-  check(bool(liveChain.prepareMixerRouting(affected))!=graphCopies,"Retained VST input can morph while note-dependent graph membership still requires preparation");
+  check(bool(liveChain.prepareMixerRouting(affected)),"Retained VST inputs and note-dependent membership have a complete prepared handoff");
   if(graphCopies) {
     auto controls=before;controls.signal.library[0].nodes[1].plugin.parameters[7]=.7;
     auto plan=liveChain.prepareGraphControls(controls);
     check(plan && liveChain.publishGraphControls(std::move(plan)),"Publish controls before an unrelated route edit");
     check(bool(liveChain.prepareMixerRouting(controls)),"Route preparation compares the latest published graph controls, not stale construction values");
-    check(!liveChain.prepareMixerRouting(before),"A combined control/routing Undo must not silently omit changed graph parameters");
+    check(bool(liveChain.prepareMixerRouting(before)),"A combined control/routing Undo prepares the changed graph parameters atomically");
     auto topology=controls;topology.signal.instrumentAssignments.clear();
-    check(!liveChain.prepareMixerRouting(topology),"Removing a sample-graph source still requires a separately prepared plan");
+    check(bool(liveChain.prepareMixerRouting(topology)),"Removing a sample-graph source prepares its binding and audio handoff");
   }
 }
 static void liveRouteObservations(const PluginState &effect,uint32_t block) {
@@ -651,13 +651,21 @@ static void monitorWhileRendering(bool testBypass=false) {
     check(different&&signal&&!observed.listen.pending(),"Channel listen isolates real rendered audio and restores the original mix");
   }
 }
+#include "SongGroupHostChecks.inc"
+#include "DirectPluginHostChecks.inc"
 int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool { try {
     check(argc == 2, "Fixture bundle path required");
     auto descriptions = NativePlugin::discoverVST3(argv[1]);
     PluginState gain{descriptions.at(0)}, synth{descriptions.at(1)}, delayed{descriptions.at(2)};
     gain.instanceID = "gain"; synth.instanceID = "synth"; delayed.instanceID = "delayed";
-    for(auto block:{17u,512u,4096u}){songModulationHost(gain,block);liveRack(gain,block);liveRouteObservations(gain,block);liveRouting(gain,block);liveRouting(gain,block,false,false,true);liveRouting(gain,block,true);liveRouting(gain,block,false,true);liveRouting(gain,block,true,true);liveRecipeParameters(gain,block);liveRecipeStructure(gain,block);}
+    for(auto block:{17u,512u,4096u}){
+      const auto run=[&](const char *name,auto &&test){try{test();}catch(const std::exception &error){throw std::runtime_error(std::string(name)+" block="+std::to_string(block)+": "+error.what());}};
+      run("songModulationHost",[&]{songModulationHost(gain,block);});run("liveRack",[&]{liveRack(gain,block);});run("liveRouteObservations",[&]{liveRouteObservations(gain,block);});
+      run("liveRouting",[&]{liveRouting(gain,block);});run("liveRouting output",[&]{liveRouting(gain,block,false,false,true);});run("liveRouting new bus",[&]{liveRouting(gain,block,true);});
+      run("liveRouting graph copies",[&]{liveRouting(gain,block,false,true);});run("liveRouting new bus graph copies",[&]{liveRouting(gain,block,true,true);});
+      run("liveRecipeParameters",[&]{liveRecipeParameters(gain,block);});run("liveRecipeStructure",[&]{liveRecipeStructure(gain,block);});
+    }
     for(auto block:{17u,512u,4096u})for(unsigned scope=0;scope<5;++scope)songNoteScope(gain,block,scope);
     for(auto block:{17u,512u,4096u}){combinedSongAutomation(gain,block);combinedRecipeAutomation(gain,block);detachedHost(gain,block);songBusFollower(gain,block);}
     {auto bundle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW|RTLD_LOCAL);
@@ -669,6 +677,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
     }
     for(auto block:{17u,512u,4096u})graphTailBudget(block);
     PluginState au{registerFixtureAUs().at(0)};au.instanceID="prepared-au";
+    for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,512u,4096u}){liveSongGroup(gain,rate,block);liveSongGroup(au,rate,block);liveDirectPluginCables(gain,rate,block);liveDirectPluginCables(au,rate,block);}
     PluginState compressor;for(const auto &d:NativePlugin::builtins())if(d.classID=="resonance.compressor.v1")compressor.descriptor=d;compressor.instanceID="prepared-compressor";
     for(auto block:{17u,512u,4096u}){liveRecipePreset(au,block,setFixtureAUHiddenGain,fixtureAUCreatedCount);liveRecipeBypass(au,block,setFixtureAUHiddenGain,fixtureAUCreatedCount);liveRecipeStructure(au,block);livePreparedSidechain(au,block,false);livePreparedSidechain(compressor,block,true);livePreparedSidechain(compressor,block,true,false);livePreparedSidechain(compressor,block,true,true,true);}
     for(auto kind:{SignalNodeKind::Follower,SignalNodeKind::LFO,SignalNodeKind::Random,SignalNodeKind::MIDI,SignalNodeKind::Amount,SignalNodeKind::Automation})for(auto block:{17u,512u,4096u})liveRecipeSources(au,block,kind,setFixtureAUHiddenGain,fixtureAUCreatedCount);

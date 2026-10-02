@@ -125,7 +125,7 @@ public:
   // Borrowed by the stopped UI/audio owner. Stop/join callbacks and release all
   // readers before calling prepare again; replacement and disposal run here.
   std::future<HostedProjectPlayback *> prepare(unsigned rate,Json settings,bool loop,bool offline=false,bool audition=false);
-  std::future<bool> refreshPlaybackLatencies(); // Caller has stopped/joined the device.
+  std::future<bool> refreshPlaybackLatencies(); // Prepared live update; false retries after the active handoff.
   void service();
 };
 }

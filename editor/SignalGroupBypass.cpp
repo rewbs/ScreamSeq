@@ -59,6 +59,7 @@ void pruneSignalGroupDryRoutes(SignalDefinition &definition){
   }
 }
 SignalSongGroupBoundary signalSongGroupBoundary(const SignalGraph &graph,const MixerGraph &mixer,const std::vector<std::string> &rack,uint64_t id){
+  if(!mixer.detachedChains.empty())return signalSongGroupBoundary(graph,projectMixerDetachedChains(mixer),rack,id);
   const auto members=songMembers(graph,id);SignalSongGroupBoundary result;
   std::set<std::string> owned(mixer.detached.begin(),mixer.detached.end());
   for(const auto &bus:mixer.buses)owned.insert(bus.inserts.begin(),bus.inserts.end());
@@ -69,11 +70,12 @@ SignalSongGroupBoundary signalSongGroupBoundary(const SignalGraph &graph,const M
   auto add=[&](std::string from,std::string to,SignalRouteIdentity identity){if(!members.contains(from)&&members.contains(to))appendUnique(result.inputs,identity);if(members.contains(from)&&!members.contains(to))appendUnique(result.outputs,std::move(identity));};
   for(const auto &bus:mixer.buses){
     auto previous=busKey(bus.id);
-    for(const auto &plugin:chains[bus.id]){const auto next="plugin:"+plugin;add(previous,next,{"insert",busKey(bus.id),{},plugin,"main-path"});previous=next;}
+    for(const auto &plugin:chains[bus.id]){const auto next="plugin:"+plugin;if(std::find(mixer.disconnectedMainInputs.begin(),mixer.disconnectedMainInputs.end(),plugin)==mixer.disconnectedMainInputs.end())add(previous,next,{"insert",busKey(bus.id),{},plugin,"main-path"});previous=next;}
     if(bus.output)add(previous,busKey(bus.output),{"output",busKey(bus.id),busKey(bus.output)});
-    if(bus.kind==MixerBusKind::Master)add(previous,"main-output",{"master-output",busKey(bus.id),{},{},"pre-master-fader"});
+    if(bus.kind==MixerBusKind::Master&&!mixer.masterOutputDisconnected)add(previous,"main-output",{"master-output",busKey(bus.id),{},{},"pre-master-fader"});
     for(const auto &send:bus.sends)add(previous,busKey(send.target),{"send",busKey(bus.id),busKey(send.target)});
   }
+  for(const auto &route:mixer.pluginConnections)add("plugin:"+route.source,"plugin:"+route.target,{"plugin-connection","plugin:"+route.source,"plugin:"+route.target,{},"post-gain",route.input,route.output});
   for(const auto &route:mixer.sidechains)if(ends.contains(route.source))add(ends.at(route.source),"plugin:"+route.plugin,{"plugin-input",busKey(route.source),{},route.plugin,"post-gain",route.input,0});
   for(const auto &route:mixer.instruments)if(route.target)add("plugin:"+route.plugin,busKey(route.target),{"plugin-output",{},busKey(route.target),route.plugin,"post-gain",0,route.output});
   for(const auto &route:graph.inputs)if(ends.contains(route.source))add(ends.at(route.source),"graph:"+busKey(route.target),{"graph-input",busKey(route.source),busKey(route.target),{},"post-gain",route.input,0});

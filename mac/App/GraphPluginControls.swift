@@ -187,6 +187,11 @@ final class GraphRackControls: NSView, NSTableViewDataSource, NSTableViewDelegat
   }
   static func manualValue(_ p:[String:Any])->Double {(p["manualValue"] as? NSNumber)?.doubleValue ?? (p["value"] as? NSNumber)?.doubleValue ?? 0}
   func refresh(){guard let id=identity else{return};load(id:id,generation:generation)}
+  func refreshSnapshot() {
+    guard let id=identity else{return}
+    if pending || editingParameter{refreshAfterEdit=true;return}
+    load(id:id,generation:generation,preserveMessage:true)
+  }
   private func load(id:String,generation:Int,preserveMessage:Bool=false,attempt:Int=0) {
     readGeneration+=1;let read=readGeneration
     if !preserveMessage{message.stringValue="Loading parameters…"}
@@ -232,7 +237,7 @@ final class GraphRackControls: NSView, NSTableViewDataSource, NSTableViewDelegat
   }
   private func updateEffective(_ label:NSTextField,parameter p:[String:Any]) {
     let value=(p["effectiveValue"] as? NSNumber)?.doubleValue
-    let text=value.map{"Effective "+Self.formatted($0,parameter:p)} ?? (recipeMode ? "Effective per copy":"Effective unavailable")
+    let text=value.map{"Last read "+Self.formatted($0,parameter:p)} ?? (recipeMode ? "Effective per copy":"Effective unavailable")
     if label.stringValue != text{label.stringValue=text}
     let tip=value.map{"Last host read: \($0) \(p["unitLabel"] as? String ?? ""). Includes currently scheduled automation and modulation. Inspect effective value for a live time trace."} ?? "This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value."
     if label.toolTip != tip{label.toolTip=tip}
@@ -339,10 +344,11 @@ final class GraphRackControls: NSView, NSTableViewDataSource, NSTableViewDelegat
       guard let self,self.identity==id,self.generation==version else{return};self.pending=false
       guard let result=response["result"] as? [String:Any] else{self.queued=[:];self.onGesture?(false);self.gestureActive=false;self.message.stringValue=(response["error"] as? [String:Any])?["message"] as? String ?? "Parameter edit failed";self.load(id:id,generation:version,preserveMessage:true);return}
       self.revision=result["revision"] as? String ?? self.revision
+      self.refreshAfterEdit=true
       self.message.stringValue="Parameter updated · menus offer automation and effective values."
       if let i=self.values.firstIndex(where:{($0["id"] as? NSNumber)?.uint32Value==parameter}){self.values[i]["manualValue"]=value;if self.values[i]["effectiveValue"]==nil{self.values[i]["value"]=value}}
       if let key=self.queued.keys.sorted().first,let amount=self.queued.removeValue(forKey:key){self.set(key,value:amount)}
-      else if !self.gestureActive{self.onGesture?(false);if self.refreshAfterEdit{self.refresh()}}
+      else if !self.gestureActive{self.onGesture?(false);if self.refreshAfterEdit{self.refreshSnapshot()}}
     }
   }
   func updateBypass(_ value:Bool){guard !bypassPending else{return};confirmedBypass=value;let state:NSControl.StateValue=value ? .on:.off;if enabled.state != state{enabled.state=state}}

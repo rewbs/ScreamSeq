@@ -8,11 +8,16 @@ Json mixer(const MixerGraph &g) {
   }
   for (const auto &r : g.instruments) instruments.push_back({{"plugin",r.plugin},{"target",r.target ? nativeID(r.target) : ""},{"output",r.output}});
   for (const auto &r : g.sidechains) sidechains.push_back({{"source",nativeID(r.source)},{"plugin",r.plugin},{"input",r.input},{"gainDB",r.gainDB},{"preFader",r.preFader},{"enabled",r.enabled}});
-  return {{"buses",buses},{"instruments",instruments},{"sidechains",sidechains},{"detached",g.detached}};
+  Json chains=Json::array();for(const auto &chain:g.detachedChains)chains.push_back({{"id",nativeID(chain.id)},{"plugins",chain.plugins}});
+  Json connections=Json::array();for(const auto &r:g.pluginConnections)connections.push_back({{"source",r.source},{"output",r.output},{"target",r.target},{"input",r.input},{"gainDB",r.gainDB},{"enabled",r.enabled}});
+  return {{"pluginConnections",connections},{"buses",buses},{"instruments",instruments},{"sidechains",sidechains},{"detached",g.detached},{"detachedChains",chains},{"disconnectedMainInputs",g.disconnectedMainInputs},{"masterOutputDisconnected",g.masterOutputDisconnected}};
 }
 MixerGraph decodeMixer(const Json &v, unsigned version) {
   MixerGraph g;
   if(v.contains("detached"))for(const auto &plugin:items(v,"detached",240))g.detached.push_back(text(plugin,128));
+  if(v.contains("detachedChains"))for(const auto &value:items(v,"detachedChains",64)){MixerDetachedChain chain;chain.id=decodeID(field(value,"id"));for(const auto &id:items(value,"plugins",32))chain.plugins.push_back(text(id,128));g.detachedChains.push_back(std::move(chain));}
+  if(v.contains("disconnectedMainInputs"))for(const auto &id:items(v,"disconnectedMainInputs",240))g.disconnectedMainInputs.push_back(text(id,128));
+  if(v.contains("masterOutputDisconnected"))g.masterOutputDisconnected=boolean(v.at("masterOutputDisconnected"));
   for (const auto &b : items(v,"buses",240)) {
     MixerBus bus; bus.id = decodeID(field(b,"id")); bus.kind = MixerBusKind(enumIndex(field(b,"kind"),MIXER_NAMES));
     bus.name = text(field(b,"name"),256); bus.color = u32(b,"color",0,0xffffff);
@@ -27,9 +32,10 @@ MixerGraph decodeMixer(const Json &v, unsigned version) {
     g.buses.push_back(std::move(bus));
   }
   for (const auto &r : items(v,"instruments",128)) g.instruments.push_back({text(field(r,"plugin"),128),field(r,"target")=="" && version>=15 ? 0 : decodeID(field(r,"target")),u32(r,"output",0,63)});
-  if (version >= 4) for (const auto &r : items(v,"sidechains",128)) g.sidechains.push_back({decodeID(field(r,"source")),text(field(r,"plugin"),128),u32(r,"input",1,63),real(r,"gainDB",-96,12),boolean(field(r,"preFader")),boolean(field(r,"enabled"))});
+  if (version >= 4) for (const auto &r : items(v,"sidechains",128)) g.sidechains.push_back({decodeID(field(r,"source")),text(field(r,"plugin"),128),u32(r,"input",0,63),real(r,"gainDB",-96,12),boolean(field(r,"preFader")),boolean(field(r,"enabled"))});
   else need(!v.contains("sidechains"),"Legacy mixer cannot contain sidechains");
   if (version < 10) for (const auto &r : g.instruments) for (const auto &b : g.buses) need(std::find(b.inserts.begin(),b.inserts.end(),r.plugin) == b.inserts.end(),"Legacy mixer cannot contain effect-output routes");
+  if(v.contains("pluginConnections"))for(const auto &r:items(v,"pluginConnections",256))g.pluginConnections.push_back({text(field(r,"source"),128),u32(r,"output",0,63),text(field(r,"target"),128),u32(r,"input",0,63),real(r,"gainDB",-96,12),boolean(field(r,"enabled"))});
   return g;
 }
 #undef MIXER_NAMES

@@ -1978,20 +1978,21 @@ nesting fail atomically. Cloning a library definition allocates fresh node and
 group IDs and remaps parent/membership references. `graph.update` preserves
 omitted group metadata, like omitted existing plugin state. Boundary edits alone
 keep playback running. These methods package nodes inside reusable definitions;
-the song-rack counterparts below package existing rack processors.
+the song-rack counterparts below package existing rack effects and modulation sources.
 
 `graph.group.export` takes `graph`, `group`, optional `name`/`number`, and the usual `expectedRevision`/`dryRun`. It creates an independent library recipe with fresh processor/group identities; it never replaces the original group or assignments. Enclosed modulation and nested groups are copied. Each incoming audio cable becomes a distinct boundary input, while outgoing taps become boundary outputs; gains on internal/input cables are preserved. External modulation dependencies and groups without a connected audio output are rejected before any edit. Publishing an unused library copy does not restart playback. `graph.group.update` moves descendants with their boundary, matching the native group drag.
 
 ### Song processing groups
 
 `graph.get.groups` contains `{id, parent, name, x, y, nodes}` boundaries around
-existing rack effects. Members use `plugin:<instanceID>` keys, and a member has
+existing rack effects and modulation sources. Members use `plugin:<instanceID>` or
+`source:n<ID>` keys, and a member has
 one immediate owner. Root `parent` is the empty string. Grouping never changes
 rack ownership, mixer routes, plugin state, automation or DSP order.
 
 - `graph.song.group.create {nodes?, groups?, parent?, name?, positions?}` packages
-  sibling rack effects and/or child group IDs. At least one member is required.
-  Optional `positions:[{node,x,y}]` captures only the selected effects' initial
+  sibling rack effects, modulation sources and/or child group IDs. At least one member is required.
+  Optional `positions:[{node,x,y}]` captures only the selected nodes' initial
   positions in the same transaction. Instruments and mixer buses remain outside.
 - `graph.song.group.update {group, name?, x?, y?}` renames or moves the boundary
   and every descendant, retaining their relative positions.
@@ -2001,7 +2002,9 @@ rack ownership, mixer routes, plugin state, automation or DSP order.
   child boundaries return to the former parent; processors and cables remain.
 - `graph.song.group.export {group, name?, number?}` saves an independent reusable
   definition. It currently requires one consecutive effect chain on one bus,
-  one to 62 effects, with no missing or bypassed member. The saved baseline and
+  one to 62 effects, with no missing member. Groups containing song modulation
+  sources are rejected until their song scopes can be preserved in a reusable
+  recipe; no source or envelope is silently omitted. The saved baseline and
   manual parameter overrides are copied, not the current automated value.
   Enabled auxiliary buses become exposed inputs/outputs. External song-cable
   gains and pre/post taps remain with the original song routing; they are not
@@ -2012,6 +2015,10 @@ Undo/Redo. Invalid membership, mixed depths, cycles and unsupported exports are
 rejected before commit. No-op updates retain revision/history. Both native
 codecs preserve groups; the Windows graph adapter implements the same methods.
 The Mac canvas resolves boundary sockets to original rack/port identities.
+`plugin.remove` accepts optional `sources:[nID]` when deleting a mixed processor/
+modulation group, so all members, structural routes and empty groups share one
+Undo. Source-only deletion uses `graph.song.source.remove`; both clean group
+membership and source envelope links.
 
 ### Song modulation into rack parameters
 
@@ -2124,11 +2131,10 @@ token retains independent transactions. The shared-plugin sidebar uses this path
 Each connection uses its stable semantic identity: `output` or `send` has `source`/`target` bus IDs;
 `graph-input` adds `input`, `graph-output` adds `output`; `plugin-input` has `source`, `plugin`, `input`;
 `plugin-output` has `plugin`, `target`, `output`. Graph auxiliary ports are 1–63; plugin ports are 0–63.
-A batch removes up to 512 explicit cables in one Undo. Duplicate, stale, missing, and unsupported
+An insert cable uses `kind:"insert"`, its `source` owner ID and target `plugin`; the terminal uses `kind:"master-output"` and Master `source`. A batch removes up to 512 cables in one Undo. Duplicate, stale, missing, and unsupported
 references reject the whole operation. An empty array is a no-op. Unselected fan-out branches remain
 intact; cutting an instrument’s last destination saves an explicit disconnected output, preventing
-an accidental reconnection to Master. Fixed rack insert wires cannot be cut independently; use
-processor movement or Delete and heal instead. On macOS, an edit that cannot be prepared for the
+an accidental reconnection to Master. Insert and final-output cuts preserve upstream processing and do not heal another path. On macOS, an edit that cannot be prepared for the
 active engine is rejected without changing the document or interrupting playback.
 
 ### Visual graph annotations and reroute geometry
@@ -2271,8 +2277,28 @@ actual source or contribution values, including muted contributions, rather than
 vendor-internal modulation. They do not claim to preserve every extremum between
 endpoints. `parameter.activity.*` remains the final parameter/provenance monitor.
 
+Note Envelope source records additionally contain
+`noteGate:{held,on,off,retrigger,lastFrame,scope:"aggregate-envelope-gate"}`.
+These cumulative, saturating counters describe this copy's aggregate envelope
+gate opens, closes and retriggers, not raw MIDI messages or polyphonic voice
+counts. `lastFrame` is the first rendered sample after the latest gate event, or
+null before any event. Repeated unchanged gates do not count again. Retained
+source identities carry their history through a live rebuild; a newly added
+source starts with no historical events. The separate note-routing activity API
+remains the place to inspect actual routed note ownership.
+
 Copy membership changes when its prepared runtime actually adopts. A removed
 node/cable becomes unavailable; a retained key never substitutes another copy.
 Inactive copies continue to process their own silence, and are not a proxy for
 the summed channel signal. Scope/Listen inspect internal processing before the
 outer wet/dry or structural transition mix.
+
+### Detached effect chains and exact cable cuts
+
+`mixer.inserts.detach` accepts 1–32 consecutive effects in their current processing order. Their original serial path is healed once, while the detached processors keep their internal order and explicit auxiliary cables. A `detachedChains` mixer record has a stable `id` and ordered `plugins`; it is not a user-facing bus. `mixer.inserts.move.target` also accepts this chain ID. Empty chains are pruned after a move. Supplied positions are part of the same Undo step, including a fully selected processing-group position.
+
+`graph.connections.remove` accepts `{kind:"insert",source:ownerID,plugin:targetPluginID}` and `{kind:"master-output",source:masterID}` alongside other cable kinds. These are exact cuts: they never heal or reroute another branch. `disconnectedMainInputs` masks only each listed effect's implicit serial input; explicit inputs can still feed it. `masterOutputDisconnected` silences only the final output, retaining upstream processing and observations. Reconnect an insert by moving it before itself on the same owner, or reconnect the terminal using `mixer.bus.set {bus:masterID,mainOutputConnected:true}`. All writes support revision guards, dry-run validation and unified Undo.
+
+Direct plugin audio uses `mixer.plugin.connection.set` with stable `source` and `target` plugin IDs, explicit logical `output` / `input` slice numbers, optional `gainDB` (−96…12) and `enabled`. This adds one contribution while preserving the insert owner and all other fan-in/out. Input `0` adds to the existing Main input; a serial cable can be cut separately when replacement rather than summing is intended. The optional `replace:{source,output,target,input}` rewires exactly one existing contribution atomically and preserves its controls unless supplied. A stale replacement or duplicate destination tuple rejects the whole edit. `dryRun` validates without history. Instrument audio-input destinations currently reject explicitly; instrument audio outputs can feed effect inputs.
+
+`graph.connections.remove` accepts `{kind:"plugin-connection",source,output,target,input}` alongside other cable types in one Undo transaction. `mixer.get` / `graph.get.mixer` include `pluginConnections`; native save/load retains them. The graph's “Direct plugin audio” connection inspector edits both endpoints, gain and enabled state; Option-drag into Main adds a contribution without moving the insert chain. Exact adopted route observations use `kind:"plugin-connection"`, canvas `plugin:<id>` source/target keys and both slice numbers. An endpoint's aggregate meter is never substituted for missing route telemetry.

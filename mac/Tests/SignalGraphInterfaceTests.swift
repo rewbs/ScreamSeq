@@ -228,7 +228,7 @@ extension InterfaceTests {
     controls.context(graph:"recipe",node:"effect")
     try require(parameterCalls==["graph.plugin.get"] && controls.parametersView.values.count==2,"Selecting a graph effect loads controls without an enable button")
     controls.parametersView.set(7,value:18)
-    try require(parameterCalls.last=="graph.plugin.set" && (editedValues.first?["id"] as? NSNumber)?.uint32Value==7 && editedValues.first?["value"] as? Double==18,"Graph parameter end editing commits to its stable parameter")
+    try require(Array(parameterCalls.suffix(2))==["graph.plugin.set","graph.plugin.get"] && (editedValues.first?["id"] as? NSNumber)?.uint32Value==7 && editedValues.first?["value"] as? Double==18,"Graph parameter end editing commits to its stable parameter and refreshes the host reading")
     let count=parameterCalls.count
     controls.parametersView.set(7,value:18)
     try require(parameterCalls.count==count,"Return and focus loss do not duplicate the graph parameter edit")
@@ -788,7 +788,7 @@ extension InterfaceTests {
     editor.detachNodes(["plugin:dist"],positions:[("plugin:dist",810,390)],remove:false)
     try require(method=="mixer.inserts.detach" && params["plugins"] as? [String]==["dist"] && (params["positions"] as? [[String:Any]])?.first?["x"] as? Double==810 && params["expectedRevision"] != nil,"Option-dragging one song insert sends one captured-revision detach and layout transaction")
     let detachCalls=calls;editor.detachNodes(["plugin:dist","plugin:comp"],positions:[],remove:false)
-    try require(calls==detachCalls && editor.status.stringValue.contains("one rack effect"),"Unsupported loose chains remain connected with an explicit reason")
+    try require(calls==detachCalls+1 && method=="mixer.inserts.detach" && params["plugins"] as? [String]==["dist","comp"],"Detaching a selected serial pair keeps both processors in one ordered loose chain")
     let before=calls
     editor.nodeSearch.stringValue="compressor";editor.changeNodeFilter()
     try require(editor.canvas.nodes.map(\.id)==["plugin:comp"] && editor.canvas.edges.isEmpty && calls==before,"Text filtering hides unmatched nodes and cables without mutating the song")
@@ -827,7 +827,7 @@ extension InterfaceTests {
     try require(editor.chosen(editor.source)=="n1" && editor.chosen(editor.destination)=="plugin:comp" && editor.inputChoice.selectedItem?.representedObject as? UInt32==1,"Cable gestures keep the named connection form on their actual endpoints and port")
     let beforeInvalidSource=calls
     editor.connectPorts("plugin:comp","plugin:comp",out:1,input:1,modulation:false)
-    try require(calls==beforeInvalidSource && editor.status.stringValue.contains("bus first"),"Unsupported plugin-output to detector gestures explain the bus step instead of routing the wrong signal")
+    try require(calls==beforeInvalidSource && editor.status.stringValue.contains("itself"),"Direct plugin patching rejects a self-cycle before sending a mutation")
     editor.selectedID="plugin:comp";editor.useConnectedDetector();try require(method=="plugin.parameters.set" && (params["values"] as? [[String:Any]])?.first?["value"] as? Int==2,"Existing compressors expose a graph action to follow their connected detector")
     editor.canvas.addingMainInput=true;editor.connectPorts("n1","plugin:comp",out:0,input:0,modulation:false);editor.canvas.addingMainInput=false
     try require(method=="mixer.sidechains.set" && params["input"] as? Int==0,"Option-drag can sum an additional channel into an insert main input")
@@ -1069,7 +1069,7 @@ extension InterfaceTests {
       method="";editor.cutConnections([cable]);let references=params["connections"] as? [[String:Any]]
       try require(method=="graph.connections.remove" && references?.count==1 && references?.first?["source"] as? String==editor.songConnections[cable]["source"] as? String,"Song cuts use semantic endpoints behind collapsed group boundary sockets")
       if let fixed=editor.songConnections.firstIndex(where:{$0["kind"] as? String=="insert"}) {
-        method="";editor.cutConnections([cable,fixed]);try require(method.isEmpty && editor.status.stringValue.contains("No cables cut"),"Mixed explicit and implicit cable strokes reject the entire gesture")
+        method="";editor.cutConnections([cable,fixed]);let cuts=params["connections"] as? [[String:Any]];try require(method=="graph.connections.remove" && cuts?.count==2 && Set(cuts?.compactMap{$0["kind"] as? String} ?? [])==["output","insert"],"Mixed explicit and implicit cable strokes use one exact-cut transaction")
       }
     } else {throw InterfaceFailure(message:"Missing explicit song output fixture")}
     method="";editor.canvas.selectNodes(["n1","n300"]);editor.canvas.onDelete?()

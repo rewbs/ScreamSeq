@@ -45,9 +45,7 @@
         } else if([method isEqual:@"graph.song.source.remove"]) {
           allowed(@[@"nodes",@"dryRun"]);std::set<uint64_t> removed;
           for(id raw:array(p[@"nodes"],64))require(removed.insert(source(raw).node.id).second,"Duplicate source identity");
-          std::erase_if(graph.songSources,[&](const auto &s){return removed.contains(s.node.id);});
-          std::erase_if(graph.songModulation,[&](const auto &e){return removed.contains(e.source);});
-          for(auto id:removed){const auto key="source:"+std::string(nativeID(id).UTF8String);graph.layout.erase(key);removeSignalPresentationNode(graph.presentation,key);}
+          next.removeSongSources(std::vector<uint64_t>(removed.begin(),removed.end()));
         } else if([method isEqual:@"graph.song.modulation.set"]) {
           allowed(@[@"source",@"plugin",@"parameter",@"minimum",@"maximum",@"enabled",@"quantized",@"replace",@"dryRun"]);nodeID=source(p[@"source"]).node.id;
           const auto plugin=std::string(string(p[@"plugin"],256).UTF8String);const auto parameter=uint32_t(integer(p[@"parameter"],0,UINT32_MAX));

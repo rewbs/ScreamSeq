@@ -62,6 +62,12 @@ extension InterfaceTests {
     try require(editor.signalReadings.ports.isEmpty && editor.copyObservation.isHidden,"Recipe ports do not leak into song-node aggregate readings")
     var control=port("n101",0.4,"control");control.removeValue(forKey:"copy");control["node"]="control";editor.showSignals(["active":true,"ports":[control]])
     try require(editor.signalReadings.primaryPort("control",output:true)==nil && editor.signalReadings.ports[0].summary(active:true).contains("0.4"),"Control values cannot be offered as Listen/Scope audio or described in dBFS")
+    control["noteGate"]=["scope":"aggregate-envelope-gate","held":true,"on":2,"off":1,"retrigger":3,"lastFrame":112]
+    editor.showSignals(["active":true,"ports":[control]])
+    let gate=editor.signalReadings.ports[0]
+    try require(gate.noteGate?.held==true && gate.summary(active:true).contains("2 opens / 1 closes / 3 retriggers") && gate.summary(active:true).contains("envelope gate"),"Note-envelope telemetry labels aggregate gate counts instead of implying MIDI voice counts")
+    control["fresh"]=false;editor.showSignals(["active":true,"ports":[control]])
+    try require(!editor.signalReadings.ports[0].summary(active:true).contains("retriggers"),"Retired measurements cannot advertise old gate activity as current")
   }
 }
 

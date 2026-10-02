@@ -1060,6 +1060,9 @@ public:
 	PLUGINDEX (*nativeSamplePlugin)(void *, const ModChannel &, CHANNELINDEX) noexcept = nullptr;
 	void *nativeMixContext = nullptr;
 	void (*nativeMixObserver)(void *, const PlayState &, uint32) noexcept = nullptr;
+	// Host topology handoffs must occur before either samples or plugin sources
+	// for the next chunk are generated. Absent hook preserves the stock chunk.
+	uint32 (*nativeMixLimit)(void *, uint32) noexcept = nullptr;
 	// Prepared host pitch curves for this mix chunk. Only explicitly controlled
 	// channels use the per-sample path; legacy songs keep their normal mixer.
 	std::array<const double *, MAX_BASECHANNELS> nativePitchRatios{};

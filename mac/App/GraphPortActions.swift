@@ -77,7 +77,8 @@ extension SignalGraphEditor {
         let from=canonicalPort(a.key),to=canonicalPort(b.key)
         if [from.node,to.node].contains(where:{$0.hasPrefix("instrument:") || $0.hasPrefix("instrument-graph:")}) {return "Assign an instrument graph; its output follows the note’s channel"}
         if songNodeGraph[to.node] != nil,to.number==0 {return "Assign this reusable channel copy; open it to edit its internal inputs"}
-        if to.number>0,!canSumSongInput(from){return "Sidechain inputs require a channel/return output or its final insert; use a subgraph for direct processor patching"}
+        if let plugin=songNodePlugin[to.node],rackPlugins.contains(where:{$0["id"] as? String==plugin && $0["isInstrument"] as? Bool==true}) {return "Plugin instrument audio inputs are not scheduled yet; choose an effect input"}
+        if to.number>0,!(songNodePlugin[from.node] != nil && songNodePlugin[to.node] != nil),!canSumSongInput(from){return "Sidechain inputs require a channel/return output or its final insert; use a subgraph for direct processor patching"}
       }
       return nil
     }
@@ -133,10 +134,10 @@ extension SignalGraphEditor {
     }
     if graphID==nil,!from.modulation,!to.modulation,to.number==0,songNodePlugin[to.node] != nil {
       let move=from.number==0 ? insertMove(from.node,to.node):nil
-      let sum=canSumSongInput(from)
+      let sum=canSumSongInput(from) || songNodePlugin[from.node] != nil
       chooseTarget(title:"How should this Main input connect?",entries:[
         .init(id:"move",title:"Move chain here",detail:"Move this effect and its following inserts to the source channel · one Undo",keywords:"move insert ownership",unavailable:move==nil ? "This output cannot own the selected effect chain":nil),
-        .init(id:"sum",title:"Add / sum input",detail:"Keep the effect chain in place and mix another channel into Main in · Option-drag equivalent",keywords:"mix add sum input",unavailable:sum ? nil:"Summing requires a channel/return output or the final insert on that bus")
+        .init(id:"sum",title:"Add / sum input",detail:"Keep the effect chain in place and mix the exact source into Main in · Option-drag equivalent",keywords:"mix add sum input",unavailable:sum ? nil:"Summing requires a channel/return output or a plugin audio output")
       ]){id in commit(id=="sum")}
     }else{commit(false)}
   }

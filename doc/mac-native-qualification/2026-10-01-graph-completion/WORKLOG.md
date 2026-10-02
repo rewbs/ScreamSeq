@@ -132,3 +132,37 @@ copying that test dependency fixed setup. No production source change was needed
 fixed a 4096-frame write into a 32-sample modulation scratch area when a group had
 stateful sources but no parameter targets. Its maximum-block PCM/realtime
 regression passes: [results](logs/group-scratch-tests.log).
+
+## Direct routing and live preset checkpoint
+
+The shared processor DAG now supports exact rack-effect input/output cables,
+including fan-in/out, stable channel slices and per-route delay compensation.
+Native AU/VST3 fixtures passed live add/remove and exact observation retirement.
+Root song-group boundary bypass has rendered fade coverage; mappings requiring
+additional cross-branch dry-path latency are still pending.
+
+Effect preset replacement prepares a vendor instance off-thread, preserves the
+existing scheduling facade and fades to the new processor while playback runs.
+Tests cover active slides, held final values, subsequent manual edits and an
+unrelated later routing publication that must not replay the preset. Instrument
+preset replacement remains stopped-only pending the held-note behavior choice.
+
+All eight targeted suites passed: native-mixer, native-signal-graph, rack-preset,
+plugin-latency, signal-graph-session, windows-mixer-document, song-group-runtime,
+and mixer-plugin-routing. The Windows-named adapter tests here ran on macOS;
+native Windows build/worker execution is separately queued in CI. Logs are
+[build](logs/direct-preset-build.log),
+[native tests](logs/direct-preset-native-tests.log), and
+[other tests](logs/direct-preset-other-tests.log).
+
+The sample-copy migration test exposed an AU clock regression at a quiet topology
+handoff. Copies now use the cached engine chunk time instead of a newly activated
+mixer's unadvanced clock. Retained-state budget accounting no longer double-counts
+prepared control/adapter storage; the 256 MiB cap is unchanged. Repeated-edit
+transient accounting remains under review.
+
+Native UI recheck in a separate copied QA bundle confirmed immediate parameter
+editing, refreshed “Last read” values, restored graph selection/filter through
+“Back to graph”, and Master placed to the right. This interim bundle predates the
+latest direct-route runtime. Final coherent presentation/audio qualification is
+still required; FPS is excluded and Windows desktop/device checks are deferred.

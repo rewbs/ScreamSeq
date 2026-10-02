@@ -39,6 +39,9 @@ extension InterfaceTests {
     let host=NSWindow(contentRect:NSRect(x:0,y:0,width:1000,height:740),styleMask:[.titled],backing:.buffered,defer:false)
     host.isReleasedWhenClosed=false;host.contentView=editor;editor.frame=NSRect(x:0,y:0,width:1000,height:740);editor.layoutSubtreeIfNeeded()
     try require(editor.trace.bounds.height>=180 && editor.table.bounds.width>400,"Parameter trace and source table remain usable in the full panel")
+    host.setContentSize(NSSize(width:370,height:860));editor.frame=NSRect(x:0,y:0,width:370,height:860);editor.layoutSubtreeIfNeeded()
+    try require(editor.viewMode.bounds.width>=editor.viewMode.intrinsicContentSize.width-1 && editor.detailMode.bounds.width>=editor.detailMode.intrinsicContentSize.width-1 && editor.reading.bounds.width>=340,"A docked parameter panel keeps its mode labels and effective value readable without competing transport buttons")
+    host.setContentSize(NSSize(width:1000,height:740));editor.frame=NSRect(x:0,y:0,width:1000,height:740);editor.layoutSubtreeIfNeeded()
     if let index=CommandLine.arguments.firstIndex(of:"--snapshots"),index+1<CommandLine.arguments.count,let bitmap=editor.bitmapImageRepForCachingDisplay(in:editor.bounds){editor.cacheDisplay(in:editor.bounds,to:bitmap);if let png=bitmap.representation(using:.png,properties:[:]){let folder=URL(fileURLWithPath:CommandLine.arguments[index+1]);try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true);try png.write(to:folder.appendingPathComponent("ParameterActivityEditor.png"))}}
     editor.detailMode.selectedSegment=2;editor.changeDetail();answer(["points":[["frame":48000,"value":-40]],"total":1])
     editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)

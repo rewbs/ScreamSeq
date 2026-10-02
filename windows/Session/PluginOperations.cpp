@@ -361,12 +361,14 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     if(!dry)commit(std::move(rack),std::move(automation),false,false,{},&next);return {{"slot",index},{"dryRun",dry}};
   }
   if(method=="plugin.remove") {
-    keys(p,{"slot","plugins","dryRun"});need(p.contains("slot")!=p.contains("plugins"),"Specify a slot or a list of plugin identities");
+    keys(p,{"slot","plugins","sources","dryRun"});need(p.contains("slot")!=p.contains("plugins"),"Specify a slot or a list of plugin identities");
     std::set<std::string> removed;
     if(p.contains("slot")){need(!rack.empty(),"Plugin rack is empty");removed.insert(rack.at(integer(p.at("slot"),0,rack.size()-1)).at("instanceID").get<std::string>());}
     else{const auto &ids=p.at("plugins");need(ids.is_array()&&!ids.empty()&&ids.size()<=maximumNativePlugins,"Select at least one plugin");
       for(const auto &raw:ids){const auto id=text(raw,128);need(removed.insert(id).second&&std::any_of(rack.begin(),rack.end(),[&](const auto &entry){return entry.at("instanceID")==id;}),"Select distinct existing plugins");}}
-    auto next=document_.native();for(const auto &id:removed)next.removePluginRoutes(id);next.validate(document_.song());
+    auto next=document_.native();std::vector<uint64_t> sources;
+    if(p.contains("sources")){const auto &ids=p.at("sources");need(ids.is_array()&&ids.size()<=64,"Select at most 64 modulation sources");for(const auto &raw:ids)sources.push_back(nativeIdentity(raw));}
+    next.removeSongSources(sources);for(const auto &id:removed)next.removePluginRoutes(id);next.validate(document_.song());
     std::vector<size_t> slots(rack.size(),SIZE_MAX);Json remaining=Json::array();
     for(size_t i=0;i<rack.size();++i)if(!removed.contains(rack[i].at("instanceID").get<std::string>())){slots[i]=remaining.size();remaining.push_back(std::move(rack[i]));}
     rack=std::move(remaining);remaining=Json::array();

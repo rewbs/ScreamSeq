@@ -62,7 +62,10 @@ void validateSongSignalGroups(const SignalGraph &graph) {
     require(g.nodes.size()<=240,"Too many group members");
     require(g.dryRoutes.size()<=256,"Too many group dry mappings");
     for(const auto &r:g.dryRoutes)for(const auto *p:{&r.input,&r.output})require(text(p->kind,32)&&text(p->source,256)&&text(p->target,256)&&text(p->plugin,256)&&text(p->tap,32)&&p->input<64&&p->output<64,"Invalid song group dry boundary");
-    for(const auto &key:g.nodes)require(key.starts_with("plugin:")&&key.size()>7&&text(key,256)&&owned.insert(key).second,"A rack processor belongs to at most one immediate song group");
+    for(const auto &key:g.nodes) {
+      const bool source=std::any_of(graph.songSources.begin(),graph.songSources.end(),[&](const auto &s){return key=="source:n"+std::to_string(s.node.id);});
+      require(((key.starts_with("plugin:")&&key.size()>7)||source)&&text(key,256)&&owned.insert(key).second,"A rack effect or existing modulation source belongs to at most one immediate song group");
+    }
   }
   for(const auto &g:graph.groups) {
     std::set<uint64_t> seen{g.id};auto parent=g.parent;
@@ -78,9 +81,10 @@ std::set<uint64_t> songGroupDescendants(const SignalGraph &graph,uint64_t id) {
   return result;
 }
 }
+std::vector<std::string> songSignalGroupNodes(const SignalGraph &graph,uint64_t id){const auto groups=songGroupDescendants(graph,id);std::vector<std::string> result;for(const auto &g:graph.groups)if(groups.contains(g.id))result.insert(result.end(),g.nodes.begin(),g.nodes.end());return result;}
 void groupSongSignalNodes(SignalGraph &graph,const std::vector<std::string> &nodes,const std::vector<uint64_t> &children,uint64_t id,uint64_t parent,std::string name) {
   auto next=graph;validateSongSignalGroups(next);
-  require(!nodes.empty()||!children.empty(),"Select rack processors or processing groups to package");
+  require(!nodes.empty()||!children.empty(),"Select rack effects, modulation sources or processing groups to package");
   require(id&&std::none_of(next.groups.begin(),next.groups.end(),[&](const auto &g){return g.id==id;}),"Allocate a fresh processing group identity");
   require(!parent||std::any_of(next.groups.begin(),next.groups.end(),[&](const auto &g){return g.id==parent;}),"Parent processing group does not exist");
   SignalSongGroup group{id,parent,std::move(name),100000,100000,{}};
@@ -91,6 +95,7 @@ void groupSongSignalNodes(SignalGraph &graph,const std::vector<std::string> &nod
     require((owner==next.groups.end()?0:owner->id)==parent,"Package only siblings at this graph depth");
     if(owner!=next.groups.end())std::erase(owner->nodes,key);
     group.nodes.push_back(key);
+    if(!next.layout.contains(key))for(const auto &source:next.songSources)if(key=="source:n"+std::to_string(source.node.id))next.layout[key]={source.node.x,source.node.y};
     if(auto position=next.layout.find(key);position!=next.layout.end()){group.x=std::min(group.x,position->second[0]);group.y=std::min(group.y,position->second[1]);}
   }
   for(auto child:children) {
@@ -129,10 +134,14 @@ SignalDefinition extractSongSignalGroup(const SignalGraph &graph,const MixerGrap
   validateSongSignalGroups(graph);const auto descendants=songGroupDescendants(graph,groupID);
   const auto &group=*std::find_if(graph.groups.begin(),graph.groups.end(),[&](const auto &g){return g.id==groupID;});
   std::set<std::string> selected;
-  for(const auto &g:graph.groups)if(descendants.contains(g.id))for(const auto &key:g.nodes)selected.insert(key.substr(7));
+  for(const auto &g:graph.groups)if(descendants.contains(g.id))for(const auto &key:g.nodes) {
+    require(key.starts_with("plugin:"),"This group contains song modulation sources; export its audio processors separately until source scopes can be mapped into a reusable recipe");
+    selected.insert(key.substr(7));
+  }
   require(!selected.empty()&&selected.size()<=62,"Save a group containing one to 62 rack effects");
+  require(std::none_of(mixer.disconnectedMainInputs.begin(),mixer.disconnectedMainInputs.end(),[&](const auto &id){return selected.contains(id);})&&std::none_of(mixer.pluginConnections.begin(),mixer.pluginConnections.end(),[&](const auto &r){return selected.contains(r.source)||selected.contains(r.target);}),"This group has cut or direct plugin cables; use its song group until all boundary routes can be preserved in a reusable recipe");
   std::vector<std::string> order;const MixerBus *owner=nullptr;
-  std::set<std::string> assigned;for(const auto &bus:mixer.buses)assigned.insert(bus.inserts.begin(),bus.inserts.end());
+  const auto loose=detachedMixerPlugins(mixer);std::set<std::string> assigned(loose.begin(),loose.end());for(const auto &bus:mixer.buses)assigned.insert(bus.inserts.begin(),bus.inserts.end());
   for(const auto &bus:mixer.buses) {
     auto inserts=bus.inserts;
     if(bus.kind==MixerBusKind::Master)for(const auto &[key,recipe]:effects)if(!assigned.contains(key)&&std::find(mixer.detached.begin(),mixer.detached.end(),key)==mixer.detached.end())inserts.push_back(key);
@@ -324,21 +333,35 @@ void insertSignalNodes(SignalDefinition &definition,const std::vector<uint64_t> 
 void detachSignalNodes(SignalDefinition &definition,const std::vector<uint64_t> &ids,bool remove,std::optional<SignalHealPath> heal) {
   auto next=definition;
   const std::set<uint64_t> selected(ids.begin(),ids.end());
-  require(!selected.empty()&&selected.size()==ids.size()&&selected.size()<=32,"Select 1–32 distinct effects");
-  for(auto id:selected)require(std::any_of(next.nodes.begin(),next.nodes.end(),[&](const auto &n){return n.id==id&&n.kind==SignalNodeKind::Plugin;}),"Only effect processors have a main path to reconnect");
-  std::map<uint64_t,uint64_t> after,before;
-  for(const auto &e:next.audio)if(selected.count(e.source)&&selected.count(e.target)&&e.input==0&&e.output==0) {
-    require(after.emplace(e.source,e.target).second&&before.emplace(e.target,e.source).second,"Select one serial main path; its internal branches are ambiguous");
-  }
-  std::vector<uint64_t> heads;for(auto id:selected)if(!before.count(id))heads.push_back(id);
-  require(heads.size()==1,"Select one connected effect chain");
-  const auto head=heads.front();auto tail=head;size_t count=1;
-  while(after.count(tail)&&count<=selected.size()){tail=after.at(tail);++count;}
-  require(count==selected.size(),"Select one connected effect chain");
+  require(!selected.empty()&&selected.size()==ids.size()&&selected.size()<=64,"Select 1–64 distinct processors or modulation sources");
+  for(auto id:selected)require(std::any_of(next.nodes.begin(),next.nodes.end(),[&](const auto &n){return n.id==id&&n.kind!=SignalNodeKind::Input&&n.kind!=SignalNodeKind::Output;}),"Graph boundary nodes cannot be detached");
   std::vector<size_t> entering,leaving;
-  for(size_t i=0;i<next.audio.size();++i){const auto &e=next.audio[i];
-    if(!selected.count(e.source)&&selected.count(e.target)&&e.input==0){require(e.target==head,"An internal effect has another main source");entering.push_back(i);}
-    if(selected.count(e.source)&&!selected.count(e.target)&&e.output==0){require(e.source==tail,"An internal effect has another main destination");leaving.push_back(i);}
+  if(heal) {
+    // The explicit boundary pair is authoritative. A connected selected
+    // subgraph may branch and include its modulators; never infer a product
+    // of all crossing inputs and outputs or rewrite the unchosen branches.
+    std::set<uint64_t> connected{*selected.begin()};
+    for(size_t pass=0;pass<selected.size();++pass) {
+      auto join=[&](uint64_t source,uint64_t target){if(selected.contains(source)&&selected.contains(target)&&(connected.contains(source)||connected.contains(target))){connected.insert(source);connected.insert(target);}};
+      for(const auto &edge:next.audio)join(edge.source,edge.target);
+      for(const auto &edge:next.modulation)join(edge.source,edge.target);
+    }
+    require(connected==selected,"Select one connected processing subgraph to detach");
+    for(size_t i=0;i<next.audio.size();++i){const auto &e=next.audio[i];if(!selected.contains(e.source)&&selected.contains(e.target))entering.push_back(i);if(selected.contains(e.source)&&!selected.contains(e.target))leaving.push_back(i);}
+  } else {
+    for(auto id:selected)require(std::any_of(next.nodes.begin(),next.nodes.end(),[&](const auto &n){return n.id==id&&n.kind==SignalNodeKind::Plugin;}),"Choose the intended boundary path when detaching a subgraph containing modulation sources");
+    std::map<uint64_t,uint64_t> after,before;
+    for(const auto &e:next.audio)if(selected.count(e.source)&&selected.count(e.target)&&e.input==0&&e.output==0)
+      require(after.emplace(e.source,e.target).second&&before.emplace(e.target,e.source).second,"Choose the intended boundary path before detaching an internally branched subgraph");
+    std::vector<uint64_t> heads;for(auto id:selected)if(!before.count(id))heads.push_back(id);
+    require(heads.size()==1,"Select one connected effect chain");
+    const auto head=heads.front();auto tail=head;size_t count=1;
+    while(after.count(tail)&&count<=selected.size()){tail=after.at(tail);++count;}
+    require(count==selected.size(),"Select one connected effect chain");
+    for(size_t i=0;i<next.audio.size();++i){const auto &e=next.audio[i];
+      if(!selected.count(e.source)&&selected.count(e.target)&&e.input==0){require(e.target==head,"Choose the intended boundary path for the additional main source");entering.push_back(i);}
+      if(selected.count(e.source)&&!selected.count(e.target)&&e.output==0){require(e.source==tail,"Choose the intended boundary path for the additional main destination");leaving.push_back(i);}
+    }
   }
   if(heal) {
     auto chosen=[](std::vector<size_t> &edges,std::optional<size_t> selected){

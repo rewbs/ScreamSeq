@@ -69,3 +69,72 @@ hook because groups now prepare runtime boundaries; stop counts remain unchanged
 The earlier n-channel/Notes AppKit snapshot passed at
 `/tmp/screamseq-layout-notes-interface.log`. The new group/copy-observation UI
 suite is being rerun by the parent; no native visual result is claimed here.
+
+### Song source membership and automatic Master placement
+
+Song processing groups now accept existing `source:nID` modulation sources along
+with rack effects. Group movement retains source coordinates; source removal
+prunes group membership and envelope links. Mixed source/effect Delete sends one
+`plugin.remove` transaction with optional `sources`, including dry-run and one
+Undo. Source-only groups use `graph.song.source.remove`. Mixed-control export
+currently rejects with a scope-preservation explanation instead of silently
+omitting its controls.
+
+A Master without a user-saved position now remains to the right of its actual
+upstream audio path when Add creates another processor. Explicitly positioned
+Master and processor cards remain unchanged.
+
+Evidence: `graph-editing` and `signal-group-bypass` passed in
+`/tmp/screamseq-source-group-tests.log`. The full copied AppKit suite passed in
+`/tmp/screamseq-source-groups-interface.log`; manifest
+`/tmp/screamseq-source-groups-interface-snapshot.json`. Native/Windows adapter
+checks and actual UI rewalk are pending at this writing. This interface snapshot
+predates the next broader recipe detach changes.
+
+## Detached-chain and exact cable-cut checkpoint (source written; verification pending)
+
+- Ordered multi-effect detach preserves internal main order, processor identities, control sources, auxiliary input/output branches, and the old chain's explicitly healed serial neighbors. It creates a document-owned detached chain; its silent scheduler root is never a user bus.
+- Recipe detach supports a connected audio/control selection with an explicit ingress/egress healing pair. Unchosen boundary branches remain connected. Ambiguous default inference still rejects rather than multiplying cross-connections.
+- Cutting an insert cable records only its target main-input disconnection. It leaves processor ownership, other cables and clocks intact. The final Master cable has a separate disconnection flag; raw Master observations remain available.
+- API and native UI source includes exact `insert`/`master-output` batch cut identities, multi-effect `mixer.inserts.detach`, detached-chain insertion targets, and `mixer.bus.set.mainOutputConnected`. Context/command catalog exposes reconnect and terminal-cut actions. Codecs/Undo include the new state on both platforms.
+- These statements describe the intended, written implementation. Shared model/API/interface regression runs and hosted PCM qualification must pass before this slice is reported complete. Runtime projection/masking is owned by the audio agent.
+
+### Exact root routing: current scope and qualification boundary
+
+The source implementation now has a dedicated `MixerPluginConnection` route;
+it no longer substitutes a bus route for a plugin-to-plugin cable. The route is
+stable source/output/target/input plus gain and enabled state, independent of
+serial ownership. Its initial target scope is effect processors. The audio
+workstream is compiling the segmented DAG/PDC implementation; final claims
+require the resulting portable, native-host and live-history tests. See the
+following source/UI checkpoint for evidence that has already passed.
+
+Mandatory root-routing gaps still requiring a scheduler/API extension:
+
+- Rack plugin output → a reusable-copy auxiliary input, and reusable-copy
+  auxiliary output → rack plugin input. Existing `graph.routes.set` routes
+  these copy boundaries through bus identities; the new rack connection must
+  not pretend a copy is a rack instance. The UI retains an explicit explanation.
+- Audio-input destinations on plugin instruments. They currently render in
+  the source phase; accepting such a wire requires incorporating the generator
+  into dependency scheduling, port activation and PDC. The new write rejects
+  these targets without changing the document or transport.
+- Audio-derived modulation into a plugin instrument when its follower depends
+  on audio rendered later in the mixer. This requires the same generalized
+  source/dependency scheduling; ordinary independent control sources are a
+  separate already-supported case and should not be conflated with it.
+
+These are musical routing capabilities, not clipboard/UI discoverability limits.
+They remain in the full-graph completion assessment even when the bounded
+rack-effect route checkpoint passes. Validation, note ownership, exact per-copy
+telemetry and audition source identity must remain shared across the extension.
+
+### Exact root plugin-to-plugin audio — source checkpoint
+
+The new shared `MixerPluginConnection` stores stable source/output/target/input, gain and enabled state independently of serial ownership. Both adapters validate actual physical logical-slice catalogs and support atomic upsert/replace, persistence, Undo and exact mixed cable removal. The Mac graph projects the real sockets, supplies keyboard/socket equivalents, edits gain/enable/endpoints in place and retains the original main move-vs-Option-sum distinction. Instrument audio-input destinations explicitly reject until the source scheduler supports them; this is still a mandatory remaining graph capability. Runtime/compiler/PDC and exact observation integration belong to the audio workstream and are not qualified by this model/UI checkpoint.
+
+The copied AppKit suite preceding this slice passed at `/tmp/screamseq-chain-interface.log` with `/tmp/screamseq-chain-interface-snapshot.json`. It includes detached chains, exact Insert/Master cuts, broad recipe detach, visible-name search, effective-value refresh, panel Back and exact-copy observation. Direct-route UI tests are running separately; do not infer their result from that pass.
+
+Action scope retained intentionally: graph clipboard is the reusable-recipe clipboard; song rack duplication provides a fresh independent processor, while mixed song-control groups do not silently convert into library recipes. Root-group export also rejects cut or direct-plugin boundaries that its current contiguous-chain exporter cannot preserve. These cases provide explicit reasons and retain the original document. This is an export scope limit, not a claim that the source graph cannot contain those connections.
+
+Direct-route UI qualification: the complete copied AppKit suite passed, exit 0, `/tmp/screamseq-direct-interface.log`; manifest `/tmp/screamseq-direct-interface-snapshot.json`. All live `mac/App/*.swift` and Swift interface-test hashes matched at completion. It exercises physical slice selection, gain/enable, both-endpoint replacement preserving prior identity/controls, Option-sum vs main chain ownership, keyboard parity, self-cycle rejection, semantic cut and unavailable exact telemetry. Native rendering and direct-route API/codec tests remain pending the segmented runtime checkpoint.

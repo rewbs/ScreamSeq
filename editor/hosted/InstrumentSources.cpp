@@ -97,7 +97,7 @@ void PluginChain::renderInstrumentSources(uint32_t frames,uint64_t position) noe
   if(!mixerTransition_)return;
   if(!mixerTransition_->renderSources(frames,position))failed_=true;
 }
-bool PluginChain::HostedMixerPlan::renderSources(void *opaque,MixerRuntime &runtime,
+bool PluginChain::HostedMixerPlan::renderSources(void *opaque,MixerTransition::Plan &routing,
     uint32_t frames,uint64_t position,bool current) noexcept {
   auto &hosted=*static_cast<HostedMixerPlan *>(opaque);auto &chain=*hosted.owner;
   for(size_t index=0;index<hosted.rack.size();++index){
@@ -112,16 +112,16 @@ bool PluginChain::HostedMixerPlan::renderSources(void *opaque,MixerRuntime &runt
     std::fill_n(chain.tailBuffer_.data(),frames*2,0.f);
     if(!wrapper.process(chain.tailBuffer_.data(),frames,position))return false;
     if(!device.sourceAwake)std::fill_n(chain.tailBuffer_.data(),frames*2,0.f);
-    runtime.instrument(index,0,chain.tailBuffer_.data());
+    routing.instrument(index,0,chain.tailBuffer_.data());
     chain.songFollower(hosted,SIZE_MAX,index,0,chain.tailBuffer_.data(),frames,position);
     const auto &observed=hosted.processorObservations[index];
     if(current)chain.observation_->observe(observed.output[0],chain.tailBuffer_.data(),frames,position);
     for(const auto port:device.outputs){
       const float *samples=device.sourceAwake?device.output(port):nullptr;
-      runtime.instrument(index,port,samples);chain.songFollower(hosted,SIZE_MAX,index,port,samples,frames,position);
+      routing.instrument(index,port,samples);chain.songFollower(hosted,SIZE_MAX,index,port,samples,frames,position);
       if(current && port<64)chain.observation_->observe(observed.output[port],samples,frames,position);
     }
   }
-  return !runtime.failed();
+  return !routing.runtime->failed();
 }
 }

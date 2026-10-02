@@ -68,6 +68,7 @@ Json signalObservationOperation(const std::string &method,const Json &params) {
             {"clipped",v.clipped},{"nonFinite",v.nonFinite}};
         entry["kind"]=port.kind;
         if(port.kind=="control"){entry["value"]=v.value;entry["first"]=v.first;entry["minimum"]=std::min(v.first,v.value);entry["maximum"]=std::max(v.first,v.value);}
+        if(v.noteGate){const auto &g=*v.noteGate;entry["noteGate"]={{"held",g.held},{"on",g.on},{"off",g.off},{"retrigger",g.retrigger},{"lastFrame",g.hasEvent?Json(g.lastFrame):Json(nullptr)},{"scope","aggregate-envelope-gate"}};}
         if(port.copy){const auto &c=*port.copy;const auto id=[](uint64_t value){return "n"+std::to_string(value);};entry["copy"]={{"graph",id(c.graph)},{"target",c.target?Json(id(c.target)):Json(nullptr)},{"role",std::array{"row","persistent","ordinary","instrument"}[c.role]},{"instrument",c.instrument?Json(id(c.instrument)):Json(nullptr)},{"channel",c.channel==UINT16_MAX?Json(nullptr):Json(c.channel)}};}
         if(port.route) {
             const auto &r=*port.route;

@@ -30,14 +30,14 @@ MixerTransition::MixerTransition(std::unique_ptr<Plan> initial,std::vector<uint6
   for(size_t i=0;i<plan.catalog.size();++i)if(plan.catalog[i].instrument)
     instrumentSources_.emplace_back(i,plan.catalog[i]);
   prepareSources(plan);
-  if(!plan.dependencies.empty() || !plan.runtime->plan().detached.empty())plan.execution=prepareMorph(plan,plan,true);
+  if(!plan.dependencies.empty() || !plan.runtime->plan().detached.empty() || plan.runtime->plan().segmented)plan.execution=prepareMorph(plan,plan,true);
   require(storage(plan)<=storageLimit_,"Live mixer exceeds the audio storage budget");
   stable_=&plan;through_=plan.runtime->through();plan.owner=owner_;
 }
 size_t MixerTransition::storage(const Plan &plan) const noexcept {
   // Conservative double-counting of shared PDC/DSP ownership bounds the whole
   // transition, rather than accepting two individually legal oversized plans.
-  const auto runtime=sizeof(Plan)+plan.runtime->storageBytes()+plan.sourceProcessors.capacity()*sizeof(size_t)+(plan.morph?plan.morph->storageBytes():0)+(plan.execution?plan.execution->storageBytes():0)+plan.dependencies.capacity()*sizeof(Dependency);
+  const auto runtime=sizeof(Plan)+plan.runtime->storageBytes()+plan.sourceProcessors.capacity()*sizeof(size_t)+(plan.morph?plan.morph->storageBytes():0)+(plan.execution?plan.execution->storageBytes():0)+(plan.bridge?plan.bridge->storageBytes():0)+plan.dependencies.capacity()*sizeof(Dependency);
   return plan.processorStorage>SIZE_MAX-runtime?SIZE_MAX:runtime+plan.processorStorage;
 }
 size_t MixerTransition::InputMorph::storageBytes() const noexcept {
@@ -64,10 +64,13 @@ std::unique_ptr<MixerTransition::InputMorph> MixerTransition::prepareMorph(const
         else step=found->second;
         auto &location=side?nodes[step].after:nodes[step].before;
         require(location.processor==SIZE_MAX,"A morph processor has multiple owners");location={bus,processor};
-        processorSteps[side][processor]=step;edges[previous].insert(step);previous=step;
+        processorSteps[side][processor]=step;
+        if(!plan.segmented||std::find(plan.disconnectedMainInputs.begin(),plan.disconnectedMainInputs.end(),processor)==plan.disconnectedMainInputs.end())edges[previous].insert(step);
+        previous=step;
       }
       const auto output=add({2,side?Location{}:Location{bus},side?Location{bus}:Location{}});
       ends[side].push_back(output);edges[previous].insert(output);
+      if(plan.segmented){edges[input].insert(output);for(auto processor:plan.nodes[bus].processors)edges[processorSteps[side][processor]].insert(output);}
     }
     for(auto processor:plan.detached){
       const auto &info=p.catalog[processor];auto found=processors.find(info.instance);size_t step;
@@ -80,17 +83,22 @@ std::unique_ptr<MixerTransition::InputMorph> MixerTransition::prepareMorph(const
     for(const auto &edge:plan.sidechains)edges[ends[side][edge.source]].insert(processorSteps[side][edge.processor]);
     for(const auto &edge:plan.instruments)if(edge.owner!=SIZE_MAX)
       edges[processorSteps[side][edge.processor]].insert(starts[side][edge.target]);
+    for(const auto &edge:plan.pluginConnections)if(!p.catalog[edge.source].instrument)edges[processorSteps[side][edge.source]].insert(processorSteps[side][edge.target]);
     for(const auto &edge:p.dependencies){
-      require(edge.target<processorSteps[side].size() && processorSteps[side][edge.target]!=SIZE_MAX,"Modulation target is not a scheduled effect");
+      const size_t target=edge.targetBus!=SIZE_MAX?(edge.targetBus<ends[side].size()?ends[side][edge.targetBus]:SIZE_MAX):(edge.target<processorSteps[side].size()?processorSteps[side][edge.target]:SIZE_MAX);
+      require(target!=SIZE_MAX,"Group/modulation target is not a scheduled audio endpoint");
       size_t source=SIZE_MAX;
       if(edge.processor!=SIZE_MAX){require(edge.processor<processorSteps[side].size(),"Invalid follower processor dependency");source=processorSteps[side][edge.processor];}
       else {require(edge.bus<ends[side].size(),"Invalid follower bus dependency");source=ends[side][edge.bus];}
       require(source!=SIZE_MAX,"Follower source is not a scheduled effect");
-      edges[source].insert(processorSteps[side][edge.target]);
+      // A self-dependency is real feedback (for example a follower targeting
+      // the processor whose output it reads), not a redundant ordering edge.
+      edges[source].insert(target);
     }
   }
   auto prefix=[](const Plan &p,Location location){
     if(location.bus==SIZE_MAX)return uint64_t(0);
+    if(p.runtime->plan().segmented)return uint64_t(p.runtime->plan().processors[location.processor].inputLatency);
     uint64_t frames=p.runtime->plan().nodes[location.bus].inputLatency;
     for(auto processor:p.runtime->plan().nodes[location.bus].processors){if(processor==location.processor)return frames;frames+=p.catalog[processor].latency;}
     return UINT64_MAX;
@@ -116,12 +124,14 @@ std::unique_ptr<MixerTransition::InputMorph> MixerTransition::prepareMorph(const
   return result;
 }
 void MixerTransition::prepareDependencies(Plan &plan) {
-  plan.execution=plan.dependencies.empty() && plan.runtime->plan().detached.empty()?nullptr:prepareMorph(plan,plan,true);
-  if(plan.morph)plan.morph=prepareMorph(*stable_,plan);
+  plan.execution=plan.dependencies.empty() && plan.runtime->plan().detached.empty() && !plan.runtime->plan().segmented?nullptr:prepareMorph(plan,plan,true);
+  if(plan.requiresAudioHandoff||plan.bridge)prepareBridge(plan);
+  else if(plan.morph)try {plan.morph=prepareMorph(*stable_,plan);}catch(const std::invalid_argument &){prepareBridge(plan);}
 }
 std::unique_ptr<MixerTransition::Plan> MixerTransition::prepareRetained(MixerGraph graph,std::vector<MixerProcessorInfo> catalog) {
-  auto result=prepare(std::move(graph),std::move(catalog));
-  result->morph=prepareMorph(*stable_,*result);
+  auto result=prepare(std::move(graph),std::move(catalog),{},true);
+  if(result->runtime->plan().latency!=stable_->runtime->plan().latency||result->runtime->plan().segmented||stable_->runtime->plan().segmented)prepareBridge(*result);
+  else try {result->morph=prepareMorph(*stable_,*result);}catch(const std::invalid_argument &){prepareBridge(*result);}
   require(storage(*result)<=storageLimit_-storage(*stable_),"Combined routing morph exceeds the audio storage budget");
   return result;
 }
@@ -129,14 +139,16 @@ float MixerTransition::amount(uint32_t frame) const noexcept {
   if(frame<warmup_)return 0;
   return float(std::min<uint64_t>(fade_+frame-warmup_,fadeFrames_))/fadeFrames_;
 }
-void MixerTransition::prepareSources(Plan &plan) const {
+void MixerTransition::prepareSources(Plan &plan,bool allowChanges) const {
   plan.sourceProcessors.assign(sourceSlots_,SIZE_MAX);
+  if(!allowChanges)for(const auto &p:plan.catalog)if(p.instrument)
+    require(std::any_of(instrumentSources_.begin(),instrumentSources_.end(),[&](const auto &source){return source.second.instance==p.instance;}),"A new source requires an explicit audio handoff");
   for(const auto &[slot,source]:instrumentSources_) {
     const auto found=std::find_if(plan.catalog.begin(),plan.catalog.end(),[&](const auto &p){return p.instance==source.instance;});
+    require(allowChanges||found!=plan.catalog.end(),"Removing a source requires an explicit audio handoff");
     if(found==plan.catalog.end())continue; // Retired plugin endpoints use the per-plan source renderer.
-    require(found->instrument && found->latency==source.latency && found->outputBuses==source.outputBuses &&
-      found->activeOutputs==source.activeOutputs && found->activeInputs==source.activeInputs,
-      "A routing transition must retain source identity, latency and active ports");
+    require(found->instrument,"A routing transition must retain source kind");
+    require(allowChanges||(found->latency==source.latency&&found->outputBuses==source.outputBuses&&found->activeInputs==source.activeInputs&&found->activeOutputs==source.activeOutputs),"Source replacement requires an explicit audio handoff");
     plan.sourceProcessors[slot]=size_t(found-plan.catalog.begin());
   }
 }
@@ -147,20 +159,20 @@ void MixerTransition::settle() noexcept {
   }
 }
 std::unique_ptr<MixerTransition::Plan> MixerTransition::prepare(MixerGraph graph,
-    std::vector<MixerProcessorInfo> catalog,const std::vector<std::string> &reset) {
+    std::vector<MixerProcessorInfo> catalog,const std::vector<std::string> &reset,bool allowHandoff) {
   require(ready(),"A routing transition is still preparing");
   for(const auto &[slot,source]:instrumentSources_)
     require(std::find(reset.begin(),reset.end(),source.instance)==reset.end(),"A source reset requires a prepared adapter handoff");
   auto compiled=compileMixer(graph,tracks_,catalog,rate_);
-  require(compiled.latency==stable_->runtime->plan().latency,"A latency change requires a latency-aligned host transition");
+  require(allowHandoff||compiled.latency==stable_->runtime->plan().latency,"A latency change requires a latency-aligned host transition");
   auto result=std::make_unique<Plan>();result->owner=owner_;result->sourceRevision=plans_.renderedRevision();
   result->reuse=mixerTransitionReuse(stable_->runtime->graph(),stable_->runtime->plan(),stable_->catalog,
     graph,compiled,catalog,reset);
   result->catalog=std::move(catalog);
-  prepareSources(*result);
+  prepareSources(*result,allowHandoff);
   result->runtime=std::make_unique<MixerRuntime>(std::move(graph),std::move(compiled),rate_);
   result->runtime->retainHistory(*stable_->runtime,result->reuse);
-  if(!result->runtime->plan().detached.empty())result->execution=prepareMorph(*result,*result,true);
+  if(!result->runtime->plan().detached.empty()||result->runtime->plan().segmented)result->execution=prepareMorph(*result,*result,true);
   for(const auto &bus:result->runtime->graph().buses) {
     const auto found=std::find(sources_.begin(),sources_.end(),bus.id);
     result->directSources.push_back(found==sources_.end()?SIZE_MAX:size_t(found-sources_.begin()));
@@ -191,17 +203,23 @@ void MixerTransition::reject() noexcept {
 }
 bool MixerTransition::controls(const std::vector<MixerControls> &values) noexcept {
   settle();
-  if(!stable_->runtime->canQueueControls() || (submitted_ && !submitted_->runtime->canQueueControls()))return false;
-  // The host may use this fast path only when stable bus order is retained.
-  // Validate both targets before publishing either queue; the single consumer
-  // can only make more room after the preflight, never consume that room.
+  std::array<MixerRuntime *,4> targets{stable_->runtime.get(),nullptr,nullptr,nullptr};size_t count=1;
   if(submitted_) {
-    const auto &before=stable_->runtime->graph().buses,&after=submitted_->runtime->graph().buses;
-    if(before.size()!=after.size())return false;
+    targets[count++]=submitted_->runtime.get();
+    if(submitted_->bridge){targets[count++]=submitted_->bridge->before.plan->runtime.get();targets[count++]=submitted_->bridge->after.plan->runtime.get();}
+  }
+  // Shadows receive the same accepted gesture as the wet plans. Otherwise a
+  // gain/mute gesture during a dry bridge could jump back to its old value.
+  const auto &before=stable_->runtime->graph().buses;
+  for(size_t n=0;n<count;++n){const auto &after=targets[n]->graph().buses;
+    if(!targets[n]->canQueueControls()||before.size()!=after.size())return false;
     for(size_t i=0;i<before.size();++i)if(before[i].id!=after[i].id)return false;
   }
-  if(!stable_->runtime->controls(values))return false;
-  return !submitted_ || submitted_->runtime->controls(values);
+  // The first queue validates all values; equal cardinality and preflighted
+  // capacity make every subsequent single-producer publication infallible.
+  if(!targets[0]->controls(values))return false;
+  for(size_t n=1;n<count;++n)if(!targets[n]->controls(values))return false;
+  return true;
 }
 void MixerTransition::refreshStopped(std::vector<MixerProcessorInfo> catalog) {
   require(commitStopped(),"Cannot refresh latency while a routing publication is pending");
@@ -218,6 +236,11 @@ bool MixerTransition::commitStopped() noexcept {
   const bool next=plans_.begin();
   if(next && !plans_.current().runtime->activateHistory(true)){reject();settle();return false;}
   if(next && plans_.current().adopt)plans_.current().adopt(plans_.current().processors.get(),plans_.previous()?plans_.previous()->processors.get():nullptr);
+  if(next && plans_.current().activateAudio)plans_.current().activateAudio(plans_.current().processors.get(),plans_.previous()?plans_.previous()->processors.get():nullptr,through_);
+  if(auto &current=plans_.current();current.bridge&&plans_.previous()){
+    if(!next&&!current.bridge->activated&&current.activateAudio)current.activateAudio(current.processors.get(),plans_.previous()->processors.get(),through_);
+    current.bridge->activated=true;current.bridge->phase=DryBridge::Phase::Done;current.renderInput=true;current.dryInput=nullptr;current.drySource=nullptr;current.dryContext=nullptr;
+  }
   if(plans_.previous()) {
     const auto revision=plans_.currentRevision();plans_.finish();
     status_.store(Status::Stable,std::memory_order_release);settled_.store(revision,std::memory_order_release);
@@ -228,19 +251,41 @@ bool MixerTransition::begin(uint32_t frames,uint64_t position) noexcept {
   if(open_ || !frames || frames>MixerRuntime::maximumFrames || position!=through_ || position>UINT64_MAX-frames) {
     failed_=true;return false;
   }
+  if(!latch(position))return false;
+  auto &current=plans_.current();
+  if(current.bridge&&plans_.previous()&&frames>current.bridge->remaining){failed_=true;return false;}
   frames_=frames;position_=position;open_=true;
-  const bool next=plans_.begin();
+  const bool next=std::exchange(adoptionPending_,false);
   if(auto *previous=plans_.previous()) {
     previous->runtime->begin(frames,position);
     if(next) {
-      if(!plans_.current().runtime->activateHistory()){reject();return true;}
-      if(plans_.current().adopt)plans_.current().adopt(plans_.current().processors.get(),previous->processors.get());
+      if(!current.runtime->activateHistory()){reject();return true;}
+      if(current.adopt)current.adopt(current.processors.get(),previous->processors.get());
+      if(!current.bridge&&current.activateAudio)current.activateAudio(current.processors.get(),previous->processors.get(),position);
       // Feed the new plan actual ongoing sources until its compensation/DSP
       // latency has filled. The old plan remains fully audible during warmup.
-      warmup_=plans_.current().runtime->plan().latency;fade_=0;
+      warmup_=current.runtime->plan().latency;fade_=0;
     }
   }
-  plans_.current().runtime->begin(frames,position);
+  current.runtime->begin(frames,position);
+  if(current.bridge&&plans_.previous()){
+    auto &bridge=*current.bridge;auto &previous=*plans_.previous();
+    if(next){if(!bridge.before.plan->runtime->activateHistory()||!bridge.after.plan->runtime->activateHistory()){reject();return true;}}
+    bridge.before.plan->runtime->begin(frames,position);bridge.after.plan->runtime->begin(frames,position);
+    previous.renderInput=!bridge.activated;current.renderInput=bridge.activated;
+    previous.dryInput=bridge.before.plan->runtime.get();current.dryInput=bridge.after.plan->runtime.get();
+    bridge.before.frames=bridge.after.frames=frames;
+    auto connectDry=[](Plan &p,DryBridge::Shadow &shadow)noexcept{
+      p.dryContext=&shadow;p.drySource=[](void *opaque,size_t processor,uint32_t port,const float *samples)noexcept{
+        auto &shadow=*static_cast<DryBridge::Shadow *>(opaque);
+        for(auto &source:shadow.sources)if(source.processor==processor&&source.port==port){
+          auto &d=source.delay;
+          for(uint32_t i=0;i<shadow.frames*2;++i){auto value=samples?samples[i]:0.f;if(!d.samples.empty()){std::swap(value,d.samples[d.cursor]);if(++d.cursor==d.samples.size())d.cursor=0;}shadow.sourceScratch[i]=value;}
+          shadow.plan->runtime->instrument(processor,port,shadow.sourceScratch.data());return;
+        }
+      };
+    };connectDry(previous,bridge.before);connectDry(current,bridge.after);
+  }
   if(auto *previous=plans_.previous();previous && previous->begin)previous->begin(previous->processors.get(),frames,position,false);
   if(plans_.current().begin)plans_.current().begin(plans_.current().processors.get(),frames,position,true);
   return true;
@@ -250,17 +295,27 @@ bool MixerTransition::renderSources(uint32_t frames,uint64_t position) noexcept 
   auto &current=plans_.current();
   // Retained RenderOnce wrappers share vendor output, but each plan has its
   // own route sums and follower inputs. The accepted controls render first.
-  if(current.renderSources&&!current.renderSources(current.processors.get(),*current.runtime,frames,position,true)){failed_=true;return false;}
+  if(current.renderSources&&!current.renderSources(current.processors.get(),current,frames,position,true)){failed_=true;return false;}
   if(auto *previous=plans_.previous();previous&&previous->renderSources)
-    if(!previous->renderSources(previous->processors.get(),*previous->runtime,frames,position,false)){failed_=true;return false;}
+    if(!previous->renderSources(previous->processors.get(),*previous,frames,position,false)){failed_=true;return false;}
   return true;
 }
 void MixerTransition::instrument(size_t processor,uint32_t port,const float *samples) noexcept {
   auto &current=plans_.current();
   if(!open_ || processor>=current.sourceProcessors.size() || current.sourceProcessors[processor]==SIZE_MAX){failed_=true;return;}
-  current.runtime->instrument(current.sourceProcessors[processor],port,samples);
+  current.instrument(current.sourceProcessors[processor],port,samples);
   if(current.source)current.source(current.processors.get(),current.sourceProcessors[processor],port,samples,frames_,position_);
-  if(auto *previous=plans_.previous();previous&&processor<previous->sourceProcessors.size()&&previous->sourceProcessors[processor]!=SIZE_MAX){previous->runtime->instrument(previous->sourceProcessors[processor],port,samples);if(previous->source)previous->source(previous->processors.get(),previous->sourceProcessors[processor],port,samples,frames_,position_);}
+  if(auto *previous=plans_.previous();previous&&processor<previous->sourceProcessors.size()&&previous->sourceProcessors[processor]!=SIZE_MAX){previous->instrument(previous->sourceProcessors[processor],port,samples);if(previous->source)previous->source(previous->processors.get(),previous->sourceProcessors[processor],port,samples,frames_,position_);}
+}
+void MixerTransition::instrument(std::string_view identity,uint32_t port,const float *wet,const float *rawDry) noexcept {
+  if(!open_){failed_=true;return;}
+  auto feed=[&](Plan &plan)noexcept{
+    const auto p=std::find_if(plan.catalog.begin(),plan.catalog.end(),[&](const auto &p){return p.instrument&&p.instance==identity;});
+    if(p==plan.catalog.end())return;
+    const auto index=size_t(p-plan.catalog.begin());plan.instrument(index,port,wet,rawDry);
+    if(plan.source)plan.source(plan.processors.get(),index,port,wet,frames_,position_);
+  };
+  feed(plans_.current());if(auto *previous=plans_.previous())feed(*previous);
 }
 const float *MixerTransition::evaluate(Plan &plan,std::span<const DirectInput> sources) noexcept {
   if(plan.execution){
@@ -275,7 +330,7 @@ const float *MixerTransition::evaluate(Plan &plan,std::span<const DirectInput> s
            (location.bus!=SIZE_MAX && !plan.runtime->finishProcessor(location.bus,location.processor)))return nullptr;
       }
     }
-    plan.runtime->complete();return plan.runtime->failed()?nullptr:plan.runtime->busOutput(plan.runtime->plan().master);
+    plan.runtime->complete();return plan.runtime->failed()?nullptr:plan.runtime->masterOutput();
   }
   struct Context {Plan &plan;};Context context{plan};
   const auto callback=[](void *opaque,size_t processor,float *samples,uint32_t frames,uint64_t position) noexcept {
@@ -287,7 +342,7 @@ const float *MixerTransition::evaluate(Plan &plan,std::span<const DirectInput> s
     const auto source=plan.directSources[bus];
     const auto input=source<sources.size()?sources[source]:DirectInput{};
     const auto *samples=plan.runtime->process(bus,input.left,input.right,callback,&context);
-    if(bus==plan.runtime->plan().master)output=samples;
+    if(bus==plan.runtime->plan().master)output=plan.runtime->masterOutput();
   }
   plan.runtime->complete();return plan.runtime->failed()?nullptr:output;
 }
@@ -365,12 +420,13 @@ bool MixerTransition::evaluateMorph(Plan &before,Plan &after,std::span<const Dir
 const float *MixerTransition::render(std::span<const DirectInput> sources) noexcept {
   if(!open_ || sources.size()!=sources_.size()){failed_=true;return nullptr;}
   auto *previous=plans_.previous();
+  if(previous&&plans_.current().bridge)return renderBridge(sources);
   const float *old=nullptr,*current=nullptr;
   if(previous && plans_.current().morph){
     auto &candidate=plans_.current();bool candidateFailed=false;
     if(evaluateMorph(*previous,candidate,sources,candidateFailed)){
-      old=previous->runtime->busOutput(previous->runtime->plan().master);
-      if(!candidateFailed)current=candidate.runtime->busOutput(candidate.runtime->plan().master);
+      old=previous->runtime->masterOutput();
+      if(!candidateFailed)current=candidate.runtime->masterOutput();
     }
   } else {
     old=previous?evaluate(*previous,sources):nullptr;

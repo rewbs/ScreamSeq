@@ -45,7 +45,7 @@ SongModulationRuntime::SongModulationRuntime(const SignalGraph &graph,std::span<
     const auto sourceIndex=size_t(std::find_if(sources_.begin(),sources_.end(),[&](const auto &s){return s.spec.node.id==edge.source;})-sources_.begin());
     auto target=std::find_if(targets_.begin(),targets_.end(),[&](const auto &t){return t.plugin==edge.plugin&&t.parameter==edge.parameter;});
     if(target==targets_.end()){targets_.push_back({edge.plugin,edge.parameter,metadata->normalizedStep,edge.quantized,{}});target=targets_.end()-1;}
-    target->contributions.push_back({sourceIndex,edge.minimum,edge.maximum});
+    target->contributions.push_back({sourceIndex,edge.minimum,edge.maximum,size_t(target-targets_.begin())});
   }
 }
 const SignalPatternEnvelope *SongModulationRuntime::envelope(const Source &s,uint64_t pattern) const noexcept {
@@ -135,7 +135,8 @@ bool SongModulationRuntime::contribution(size_t index,uint64_t frame,double &val
 }
 bool SongModulationRuntime::scaledContribution(const SongModulationTarget::Contribution &edge,uint64_t frame,double &value) const noexcept {
   double normalized;if(!contribution(edge.source,frame,normalized))return false;
-  value=sources_[edge.source].spec.node.muted?0:edge.minimum+(edge.maximum-edge.minimum)*normalized;return true;
+  value=sources_[edge.source].spec.node.muted?0:edge.minimum+(edge.maximum-edge.minimum)*normalized;
+  if(contributionGain_)value*=contributionGain_(contributionContext_,sources_[edge.source].spec.node.id,targets_[edge.target].plugin,frame);return true;
 }
 bool SongModulationRuntime::overlay(size_t index,uint64_t frame,double baseline,double &result) const noexcept {
   if(index>=targets_.size()||!std::isfinite(baseline))return false;
@@ -148,7 +149,7 @@ bool SongModulationRuntime::overlay(size_t index,uint64_t frame,double baseline,
 uint32_t SongModulationRuntime::rampFrames(size_t index,uint64_t frame,uint32_t maximum,SignalClock clock) const noexcept {
   if(index>=targets_.size()||!maximum||!validClock(clock))return 0;
   const auto &target=targets_[index];auto count=std::min(maximum,maximumFrames);
-  if(target.quantized)count=1;
+  if(target.quantized||contributionGain_)count=1;
   for(const auto &c:target.contributions){const auto &s=sources_[c.source];
     if(frame<s.frame||frame-s.frame>=s.frames)return 0;
     count=std::min(count,s.frames-uint32_t(frame-s.frame));count=segmentFrames(s,frame,count,clock);

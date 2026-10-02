@@ -308,6 +308,7 @@ samplecount_t CSoundFile::Read(samplecount_t count, IAudioTarget &target, IAudio
 		samplecount_t countChunk = std::min({ static_cast<samplecount_t>(MIXBUFFERSIZE), static_cast<samplecount_t>(m_PlayState.m_nBufferCount), static_cast<samplecount_t>(countToRender) });
 
 #if defined(OPENMPT_EDITOR_CORE)
+		if(nativeMixLimit) countChunk = std::clamp<samplecount_t>(nativeMixLimit(nativeMixContext, countChunk), 1, countChunk);
 		if(nativePrepareMix) countChunk = std::clamp<samplecount_t>(nativePrepareMix(nativePrepareContext, countChunk), 1, countChunk);
 #endif
 		if(m_MixerSettings.NumInputChannels > 0)

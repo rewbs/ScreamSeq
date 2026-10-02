@@ -433,6 +433,11 @@ void songCableCuts() {
   auto model=before;bool failed=false;try{removeSongConnections(model,{{SongConnectionKind::Output,a,master},{SongConnectionKind::Output,b,999999}});}catch(const std::invalid_argument &){failed=true;}CHECK(failed&&model==before);
   f.api.invoke("graph.connections.remove",{{"connections",cuts}});CHECK(f.doc->revision==revision+1);const auto after=f.doc->native();CHECK(after.mixer.buses[0].output==0&&after.mixer.buses[0].sends.empty()&&after.mixer.sidechains.empty());CHECK(after.mixer.instruments.size()==1&&after.mixer.instruments[0].target==master);CHECK(after.mixer.buses[1].inserts==before.mixer.buses[1].inserts);
   f.doc->undo();CHECK(f.doc->native()==before);f.doc->redo();CHECK(f.doc->native()==after);CHECK(ScreamSeq::Project::decodeNativeMetadata(ScreamSeq::Project::encodeNativeMetadata(after))==after);
+  const auto rackBefore=f.doc->native();const Json exactCuts=Json::array({{{"kind","insert"},{"source",nativeID(b)},{"plugin","fx"}},{{"kind","master-output"},{"source",nativeID(master)}}});
+  f.api.invoke("graph.connections.remove",{{"connections",exactCuts},{"dryRun",true}});CHECK(f.doc->native()==rackBefore);
+  f.api.invoke("graph.connections.remove",{{"connections",exactCuts}});const auto exactCut=f.doc->native();CHECK(exactCut.mixer.disconnectedMainInputs==std::vector<std::string>{"fx"}&&exactCut.mixer.masterOutputDisconnected&&exactCut.mixer.buses[1].inserts==rackBefore.mixer.buses[1].inserts);
+  CHECK(ScreamSeq::Project::decodeNativeMetadata(ScreamSeq::Project::encodeNativeMetadata(exactCut))==exactCut);rejected(f,"graph.connections.remove",{{"connections",exactCuts}});
+  f.doc->undo();CHECK(f.doc->native()==rackBefore);f.doc->redo();CHECK(f.doc->native()==exactCut);f.doc->undo();
   const Json last={{"kind","plugin-output"},{"plugin","synth"},{"target",nativeID(master)},{"output",0}};
   f.api.invoke("graph.connections.remove",{{"connections",Json::array({last})}});CHECK(f.doc->native().mixer.instruments.size()==1&&f.doc->native().mixer.instruments[0].target==0);rejected(f,"graph.connections.remove",{{"connections",Json::array({last})}});
   Fixture implicit;ScreamSeq::GraphHostHooks hooks;hooks.cachedRack={{{{"isInstrument",true}},"synth",0}};GraphOperations instrumentAPI(*implicit.doc,[&]{++implicit.stops;},hooks);

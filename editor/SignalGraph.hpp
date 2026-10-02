@@ -135,7 +135,7 @@ struct SignalSongGroup {
   uint64_t id=0,parent=0;
   std::string name;
   double x=0,y=0;
-  std::vector<std::string> nodes; // canonical "plugin:<instance ID>" keys
+  std::vector<std::string> nodes; // canonical "plugin:<instance ID>" or "source:n<ID>" keys
   bool bypass=false;
   std::vector<SignalSongGroupDryRoute> dryRoutes;
   bool operator==(const SignalSongGroup &) const = default;
@@ -191,6 +191,7 @@ void validateSongSignalGroups(const SignalGraph &);
 void groupSongSignalNodes(SignalGraph &,const std::vector<std::string> &nodes,const std::vector<uint64_t> &groups,uint64_t id,uint64_t parent,std::string name);
 void ungroupSongSignalNodes(SignalGraph &,uint64_t id);
 void moveSongSignalGroup(SignalGraph &,uint64_t id,double x,double y);
+std::vector<std::string> songSignalGroupNodes(const SignalGraph &,uint64_t id);
 void pruneSongSignalGroups(SignalGraph &,const std::vector<std::string> &available);
 // Save a contiguous rack chain as an independent recipe. Active auxiliary
 // ports are exposed explicitly; the original rack/group remains untouched.

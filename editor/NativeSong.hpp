@@ -31,15 +31,16 @@ struct NativeNoteTrack {
   bool operator==(const NativeNoteTrack &) const = default;
 };
 // Semantic cable identities survive filtering, grouping and route reordering.
-// Fixed rack-chain wires are intentionally absent: deleting them requires a
-// detached-processor ownership model, not an implicit reassignment to Master.
-enum class SongConnectionKind { Output, Send, GraphInput, GraphOutput, PluginInput, PluginOutput, FollowerInput, Modulation, Note };
+// Cutting implicit rack inputs records a disconnection without healing the chain.
+enum class SongConnectionKind { Output, Send, GraphInput, GraphOutput, PluginInput, PluginOutput, FollowerInput, Modulation, Note, Insert, MasterOutput, PluginConnection };
 struct SongConnectionRef {
   SongConnectionKind kind;
   uint64_t source = 0, target = 0;
   std::string plugin;
   uint32_t port = 0; // Parameter ID for Modulation; audio port otherwise.
   bool preFader = false;
+  std::string sourcePlugin; // Direct plugin contribution; plugin is its target.
+  uint32_t output = 0;
 };
 struct NativeSong {
   static constexpr uint64_t maximumID = 1000000000000ULL;
@@ -65,6 +66,7 @@ struct NativeSong {
   // Remove structural references when a rack instance is deleted. Musical
   // automation and pattern bindings remain unresolved until Undo restores it.
   void removePluginRoutes(const std::string &instance);
+  void removeSongSources(const std::vector<uint64_t> &sources); // Validated atomic removal, including groups and envelope links.
   void reconcile(const OpenMPT::CSoundFile &song);
   void clonePatternAutomation(uint64_t source, uint64_t destination);
   void validate(const OpenMPT::CSoundFile &song) const;
@@ -76,5 +78,6 @@ struct NativeSong {
 // Validate the entire batch before replacing song. instrumentPlugins identifies
 // live instrument instances whose unrecorded main output defaults to Master.
 void removeSongConnections(NativeSong &song, const std::vector<SongConnectionRef> &connections,
-                           const std::vector<std::string> &instrumentPlugins = {});
+                           const std::vector<std::string> &instrumentPlugins = {},
+                           const std::vector<std::string> &effectRack = {});
 } // namespace Tracker

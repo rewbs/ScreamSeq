@@ -29,12 +29,12 @@ extension AppController {
       guard let self else{return};self.openParameterSource(source)
       let kind=source["kind"] as? String ?? "",panel=kind=="envelope" ? "automation":kind=="recorded" ? "parameterActivity":"graph"
       self.workspace?.panels[panel]?.onBack={[weak self] in self?.signalGraphEditor.returnToProvenance()}
-      if kind=="pattern-set" || kind=="pattern-slide"{self.statusLabel.stringValue+=" · ⌘K → Back to graph source"}
+      if kind=="pattern-set" || kind=="pattern-slide"{self.statusLabel.stringValue+=" · ⌘K → Back to graph"}
     }
     signalGraphEditor.onAddSongEffect = { [weak self] target in self?.addPlugin(target: target) }
     signalGraphEditor.rackControls.onGesture={[weak self] active in self?.session.parameterGesture(active)}
-    signalGraphEditor.rackControls.onAutomate={[weak self] id,parameter in self?.automateParameter(plugin:id,parameter:Int(parameter))}
-    signalGraphEditor.rackControls.onActivity={[weak self] id,parameter in self?.showParameterActivity(plugin:id,parameter:Int(parameter))}
+    signalGraphEditor.rackControls.onAutomate={[weak self] id,parameter in self?.prepareGraphReturn(to:"automation");self?.automateParameter(plugin:id,parameter:Int(parameter))}
+    signalGraphEditor.rackControls.onActivity={[weak self] id,parameter in self?.prepareGraphReturn(to:"parameterActivity");self?.showParameterActivity(plugin:id,parameter:Int(parameter))}
     signalGraphEditor.onPlugin = {[weak self] id in self?.openWorkspacePlugin(id)}
     signalGraphEditor.onShowPattern = {[weak self] id in
       guard let self else{return}

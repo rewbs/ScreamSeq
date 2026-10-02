@@ -11,7 +11,7 @@ enum GraphCommand:String,CaseIterable {
   case parameterAutomate,parameterActivity,parameterExpose,parameterValue,parameterSources,parameterLastTouched,returnFromLastTouched,editProvenance,hideProvenance,returnFromSource,nextProvenancePage
   case visualFrame,visualComment,visualReroute,visualCollapse,visualRemove
   case copySelection,cutSelection,pasteSelection,duplicateSelection,presetSave,presetLoad
-  case findNode,openNode,removeNode,arrangeSelection
+  case findNode,openNode,removeNode,arrangeSelection,reconnectMain,cutMasterOutput
   var id:String {"graph."+rawValue}
   // Canvas-only defaults must yield to the same persisted overrides used by
   // the command palette. Otherwise removing/remapping M still bypasses audio.

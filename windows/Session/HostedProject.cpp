@@ -96,7 +96,7 @@ Json HostedProjectPlayback::failureDiagnostics() const {
 bool HostedProjectPlayback::render(float *stereo,uint32_t frames) noexcept {
   if(failed()) {std::fill_n(stereo,size_t(frames)*2,0.0f);return false;}
   for(uint32_t at=0;at<frames;) {
-    if(chain_->latencyChangePending()) {std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return !offline_;}
+    if(offline_&&chain_->latencyChangePending()) {std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return false;}
     const auto count=std::min(4096u,frames-at);auto *buffer=stereo+size_t(at)*2;
     chain_->beginRenderBlock();chain_->syncTransport(*renderer_);
     renderer_->render(buffer,count);

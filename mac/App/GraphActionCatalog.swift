@@ -80,7 +80,7 @@ extension SignalGraphEditor {
     parameters.addItem(GraphCommand.editProvenance.item("Edit selected automation source…",reason:selectedProvenance==nil ? "Select an existing automation source card or Sets base wire":nil){[weak self] in if let source=self?.selectedProvenance{self?.openProvenanceSource(source)}})
     parameters.addItem(GraphCommand.nextProvenancePage.item("Next page of existing sources",reason:provenance.total>64 ? nil:"All sources for the inspected parameter fit on one page"){[weak self] in self?.nextProvenancePage()})
     parameters.addItem(GraphCommand.hideProvenance.item("Hide existing automation sources",reason:provenance.target==nil ? "No parameter source view is open":nil){[weak self] in self?.hideParameterProvenance()})
-    parameters.addItem(GraphCommand.returnFromSource.item("Back to graph source",reason:provenance.hasReturn ? nil:"Open an existing source from the graph first"){[weak self] in self?.returnToProvenance()})
+    parameters.addItem(GraphCommand.returnFromSource.item("Back to graph",reason:provenance.hasReturn || panelReturn != nil ? nil:"Open automation or parameter activity from the graph first"){[weak self] in self?.returnToProvenance()})
     ContextActions.appendMenu(parameters,to:menu)
   }
   func chooseGraphParameter(_ command:GraphCommand) {

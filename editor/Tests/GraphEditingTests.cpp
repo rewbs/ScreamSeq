@@ -68,6 +68,17 @@ int main(){try{
   CHECK(branch.audio[0]==branched.audio[1]&&branch.audio[1]==branched.audio[3]);CHECK((branch.audio[2]==SignalAudioEdge{input,output,0,0,.15}));
   auto removed=branched;detachSignalNodes(removed,{plugin},true,SignalHealPath{1,3});CHECK(removed.audio.size()==1&&removed.audio[0].output==1&&removed.audio[0].input==1&&std::abs(removed.audio[0].gain-.16)<1e-12);
   auto invalid=branched;rejects([&]{detachSignalNodes(invalid,{plugin},false,SignalHealPath{2,0});});CHECK(invalid==branched);
+  auto multi=branched;const auto secondPlugin=uint64_t(90001);auto extra=*std::find_if(multi.nodes.begin(),multi.nodes.end(),[&](const auto &n){return n.id==plugin;});extra.id=secondPlugin;multi.nodes.push_back(extra);
+  multi.audio={{input,plugin,0,0,.5},{plugin,secondPlugin,0,0,.7},{plugin,output,0,1,.2},{secondPlugin,output,0,0,.6}};
+  // The source is attached by a control edge, so the selected audio/control
+  // subgraph is connected even though it is not a serial list of effects.
+  const auto beforeMulti=multi;rejects([&]{detachSignalNodes(multi,{plugin,secondPlugin,lfo});});CHECK(multi==beforeMulti);
+  detachSignalNodes(multi,{plugin,secondPlugin,lfo},false,SignalHealPath{0,3});
+  CHECK(multi.nodes==beforeMulti.nodes&&multi.modulation==beforeMulti.modulation&&multi.audio.size()==3);
+  CHECK(multi.audio[0]==beforeMulti.audio[1]&&multi.audio[1]==beforeMulti.audio[2]&&std::abs(multi.audio[2].gain-.3)<1e-12);
+  auto disconnected=beforeMulti;disconnected.modulation.clear();const auto disconnectedBefore=disconnected;
+  rejects([&]{detachSignalNodes(disconnected,{plugin,secondPlugin,lfo},false,SignalHealPath{0,3});});CHECK(disconnected==disconnectedBefore);
+  auto deleteMulti=beforeMulti;detachSignalNodes(deleteMulti,{plugin,secondPlugin,lfo},true,SignalHealPath{0,2});CHECK(deleteMulti.nodes.size()==2&&deleteMulti.modulation.empty()&&deleteMulti.audio.size()==1&&deleteMulti.audio[0].input==1);
   // A mixed cable cut is one staged model operation. An invalid later cable
   // must not partially remove either the event route or the audio route.
   auto notes=doc.native();const auto noteID=notes.makeEntity().id,otherID=notes.makeEntity().id;
@@ -91,5 +102,15 @@ int main(){try{
   NoteRouting replacement;replacement.routes={materialized};replacement.suppressedAssignments={999};reconcileNoteCableGeometry(geometry,replacement);
   CHECK(geometry.cables.size()==1&&geometry.cables[0].connection==cable.connection&&geometry.cables[0].source=="note-instrument:n999"&&geometry.cables[0].points==cable.points);
   replacement.routes.clear();reconcileNoteCableGeometry(geometry,replacement);CHECK(geometry.cables.empty());
+  auto cableSong=doc.native();cableSong.ensureMixer();const auto master=cableSong.masterID;const std::vector<std::string> rack={"A","B","C"};
+  auto beforeCable=cableSong;removeSongConnections(cableSong,{{SongConnectionKind::Insert,master,0,"B"},{SongConnectionKind::MasterOutput,master}}, {},rack);
+  CHECK(cableSong.mixer.disconnectedMainInputs==std::vector<std::string>{"B"}&&cableSong.mixer.masterOutputDisconnected);
+  CHECK(cableSong.mixer.buses.back().inserts==rack&&cableSong.signal==beforeCable.signal);
+  const auto cutCables=cableSong;rejects([&]{removeSongConnections(cableSong,{{SongConnectionKind::Insert,master,0,"A"},{SongConnectionKind::Insert,master,0,"B"}}, {},rack);});CHECK(cableSong==cutCables);
+  rejects([&]{removeSongConnections(cableSong,{{SongConnectionKind::MasterOutput,master}}, {},rack);});CHECK(cableSong==cutCables);
+  const auto undoOriginal=doc.native();doc.annotate([&](NativeSong &n){n=cableSong;});CHECK(doc.native().mixer.masterOutputDisconnected);doc.undo();CHECK(doc.native()==undoOriginal);doc.redo();CHECK(doc.native().mixer==cutCables.mixer);
+  auto head=cableSong;head.mixer.detachedChains={{head.makeEntity().id,{"D","E","F"}}};head.mixer.disconnectedMainInputs={"E","F"};head.removePluginRoutes("D");CHECK(head.mixer.disconnectedMainInputs==std::vector<std::string>{"F"});
+  auto removedTrack=doc.native();removedTrack.ensureMixer();const auto removedID=removedTrack.makeEntity().id;removedTrack.mixer.buses.push_back({removedID,removedTrack.masterID,MixerBusKind::Track,"Removed"});removedTrack.mixer.buses.back().inserts={"track-fx","after"};removedTrack.mixer.disconnectedMainInputs={"after"};removedTrack.reconcile(doc.song());
+  CHECK(removedTrack.mixer.detachedChains.size()==1&&removedTrack.mixer.detachedChains[0].plugins==std::vector<std::string>({"track-fx","after"})&&removedTrack.mixer.disconnectedMainInputs==std::vector<std::string>{"after"});removedTrack.validate(doc.song());
   std::cout<<"PASS atomic graph edits, independent uses, mixed note/audio cuts and stable event cable geometry\n";
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

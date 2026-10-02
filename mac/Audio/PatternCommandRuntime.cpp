@@ -28,7 +28,7 @@ PatternCommandRuntime::PatternCommandRuntime(const NativeSong &native,const std:
       for(const auto &event:absolute)if(event.slot==slot&&event.id==binding.parameter)
         throw std::invalid_argument("A parameter cannot use both recorded absolute automation and pattern commands");
       Target target;target.plugin=plugins[slot];target.parameter=binding.parameter;target.minimum=parameter->min;target.maximum=parameter->max;
-      target.current=std::clamp((parameter->value-parameter->min)/double(parameter->max-parameter->min),0.,1.);
+      target.current=std::clamp((parameter->manualValue.value_or(parameter->value)-double(parameter->min))/(double(parameter->max)-parameter->min),0.,1.);
       target.curve={target.current,target.current,0,0};target.plugin->prepareMusicalAutomation();
       index=targetIndices.emplace(key,targets_.size()).first;targets_.push_back(std::move(target));
     }
@@ -54,8 +54,8 @@ bool PatternCommandRuntime::render(const OpenMPT::PlayState &state,uint32_t fram
   const bool entering=pattern_!=state.m_nPattern||order_!=state.m_nCurrentOrder||begin<=previousPosition_;
   pattern_=state.m_nPattern;order_=state.m_nCurrentOrder;previousPosition_=begin;
   for(auto &target:targets_) {
-    if(entering){const auto found=target.patterns.find(pattern_);target.events=found==target.patterns.end()?nullptr:&found->second;
-      target.next=0;target.curve={target.current,target.current,begin,begin};target.activeChannel=UINT16_MAX;}
+    if(entering||!target.initialized){const auto found=target.patterns.find(pattern_);target.events=found==target.patterns.end()?nullptr:&found->second;
+      target.next=0;target.curve={target.current,target.current,begin,begin};target.activeChannel=UINT16_MAX;target.initialized=true;}
     auto muted=[&](uint16_t channel){return channel<state.Chn.size()&&state.Chn[channel].dwFlags[CHN_MUTE|CHN_SYNCMUTE];};
     if(target.activeChannel!=UINT16_MAX&&muted(target.activeChannel)){const auto held=target.curve.at(begin);target.curve={held,held,begin,begin};target.activeChannel=UINT16_MAX;}
     uint32_t offset=0;
@@ -78,6 +78,20 @@ bool PatternCommandRuntime::render(const OpenMPT::PlayState &state,uint32_t fram
     }
     target.current=target.curve.at(musical(frames));
   }
-  return true;
+  throughPosition_=musical(frames);return true;
+}
+void PatternCommandRuntime::inheritState(const PatternCommandRuntime &old) noexcept {
+  pattern_=old.pattern_;order_=old.order_;previousPosition_=old.previousPosition_;throughPosition_=old.throughPosition_;
+  for(auto &target:targets_)for(const auto &prior:old.targets_)if(target.plugin==prior.plugin&&target.parameter==prior.parameter){
+    target.current=prior.current;target.curve=prior.curve;target.activeChannel=prior.activeChannel;target.used=prior.used;target.initialized=prior.initialized;target.source=prior.source;
+    const auto events=target.patterns.find(pattern_);target.events=events==target.patterns.end()?nullptr:&events->second;
+    target.next=target.events?size_t(std::lower_bound(target.events->begin(),target.events->end(),throughPosition_,[](const auto &event,double at){return event.position<at-1e-8;})-target.events->begin()):0;
+    break;
+  }
+}
+size_t PatternCommandRuntime::storageBytes() const noexcept {
+  size_t result=sizeof(*this)+targets_.capacity()*sizeof(Target);
+  for(const auto &target:targets_)for(const auto &[id,events]:target.patterns)result+=sizeof(std::pair<const uint32_t,std::vector<Event>>)+4*sizeof(void*)+events.capacity()*sizeof(Event);
+  return result;
 }
 }

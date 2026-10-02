@@ -7,6 +7,47 @@
 #include <iostream>
 
 using namespace Tracker;
+static void noteGateHistory() {
+  for(uint32_t rate:{44100u,48000u,96000u})for(uint32_t block:{17u,128u,4096u}){
+    SignalDefinition graph;graph.id=40;graph.name="Gate observations";
+    graph.nodes={{41,SignalNodeKind::Input,"Input"},{42,SignalNodeKind::Output,"Output"},{43,SignalNodeKind::NoteEnvelope,"Gate"}};
+    graph.audio={{41,42,0,0,1}};const auto plan=compileSignal(graph);
+    auto o=std::make_unique<SignalObservation>(rate);std::vector<SignalPortIdentity> pending;
+    const auto domain=o->newDomain(),otherDomain=o->newDomain();
+    SignalRuntime runtime(graph,plan,rate),other(graph,plan,rate);
+    runtime.observer(std::make_shared<GraphSignalObservation>(*o,domain,SignalCopyIdentity{40,50,2},graph,plan,pending));
+    other.observer(std::make_shared<GraphSignalObservation>(*o,otherDomain,SignalCopyIdentity{40,51,2},graph,plan,pending));
+    auto batch=o->preparePorts(std::move(pending));o->publishPorts(batch);
+    uint32_t token=0,otherToken=0;for(size_t i=0;i<o->ports.size();++i)if(o->ports[i].kind=="control"){
+      (o->ports[i].copy->target==50?token:otherToken)=uint32_t(i+1);
+    }
+    REQUIRE(token&&otherToken);std::array<float,8192> samples{};uint64_t at=0;
+    auto render=[&](uint32_t frames){for(uint32_t offset=0;offset<frames;){const auto count=std::min(block,frames-offset);
+      REQUIRE(runtime.render(samples.data(),count,at,{},{}));REQUIRE(other.render(samples.data(),count,at,{},{}));offset+=count;at+=count;}};
+    render(127);auto g=*o->read(token).noteGate;REQUIRE(!g.held&&!g.hasEvent&&g.on+g.off+g.retrigger==0);
+    runtime.note(true,true);render(4096);g=*o->read(token).noteGate;
+    REQUIRE(g.held&&g.on==1&&g.off==0&&g.retrigger==1&&g.hasEvent&&g.lastFrame==127);
+    runtime.note(true);render(128);g=*o->read(token).noteGate;REQUIRE(g.on==1&&g.retrigger==1&&g.lastFrame==127);
+    const auto retriggerAt=at;runtime.note(true,true);render(33);g=*o->read(token).noteGate;
+    REQUIRE(g.on==1&&g.retrigger==2&&g.lastFrame==retriggerAt);
+    const auto releaseAt=at;runtime.note(false);runtime.note(false);render(50);g=*o->read(token).noteGate;
+    REQUIRE(!g.held&&g.off==1&&g.lastFrame==releaseAt);
+    const auto untouched=*o->read(otherToken).noteGate;REQUIRE(!untouched.held&&!untouched.hasEvent&&untouched.on+untouched.off+untouched.retrigger==0);
+    const auto generation=o->read(token).generation;o->activateDomain(domain,{});REQUIRE(!o->read(token).noteGate);
+    render(1);REQUIRE(o->read(token).generation>generation&&o->read(token).noteGate->off==1);
+    // Rebuild transfers the live history for a retained source; a new source
+    // begins with the current aggregate gate but no invented historical note-on.
+    runtime.note(true,true);auto updated=graph;updated.nodes.push_back({44,SignalNodeKind::NoteEnvelope,"New gate"});
+    const auto updatedPlan=compileSignal(updated);SignalRuntime replacement(updated,updatedPlan,rate);pending.clear();
+    replacement.observer(std::make_shared<GraphSignalObservation>(*o,domain,SignalCopyIdentity{40,50,2},updated,updatedPlan,pending));
+    batch=o->preparePorts(std::move(pending));o->publishPorts(batch);replacement.inheritState(runtime);
+    REQUIRE(replacement.render(samples.data(),1,at,{},{}));g=*o->read(token).noteGate;
+    REQUIRE(g.held&&g.on==2&&g.off==1&&g.retrigger==3&&g.lastFrame==at);
+    for(size_t i=0;i<o->ports.size();++i)if(o->ports[i].node=="node:n44"){
+      const auto fresh=*o->read(uint32_t(i+1)).noteGate;REQUIRE(fresh.held&&!fresh.hasEvent&&fresh.on+fresh.off+fresh.retrigger==0);
+    }
+  }
+}
 static void generationHistory() {
   auto o=std::make_unique<SignalObservation>(48000);
   SignalPortIdentity audio{"generation/audio","test","Audio",true};audio.copy=SignalCopyIdentity{1,2,2};
@@ -36,6 +77,7 @@ static void generationHistory() {
   REQUIRE(!o->read(1).clipped&&!o->read(1).nonFinite&&o->read(1).peakLeft>1&&o->read(1).lastSignal==7);
 }
 int main(){
+  noteGateHistory();
   generationHistory();
   auto observation=std::make_unique<SignalObservation>(48000);
   const auto rack=observation->add({"rack","plugin:rack","Rack",true,0,2,0,0});

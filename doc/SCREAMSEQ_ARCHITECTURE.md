@@ -246,15 +246,19 @@ belong in the dated qualification record; source support is not a claim that
 every third-party plugin or machine has passed live UI/audio qualification.
 
 
-### Pulling out a rack processor
+### Detached effect chains and exact main cable cuts
 
-`mixer.inserts.detach` uses the shared `detachMixerInsert` transaction to remove
-one existing effect from its serial owner, heal that main path and retain the
-processor as explicitly disconnected. The existing `MixerGraph.detached` storage
-clocks it on silence; it cannot fall back onto Master. State, parameter bindings
-and identity survive, and optional dragged position belongs to the same Undo.
-Mac and Windows adapters expose the same strict guarded operation. Explicit
-auxiliary input/output routes reject without dropping branches. A disconnected
-multi-processor chain still needs a representation for its internal cables; this
-operation therefore accepts exactly one processor rather than silently splitting
-a selected chain. Recipe `graph.nodes.detach` remains the chain-capable path.
+`mixer.inserts.detach` uses shared `detachMixerInserts` to remove a consecutive
+segment, heal its old serial path, and retain internal order and auxiliary
+branches. Isolated effects use `MixerGraph.detached`; connected loose segments
+use stable `detachedChains` records. `projectMixerDetachedChains` adds neutral
+silent scheduler roots only to the prepared graph; no fake buses enter song data.
+The projected head has no implicit main cable, while explicit input0 fan-in
+remains available. Moving a whole chain back into a bus prunes its empty root.
+
+Cut is separate from detach/heal. `disconnectedMainInputs` suppresses only the
+implicit serial contribution immediately before explicit main-input fan-in;
+`masterOutputDisconnected` masks only the final output. Upstream processors and
+raw observations remain warm. Stable semantic cable removal, reconnection and
+optional dragged/group positions share guarded API transactions and one Undo.
+Current rendered/adapter evidence belongs in the dated qualification report.

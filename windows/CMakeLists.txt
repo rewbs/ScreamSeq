@@ -53,12 +53,12 @@ target_link_libraries(OpenMPTCore PUBLIC TrackerFLAC ScreamSeqBuildOptions
 
 set(EDITOR_SOURCES
   TrackLayout PatternCommands AutomationTools TrackerDocument PatternTools NativeSong
-  ArrangementTools MixerGraph MixerRuntime MixerTransition NativeEffects SampleImport SongTiming
+  ArrangementTools MixerGraph MixerRuntime MixerTransition MixerDryBridge MixerPluginRouting NativeEffects SampleImport SongTiming
   PreciseNoteRuntime RecordNudgeRuntime NoteRecording InstrumentEnvelopeTools EnvelopeBank
   StateVariableFilter FractionalDelay Distortion LofiMat CabinetVoicing CabinetSimulator
   Dynamics Maximizer SampleProcessing SampleWaveform SampleDocument SampleArchive
   SampleClipboard SampleSplice SampleCopy SampleDrawing SampleSnap SampleLoopCrossfade
-  SignalGraph SignalGroupBypass NoteRouting GraphEditing GraphClipboard SignalRuntime SignalGroupRuntime SongModulation GraphPresentation ParameterProvenance)
+  SignalGraph SignalGroupBypass NoteRouting GraphEditing GraphClipboard SignalRuntime SignalGroupRuntime SongGroupRuntime SongModulation GraphPresentation ParameterProvenance)
 list(TRANSFORM EDITOR_SOURCES PREPEND "${ROOT}/editor/")
 list(TRANSFORM EDITOR_SOURCES APPEND ".cpp")
 add_library(TrackerEditor STATIC ${EDITOR_SOURCES} "${ROOT}/tracklib/SampleEdit.cpp")
@@ -171,6 +171,22 @@ if(BUILD_TESTING)
   add_test(NAME signal-group-runtime COMMAND signal-group-runtime-tests)
   set_tests_properties(signal-group-runtime PROPERTIES LABELS "portable;functional;no-realtime-audit")
   add_dependencies(portable-tests signal-group-runtime-tests)
+  add_executable(song-group-runtime-tests "${ROOT}/editor/Tests/SongGroupRuntimeTests.cpp")
+  target_link_libraries(song-group-runtime-tests PRIVATE TrackerEditor)
+  target_compile_definitions(song-group-runtime-tests PRIVATE TRACKER_SANITIZER)
+  target_compile_options(song-group-runtime-tests PRIVATE "/FI${ROOT}/windows/cmake/WindowsTestPreamble.hpp")
+  target_link_options(song-group-runtime-tests PRIVATE /STACK:8388608)
+  add_test(NAME song-group-runtime COMMAND song-group-runtime-tests)
+  set_tests_properties(song-group-runtime PROPERTIES LABELS "portable;functional;no-realtime-audit")
+  add_dependencies(portable-tests song-group-runtime-tests)
+  add_executable(mixer-plugin-routing-tests "${ROOT}/editor/Tests/MixerPluginRoutingTests.cpp")
+  target_link_libraries(mixer-plugin-routing-tests PRIVATE TrackerEditor)
+  target_compile_definitions(mixer-plugin-routing-tests PRIVATE TRACKER_SANITIZER)
+  target_compile_options(mixer-plugin-routing-tests PRIVATE "/FI${ROOT}/windows/cmake/WindowsTestPreamble.hpp")
+  target_link_options(mixer-plugin-routing-tests PRIVATE /STACK:8388608)
+  add_test(NAME mixer-plugin-routing COMMAND mixer-plugin-routing-tests)
+  set_tests_properties(mixer-plugin-routing PROPERTIES LABELS "portable;functional;no-realtime-audit")
+  add_dependencies(portable-tests mixer-plugin-routing-tests)
   add_executable(parameter-provenance-tests "${ROOT}/editor/Tests/ParameterProvenanceTests.cpp")
   target_link_libraries(parameter-provenance-tests PRIVATE TrackerEditor)
   target_compile_options(parameter-provenance-tests PRIVATE "/FI${ROOT}/windows/cmake/WindowsTestPreamble.hpp")

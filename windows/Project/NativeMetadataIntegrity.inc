@@ -57,6 +57,7 @@ void validateMetadataReferences(const NativeSong &n) {
     need(OpenMPT::NativeNoteEffectSupported(p.effect,p.parameter),"Unsupported precise-note effect");
     need(notePositions.emplace(p.pattern,p.track,p.position,on).second,"Duplicate precise-note event");
   }
+  for(const auto &chain:n.mixer.detachedChains)identity(chain.id);
   for(const auto &group:n.signal.groups)identity(group.id);
   for(const auto &source:n.signal.songSources)identity(source.node.id);
   for(const auto &route:n.signal.noteRouting.routes)identity(route.id);

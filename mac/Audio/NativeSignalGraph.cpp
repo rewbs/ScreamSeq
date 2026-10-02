@@ -24,6 +24,12 @@ struct NativeSignalGraph::Instance {
   std::atomic<bool> layoutSettled{true};
   ParameterProcessor identity;
   uint32_t observationDomain=0;
+  struct Remembered {
+    std::shared_ptr<SignalRuntime> runtime;
+    std::shared_ptr<GraphProcessorSet> processors;
+    GraphControlPlan prior; // Only per-copy presets/ranges/touched controls.
+  };
+  std::shared_ptr<void> remembered; // Producer-only; immutable after publication.
   SignalCopyIdentity copyIdentity() const noexcept {return {identity.graph,identity.target,identity.instrument?uint8_t(3):identity.role,identity.instrument,identity.channel};}
   static std::vector<SignalObservedBus> observedBuses(const GraphProcessorSet &processors) {std::vector<SignalObservedBus> result;for(const auto &p:processors.entries)for(const auto &bus:p.endpoint->initial()->plugin->buses())if(bus.supported)result.push_back({p.id,!bus.input,bus.index,bus.channels});return result;}
   enum class Transition {Stable,Out,Warm,In};
@@ -134,20 +140,21 @@ struct NativeSignalGraph::Instance {
 struct NativeSignalGraph::Bus {
   uint64_t id=0;
   double rate=48000;
-  std::vector<std::unique_ptr<Instance>> instances;
+  std::vector<std::shared_ptr<Instance>> instances;
   std::vector<size_t> row,persistent;
   std::array<std::vector<size_t>,2> renderOrder;
   struct NoteWatch {uint16_t index=0;uint64_t generation=0;};
   std::vector<NoteWatch> channels;
   std::array<bool,192> members{};
   uint16_t rawChannels=0;
+  bool sampleSource=false;
   const OpenMPT::ModInstrument *instrument=nullptr;
   uint16_t sampleChannel=0;
   std::map<uint16_t,std::vector<SignalCommand>> patterns;
   const std::vector<SignalCommand> *events=nullptr;
   size_t next=0;
   double begin=0,units=0;
-  bool expire=false,commands=true;
+  bool expire=false,commands=true,seek=false;
   PluginTransport transport;
   SignalClock clock;
 
@@ -216,6 +223,21 @@ struct NativeSignalGraph::Bus {
     return true;
   }
 };
+struct NativeSignalGraph::CopySet {
+  std::vector<std::shared_ptr<Bus>> buses;
+  std::shared_ptr<CopySet> predecessor; // Retain the handoff source off the callback.
+  std::vector<std::shared_ptr<Instance>> retained;
+  MixerGraph routing;
+  struct Assignment {Instance *instance=nullptr;double amount=1,wet=1;};
+  std::vector<Assignment> assignments;
+  struct Buffers {Instance *instance=nullptr;std::vector<float> dry;std::vector<Instance::Auxiliary> auxiliary;};
+  std::vector<Buffers> buffers;
+  size_t storage=0,processors=0;
+  uint32_t domainBase=0,domains=0;
+};
+const std::vector<std::shared_ptr<NativeSignalGraph::Bus>> &NativeSignalGraph::controlBuses() const noexcept {return controlCopies_?controlCopies_->buses:buses_;}
+const std::vector<std::shared_ptr<NativeSignalGraph::Bus>> &NativeSignalGraph::audioBuses() const noexcept {return audioCopies_?audioCopies_->buses:buses_;}
+const std::vector<std::shared_ptr<NativeSignalGraph::Bus>> &NativeSignalGraph::publishedBuses() const noexcept {const auto *copies=publishedCopies_.load(std::memory_order_acquire);return copies?copies->buses:buses_;}
 NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool offline,std::span<const SignalSampleSource> sampleSources,size_t storageLimit,size_t processorLimit,ParameterActivity *activity,SignalObservation *observation):rate_(rate),offline_(offline),activity_(activity),observation_(observation),routedMixer_(signalRoutingGraph(native.mixer,native.signal)){
   std::vector<SignalPortIdentity> observedPorts;
   for(const auto &[index,entity]:native.patterns)patternIDs_.emplace(index,entity.id);
@@ -224,15 +246,16 @@ NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool o
   for(const auto &bus:native.mixer.buses){std::set<std::pair<uint64_t,uint8_t>> required;
     for(const auto &c:native.signal.commands)if(c.target==bus.id&&(c.kind==SignalCommandKind::Row||c.kind==SignalCommandKind::Start))required.emplace(c.graph,c.kind==SignalCommandKind::Row?0:1);
     for(const auto &a:native.signal.assignments)if(a.target==bus.id)required.emplace(a.graph,2);
-    if(required.empty())continue;
-    auto prepared=std::make_unique<Bus>();prepared->id=bus.id;prepared->rate=rate;
+    const bool sampleSource=std::any_of(sampleSources.begin(),sampleSources.end(),[&](const auto &source){return source.target==bus.id;});
+    if(required.empty()&&!sampleSource)continue;
+    auto prepared=std::make_shared<Bus>();prepared->sampleSource=sampleSource;prepared->id=bus.id;prepared->rate=rate;
     for(const auto &[channel,track]:native.tracks){auto id=track.id;for(size_t depth=0;id&&depth<native.mixer.buses.size();++depth){if(id==bus.id){prepared->channels.push_back({channel,0});break;}auto source=std::find_if(native.mixer.buses.begin(),native.mixer.buses.end(),[&](const auto &b){return b.id==id;});id=source==native.mixer.buses.end()?0:source->output;}}
 
     // Prepare membership independently of today's source list. A live-added
     // note envelope can inspect existing held voices without allocating watch
     // storage in the callback. The render path skips this scan when unused.
     for(const auto &source:sampleSources)if(source.target==bus.id){prepared->instrument=source.instrument;prepared->sampleChannel=source.channel;prepared->channels.clear();if(source.channel!=UINT16_MAX)prepared->channels.push_back({source.channel,0});for(uint16_t i=source.channels;i<OpenMPT::MAX_CHANNELS;++i)prepared->channels.push_back({i,0});}
-    if(!prepared->instrument){
+    if(!prepared->sampleSource){
       prepared->rawChannels=uint16_t(native.tracks.size());
       for(const auto &watch:prepared->channels)if(watch.index<prepared->members.size())prepared->members[watch.index]=true;
       for(uint16_t i=prepared->rawChannels;i<OpenMPT::MAX_CHANNELS;++i)prepared->channels.push_back({i,0});
@@ -244,7 +267,7 @@ NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool o
         auto node=std::find_if(definition->nodes.begin(),definition->nodes.end(),[&](const auto &n){return n.id==edge.source;});
         if(node!=definition->nodes.end()&&node->kind==SignalNodeKind::Input&&edge.output)prepared->inputMask|=uint64_t(1)<<edge.output;
       }
-      auto instance=std::make_unique<Instance>(*definition,role,rate,offline);budget(sizeof(Instance)+sizeof(GraphProcessorSet)+instance->processors->entries.capacity()*sizeof(GraphProcessorSet::Entry)+instance->dryDelay.size()*sizeof(float)+instance->runtime->storageBytes()+instance->bypassStorage());prepared->reserved+=instance->runtime->latency();prepared->tailSeconds=std::min(mixerMaximumTailSeconds,prepared->tailSeconds+instance->tailFrames/rate);
+      auto instance=std::make_shared<Instance>(*definition,role,rate,offline);budget(sizeof(Instance)+sizeof(GraphProcessorSet)+instance->processors->entries.capacity()*sizeof(GraphProcessorSet::Entry)+instance->dryDelay.size()*sizeof(float)+instance->runtime->storageBytes()+instance->bypassStorage());prepared->reserved+=instance->runtime->latency();prepared->tailSeconds=std::min(mixerMaximumTailSeconds,prepared->tailSeconds+instance->tailFrames/rate);
       for(const auto &p:instance->processors->entries)budget(p.endpoint->storageBytes()+p.endpoint->initial()->storageBytes());
       if(role==2){instance->active=true;for(const auto &a:native.signal.assignments)if(a.target==bus.id){instance->amount=a.amount;instance->wet=a.wet;}}
       instance->identity.graph=id;instance->identity.target=bus.id;instance->identity.role=role;
@@ -277,29 +300,126 @@ NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool o
   }
   if(observation){auto batch=observation->preparePorts(std::move(observedPorts));budget(batch.storageBytes());observation->publishPorts(batch);}
   storageBytes_=delayBytes;processors_=processors;
+  controlCopies_=std::make_shared<CopySet>();controlCopies_->buses=buses_;controlCopies_->routing=routedMixer_;
+  controlCopies_->storage=storageBytes_;controlCopies_->processors=processors_;
+  for(const auto &bus:buses_)for(const auto &instance:bus->instances)controlCopies_->retained.push_back(instance);
+  initialCopies_=controlCopies_;audioCopies_=controlCopies_.get();publishedCopies_.store(audioCopies_,std::memory_order_relaxed);
 }
 NativeSignalGraph::~NativeSignalGraph()=default;
+std::shared_ptr<NativeSignalGraph::CopySet> NativeSignalGraph::prepareCopies(const NativeSong &native,GraphControlPlan &controls,const GraphControlPlan *previous,std::span<const SignalSampleSource> sampleSources) const {
+  // Once the current set is adopted, only its own membership and retained
+  // instance cache are needed. Retire the prior handoff's tables on producer.
+  if(publishedCopies_.load(std::memory_order_acquire)==controlCopies_.get())controlCopies_->predecessor.reset();
+  auto next=std::make_shared<CopySet>();next->routing=signalRoutingGraph(native.mixer,native.signal);next->retained=controlCopies_->retained;next->predecessor=controlCopies_;next->storage=controlCopies_->storage;
+  // Stable outer processor slots survive removal and Undo. Empty slots do not
+  // enter the compiled mixer but old fading plans can keep their original index.
+  for(const auto &old:controlBuses()){auto empty=std::make_shared<Bus>();empty->id=old->id;empty->rate=rate_;next->buses.push_back(std::move(empty));}
+  const auto reserve=[&](size_t bytes){if(bytes>controls.preparationHeadroom)throw std::invalid_argument("Live graph copies exceed the prepared audio storage budget");controls.preparationHeadroom-=bytes;next->storage+=bytes;};
+  const auto sameCopy=[](const SignalCopyIdentity &a,const SignalCopyIdentity &b){return std::tie(a.graph,a.target,a.role,a.instrument,a.channel)==std::tie(b.graph,b.target,b.role,b.instrument,b.channel);};
+  for(const auto &bus:native.mixer.buses){
+    std::set<std::pair<uint64_t,uint8_t>> required;
+    for(const auto &c:native.signal.commands)if(c.target==bus.id&&(c.kind==SignalCommandKind::Row||c.kind==SignalCommandKind::Start))required.emplace(c.graph,c.kind==SignalCommandKind::Row?0:1);
+    for(const auto &a:native.signal.assignments)if(a.target==bus.id)required.emplace(a.graph,2);
+    const auto sample=std::find_if(sampleSources.begin(),sampleSources.end(),[&](const auto &source){return source.target==bus.id;});
+    if(required.empty()&&sample==sampleSources.end())continue;
+    auto prepared=std::make_shared<Bus>();prepared->sampleSource=sample!=sampleSources.end();prepared->id=bus.id;prepared->rate=rate_;prepared->seek=true;
+    for(const auto &[channel,track]:native.tracks){auto id=track.id;for(size_t depth=0;id&&depth<native.mixer.buses.size();++depth){if(id==bus.id){prepared->channels.push_back({channel,0});break;}const auto source=std::find_if(native.mixer.buses.begin(),native.mixer.buses.end(),[&](const auto &b){return b.id==id;});id=source==native.mixer.buses.end()?0:source->output;}}
+    if(sample!=sampleSources.end()){prepared->instrument=sample->instrument;prepared->sampleChannel=sample->channel;prepared->channels.clear();if(sample->channel!=UINT16_MAX)prepared->channels.push_back({sample->channel,0});for(uint16_t i=sample->channels;i<OpenMPT::MAX_CHANNELS;++i)prepared->channels.push_back({i,0});}
+    if(!prepared->sampleSource){prepared->rawChannels=uint16_t(native.tracks.size());for(const auto &watch:prepared->channels)if(watch.index<prepared->members.size())prepared->members[watch.index]=true;for(uint16_t i=prepared->rawChannels;i<OpenMPT::MAX_CHANNELS;++i)prepared->channels.push_back({i,0});}
+    reserve(sizeof(Bus)+prepared->channels.capacity()*sizeof(Bus::NoteWatch));
+    for(auto [id,role]:required){
+      const auto definition=std::find_if(native.signal.library.begin(),native.signal.library.end(),[&](const auto &d){return d.id==id;});if(definition==native.signal.library.end())throw std::invalid_argument("Unresolved subgraph assignment");
+      SignalCopyIdentity identity{id,bus.id,role,0,UINT16_MAX};if(sample!=sampleSources.end())identity={id,0,3,sample->instrumentID,sample->channel};
+      const auto retained=std::find_if(next->retained.begin(),next->retained.end(),[&](const auto &instance){return sameCopy(instance->copyIdentity(),identity);});
+      std::shared_ptr<Instance> instance;
+      if(retained!=next->retained.end()){
+        instance=*retained;const auto saved=std::static_pointer_cast<Instance::Remembered>(instance->remembered);const auto expected=saved?saved->runtime:instance->initialRuntime;
+        if(!instance->layoutReady(expected.get()))throw std::runtime_error("A graph copy is still changing layout; retry the assignment shortly");
+      }else {
+        instance=std::make_shared<Instance>(*definition,role,rate_,offline_);instance->identity.graph=id;instance->identity.target=identity.target;instance->identity.role=role;instance->identity.instrument=identity.instrument;instance->identity.channel=identity.channel;
+        instance->identity.name=bus.name+" · "+definition->name+" · ";
+        reserve(sizeof(Instance)+sizeof(GraphProcessorSet)+instance->processors->entries.capacity()*sizeof(GraphProcessorSet::Entry)+instance->dryDelay.capacity()*sizeof(float)+instance->runtime->storageBytes()+instance->bypassStorage());
+        for(const auto &p:instance->processors->entries)reserve(p.endpoint->storageBytes()+p.endpoint->initial()->storageBytes());
+        if(observation_){if(!controls.signalDomains)controls.signalDomainBase=observation_->domainCount();instance->observationDomain=observation_->prepareDomain(controls.signalDomains++);
+          const auto before=instance->runtime->storageBytes();instance->runtime->observer(std::make_shared<GraphSignalObservation>(*observation_,instance->observationDomain,identity,*definition,instance->runtime->plan(),controls.signalPortIdentities,Instance::observedBuses(*instance->processors)));reserve(instance->runtime->storageBytes()-before);}
+        if(activity_)for(auto &p:instance->processors->entries){const auto node=std::find_if(definition->nodes.begin(),definition->nodes.end(),[&](const auto &n){return n.id==p.id;});auto observed=instance->observation(*node,*p.endpoint->initial());
+          const auto old=std::find_if(activity_->processors.begin(),activity_->processors.end(),[&](const auto &p){return p.key==observed.key;});uint32_t token=0;
+          if(old!=activity_->processors.end())token=uint32_t(old-activity_->processors.begin()+1);
+          else {size_t additions=0;for(const auto &pending:controls.observations)if(pending.token>controls.activityBase)++additions;token=uint32_t(controls.activityBase+additions+1);}
+          if(token>4096)throw std::invalid_argument("Parameter observation capacity exceeded");controls.observations.push_back({token,std::move(observed)});p.endpoint->observe(activity_,token);
+        }
+        if(next->retained.size()>=4096)throw std::invalid_argument("Graph copy history exceeds 4096 retained instances");next->retained.push_back(instance);
+      }
+      for(const auto &edge:definition->audio){const auto node=std::find_if(definition->nodes.begin(),definition->nodes.end(),[&](const auto &n){return n.id==edge.source;});if(node!=definition->nodes.end()&&node->kind==SignalNodeKind::Input&&edge.output)prepared->inputMask|=uint64_t(1)<<edge.output;}
+      if(role==2){const auto assignment=std::find_if(native.signal.assignments.begin(),native.signal.assignments.end(),[&](const auto &a){return a.target==bus.id;});next->assignments.push_back({instance.get(),assignment->amount,assignment->wet});}
+      prepared->instances.push_back(instance);if(role<2)prepared->renderOrder[role].push_back(prepared->instances.size()-1);
+    }
+    for(const auto &route:native.signal.outputs)if(route.source==bus.id)prepared->outputPorts.push_back(route.output);
+    std::sort(prepared->outputPorts.begin(),prepared->outputPorts.end());prepared->outputPorts.erase(std::unique(prepared->outputPorts.begin(),prepared->outputPorts.end()),prepared->outputPorts.end());
+    reserve(prepared->outputPorts.size()*sizeof(std::array<float,8192>));prepared->outputBuffers.resize(prepared->outputPorts.size());prepared->row.reserve(required.size());prepared->persistent.reserve(required.size());
+    for(const auto &command:native.signal.commands)if(command.target==bus.id){const auto pattern=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &p){return p.second.id==command.pattern;});if(pattern==native.patterns.end())throw std::invalid_argument("Graph command pattern is unavailable");prepared->patterns[pattern->first].push_back(command);}
+    for(auto &[pattern,commands]:prepared->patterns)std::sort(commands.begin(),commands.end(),[](const auto &a,const auto &b){return std::tie(a.position,a.column)<std::tie(b.position,b.column);});
+    const auto old=std::find_if(next->buses.begin(),next->buses.end(),[&](const auto &b){return b->id==bus.id;});if(old==next->buses.end())next->buses.push_back(std::move(prepared));else *old=std::move(prepared);
+  }
+  prepareParameters(native.signal,controls,previous,next.get());
+  for(auto &bus:next->buses){
+    for(const auto &instance:bus->instances){const auto owner=std::find_if(controls.runtimeOwners.begin(),controls.runtimeOwners.end(),[&](const auto &owner){return owner.target==&instance->runtime;});if(owner==controls.runtimeOwners.end())throw std::logic_error("Missing prepared copy runtime");bus->reserved+=owner->state->latency();
+      for(const auto &[target,tail]:controls.tails)if(target==&instance->tailFrames){bus->tailSeconds=std::min(mixerMaximumTailSeconds,bus->tailSeconds+double(tail)/rate_);break;}
+      const auto processor=std::find_if(controls.processorOwners.begin(),controls.processorOwners.end(),[&](const auto &p){return p.target==&instance->processors;});if(processor!=controls.processorOwners.end())next->processors+=processor->state->entries.size();
+    }
+    if(bus->reserved>1048576)throw std::invalid_argument("Channel graph compensation exceeds supported delay");
+    for(const auto &instance:bus->instances){const auto owner=std::find_if(controls.runtimeOwners.begin(),controls.runtimeOwners.end(),[&](const auto &owner){return owner.target==&instance->runtime;});CopySet::Buffers buffers;buffers.instance=instance.get();buffers.dry.resize(size_t(owner->state->latency())*2);reserve(buffers.dry.capacity()*sizeof(float));
+      for(const auto port:bus->outputPorts)if(owner->state->output(port)){const auto delay=size_t(bus->reserved)*2+2;reserve(sizeof(Instance::Auxiliary)+delay*sizeof(float));buffers.auxiliary.push_back({port,std::vector<float>(delay),0});}next->buffers.push_back(std::move(buffers));
+    }
+  }
+  reserve(sizeof(CopySet)+next->retained.capacity()*sizeof(next->retained[0])+next->buses.capacity()*sizeof(next->buses[0])+next->assignments.capacity()*sizeof(CopySet::Assignment)+next->buffers.capacity()*sizeof(CopySet::Buffers));
+  return next;
+}
+size_t NativeSignalGraph::copyIndex(const CopySet &set,uint64_t target) const noexcept {for(size_t i=0;i<set.buses.size();++i)if(set.buses[i]->id==target&&(set.buses[i]->sampleSource||!set.buses[i]->instances.empty()))return i;return SIZE_MAX;}
+std::span<const uint32_t> NativeSignalGraph::copyOutputs(const CopySet &set,size_t index) const noexcept {return index<set.buses.size()?std::span<const uint32_t>(set.buses[index]->outputPorts):std::span<const uint32_t>{};}
+size_t NativeSignalGraph::copyStorageBytes(const CopySet &set) const noexcept {return set.storage;}
+size_t NativeSignalGraph::copyProcessors(const CopySet &set) const noexcept {return set.processors;}
+void NativeSignalGraph::compileCopies(const CopySet &set,MixerGraph &mixer,std::vector<MixerProcessorInfo> &processors) const {
+  mixer=set.routing;for(const auto &bus:set.buses)if(bus->sampleSource||!bus->instances.empty()){uint32_t count=1;uint64_t mask=1;for(const auto port:bus->outputPorts){count=std::max(count,port+1);mask|=uint64_t(1)<<port;}processors.push_back({signalBusIdentity(bus->id),bus->reserved,bus->tailSeconds,false,false,count,mask,bus->inputMask});}
+}
+void NativeSignalGraph::acceptCopies(std::shared_ptr<CopySet> copies) noexcept {storageBytes_=copies->storage;processors_=copies->processors;controlCopies_=std::move(copies);}
+void NativeSignalGraph::activateCopies(CopySet &next) noexcept {
+  const auto &old=audioBuses();
+  if(observation_)for(const auto &bus:old)for(const auto &instance:bus->instances){bool retained=false;for(const auto &after:next.buses)if(std::find(after->instances.begin(),after->instances.end(),instance)!=after->instances.end()){retained=true;break;}if(!retained)observation_->activateDomain(instance->observationDomain,{});}
+  for(auto &bus:next.buses){const auto prior=std::find_if(old.begin(),old.end(),[&](const auto &p){return p->id==bus->id;});if(prior==old.end())continue;const auto &before=**prior;
+    for(auto &watch:bus->channels)for(const auto &v:before.channels)if(watch.index==v.index){watch.generation=v.generation;break;}
+    for(uint8_t role=0;role<2;++role){auto &order=bus->renderOrder[role];size_t at=0;for(const auto index:before.renderOrder[role]){const auto &instance=before.instances[index];const auto found=std::find(bus->instances.begin(),bus->instances.end(),instance);if(found==bus->instances.end())continue;const auto nextIndex=size_t(found-bus->instances.begin());const auto oldOrder=std::find(order.begin()+at,order.end(),nextIndex);if(oldOrder!=order.end()){std::rotate(order.begin()+at,oldOrder,oldOrder+1);++at;}if(instance->active)(role?bus->persistent:bus->row).push_back(nextIndex);}}
+  }
+  for(const auto &assignment:next.assignments){assignment.instance->active=true;assignment.instance->amount=assignment.amount;assignment.instance->wet=assignment.wet;assignment.instance->tailRemaining=0;}
+  for(auto &buffers:next.buffers){auto &instance=*buffers.instance;if(instance.dryDelay.size()!=buffers.dry.size()){instance.dryDelay.swap(buffers.dry);instance.dryPosition=0;}instance.auxiliary.swap(buffers.auxiliary);}
+  for(const auto &bus:next.buses)for(const auto &instance:bus->instances)for(uint32_t cc=0;cc<128;++cc)instance->runtime->controller(cc,controllers_[cc].load(std::memory_order_relaxed)/127.);
+  audioCopies_=&next;publishedCopies_.store(&next,std::memory_order_release);
+}
+
 std::vector<SignalActivity> NativeSignalGraph::activity() const {
   std::vector<SignalActivity> result;
-  for(const auto &bus:buses_)for(const auto &instance:bus->instances){const auto state=instance->published.load(std::memory_order_relaxed);if(state)result.push_back({bus->id,instance->graph,instance->role,uint16_t(state&0xffff),bool(state&0x10000)});}
+  for(const auto &bus:publishedBuses())for(const auto &instance:bus->instances){const auto state=instance->published.load(std::memory_order_relaxed);if(state)result.push_back({bus->id,instance->graph,instance->role,uint16_t(state&0xffff),bool(state&0x10000)});}
   return result;
 }
-void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPlan &plan,const GraphControlPlan *previous) const {
+void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPlan &plan,const GraphControlPlan *previous,const CopySet *copies) const {
   auto reserve=[&](size_t bytes){if(bytes>plan.preparationHeadroom)throw std::invalid_argument("Live graph controls exceed the 256 MB prepared storage budget");plan.preparationHeadroom-=bytes;};
-  for(const auto &b:buses_)for(const auto &instance:b->instances){
+  for(const auto &b:(copies?copies->buses:controlBuses()))for(const auto &instance:b->instances){
+    const auto saved=std::static_pointer_cast<Instance::Remembered>(instance->remembered);
+    const bool inPrevious=previous&&std::any_of(previous->runtimeOwners.begin(),previous->runtimeOwners.end(),[&](const auto &owner){return owner.target==&instance->runtime;});
+    const auto *prior=inPrevious?previous:(saved?&saved->prior:nullptr);
     const auto d=std::find_if(next.library.begin(),next.library.end(),[&](const auto &d){return d.id==instance->graph;});
     if(d==next.library.end())throw std::invalid_argument("Playing subgraph no longer exists");
     const SignalControls *controls=nullptr;
     for(const auto &c:plan.controls)if(c->definition.id==d->id){controls=c.get();break;}
     if(!controls){auto c=std::make_shared<SignalControls>(*d,rate_);controls=c.get();plan.controls.push_back(std::move(c));}
-    auto runtime=instance->initialRuntime;
-    if(previous)for(const auto &owner:previous->runtimeOwners)if(owner.target==&instance->runtime){runtime=owner.state;break;}
+    auto runtime=saved?saved->runtime:instance->initialRuntime;
+    if(prior)for(const auto &owner:prior->runtimeOwners)if(owner.target==&instance->runtime){runtime=owner.state;break;}
     std::vector<SignalProcessorInfo> processorInfo;std::vector<SignalParameterInfo> parameterInfo;
     const size_t updateStart=plan.updates.size();
-    double tail=0;
-    auto processorSet=instance->initialProcessors;
-    if(previous)for(const auto &owner:previous->processorOwners)if(owner.target==&instance->processors){processorSet=owner.state;break;}
-    if(previous)for(const auto &owner:previous->runtimeOwners)if(owner.target==&instance->runtime&&owner.structural&&!instance->layoutReady(runtime.get()))throw std::runtime_error("This graph is changing its audio layout; retry the edit shortly");
+    double tail=0;bool latencyChanged=false;
+    auto processorSet=saved?saved->processors:instance->initialProcessors;
+    if(prior)for(const auto &owner:prior->processorOwners)if(owner.target==&instance->processors){processorSet=owner.state;break;}
+    if(prior)for(const auto &owner:prior->runtimeOwners)if(owner.target==&instance->runtime&&owner.structural&&!instance->layoutReady(runtime.get()))throw std::runtime_error("This graph is changing its audio layout; retry the edit shortly");
     plan.preparedProcessors+=std::count_if(d->nodes.begin(),d->nodes.end(),[](const auto &n){return n.kind==SignalNodeKind::Plugin;});
     if(plan.preparedProcessors>256)throw std::invalid_argument("Active song graph exceeds 256 prepared plugin copies");
     auto desired=std::make_shared<GraphProcessorSet>();
@@ -331,7 +451,7 @@ void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPl
     for(const auto &p:processorSet->entries){
       const auto n=std::find_if(d->nodes.begin(),d->nodes.end(),[&](const auto &n){return n.id==p.id;});
       auto state=p.endpoint->initial();std::shared_ptr<GraphPluginState> retained;
-      if(previous)for(const auto &preset:previous->presets)if(preset.endpoint==p.endpoint.get()){state=preset.state;retained=preset.previous;break;}
+      if(prior)for(const auto &preset:prior->presets)if(preset.endpoint==p.endpoint.get()){state=preset.state;retained=preset.previous;break;}
       for(auto port:n->plugin.inputs)if(port>=64||!(state->inputs&(uint64_t(1)<<port)))throw std::invalid_argument("Recipe input is outside the prepared physical channel layout");
       for(auto port:n->plugin.outputs)if(port>=64||!(state->outputs&(uint64_t(1)<<port)))throw std::invalid_argument("Recipe output is outside the prepared physical channel layout");
       if(state->recipe.state!=n->plugin.state){
@@ -340,15 +460,21 @@ void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPl
         const auto sameParameter=[](const PluginParameter &a,const PluginParameter &b){return a.id==b.id&&a.name==b.name&&a.min==b.min&&a.max==b.max&&a.unit==b.unit&&a.unitLabel==b.unitLabel&&a.choices==b.choices&&a.logarithmic==b.logarithmic&&a.step==b.step&&a.writable==b.writable&&a.continuous==b.continuous;};
         const auto &beforeBuses=state->plugin->buses(),&afterBuses=replacement->plugin->buses();
         const bool sameBuses=beforeBuses.size()==afterBuses.size()&&std::equal(beforeBuses.begin(),beforeBuses.end(),afterBuses.begin(),[](const auto &a,const auto &b){return a.index==b.index&&a.channels==b.channels&&a.input==b.input&&a.active==b.active&&a.supported==b.supported;});
-        if(!sameBuses||replacement->inputs!=state->inputs||replacement->outputs!=state->outputs||replacement->latency!=state->latency||replacement->parameters.size()!=state->parameters.size()||!std::equal(state->parameters.begin(),state->parameters.end(),replacement->parameters.begin(),sameParameter))
+        if(!sameBuses||replacement->inputs!=state->inputs||replacement->outputs!=state->outputs||replacement->latency!=uint32_t(std::llround(state->plugin->latency()*rate_))||replacement->parameters.size()!=state->parameters.size()||!std::equal(state->parameters.begin(),state->parameters.end(),replacement->parameters.begin(),sameParameter))
           throw std::invalid_argument("Live graph presets must preserve plugin ports, latency and parameter identities");
         p.endpoint->observePrepared(*replacement);retained=state;state=std::move(replacement);
         for(const auto &parameter:state->parameters)plan.readings.push_back({state->plugin.get(),parameter.id,parameter.value});
       }
       plan.presets.push_back({p.endpoint.get(),state,retained});
       plan.bypasses.emplace_back(p.endpoint.get(),n->plugin.bypass);
-      tail=std::min(mixerMaximumTailSeconds,tail+std::max(0.,state->plugin->tail()));
-      processorInfo.push_back({p.id,state->latency,state->inputs,state->outputs});
+      auto samples=uint32_t(std::llround(state->plugin->latency()*rate_));auto processorTail=state->plugin->tail();
+      if(copies&&state->plugin->latencyChangePending()){
+        auto update=state->plugin->prepareLatency();if(!update)throw std::runtime_error("Recipe latency changed while preparing; retry the edit");
+        samples=update->snapshot.samples;processorTail=update->snapshot.tail;latencyChanged=true;
+        const auto bytes=update->storageBytes();reserve(bytes);plan.latencies.push_back({state->plugin,std::move(update),bytes});
+      }
+      tail=std::min(mixerMaximumTailSeconds,tail+std::max(0.,processorTail));
+      processorInfo.push_back({p.id,samples,state->inputs,state->outputs});
       const auto &parameters=state->parameters;
       std::set<uint32_t> modulated;
       for(const auto &m:d->modulation)if(m.enabled&&m.target==p.id){const auto c=std::find_if(parameters.begin(),parameters.end(),[&](const auto &c){return c.id==m.parameter;});if(c==parameters.end())throw std::invalid_argument("Graph modulation parameter is unavailable");parameterInfo.push_back({p.id,m.parameter,graphModulationStep(*c,m.quantized)});modulated.insert(m.parameter);}
@@ -361,7 +487,7 @@ void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPl
           plan.scheduling.push_back({vendor,std::move(queue)});
         }else if(vendor->scheduling)plan.scheduling.push_back({vendor,vendor->scheduling});
         std::set<uint32_t> ranges=modulated;ranges.insert(vendor->initialModulated.begin(),vendor->initialModulated.end());
-        if(previous)for(const auto &range:previous->ranges)if(range.plugin==vendor->plugin.get())ranges.insert(range.parameter);
+        if(prior)for(const auto &range:prior->ranges)if(range.plugin==vendor->plugin.get())ranges.insert(range.parameter);
         // Predict built-in decay from a separate control-thread model, never
         // mutate the live processor's range trackers during preparation.
         std::unique_ptr<NativeEffect> tailModel;
@@ -381,10 +507,10 @@ void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPl
       // publications and Undo restore it. Untouched catalog entries never need
       // an audio command, even for a plugin exposing thousands of parameters.
       std::set<uint32_t> formerlyModulated(state->initialModulated.begin(),state->initialModulated.end());
-      if(previous)for(const auto &range:previous->ranges)if(range.plugin==state->plugin.get())formerlyModulated.insert(range.parameter);
+      if(prior)for(const auto &range:prior->ranges)if(range.plugin==state->plugin.get())formerlyModulated.insert(range.parameter);
       std::set<uint32_t> touched=modulated;touched.insert(formerlyModulated.begin(),formerlyModulated.end());
       for(const auto &[id,value]:n->plugin.parameters)touched.insert(id);
-      if(previous)for(const auto &v:previous->updates)if(v.endpoint==p.endpoint.get())touched.insert(v.parameter);
+      if(prior)for(const auto &v:prior->updates)if(v.endpoint==p.endpoint.get())touched.insert(v.parameter);
       for(size_t i=0;i<parameters.size();++i)if(state->initialBaselines[i]!=parameters[i].value)touched.insert(parameters[i].id);
       for(const auto &c:parameters)if(c.writable&&touched.contains(c.id)){const auto found=n->plugin.parameters.find(c.id);
         plan.updates.push_back({state->plugin.get(),nullptr,p.id,c.id,found==n->plugin.parameters.end()?c.value:found->second,state->baselines.get()+(&c-parameters.data()),state->initialBaselines[&c-parameters.data()],p.endpoint.get(),formerlyModulated.contains(c.id)&&!modulated.contains(c.id)});
@@ -402,51 +528,60 @@ void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPl
     // incarnation. Carry both owners even after its last audible fade; Undo
     // must not revive a dangling pointer or flatten its vendor state.
     for(const auto &retired:processorSet->retired){
-      const auto found=previous?std::find_if(previous->presets.begin(),previous->presets.end(),[&](const auto &p){return p.endpoint==retired.endpoint.get();}):plan.presets.end();
-      if(previous&&found!=previous->presets.end())plan.presets.push_back(*found);
+      const auto found=prior?std::find_if(prior->presets.begin(),prior->presets.end(),[&](const auto &p){return p.endpoint==retired.endpoint.get();}):plan.presets.end();
+      if(prior&&found!=prior->presets.end())plan.presets.push_back(*found);
       else plan.presets.push_back({retired.endpoint.get(),retired.endpoint->initial(),{}});
     }
     bool structural=processorsChanged;
     auto audioLayout=[](const SignalDefinition &definition){SignalGraph graph;graph.library={definition};graph.assignments={{1,definition.id}};for(auto &node:graph.library[0].nodes)node.plugin.state.clear();return graph;};
     structural|=!sameSignalSourceLayout(audioLayout(runtime->definition()),audioLayout(*d));
     if(structural&&!instance->layoutReady(runtime.get()))throw std::runtime_error("A graph layout publication is pending; retry the edit shortly");
-    if(!runtime->sameLayout(*d)||structural){
+    if(!runtime->sameLayout(*d)||structural||latencyChanged){
       auto compiled=compileSignal(*d,processorInfo);
       const auto inputNode=std::find_if(d->nodes.begin(),d->nodes.end(),[](const auto &n){return n.kind==SignalNodeKind::Input;});
       for(const auto &edge:d->audio)if(edge.source==inputNode->id&&edge.output&&!(b->inputMask&(uint64_t(1)<<edge.output)))throw std::invalid_argument("A live source cannot enable an unprepared external graph input");
       auto replacement=std::make_shared<SignalRuntime>(*d,std::move(compiled),rate_,parameterInfo);
       if(observation_)replacement->observer(std::make_shared<GraphSignalObservation>(*observation_,instance->observationDomain,instance->copyIdentity(),*d,replacement->plan(),plan.signalPortIdentities,Instance::observedBuses(*processorSet)));
       reserve(replacement->storageBytes());
-      if(replacement->latency()!=runtime->latency())throw std::invalid_argument("This recipe latency change needs a prepared outer-mixer transition");
-      if(!structural&&!replacement->compatibleHistory(*runtime))throw std::invalid_argument("Live graph source edits must preserve audio latency and compensation");
-      for(auto port:b->outputPorts)if(replacement->output(port)&&std::none_of(instance->auxiliary.begin(),instance->auxiliary.end(),[&](const auto &p){return p.port==port;}))throw std::invalid_argument("This recipe output activation needs a prepared outer-mixer transition");
+      if(!copies&&replacement->latency()!=runtime->latency())throw std::invalid_argument("This recipe latency change needs a prepared outer-mixer transition");
+      if(!copies&&!structural&&!replacement->compatibleHistory(*runtime))throw std::invalid_argument("Live graph source edits must preserve audio latency and compensation");
+      for(auto port:b->outputPorts)if(!copies&&replacement->output(port)&&std::none_of(instance->auxiliary.begin(),instance->auxiliary.end(),[&](const auto &p){return p.port==port;}))throw std::invalid_argument("This recipe output activation needs a prepared outer-mixer transition");
       runtime=std::move(replacement);
     }
     for(size_t i=updateStart;i<plan.updates.size();++i)if(plan.updates[i].runtime)plan.updates[i].runtime=runtime.get();
     plan.runtimeOwners.push_back({&instance->runtime,instance->initialRuntime,runtime,{},instance.get(),
-      [](void *context,SignalRuntime *runtime,GraphProcessorSet *processors,bool structural) noexcept {static_cast<Instance *>(context)->adopt(runtime,processors,structural);},processorSet.get(),structural});
+      [](void *context,SignalRuntime *runtime,GraphProcessorSet *processors,bool structural) noexcept {static_cast<Instance *>(context)->adopt(runtime,processors,structural);},processorSet.get(),copies?false:structural});
     plan.processorOwners.push_back({&instance->processors,&instance->publishedProcessors,instance->initialProcessors,processorSet});
     plan.runtimes.emplace_back(runtime.get(),controls);
     plan.tails.emplace_back(&instance->tailFrames,uint64_t(std::ceil(tail*rate_))+runtime->latency());
+    auto remember=std::make_shared<Instance::Remembered>();remember->runtime=runtime;remember->processors=processorSet;
+    const auto ownsEndpoint=[&](const GraphPluginEndpoint *endpoint){for(const auto *entries:{&processorSet->entries,&processorSet->retired})for(const auto &p:*entries)if(p.endpoint.get()==endpoint)return true;return false;};
+    for(const auto &preset:plan.presets)if(ownsEndpoint(preset.endpoint))remember->prior.presets.push_back(preset);
+    for(const auto &control:plan.controls)if(control->definition.id==instance->graph)remember->prior.controls.push_back(control);
+    const auto ownsPlugin=[&](const NativePlugin *plugin){for(const auto &preset:remember->prior.presets)for(const auto &state:{preset.state,preset.previous})if(state&&state->plugin.get()==plugin)return true;return false;};
+    for(const auto &range:plan.ranges)if(ownsPlugin(range.plugin))remember->prior.ranges.push_back(range);
+    for(size_t i=updateStart;i<plan.updates.size();++i)if(ownsEndpoint(plan.updates[i].endpoint))remember->prior.updates.push_back(plan.updates[i]);
+    const size_t rememberedBytes=sizeof(Instance::Remembered)+remember->prior.presets.capacity()*sizeof(GraphControlPlan::Preset)+remember->prior.ranges.capacity()*sizeof(GraphControlPlan::Range)+remember->prior.updates.capacity()*sizeof(GraphParameterUpdate);
+    reserve(rememberedBytes+remember->prior.controls.capacity()*sizeof(remember->prior.controls[0]));plan.rememberedCopies.push_back({&instance->remembered,std::move(remember),rememberedBytes});
   }
-  for(const auto &bus:buses_){uint64_t frames=0;for(const auto &instance:bus->instances)for(const auto &[target,value]:plan.tails)if(target==&instance->tailFrames){frames+=value;break;}
+  for(const auto &bus:(copies?copies->buses:controlBuses())){uint64_t frames=0;for(const auto &instance:bus->instances)for(const auto &[target,value]:plan.tails)if(target==&instance->tailFrames){frames+=value;break;}
     plan.graphTails.emplace_back(signalBusIdentity(bus->id),std::min(mixerMaximumTailSeconds,double(frames)/rate_));}
 }
 uint64_t NativeSignalGraph::tailFrames(size_t index) const noexcept {
-  if(index>=buses_.size())return 0;uint64_t total=0;for(const auto &instance:buses_[index]->instances)total+=instance->currentTailFrames();
+  if(index>=audioBuses().size())return 0;uint64_t total=0;for(const auto &instance:audioBuses()[index]->instances)total+=instance->currentTailFrames();
   return std::min(total,uint64_t(std::ceil(mixerMaximumTailSeconds*rate_)));
 }
 // Growth is conservative across parallel copies but bounded; it prevents a
 // live comb/filter edit from truncating stored energy before a new plan exists.
-double NativeSignalGraph::tailGrowth() const noexcept {double growth=0;for(const auto &b:buses_)for(const auto &i:b->instances)for(const auto &p:i->publishedProcessors.load(std::memory_order_acquire)->entries)growth+=p.endpoint->tailGrowth();return std::min(60.,growth);}
-uint64_t NativeSignalGraph::tailRevision() const noexcept {uint64_t revision=0;for(const auto &b:buses_)for(const auto &i:b->instances)for(const auto &p:i->publishedProcessors.load(std::memory_order_acquire)->entries)revision+=p.endpoint->tailRevision();return revision;}
+double NativeSignalGraph::tailGrowth() const noexcept {double growth=0;for(const auto &b:publishedBuses())for(const auto &i:b->instances)for(const auto &p:i->publishedProcessors.load(std::memory_order_acquire)->entries)growth+=p.endpoint->tailGrowth();return std::min(60.,growth);}
+uint64_t NativeSignalGraph::tailRevision() const noexcept {uint64_t revision=0;for(const auto &b:publishedBuses())for(const auto &i:b->instances)for(const auto &p:i->publishedProcessors.load(std::memory_order_acquire)->entries)revision+=p.endpoint->tailRevision();return revision;}
 bool NativeSignalGraph::latencyChangePending() const noexcept {
-  for (const auto &b : buses_) for (const auto &i : b->instances)
+  for (const auto &b : publishedBuses()) for (const auto &i : b->instances)
     for (const auto &p : i->publishedProcessors.load(std::memory_order_acquire)->entries) if (p.endpoint->latencyChangePending()) return true;
   return false;
 }
 void NativeSignalGraph::refreshLatencies(std::vector<MixerProcessorInfo> &mixerProcessors) {
-  for (auto &b : buses_) {
+  for (auto &b : controlBuses()) {
     const auto previousReserved = b->reserved;
     b->reserved = 0; b->tailSeconds = 0;
     for (auto &i : b->instances) {
@@ -486,15 +621,9 @@ void NativeSignalGraph::refreshLatencies(std::vector<MixerProcessorInfo> &mixerP
     }
   }
 }
-void NativeSignalGraph::compile(MixerGraph &mixer,std::vector<MixerProcessorInfo> &processors){
-  mixer=routedMixer_;
-  for(const auto &bus:buses_){const auto &b=*bus;uint32_t count=1;uint64_t mask=1;
-    for(auto port:b.outputPorts){count=std::max(count,port+1);mask|=uint64_t(1)<<port;}
-    processors.push_back({signalBusIdentity(b.id),b.reserved,b.tailSeconds,false,false,count,mask,b.inputMask});
-  }
-}
+void NativeSignalGraph::compile(MixerGraph &mixer,std::vector<MixerProcessorInfo> &processors){compileCopies(*controlCopies_,mixer,processors);}
 bool NativeSignalGraph::sameNoteMembership(const NativeSong &native) const {
-  for(const auto &bus:buses_) {
+  for(const auto &bus:controlBuses()) {
     // Instrument-copy membership follows its original voice/channel, not the
     // destination mixer path. rawChannels is set only for bus note envelopes.
     if(!bus->rawChannels || bus->instrument)continue;
@@ -517,10 +646,10 @@ bool NativeSignalGraph::sameNoteMembership(const NativeSong &native) const {
   return true;
 }
 std::span<const uint32_t> NativeSignalGraph::outputs(size_t index) const noexcept {
-  if(index>=buses_.size())return {};return buses_[index]->outputPorts;
+  if(index>=controlBuses().size())return {};return controlBuses()[index]->outputPorts;
 }
 const float *NativeSignalGraph::output(size_t index,uint32_t port) const noexcept {
-  if(index>=buses_.size())return nullptr;const auto &b=*buses_[index];
+  if(index>=audioBuses().size())return nullptr;const auto &b=*audioBuses()[index];
   auto found=std::find(b.outputPorts.begin(),b.outputPorts.end(),port);
   return found==b.outputPorts.end()?nullptr:b.outputBuffers[size_t(found-b.outputPorts.begin())].data();
 }
@@ -531,8 +660,8 @@ void NativeSignalGraph::begin(const OpenMPT::PlayState &state,uint32_t,uint64_t,
   const bool entering=pattern_!=state.m_nPattern||order_!=state.m_nCurrentOrder||at<=previous_;
   const bool rowChanged=entering||row_!=state.m_nRow;
   pattern_=state.m_nPattern;order_=state.m_nCurrentOrder;row_=state.m_nRow;previous_=at;
-  for(uint32_t cc=0;cc<128;++cc){auto value=controllers_[cc].load(std::memory_order_relaxed);if(value!=appliedControllers_[cc]){appliedControllers_[cc]=value;for(auto &b:buses_)for(auto &i:b->instances)i->runtime->controller(cc,value/127.);}}
-  for(auto &b:buses_){bool gate=false,retrigger=false;
+  for(uint32_t cc=0;cc<128;++cc){auto value=controllers_[cc].load(std::memory_order_relaxed);if(value!=appliedControllers_[cc]){appliedControllers_[cc]=value;for(auto &b:audioBuses())for(auto &i:b->instances)i->runtime->controller(cc,value/127.);}}
+  for(auto &b:audioBuses()){bool gate=false,retrigger=false;
     const bool watching=std::any_of(b->instances.begin(),b->instances.end(),[](const auto &i){return i->runtime->watchesNotes()||(i->pendingRuntime&&i->pendingRuntime->watchesNotes());});
     if(watching)for(auto &watch:b->channels)if(watch.index<state.Chn.size()){
       const auto &channel=state.Chn[watch.index];
@@ -546,11 +675,11 @@ void NativeSignalGraph::begin(const OpenMPT::PlayState &state,uint32_t,uint64_t,
     const auto identity=patternIDs_.find(uint16_t(state.m_nPattern));
     b->clock={transport.beat,transport.tempo,transport.playing,identity==patternIDs_.end()?0:identity->second,at/256,transport.playing?units/256:0,double(patternRows)*256,double(std::max(1u,unsigned(state.m_nCurrentRowsPerBeat)))};
     b->transport=transport;b->begin=at;b->units=units;b->commands=valid;b->expire|=rowChanged;
-    if(entering){auto found=b->patterns.find(uint16_t(pattern_));b->events=found==b->patterns.end()?nullptr:&found->second;b->next=0;
+    if(entering||b->seek){b->seek=false;auto found=b->patterns.find(uint16_t(pattern_));b->events=found==b->patterns.end()?nullptr:&found->second;b->next=0;
       if(b->events)while(b->next<b->events->size()&&(*b->events)[b->next].position<at-1e-8)++b->next;}
     // Note gates are distinct from amplitude followers and aggregate group members.
   }
 }
-void NativeSignalGraph::tail()noexcept {for(auto &b:buses_){b->commands=false;b->transport.playing=false;b->clock.playing=false;b->clock.unitsPerFrame=0;for(auto &i:b->instances)i->runtime->note(false);}}
-bool NativeSignalGraph::process(size_t index,float *audio,uint32_t frames,uint64_t position,std::span<const MixerAudioInput> inputs)noexcept {return index<buses_.size()&&frames<=4096&&buses_[index]->render(audio,frames,position,inputs);}
+void NativeSignalGraph::tail()noexcept {for(auto &b:audioBuses()){b->commands=false;b->transport.playing=false;b->clock.playing=false;b->clock.unitsPerFrame=0;for(auto &i:b->instances)i->runtime->note(false);}}
+bool NativeSignalGraph::process(size_t index,float *audio,uint32_t frames,uint64_t position,std::span<const MixerAudioInput> inputs)noexcept {return index<audioBuses().size()&&frames<=4096&&audioBuses()[index]->render(audio,frames,position,inputs);}
 } // namespace Tracker

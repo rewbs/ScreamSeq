@@ -34,4 +34,12 @@ void groupBypassOperations() {
   auto invalid=boundary["dryRoutes"];invalid[0]["output"]["node"]="n99999";rejected(f,"graph.group.bypass",{{"graph",graph},{"group",group},{"bypass",true},{"dryRoutes",invalid}});
   f.api.invoke("graph.clone",{{"graph",graph}});const auto &copy=f.doc->native().signal.library.back();CHECK(copy.groups[0].bypass&&copy.groups[0].dryRoutes[0].output.node!=bypassed.signal.library[0].groups[0].dryRoutes[0].output.node);
   f.api.invoke("graph.group.export",{{"graph",graph},{"group",group}});CHECK(f.doc->native().signal.library.back().groups[0].bypass);
+  const auto source=f.api.invoke("graph.song.source.add",{{"source",{{"kind","lfo"},{"x",25},{"y",35}}}}).at("node");
+  const auto rootGroup=f.api.invoke("graph.song.group.create",{{"nodes",{"source:"+source.get<std::string>()}},{"name","Control"}}).at("group");
+  CHECK(f.doc->native().signal.groups.back().nodes==std::vector<std::string>{"source:"+source.get<std::string>()});
+  f.api.invoke("graph.song.group.update",{{"group",rootGroup},{"x",100},{"y",200}});CHECK((f.doc->native().signal.layout.at("source:"+source.get<std::string>())==std::array<double,2>{100,200}));
+  auto grouped=f.doc->native();CHECK(ScreamSeq::Project::decodeNativeMetadata(ScreamSeq::Project::encodeNativeMetadata(grouped))==grouped);
+  rejected(f,"graph.song.group.create",{{"nodes",{"source:n999999"}}});
+  f.api.invoke("graph.song.source.remove",{{"nodes",{source}}});CHECK(f.doc->native().signal.groups.empty());
+  f.doc->undo();CHECK(f.doc->native()==grouped);f.doc->redo();CHECK(f.doc->native().signal.groups.empty());
 }

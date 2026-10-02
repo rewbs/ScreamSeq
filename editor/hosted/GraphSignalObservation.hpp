@@ -74,6 +74,7 @@ public:
   }
   void route(uint32_t index,const float *samples,uint32_t frames,uint64_t position,double gain) noexcept override {if(index<routes_.size()){observation_.routeGain(routes_[index],gain);observation_.observe(routes_[index],samples,frames,position);}}
   void control(uint64_t node,double first,double last,uint32_t frames,uint64_t position) noexcept override {const auto found=controls_.find(node);if(found!=controls_.end())observation_.observeControl(found->second,first,last,frames,position);}
+  void noteGate(uint64_t node,const SignalNoteGate &gate) noexcept override {const auto found=controls_.find(node);if(found!=controls_.end())observation_.observeNoteGate(found->second,gate);}
   void contribution(uint32_t index,double first,double last,uint32_t frames,uint64_t position) noexcept override {if(index<contributions_.size())observation_.observeControl(contributions_[index],first,last,frames,position);}
   size_t storageBytes() const noexcept override {return sizeof(*this)+configuration_.capacity()*sizeof(SignalPortConfiguration)+(routes_.capacity()+contributions_.capacity())*sizeof(uint32_t)+audio_.size()*(sizeof(decltype(audio_)::value_type)+4*sizeof(void*))+controls_.size()*(sizeof(decltype(controls_)::value_type)+4*sizeof(void*));}
 };

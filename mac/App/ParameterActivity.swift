@@ -44,10 +44,11 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
     recordBar=stack(.horizontal,[Theme.label("Seconds",size:11),pointTime,Theme.label("Value",size:11),pointValue,ActionButton("Add / update"){[weak self] in self?.addPoint()},ActionButton("Delete point"){[weak self] in self?.deletePoint()},loadMore!],spacing:6)
     recordBar.isHidden=true
     let content=stack(.vertical,[
-      stack(.horizontal,[Theme.label("Parameter activity",size:20,weight:.semibold),NSView(),ActionButton("Last touched"){[weak self] in self?.lastTouched()},ActionButton("Refresh copies"){[weak self] in self?.recordedInspection=nil;self?.reloadTargets()}]),
-      processor,stack(.horizontal,[search,parameter]),stack(.horizontal,[reading,NSView(),freezeButton!,clear]),
-      stack(.horizontal,[viewMode,pass,NSView(),ActionButton("Play / capture pattern"){[weak self] in guard let self,!self.pending else{return};self.onCapture?()},ActionButton("−"){[weak self] in self?.trace.zoom(0.5)},ActionButton("+"){[weak self] in self?.trace.zoom(2)},ActionButton("Fit"){[weak self] in self?.trace.fit()}]),trace,
-      stack(.horizontal,[detailMode,NSView(),ActionButton("Edit mapping…"){[weak self] in self?.openSelectedMapping()},ActionButton("Open source…"){[weak self] in self?.openSelected()}]),scroll,recordBar!,rule,status
+      stack(.horizontal,[ActionButton("Last touched"){[weak self] in self?.lastTouched()},NSView(),ActionButton("Refresh copies"){[weak self] in self?.recordedInspection=nil;self?.reloadTargets()}]),
+      processor,stack(.horizontal,[search,parameter]),reading,
+      stack(.horizontal,[freezeButton!,clear,NSView()]),stack(.horizontal,[viewMode,pass]),
+      stack(.horizontal,[ActionButton("Play / capture pattern"){[weak self] in guard let self,!self.pending else{return};self.onCapture?()},NSView(),ActionButton("−"){[weak self] in self?.trace.zoom(0.5)},ActionButton("+"){[weak self] in self?.trace.zoom(2)},ActionButton("Fit"){[weak self] in self?.trace.fit()}]),trace,
+      detailMode,stack(.horizontal,[ActionButton("Edit mapping…"){[weak self] in self?.openSelectedMapping()},ActionButton("Open source…"){[weak self] in self?.openSelected()},NSView()]),scroll,recordBar!,rule,status
     ],spacing:8);content.stretchAcrossAxis();content.fill(self,inset:12)
     for p in [processor,parameter,pass]{p.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
     reading.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)

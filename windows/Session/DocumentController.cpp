@@ -341,13 +341,14 @@ std::function<void()> DocumentController::prepareRackPublication(const std::vect
   const auto feedback=playbackFeedback();if(!feedback.playing&&!feedback.audioActive)return [this]{onMain(stop_);};
   if(!playback_)throw Api::ApiError(-32002,"Active playback has no prepared rack; playback was preserved");
   const auto current=projectPluginStates(project_);
-  // prepareRack preserves retained vendor state. An opaque preset change must
-  // never be silently accepted as a topology update.
-  for(const auto &next:states)if(const auto old=std::find_if(current.begin(),current.end(),[&](const auto &p){return p.instanceID==next.instanceID;});old!=current.end())
-    if(next.state!=old->state||next.bypass!=old->bypass)throw Api::ApiError(-32002,"This preset change cannot be prepared during playback; playback was preserved");
+  std::vector<std::string> presets;
+  for(const auto &next:states)if(const auto old=std::find_if(current.begin(),current.end(),[&](const auto &p){return p.instanceID==next.instanceID;});old!=current.end()) {
+    if(next.state!=old->state)presets.push_back(next.instanceID);
+    if(next.bypass!=old->bypass)throw Api::ApiError(-32002,"Combined bypass changes need a separate live bypass edit; playback was preserved");
+  }
   (void)points; // Topology changes retain each stable processor's existing timeline.
   auto plan=std::make_shared<std::unique_ptr<Tracker::PluginChain::RackPlan>>();auto *chain=&playback_->chain();
-  try{auto prepared=native;prepared.ensureMixer();*plan=chain->prepareRack(states,prepared);}
+  try{auto prepared=native;prepared.ensureMixer();*plan=chain->prepareRack(states,prepared,presets);}
   catch(const std::exception &e){throw Api::ApiError(-32002,std::string("Rack preparation failed; playback was preserved: ")+e.what());}
   return [chain,plan]{if(!chain->publishRack(*plan))throw Api::ApiError(-32002,"Rack publication is busy; retry the same revision");};
 }
@@ -570,7 +571,7 @@ std::future<HostedProjectPlayback *> DocumentController::prepare(unsigned rate,J
 std::future<bool> DocumentController::refreshPlaybackLatencies() {
   auto task=std::make_shared<std::packaged_task<bool()>>([this]{
     if(!playback_) return false;
-    playback_->chain().refreshLatencies();return true;
+    return playback_->chain().refreshLatencies(document_->native());
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
 }

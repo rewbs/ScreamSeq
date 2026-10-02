@@ -3,10 +3,12 @@ import AppKit
 extension SignalGraphEditor {
   @discardableResult func offerBranchedDetach(_ ids:[String],positions:[(String,Double,Double)],remove:Bool)->Bool {
     guard let graphID,let definition else{return false}
-    let selected=remove ? expandedProcessingSelection(Set(ids)):Set(ids),audio=definition["audio"] as? [[String:Any]] ?? []
-    let incoming=audio.indices.filter{!selected.contains(audio[$0]["source"] as? String ?? "") && selected.contains(audio[$0]["target"] as? String ?? "") && (audio[$0]["input"] as? Int ?? 0)==0}
-    let outgoing=audio.indices.filter{selected.contains(audio[$0]["source"] as? String ?? "") && !selected.contains(audio[$0]["target"] as? String ?? "") && (audio[$0]["output"] as? Int ?? 0)==0}
-    guard incoming.count>1 || outgoing.count>1 else{return false}
+    let selected=expandedProcessingSelection(Set(ids)),audio=definition["audio"] as? [[String:Any]] ?? []
+    let incoming=audio.indices.filter{!selected.contains(audio[$0]["source"] as? String ?? "") && selected.contains(audio[$0]["target"] as? String ?? "")}
+    let outgoing=audio.indices.filter{selected.contains(audio[$0]["source"] as? String ?? "") && !selected.contains(audio[$0]["target"] as? String ?? "")}
+    // A unique pair also makes a branched/grouped selection explicit. This
+    // keeps modulators and internal branches intact without extra confirmation.
+    guard !selected.isEmpty else{return false}
     let context=viewContext,document=projectionDocument,capturedRevision=revision
     // Option-drag only previews position. Canceling a path chooser must leave
     // even that preview at the stored document position.

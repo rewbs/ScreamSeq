@@ -2,6 +2,16 @@ import AppKit
 
 extension InterfaceTests {
   static func graphPortActionChecks() throws {
+    let search=GraphAddMenu()
+    let entries:[GraphAddMenu.Entry]=[.init(id:"n2",title:"Track 1 · Main out",detail:"Audio output",keywords:"n2"),.init(id:"n3",title:"Track 2 · Main out",detail:"Audio output",keywords:"n3")]
+    search.show(in:NSView(),at:.zero,title:"Connect port",entries:entries,verb:"connects"){_ in}
+    search.search.stringValue="track 2 main";search.filter()
+    try require(search.filtered.first?.id=="n3" && search.table.selectedRow==0,"Visible channel titles outrank hidden stable IDs and select the intended target on a changed query")
+    search.table.selectRowIndexes(IndexSet(integer:1),byExtendingSelection:false);search.replace(entries)
+    try require(search.filtered[search.table.selectedRow].id=="n2","A passive catalogue refresh preserves the musician's explicit target selection")
+    search.search.stringValue="n2";search.filter()
+    try require(search.filtered.count==1 && search.filtered.first?.id=="n2","Stable IDs remain available as deliberate exact search terms")
+
     func key(_ node:String,_ number:UInt32=0,_ output:Bool=true,_ modulation:Bool=false)->GraphBoundaryPort {.init(node:node,number:number,output:output,modulation:modulation)}
     func choose(_ editor:SignalGraphEditor,_ id:String) throws {
       guard let index=editor.targetMenu.filtered.firstIndex(where:{$0.id==id})else{throw InterfaceFailure(message:"Missing socket choice \(id)")}

@@ -128,6 +128,6 @@ extension SignalGraphEditor {
       chooseTarget(title:"Edit pattern command",entries:entries){[weak self] key in guard let self,let i=Int(key),commands.indices.contains(i)else{return};var reference=source;reference.merge(commands[i]){_,new in new};self.bridgeProvenance(reference)}
     }else{bridgeProvenance(source)}
   }
-  private func bridgeProvenance(_ source:[String:Any]){rememberGraphView();provenance.hasReturn=true;onSourceReference?(source)}
-  func returnToProvenance(){onReveal?();window?.makeFirstResponder(canvas);revealAddedNode()}
+  private func bridgeProvenance(_ source:[String:Any]){rememberPanelReturn();onSourceReference?(source)}
+  func returnToProvenance(){onReveal?();restorePanelReturn();window?.makeFirstResponder(canvas);if panelReturn==nil{revealAddedNode()}}
 }

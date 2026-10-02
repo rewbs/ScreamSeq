@@ -495,7 +495,7 @@
       "description": "Load a validated portable plugin preset into a shared recipe in one Undo. Preserve audio ports, routing, bypass and modulation ranges; update all target manual modulation baselines from the loaded preset. All uses update together through prepared publication."
     },
     {
-      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument\u2019s implicit cable.",
+      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument’s implicit cable.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -707,7 +707,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Restore an instrument\u2019s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
+      "description": "Restore an instrument’s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -1153,7 +1153,7 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 65535,
-              "description": "Final order position for move, preserving the entry\u2019s section metadata."
+              "description": "Final order position for move, preserving the entry’s section metadata."
             }
           },
           "required": [
@@ -2302,6 +2302,19 @@
             "expectedRevision": {
               "type": "string",
               "description": "Opaque revision from the last read. Mandatory for every mutation."
+            },
+            "sources": {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$"
+              },
+              "description": "Optional song modulation sources removed atomically with the selected rack processors."
+            },
+            "dryRun": {
+              "type": "boolean"
             },
             "plugins": {
               "type": "array",
@@ -8371,6 +8384,10 @@
             },
             "dryRun": {
               "type": "boolean"
+            },
+            "mainOutputConnected": {
+              "type": "boolean",
+              "description": "Master only: connect or cut its final output cable. Processing and taps stay active."
             }
           },
           "required": [
@@ -8790,7 +8807,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1\u201363 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
+      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1–63 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -12852,7 +12869,7 @@
       "x-application-only": true
     },
     {
-      "description": "Atomically append 1\u2013128 sample files, optionally creating instruments; one document Undo. Every file is decoded before commit.",
+      "description": "Atomically append 1–128 sample files, optionally creating instruments; one document Undo. Every file is decoded before commit.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -13926,7 +13943,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Allocate a node. Effects require exactly one rack slot or independent plugin recipe. Optional insertAfter splices an effect into the node\u2019s single main audio connection atomically."
+      "description": "Allocate a node. Effects require exactly one rack slot or independent plugin recipe. Optional insertAfter splices an effect into the node’s single main audio connection atomically."
     },
     {
       "type": "object",
@@ -17638,7 +17655,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Pull one effect out of its serial main path and heal that path. Retains plugin identity/state/bindings and clocks the disconnected effect on silence. Explicit auxiliary cables must be disconnected first; loose multi-effect chains are not yet supported. One unified Undo includes supplied layout. Compatible live transitions preserve playback; dryRun validates only.",
+      "description": "Detach an ordered consecutive effect chain, healing its old serial main path. Preserves processor identity/state, internal order, existing auxiliary branches and grouped sources. The detached chain is clocked from a silent root; explicit inputs can still feed it. One Undo includes supplied positions.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -17663,7 +17680,7 @@
             "plugins": {
               "type": "array",
               "minItems": 1,
-              "maxItems": 1,
+              "maxItems": 32,
               "uniqueItems": true,
               "items": {
                 "type": "string",
@@ -17702,7 +17719,7 @@
                 ],
                 "additionalProperties": false
               },
-              "maxItems": 1
+              "maxItems": 64
             }
           },
           "required": [
@@ -18177,7 +18194,7 @@
                 }
               },
               "additionalProperties": false,
-              "description": "Explicit boundary edge indices for a branched main path, guarded by expectedRevision. Chosen edge gains multiply; unchosen branches remain when detaching. No implicit cross-product."
+              "description": "Explicit boundary edge indices for one connected processing subgraph, including branches and modulators, guarded by expectedRevision. Chosen edge gains multiply; unchosen branches remain when detaching. No implicit cross-product."
             },
             "graph": {
               "type": "string",
@@ -18194,7 +18211,7 @@
             "nodes": {
               "type": "array",
               "minItems": 1,
-              "maxItems": 32,
+              "maxItems": 64,
               "uniqueItems": true,
               "items": {
                 "type": "string",
@@ -18230,7 +18247,7 @@
                 ],
                 "additionalProperties": false
               },
-              "maxItems": 32
+              "maxItems": 64
             },
             "remove": {
               "type": "boolean",
@@ -18255,7 +18272,7 @@
       "description": "Detach a serial effect chain and heal its main path atomically. Preserve auxiliary/modulation routes unless remove is true. Ambiguous branches fail unchanged. Optional positions share one Undo."
     },
     {
-      "description": "Read host physical ports and exact gained/delayed route contributions from the adopted plan. Optional route descriptors identify kind/source/target/plugin/input/output, tap, adopted gainDB and preFader; use returned opaque keys for scope/listen. Measured false differs from silence. Stopped values are historical; reusable graph internals are not yet observed.",
+      "description": "Read host physical ports, exact reusable graph copies and gained/delayed cable contributions from the adopted plan. Optional copy identifies graph/target/role/instrument/channel; route identifies the precise cable. Control records expose quantum endpoint values; Note Envelope sources additionally expose noteGate aggregate held/on/off/retrigger counters and lastFrame, not a raw MIDI event log. Use opaque audio keys for scope/listen. Measured false differs from silence; stopped values are historical.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -18769,7 +18786,7 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "pattern": "^plugin:.+",
+                "pattern": "^(plugin:.+|source:n[1-9][0-9]*)$",
                 "maxLength": 256
               },
               "maxItems": 240,
@@ -18815,7 +18832,7 @@
                 "properties": {
                   "node": {
                     "type": "string",
-                    "pattern": "^plugin:.+",
+                    "pattern": "^(plugin:.+|source:n[1-9][0-9]*)$",
                     "maxLength": 256
                   },
                   "x": {
@@ -19328,6 +19345,84 @@
                       "instrument"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "source",
+                      "plugin"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "insert"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "plugin": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "source"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "master-output"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "plugin-connection"
+                      },
+                      "source": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "output": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      },
+                      "target": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "input": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "source",
+                      "output",
+                      "target",
+                      "input"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -19354,7 +19449,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Atomically cut explicit song routes by stable semantic endpoints. One Undo; dryRun validates without changing history. Empty batches are no-ops. Cutting an instrument\u2019s last destination preserves an explicit disconnected output; fixed rack-chain wires are rejected."
+      "description": "Atomically cut song cables by stable semantic endpoints. One Undo; dryRun leaves history unchanged. Cutting an implicit insert input or Master terminal never heals another route. Auxiliary branches remain intact."
     },
     {
       "type": "object",
@@ -20323,7 +20418,8 @@
                                   "plugin-input",
                                   "plugin-output",
                                   "graph-input",
-                                  "follower-input"
+                                  "follower-input",
+                                  "plugin-connection"
                                 ]
                               },
                               "source": {
@@ -20381,7 +20477,8 @@
                               "plugin-input",
                               "plugin-output",
                               "graph-input",
-                              "follower-input"
+                              "follower-input",
+                              "plugin-connection"
                             ]
                           },
                           "source": {
@@ -20447,6 +20544,110 @@
       ],
       "additionalProperties": false,
       "description": "Bypass a real processing boundary while its contents keep running. A unique input/output dry path is inferred; ambiguous boundaries require an explicit dryRoutes map covering each outgoing boundary. graph:null selects a song group. One Undo; no per-member bypass substitution."
+    },
+    {
+      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1–63 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "mixer.plugin.connection.set"
+        },
+        "params": {
+          "type": "object",
+          "description": "Atomic direct plugin output to effect input upsert or exact endpoint replacement. Fan-in/out preserves serial ownership; input 0 sums into Main. Supported logical bus/channel slices only. Instrument audio-input destinations currently reject without mutation. Disabled routes remain cycle-validated.",
+          "properties": {
+            "expectedRevision": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "output": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "input": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "gainDB": {
+              "type": "number",
+              "minimum": -96,
+              "maximum": 12
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "replace": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "output": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "input": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                }
+              },
+              "required": [
+                "source",
+                "output",
+                "target",
+                "input"
+              ],
+              "additionalProperties": false
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "source",
+            "output",
+            "target",
+            "input"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
     }
   ],
   "$defs": {
@@ -20948,7 +21149,8 @@
                                     "plugin-input",
                                     "plugin-output",
                                     "graph-input",
-                                    "follower-input"
+                                    "follower-input",
+                                    "plugin-connection"
                                   ]
                                 },
                                 "source": {
@@ -21006,7 +21208,8 @@
                                 "plugin-input",
                                 "plugin-output",
                                 "graph-input",
-                                "follower-input"
+                                "follower-input",
+                                "plugin-connection"
                               ]
                             },
                             "source": {
