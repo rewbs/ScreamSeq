@@ -1,6 +1,7 @@
 #include "editor/SignalGraph.hpp"
 #include "editor/SignalGroupBypass.hpp"
 #include <iostream>
+#include <algorithm>
 #include <stdexcept>
 using namespace Tracker;
 #define CHECK(x) do{if(!(x))throw std::runtime_error("Check failed: " #x);}while(false)
@@ -28,5 +29,22 @@ int main(){try{
   rejects([&]{extractSongSignalGroup(song,mixer,81,{{"a",gain},{"b",gain}},[&]{return freshID++;});});
   auto membership=song;membership.songSources.clear();rejects([&]{validateSongSignalGroups(membership);});
   SignalGraph a;a.library={recipe()};a.assignments={{50,1,1,1}};auto c=a;c.library[0].groups[0].name="Label only";c.library[0].groups[0].x=50;CHECK(sameSignalProcessing(a,c));c.library[0].groups[0].bypass=true;CHECK(!sameSignalProcessing(a,c)&&sameSignalControlLayout(a,c));c.library[0].groups[0].nodes={3};CHECK(!sameSignalControlLayout(a,c)&&!sameSignalSourceLayout(a,c));
+  {
+    MixerGraph beforeMixer;MixerBus track;track.id=10;track.output=50;track.inserts={"compressor"};MixerBus detector;detector.id=11;detector.output=50;MixerBus master;master.id=50;master.kind=MixerBusKind::Master;beforeMixer.buses={track,detector,master};beforeMixer.sidechains={{11,"compressor",1,-9,false,true}};
+    SignalGraph beforeGraph;beforeGraph.groups={{100,0,"Outer",0,0,{}},{101,100,"Dynamics",0,0,{"plugin:compressor"}}};
+    for(auto &g:beforeGraph.groups){const auto boundary=signalSongGroupBoundary(beforeGraph,beforeMixer,{"compressor"},g.id);CHECK(boundary.inputs.size()==2&&boundary.outputs.size()==1);const auto main=*std::find_if(boundary.inputs.begin(),boundary.inputs.end(),[](const auto &r){return r.kind=="insert";});g.dryRoutes={{main,boundary.outputs[0]}};g.bypass=true;}
+    auto afterMixer=beforeMixer;afterMixer.buses[0].inserts.push_back("reverb");auto afterGraph=beforeGraph;
+    preserveSongGroupInsertion(afterGraph,beforeGraph,beforeMixer,afterMixer,{"compressor"},{"compressor","reverb"},"reverb");
+    for(size_t i=0;i<2;++i){CHECK(afterGraph.groups[i].dryRoutes[0].input==beforeGraph.groups[i].dryRoutes[0].input);CHECK((afterGraph.groups[i].dryRoutes[0].output==SignalRouteIdentity{"insert","n10",{},"reverb","main-path"}));CHECK(afterGraph.groups[i].nodes==beforeGraph.groups[i].nodes&&afterGraph.groups[i].bypass);CHECK(resolvedSongGroupDryRoutes(afterGraph,afterMixer,{"compressor","reverb"},afterGraph.groups[i].id).size()==1);}
+    CHECK(afterMixer.sidechains==beforeMixer.sidechains);
+    auto inner=beforeGraph;inner.groups[1].nodes.push_back("plugin:reverb");preserveSongGroupInsertion(inner,beforeGraph,beforeMixer,afterMixer,{"compressor"},{"compressor","reverb"},"reverb");CHECK(inner.groups[0].dryRoutes==beforeGraph.groups[0].dryRoutes&&inner.groups[1].dryRoutes==beforeGraph.groups[1].dryRoutes);
+    auto prepend=beforeMixer;prepend.buses[0].inserts.insert(prepend.buses[0].inserts.begin(),"reverb");auto extended=beforeGraph;extended.groups[1].nodes.push_back("plugin:reverb");preserveSongGroupInsertion(extended,beforeGraph,beforeMixer,prepend,{"compressor"},{"compressor","reverb"},"reverb");for(const auto &g:extended.groups)CHECK(g.dryRoutes[0].input.plugin=="reverb"&&g.dryRoutes[0].output.kind=="output");
+    auto fanMixer=beforeMixer;MixerBus returnBus;returnBus.id=12;returnBus.output=50;returnBus.kind=MixerBusKind::Return;fanMixer.buses.push_back(returnBus);fanMixer.buses[0].sends={{12,-12,false,true}};auto fan=beforeGraph;
+    for(auto &g:fan.groups){auto out=signalSongGroupBoundary(fan,fanMixer,{"compressor"},g.id).outputs;g.dryRoutes={{g.dryRoutes[0].input,out[0]},{g.dryRoutes[0].input,out[1]}};}
+    auto appended=fanMixer;appended.buses[0].inserts.push_back("reverb");auto merged=fan;preserveSongGroupInsertion(merged,fan,fanMixer,appended,{"compressor"},{"compressor","reverb"},"reverb");CHECK(merged.groups[0].dryRoutes.size()==1);
+    auto conflict=fan;const auto boundary=signalSongGroupBoundary(conflict,fanMixer,{"compressor"},101);conflict.groups[1].dryRoutes[1].input=*std::find_if(boundary.inputs.begin(),boundary.inputs.end(),[](const auto &r){return r.kind=="plugin-input";});auto unchanged=conflict;rejects([&]{preserveSongGroupInsertion(conflict,unchanged,fanMixer,appended,{"compressor"},{"compressor","reverb"},"reverb");});CHECK(conflict==unchanged);
+    auto stale=beforeGraph;stale.groups[0].dryRoutes[0].output.target="n999";const auto priorStale=stale;rejects([&]{preserveSongGroupInsertion(stale,priorStale,beforeMixer,afterMixer,{"compressor"},{"compressor","reverb"},"reverb");});CHECK(stale==priorStale);
+    auto undecided=beforeGraph;for(auto &g:undecided.groups){g.bypass=false;g.dryRoutes.clear();}auto undecidedBefore=undecided;preserveSongGroupInsertion(undecided,undecidedBefore,beforeMixer,afterMixer,{"compressor"},{"compressor","reverb"},"reverb");CHECK(undecided==undecidedBefore);
+  }
   std::cout<<"PASS group dry boundaries: exact ingress/egress, explicit branches, nested members, silence, dry-cycle rejection and live-control classification\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

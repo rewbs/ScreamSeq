@@ -84,4 +84,38 @@ static void graphEditingSessionChecks() {
   api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Direct route Undo changes unrelated chains");api(@"history.redo",@{},true);
   api(@"graph.connections.remove",@{@"connections":@[@{@"kind":@"plugin-connection",@"source":rack,@"output":@0,@"target":copy,@"input":@0}]},true);check([snapshot()[@"mixer"][@"pluginConnections"] count]==0&&[snapshot()[@"mixer"][@"detachedChains"] isEqual:connected[@"mixer"][@"detachedChains"]],"Direct cut must remove exactly its contribution without healing serial audio");api(@"history.undo",@{},true);check([connected isEqual:snapshot()],"Direct cut is not one complete Undo");
   NSString *songPath=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];before=snapshot();check([s savePath:songPath error:&error]&&[s openPath:songPath error:&error]&&[before isEqual:snapshot()],"Graph editing actions did not survive native project round trip");[[NSFileManager defaultManager] removeItemAtPath:songPath error:nil];
+  {
+    TrackerSession *grouped=[TrackerSession new];NSError *failure=nil;
+    auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=grouped.automationRevision;auto r=[grouped automationMethod:method params:p error:&failure];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+failure.localizedDescription.UTF8String);return r[@"data"];};
+    auto read=[&](){return call(@"graph.get",@{@"includeImplicitMixer":@YES});};
+    NSString *track=read()[@"mixer"][@"buses"][2][@"id"],*detector=read()[@"mixer"][@"buses"][1][@"id"];
+    NSDictionary *compressor=@{@"format":@"Built-in",@"name":@"Compressor",@"classID":@"resonance.compressor.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0},*gain=@{@"format":@"Built-in",@"name":@"After group",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0};
+    call(@"plugin.add",@{@"descriptor":compressor,@"target":track},true);NSString *processor=read()[@"plugins"][0][@"id"];
+    call(@"mixer.sidechains.set",@{@"plugin":processor,@"input":@1,@"sources":@[@{@"source":detector,@"gainDB":@(-9)}]},true);
+    NSString *group=call(@"graph.song.group.create",@{@"nodes":@[[ @"plugin:" stringByAppendingString:processor]],@"name":@"Sidechain dynamics"},true)[@"group"];
+    auto boundary=call(@"graph.group.boundary",@{@"graph":NSNull.null,@"group":group});NSDictionary *mainInput=nil;
+    for(NSDictionary *input in boundary[@"inputs"])if([input[@"kind"] isEqual:@"insert"])mainInput=input;
+    check(mainInput&&[boundary[@"inputs"] count]==2&&[boundary[@"outputs"] count]==1,"Grouped Add fixture must have distinct Main and detector inputs");
+    call(@"graph.group.bypass",@{@"graph":NSNull.null,@"group":group,@"bypass":@NO,@"dryRoutes":@[@{@"input":mainInput,@"output":boundary[@"outputs"][0]}]},true);
+    auto prior=read();call(@"plugin.add",@{@"descriptor":gain,@"target":track},true);auto after=read();NSString *added=after[@"plugins"][1][@"id"];
+    auto dry=after[@"groups"][0][@"dryRoutes"][0];check([dry[@"input"] isEqual:mainInput]&&[dry[@"output"][@"kind"] isEqual:@"insert"]&&[dry[@"output"][@"plugin"] isEqual:added]&&[after[@"mixer"][@"sidechains"] isEqual:prior[@"mixer"][@"sidechains"]],"Adding after a grouped sidechain processor must retain its chosen Main dry source and move only the output boundary");
+    check(![call(@"graph.group.boundary",@{@"graph":NSNull.null,@"group":group})[@"needsMapping"] boolValue],"Remapped group boundary must remain immediately usable");
+    call(@"history.undo",@{},true);check([prior isEqual:read()],"Grouped Add must undo processor, boundary and rack in one step");call(@"history.redo",@{},true);check([after isEqual:read()],"Grouped Add Redo must restore the exact dry mapping");
+    call(@"graph.group.bypass",@{@"graph":NSNull.null,@"group":group,@"bypass":@YES},true);call(@"graph.group.bypass",@{@"graph":NSNull.null,@"group":group,@"bypass":@NO},true);
+    call(@"plugin.add",@{@"descriptor":gain,@"target":track,@"before":processor,@"parent":group},true);auto expanded=read();NSString *head=expanded[@"plugins"][2][@"id"];
+    check([expanded[@"groups"][0][@"dryRoutes"][0][@"input"][@"plugin"] isEqual:head]&&[expanded[@"groups"][0][@"dryRoutes"][0][@"output"][@"plugin"] isEqual:added],"Adding inside the group's leading boundary must preserve its dry path through the new head");
+    NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];check([grouped savePath:path error:&failure]&&[grouped openPath:path error:&failure]&&[expanded isEqual:read()],"Remapped insertion boundaries must survive native save/reopen");[[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+  }
+  {
+    TrackerSession *implicit=[TrackerSession new];NSError *failure=nil;
+    auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=implicit.automationRevision;auto r=[implicit automationMethod:method params:p error:&failure];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+failure.localizedDescription.UTF8String);return r[@"data"];};
+    NSDictionary *gain=@{@"format":@"Built-in",@"name":@"Gain",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0};
+    call(@"plugin.add",@{@"descriptor":gain},true);NSString *processor=call(@"graph.get",@{})[@"plugins"][0][@"id"];
+    NSString *group=call(@"graph.song.group.create",@{@"nodes":@[[ @"plugin:" stringByAppendingString:processor]]},true)[@"group"];
+    auto boundary=call(@"graph.group.boundary",@{@"graph":NSNull.null,@"group":group});call(@"graph.group.bypass",@{@"graph":NSNull.null,@"group":group,@"bypass":@NO,@"dryRoutes":boundary[@"dryRoutes"]},true);
+    auto prior=call(@"graph.get",@{});call(@"plugin.add",@{@"descriptor":gain},true);auto after=call(@"graph.get",@{});
+    check([after[@"plugins"] count]==2&&[after[@"groups"][0][@"dryRoutes"][0][@"output"][@"plugin"] isEqual:after[@"plugins"][1][@"id"]],"Targetless rack Add must preserve an implicit Master group's boundary");
+    call(@"history.undo",@{},true);check([prior isEqual:call(@"graph.get",@{})],"Implicit grouped Add must have one Undo");call(@"history.redo",@{},true);check([after isEqual:call(@"graph.get",@{})],"Implicit grouped Add Redo must preserve rack publication");
+  }
+
 }

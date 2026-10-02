@@ -1900,11 +1900,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     auto states = (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
     states.push_back({d, {}, false, 0, NSUUID.UUID.UUIDString.UTF8String});
     {NativePlugin probe(states.back(),_audio->sampleRate(),false);states.back().audioLayout=pluginAudioLayoutSignature(probe.buses());}
-    if (target || detached) {
-      if(d.instrument || d.type==kAudioUnitType_MusicDevice) throw std::invalid_argument("Instrument plugins use instrument assignments");
+    const bool effect=!d.instrument&&d.type!=kAudioUnitType_MusicDevice;
+    if (target || detached || (effect&&!_document->native().signal.groups.empty())) {
+      if(!effect) throw std::invalid_argument("Instrument plugins use instrument assignments");
       auto next=_document->native();
       if(detached)next.mixer.detached.push_back(states.back().instanceID);
-      else {
+      else if(target) {
       next.ensureMixer();
       const auto id=decodeNativeID(target);
       auto bus=std::find_if(next.mixer.buses.begin(),next.mixer.buses.end(),[&](const auto &b){return b.id==id;});
@@ -1924,7 +1925,15 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
         if(!std::isfinite(x)||!std::isfinite(y)||x<0||y<0||x>100000||y>100000)throw std::invalid_argument("Invalid graph position");
         next.signal.layout["plugin:"+states.back().instanceID]={x,y};
       }
+      if(!next.signal.groups.empty()) {
+        auto previous=_document->native(),after=next;previous.ensureMixer();after.ensureMixer();
+        std::vector<std::string> priorRack,nextRack;
+        for(size_t i=0;i<states.size();++i)if(!states[i].descriptor.instrument&&states[i].descriptor.type!=kAudioUnitType_MusicDevice){nextRack.push_back(states[i].instanceID);if(i+1<states.size())priorRack.push_back(states[i].instanceID);}
+        preserveSongGroupInsertion(next.signal,previous.signal,previous.mixer,after.mixer,priorRack,nextRack,states.back().instanceID);
+      }
       next.validate(_document->song());validatePluginCapacity(states,next.mixer.buses.size());
+      if(next==_document->native()) { [self applyPluginGraph:states automation:_automation native:next]; }
+      else {
       _historyGroups.reserve(_historyGroups.size()+1);
       const auto first=_document->historySequence()+1;
       // Document::annotate rolls back its prepared snapshot if hosting fails.
@@ -1932,6 +1941,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       _historyGroups.emplace_back(first,_document->historySequence());
       if(_historyGroups.size()>512)_historyGroups.erase(_historyGroups.begin());
       _knownHistorySequence=_document->historySequence();
+      }
     } else [self applyPluginGraph:states automation:_automation];
     // Only a plugin that was really added is remembered for later launches.
     if (chosen)

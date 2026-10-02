@@ -180,7 +180,10 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     canvas.insertionHint = {[weak self] ids,edge in self?.insertionDescription(ids,edge:edge)}
     canvas.onConnect = {[weak self] a,b in self?.connect(a,b)}
     canvas.onOpen = {[weak self] id in self?.openNode(id)}
-    canvas.onAdd = {[weak self] point in self?.showAdd(at:point)}
+    canvas.onAdd = {[weak self] point in
+      guard let self else{return}
+      self.showAdd(at:self.canvas.selected != nil && self.canvas.selectedEdge==nil ? nil:point)
+    }
     canvas.onAddConnected = {[weak self] node,port,output,point in
       guard let self else{return}
       if port.signalType == .events{self.connectFromSocket(.init(node:node,number:port.number,output:output,modulation:false));return}

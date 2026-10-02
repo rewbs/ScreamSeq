@@ -43,6 +43,13 @@ SignalGroupBoundary signalGroupBoundary(const SignalDefinition &,uint64_t group)
 std::vector<SignalGroupDryRoute> resolvedSignalGroupDryRoutes(const SignalDefinition &,uint64_t group,bool requireComplete=true);
 SignalSongGroupBoundary signalSongGroupBoundary(const SignalGraph &,const MixerGraph &,const std::vector<std::string> &orderedEffectRack,uint64_t group);
 std::vector<SignalSongGroupDryRoute> resolvedSongGroupDryRoutes(const SignalGraph &,const MixerGraph &,const std::vector<std::string> &orderedEffectRack,uint64_t group,bool requireComplete=true);
+// Inserting one rack processor can replace a group's old terminal/next-insert
+// boundary. Preserve the chosen dry source without inferring a different path.
+// Conflicting fan-out maps reject atomically rather than collapse musical intent.
+void preserveSongGroupInsertion(SignalGraph &next,const SignalGraph &previous,
+  const MixerGraph &previousMixer,const MixerGraph &nextMixer,
+  const std::vector<std::string> &previousRack,const std::vector<std::string> &nextRack,
+  const std::string &insertedPlugin);
 void remapSignalGroupDryRoutes(SignalDefinition &,const std::map<uint64_t,uint64_t> &);
 // Only remove boundaries which no longer exist. A changed surviving ingress is
 // deliberately not guessed; callers must choose it in the same atomic edit.

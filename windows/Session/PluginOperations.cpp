@@ -2,6 +2,7 @@
 #include "editor/ParameterBaseline.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/PluginNoteSources.hpp"
+#include "editor/SignalGroupBypass.hpp"
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/PluginPreset.hpp"
@@ -355,8 +356,17 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
       }
       if(p.contains("parent")){const auto parent=nativeIdentity(p.at("parent"));auto group=std::find_if(next.signal.groups.begin(),next.signal.groups.end(),[&](const auto &g){return g.id==parent;});need(group!=next.signal.groups.end(),"Song processing group no longer exists");group->nodes.push_back("plugin:"+state.instanceID);}
       if(p.contains("position")){const auto &position=p.at("position");keys(position,{"x","y"});next.signal.layout["plugin:"+state.instanceID]={number(field(position,"x"),0,100000),number(field(position,"y"),0,100000)};}
-      next.validate(document_.song());
     }
+    if(!state.descriptor.instrument&&state.descriptor.type!=audioUnitMusicDeviceType&&!next.signal.groups.empty()) {
+      auto previous=document_.native(),projected=next;
+      if(!previous.mixer.active())previous.ensureMixer();
+      if(!projected.mixer.active())projected.ensureMixer();
+      std::vector<std::string> before,after;
+      for(const auto &entry:projectPluginStates(project_))if(!entry.descriptor.instrument&&entry.descriptor.type!=audioUnitMusicDeviceType)before.push_back(entry.instanceID);
+      after=before;after.push_back(state.instanceID);
+      preserveSongGroupInsertion(next.signal,previous.signal,previous.mixer,projected.mixer,before,after,state.instanceID);
+    }
+    next.validate(document_.song());
     // Construct a disposable candidate before any song/history/transport change.
     NativePlugin probe(state,48000);const auto captured=probe.state();state.state=captured.state;state.audioLayout=captured.audioLayout;
     const auto index=rack.size();rack.push_back(record(state));

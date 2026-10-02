@@ -1,5 +1,40 @@
 import AppKit
 extension InterfaceTests {
+  static func graphAppendPlacementChecks() throws {
+    let editor=SignalGraphEditor(frame:.zero)
+    let song:[String:Any]=["mixer":["buses":[["id":"n4","name":"Track 4","kind":"track","output":"n9","inserts":["compressor"]],["id":"n9","name":"Master","kind":"master","output":""]]],"plugins":[["id":"compressor","name":"Compressor"]],"layout":[["node":"n4","x":40.0,"y":100.0],["node":"plugin:compressor","x":534.0,"y":100.0],["node":"n9","x":1200.0,"y":100.0]]]
+    editor.update(song);editor.selectedID="n4";editor.canvas.selected="n4";editor.addCatalogLoaded=true
+    let effect=GraphAddMenu.Entry(id:"reverb",title:"Reverb",detail:"",keywords:"",payload:["kind":"plugin","descriptor":["name":"Reverb","isInstrument":false]])
+    let before=Dictionary(uniqueKeysWithValues:editor.canvas.nodes.map{($0.id,$0.rect)})
+    var method="",params=[String:Any]()
+    editor.onRequest={m,p,reply in method=m;params=p;reply(["error":["message":"Captured placement"]])}
+    func choose(_ entry:GraphAddMenu.Entry,at point:NSPoint?=nil,connecting connection:GraphAddConnection?=nil,keyboard:Bool=false)->NSPoint {
+      if keyboard {editor.canvas.keyDown(with:NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:.shift,timestamp:0,windowNumber:0,context:nil,characters:"A",charactersIgnoringModifiers:"a",isARepeat:false,keyCode:0)!)}
+      else{editor.showAdd(at:point,connecting:connection)}
+      editor.addMenu.onChoose?(entry);editor.addMenu.close()
+      let p=params["position"] as? [String:Any] ?? [:]
+      return NSPoint(x:p["x"] as? Double ?? -1,y:p["y"] as? Double ?? -1)
+    }
+    let appended=choose(effect,keyboard:true)
+    try require(method=="plugin.add" && params["target"] as? String=="n4" && params["before"]==nil && appended.x>=before["plugin:compressor"]!.maxX+30,"Selecting a channel appends a new effect after its actual last insert, including a saved manual position")
+    try require(editor.canvas.nodes.allSatisfy{before[$0.id]==$0.rect},"Appending placement never moves existing musician-positioned cards")
+    let explicit=NSPoint(x:240,y:450),expected=editor.freePosition(near:explicit)
+    try require(choose(effect,at:explicit)==expected,"Explicit canvas Add retains the requested nearby position instead of jumping to the chain end")
+    let source=GraphAddMenu.Entry(id:"lfo",title:"LFO",detail:"",keywords:"",payload:["kind":"lfo"])
+    let sourcePoint=editor.freePosition(near:NSPoint(x:before["n4"]!.maxX+30,y:before["n4"]!.minY))
+    _=choose(source)
+    let sourceParams=params["source"] as? [String:Any]
+    try require(method=="graph.song.source.add" && sourceParams?["x"] as? CGFloat==sourcePoint.x && sourceParams?["y"] as? CGFloat==sourcePoint.y,"Adding a modulation source remains local to the selected channel")
+    let cable=editor.songConnections.firstIndex{$0["kind"] as? String=="insert" && $0["plugin"] as? String=="compressor"}!
+    editor.selectConnection(cable);_ = choose(effect,at:explicit)
+    try require(params["before"] as? String=="compressor" && (params["position"] as? [String:Any])?["x"] as? Double==expected.x,"Cable-first insertion keeps its exact before target and explicit placement")
+    editor.canvas.selectedEdge=nil;editor.selectedID="n4"
+    editor.canvas.nodes.append(SignalCanvasNode(id:"obstacle",title:"Obstacle",detail:"",kind:"plugin",x:appended.x,y:appended.y))
+    let crowded=choose(effect)
+    try require(crowded.x>=before["plugin:compressor"]!.maxX+30 && crowded != appended,"Collision avoidance keeps appended effects downstream")
+    editor.canvas.nodes.removeAll{$0.id=="plugin:compressor"}
+    try require(editor.appendedEffectPosition(target:"n4")!.x>=before["plugin:compressor"]!.maxX+30,"A hidden last insert retains its saved anchor without changing the filter")
+  }
   static func graphShortcutChecks() throws {
     let defaults=UserDefaults.standard
     let oldKeys=defaults.object(forKey:"workspaceShortcuts"),oldSequences=defaults.object(forKey:"workspaceSequences")
@@ -109,6 +144,7 @@ extension InterfaceTests {
     try require(placement.canvas.nodes.first{$0.id=="b"}?.y==152,"An explicit musician position remains authoritative even when it overlaps another card")
   }
   static func signalGraphChecks() throws {
+    try graphAppendPlacementChecks()
     try graphFollowerGestureChecks()
     try graphControlRefreshChecks()
     try graphGestureRefreshChecks()

@@ -92,4 +92,42 @@ std::vector<SignalSongGroupDryRoute> resolvedSongGroupDryRoutes(const SignalGrap
   const auto &group=*std::find_if(graph.groups.begin(),graph.groups.end(),[&](const auto &g){return g.id==id;});
   return resolve(group.dryRoutes,boundary.inputs,boundary.outputs,required);
 }
+void preserveSongGroupInsertion(SignalGraph &next,const SignalGraph &previous,
+  const MixerGraph &previousMixer,const MixerGraph &nextMixer,
+  const std::vector<std::string> &previousRack,const std::vector<std::string> &nextRack,
+  const std::string &insertedPlugin){
+  if(previous.groups.empty())return;
+  need(!insertedPlugin.empty()&&std::find(previousRack.begin(),previousRack.end(),insertedPlugin)==previousRack.end()&&std::find(nextRack.begin(),nextRack.end(),insertedPlugin)!=nextRack.end(),"Choose one newly inserted effect");
+  const auto mixer=projectMixerDetachedChains(nextMixer);
+  const MixerBus *owner=nullptr;std::set<std::string> owned(mixer.detached.begin(),mixer.detached.end());
+  for(const auto &bus:mixer.buses){owned.insert(bus.inserts.begin(),bus.inserts.end());if(std::find(bus.inserts.begin(),bus.inserts.end(),insertedPlugin)!=bus.inserts.end())owner=&bus;}
+  if(!owner&&!owned.contains(insertedPlugin))for(const auto &bus:mixer.buses)if(bus.kind==MixerBusKind::Master)owner=&bus;
+  // A genuinely detached effect does not split an existing group's cable.
+  if(!owner)return;
+  const SignalRouteIdentity inserted{"insert","n"+std::to_string(owner->id),{},insertedPlugin,"main-path"};
+  auto prepared=next;
+  for(auto &group:prepared.groups){
+    const auto old=std::find_if(previous.groups.begin(),previous.groups.end(),[&](const auto &g){return g.id==group.id;});
+    if(old==previous.groups.end()||old->dryRoutes.empty())continue;
+    // Never reinterpret a stale map as belonging to the newly inserted cable.
+    const auto saved=resolvedSongGroupDryRoutes(previous,previousMixer,previousRack,group.id,old->bypass);
+    const auto boundary=signalSongGroupBoundary(prepared,mixer,nextRack,group.id);
+    std::vector<SignalSongGroupDryRoute> maps;
+    for(auto map:saved){
+      if(map.input!=SignalRouteIdentity{}&&std::find(boundary.inputs.begin(),boundary.inputs.end(),map.input)==boundary.inputs.end()){
+        need(std::find(boundary.inputs.begin(),boundary.inputs.end(),inserted)!=boundary.inputs.end(),"Adding this effect changes a group dry input; choose its boundary explicitly");map.input=inserted;
+      }
+      if(std::find(boundary.outputs.begin(),boundary.outputs.end(),map.output)==boundary.outputs.end()){
+        need(std::find(boundary.outputs.begin(),boundary.outputs.end(),inserted)!=boundary.outputs.end(),"Adding this effect changes a group dry output; choose its boundary explicitly");map.output=inserted;
+      }
+      const auto same=std::find_if(maps.begin(),maps.end(),[&](const auto &r){return r.output==map.output;});
+      if(same==maps.end())maps.push_back(map);
+      else need(same->input==map.input,"Adding after this group merges different dry paths; choose one shared dry input first");
+    }
+    group.dryRoutes=std::move(maps);
+    (void)resolvedSongGroupDryRoutes(prepared,mixer,nextRack,group.id,group.bypass);
+  }
+  next.groups=std::move(prepared.groups);
+}
+
 }

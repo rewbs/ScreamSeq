@@ -348,7 +348,46 @@ void graphPatternViewTests() {
   need(call(limited,"graph.get",{{"includeState",false}}).at("commands").empty(),"rejected graph command left partial data");
   std::cout<<"PASS graph lane projection, exact offsets, immutable reuse, rename Undo and precommit cache budget\n";
 }
+void groupedPluginInsertionTests(const std::filesystem::path &directory) {
+  // Explicit saved dry maps must follow an insertion at their old boundary,
+  // including the targetless rack's implicit Master chain.
+  for(unsigned scenario=0;scenario<4;++scenario) {
+    DocumentController c({},"grouped-plugin-insertion",[]{},[](const auto &){});
+    const auto catalogue=call(c,"plugin.discover",{{"format","Built-in"}});
+    const auto found=std::find_if(catalogue.begin(),catalogue.end(),[](const auto &p){return p.at("classID")=="resonance.gainer.v1";});
+    need(found!=catalogue.end(),"Grouped insertion gain fixture missing");const auto gain=*found;
+    auto graph=[&]{return call(c,"graph.get",{{"includeState",false},{"includeImplicitMixer",true}});};
+    auto rack=[&]{return c.view()->session.document.at("nativePlugins");};
+    const auto target=graph().at("mixer").at("buses")[0].at("id");
+    Json placement=Json::object();if(scenario!=3)placement["target"]=target;
+    auto add=[&](Json extra){extra["descriptor"]=gain;return invoke(c,"plugin.add",std::move(extra));};
+    add(placement);const auto first=rack().at(0).at("instanceID").get<std::string>();
+    const auto group=invoke(c,"graph.song.group.create",{{"nodes",Json::array({"plugin:"+first})}}).at("group");
+    const auto boundary=call(c,"graph.group.boundary",{{"graph",nullptr},{"group",group}});
+    need(!boundary.at("needsMapping").get<bool>()&&boundary.at("dryRoutes").size()==1,"Single grouped gain needs one unambiguous dry map");
+    invoke(c,"graph.group.bypass",{{"graph",nullptr},{"group",group},{"bypass",false},{"dryRoutes",boundary.at("dryRoutes")}});
+    const auto before=graph(),beforeRack=rack();const auto beforeView=c.view();
+    if(scenario==1||scenario==2)placement["before"]=first;
+    if(scenario==2)placement["parent"]=group;
+    auto preview=placement;preview["dryRun"]=true;add(preview);
+    need(c.view()==beforeView&&graph()==before&&rack()==beforeRack,"Grouped insertion dry run published part of its rack or boundary");
+    add(placement);const auto after=graph(),afterRack=rack();
+    const auto resolved=call(c,"graph.group.boundary",{{"graph",nullptr},{"group",group}});
+    need(!resolved.at("needsMapping").get<bool>()&&resolved.at("dryRoutes").size()==1,"Insertion lost the chosen group dry map");
+    need(after.at("groups")[0].at("dryRoutes")==resolved.at("dryRoutes"),"Saved insertion map differs from the actual group boundary");
+    need(after.at("groups")[0].at("nodes").size()==(scenario==2?2:1),"Insertion changed unrelated group membership");
+    if(scenario==0||scenario==3)need(resolved.at("dryRoutes")[0].at("input")==boundary.at("dryRoutes")[0].at("input"),"Appending an effect changed the selected dry input");
+    invoke(c,"history.undo",{{"domain","all"}});need(graph()==before&&rack()==beforeRack,"Grouped insertion Undo failed to restore exact routing and rack state");
+    invoke(c,"history.redo",{{"domain","all"}});need(graph()==after&&rack()==afterRack,"Grouped insertion Redo failed to restore exact boundary and plugin identity");
+    const auto path=directory/("grouped-plugin-insertion-"+std::to_string(scenario)+".screamseq");
+    invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});
+    invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
+    need(graph()==after&&rack()==afterRack,"Inserted group boundary did not survive native save/reopen");
+  }
+  std::cout<<"PASS grouped plugin insertion: append, prepend, parent membership, implicit Master, dry-run, exact Undo/Redo and native save/reopen\n";
+}
 void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
+  groupedPluginInsertionTests(directory);
   unsigned stops=0;bool rejectStop=false;
   DocumentController c({},"unified-plugin-history",[&]{if(rejectStop)throw std::runtime_error("controlled stop rejection");++stops;},[](const auto &){});
   const auto catalogue=call(c,"plugin.discover",{{"format","Built-in"}});

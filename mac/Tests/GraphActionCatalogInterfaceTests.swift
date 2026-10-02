@@ -7,6 +7,14 @@ extension InterfaceTests {
     let catalog=actions(editor.actionMenu())
     try require(Set(catalog.compactMap(\.commandID)).isSuperset(of:GraphCommand.allCases.map(\.id)),"Every registered graph command remains in the menu and complete command palette, even before selecting an object")
     try require(catalog.allSatisfy{$0.isEnabled || !($0.toolTip ?? "").isEmpty},"Unavailable graph actions always explain the specific requirement")
+    let sendPalette=WorkspaceCommandPalette();sendPalette.additionalMenus={ [editor.actionMenu()] };sendPalette.collect()
+    sendPalette.search.stringValue="send";sendPalette.filter()
+    try require(sendPalette.filtered.contains{$0.id==GraphCommand.portAdd.id && $0.path.contains("quiet send")},"Searching the complete command palette for send finds the graph's existing socket Add workflow")
+    let sendAction=sendPalette.filtered.first{$0.id==GraphCommand.portAdd.id}!
+    try require(sendAction.item.toolTip?.contains("disabled at −96 dB")==true,"Quiet send guidance explains the initial silent state and cable gain without changing the action identity")
+    editor.graphID="recipe"
+    try require(actions(editor.actionMenu()).first{$0.commandID==GraphCommand.portAdd.id}?.title=="Add compatible node…","Recipe Add never advertises a root mixer send")
+    editor.graphID=nil
     let finder=SignalGraphEditor(frame:.zero)
     let finderData:[String:Any]=["mixer":["buses":[["id":"find-track","name":"Duplicate","kind":"track","output":"find-master"],["id":"find-master","name":"Duplicate","kind":"master","output":""]]]]
     var finderRevision="find-song:1"

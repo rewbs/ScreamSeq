@@ -169,7 +169,10 @@ extension SignalGraphEditor {
   func appendPortCommands(to menu:NSMenu,socket:GraphBoundaryPort?=nil) {
     let reason=socket.flatMap{portChoice($0)}.flatMap{portUnavailable($0)}
     menu.addItem(GraphCommand.patch.item(socket==nil ? "Patch by keyboard…":"Connect to…",reason:reason){[weak self] in guard let self else{return};if let socket{self.connectFromSocket(socket)}else{self.patchByKeyboard()}})
-    menu.addItem(GraphCommand.portAdd.item("Add compatible node…",reason:socket.flatMap{portChoice($0)}.flatMap{addSocketUnavailable($0)}){[weak self] in guard let self else{return};if let socket{self.addAtSocket(socket)}else{self.chooseSocket(title:"Choose the socket for a new node"){[weak self] in self?.addAtSocket($0)}}})
+    let addReason=socket.flatMap{portChoice($0)}.flatMap{addSocketUnavailable($0)}
+    let add=GraphCommand.portAdd.item(graphID==nil ? "Add compatible node / quiet send…":"Add compatible node…",reason:addReason){[weak self] in guard let self else{return};if let socket{self.addAtSocket(socket)}else{self.chooseSocket(title:"Choose the socket for a new node"){[weak self] in self?.addAtSocket($0)}}}
+    if addReason==nil,graphID==nil{add.toolTip="For a quiet send, choose a channel output and then Return bus. The new send starts disabled at −96 dB; raise its cable gain to hear it."}
+    menu.addItem(add)
     for (output,title,command) in [(false,"Show sources…",GraphCommand.portSources),(true,"Show targets…",.portTargets)] {
       let wrong=socket.map{$0.output != output} ?? false
       menu.addItem(command.item(title,reason:wrong ? (output ? "Choose an output to show its destinations":"Choose an input to show its sources"):nil){[weak self] in
