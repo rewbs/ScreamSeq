@@ -85,6 +85,47 @@ extension InterfaceTests {
     try require(gate.noteGate?.held==true && gate.summary(active:true).contains("2 opens / 1 closes / 3 retriggers") && gate.summary(active:true).contains("envelope gate"),"Note-envelope telemetry labels aggregate gate counts instead of implying MIDI voice counts")
     control["fresh"]=false;editor.showSignals(["active":true,"ports":[control]])
     try require(!editor.signalReadings.ports[0].summary(active:true).contains("retriggers"),"Retired measurements cannot advertise old gate activity as current")
+    try graphInstrumentNavigationChecks()
+  }
+
+  static func graphInstrumentNavigationChecks() throws {
+    let editor=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1100,height:700))
+    let host=NSWindow(contentRect:editor.frame,styleMask:[.borderless],backing:.buffered,defer:false);host.contentView=editor
+    let song:[String:Any]=["library":[["id":"n10","name":"Shared","nodes":[["id":"n12","kind":"input"],["id":"n13","kind":"output"]],"audio":[]]],"assignments":[["target":"n100","graph":"n10"]],"instruments":[["id":"n80","index":1,"name":"Warm pulse","plugin":false],["id":"n81","index":2,"name":"Other","plugin":false]],"instrumentAssignments":[["target":"n80","graph":"n10"],["target":"n81","graph":"n10"]],"layout":[["node":"n100","x":40.0,"y":60.0],["node":"instrument:n80","x":4000.0,"y":800.0]],"mixer":["buses":[["id":"n100","kind":"track","name":"Track 5","output":"n102"],["id":"n101","kind":"track","name":"Track 6","output":"n102"],["id":"n102","kind":"master","name":"Master"]]]]
+    editor.update(song);editor.filterID="n100";editor.nodeSearch.stringValue="Track 5";editor.selectedID="n100";editor.canvas.selected="n100";editor.update(song)
+    editor.layoutSubtreeIfNeeded();editor.scroll.magnification=1;editor.canvas.scroll(.zero)
+    var writes=[String]();editor.onRequest={method,_,_ in if !method.hasSuffix(".get"){writes.append(method)}}
+    func actions(_ menu:NSMenu)->[ContextAction]{menu.items.flatMap{item in if let child=item.submenu{return actions(child)};return (item as? ContextAction).map{[$0]} ?? []}}
+    let entry=actions(editor.actionMenu()).first{$0.commandID?.hasPrefix("graph.instrument/")==true && $0.commandID?.hasSuffix("/n80")==true}!
+    NSApp.sendAction(entry.action!,to:entry.target,from:entry)
+    try require(editor.graphID==nil && editor.selectedID=="instrument:n80" && editor.filterID==nil && editor.filter.indexOfSelectedItem==0 && editor.nodeSearch.stringValue.isEmpty,"The instrument catalog command reveals its root bus through existing channel and text filters")
+    let selected=editor.canvas.nodes.first{$0.id=="instrument:n80"}!
+    try require(selected.x==4000 && selected.y==800 && selected.rect.intersects(editor.scroll.documentVisibleRect) && writes.isEmpty,"Instrument navigation frames the actual saved card without creating a graph or changing layout/history")
+    editor.restorePanelReturn()
+    try require(editor.selectedID=="n100" && editor.filterID=="n100" && editor.nodeSearch.stringValue=="Track 5","Back restores the instrument command's exact graph filter and selection context")
+    editor.hasDraft=true;editor.instrumentPicker.selectItem(at:0);editor.inspectSampleInstrument()
+    try require(editor.selectedID=="n100" && editor.nodeSearch.stringValue=="Track 5","Instrument navigation preserves an unfinished graph edit")
+    editor.hasDraft=false;editor.filterID=nil;editor.nodeSearch.stringValue="";editor.update(song)
+    func port(_ instrument:String?,_ channel:Int?,_ value:Double)->[String:Any]{
+      var copy:[String:Any]=["graph":"n10","role":instrument==nil ? "ordinary":"instrument"]
+      if let instrument{copy["instrument"]=instrument;if let channel{copy["channel"]=channel}}else{copy["target"]="n100"}
+      return ["key":"observed/\(instrument ?? "ordinary")/\(channel ?? -1)","node":"node:n13","direction":"output","port":0,"channels":2,"peak":[value,value],"rms":[value,value],"through":128,"measured":true,"fresh":true,"available":true,"copy":copy]
+    }
+    let ordinary=port(nil,nil,0.2),first=port("n80",0,0.4),second=port("n80",1,0.6),other=port("n81",0,0.9)
+    editor.showSignals(["active":true,"ports":[ordinary,other]])
+    editor.openSongNode("graph:n100:Ordinary:n10");editor.navigate(graph:nil);editor.openSongNode("instrument:n80")
+    try require(editor.graphID=="n10" && editor.copyObservation.selected==nil && editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("Instrument copy unavailable"),"Entering an instrument never retains an ordinary or another instrument's readings while its copy is pending")
+    editor.showSignals(["active":true,"ports":[ordinary,other,second,first]])
+    try require(editor.copyObservation.selected=="n10//instrument/n80/0" && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.4,"Delayed instrument telemetry selects an actual matching channel copy and labels it explicitly")
+    editor.copyObservation.select("n10/n100/ordinary//inspector");editor.showSignals(["active":true,"ports":[ordinary,first,second]])
+    try require(editor.signalReadings.primaryPort("n13",output:true)?.peak==0.2,"Passive instrument telemetry preserves a subsequent explicit observation choice")
+    editor.navigate(graph:nil);editor.openSongNode("instrument-graph:n80:n101")
+    try require(editor.copyObservation.selected=="n10//instrument/n80/1" && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.6,"Opening an individual instrument processing card observes that exact channel copy")
+    editor.navigate(graph:nil);editor.showSignals(["active":true,"ports":[ordinary,first]]);editor.openSongNode("instrument-graph:n80:n101")
+    try require(editor.signalReadings.ports.isEmpty,"A pending individual instrument copy does not borrow a different channel's signal")
+    editor.showSignals(["active":true,"ports":[ordinary,first,second]])
+    try require(editor.signalReadings.primaryPort("n13",output:true)?.peak==0.6,"An instrument card's exact channel observation resolves when its telemetry arrives")
+    editor.onRequest=nil
   }
 }
 

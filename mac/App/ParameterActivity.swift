@@ -20,6 +20,7 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
   private var preferredTarget:String?,preferredParameter:Int?,preferredGraph:String?,preferredNode:String?,preferredCopy:String?
   private var frozen=false,freezeButton:ActionButton!,recordBar:NSStackView!,loadMore:ActionButton!
   private var recordedOffset=0,recordedTotal=0
+  private var refreshingRecorded=false
   private var passes=[(label:String,samples:[ParameterTraceSample])](),displayPass=0
   private var selectedSource:[String:Any]?
   private var recordedInspection:[String:Any]?,preferredRecording:(plugin:String,parameter:Int)?
@@ -192,7 +193,13 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
     table.editColumn(column,row:row,with:nil,select:true)
   }
   func tableView(_ tableView:NSTableView,setObjectValue object:Any?,for column:NSTableColumn?,row:Int){guard detailMode.selectedSegment==2,recorded.indices.contains(row),let n=Double("\(object ?? "")"),n.isFinite,n>=0 || column?.identifier.rawValue=="value" else{return};var params:[String:Any]=["frame":recorded[row]["frame"] ?? 0,"value":recorded[row]["value"] ?? 0];if column?.identifier.rawValue=="value"{params["value"]=n}else{params["newFrame"]=(n*48000).rounded()};editRecorded(params)}
-  func tableViewSelectionDidChange(_ notification:Notification){let row=table.selectedRow;selectedSource=nil;if detailMode.selectedSegment==0,sources.indices.contains(row){selectedSource=sources[row];selectedSource?["parameter"]=parameterID;selectedSource?["plugin"]=target?["plugin"]}else if detailMode.selectedSegment==1,audit.indices.contains(row){selectedSource=link(audit[audit.count-1-row])}else if detailMode.selectedSegment==2,recorded.indices.contains(row){pointTime.stringValue=String(format:"%.7f",(recorded[row]["frame"] as? Double ?? 0)/48000);pointValue.stringValue="\(recorded[row]["value"] ?? 0)"}}
+  func tableViewSelectionDidChange(_ notification:Notification){guard !refreshingRecorded else{return};let row=table.selectedRow;selectedSource=nil;if detailMode.selectedSegment==0,sources.indices.contains(row){selectedSource=sources[row];selectedSource?["parameter"]=parameterID;selectedSource?["plugin"]=target?["plugin"]}else if detailMode.selectedSegment==1,audit.indices.contains(row){selectedSource=link(audit[audit.count-1-row])}else if detailMode.selectedSegment==2{showRecordedSelection()}}
+  private func showRecordedSelection(){
+    guard detailMode.selectedSegment==2,recorded.indices.contains(table.selectedRow) else{return}
+    let point=recorded[table.selectedRow]
+    pointTime.stringValue=String(format:"%.7f",((point["frame"] as? NSNumber)?.doubleValue ?? 0)/48000)
+    pointValue.stringValue="\(point["value"] ?? 0)"
+  }
   var unclampedModulationValue:Double? {
     let active=sources.filter{$0["kind"] as? String=="graph-source" && $0["enabled"] as? Bool != false}
     guard !active.isEmpty else{return nil}
@@ -218,12 +225,36 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
     guard var source=selectedSource,source["connection"] != nil || (source["scope"] as? String=="song" && source["node"] as? String != nil) else{status.stringValue="Select a modulation contribution to edit its range.";return}
     source["editConnection"]=true;onOpen?(source)
   }
-  func loadRecorded(){guard let plugin=target?["plugin"] as? String,!plugin.isEmpty,let id=parameterID else{recorded=[];table.reloadData();status.stringValue="Recorded automation belongs to rack plugins. Graph copies use graph sources.";return};request("automation.recorded.get",["plugin":plugin,"parameter":id,"offset":recordedOffset,"limit":512]){[weak self] data in guard let self else{return};self.recorded=data["points"] as? [[String:Any]] ?? [];self.recordedTotal=data["total"] as? Int ?? 0;self.loadMore.title=self.recordedTotal==0 ? "No recorded points":"\(self.recordedOffset+1)…\(self.recordedOffset+self.recorded.count) / \(self.recordedTotal) · Next";self.loadMore.isEnabled=self.recordedTotal>512;self.table.reloadData();self.status.stringValue="Edit time or value directly during playback. Recorded points use song time. Changes take effect immediately and support Undo."}}
+  func loadRecorded(movedPoint:(from:Double,to:Double)?=nil){
+    guard let plugin=target?["plugin"] as? String,!plugin.isEmpty,let id=parameterID else{recorded=[];table.reloadData();status.stringValue="Recorded automation belongs to rack plugins. Graph copies use graph sources.";return}
+    request("automation.recorded.get",["plugin":plugin,"parameter":id,"offset":recordedOffset,"limit":512]){[weak self] data in
+      guard let self else{return}
+      // Row indexes may change when a time edit reorders points. Keep the point
+      // selected now, including a selection made while this read was pending.
+      var frame=self.detailMode.selectedSegment==2 && self.recorded.indices.contains(self.table.selectedRow) ? (self.recorded[self.table.selectedRow]["frame"] as? NSNumber)?.doubleValue:nil
+      if let move=movedPoint,frame==move.from{frame=move.to}
+      self.refreshingRecorded=true
+      self.recorded=data["points"] as? [[String:Any]] ?? [];self.recordedTotal=data["total"] as? Int ?? 0
+      self.loadMore.title=self.recordedTotal==0 ? "No recorded points":"\(self.recordedOffset+1)…\(self.recordedOffset+self.recorded.count) / \(self.recordedTotal) · Next";self.loadMore.isEnabled=self.recordedTotal>512
+      self.table.reloadData()
+      if self.detailMode.selectedSegment==2 {
+        if let frame,let row=self.recorded.firstIndex(where:{($0["frame"] as? NSNumber)?.doubleValue==frame}){self.table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)}else{self.table.deselectAll(nil)}
+      }
+      self.refreshingRecorded=false
+      // reloadData does not send a selection notification when the same row
+      // remains selected. Refresh its form too, without overwriting typed text.
+      if self.pointTime.currentEditor()==nil && self.pointValue.currentEditor()==nil{self.showRecordedSelection()}
+      self.status.stringValue="Edit time or value directly during playback. Recorded points use song time. Changes take effect immediately and support Undo."
+    }
+  }
   func editRecorded(_ changes:[String:Any]){guard let plugin=target?["plugin"] as? String,!plugin.isEmpty,let id=parameterID else{return};var p=changes;p["plugin"]=plugin;p["parameter"]=id;p["expectedRevision"]=revision;sendRecordedEdit(p,generation:generation)}
   private func sendRecordedEdit(_ params:[String:Any],generation expected:Int,attempt:Int=0){
     guard generation==expected else{return}
     if pending {guard attempt<40 else{status.stringValue="The app is busy. Your point fields are retained; retry the edit.";return};DispatchQueue.main.asyncAfter(deadline:.now()+0.05){[weak self] in self?.sendRecordedEdit(params,generation:expected,attempt:attempt+1)};return}
-    request("automation.recorded.edit",params){[weak self] _ in self?.loadRecorded();self?.lastSourceRevision=""}
+    request("automation.recorded.edit",params){[weak self] _ in
+      let move=(params["frame"] as? NSNumber).flatMap{from in (params["newFrame"] as? NSNumber).map{(from:from.doubleValue,to:$0.doubleValue)}}
+      self?.loadRecorded(movedPoint:move);self?.lastSourceRevision=""
+    }
   }
   func addPoint(){guard let time=Double(pointTime.stringValue),time.isFinite,time>=0,let value=Double(pointValue.stringValue),value.isFinite else{status.stringValue="Enter a finite time in seconds and parameter value.";return};editRecorded(["frame":(time*48000).rounded(),"value":value])}
   func deletePoint(){guard recorded.indices.contains(table.selectedRow)else{return};editRecorded(["frame":recorded[table.selectedRow]["frame"] ?? 0,"remove":true])}

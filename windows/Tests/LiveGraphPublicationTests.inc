@@ -57,7 +57,34 @@ void liveRecordedAutomationTests(const std::filesystem::path &directory) {
   active=false;invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});need(lane()==saved,"Recorded points did not survive native save/reopen");
   std::cout<<"PASS Windows recorded point preview/add/move/remove, live queue refusal, Undo/Redo, opaque baseline and persistence\n";
 }
+void liveBusMetadataTests() {
+  bool active=false;unsigned stops=0;PlaybackHooks hooks;hooks.feedback=[&]{PlaybackFeedback r;r.playing=active;r.audioActive=active;return r;};
+  DocumentController c({},"live-bus-metadata",[&]{++stops;active=false;},[](const auto &){},{},64u*1024u*1024u,{},std::move(hooks));
+  const auto library=call(c,"plugin.discover",{{"format","Built-in"}}),initial=call(c,"mixer.get",{{"includeImplicit",true}});
+  auto add=[&](const char *classID,size_t track){const auto found=std::find_if(library.begin(),library.end(),[&](const auto &p){return p.at("classID")==classID;});need(found!=library.end(),"Bus metadata fixture plugin missing");invoke(c,"plugin.add",{{"descriptor",*found},{"target",initial.at("buses")[track].at("id")}});return c.view()->session.document.at("nativePlugins").back().at("instanceID");};
+  const auto source=add("resonance.gainer.v1",0),target=add("resonance.compressor.v1",1);
+  auto connected=[&]{const auto info=call(c,"plugin.buses.get",{{"plugin",target}});for(const auto &bus:info.at("buses"))if(bus.at("direction")=="input"&&bus.at("index")==1)return bus.at("active").get<bool>();throw std::runtime_error("Detector bus missing");};
+  Json route={{"source",source},{"output",0},{"target",target},{"input",1},{"enabled",false}};
+  invoke(c,"mixer.plugin.connection.set",route);need(!connected(),"Stopped editor unexpectedly inferred an enabled detector");
+  const auto baseline=call(c,"plugin.state.get",{{"plugin",target}});
+  auto *playback=c.prepare(48000,Json::object(),true,true).get();active=true;const auto stopped=stops;std::array<float,2048> pcm{};
+  auto settle=[&]{for(unsigned i=0;i<16;++i)need(playback->render(pcm.data(),1024),"Bus metadata transition render failed");};settle();
+  need(!connected(),"Disabled direct cable must not activate prepared capacity");
+  route["enabled"]=true;invoke(c,"mixer.plugin.connection.set",route);settle();
+  need(connected()&&active&&stops==stopped&&call(c,"plugin.state.get",{{"plugin",target}})==baseline,"Accepted detector cable did not update bus metadata independently of saved plugin state");
+  const auto mixer=call(c,"mixer.get",Json::object());bool mirrored=false;
+  for(const auto &plugin:mixer.at("plugins"))if(plugin.at("id")==target)for(const auto &bus:plugin.at("audioBuses"))if(bus.at("direction")=="input"&&bus.at("index")==1)mirrored=bus.at("active").get<bool>();
+  need(mirrored,"Mixer and plugin bus reads disagree about accepted direct routing");
+  const auto before=c.view();auto invalid=route;invalid["input"]=2;bool rejected=false;try{invoke(c,"mixer.plugin.connection.set",invalid);}catch(const std::exception &){rejected=true;}
+  need(rejected&&c.view()==before&&connected(),"Rejected route changed bus membership");
+  invoke(c,"history.undo");settle();need(!connected(),"Undo to disabled direct route retained inferred bus membership");
+  invoke(c,"history.redo");settle();need(connected(),"Redo did not restore inferred detector membership");
+  invoke(c,"graph.connections.remove",{{"connections",Json::array({{{"kind","plugin-connection"},{"source",source},{"output",0},{"target",target},{"input",1}}})}});
+  settle();need(!connected()&&active&&stops==stopped,"Removing the last detector cable retained membership or stopped playback");
+  std::cout<<"PASS Windows accepted playback bus metadata: disabled/direct detector, mixer parity, rejection, Undo/Redo, last-cable removal and saved baseline isolation\n";
+}
 void liveRackPublicationTests(const std::filesystem::path &directory) {
+  liveBusMetadataTests();
   bool active=false;unsigned stops=0;PlaybackHooks hooks;hooks.feedback=[&]{PlaybackFeedback r;r.playing=active;r.audioActive=active;return r;};
   DocumentController c({},"live-rack-publication",[&]{++stops;active=false;},[](const auto &){},{},64u*1024u*1024u,{},std::move(hooks));
   const auto library=call(c,"plugin.discover",{{"format","Built-in"}});const auto gain=std::find_if(library.begin(),library.end(),[](const auto &p){return p.at("classID")=="resonance.gainer.v1";});need(gain!=library.end(),"Gainer missing");

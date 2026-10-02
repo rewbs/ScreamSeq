@@ -168,6 +168,34 @@ static void graphSidechains(PluginState effect, PluginState synth, uint32_t rate
   check(energy > 1 && maximum < 2e-7, "Actual hosted sidechain gain matches an independently scaled automation envelope");
   std::cout << "Hosted " << effect.descriptor.format << " sidechain at " << rate << " Hz, reference difference " << maximum << '\n';
 }
+// Never pre-enable the test ports: physical capacity and accepted cable
+// membership are deliberately different, as they are for a first UI cable.
+static void inferredPortMembership(PluginState effect,PluginState instrument) {
+  auto document=Document::demo();auto native=document->native();native.ensureMixer();
+  effect.instanceID="membership-effect";effect.auxiliaryInputs.clear();
+  instrument.instanceID="membership-source";instrument.auxiliaryOutputs={31};
+  native.mixer.buses.back().inserts={effect.instanceID};
+  SignalDefinition definition;definition.id=native.makeEntity().id;definition.number=1;definition.name="Port membership";
+  const auto input=native.makeEntity().id,output=native.makeEntity().id,stage=native.tracks.at(0).id;
+  definition.nodes={{input,SignalNodeKind::Input,"Input"},{output,SignalNodeKind::Output,"Output"}};
+  definition.audio={{input,output},{input,output,1,1}};
+  native.signal.library={definition};native.signal.assignments={{stage,definition.id,1,1}};
+  Renderer renderer(document->snapshotData(),48000);
+  auto host=std::make_unique<PluginChain>(std::vector<PluginState>{instrument,effect},48000,true);host->attachInstruments(renderer,&native);
+  auto active=[&](size_t slot,bool input,uint32_t index){const auto ports=host->buses(slot);const auto found=std::find_if(ports.begin(),ports.end(),[&](const auto &p){return p.input==input&&p.index==index;});check(found!=ports.end()&&found->supported,"Membership fixture port must exist");return found->active;};
+  auto membership=[&](bool first,bool second,bool detector){if(active(0,false,1)!=first||active(0,false,2)!=second||active(1,true,1)!=detector)std::cerr<<effect.descriptor.format<<" membership actual="<<active(0,false,1)<<active(0,false,2)<<active(1,true,1)<<" expected="<<first<<second<<detector<<" frame="<<renderer.telemetry().frames<<"\n";check(active(0,false,1)==first&&active(0,false,2)==second&&active(1,true,1)==detector,"Accepted direct/stage/follower routes must identify exactly their active auxiliary ports");check(active(0,false,31),"Removing inferred routes must preserve explicit activation");const auto saved=host->states();check(saved[0].auxiliaryOutputs==std::vector<uint32_t>{31}&&saved[1].auxiliaryInputs.empty(),"Inferred enables must never leak into saved plugin state/history");};
+  auto render=[&]{std::array<float,1024> samples{};for(unsigned i=0;i<4;++i){tracker_audit_begin();host->beginRenderBlock();host->syncTransport(renderer);renderer.render(samples.data(),512);const bool okay=host->process(samples.data(),512);if(!okay){uint64_t a,f,l;tracker_audit_end(&a,&f,&l);std::cerr<<effect.descriptor.format<<" membership render frame="<<renderer.telemetry().frames<<" direct="<<native.mixer.pluginConnections.size()<<" stage="<<native.signal.stageConnections.size()<<" followers="<<native.signal.songSources.size()<<"\n";check(false,"Membership fixture callback failed");}auditEnd(okay);}check(host->mixerRoutingReady(),"Membership transition must settle");};
+  auto publish=[&](bool first,bool second,bool detector){const bool oldFirst=active(0,false,1),oldSecond=active(0,false,2),oldDetector=active(1,true,1);auto plan=host->prepareMixerRouting(native);check(plan&&host->publishMixerRouting(plan),"Membership route must publish");membership(oldFirst,oldSecond,oldDetector);render();membership(first,second,detector);};
+  membership(false,false,false);render();
+  native.mixer.pluginConnections={{instrument.instanceID,1,effect.instanceID,1,0,false}};publish(false,false,false);
+  native.mixer.pluginConnections[0].enabled=true;publish(true,false,true);
+  // A failed candidate must not make a hollow port appear connected.
+  auto invalid=native;invalid.mixer.pluginConnections={{effect.instanceID,0,effect.instanceID,1,0,true}};bool rejected=false;try{rejected=!host->prepareMixerRouting(invalid);}catch(const std::exception&){rejected=true;}check(rejected,"Feedback endpoint must reject before acceptance");membership(true,false,true);
+  native.mixer.pluginConnections.clear();
+  native.signal.stageConnections={{{instrument.instanceID,0},{{},stage},2,1,0,true},{{{},stage},{effect.instanceID,0},1,1,0,true}};publish(false,true,true);
+  native.signal.stageConnections.clear();SignalSongSource follower;follower.node={native.makeEntity().id,SignalNodeKind::Follower,"Output-only follower"};follower.audioPlugin=instrument.instanceID;follower.output=1;native.signal.songSources={follower};publish(true,false,false);
+  native.signal.songSources.clear();publish(false,false,false);
+}
 int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool { try {
     check(argc == 2, "Fixture bundle path required");
@@ -178,6 +206,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       graphSidechains({descriptors[0]}, {descriptors[1]}, rate);
     }
     auto au = registerFixtureAUs();
+    inferredPortMembership({descriptors[0]},{descriptors[1]});inferredPortMembership({au[0]},{au[1]});
     for (uint32_t rate : {44100, 48000, 96000}) {
       for (auto block : {17u, 128u, 512u, 4096u}) for(bool shared:{false,true}) { hostOutputs({au[1]}, rate, block,shared); hostInputs({au[0]}, rate, block,shared); }
       graphOutputs({au[1]}, rate);
@@ -260,6 +289,16 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
     check([call(@"mixer.get", @{})[@"data"][@"sidechains"] count] == 1, "Disabling sidechain input retains routing");
     call(@"mixer.sidechains.set", @{@"plugin": effectID, @"input": @1, @"sources": @[]}, true);
     check([call(@"mixer.get", @{})[@"data"][@"sidechains"] count] == 0, "Dormant sidechain can be removed");
+    // A first real cable is accepted with both endpoint toggles still off.
+    // The offline hosted test above checks its active-plan metadata; this API
+    // transaction checks no hidden plugin.buses.set or plugin-history edit.
+    auto savedSource=call(@"plugin.state.get",@{@"slot":@0})[@"data"],savedTarget=call(@"plugin.state.get",@{@"slot":@1})[@"data"];
+    NSDictionary *direct=@{@"source":id,@"output":@2,@"target":effectID,@"input":@1};
+    call(@"mixer.plugin.connection.set",direct,true);
+    check([call(@"mixer.get",@{})[@"data"][@"pluginConnections"] count]==1,"First cable must auto-activate previously inactive auxiliary endpoints");
+    check([savedSource isEqual:call(@"plugin.state.get",@{@"slot":@0})[@"data"]]&&[savedTarget isEqual:call(@"plugin.state.get",@{@"slot":@1})[@"data"]],"Automatic port membership must not alter saved plugin state");
+    call(@"history.undo",@{@"domain":@"document"},true);check([call(@"mixer.get",@{})[@"data"][@"pluginConnections"] count]==0,"First auxiliary cable must undo in one document edit");
+    call(@"history.redo",@{@"domain":@"document"},true);check([call(@"mixer.get",@{})[@"data"][@"pluginConnections"] count]==1,"First auxiliary cable must redo without pre-enabling either port");
     [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
     std::cout << "PASS multi-bus host and native graph: mono/stereo outputs through port 31, side input buffers, timed parameters, musical automation, independent faders, 44.1/48/96 kHz, 17/128/512/4096 frames, RT audit, API validation, history and persistence\n";
     return 0;

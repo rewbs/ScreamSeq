@@ -158,7 +158,14 @@ void PluginChain::songFollower(HostedMixerPlan &hosted,size_t bus,size_t process
   for(const auto &tap:song.taps)if(tap.bus==bus && tap.processor==processor && tap.output==output){
     double existing;if(song.runtime->contribution(tap.source,position,existing))continue;
     const float *input=samples;
-    if(hosted.groups){if(samples)std::copy_n(samples,frames*2,song.groupFollower.data());else std::fill_n(song.groupFollower.data(),frames*2,0.f);hosted.groups->follower(tap.source,song.groupFollower.data(),frames,position);if(hosted.groups->failed())failed_=true;input=song.groupFollower.data();}
+    // A validated tap can have silent PCM while an instrument sleeps, or
+    // while a retained transition source supplies no samples. Silence still
+    // advances the follower envelope; it is not an unavailable endpoint.
+    if(hosted.groups||!samples){
+      if(samples)std::copy_n(samples,frames*2,song.groupFollower.data());else std::fill_n(song.groupFollower.data(),frames*2,0.f);
+      if(hosted.groups){hosted.groups->follower(tap.source,song.groupFollower.data(),frames,position);if(hosted.groups->failed())failed_=true;}
+      input=song.groupFollower.data();
+    }
     if(!song.runtime->renderSource(tap.source,frames,position,song.clock,input))failed_=true;
   }
 }

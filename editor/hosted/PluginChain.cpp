@@ -498,14 +498,35 @@ std::vector<PluginParameter> PluginChain::parameters(size_t slot) const {
   return result;
 }
 
+std::optional<std::vector<PluginAudioBus>> PluginChain::buses(const std::string &instance) const {
+  const auto found=std::find_if(rack_.begin(),rack_.end(),[&](const auto &entry){return entry->baseline.instanceID==instance;});
+  if(found==rack_.end())return std::nullopt;
+  return buses(size_t(found-rack_.begin()));
+}
 std::vector<PluginAudioBus> PluginChain::buses(size_t slot) const {
-  if(slot>=rack_.size())return {};auto result=rack_[slot]->plugin->buses();
-  for(auto &bus:result)if(bus.index){const auto &selected=bus.input?rack_[slot]->baseline.auxiliaryInputs:rack_[slot]->baseline.auxiliaryOutputs;bus.active=std::find(selected.begin(),selected.end(),bus.index)!=selected.end();}
-  // Rendering capacity is immutable; the UI's hollow/connected state follows
-  // the accepted routing document instead of mutating a vendor mid-process.
-  if(mixerTransition_){const auto &graph=mixerTransition_->controlPlan().runtime->graph();for(auto &bus:result)if(bus.input&&bus.index&&bus.index<64&&bus.supported&&
-    (rack_[slot]->plugin->preparedAuxiliaryInputs()&(uint64_t(1)<<bus.index)))for(const auto &route:graph.sidechains)if(route.enabled&&route.plugin==rack_[slot]->baseline.instanceID&&route.input==bus.index)bus.active=true;
-    for(auto &bus:result)if(!bus.input&&bus.index)for(const auto &route:graph.instruments)if(route.plugin==rack_[slot]->baseline.instanceID&&route.output==bus.index&&route.target)bus.active=true;
+  if(slot>=rack_.size())return {};
+  const auto &entry=*rack_[slot];auto result=entry.plugin->buses();
+  const auto *plan=mixerTransition_?&mixerTransition_->controlPlan():nullptr;
+  const auto *hosted=plan?static_cast<const HostedMixerPlan *>(plan->processors.get()):nullptr;
+  // Prepared capacity is broader than logical membership. Report only explicit
+  // enables and accepted connected endpoints, without changing saved state or
+  // querying callback-owned buffers. Typed stage cables are already projected
+  // into this plan's pluginConnections with their stable synthetic identities.
+  for(auto &bus:result)if(bus.index){
+    const auto &selected=bus.input?entry.baseline.auxiliaryInputs:entry.baseline.auxiliaryOutputs;
+    bus.active=std::find(selected.begin(),selected.end(),bus.index)!=selected.end();
+    const auto capacity=bus.input?entry.plugin->preparedAuxiliaryInputs():entry.plugin->preparedAuxiliaryOutputs();
+    if(!plan||!bus.supported||bus.index>=64||!(capacity&(uint64_t(1)<<bus.index)))continue;
+    const auto &graph=plan->runtime->graph();const auto &id=entry.baseline.instanceID;
+    if(bus.input){
+      for(const auto &route:graph.sidechains)if(route.enabled&&route.plugin==id&&route.input==bus.index)bus.active=true;
+    }else{
+      for(const auto &route:graph.instruments)if(route.plugin==id&&route.output==bus.index&&route.target)bus.active=true;
+      for(const auto &source:hosted->songSpec.songSources)
+        if(source.node.kind==SignalNodeKind::Follower&&source.audioPlugin==id&&source.output==bus.index)bus.active=true;
+    }
+    for(const auto &route:graph.pluginConnections)if(route.enabled&&
+      (bus.input?(route.target==id&&route.input==bus.index):(route.source==id&&route.output==bus.index)))bus.active=true;
   }
   return result;
 }

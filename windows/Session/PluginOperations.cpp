@@ -40,7 +40,8 @@ PluginDescriptor descriptor(const Json &v){keys(v,{"type","subtype","manufacture
 }
 Json record(const PluginState &s){auto j=descriptor(s.descriptor);j["instanceID"]=s.instanceID;j["state"]=blob(s.state);j["audioLayout"]=s.audioLayout;j["instrument"]=s.instrument;j["bypass"]=s.bypass;j["instrumentAssignments"]=Json::array();for(auto a:pluginAssignments(s))j["instrumentAssignments"].push_back({{"instrument",a.instrument},{"channel",a.channel}});j["auxiliaryInputs"]=s.auxiliaryInputs;j["auxiliaryOutputs"]=s.auxiliaryOutputs;return j;}
 Json parameters(const NativePlugin &plugin){Json j=Json::array();for(const auto &p:plugin.parameters())j.push_back({{"id",p.id},{"name",p.name},{"min",p.min},{"max",p.max},{"value",p.value},{"manualValue",p.manualValue.value_or(p.value)},{"effectiveValue",nullptr},{"valueRole","manual-editor"},{"unit",p.unit},{"unitLabel",p.unitLabel},{"choices",p.choices},{"displayScale",p.logarithmic?"logarithmic":"linear"},{"step",p.step},{"canSlide",p.continuous},{"writable",p.writable}});return j;}
-Json buses(const NativePlugin &plugin){Json j=Json::array();for(const auto &b:plugin.buses())j.push_back({{"index",b.index},{"direction",b.input?"input":"output"},{"name",b.name},{"channels",b.channels},{"physicalBus",b.physicalChannels?b.physicalBus:b.index},{"firstChannel",b.firstChannel},{"physicalChannels",b.physicalChannels?b.physicalChannels:b.channels},{"active",b.active},{"supported",b.supported}});return j;}
+Json buses(const std::vector<PluginAudioBus> &catalog){Json j=Json::array();for(const auto &b:catalog)j.push_back({{"index",b.index},{"direction",b.input?"input":"output"},{"name",b.name},{"channels",b.channels},{"physicalBus",b.physicalChannels?b.physicalBus:b.index},{"firstChannel",b.firstChannel},{"physicalChannels",b.physicalChannels?b.physicalChannels:b.channels},{"active",b.active},{"supported",b.supported}});return j;}
+Json buses(const NativePlugin &plugin){return buses(plugin.buses());}
 size_t stateBytes(const Json &plugins,const Json &automation){size_t n=automation.size()*128;for(const auto &p:plugins)n+=4096+p.at("state").get_binary().size()+p.value("audioLayout",std::string{}).size();return n;}
 std::string hashText(const std::string &s){std::array<UCHAR,32> digest{};if(BCryptHash(BCRYPT_SHA256_ALG_HANDLE,nullptr,0,reinterpret_cast<PUCHAR>(const_cast<char*>(s.data())),ULONG(s.size()),digest.data(),ULONG(digest.size()))<0)throw std::runtime_error("Cannot hash plugin program catalog");std::string out;for(auto b:digest){out+="0123456789abcdef"[b>>4];out+="0123456789abcdef"[b&15];}return out;}
 }
@@ -61,7 +62,8 @@ GraphRackClone PluginOperations::cloneRackSlot(uint32_t index) {
   result.recipe.bypass=s.bypass;result.recipe.audioLayout=s.audioLayout;result.instrument=d.instrument||d.type==audioUnitMusicDeviceType;for(auto a:pluginAssignments(s))result.instruments.push_back(uint16_t(a.instrument));return result;
 }
 std::vector<PluginAudioBus> PluginOperations::audioBuses(size_t index,bool required) {
-  try{return editor(index).buses();}catch(const std::exception &){if(required)throw;return {};}
+  try{if(liveBuses_){const auto states=projectPluginStates(project_,false);need(index<states.size(),"Plugin rack slot no longer exists");if(auto current=liveBuses_(states[index].instanceID))return std::move(*current);}return editor(index).buses();}
+  catch(const std::exception &){if(required)throw;return {};}
 }
 std::vector<PluginAudioBus> PluginOperations::audioBusMetadata(const std::string &identity) {
   return audioBuses(slot({{"plugin",identity}}),true);
@@ -425,7 +427,7 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
   }
   if(method=="plugin.parameters.get"){keys(p,{"slot","plugin"});return parameters(editor(index));}
   if(method=="plugin.state.get"){keys(p,{"slot","plugin"});return {{"descriptor",descriptor(state.descriptor)},{"data",base64(state.state)},{"audioLayout",state.audioLayout},{"kind","saved-baseline"}};}
-  if(method=="plugin.buses.get"){keys(p,{"slot","plugin"});return {{"plugin",state.instanceID},{"buses",buses(editor(index))},{"audioLayout",pluginAudioLayoutSignature(editor(index).buses())}};}
+  if(method=="plugin.buses.get"){keys(p,{"slot","plugin"});const auto catalog=audioBuses(index,true);return {{"plugin",state.instanceID},{"buses",buses(catalog)},{"audioLayout",pluginAudioLayoutSignature(catalog)}};}
   if(method=="plugin.editor.open"||method=="plugin.editor.close") {
     keys(p,{"slot"});auto &plugin=editor(index);if(method=="plugin.editor.open"){plugin.showEditor();openEditors_.insert(state.instanceID);}else {flushEditors(true);plugin.closeEditor();openEditors_.erase(state.instanceID);}return {{"open",plugin.editorOpen()},{"plugin",state.instanceID}};
   }

@@ -129,5 +129,52 @@ void preserveSongGroupInsertion(SignalGraph &next,const SignalGraph &previous,
   }
   next.groups=std::move(prepared.groups);
 }
+void preserveSongGroupDetachment(SignalGraph &next,const SignalGraph &previous,
+  const MixerGraph &previousMixer,const MixerGraph &nextMixer,const std::vector<std::string> &rack){
+  if(previous.groups.empty())return;
+  struct SerialWire {std::string source;SignalRouteIdentity identity;};
+  auto serialWires=[&](const MixerGraph &input){
+    const auto mixer=projectMixerDetachedChains(input);std::map<std::string,SerialWire> wires;
+    std::set<std::string> owned(mixer.detached.begin(),mixer.detached.end());
+    for(const auto &bus:mixer.buses)owned.insert(bus.inserts.begin(),bus.inserts.end());
+    for(const auto &bus:mixer.buses){auto chain=bus.inserts;
+      if(bus.kind==MixerBusKind::Master)for(const auto &id:rack)if(!owned.contains(id))chain.push_back(id);
+      const auto owner="n"+std::to_string(bus.id);auto source=owner;
+      for(const auto &plugin:chain){if(std::find(mixer.disconnectedMainInputs.begin(),mixer.disconnectedMainInputs.end(),plugin)==mixer.disconnectedMainInputs.end())
+          wires.emplace(plugin,SerialWire{source,{"insert",owner,{},plugin,"main-path"}});
+        source="plugin:"+plugin;}
+    }
+    return wires;
+  };
+  const auto before=serialWires(previousMixer),after=serialWires(nextMixer);
+  auto retain=[&](SignalRouteIdentity &route,const std::vector<SignalRouteIdentity> &boundary){
+    if(std::find(boundary.begin(),boundary.end(),route)!=boundary.end())return true;
+    if(route.kind!="insert")return false;
+    const auto old=before.find(route.plugin),now=after.find(route.plugin);
+    if(old==before.end()||now==after.end()||old->second.identity!=route||old->second.source!=now->second.source||
+       std::find(boundary.begin(),boundary.end(),now->second.identity)==boundary.end())return false;
+    route=now->second.identity;return true;
+  };
+  auto prepared=next;
+  for(auto &group:prepared.groups){
+    const auto old=std::find_if(previous.groups.begin(),previous.groups.end(),[&](const auto &g){return g.id==group.id;});
+    if(old==previous.groups.end())continue;
+    const auto saved=resolvedSongGroupDryRoutes(previous,previousMixer,rack,group.id,old->bypass);
+    if(!old->dryRoutes.empty()){
+      const auto boundary=signalSongGroupBoundary(prepared,nextMixer,rack,group.id);std::vector<SignalSongGroupDryRoute> maps;
+      for(auto map:saved){
+        if(!retain(map.output,boundary.outputs))continue;
+        if(boundary.inputs.empty())map.input={};
+        else need(retain(map.input,boundary.inputs),"Detaching removes a selected dry input from a surviving group output; choose its dry path explicitly");
+        maps.push_back(std::move(map));
+      }
+      // Do not let an emptied explicit map infer a different surviving input.
+      need(maps.size()==boundary.outputs.size(),"Detaching creates a new group boundary; choose its dry path explicitly");
+      group.dryRoutes=std::move(maps);
+    }
+    (void)resolvedSongGroupDryRoutes(prepared,nextMixer,rack,group.id,group.bypass);
+  }
+  next.groups=std::move(prepared.groups);
+}
 
 }

@@ -18,6 +18,7 @@ class PluginOperations {
   std::function<void()> stop_;
   std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters_;
   std::function<void(size_t,bool)> liveBypass_;
+  std::function<std::optional<std::vector<Tracker::PluginAudioBus>>(const std::string &)> liveBuses_;
   std::function<std::function<void()>(const Tracker::NativeSong &)> prepareNativePublication_;
   std::function<std::function<void()>(const std::vector<Tracker::ParameterChange> &)> prepareRecordedPublication_;
   std::function<std::function<void()>(const std::vector<Tracker::PluginState> &,const std::vector<Tracker::ParameterChange> &,const Tracker::NativeSong &)> prepareRackPublication_;
@@ -60,6 +61,7 @@ public:
     std::optional<std::filesystem::path> libraryPath={});
   ~PluginOperations();
   void liveBypass(std::function<void(size_t,bool)> callback) {liveBypass_=std::move(callback);}
+  void liveBuses(decltype(liveBuses_) callback) {liveBuses_=std::move(callback);}
   void nativePublication(std::function<std::function<void()>(const Tracker::NativeSong &)> callback) {prepareNativePublication_=std::move(callback);}
   void recordedPublication(std::function<std::function<void()>(const std::vector<Tracker::ParameterChange> &)> callback) {prepareRecordedPublication_=std::move(callback);}
   void rackPublication(decltype(prepareRackPublication_) callback) {prepareRackPublication_=std::move(callback);}

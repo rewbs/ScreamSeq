@@ -120,6 +120,13 @@ void DocumentController::open(const std::filesystem::path &path) {
     onMain([this,batch=std::vector<Tracker::ParameterChange>(changes.begin(),changes.end())]{liveParameters_(batch);});
   };
   auto plugins=std::make_unique<PluginOperations>(*candidate.document,project_,[this]{onMain(stop_);},std::move(liveParameters),libraryPath_);
+  plugins->liveBuses([this](const std::string &instance)->std::optional<std::vector<Tracker::PluginAudioBus>>{
+    const auto feedback=playbackFeedback();
+    if(!playback_||(!feedback.playing&&!feedback.audioActive))return std::nullopt;
+    // The document worker owns this accepted-plan read. Editor instances carry
+    // the saved baseline and cannot report inferred live route membership.
+    return playback_->chain().buses(instance);
+  });
   plugins->rackPublication([this](const auto &states,const auto &points,const auto &native){return prepareRackPublication(states,points,native);});
   plugins->nativePublication([this](const Tracker::NativeSong &next){return prepareNativePublication(next);});
   plugins->recordedPublication([this](const std::vector<Tracker::ParameterChange> &points)->std::function<void()>{

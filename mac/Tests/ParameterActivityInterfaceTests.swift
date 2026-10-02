@@ -52,6 +52,20 @@ extension InterfaceTests {
     host.makeFirstResponder(nil)
     try require(requests.last?.0=="automation.recorded.edit" && requests.last?.1["frame"] as? Int==48000 && requests.last?.1["value"] as? Double == -30,"Committing an inline recorded value preserves its time and edits the exact parameter")
     answer([:]);answer(["points":[["frame":48000,"value":-30]],"total":1])
+    try require(editor.table.selectedRow==0 && editor.pointTime.doubleValue==1 && editor.pointValue.doubleValue == -30,"Inline recorded edits refresh the selected point form even when its table row stays selected")
+    editor.loadRecorded();answer(["points":[["frame":48000,"value":-40]],"total":1])
+    try require(editor.pointValue.doubleValue == -40,"Recorded Undo refresh restores the selected form alongside the table")
+    editor.loadRecorded();answer(["points":[["frame":48000,"value":-30],["frame":96000,"value":-20]],"total":2])
+    editor.tableView(editor.table,setObjectValue:"3",for:editor.table.tableColumns[0],row:0)
+    answer([:]);answer(["points":[["frame":96000,"value":-20],["frame":144000,"value":-30]],"total":2])
+    try require(editor.table.selectedRow==1 && editor.pointTime.doubleValue==3 && editor.pointValue.doubleValue == -30,"Editing recorded time follows that exact point through table reordering")
+    host.makeFirstResponder(editor.pointValue);(host.firstResponder as? NSTextView)?.string="-12.5"
+    editor.loadRecorded();answer(["points":[["frame":96000,"value":-20],["frame":144000,"value":-31]],"total":2])
+    try require((host.firstResponder as? NSTextView)?.string=="-12.5","Passive recorded refresh preserves an in-progress point-form text draft")
+    host.makeFirstResponder(nil)
+    editor.loadRecorded();editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    answer(["points":[["frame":96000,"value":-21],["frame":144000,"value":-31]],"total":2])
+    try require(editor.table.selectedRow==0 && editor.pointTime.doubleValue==2 && editor.pointValue.doubleValue == -21,"A pending recorded read respects a newer selected point instead of restoring the old row")
     // Song-level contributors use stable source IDs, not recipe edge indices.
     editor.detailMode.selectedSegment=0
     editor.loadSources();answer(["sources":[

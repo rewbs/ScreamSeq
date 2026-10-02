@@ -220,6 +220,8 @@ extension SignalGraphEditor {
   func openSongNode(_ id:String){
     if id.hasPrefix("instrument:"),let instrument=sampleInstruments.first(where:{"instrument:\($0["id"] as? String ?? "")"==id}),let stable=instrument["id"] as? String {
       if let graph=(data["instrumentAssignments"] as? [[String:Any]] ?? []).first(where:{$0["target"] as? String==stable})?["graph"] as? String {
+        let channel=buses.filter{$0["kind"] as? String=="track"}.firstIndex{$0["id"] as? String==filterID}
+        copyObservation.enterInstrument(graph:graph,instrument:stable,channel:channel)
         navigate(graph:graph,origin:"I\(instrument["index"] ?? 0) · \(instrument["name"] ?? "Instrument")",target:filterID)
       }else{status.stringValue="Choose this instrument’s processing graph in the inspector.";selectedID=id;inspect()}
       return
@@ -228,6 +230,10 @@ extension SignalGraphEditor {
       let bus=songNodeBus[id],name=buses.first{$0["id"] as? String==bus}?["name"] as? String
       let role=instrumentForSongNode(id).map{"I\($0["index"] ?? 0) · \($0["name"] as? String ?? "Instrument")"} ?? id.split(separator:":").dropFirst(2).first.map(String.init)
       let parts=id.split(separator:":",omittingEmptySubsequences:false)
+      if parts.count==3,parts[0]=="instrument-graph" {
+        let channel=buses.filter{$0["kind"] as? String=="track"}.firstIndex{$0["id"] as? String==bus}
+        copyObservation.enterInstrument(graph:graph,instrument:String(parts[1]),channel:channel)
+      }
       let observed:GraphObservedCopy? = parts.count==4 && parts[0]=="graph" ? GraphObservedCopy(["graph":graph,"target":bus ?? "","role":String(parts[2]).lowercased()]):nil
       navigate(graph:graph,origin:[name,role].compactMap{$0}.joined(separator:" › "),target:bus,observedCopy:observed)
     }else if let plugin=songNodePlugin[id]{onPlugin?(plugin)}else if let bus=songNodeBus[id]{onBus?(bus)}

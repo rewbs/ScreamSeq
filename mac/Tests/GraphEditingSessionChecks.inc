@@ -105,6 +105,14 @@ static void graphEditingSessionChecks() {
     call(@"plugin.add",@{@"descriptor":gain,@"target":track,@"before":processor,@"parent":group},true);auto expanded=read();NSString *head=expanded[@"plugins"][2][@"id"];
     check([expanded[@"groups"][0][@"dryRoutes"][0][@"input"][@"plugin"] isEqual:head]&&[expanded[@"groups"][0][@"dryRoutes"][0][@"output"][@"plugin"] isEqual:added],"Adding inside the group's leading boundary must preserve its dry path through the new head");
     NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];check([grouped savePath:path error:&failure]&&[grouped openPath:path error:&failure]&&[expanded isEqual:read()],"Remapped insertion boundaries must survive native save/reopen");[[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+    call(@"graph.group.bypass",@{@"graph":NSNull.null,@"group":group,@"bypass":@YES},true);auto beforeDetach=read();
+    call(@"mixer.inserts.detach",@{@"plugins":@[head,processor],@"dryRun":@YES},true);check([beforeDetach isEqual:read()],"Grouped detach dry run must preserve the complete song");
+    call(@"mixer.inserts.detach",@{@"plugins":@[head,processor]},true);auto detached=read();
+    check([detached[@"groups"][0][@"dryRoutes"] count]==0&&[detached[@"groups"][0][@"bypass"] boolValue]&&[detached[@"groups"][0][@"nodes"] isEqual:beforeDetach[@"groups"][0][@"nodes"]]&&[detached[@"mixer"][@"sidechains"] isEqual:beforeDetach[@"mixer"][@"sidechains"]],"Detaching a group must remove its old serial dry egress and preserve the detector, membership and bypass state");
+    check([detached[@"mixer"][@"buses"][2][@"inserts"] isEqual:@[added]]&&[detached[@"mixer"][@"detachedChains"][0][@"plugins"] isEqual:@[head,processor]],"Grouped detach must reconnect the original track and preserve the detached chain order");
+    NSString *detachedRevision=grouped.automationRevision;call(@"mixer.inserts.detach",@{@"plugins":@[head,processor]},true);check([detachedRevision isEqual:grouped.automationRevision]&&[detached isEqual:read()],"Repeated grouped detach must be a no-op");
+    call(@"history.undo",@{},true);check([beforeDetach isEqual:read()],"Grouped detach must undo routing and dry maps together");call(@"history.redo",@{},true);check([detached isEqual:read()],"Grouped detach Redo must restore the exact detached song");
+    check([grouped savePath:path error:&failure]&&[grouped openPath:path error:&failure]&&[detached isEqual:read()],"Detached group dry boundaries and sidechain must survive native save/reopen");[[NSFileManager defaultManager] removeItemAtPath:path error:nil];
   }
   {
     TrackerSession *implicit=[TrackerSession new];NSError *failure=nil;

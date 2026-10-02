@@ -2,6 +2,7 @@
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Project/NativeMetadata.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "editor/SignalGroupBypass.hpp"
 #include <cmath>
 #include <set>
 namespace ScreamSeq {
@@ -66,7 +67,10 @@ Json MixerOperations::invoke(const std::string &method,const Json &p) {
       for(size_t i=0;i<host_.plugins.size();++i)if(!isInstrument(i))rack.push_back(host_.plugins[i].instanceID);
       for(const auto &v:array(field(p,"plugins"),32))moving.push_back(plugin(v,false));
       need(!moving.empty(),"Select an effect chain");
-      if(detach){if(std::find(graph.detached.begin(),graph.detached.end(),moving.front())==graph.detached.end())next.ensureMixer();detachMixerInserts(graph,rack,moving,[&]{return allocate(next);});}
+      if(detach){if(std::find(graph.detached.begin(),graph.detached.end(),moving.front())==graph.detached.end())next.ensureMixer();
+        const auto previousMixer=graph;const auto previousSignal=next.signal;
+        detachMixerInserts(graph,rack,moving,[&]{return allocate(next);});
+        preserveSongGroupDetachment(next.signal,previousSignal,previousMixer,graph,rack);}
       else {affected=identity(field(p,"target"));moveMixerInserts(graph,rack,moving,affected,p.contains("before")&&!p.at("before").is_null()?text(p.at("before"),128):"");}
       const auto positions=p.value("positions",Json::array());
       for(const auto &v:array(positions,64)){keys(v,{"node","x","y"});auto key=text(field(v,"node"),256);auto group=std::find_if(next.signal.groups.begin(),next.signal.groups.end(),[&](const auto &g){return key==id(g.id);});if(group!=next.signal.groups.end()){const auto members=songSignalGroupNodes(next.signal,group->id);need(std::any_of(members.begin(),members.end(),[](const auto &m){return m.starts_with("plugin:");})&&std::all_of(members.begin(),members.end(),[&](const auto &m){return !m.starts_with("plugin:")||std::find(moving.begin(),moving.end(),m.substr(7))!=moving.end();}),"Move every group processor together");moveSongSignalGroup(next.signal,group->id,number(field(v,"x"),0,100000),number(field(v,"y"),0,100000));}

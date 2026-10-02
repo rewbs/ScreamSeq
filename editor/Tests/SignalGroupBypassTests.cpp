@@ -45,6 +45,34 @@ int main(){try{
     auto conflict=fan;const auto boundary=signalSongGroupBoundary(conflict,fanMixer,{"compressor"},101);conflict.groups[1].dryRoutes[1].input=*std::find_if(boundary.inputs.begin(),boundary.inputs.end(),[](const auto &r){return r.kind=="plugin-input";});auto unchanged=conflict;rejects([&]{preserveSongGroupInsertion(conflict,unchanged,fanMixer,appended,{"compressor"},{"compressor","reverb"},"reverb");});CHECK(conflict==unchanged);
     auto stale=beforeGraph;stale.groups[0].dryRoutes[0].output.target="n999";const auto priorStale=stale;rejects([&]{preserveSongGroupInsertion(stale,priorStale,beforeMixer,afterMixer,{"compressor"},{"compressor","reverb"},"reverb");});CHECK(stale==priorStale);
     auto undecided=beforeGraph;for(auto &g:undecided.groups){g.bypass=false;g.dryRoutes.clear();}auto undecidedBefore=undecided;preserveSongGroupInsertion(undecided,undecidedBefore,beforeMixer,afterMixer,{"compressor"},{"compressor","reverb"},"reverb");CHECK(undecided==undecidedBefore);
+    auto detached=afterMixer;detachMixerInserts(detached,{"compressor","reverb"},{"compressor"},[]{return 300;});auto detachedGraph=afterGraph;
+    preserveSongGroupDetachment(detachedGraph,afterGraph,afterMixer,detached,{"compressor","reverb"});
+    CHECK(detached.buses[0].inserts==std::vector<std::string>{"reverb"}&&detached.sidechains==afterMixer.sidechains);
+    for(const auto &g:detachedGraph.groups){CHECK(g.bypass&&g.dryRoutes.empty());CHECK(resolvedSongGroupDryRoutes(detachedGraph,detached,{"compressor","reverb"},g.id).empty());}
+    // An explicit auxiliary egress and its chosen detector input survive; the
+    // removed main egress is the only map discarded.
+    auto auxiliary=afterMixer;auxiliary.instruments.push_back({"compressor",50,1});auto chosen=afterGraph;
+    for(auto &g:chosen.groups){const auto b=signalSongGroupBoundary(chosen,auxiliary,{"compressor","reverb"},g.id);
+      const auto input=*std::find_if(b.inputs.begin(),b.inputs.end(),[](const auto &r){return r.kind=="plugin-input";});
+      const auto output=*std::find_if(b.outputs.begin(),b.outputs.end(),[](const auto &r){return r.kind=="plugin-output";});g.dryRoutes.push_back({input,output});}
+    auto moved=auxiliary;detachMixerInserts(moved,{"compressor","reverb"},{"compressor"},[]{return 301;});auto preserved=chosen;
+    preserveSongGroupDetachment(preserved,chosen,auxiliary,moved,{"compressor","reverb"});
+    for(size_t i=0;i<preserved.groups.size();++i)CHECK(preserved.groups[i].dryRoutes==std::vector<SignalSongGroupDryRoute>{chosen.groups[i].dryRoutes[1]});
+    auto ambiguous=chosen;ambiguous.groups[1].dryRoutes[1].input=ambiguous.groups[1].dryRoutes[0].input;const auto rejectedGraph=ambiguous;
+    rejects([&]{preserveSongGroupDetachment(ambiguous,rejectedGraph,auxiliary,moved,{"compressor","reverb"});});CHECK(ambiguous==rejectedGraph);
+    auto staleDetach=afterGraph;staleDetach.groups[0].dryRoutes[0].output.plugin="missing";const auto staleBefore=staleDetach;
+    rejects([&]{preserveSongGroupDetachment(staleDetach,staleBefore,afterMixer,detached,{"compressor","reverb"});});CHECK(staleDetach==staleBefore);
+  }
+  {
+    MixerGraph before;MixerBus track;track.id=10;track.output=50;track.inserts={"a","b","reverb"};MixerBus master;master.id=50;master.kind=MixerBusKind::Master;before.buses={track,master};before.instruments={{"b",50,1}};
+    SignalGraph graph;graph.groups={{100,0,"Outer",0,0,{}},{101,100,"A",0,0,{"plugin:a"}},{102,100,"B",0,0,{"plugin:b"}}};
+    for(auto &g:graph.groups){const auto b=signalSongGroupBoundary(graph,before,{"a","b","reverb"},g.id);for(const auto &output:b.outputs)g.dryRoutes.push_back({b.inputs[0],output});g.bypass=true;}
+    const auto previous=graph;auto after=before;detachMixerInserts(after,{"a","b","reverb"},{"a","b"},[]{return 300;});
+    preserveSongGroupDetachment(graph,previous,before,after,{"a","b","reverb"});
+    CHECK(graph.groups[1].dryRoutes.size()==1&&graph.groups[1].dryRoutes[0].input==SignalRouteIdentity{}&&graph.groups[1].dryRoutes[0].output.source=="n300");
+    CHECK(graph.groups[2].dryRoutes.size()==1&&graph.groups[2].dryRoutes[0].input.source=="n300"&&graph.groups[2].dryRoutes[0].output.kind=="plugin-output");
+    CHECK(graph.groups[0].dryRoutes.size()==1&&graph.groups[0].dryRoutes[0].input==SignalRouteIdentity{}&&graph.groups[0].dryRoutes[0].output.kind=="plugin-output");
+    for(const auto &g:graph.groups)(void)resolvedSongGroupDryRoutes(graph,after,{"a","b","reverb"},g.id);
   }
   std::cout<<"PASS group dry boundaries: exact ingress/egress, explicit branches, nested members, silence, dry-cycle rejection and live-control classification\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

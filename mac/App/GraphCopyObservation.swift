@@ -19,6 +19,7 @@ final class GraphCopyObservation:NSView {
   let picker=NSPopUpButton(),detail=Theme.label("",size:10,color:Theme.muted)
   var onChange:(()->Void)?
   private var selection=[String:String](),graph:String?
+  private var instrumentEntry=[String:(instrument:String,channel:Int?)]()
   private var items=[(String,String)]()
   private(set) var copies=[GraphObservedCopy]()
   var selected:String? {graph.flatMap{selection[$0]}}
@@ -30,30 +31,35 @@ final class GraphCopyObservation:NSView {
     toolTip="Meters and scopes show one actual processor copy. Editing still updates the shared definition."
   }
   required init?(coder:NSCoder){fatalError()}
-  @objc private func change(){guard let graph,let key=picker.selectedItem?.representedObject as? String else{return};selection[graph]=key;onChange?()}
-  func select(_ key:String){guard let graph else{return};selection[graph]=key;onChange?()}
-  func enter(_ copy:GraphObservedCopy){selection[copy.graph]=copy.key}
-  func resetDocument(){selection=[:];graph=nil;copies=[];items=[];picker.removeAllItems();isHidden=true}
+  @objc private func change(){guard let graph,let key=picker.selectedItem?.representedObject as? String,!key.isEmpty else{return};instrumentEntry[graph]=nil;selection[graph]=key;onChange?()}
+  func select(_ key:String){guard let graph else{return};instrumentEntry[graph]=nil;selection[graph]=key;onChange?()}
+  func enter(_ copy:GraphObservedCopy){instrumentEntry[copy.graph]=nil;selection[copy.graph]=copy.key}
+  func enterInstrument(graph:String,instrument:String,channel:Int?){selection[graph]=nil;instrumentEntry[graph]=(instrument,channel)}
+  func resetDocument(){selection=[:];instrumentEntry=[:];graph=nil;copies=[];items=[];picker.removeAllItems();isHidden=true}
 
   func update(graph:String?,ports:[[String:Any]],preferred:String?,buses:[[String:Any]],instruments:[[String:Any]]) {
     self.graph=graph;isHidden=graph==nil
     guard let graph else{return}
     var seen=Set<GraphObservedCopy>()
     copies=ports.compactMap{($0["copy"] as? [String:Any]).flatMap(GraphObservedCopy.init)}.filter{$0.graph==graph && seen.insert($0).inserted}
-    if selection[graph]==nil,let copy=copies.first(where:{$0.target==preferred || $0.instrument==preferred}) ?? copies.first {selection[graph]=copy.key}
+    if let entry=instrumentEntry[graph],let copy=copies.filter({$0.role=="instrument" && $0.instrument==entry.instrument && (entry.channel==nil || $0.channel==entry.channel)}).sorted(by:{($0.channel ?? Int.max)<($1.channel ?? Int.max)}).first {
+      selection[graph]=copy.key;instrumentEntry[graph]=nil
+    }
+    if selection[graph]==nil,instrumentEntry[graph]==nil,let copy=copies.first(where:{$0.target==preferred || $0.instrument==preferred}) ?? copies.first {selection[graph]=copy.key}
     let titles=copies.map{$0.title(buses:buses,instruments:instruments)}
     let counts=Dictionary(titles.map{($0,1)},uniquingKeysWith:+)
     var next=zip(copies,titles).map{copy,title in (title+((counts[title] ?? 0)>1 ? " · "+(copy.instrument.isEmpty ? copy.target:copy.instrument):""),copy.key)}
+    if instrumentEntry[graph] != nil{next.insert(("Instrument copy unavailable",""),at:0)}
     if let selected,!copies.contains(where:{$0.key==selected}) {next.insert(("Selected copy unavailable",selected),at:0)}
     if next.isEmpty {next=[("No prepared copy","")]}
     if !next.elementsEqual(items,by:{$0.0==$1.0 && $0.1==$1.1}) {
       items=next;picker.removeAllItems()
       for (title,key) in next {let item=NSMenuItem(title:title,action:nil,keyEquivalent:"");item.representedObject=key;item.toolTip="Exact copy: "+key;picker.menu?.addItem(item)}
     }
-    if let selected,let i=items.firstIndex(where:{$0.1==selected}){picker.selectItem(at:i)}
+    if let selected,let i=items.firstIndex(where:{$0.1==selected}){picker.selectItem(at:i)}else if instrumentEntry[graph] != nil{picker.selectItem(at:0)}
     picker.isEnabled = !copies.isEmpty
     let missingSelection=selected.map{key in !copies.contains(where:{$0.key==key})} ?? false
-    let label=missingSelection ? "Selected copy unavailable · choose another":copies.isEmpty ? "Play or audition an assigned use to prepare it":"One copy · edits affect all uses"
+    let label=instrumentEntry[graph] != nil ? "Instrument copy unavailable · play or audition it":missingSelection ? "Selected copy unavailable · choose another":copies.isEmpty ? "Play or audition an assigned use to prepare it":"One copy · edits affect all uses"
     if detail.stringValue != label {detail.stringValue=label}
   }
 }

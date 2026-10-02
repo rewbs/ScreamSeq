@@ -1,6 +1,7 @@
 #include "windows/Session/MixerOperations.hpp"
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Project/NativeMetadata.hpp"
+#include "editor/SignalGroupBypass.hpp"
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -77,6 +78,23 @@ int main() {
       m.invoke("mixer.bus.set",{{"bus",master},{"mainOutputConnected",true}});CHECK(!d.native().mixer.masterOutputDisconnected);
       const auto beforeRestore=d.native();d.undo();CHECK(d.native().mixer.masterOutputDisconnected);d.redo();CHECK(d.native()==beforeRestore);
       m.invoke("mixer.inserts.move",{{"plugins",{"loose-effect","second"}},{"target",track}});CHECK(d.native().mixer.detachedChains.empty());
+    }
+
+    {
+      auto storageGrouped=std::make_unique<Document>(MOD_TYPE_MPT,4);auto &d=*storageGrouped;auto after=effect;after.instanceID="after-group";
+      MixerHostHooks h;h.plugins={effect,after};h.buses=[](size_t,bool){return std::vector<PluginAudioBus>{{0,2,"Main",true,true,true},{1,2,"Detector",true,true,true},{0,2,"Main",false,true,true}};};
+      d.annotate([&](NativeSong &n){n.ensureMixer();n.mixer.buses[0].inserts={effect.instanceID,after.instanceID};n.mixer.sidechains={{n.tracks.at(1).id,effect.instanceID,1,-9,false,true}};
+        const auto group=n.makeEntity().id;n.signal.groups={{group,0,"Sidechain dynamics",0,0,{"plugin:"+effect.instanceID}}};
+        const auto boundary=signalSongGroupBoundary(n.signal,n.mixer,{effect.instanceID,after.instanceID},group);
+        const auto input=*std::find_if(boundary.inputs.begin(),boundary.inputs.end(),[](const auto &r){return r.kind=="insert";});n.signal.groups[0].dryRoutes={{input,boundary.outputs[0]}};n.signal.groups[0].bypass=true;});
+      MixerOperations m(d,[]{},h);const auto attached=d.native();const Json remove={{"plugins",{effect.instanceID}}};auto preview=remove;preview["dryRun"]=true;
+      m.invoke("mixer.inserts.detach",preview);CHECK(d.native()==attached);
+      m.invoke("mixer.inserts.detach",remove);const auto detached=d.native();
+      CHECK(detached.mixer.buses[0].inserts==std::vector<std::string>{after.instanceID}&&detached.mixer.sidechains==attached.mixer.sidechains);
+      CHECK(detached.signal.groups[0].dryRoutes.empty()&&detached.signal.groups[0].bypass&&detached.signal.groups[0].nodes==attached.signal.groups[0].nodes);
+      CHECK(Project::decodeNativeMetadata(Project::encodeNativeMetadata(detached))==detached);
+      const auto revision=d.revision;m.invoke("mixer.inserts.detach",remove);CHECK(d.revision==revision);
+      d.undo();auto expected=attached;expected.nextID=d.native().nextID;CHECK(d.native()==expected);d.redo();CHECK(d.native()==detached);
     }
 
     {

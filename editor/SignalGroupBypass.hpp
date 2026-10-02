@@ -50,6 +50,11 @@ void preserveSongGroupInsertion(SignalGraph &next,const SignalGraph &previous,
   const MixerGraph &previousMixer,const MixerGraph &nextMixer,
   const std::vector<std::string> &previousRack,const std::vector<std::string> &nextRack,
   const std::string &insertedPlugin);
+// Detaching cuts the old serial ingress/egress. Retain explicit sidechain and
+// auxiliary mappings, and track internal serial wires onto their new owner.
+void preserveSongGroupDetachment(SignalGraph &next,const SignalGraph &previous,
+  const MixerGraph &previousMixer,const MixerGraph &nextMixer,
+  const std::vector<std::string> &orderedEffectRack);
 void remapSignalGroupDryRoutes(SignalDefinition &,const std::map<uint64_t,uint64_t> &);
 // Only remove boundaries which no longer exist. A changed surviving ingress is
 // deliberately not guessed; callers must choose it in the same atomic edit.

@@ -94,7 +94,10 @@
         if(detach && std::find(graph.detached.begin(),graph.detached.end(),moving.front())==graph.detached.end())candidate.ensureMixer();
         if(!detach)affected = decodeNativeID(p[@"target"]);
         const std::string before = p[@"before"] && p[@"before"] != NSNull.null ? string(p[@"before"],128).UTF8String : "";
-        try { if(detach)detachMixerInserts(graph,rack,moving,[&]{return candidate.makeEntity().id;});else moveMixerInserts(graph,rack,moving,affected,before); }
+        try { if(detach){const auto previousMixer=graph;const auto previousSignal=candidate.signal;
+            detachMixerInserts(graph,rack,moving,[&]{return candidate.makeEntity().id;});
+            preserveSongGroupDetachment(candidate.signal,previousSignal,previousMixer,graph,rack);
+          }else moveMixerInserts(graph,rack,moving,affected,before); }
         catch(const std::invalid_argument &e) { throw Error(-32602,e.what()); }
         for(id raw:array(p[@"positions"]?:@[],64)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);const std::string key=string(v[@"node"],256).UTF8String;auto group=std::find_if(candidate.signal.groups.begin(),candidate.signal.groups.end(),[&](const auto &g){return key=="n"+std::to_string(g.id);});
           if(group!=candidate.signal.groups.end()){const auto members=songSignalGroupNodes(candidate.signal,group->id);require(std::any_of(members.begin(),members.end(),[](const auto &m){return m.starts_with("plugin:");})&&std::all_of(members.begin(),members.end(),[&](const auto &m){return !m.starts_with("plugin:")||std::find(moving.begin(),moving.end(),m.substr(7))!=moving.end();}),"Move every group processor together");moveSongSignalGroup(candidate.signal,group->id,number(v[@"x"],0,100000),number(v[@"y"],0,100000));}

@@ -609,6 +609,8 @@ public:
   std::vector<PluginProgram> programs(size_t slot) const { return slot < rack_.size() ? rack_[slot]->plugin->programs() : std::vector<PluginProgram>{}; }
   std::optional<EffectMeters> meters(size_t slot) const { return slot < rack_.size() ? rack_[slot]->plugin->meters() : std::nullopt; }
   std::vector<PluginAudioBus> buses(size_t slot) const;
+  // Control owner: retain identity across rack edits and old playback snapshots.
+  std::optional<std::vector<PluginAudioBus>> buses(const std::string &instance) const;
   bool failed() const { return failed_.load(); }
   std::vector<PluginFailureEntry> failureDiagnostics() const; // Control owner only.
   bool latencyChangePending() const noexcept;
