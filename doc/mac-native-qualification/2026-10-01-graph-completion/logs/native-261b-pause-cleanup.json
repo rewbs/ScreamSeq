@@ -1,0 +1,52 @@
+{
+  "save": {
+    "changed": false,
+    "data": {
+      "format": "screamseq",
+      "path": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/release-e5614327/Final graph walk.screamseq",
+      "projectVersion": 6,
+      "written": true
+    },
+    "documentId": "99206600-A771-499F-AA15-8D1C7FDF36B8",
+    "playbackStopped": false,
+    "revision": "99206600-A771-499F-AA15-8D1C7FDF36B8:30:11:0"
+  },
+  "transport": {
+    "audioActive": false,
+    "audition": false,
+    "callbacks": 123645,
+    "fault": false,
+    "frames": 63306240,
+    "graphActivity": [],
+    "left": 0.6115677356719971,
+    "loop": true,
+    "maxMicros": 5702.458,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 4570,
+    "pattern": 0,
+    "patternPosition": 7963.267838676318,
+    "playing": false,
+    "pluginFailure": false,
+    "pluginLatency": 0,
+    "region": {
+      "cursorRow": 0,
+      "loop": true,
+      "order": 0
+    },
+    "right": 0.6122491359710693,
+    "routing": {
+      "active": false,
+      "available": true,
+      "failedPlan": 0,
+      "latencyPending": false,
+      "renderedPlan": 21,
+      "requestedPlan": 21,
+      "state": "stopped"
+    },
+    "row": 31,
+    "voicePositions": [],
+    "voices": 3
+  },
+  "termination": "SIGTERM to private PID84230 after explicit stop/save; desktop unavailable; not a normal-Quit qualification"
+}

@@ -1,0 +1,58 @@
+Window: "Audio & modulation graph", App: ScreamSeq Final QA.
+0 standard window Audio & modulation graph, Secondary Actions: Raise
+	1 text Audio & modulation graph Shared song graph
+	2 button Description: Pin Audio & modulation graph, Help: Pin this panel's target independently of other panels
+	3 button …, Description: Audio & modulation graph panel actions, Help: Secondary actions · also available with ⌘K
+	4 button Song
+	5 pop up button Description: Graph channel filter, Value: Track 7
+	6 button Add…
+	7 button More…, Help: Secondary actions · also available with ⌘K
+	8 text Channels → row graphs → persistent graphs → ordinary graphs → inserts → outputs
+	9 search text field (settable) Description: Filter graph nodes, Placeholder: Filter nodes…
+		10 button Search
+	11 pop up button Description: Graph node type filter, Value: All node types
+	12 button Clear filters
+	13 text 3 / 3 nodes · 1 hidden branches
+	14 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down
+		15 container Description: Audio and modulation graph, Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire., Value: Track 7 → Output, Notes · MIDI 3; Master → ; Resonance Test Instrument → Out 0; 9 other inputs  › · Reveal 1 · Sidechain dynamics, 2 · Sidechain dynamics, Apple: AUMatrixReverb, Apple: AUMatrixReverb, Compressor, Compressor, Resonance Test Instrument, Return, Track 2
+		16 scroll bar (settable, float) 0
+			17 value indicator (settable, float) 0
+			18 increment arrow button
+			19 decrement arrow button
+			20 increment page button
+			21 decrement page button
+		22 scroll bar (settable, float) 0
+			23 value indicator (settable, float) 0
+			24 increment arrow button
+			25 decrement arrow button
+			26 increment page button
+			27 decrement page button
+	28 scroll area Secondary Actions: Scroll Up, Scroll Down
+		29 text SELECTED CONNECTION
+		30 button New…
+		31 button Remove
+		32 pop up button Description: Existing graph connections, Value: Track 7 → Resonance Test Instrument Notes · MIDI 3
+		33 text Note events are separate from audio. Drag an endpoint to reroute; changes commit immediately.
+		34 checkbox Forward notes, Value: 1
+		35 pop up button Description: Note route MIDI channel, Value: MIDI channel 3
+		36 text Notes held: 1 · pedals: 0
+Note on: 45 · off: 44 · events: 89
+Route releases: 0 · failures: 0
+Last event: frame 16338432 · adopted route Plugin-instrument notes only. A new destination waits for the next note-on. Removing or disabling a cable releases the notes owned by that route. Sockets add cables; wire handles reroute. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert. Hollow sockets enable automatically. Option-drag adds a Main input to an existing insert.
+		37 scroll bar (disabled, settable, float) 0
+	38 text Configured routes · live stack order appears on playing copies
+	39 close button
+	40 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	41 minimize button
+	42 text Audio & modulation graph
+43 menu bar
+	44 ScreamSeq Final QA
+	45 File
+	46 Edit
+	47 Automation
+	48 Playback
+	49 Pattern
+	50 Workspace
+	51 Window
+
+The focused UI element is 15 container Description: Audio and modulation graph, Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire., Value: Track 7 → Output, Notes · MIDI 3; Master → ; Resonance Test Instrument → Out 0; 9 other inputs  › · Reveal 1 · Sidechain dynamics, 2 · Sidechain dynamics, Apple: AUMatrixReverb, Apple: AUMatrixReverb, Compressor, Compressor, Resonance Test Instrument, Return, Track 2

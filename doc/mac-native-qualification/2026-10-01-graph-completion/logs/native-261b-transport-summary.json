@@ -1,0 +1,14 @@
+{
+  "samples": 275,
+  "readErrors": 0,
+  "errorKinds": [],
+  "firstElapsed": 0.0,
+  "lastElapsed": 1264.959,
+  "anyStopped": false,
+  "anyFault": false,
+  "maxOverruns": 0,
+  "lastFrames": 63097856,
+  "maxReadGapSeconds": 5.13799999999992,
+  "explicitStop": "explicit-stop.json",
+  "scope": "PID84230, isolated release-e5614327 QA, virtual BlackHole2ch48k/512; read-only polling, not gap-free PCM evidence"
+}

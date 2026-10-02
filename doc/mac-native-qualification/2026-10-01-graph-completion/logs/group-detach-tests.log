@@ -1,0 +1,11 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 83: signal-graph-session
+1/3 Test #83: signal-graph-session .............   Passed    2.84 sec
+    Start 96: windows-mixer-document
+2/3 Test #96: windows-mixer-document ...........   Passed    0.03 sec
+    Start 99: signal-group-bypass
+3/3 Test #99: signal-group-bypass ..............   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =   2.88 sec

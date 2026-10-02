@@ -1,0 +1,4 @@
+The following is a diff from the previous accessibility tree for Window: "Midnight Circuit — ScreamSeq" with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~	139 text 000 : 51 PLAY · ORDER : ROW
+~	233 text EDIT P00 · R006 · CH01 INS 02 Sub bass · OCT 4 Playing · 3 voices · 0 audio overruns Z–M notes · Arrows navigate · Space plays
+The focused UI element is 174 table Description: Pattern editor, Value: Row 6, channel 1, column 1, Help: Arrow keys navigate. Z through M and Q through U enter notes. Tab changes channel. Space starts or stops playback.

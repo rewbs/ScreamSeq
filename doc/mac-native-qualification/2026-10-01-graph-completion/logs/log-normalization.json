@@ -1,0 +1,30 @@
+{
+  "note": "Only CRLF line endings, trailing whitespace and excess blank lines at EOF were normalized in these archived logs. Diagnostic text and test results are unchanged. Original byte hashes retained below.",
+  "files": [
+    {
+      "file": "logs/sanitizer-before-adapter-fix.log",
+      "originalSHA256": "1a6e6e3113cc15b426eb54bdce6e63d8d4ee93fa82a9c4abda4155aff60ea4b5",
+      "normalizedSHA256": "14be11d9e1db9e13565fbeac184ff94cafb6193815cdf28a1ef211dd63cb2d2b"
+    },
+    {
+      "file": "logs/windows-261b15387-build-and-tests.log",
+      "originalSHA256": "318e4ff8b66015542b38f8cf7922b93bcadb14a1f67b05ff4b4332c44ddbae58",
+      "normalizedSHA256": "8f968b3b87b244e1c3034d3a9cefed77b2130b6870a8b542176d4103b1128c08"
+    },
+    {
+      "file": "logs/windows-261b15387-worker.log",
+      "originalSHA256": "8370ebea29f902a9f5837080cb9e7f33f24b5dfdfa2b99b6ba547519ace6b42d",
+      "normalizedSHA256": "d28ff691908e834d74c78580d087291cfeffc16f31204797035ecf7588711809"
+    },
+    {
+      "file": "logs/windows-e42639558-build-and-tests.log",
+      "originalSHA256": "1df2cb5685d775b35de8340391fef4adc1a85cfb07836f382c36bb148ba1fa98",
+      "normalizedSHA256": "d608839beec7cfa1691706c914b8876384fa9cb9246ec6ee3de6fde5495df190"
+    },
+    {
+      "file": "logs/windows-e42639558-worker.log",
+      "originalSHA256": "fa2101652a8a298fd2e3bd1c334b7f0a8de27ffd12e89d4b6e37c9d9ade0117a",
+      "normalizedSHA256": "b33449de279d5b8cebb0835ec71f824cb580110f9b906d41821c2242542535db"
+    }
+  ]
+}

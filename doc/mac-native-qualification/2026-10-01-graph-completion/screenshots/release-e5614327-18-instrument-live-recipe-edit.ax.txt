@@ -1,0 +1,200 @@
+Window: "Audio & modulation graph", App: ScreamSeq Final QA.
+0 standard window Audio & modulation graph, Secondary Actions: Raise
+	1 text Audio & modulation graph Shared song graph
+	2 button Description: Pin Audio & modulation graph, Help: Pin this panel's target independently of other panels
+	3 button …, Description: Audio & modulation graph panel actions, Help: Secondary actions · also available with ⌘K
+	4 button Song
+	5 text › I1 · Warm pulse
+	6 button › Sidechain dynamics
+	7 button › Sidechain dynamics
+	8 pop up button Description: Graph channel filter, Value: All channels
+	9 button Add…
+	10 button More…, Help: Secondary actions · also available with ⌘K
+	11 text Shared definition · edits update all uses · 1 bus / 1 instrument assignments · 0 pattern commands Observe
+	12 pop up button Description: Observed graph processor copy, Value: Warm pulse · Channel 1
+	13 text One copy · edits affect all uses
+	14 search text field (settable) Description: Filter graph nodes, Placeholder: Filter nodes…
+		15 button Search
+	16 pop up button Description: Graph node type filter, Value: All node types
+	17 button Clear filters
+	18 text 3 / 3 nodes
+	19 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down
+		20 container Description: Audio and modulation graph, Value: Compressor → 0 → 0 · ×1; Input → 0 → 0 · ×1, 1 → 1 · ×1; Output → , Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire.
+		21 scroll bar (settable, float) 0
+			22 value indicator (settable, float) 0
+			23 increment arrow button
+			24 decrement arrow button
+			25 increment page button
+			26 decrement page button
+		27 scroll bar (disabled, settable, float) 0
+	28 scroll area Secondary Actions: Scroll Up, Scroll Down
+		29 text Compressor
+		30 checkbox Bypass, Help: Host bypass · M on the graph · updates every use of this shared definition; processing stays clocked, Value: 0, ID: graph.bypass
+		31 button Open interface
+		32 search text field (settable) Description: Find graph processor parameter, Placeholder: Find a parameter…
+			33 button Search
+		34 scroll area Secondary Actions: Scroll Up, Scroll Down
+			35 table Description: Selected graph processor parameters, Help: Select a processor, then drag a modulation source card onto a visible parameter here. The source stays in place; the connection starts at zero depth.
+				36 row (selectable)
+					37 cell
+						38 text Enabled
+						39 button …, Help: Secondary actions · also available with ⌘K
+						40 slider (settable, float) Description: Enabled, Value: 1
+							41 value indicator (settable, float) 1
+						42 text Value: Base On Effective per copy, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+				43 row (selectable)
+					44 cell
+						45 text Threshold
+						46 button …, Help: Secondary actions · also available with ⌘K
+						47 slider (settable, float) Description: Threshold, Value: 0.7916666666666666
+							48 value indicator (settable, float) 0.7916666666666666
+						49 text Value: Base, Help: Manual / preset base · -96.0…0.0 dB. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						50 text field (settable) Description: Threshold manual base, Value: -20, Help: Manual / preset base · -96.0…0.0 dB. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						51 text Description: Threshold effective snapshot, Value: Effective per copy, ID: parameter-effective-1, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+				52 row (selectable)
+					53 cell
+						54 text Ratio
+						55 button …, Help: Secondary actions · also available with ⌘K
+						56 slider (settable, float) Description: Ratio, Value: 0.07692307692307693
+							57 value indicator (settable, float) 0.07692307692307693
+						58 text Value: Base, Help: Manual / preset base · 1.0…40.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						59 text field (settable) Description: Ratio manual base, Value: 4, Help: Manual / preset base · 1.0…40.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						60 text Description: Ratio effective snapshot, Value: Effective per copy, ID: parameter-effective-2, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+				61 row (selectable)
+					62 cell
+						63 text Attack
+						64 button …, Help: Secondary actions · also available with ⌘K
+						65 slider (settable, float) Description: Attack, Value: 0.6058715007365795
+							66 value indicator (settable, float) 0.6058715007365795
+						67 text Value: Base, Help: Manual / preset base · 0.10000000149011612…200.0 ms. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						68 text field (settable) Description: Attack manual base, Value: 10, Help: Manual / preset base · 0.10000000149011612…200.0 ms. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						69 text Description: Attack effective snapshot, Value: Effective per copy, ID: parameter-effective-3, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+				70 row (selectable)
+					71 cell
+						72 text Release
+						73 button …, Help: Secondary actions · also available with ⌘K
+						74 slider (settable, float) Description: Release, Value: 0.4336766652213271
+							75 value indicator (settable, float) 0.4336766652213271
+						76 text Value: Base, Help: Manual / preset base · 5.0…5000.0 ms. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						77 text field (settable) Description: Release manual base, Value: 100, Help: Manual / preset base · 5.0…5000.0 ms. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						78 text Description: Release effective snapshot, Value: Effective per copy, ID: parameter-effective-4, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+				79 row (selectable)
+					80 cell
+						81 text Makeup
+						82 button …, Help: Secondary actions · also available with ⌘K
+						83 slider (settable, float) Description: Makeup, Value: 0.5
+							84 value indicator (settable, float) 0.5
+						85 text Value: Base, Help: Manual / preset base · -24.0…24.0 dB. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						86 text field (settable) Description: Makeup manual base, Value: 0, Help: Manual / preset base · -24.0…24.0 dB. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						87 text Description: Makeup effective snapshot, Value: Effective per copy, ID: parameter-effective-5, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+				88 row (selectable)
+					89 cell
+						90 text Knee
+						91 button …, Help: Secondary actions · also available with ⌘K
+						92 slider (settable, float) Description: Knee, Value: 0.25
+							93 value indicator (settable, float) 0.25
+						94 text Value: Base, Help: Manual / preset base · 0.0…24.0 dB. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						95 text field (settable) Description: Knee manual base, Value: 6, Help: Manual / preset base · 0.0…24.0 dB. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						96 text Description: Knee effective snapshot, Value: Effective per copy, ID: parameter-effective-6, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+				97 row (selectable)
+					98 cell
+						99 text Detector
+						100 button …, Help: Secondary actions · also available with ⌘K
+						101 slider (settable, float) Description: Detector, Value: 0
+							102 value indicator (settable, float) 0
+						103 text Value: Base Peak Effective per copy, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+				104 row (selectable)
+					105 cell
+						106 text Stereo link
+						107 button …, Help: Secondary actions · also available with ⌘K
+						108 slider (settable, float) Description: Stereo link, Value: 1
+							109 value indicator (settable, float) 1
+						110 text Value: Base, Help: Manual / preset base · 0.0…100.0 %. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						111 text field (settable) Description: Stereo link manual base, Value: 100, Help: Manual / preset base · 0.0…100.0 %. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						112 text Description: Stereo link effective snapshot, Value: Effective per copy, ID: parameter-effective-8, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+				113 row (selectable)
+					114 cell
+						115 text Detector source
+						116 button …, Help: Secondary actions · also available with ⌘K
+						117 slider (settable, float) Description: Detector source, Value: 1
+							118 value indicator (settable, float) 1
+						119 text Value: Base Auto (use connected sidechain) Effective per copy, Help: Manual / preset base · 0.0…2.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+				120 row (selectable)
+					121 cell
+						122 text Detector high-pass
+						123 button …, Help: Secondary actions · also available with ⌘K
+						124 slider (settable, float) Description: Detector high-pass, Value: 0
+							125 value indicator (settable, float) 0
+						126 text Value: Base, Help: Manual / preset base · 20.0…20000.0 Hz. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						127 text field (settable) Description: Detector high-pass manual base, Value: 20, Help: Manual / preset base · 20.0…20000.0 Hz. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						128 text Description: Detector high-pass effective snapshot, Value: Effective per copy, ID: parameter-effective-10, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+				129 row (selectable)
+					130 cell
+						131 text Detector low-pass
+						132 button …, Help: Secondary actions · also available with ⌘K
+						133 slider (settable, float) Description: Detector low-pass, Value: 1
+							134 value indicator (settable, float) 1
+						135 text Value: Base, Help: Manual / preset base · 20.0…20000.0 Hz. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						136 text field (settable) Description: Detector low-pass manual base, Value: 2e+04, Help: Manual / preset base · 20.0…20000.0 Hz. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						137 text Description: Detector low-pass effective snapshot, Value: Effective per copy, ID: parameter-effective-11, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+				138 row (selectable)
+					139 cell
+						140 text Detector filters
+						141 button …, Help: Secondary actions · also available with ⌘K
+						142 slider (settable, float) Description: Detector filters, Value: 0
+							143 value indicator (settable, float) 0
+						144 text Value: Base Off Effective per copy, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+				145 row (selectable)
+					146 cell
+						147 text Listen to detector
+						148 button …, Help: Secondary actions · also available with ⌘K
+						149 slider (settable, float) Description: Listen to detector, Value: 0
+							150 value indicator (settable, float) 0
+						151 text Value: Base Off Effective per copy, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+				152 row (selectable)
+					153 cell
+						154 text Dry / wet
+						155 button …, Help: Secondary actions · also available with ⌘K
+						156 slider (settable, float) Description: Dry / wet, Value: 1
+							157 value indicator (settable, float) 1
+						158 text Value: Base, Help: Manual / preset base · 0.0…100.0 %. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						159 text field (settable) Description: Dry / wet manual base, Value: 100, Help: Manual / preset base · 0.0…100.0 %. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						160 text Description: Dry / wet effective snapshot, Value: Effective per copy, ID: parameter-effective-14, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+				161 row (selectable)
+					162 cell
+						163 text RMS window
+						164 button …, Help: Secondary actions · also available with ⌘K
+						165 slider (settable, float) Description: RMS window, Value: 0.5
+							166 value indicator (settable, float) 0.5
+						167 text Value: Base, Help: Manual / preset base · 1.0…100.0 ms. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						168 text field (settable) Description: RMS window manual base, Value: 10, Help: Manual / preset base · 1.0…100.0 ms. Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						169 text Description: RMS window effective snapshot, Value: Effective per copy, ID: parameter-effective-15, Help: This is a template/editor instance. Choose a playing copy in Parameter activity to inspect its effective value.
+			170 scroll bar (settable, float) 0
+				171 value indicator (settable, float) 0
+				172 increment arrow button
+				173 decrement arrow button
+				174 increment page button
+				175 decrement page button
+		176 text Parameter updated · menus offer automation and effective values.
+		177 button Audio buses, Value: Collapsed
+		178 button More…, Help: Secondary actions · also available with ⌘K
+		179 text Parameter edits and bypass update all uses of this shared definition.
+		180 text field (settable) Description: Node or bus name, Value: Compressor
+		181 text Sockets add cables; wire handles reroute. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert. Hollow sockets enable automatically. Option-drag adds a Main input to an existing insert.
+		182 scroll bar (disabled, settable, float) 0
+	183 text Each channel gets its own copy · drag nodes and ports to edit
+	184 close button
+	185 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	186 minimize button
+	187 text Audio & modulation graph
+188 menu bar
+	189 ScreamSeq Final QA
+	190 File
+	191 Edit
+	192 Automation
+	193 Playback
+	194 Pattern
+	195 Workspace
+	196 Window
+
+The focused UI element is 35 table Description: Selected graph processor parameters, Help: Select a processor, then drag a modulation source card onto a visible parameter here. The source stays in place; the connection starts at zero depth.

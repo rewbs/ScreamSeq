@@ -1,0 +1,6 @@
+The following is a diff from the previous accessibility tree for Window: "Midnight Circuit — ScreamSeq" with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~			303 text Ready to capture · play to see delivered values
+~			308 pop up button Description: Captured pattern pass, Value: Latest pass
+~			341 text Enabled envelopes, parameter pattern commands and recorded automation are mutually exclusive base controls. Song modulation adds its contributions to that base, then clamps to 0…1 and rounds discrete targets. Manual edits may be overwritten by base automation. Plugin-internal modulation is not exposed. Stopped · capture retained · about 1 ms detail with min/max · 0 trace points
+~	351 text 59 fps   CORE AUDIO  48.0 kHz / 512 MASTER
+The focused UI element is 297 button Last touched

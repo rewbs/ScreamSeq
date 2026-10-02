@@ -1,0 +1,41 @@
+{
+  "checkpointCommit": "e426395580c907e62ddf4fbd93bf52996a6e4a14",
+  "sourceFingerprint": "0af269e2d74aeba5acc490d43caa7d8962460aa824ae61aebe76de84ed379e28",
+  "buildManifestBaseRevision": "b3f5f5952f47fbaf8009fac8617af5347c45206a",
+  "buildManifestNote": "Build occurred with pending source changes atop this base; the same compiled source was subsequently committed as checkpointCommit.",
+  "buildBeforeUTC": "2026-10-02T02:11:40.756786+00:00",
+  "buildAfterUTC": "2026-10-02T02:14:33.143420+00:00",
+  "sourceEntries": 945,
+  "changedEntriesDuringBuild": [],
+  "qaBundle": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/verified-8cf8e30a/ScreamSeq Verified QA.app",
+  "qaBundleID": "org.resonance.tracker.qa.verified-8cf8e30a",
+  "qaExecutableSHA256": "21a7f763235c37d605197f6bf26ba0d765dc326e7858f7912ab36d04629446a0",
+  "qaBuildFingerprint": "0af269e2d74aeba5acc490d43caa7d8962460aa824ae61aebe76de84ed379e28",
+  "signatureRecheck": {
+    "command": [
+      "codesign",
+      "--verify",
+      "--deep",
+      "--strict",
+      "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/verified-8cf8e30a/ScreamSeq Verified QA.app"
+    ],
+    "exitCode": 0,
+    "checkedAtUTC": "2026-10-02T02:39:59.902493+00:00"
+  },
+  "logs": {
+    "corrected-build-start.json": "8643d87777fc5abd5a02963b3ce45de5f88be9c7c375a13d28843f00f3de17ca",
+    "corrected-build-after.json": "4583a0f14973626e72de4854408906a86060e00879b226c6f53610bcec5df142",
+    "corrected-build.log": "fa3edeceb247407f47f063d2a6325432f1409a1380de1e90c3b6576ca24bc26a",
+    "corrected-ctest.log": "bafecaf8be11bf2147e95c001a087bf3faf4b57eca2a9e7a2a147542cb5fa299",
+    "corrected-socket-app.log": "2bc76bbe8c0881532c5d939fd9c789e62f2d58c14902d00bdec062ee23853010",
+    "corrected-socket-host.log": "cb8dba7606e3ef996a6949250355287f06467b4d8eed82f40768eeeacccd0ce0",
+    "corrected-workspace.log": "8be1e60b6eecaaad5b767b1aba870d2d23a1fc3ecb523d654540997935498879",
+    "corrected-loopback.log": "1b8086529cabbc02312521651d35f8102f352dc2884bf41250b356a20d8daa8b",
+    "corrected-shutdown.log": "2246ce7eecb065377d3b6cebb936188ac35b38f4f50b3867169292ca046818c4"
+  },
+  "limitations": [
+    "Identifies the corrected e426 checkpoint, not subsequent UI placement or group-insertion changes.",
+    "Loopback ran with concurrent compilation; bounded functional PCM/continuity evidence only.",
+    "Native journey uninterrupted playback is not established; a prior stop interval is unresolved."
+  ]
+}

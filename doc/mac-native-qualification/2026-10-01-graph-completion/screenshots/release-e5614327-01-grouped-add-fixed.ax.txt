@@ -1,0 +1,209 @@
+Window: "Audio & modulation graph", App: ScreamSeq Final QA.
+0 standard window Audio & modulation graph, Secondary Actions: Raise
+	1 text Audio & modulation graph Shared song graph
+	2 button Description: Pin Audio & modulation graph, Help: Pin this panel's target independently of other panels
+	3 button …, Description: Audio & modulation graph panel actions, Help: Secondary actions · also available with ⌘K
+	4 button Song
+	5 pop up button Description: Graph channel filter, Value: Track 3
+	6 button Add…
+	7 button More…, Help: Secondary actions · also available with ⌘K
+	8 text Channels → row graphs → persistent graphs → ordinary graphs → inserts → outputs
+	9 search text field (settable) Description: Filter graph nodes, Placeholder: Filter nodes…
+		10 button Search
+	11 pop up button Description: Graph node type filter, Value: All node types
+	12 button Clear filters
+	13 text 5 / 5 nodes · 2 hidden branches
+	14 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down
+		15 container Description: Audio and modulation graph, Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire., Value: Track 2 → Output, Sidechain 1; Track 3 → ; Apple: AUMatrixReverb → Output; Master → ; Sidechain dynamics → ; 9 other inputs  › · Reveal 1 · Sidechain dynamics, 2 · Sidechain dynamics, Apple: AUMatrixReverb, Compressor, Compressor, Resonance Test Instrument, Resonance Test Instrument, Return, Track 7; 1 other output  › · Reveal Compressor
+		16 scroll bar (settable, float) 0.7259380097879282
+			17 value indicator (settable, float) 0.7259380097879282
+			18 increment arrow button
+			19 decrement arrow button
+			20 increment page button
+			21 decrement page button
+		22 scroll bar (disabled, settable, float) 0
+	23 scroll area Secondary Actions: Scroll Up, Scroll Down
+		24 text Apple: AUMatrixReverb
+		25 checkbox Bypass, Help: Host bypass · M on the graph · processing keeps running with latency preserved, Value: 0, ID: graph.bypass
+		26 button Open interface
+		27 search text field (settable) Description: Find graph processor parameter, Placeholder: Find a parameter…
+			28 button Search
+		29 scroll area Secondary Actions: Scroll Up, Scroll Down
+			30 table Description: Selected graph processor parameters, Help: Select a processor, then drag a modulation source card onto a visible parameter here. The source stays in place; the connection starts at zero depth.
+				31 row (selectable)
+					32 cell
+						33 text Dry/Wet Mix
+						34 button …, Help: Secondary actions · also available with ⌘K
+						35 slider (settable, float) Description: Dry/Wet Mix, Value: 1
+							36 value indicator (settable, float) 1
+						37 text Value: Base, Help: Manual / preset base · 0.0…100.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						38 text field (settable) Description: Dry/Wet Mix manual base, Value: 100, Help: Manual / preset base · 0.0…100.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						39 text Description: Dry/Wet Mix effective snapshot, Value: Last read 100, ID: parameter-effective-0, Help: Last host read: 100.0 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				40 row (selectable)
+					41 cell
+						42 text Small/Large Mix
+						43 button …, Help: Secondary actions · also available with ⌘K
+						44 slider (settable, float) Description: Small/Large Mix, Value: 0.35
+							45 value indicator (settable, float) 0.35
+						46 text Value: Base, Help: Manual / preset base · 0.0…100.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						47 text field (settable) Description: Small/Large Mix manual base, Value: 35, Help: Manual / preset base · 0.0…100.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						48 text Description: Small/Large Mix effective snapshot, Value: Last read 35, ID: parameter-effective-1, Help: Last host read: 35.0 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				49 row (selectable)
+					50 cell
+						51 text Small Size
+						52 button …, Help: Secondary actions · also available with ⌘K
+						53 slider (settable, float) Description: Small Size, Value: 0.2934869659644054
+							54 value indicator (settable, float) 0.2934869659644054
+						55 text Value: Base, Help: Manual / preset base · 9.999999747378752e-05…0.05000000074505806 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						56 text field (settable) Description: Small Size manual base, Value: 0.01474, Help: Manual / preset base · 9.999999747378752e-05…0.05000000074505806 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						57 text Description: Small Size effective snapshot, Value: Last read 0.01474, ID: parameter-effective-2, Help: Last host read: 0.014744999818503857 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				58 row (selectable)
+					59 cell
+						60 text Large Size
+						61 button …, Help: Secondary actions · also available with ⌘K
+						62 slider (settable, float) Description: Large Size, Value: 0.3889655017643713
+							63 value indicator (settable, float) 0.3889655017643713
+						64 text Value: Base, Help: Manual / preset base · 0.004999999888241291…0.15000000596046448 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						65 text field (settable) Description: Large Size manual base, Value: 0.0614, Help: Manual / preset base · 0.004999999888241291…0.15000000596046448 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						66 text Description: Large Size effective snapshot, Value: Last read 0.0614, ID: parameter-effective-3, Help: Last host read: 0.061400000005960464 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				67 row (selectable)
+					68 cell
+						69 text Pre-Delay
+						70 button …, Help: Secondary actions · also available with ⌘K
+						71 slider (settable, float) Description: Pre-Delay, Value: 0.4801724329338038
+							72 value indicator (settable, float) 0.4801724329338038
+						73 text Value: Base, Help: Manual / preset base · 0.0010000000474974513…0.029999999329447746 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						74 text field (settable) Description: Pre-Delay manual base, Value: 0.01493, Help: Manual / preset base · 0.0010000000474974513…0.029999999329447746 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						75 text Description: Pre-Delay effective snapshot, Value: Last read 0.01493, ID: parameter-effective-4, Help: Last host read: 0.014925000257790089 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				76 row (selectable)
+					77 cell
+						78 text Large Delay
+						79 button …, Help: Secondary actions · also available with ⌘K
+						80 slider (settable, float) Description: Large Delay, Value: 0
+							81 value indicator (settable, float) 0
+						82 text Value: Base, Help: Manual / preset base · 0.0010000000474974513…0.10000000149011612 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						83 text field (settable) Description: Large Delay manual base, Value: 0.001, Help: Manual / preset base · 0.0010000000474974513…0.10000000149011612 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						84 text Description: Large Delay effective snapshot, Value: Last read 0.001, ID: parameter-effective-5, Help: Last host read: 0.0010000000474974513 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				85 row (selectable)
+					86 cell
+						87 text Small Density
+						88 button …, Help: Secondary actions · also available with ⌘K
+						89 slider (settable, float) Description: Small Density, Value: 0.6549999713897705
+							90 value indicator (settable, float) 0.6549999713897705
+						91 text Value: Base, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						92 text field (settable) Description: Small Density manual base, Value: 0.655, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						93 text Description: Small Density effective snapshot, Value: Last read 0.655, ID: parameter-effective-6, Help: Last host read: 0.6549999713897705 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				94 row (selectable)
+					95 cell
+						96 text Large Density
+						97 button …, Help: Secondary actions · also available with ⌘K
+						98 slider (settable, float) Description: Large Density, Value: 0.6800000071525574
+							99 value indicator (settable, float) 0.6800000071525574
+						100 text Value: Base, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						101 text field (settable) Description: Large Density manual base, Value: 0.68, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						102 text Description: Large Density effective snapshot, Value: Last read 0.68, ID: parameter-effective-7, Help: Last host read: 0.6800000071525574 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				103 row (selectable)
+					104 cell
+						105 text Large Delay Range
+						106 button …, Help: Secondary actions · also available with ⌘K
+						107 slider (settable, float) Description: Large Delay Range, Value: 0.5849999785423279
+							108 value indicator (settable, float) 0.5849999785423279
+						109 text Value: Base, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						110 text field (settable) Description: Large Delay Range manual base, Value: 0.585, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						111 text Description: Large Delay Range effective snapshot, Value: Last read 0.585, ID: parameter-effective-8, Help: Last host read: 0.5849999785423279 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				112 row (selectable)
+					113 cell
+						114 text Small HiFreq Absorption
+						115 button …, Help: Secondary actions · also available with ⌘K
+						116 slider (settable, float) Description: Small HiFreq Absorption, Value: 0.7222222217623099
+							117 value indicator (settable, float) 0.7222222217623099
+						118 text Value: Base, Help: Manual / preset base · 0.10000000149011612…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						119 text field (settable) Description: Small HiFreq Absorption manual base, Value: 0.75, Help: Manual / preset base · 0.10000000149011612…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						120 text Description: Small HiFreq Absorption effective snapshot, Value: Last read 0.75, ID: parameter-effective-9, Help: Last host read: 0.75 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				121 row (selectable)
+					122 cell
+						123 text Large HiFreq Absorption
+						124 button …, Help: Secondary actions · also available with ⌘K
+						125 slider (settable, float) Description: Large HiFreq Absorption, Value: 0.6005555649607638
+							126 value indicator (settable, float) 0.6005555649607638
+						127 text Value: Base, Help: Manual / preset base · 0.10000000149011612…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						128 text field (settable) Description: Large HiFreq Absorption manual base, Value: 0.6405, Help: Manual / preset base · 0.10000000149011612…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						129 text Description: Large HiFreq Absorption effective snapshot, Value: Last read 0.6405, ID: parameter-effective-10, Help: Last host read: 0.640500009059906 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				130 row (selectable)
+					131 cell
+						132 text Small Delay Range
+						133 button …, Help: Secondary actions · also available with ⌘K
+						134 slider (settable, float) Description: Small Delay Range, Value: 0.3956049978733063
+							135 value indicator (settable, float) 0.3956049978733063
+						136 text Value: Base, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						137 text field (settable) Description: Small Delay Range manual base, Value: 0.3956, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						138 text Description: Small Delay Range effective snapshot, Value: Last read 0.3956, ID: parameter-effective-11, Help: Last host read: 0.3956049978733063 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				139 row (selectable)
+					140 cell
+						141 text Modulation Rate
+						142 button …, Help: Secondary actions · also available with ⌘K
+						143 slider (settable, float) Description: Modulation Rate, Value: 0.6149900139568804
+							144 value indicator (settable, float) 0.6149900139568804
+						145 text Value: Base, Help: Manual / preset base · 0.0010000000474974513…2.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						146 text field (settable) Description: Modulation Rate manual base, Value: 1.23, Help: Manual / preset base · 0.0010000000474974513…2.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						147 text Description: Modulation Rate effective snapshot, Value: Last read 1.23, ID: parameter-effective-12, Help: Last host read: 1.2303650379180908 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				148 row (selectable)
+					149 cell
+						150 text Modulation Depth
+						151 button …, Help: Secondary actions · also available with ⌘K
+						152 slider (settable, float) Description: Modulation Depth, Value: 0.4000000059604645
+							153 value indicator (settable, float) 0.4000000059604645
+						154 text Value: Base, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						155 text field (settable) Description: Modulation Depth manual base, Value: 0.4, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						156 text Description: Modulation Depth effective snapshot, Value: Last read 0.4, ID: parameter-effective-13, Help: Last host read: 0.4000000059604645 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				157 row (selectable)
+					158 cell
+						159 text Filter Frequency
+						160 button …, Help: Secondary actions · also available with ⌘K
+						161 slider (settable, float) Description: Filter Frequency, Value: 0.03293038766152564
+							162 value indicator (settable, float) 0.03293038766152564
+						163 text Value: Base, Help: Manual / preset base · 10.0…24000.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						164 text field (settable) Description: Filter Frequency manual base, Value: 800, Help: Manual / preset base · 10.0…24000.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						165 text Description: Filter Frequency effective snapshot, Value: Last read 800, ID: parameter-effective-14, Help: Last host read: 800.0 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				166 row (selectable)
+					167 cell
+						168 text Filter Bandwidth
+						169 button …, Help: Secondary actions · also available with ⌘K
+						170 slider (settable, float) Description: Filter Bandwidth, Value: 0.7468354429902222
+							171 value indicator (settable, float) 0.7468354429902222
+						172 text Value: Base, Help: Manual / preset base · 0.05000000074505806…4.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						173 text field (settable) Description: Filter Bandwidth manual base, Value: 3, Help: Manual / preset base · 0.05000000074505806…4.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						174 text Description: Filter Bandwidth effective snapshot, Value: Last read 3, ID: parameter-effective-15, Help: Last host read: 3.0 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+				175 row (selectable)
+					176 cell
+						177 text Filter Gain
+						178 button …, Help: Secondary actions · also available with ⌘K
+						179 slider (settable, float) Description: Filter Gain, Value: 0.5
+							180 value indicator (settable, float) 0.5
+						181 text Value: Base, Help: Manual / preset base · -18.0…18.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						182 text field (settable) Description: Filter Gain manual base, Value: 0, Help: Manual / preset base · -18.0…18.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						183 text Description: Filter Gain effective snapshot, Value: Last read 0, ID: parameter-effective-16, Help: Last host read: 0.0 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+			184 scroll bar (settable, float) 0
+				185 value indicator (settable, float) 0
+				186 increment arrow button
+				187 decrement arrow button
+				188 increment page button
+				189 decrement page button
+		190 text Drop a modulation source onto a parameter here · menus offer automation and effective values. Sockets add cables; wire handles reroute. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert. Hollow sockets enable automatically. Option-drag adds a Main input to an existing insert.
+		191 scroll bar (disabled, settable, float) 0
+	192 text Configured routes · live stack order appears on playing copies
+	193 close button
+	194 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	195 minimize button
+	196 text Audio & modulation graph
+197 menu bar
+	198 ScreamSeq Final QA
+	199 File
+	200 Edit
+	201 Automation
+	202 Playback
+	203 Pattern
+	204 Workspace
+	205 Window
+
+The focused UI element is 15 container Description: Audio and modulation graph, Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire., Value: Track 2 → Output, Sidechain 1; Track 3 → ; Apple: AUMatrixReverb → Output; Master → ; Sidechain dynamics → ; 9 other inputs  › · Reveal 1 · Sidechain dynamics, 2 · Sidechain dynamics, Apple: AUMatrixReverb, Compressor, Compressor, Resonance Test Instrument, Resonance Test Instrument, Return, Track 7; 1 other output  › · Reveal Compressor

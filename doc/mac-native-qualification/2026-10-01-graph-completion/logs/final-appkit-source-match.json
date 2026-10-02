@@ -1,0 +1,6 @@
+{
+  "scope": "All Swift inputs and the imported TrackerSession bridge header from the final copied AppKit suite",
+  "inputCount": 158,
+  "changed": [],
+  "passed": true
+}

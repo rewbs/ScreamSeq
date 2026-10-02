@@ -1,0 +1,13 @@
+{
+  "root": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/release-e5614327",
+  "bundle": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/release-e5614327/ScreamSeq Final QA.app",
+  "bundleID": "org.resonance.tracker.qa.release-e5614327",
+  "song": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/qualification/release-e5614327/Final graph walk.screamseq",
+  "commit": "261b153876083cfc942d20c806c343604bb7477c",
+  "executableSHA256": "b6dca78a1d7c52f4d16f712fc9ec82f4d6651d56b390119db70a3d104ff3ebaf",
+  "build": {
+    "baseRevision": "e426395580c907e62ddf4fbd93bf52996a6e4a14",
+    "builtAtUTC": "2026-10-02T02:38:35.090424+00:00",
+    "sourceFingerprint": "ca9e8d499a41fdfc51dec27ac501ebabc0707526d9196e6ccac827952536bdc6"
+  }
+}

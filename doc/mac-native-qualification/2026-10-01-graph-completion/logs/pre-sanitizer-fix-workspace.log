@@ -1,0 +1,6 @@
+
+Traceback (most recent call last):
+  File "/Users/rewbs/code/openmpt/mac/Tests/test_workspace.py", line 42, in <module>
+    assert 'R4' in read()['targets']['notes']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

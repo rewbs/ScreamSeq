@@ -138,3 +138,69 @@ The copied AppKit suite preceding this slice passed at `/tmp/screamseq-chain-int
 Action scope retained intentionally: graph clipboard is the reusable-recipe clipboard; song rack duplication provides a fresh independent processor, while mixed song-control groups do not silently convert into library recipes. Root-group export also rejects cut or direct-plugin boundaries that its current contiguous-chain exporter cannot preserve. These cases provide explicit reasons and retain the original document. This is an export scope limit, not a claim that the source graph cannot contain those connections.
 
 Direct-route UI qualification: the complete copied AppKit suite passed, exit 0, `/tmp/screamseq-direct-interface.log`; manifest `/tmp/screamseq-direct-interface-snapshot.json`. All live `mac/App/*.swift` and Swift interface-test hashes matched at completion. It exercises physical slice selection, gain/enable, both-endpoint replacement preserving prior identity/controls, Option-sum vs main chain ownership, keyboard parity, self-cycle rejection, semantic cut and unavailable exact telemetry. Native rendering and direct-route API/codec tests remain pending the segmented runtime checkpoint.
+
+### 2026-10-02 outer-stage and instrument-input checkpoint
+
+This checkpoint supersedes the instrument-input restrictions in the historical
+source checkpoints above. The audio workstream has rendered actual AU/VST
+instrument input and current-block follower fixtures at three sample rates and
+17/512/4096-frame partitions, including live add/remove and feedback rejection.
+Mac and Windows adapters are being aligned to that qualified scheduler:
+plugin instruments expose only their actual supported physical audio inputs.
+Generator-only plugins acquire no invented Main input.
+
+`SignalGraph.stageConnections` and `graph.audio.connection.set` add typed
+`{plugin: instanceID}` / `{stage: busID}` endpoints. A stage socket represents
+the **combined channel graph stage**, with shared auxiliary inputs across its
+prepared row/persistent/ordinary copies and summed audible/tail auxiliary
+outputs. It never represents an exact chosen copy, and excludes sample
+instrument graphs. Stage ports begin at 1. Saved unavailable sockets stay
+visible with a reason and can be cut; they are never reassigned to another port.
+Gain/enable, exact endpoint replacement, bend preservation, mixed cable cuts,
+Undo and current-format persistence are implemented. Both stage writes and
+mixer writes must validate the complete combined rack/stage DAG on dry runs.
+
+The native-signal stage PCM/RT fixture and Windows graph-document/metadata
+checks passed in the latest four-target stage batch. The Mac stage API fixture
+contained an unsupported redundant `graph` field in its `graph.update` call;
+that fixture is corrected and awaits rerun. The first copied AppKit suite
+identified a real visibility regression for saved legacy graph-input/output
+cables without a currently declared recipe port. The projection now retains
+these unavailable stage sockets; the full copied suite is rerunning, with
+compatible Notes targets ranked first and current recorded-automation labels.
+
+Remaining scope distinction: exact selected-copy root audio I/O still requires
+its own stable typed copy identity and scheduling/publication policy. The
+aggregate stage capability and exact per-copy observation do not establish
+that editable per-copy capability. The root/provider workstreams are auditing
+it separately. Root mixed-control library export and root arbitrary clipboard
+remain explicit unsupported scope, preserving the document rather than
+silently dropping routing or modulation.
+
+Stage/copy interface evidence: the complete copied AppKit suite passed, exit 0,
+`/tmp/screamseq-stage-copy-interface.log`, manifest
+`/tmp/screamseq-stage-copy-interface-snapshot.json`. This includes typed stage
+routing and saved unavailable sockets, actual instrument input sockets,
+compatible-first Notes choices, live-recorded labels, and exact instance-entry
+observation (switching shared Track 5/Track 6 copies, delayed telemetry and no
+fallback to another copy). The subsequent duplicate-title observation-menu
+repair and direct channel-to-instrument Main-input gesture remain pending the
+next combined interface run. No display-performance claim is made from these
+offscreen tests.
+
+The next complete copied suite also passed, exit 0,
+`/tmp/screamseq-stage-context-interface.log` with
+`/tmp/screamseq-stage-context-interface-snapshot.json`. It includes the
+previously pending duplicate-title copy menu and channel-to-instrument Main
+input gesture, plus the parameter activity bridge's exact-copy selection and
+duplicate-name target handling. A final root stale-response/generation guard
+was added afterward and is being checked in
+`/tmp/screamseq-stage-reviewed-interface.log`.
+
+## 2026-10-02 — typed stage follower completion checkpoint
+
+The reviewed AppKit suite passed at `/tmp/screamseq-stage-reviewed-interface.log`, including exact entered-copy observation and the latest parameter-activity duplicate-target/stale-response regressions. The next source checkpoint adds a typed `audioStage` follower tap, with explicit aggregate labels, atomic converter creation and mixed cuts, port/XOR validation, Undo and persistence. Mac/shared/UI regressions are written; this later checkpoint still awaits its combined build and rendered tests. Source dryRun remains model-only; actual prepared publication checks runtime dependencies. No graph-stage tap substitutes for exact selected-copy I/O.
+
+The complete copied AppKit suite for this stage-follower checkpoint passed (exit 0): `/tmp/screamseq-stage-follower-interface.log`, with source hashes in `/tmp/screamseq-stage-follower-interface-snapshot.json`. The tests exercised typed stage projection, explicit converter choice, one atomic source/parameter transaction, exact mixed-cut identity and repatching away from a stage. Native model/API/PCM evidence remains pending the coordinated combined batch.
+
+Coordinated native checkpoint passed against the current source: 9/9 shared/API/Windows portable suites in `/tmp/screamseq-stage-follower-adapter-tests.log` and 3/3 native mixer/signal/latency suites in `/tmp/screamseq-stage-follower-native-tests.log`. The audio owner confirmed source coherence; the host correction delivers actual graph-processor main/aux PCM into the follower path, and the rendered cases exercise stage auxiliary followers rather than a bus proxy. Native desktop interaction with this final checkpoint is still for the parent’s isolated app walkthrough; no device or presentation-rate claim is made from these tests.

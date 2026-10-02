@@ -1,0 +1,156 @@
+[
+  {
+    "file": "screenshots/verified-8cf8e30a-01-pattern-entry.png",
+    "checkpoint": "e42639558",
+    "title": "Pattern entry",
+    "caption": "Melody entry in the tracker grid. The complete instrument-change/return journey remains open.",
+    "sha256": "0a2b4e286ce8711b3cb94c4a18e221694970c63b29505f225667f52d5ff16793"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-05-insert-eq.png",
+    "checkpoint": "e42639558",
+    "title": "Insert on a cable",
+    "caption": "EQ inserted on the selected channel path; Undo/Redo checked.",
+    "sha256": "2160c6228bb8898c1941f2eba6f4f140217ba679a7962a3b53d8f4ee015015c1"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-08-sidechain-pointer.png",
+    "checkpoint": "e42639558",
+    "title": "Sidechain by dragging",
+    "caption": "Track 2 connected to the compressor detector socket. This individual recheck was while stopped.",
+    "sha256": "b5977951ee063bf1cd973610608dbc8b5b2fd61348974345d3e5ccbad4223996"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-10-source-range.png",
+    "checkpoint": "e42639558",
+    "title": "Independent modulation range",
+    "caption": "Range edits address only the selected source contribution.",
+    "sha256": "987adf02f4c4e8ae84ab755305630244a2d90c613cc9623dbea00fda146889c9"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-11-parameter-provenance.png",
+    "checkpoint": "e42639558",
+    "title": "Parameter sources",
+    "caption": "Parameter activity identifies the selected processor and contribution.",
+    "sha256": "4c9221a2020456c507a5104646577e7c0a02fe6092052ebc0fec7e26b505dff5"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-15-quiet-send.png",
+    "checkpoint": "e42639558",
+    "title": "Quiet send",
+    "caption": "New send starts at −96 dB and is disabled until raised.",
+    "sha256": "f262ecc0cabe0e9675852a065beb1a9994839b719f594ceff7867bb2efd60000"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-16-send-scope.png",
+    "checkpoint": "e42639558",
+    "title": "Scope at the cable",
+    "caption": "Observed post-gain route signal; zero was checked after muting the send.",
+    "sha256": "510012d3f7f850a119a8ecb21190a90eccaf3493b522cadd316aec5983e3582f"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-20-listen-send.png",
+    "checkpoint": "e42639558",
+    "title": "Temporary Listen",
+    "caption": "Session-only monitor indicator and return to the normal mix.",
+    "sha256": "faabca16be6a49b9c441be42afb7ebd75a91dab2739aaa6eb9b89a6682a2ff2b"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-14-preset-loaded-live.png",
+    "checkpoint": "e42639558",
+    "title": "Reuse a preset",
+    "caption": "Saved compressor preset loaded on another channel while playing.",
+    "sha256": "5fd3bec7095e54052039c6a98cb4a8a739bece1341347e308ccc6ac88b35415b"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-21-exact-copy-entered.png",
+    "checkpoint": "e42639558",
+    "title": "Exact copy observation",
+    "caption": "Entering the Track 6 use selects that prepared copy.",
+    "sha256": "9f705f8f9c95c859cec5f8929da697705b6a2f1bdbf46c38031d1d882e86c493"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-24-independent-use.png",
+    "checkpoint": "e42639558",
+    "title": "Independent graph use",
+    "caption": "Track 6 made independent while Track 5 retains its original definition.",
+    "sha256": "5419b149f0ad0b39f0dbac40d26c9bc497a9109301fafa86f8520e45f63d2297"
+  },
+  {
+    "file": "screenshots/verified-8cf8e30a-25-recipe-paste.png",
+    "checkpoint": "e42639558",
+    "title": "Recipe clipboard",
+    "caption": "Copied group pasted with its internal cables; Undo/Redo checked.",
+    "sha256": "3551010908d2c30b5cc53e5e88466213d6c5af1117d1159354c76b8b7e538e76"
+  },
+  {
+    "file": "screenshots/release-e5614327-01-grouped-add-fixed.png",
+    "checkpoint": "261b15387",
+    "title": "Add after a processing group",
+    "caption": "The grouped-insert failure is fixed; adding reverb preserves the explicit group dry path.",
+    "sha256": "2707c15afbc28f6676523dba3db4f588d9e0f06bfd61bee4b55037c513225054"
+  },
+  {
+    "file": "screenshots/release-e5614327-03-grouped-reverb-value.png",
+    "checkpoint": "261b15387",
+    "title": "Inline processor controls",
+    "caption": "Dry/Wet changed directly to 25; bypass comparison checked.",
+    "sha256": "c0eba2dd38c537747059ddc977f3657c675f1670a94df1641cb7e49f06d6a39a"
+  },
+  {
+    "file": "screenshots/release-e5614327-04-group-boundary-bypass.png",
+    "checkpoint": "261b15387",
+    "title": "Processing-group bypass",
+    "caption": "The group bypass keeps its Main dry path and separate detector input.",
+    "sha256": "6a57da88857f7a47dc3ce5666dd21a21422f9dcec427498b3e3b1eb4e1cac274"
+  },
+  {
+    "file": "screenshots/release-e5614327-05-recorded-edit-live.png",
+    "checkpoint": "261b15387",
+    "title": "Recorded automation editing",
+    "caption": "The table and effective parameter update live. The stale detail field visible here was subsequently fixed; its final native recheck is pending.",
+    "sha256": "80ad8e5a2a37ea95302511eb0cdb4bea46b2882a04a3ac0e99882a6e08bf3d31"
+  },
+  {
+    "file": "screenshots/release-e5614327-06-note-ownership.png",
+    "checkpoint": "261b15387",
+    "title": "Notes ownership",
+    "caption": "The Notes route reports held events and MIDI mapping instead of audio meters.",
+    "sha256": "5614453fb0ebb89caeb1dcc82191887bb3ba40b5af88c4dfa2e8e8f061b9fdd4"
+  },
+  {
+    "file": "screenshots/release-e5614327-08-note-undo-waits.png",
+    "checkpoint": "261b15387",
+    "title": "Notes route Undo",
+    "caption": "Removal released owned notes. Undo restored the route without synthesizing a held note-on.",
+    "sha256": "29d32b4cfe2dc3cdc2be73639e2c6b537378dbc340a8bab2fe26ccf656d38726"
+  },
+  {
+    "file": "screenshots/release-e5614327-11-notes-midi-mapping.png",
+    "checkpoint": "261b15387",
+    "title": "MIDI-channel mapping",
+    "caption": "The replacement Notes route uses MIDI channel 3.",
+    "sha256": "33c69b4f37959ba454c5fd21f5039a7f10bd9a69bc63ce7cf83c247d415009d8"
+  },
+  {
+    "file": "screenshots/release-e5614327-15-wide-all-outputs.png",
+    "checkpoint": "261b15387",
+    "title": "Wide physical ports",
+    "caption": "All five logical input/output slices of the 5-channel Main and 3-channel auxiliary buses are wired.",
+    "sha256": "65dbaff811aae4b94a3f292e3bde1d86065163d341c4a9ef8a1997ff8246051a"
+  },
+  {
+    "file": "screenshots/release-e5614327-16-instrument-main-aux-inputs.png",
+    "checkpoint": "261b15387",
+    "title": "Instrument audio inputs",
+    "caption": "Actual Main and auxiliary inputs are wired separately from the Notes socket.",
+    "sha256": "ca690aa69ee73ad4357df4c4eea4f2cf7c222001f61f9b9f638f8c07f1651943"
+  },
+  {
+    "file": "screenshots/release-e5614327-18-instrument-live-recipe-edit.png",
+    "checkpoint": "261b15387",
+    "title": "Instrument recipe edit",
+    "caption": "Instrument assignment, explicit copy selection, shared threshold edit to −20 and return navigation worked while playing. Automatic instrument entry/copy selection was subsequently corrected; final native recheck is pending.",
+    "sha256": "9e00001e4d8ef5dd9a1675805276b5f2560c19fdd3160870d05b295fc6f1a40d"
+  }
+]
