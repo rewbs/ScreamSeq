@@ -3,12 +3,14 @@
 #include "../Audio/NativeSignalGraph.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/hosted/GraphPluginEndpoint.hpp"
+#include "editor/SongGroupRuntime.hpp"
 #include "soundlib/ModInstrument.h"
 #import "../Bridge/TrackerSession.h"
 #include <iostream>
 #include <dlfcn.h>
 std::vector<Tracker::PluginDescriptor> registerFixtureAUs();
 void setFixtureAUHiddenGain(float);
+void setFixtureAUInstrumentInputs(bool);
 uint64_t fixtureAUCreatedCount();
 using namespace Tracker;
 using namespace OpenMPT;
@@ -26,6 +28,20 @@ static void enable(Document &doc) {
     for (const auto &[channel, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
     n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
   });
+}
+static void projectedAdapterCapacity() {
+  for(bool bounded:{false,true}){
+    auto document=Document::demo();auto native=document->native();
+    if(bounded){native.ensureMixer();for(unsigned i=0;i<50;++i)native.mixer.buses.push_back({native.makeEntity().id,native.masterID,MixerBusKind::Return,"Empty return"});}
+    // Unresolved saved endpoints still own silent roots. With 64 chains the
+    // host must shrink its sample reserve to stay inside the adapter limit.
+    const unsigned count=bounded?64:1;for(unsigned i=0;i<count;++i)native.mixer.detachedChains.push_back({native.makeEntity().id,{"unavailable-"+std::to_string(i)}});
+    Renderer renderer(document->snapshotData(),48000);auto host=std::make_unique<PluginChain>(std::vector<PluginState>{},48000,true);host->attachInstruments(renderer,&native);
+    size_t adapters=0;for(const auto &slot:renderer.song().m_MixPlugins)adapters+=slot.pMixPlugin!=nullptr;
+    check(adapters<=250&&adapters>=native.tracks.size()+1+count+(bounded?50:0)&&host->mixerRoutingReady(),"Projected roots must count against the prepared adapter budget");
+    for(const auto &[channel,track]:native.tracks)check(renderer.song().ChnSettings[channel].nMixPlugin&&renderer.song().ChnSettings[channel].nMixPlugin<=adapters,"Projected chain roots must never replace a channel's exact adapter identity");
+    std::array<float,1024> samples{};renderer.render(samples.data(),512);check(host->process(samples.data(),512),"Implicit detached chains retain normal channel routing");
+  }
 }
 static void liveRouting(const PluginState &effect,uint32_t block,bool graphCopies=false,bool newBus=false,bool changedInput=false) {
   auto doc=Document::demo();
@@ -653,9 +669,11 @@ static void monitorWhileRendering(bool testBypass=false) {
 }
 #include "SongGroupHostChecks.inc"
 #include "DirectPluginHostChecks.inc"
+#include "InstrumentInputChecks.inc"
 int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool { try {
     check(argc == 2, "Fixture bundle path required");
+    projectedAdapterCapacity();
     auto descriptions = NativePlugin::discoverVST3(argv[1]);
     PluginState gain{descriptions.at(0)}, synth{descriptions.at(1)}, delayed{descriptions.at(2)};
     gain.instanceID = "gain"; synth.instanceID = "synth"; delayed.instanceID = "delayed";
@@ -675,9 +693,11 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       for(auto kind:{SignalNodeKind::Follower,SignalNodeKind::LFO,SignalNodeKind::Random,SignalNodeKind::MIDI,SignalNodeKind::Amount,SignalNodeKind::Automation})for(auto block:{17u,512u,4096u})liveRecipeSources(gain,block,kind,hidden,created);
       liveRecipeSources(gain,512,SignalNodeKind::Follower,hidden,created,true);dlclose(bundle);
     }
+    {auto bundle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW|RTLD_LOCAL);auto latency=reinterpret_cast<int(*)(uint32_t)>(dlsym(bundle,"ResonanceFixtureLatency"));check(latency,"Delayed group fixture exists");for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u})for(bool bypass:{false,true})for(bool refresh:{false,true})delayedSongGroup(gain,rate,block,bypass,refresh,latency);latency(0);dlclose(bundle);}
     for(auto block:{17u,512u,4096u})graphTailBudget(block);
-    PluginState au{registerFixtureAUs().at(0)};au.instanceID="prepared-au";
+    const auto auDescriptions=registerFixtureAUs();PluginState au{auDescriptions.at(0)};au.instanceID="prepared-au";
     for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,512u,4096u}){liveSongGroup(gain,rate,block);liveSongGroup(au,rate,block);liveDirectPluginCables(gain,rate,block);liveDirectPluginCables(au,rate,block);}
+    {auto bundle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW|RTLD_LOCAL);auto mode=reinterpret_cast<void(*)(bool)>(dlsym(bundle,"ResonanceFixtureInstrumentInputs"));check(mode,"Instrument audio input fixture exists");PluginState auSynth{auDescriptions.at(1)};for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,512u,4096u}){liveInstrumentInputs(gain,synth,rate,block,mode);liveInstrumentInputs(au,auSynth,rate,block,setFixtureAUInstrumentInputs);}dlclose(bundle);}
     PluginState compressor;for(const auto &d:NativePlugin::builtins())if(d.classID=="resonance.compressor.v1")compressor.descriptor=d;compressor.instanceID="prepared-compressor";
     for(auto block:{17u,512u,4096u}){liveRecipePreset(au,block,setFixtureAUHiddenGain,fixtureAUCreatedCount);liveRecipeBypass(au,block,setFixtureAUHiddenGain,fixtureAUCreatedCount);liveRecipeStructure(au,block);livePreparedSidechain(au,block,false);livePreparedSidechain(compressor,block,true);livePreparedSidechain(compressor,block,true,false);livePreparedSidechain(compressor,block,true,true,true);}
     for(auto kind:{SignalNodeKind::Follower,SignalNodeKind::LFO,SignalNodeKind::Random,SignalNodeKind::MIDI,SignalNodeKind::Amount,SignalNodeKind::Automation})for(auto block:{17u,512u,4096u})liveRecipeSources(au,block,kind,setFixtureAUHiddenGain,fixtureAUCreatedCount);

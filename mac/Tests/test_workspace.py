@@ -36,10 +36,19 @@ with tempfile.TemporaryDirectory(prefix='resonance-workspace-') as temporary:
             assert read()['locations']['notes']=='bottom','Rejected changes are atomic'
             client.call('workspace.panel',{'panel':'notes','follow':True})
             assert not read()['pins']['notes']
-            context=client.call('context.get');value=context['data']
-            client.call('context.set',{'expectedRevision':context['revision'],'expectedContext':value['contextRevision'],'row':4,'following':False})
-            client.call('workspace.panel',{'panel':'notes','follow':True})
-            assert 'R4' in read()['targets']['notes']
+            # Notes remains hidden behind Mixer. An explicit Follow must not
+            # be lost while another inspector refreshes; no timer will later
+            # follow this hidden panel. Success must include the exact target,
+            # not merely unpin the panel or eventually refresh after a retry.
+            assert 'notes' not in read()['visible']
+            for row in (4,9,2):
+                context=client.call('context.get');value=context['data']
+                moved=client.call('context.set',{'expectedRevision':context['revision'],'expectedContext':value['contextRevision'],'row':row,'following':False})['data']
+                assert moved['row']==row
+                followed=client.call('workspace.panel',{'panel':'notes','follow':True})['data']
+                target=f"P{moved['pattern']} · R{row} · CH{moved['channel']+1}"
+                assert followed['targets']['notes']==target,(followed['targets']['notes'],target)
+                assert read()['targets']['notes']==target
             client.call('workspace.panel',{'panel':'notes','return':True})
             assert client.call('context.get')['data']['row']==0
             shortcuts=client.call('workspace.commands.get')['data']['commands']

@@ -70,7 +70,7 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
       guard terms.allSatisfy({all.contains($0)})else{return nil}
       let rank=terms.allSatisfy({title.contains($0)}) ? 0:terms.allSatisfy({visible.contains($0)}) ? 1:2
       return (rank,index,entry)
-    }.sorted{$0.0==$1.0 ? $0.1<$1.1:$0.0<$1.0}.map{$0.2}
+    }.sorted{a,b in if (a.2.unavailable==nil) != (b.2.unavailable==nil){return a.2.unavailable==nil};return a.0==b.0 ? a.1<b.1:a.0<b.0}.map{$0.2}
     table.reloadData()
     if !filtered.isEmpty { table.selectRowIndexes(IndexSet(integer: filtered.firstIndex { $0.id == selected } ?? 0), byExtendingSelection: false) }
     hint.stringValue = filtered.isEmpty ? "No matching targets · Escape returns to the graph" : "↑↓ choose · Return \(verb) · Esc cancels"

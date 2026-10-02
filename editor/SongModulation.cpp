@@ -18,7 +18,10 @@ bool validClock(const SignalClock &c) noexcept {
 void validateControls(const SignalGraph &graph) {
   SignalGraph controls;controls.songSources=graph.songSources;controls.songModulation=graph.songModulation;
   std::vector<uint64_t> buses,instruments;std::map<uint64_t,uint32_t> patterns;
-  for(const auto &s:controls.songSources) {
+  for(auto &s:controls.songSources) {
+    // Port existence belongs to the prepared host catalog, like rack inputs.
+    // Keep pure evaluator clients able to supply explicitly captured stage PCM.
+    if(s.audioStage){require(!s.audioBus&&s.audioPlugin.empty()&&s.output>0&&!s.preFader,"Invalid stage follower input");s.audioPlugin=signalBusIdentity(s.audioStage);s.audioStage=0;}
     if(s.audioBus)buses.push_back(s.audioBus);if(s.noteTarget)buses.push_back(s.noteTarget);if(s.noteInstrument)instruments.push_back(s.noteInstrument);
     for(const auto &lane:s.node.envelopes){auto &rows=patterns[lane.pattern];rows=std::max(rows,1u);for(const auto &p:lane.points)rows=std::max(rows,p.position/256+1);}
   }
@@ -107,14 +110,14 @@ bool SongModulationRuntime::renderSource(size_t index,uint32_t frames,uint64_t a
   if(index>=sources_.size())return false;auto &s=sources_[index];s.frames=0;
   if(frames>maximumFrames||absoluteFrame>UINT64_MAX-frames||!validClock(clock))return false;
   const auto kind=s.spec.node.kind;
-  if(frames&&kind==SignalNodeKind::Follower&&(s.spec.audioBus||!s.spec.audioPlugin.empty())&&!audio)return false;
+  if(frames&&kind==SignalNodeKind::Follower&&(s.spec.audioBus||s.spec.audioStage||!s.spec.audioPlugin.empty())&&!audio)return false;
   const auto beatsPerFrame=clock.playing?clock.tempo/(60*sampleRate_):0.;if(!clock.playing)clock.unitsPerFrame=0;
   for(uint32_t offset=0;offset<frames;) {
     auto at=clock;at.beat+=offset*beatsPerFrame;at.position+=offset*clock.unitsPerFrame;
     const auto count=segmentFrames(s,absoluteFrame+offset,frames-offset,at);
     if(kind==SignalNodeKind::Follower||kind==SignalNodeKind::NoteEnvelope) {
       for(uint32_t i=0;i<count;++i){double target=s.held?1:0;
-        if(kind==SignalNodeKind::Follower){target=0;if(audio&&(s.spec.audioBus||!s.spec.audioPlugin.empty()))for(size_t channel=0;channel<2;++channel){const auto sample=audio[(offset+i)*2+channel];if(std::isfinite(sample))target=std::max(target,std::min(1.,std::abs(double(sample))));}}
+        if(kind==SignalNodeKind::Follower){target=0;if(audio&&(s.spec.audioBus||s.spec.audioStage||!s.spec.audioPlugin.empty()))for(size_t channel=0;channel<2;++channel){const auto sample=audio[(offset+i)*2+channel];if(std::isfinite(sample))target=std::max(target,std::min(1.,std::abs(double(sample))));}}
         s.envelope=target+(target>s.envelope?s.attack:s.release)*(s.envelope-target);s.values[offset+i]=s.envelope;
       }
     } else {

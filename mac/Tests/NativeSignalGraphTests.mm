@@ -276,12 +276,13 @@ static void structuralRecipes(const PluginDescriptor &descriptor,const char *pat
 #include "GraphCopyObservationChecks.inc"
 #include "GraphCopyMigrationChecks.inc"
 #include "editor/Tests/HostedCopyMigrationChecks.hpp"
+#include "editor/Tests/HostedStageRoutingChecks.hpp"
 int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Pass VST3 fixture");auto plugins=NativePlugin::discoverVST3(argv[1]);
   recipeBypassEndpoint(plugins[0],argv[1]);
   sourcePreparationFailure(plugins[0]);
   newlyWatchedNotes(plugins[0]);compoundHeldNote(plugins[0]);
-  auto fixtureAUs=registerFixtureAUs();preparedCopyMigration(plugins[0]);preparedCopyMigration(fixtureAUs.at(0));for(const auto &descriptor:{plugins[0],fixtureAUs.at(0)})for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u})for(bool sample:{false,true})hostedCopyMigration(descriptor,rate,block,sample);exactCopyObservation(plugins[0]);exactCopyObservation(fixtureAUs.at(0));structuralRecipes(plugins[0],argv[1],false);structuralRecipes(fixtureAUs.at(0),argv[1],true);
+  auto fixtureAUs=registerFixtureAUs();for(const auto &descriptor:{plugins[0],fixtureAUs.at(0)})for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u}){hostedStageRouting(descriptor,rate,block);hostedStageFollower(descriptor,rate,block);}preparedCopyMigration(plugins[0]);preparedCopyMigration(fixtureAUs.at(0));for(const auto &descriptor:{plugins[0],fixtureAUs.at(0)})for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u})for(bool sample:{false,true})hostedCopyMigration(descriptor,rate,block,sample);exactCopyObservation(plugins[0]);exactCopyObservation(fixtureAUs.at(0));structuralRecipes(plugins[0],argv[1],false);structuralRecipes(fixtureAUs.at(0),argv[1],true);
   discreteHosted(plugins[0],argv[1]);
   auto gain=definition(100,plugins[0],true);
   setFixtureAUStepped(true);scalarDiscreteHosted(fixtureAUs.at(0),7);setFixtureAUStepped(false);

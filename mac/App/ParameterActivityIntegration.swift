@@ -17,7 +17,7 @@ extension AppController {
     parameterActivity.onOpen = {[weak self] source in self?.openParameterSource(source)}
     pluginEditor.onActivity = {[weak self] in guard let self,self.model.nativePlugins.indices.contains(self.pluginEditor.selected),let plugin=self.model.nativePlugins[self.pluginEditor.selected]["instanceID"] as? String else{return};self.showParameterActivity(plugin:plugin)}
     workspaceAutomation.onActivity = {[weak self] plugin,parameter in self?.showParameterActivity(plugin:plugin,parameter:parameter)}
-    signalGraphEditor.pluginControls.onActivity = {[weak self] graph,node,parameter in guard let self else{return};self.prepareGraphReturn(to:"parameterActivity");self.workspace?.show("parameterActivity",focus:true);self.parameterActivity.inspect(graph:graph,node:node,parameter:Int(parameter))}
+    signalGraphEditor.pluginControls.onActivity = {[weak self] graph,node,parameter in guard let self else{return};let copy=self.signalGraphEditor.copyObservation.selected;self.prepareGraphReturn(to:"parameterActivity");self.workspace?.show("parameterActivity",focus:true);self.parameterActivity.inspect(graph:graph,node:node,parameter:Int(parameter),copy:copy)}
   }
   func prepareGraphReturn(to panel:String) {
     signalGraphEditor.rememberPanelReturn()

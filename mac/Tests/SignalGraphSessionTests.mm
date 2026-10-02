@@ -6,6 +6,7 @@ using namespace Tracker;
 static void check(bool b,const char *message){if(!b)throw std::runtime_error(message);}
 
 #include "GraphEditingSessionChecks.inc"
+#include "GraphStageSessionChecks.inc"
 int main(){@autoreleasepool{try{
   TrackerSession *session=[TrackerSession new];NSError *error=nil;
   auto call=[&](NSString *method,NSDictionary *parameters,bool write=false)->NSDictionary *{auto p=[parameters mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;auto response=[session automationMethod:method params:p error:&error];if(!response)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);return response;};
@@ -423,5 +424,6 @@ int main(){@autoreleasepool{try{
     check([bypass savePath:path error:&problem]&&[bypass openPath:path error:&problem]&&[saved isEqual:snapshot()],"Recipe bypass lost on save/reopen");[[NSFileManager defaultManager] removeItemAtPath:path error:nil];
   }
   graphEditingSessionChecks();
+  graphStageSessionChecks();
   std::cout<<"PASS graph API: preview, identity allocation, guarded atomic edits, assignment and group-capable lanes, Undo/Redo, recipe/state project roundtrip, independent clone identities\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}

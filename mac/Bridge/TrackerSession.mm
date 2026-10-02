@@ -500,6 +500,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       }
       auto native = decodeNativeSong(root[@"native"]);
       plugins = decodePlugins(root);
+      for(const auto &r:native.signal.stageConnections)for(const auto &e:{r.source,r.target})if(!e.plugin.empty()&&std::none_of(plugins.begin(),plugins.end(),[&](const auto &p){return p.instanceID==e.plugin;}))throw std::invalid_argument("Graph stage cable refers to a missing rack plugin");
       missing = resolvePluginLocations(plugins, &native, _pluginInventory->cached(), hints);
       next->restoreNative(std::move(native));
       automation = decodeAutomation(root);
@@ -2348,6 +2349,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       automation = decodeAutomation(root);
       {
         native = decodeNativeSong(root[@"native"]);
+        for(const auto &r:native->signal.stageConnections)for(const auto &e:{r.source,r.target})if(!e.plugin.empty()&&std::none_of(states.begin(),states.end(),[&](const auto &p){return p.instanceID==e.plugin;}))throw std::invalid_argument("Graph stage cable refers to a missing rack plugin");
         Document validation(byteVector(module));
         native->validate(validation.song());
       }

@@ -85,6 +85,9 @@ public:
       struct SourceDelay {size_t processor;uint32_t port;Delay delay;};
       std::vector<SourceDelay> sources;
       std::array<float,MixerRuntime::maximumFrames*2> sourceScratch{};
+      // Prepared stable-identity maps to whichever wet plan currently runs.
+      std::vector<size_t> beforeSources,afterSources;
+      const Plan *rendered=nullptr;const std::vector<size_t> *renderedSources=nullptr;
       uint32_t frames=0;
     };
     Shadow before,after;
@@ -129,15 +132,15 @@ public:
   MixerTransition(std::unique_ptr<Plan>,std::vector<uint64_t> directSources,
                   std::vector<uint64_t> tracks,uint32_t sampleRate,
                   size_t storageLimit=256u*1024u*1024u);
-  // Effects can be added/removed/reordered; the host supplies independently
-  // prepared affected processors and retains every unchanged RenderOnce. Source
-  // identities, active ports and latency remain fixed, as does total latency.
-  // Changed adapters/source state and latency need a separate host handoff.
+  // Effects/sources and routing can change through prepared host ownership.
+  // Reuse unaffected processors exactly once; source/copy or latency changes
+  // select the aligned dry bridge and its explicit audio-activation boundary.
   std::unique_ptr<Plan> prepare(MixerGraph,std::vector<MixerProcessorInfo>,
-                               const std::vector<std::string> &reset={},bool allowHandoff=false);
-  // Retained stateful DSP is evaluated once on a fade of its two input sums.
-  // Requires an acyclic union and equal retained-processor input alignment.
-  std::unique_ptr<Plan> prepareRetained(MixerGraph,std::vector<MixerProcessorInfo>);
+                               const std::vector<std::string> &reset={},bool allowHandoff=false,std::span<const MixerTimingConstraint> timing={});
+  // Retained stateful DSP is evaluated once on a fade of its two input sums
+  // when the union is acyclic and alignment agrees. Other accepted changes use
+  // the prepared dry bridge without resetting the retained vendors.
+  std::unique_ptr<Plan> prepareRetained(MixerGraph,std::vector<MixerProcessorInfo>,std::span<const MixerTimingConstraint> timing={});
   // Control dependencies participate in both the settled schedule and the
   // union schedule. Call after assigning dependencies, before publication.
   void prepareDependencies(Plan &);
@@ -149,7 +152,7 @@ public:
   bool ready() noexcept {collect();return submitted_==nullptr;}
   const Plan &controlPlan() noexcept {settle();return *stable_;}
   bool controls(const std::vector<MixerControls> &) noexcept;
-  void refreshStopped(std::vector<MixerProcessorInfo>); // Quiescent: update latency catalogue and dependent schedule together.
+  Plan &refreshStopped(std::vector<MixerProcessorInfo>); // Quiescent: update latency catalogue and dependent schedule together.
   bool commitStopped() noexcept; // Control owner, callback fully quiescent.
   // Audio owner only. Native adapters may inspect current frame/latency state.
   MixerRuntime &renderRuntime() noexcept {

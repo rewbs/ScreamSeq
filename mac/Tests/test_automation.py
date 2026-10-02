@@ -1962,6 +1962,128 @@ def note_routing_tools(client):
     print("PASS note routing socket: strict/stale/dry-run/idempotent edits, exact MIDI mapping, implicit suppression, orphan source persistence, atomic cuts and unified Undo")
 
 
+def graph_stage_routing(client, directory):
+    """Typed outer-stage cables over the actual guarded socket and native save."""
+    def read():
+        return client.call("graph.get", {"includeImplicitMixer": True})["data"]
+    def write(method, **params):
+        return client.call(method, {"expectedRevision": client.call("document.get")["revision"], **params})
+    def rejected(method, params, code=-32602):
+        before = read()
+        revision = client.call("document.get")["revision"]
+        expect_error(code, lambda: write(method, **params))
+        assert read() == before and client.call("document.get")["revision"] == revision
+
+    graph = write("graph.create", name="Socket detector stage")["data"]["graph"]
+    node = write("graph.node.add", graph=graph, kind="plugin",
+                 plugin={"format": "Built-in", "classID": "resonance.compressor.v1", "inputs": [1]}, insertEdge=0)["data"]["node"]
+    definition = next(d for d in read()["library"] if d["id"] == graph)
+    source = next(n["id"] for n in definition["nodes"] if n["kind"] == "input")
+    target = next(n["id"] for n in definition["nodes"] if n["kind"] == "output")
+    # Main audio crosses the compressor; outer input 1 drives its detector,
+    # and output 2 exposes its processed main signal as an auxiliary port.
+    definition["audio"] += [
+        {"source": source, "target": node, "output": 1, "input": 1, "gain": 1},
+        {"source": node, "target": target, "output": 0, "input": 2, "gain": 1},
+    ]
+    write("graph.update", definition=definition)
+    inventory = read()
+    assigned = {a["target"] for a in inventory["assignments"]}
+    bus = next(b["id"] for b in inventory["mixer"]["buses"] if b["kind"] == "track" and b["id"] not in assigned)
+    write("graph.assign", target=bus, graph=graph)
+    descriptor = {"format": "Built-in", "classID": "resonance.gainer.v1", "name": "Gainer", "type": 0, "subtype": 0, "manufacturer": 0}
+    plugins = []
+    for _ in range(2):
+        reply = write("plugin.add", descriptor=descriptor, detached=True)
+        plugins.append(next(p["id"] for p in read()["plugins"] if p["slot"] == reply["data"]["slot"]))
+    a, b = plugins
+    incoming = {"source": {"plugin": a}, "output": 0, "target": {"stage": bus}, "input": 1, "gainDB": -6, "enabled": False}
+    outgoing = {"source": {"stage": bus}, "output": 2, "target": {"plugin": b}, "input": 0}
+    before = read()
+    revision = client.call("document.get")["revision"]
+    assert not write("graph.audio.connection.set", **incoming, dryRun=True)["changed"]
+    assert read() == before and client.call("document.get")["revision"] == revision
+    request = {"expectedRevision": revision, **incoming}
+    applied = client.call("graph.audio.connection.set", request, "stage-cable-retry")
+    assert applied["changed"] and client.call("graph.audio.connection.set", request, "stage-cable-retry") == applied
+    connected = read()
+    assert not write("graph.audio.connection.set", **incoming)["changed"]
+    assert read() == connected and client.call("document.get")["revision"] == applied["revision"]
+    write("history.undo")
+    assert read() == before
+    write("history.redo")
+    assert read() == connected
+    expect_error(-32001, lambda: client.call("graph.audio.connection.set", request))
+    assert read() == connected
+
+    for delta in [{"input": 0}, {"input": 3}, {"input": True},
+                  {"source": {"plugin": a, "stage": bus}}, {"source": {"plugin": "missing"}},
+                  {"target": {"stage": "n999999999"}}, {"gainDB": 13}]:
+        rejected("graph.audio.connection.set", {**incoming, **delta})
+    write("graph.audio.connection.set", **outgoing)
+    both = read()
+    # Disabled contributions still constrain the DAG, including mixed API writes.
+    rejected("graph.audio.connection.set", {"source": {"plugin": b}, "output": 0, "target": {"stage": bus}, "input": 1, "dryRun": True})
+    rejected("mixer.plugin.connection.set", {"source": b, "output": 0, "target": a, "input": 0, "dryRun": True})
+    rejected("mixer.enable", {"enabled": False, "dryRun": True})
+    key = {k: incoming[k] for k in ("source", "output", "target", "input")}
+    write("graph.audio.connection.set", **key, enabled=True)
+    enabled = read()
+    edge = next(e for e in enabled["stageConnections"] if e["source"] == incoming["source"])
+    assert edge["enabled"] and edge["gainDB"] == -6
+    assert enabled["mixer"] == both["mixer"]
+    assert [e for e in enabled["stageConnections"] if e["source"] != incoming["source"]] == [e for e in both["stageConnections"] if e["source"] != incoming["source"]]
+    write("history.undo")
+    assert read() == both
+    write("history.redo")
+    assert read() == enabled
+    cut = {"kind": "stage-connection", **outgoing}
+    rejected("graph.connections.remove", {"connections": [cut, {**cut, "output": 3}]})
+    write("graph.connections.remove", connections=[cut])
+    after_cut = read()
+    assert after_cut["mixer"] == enabled["mixer"]
+    assert after_cut["stageConnections"] == [e for e in enabled["stageConnections"] if e["target"] != outgoing["target"]]
+    write("history.undo")
+    assert read() == enabled
+    follower = write("graph.song.source.add", source={"kind": "follower", "audioStage": bus, "output": 2},
+                     connect={"plugin": b, "parameter": 1})["data"]["node"]
+    followed = read()
+    source_record = next(s for s in followed["songSources"] if s["id"] == follower)
+    assert source_record["audioStage"] == bus and not source_record["audioBus"] and not source_record["audioPlugin"]
+    modulation = next(e for e in followed["songModulation"] if e["source"] == follower)
+    assert modulation["minimum"] == modulation["maximum"] == 0
+    write("history.undo")
+    assert read() == enabled
+    write("history.redo")
+    assert read() == followed
+    for patch in [{"audioBus": bus}, {"audioPlugin": a}, {"output": 0}, {"output": 3}, {"preFader": True}]:
+        rejected("graph.song.source.update", {"node": follower, "source": patch})
+    follower_cut = {"kind": "follower-input", "node": follower, "stage": bus, "output": 2}
+    rejected("graph.connections.remove", {"connections": [{**follower_cut, "output": 1}]})
+    write("graph.connections.remove", connections=[follower_cut])
+    disconnected = next(s for s in read()["songSources"] if s["id"] == follower)
+    assert not disconnected["audioStage"] and disconnected["output"] == 0
+    assert read()["stageConnections"] == followed["stageConnections"]
+    write("history.undo")
+    assert read() == followed
+    enabled = followed
+    path = directory / "typed-stage-routes.screamseq"
+    assert not write("document.save", path=str(path), dryRun=True)["changed"] and not path.exists()
+    write("document.save", path=str(path))
+    saved = plistlib.loads(path.read_bytes())["native"]["signalGraph"]
+    assert saved["stageConnections"] == enabled["stageConnections"]
+    assert next(s for s in saved["songSources"] if s["id"] == follower) == source_record
+    assert next(d for d in saved["library"] if d["id"] == graph)["audio"] == definition["audio"]
+    assert read() == enabled
+    write("graph.song.source.remove", nodes=[follower])
+    write("graph.connections.remove", connections=[cut, {"kind": "stage-connection", **key}])
+    assert read()["stageConnections"] == before["stageConnections"]
+    write("graph.assign", target=bus, graph=None)
+    write("graph.remove", graph=graph)
+    write("plugin.remove", plugins=plugins)
+    print("PASS stage routing socket: built-in detector recipe, typed rack/stage ports, dry-run/no-op/retry/stale guards, mixed-cycle rejection, unrelated-route preservation, atomic cut/Undo, auxiliary follower conversion and native save")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="resonance-api-tests-") as tmp:
         directory = Path(tmp)
@@ -2137,6 +2259,7 @@ def main():
                 graph_provenance(client)
                 navigation_pattern(client)
                 note_routing_tools(client)
+                graph_stage_routing(client, directory)
                 print("PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output")
             finally:
                 process.terminate()

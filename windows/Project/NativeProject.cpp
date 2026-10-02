@@ -81,6 +81,8 @@ void validateRecords(Json &root,const Tracker::NativeSong &native) {
 			}
 		}
 	}
+	for(const auto &route:native.signal.stageConnections)for(const auto &endpoint:{route.source,route.target})
+		need(endpoint.plugin.empty()||ids.contains(endpoint.plugin),"Graph stage cable refers to a missing rack plugin");
 	need(native.mixer.buses.size()+assignedPlugins<=250,"Mixer buses and assigned instruments exceed the shared adapter budget");
     // Native references are stable identities. Removing a rack entry retains
     // unresolved lanes/routes/bindings for plugin Undo, exactly as on Mac.

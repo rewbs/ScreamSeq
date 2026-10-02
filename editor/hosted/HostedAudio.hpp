@@ -129,6 +129,10 @@ struct GraphControlPlan {
   std::optional<SignalObservation::PreparedPorts> signalPorts;
   uint32_t signalDomainBase=0,signalDomains=0; // Staged copy-domain allocation.
   struct Scheduling {std::shared_ptr<GraphPluginState> state;std::shared_ptr<PluginParameterQueue> queue;};
+  // Small per-copy ownership snapshots also keep inactive copies' replacement
+  // runtimes, preset incarnations and scheduling storage in the global budget.
+  std::vector<std::shared_ptr<const GraphControlPlan>> copyOwners;
+  size_t copyOwnerStorage=0; // Surrounding immutable per-copy ownership record.
   std::vector<Scheduling> scheduling;
   struct Range {NativePlugin *plugin;uint32_t parameter;float minimum,maximum;};
   std::vector<Range> ranges;

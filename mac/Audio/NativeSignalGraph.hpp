@@ -40,6 +40,8 @@ public:
   size_t copyIndex(const CopySet &,uint64_t target) const noexcept;
   std::span<const uint32_t> copyOutputs(const CopySet &,size_t index) const noexcept;
   size_t copyStorageBytes(const CopySet &) const noexcept;
+  size_t copyTableStorageBytes(const CopySet &) const noexcept;
+  const CopySet *previousCopySet(const CopySet &) const noexcept;
   size_t copyProcessors(const CopySet &) const noexcept;
   void acceptCopies(std::shared_ptr<CopySet>) noexcept; // Control owner, after publication.
   void activateCopies(CopySet &) noexcept; // Quiet boundary, before new rendering.

@@ -6,6 +6,7 @@ namespace Tracker {
 size_t MixerTransition::DryBridge::storageBytes() const noexcept {
   size_t bytes=sizeof(*this);
   for(const auto *s:{&before,&after}){
+    bytes+=(s->beforeSources.capacity()+s->afterSources.capacity())*sizeof(size_t);
     bytes+=sizeof(Plan)+s->plan->runtime->storageBytes()+s->delays.capacity()*sizeof(Delay)+s->sources.capacity()*sizeof(Shadow::SourceDelay);
     bytes+=s->plan->catalog.capacity()*sizeof(MixerProcessorInfo)+s->plan->directSources.capacity()*sizeof(size_t)+s->plan->dependencies.capacity()*sizeof(Dependency);
     for(const auto &processor:s->plan->catalog)bytes+=processor.instance.capacity();
@@ -29,14 +30,25 @@ void MixerTransition::prepareBridge(Plan &plan) {
     controls.direct.assign(mix.nodes.size(),SIZE_MAX);controls.connections.assign(mix.connections.size(),SIZE_MAX);
     controls.instruments.assign(mix.instruments.size(),SIZE_MAX);controls.sidechains.assign(mix.sidechains.size(),SIZE_MAX);
     p.runtime->retainHistory(*source.runtime,controls);
+    auto sourceMap=[&](const Plan &wet){std::vector<size_t> map(p.catalog.size(),SIZE_MAX);for(size_t i=0;i<p.catalog.size();++i)if(p.catalog[i].scheduledSource){const auto found=std::find_if(wet.catalog.begin(),wet.catalog.end(),[&](const auto &item){return item.instance==p.catalog[i].instance;});if(found!=wet.catalog.end())map[i]=size_t(found-wet.catalog.begin());}return map;};
+    result.beforeSources=sourceMap(*stable_);result.afterSources=sourceMap(plan);
     result.delays.resize(p.catalog.size());
     for(size_t i=0;i<p.catalog.size();++i)if(!p.catalog[i].instrument)result.delays[i].samples.assign(size_t(p.catalog[i].latency)*2,0);
     for(size_t i=0;i<p.catalog.size();++i)if(p.catalog[i].instrument)
       for(uint32_t port=0;port<std::min(64u,p.catalog[i].outputBuses);++port)if(p.catalog[i].activeOutputs&(uint64_t(1)<<port))
         result.sources.push_back({i,port,{std::vector<float>(size_t(p.catalog[i].latency)*2),0}});
     p.processors=std::shared_ptr<void>(&result,[](void *){});
-    p.process=[](void *opaque,MixerRuntime &,size_t index,float *samples,uint32_t count,uint64_t)noexcept{
+    p.process=[](void *opaque,MixerRuntime &runtime,size_t index,float *samples,uint32_t count,uint64_t)noexcept{
       auto &s=*static_cast<DryBridge::Shadow *>(opaque);if(index>=s.delays.size())return false;
+      if(s.plan->catalog[index].scheduledSource){
+        if(!s.rendered||!s.renderedSources)return false;
+        const auto slot=(*s.renderedSources)[index];
+        const auto *main=slot==SIZE_MAX?nullptr:s.rendered->runtime->processorOutput(slot);
+        if(main)std::copy_n(main,count*2,samples);else std::fill_n(samples,count*2,0.f);
+        for(uint32_t port=1;port<std::min(64u,s.plan->catalog[index].outputBuses);++port)if(s.plan->catalog[index].activeOutputs&(uint64_t(1)<<port))
+          runtime.instrument(index,port,main&&s.rendered->output?s.rendered->output(s.rendered->processors.get(),slot,port):nullptr);
+        return true;
+      }
       auto &delay=s.delays[index];if(delay.samples.empty())return true;
       for(uint32_t i=0;i<count*2;++i){std::swap(samples[i],delay.samples[delay.cursor]);if(++delay.cursor==delay.samples.size())delay.cursor=0;}return true;
     };
@@ -79,8 +91,13 @@ uint32_t MixerTransition::limitFrames(uint32_t frames,uint64_t position) noexcep
 }
 const float *MixerTransition::renderBridge(std::span<const DirectInput> sources) noexcept {
   auto &current=plans_.current();auto &previous=*plans_.previous();auto &b=*current.bridge;
-  const auto *dryBefore=evaluate(*b.before.plan,sources),*dryAfter=evaluate(*b.after.plan,sources);
+  const auto &rendered=b.activated?current:previous;
   const auto *wet=evaluate(b.activated?current:previous,sources);
+  // Standalone instruments may depend on upstream audio/followers. Evaluate
+  // their accepted wet DAG once, then borrow that fresh output in both dry
+  // expressions. No MIDI, parameter queues or vendor clocks run a second time.
+  for(auto *shadow:{&b.before,&b.after}){shadow->rendered=&rendered;shadow->renderedSources=b.activated?&shadow->afterSources:&shadow->beforeSources;}
+  const auto *dryBefore=evaluate(*b.before.plan,sources),*dryAfter=evaluate(*b.after.plan,sources);
   open_=false;through_+=frames_;
   if(!dryBefore||!dryAfter||!wet){failed_=true;return nullptr;}
   for(uint32_t frame=0;frame<frames_;++frame){

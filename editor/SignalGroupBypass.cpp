@@ -75,13 +75,15 @@ SignalSongGroupBoundary signalSongGroupBoundary(const SignalGraph &graph,const M
     if(bus.kind==MixerBusKind::Master&&!mixer.masterOutputDisconnected)add(previous,"main-output",{"master-output",busKey(bus.id),{},{},"pre-master-fader"});
     for(const auto &send:bus.sends)add(previous,busKey(send.target),{"send",busKey(bus.id),busKey(send.target)});
   }
+  for(const auto &route:graph.stageConnections)add(signalStageEndpointKey(route.source),signalStageEndpointKey(route.target),signalStageRouteIdentity(route));
   for(const auto &route:mixer.pluginConnections)add("plugin:"+route.source,"plugin:"+route.target,{"plugin-connection","plugin:"+route.source,"plugin:"+route.target,{},"post-gain",route.input,route.output});
-  for(const auto &route:mixer.sidechains)if(ends.contains(route.source))add(ends.at(route.source),"plugin:"+route.plugin,{"plugin-input",busKey(route.source),{},route.plugin,"post-gain",route.input,0});
-  for(const auto &route:mixer.instruments)if(route.target)add("plugin:"+route.plugin,busKey(route.target),{"plugin-output",{},busKey(route.target),route.plugin,"post-gain",0,route.output});
+  for(const auto &route:mixer.sidechains)if(ends.contains(route.source)&&std::none_of(graph.inputs.begin(),graph.inputs.end(),[&](const auto &r){return r.source==route.source&&signalBusIdentity(r.target)==route.plugin&&r.input==route.input;}))add(ends.at(route.source),"plugin:"+route.plugin,{"plugin-input",busKey(route.source),{},route.plugin,"post-gain",route.input,0});
+  for(const auto &route:mixer.instruments)if(route.target&&std::none_of(graph.outputs.begin(),graph.outputs.end(),[&](const auto &r){return signalBusIdentity(r.source)==route.plugin&&r.target==route.target&&r.output==route.output;}))add("plugin:"+route.plugin,busKey(route.target),{"plugin-output",{},busKey(route.target),route.plugin,"post-gain",0,route.output});
   for(const auto &route:graph.inputs)if(ends.contains(route.source))add(ends.at(route.source),"graph:"+busKey(route.target),{"graph-input",busKey(route.source),busKey(route.target),{},"post-gain",route.input,0});
+  for(const auto &route:graph.outputs)add("graph:"+busKey(route.source),busKey(route.target),{"graph-output",busKey(route.source),busKey(route.target),{},"post-gain",0,route.output});
   for(const auto &source:graph.songSources)if(source.node.kind==SignalNodeKind::Follower){
-    const auto from=!source.audioPlugin.empty()?"plugin:"+source.audioPlugin:source.audioBus&&ends.contains(source.audioBus)?ends.at(source.audioBus):std::string{};
-    if(!from.empty())add(from,"source:"+busKey(source.node.id),{"follower-input",!source.audioPlugin.empty()?"plugin:"+source.audioPlugin:busKey(source.audioBus),"source:"+busKey(source.node.id),{},"post-gain",0,source.output});
+    const auto from=source.audioStage?"stage:"+busKey(source.audioStage):!source.audioPlugin.empty()?"plugin:"+source.audioPlugin:source.audioBus&&ends.contains(source.audioBus)?ends.at(source.audioBus):std::string{};
+    if(!from.empty())add(from,"source:"+busKey(source.node.id),{"follower-input",source.audioStage?"stage:"+busKey(source.audioStage):!source.audioPlugin.empty()?"plugin:"+source.audioPlugin:busKey(source.audioBus),"source:"+busKey(source.node.id),{},"post-gain",0,source.output});
   }
   return result;
 }

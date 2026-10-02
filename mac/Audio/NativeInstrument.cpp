@@ -1,3 +1,4 @@
+#include "editor/SongGroupRuntime.hpp"
 #include "AudioUnitHost.hpp"
 #include "PatternCommandRuntime.hpp"
 #include "PatternPitchRuntime.hpp"
@@ -372,7 +373,7 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
   // integer summation path for bit-exact upstream/sample-export playback.
   // Materialization belongs to the playback copy, never the document.
   std::optional<NativeSong> implicit;
-  const bool needsRouting=native&&(!native->signal.noteRouting.empty()||!native->mixer.detached.empty()||!native->signal.assignments.empty()||!native->signal.instrumentAssignments.empty()||!native->signal.commands.empty()||!native->signal.songSources.empty()||!native->signal.songModulation.empty());
+  const bool needsRouting=native&&(!native->signal.noteRouting.empty()||!native->mixer.detached.empty()||!native->mixer.detachedChains.empty()||!native->signal.assignments.empty()||!native->signal.instrumentAssignments.empty()||!native->signal.commands.empty()||!native->signal.songSources.empty()||!native->signal.songModulation.empty());
   if(needsRouting && !native->mixer.active()){implicit=*native;implicit->ensureMixer();native=&*implicit;}
   auto &song = renderer.song();
   for(size_t index=1;index<originalInstruments_.size()&&index<=song.GetNumInstruments();++index)if(auto *instrument=song.Instruments[index]){
@@ -386,7 +387,9 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
   if(native){noteLedger_=std::make_unique<NoteRouteLedger>();initialNoteRouting_=prepareNoteRouting(*native);commitNoteRouting(initialNoteRouting_);adoptNoteRouting(*initialNoteRouting_);}
   song.nativeSamplePlugin=nullptr;song.nativeSampleContext=nullptr;sampleRoutes_.clear();sampleSourceIdentities_.clear();sampleSignalGraph_.reset();publishedSampleBindings_.reset();activeSampleBindings_=nullptr;adoptedSampleBindings_.store(nullptr);musicalSong_=&song;sampleAdapterStorage_=0;
   const auto assigned=size_t(std::count_if(instruments_.begin(),instruments_.end(),[](auto index){return index!=0;}));
-  const size_t mixerBuses=native&&native->mixer.active()?native->mixer.buses.size():0;
+  // The compiled schedule also owns silent detached-chain roots. Reserve real
+  // adapter slots for those projected buses before filling the sample pool.
+  const size_t mixerBuses=native&&native->mixer.active()?projectMixerDetachedChains(native->mixer).buses.size():0;
   const size_t requiredSamples=native?native->signal.instrumentAssignments.size()*(song.GetNumChannels()+1):0;
   if(assigned>maximumNativeAdapters||mixerBuses+requiredSamples>maximumNativeAdapters-assigned)
     throw std::invalid_argument("Mixer buses and assigned instruments exceed the 250 native adapters");
@@ -408,13 +411,13 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
     for (size_t i = 0; i < plugins_.size(); ++i) {
       const auto &p = *plugins_[i]; const bool source = p.isInstrument();
       uint32_t count = 1; uint64_t enabled = 1 | p.preparedAuxiliaryOutputs(), inputs = p.preparedAuxiliaryInputs();
-      for (const auto &bus : p.buses()) if (bus.input && bus.index && bus.active) inputs |= uint64_t(1) << bus.index;
+      for (const auto &bus : p.buses()) if (bus.input && bus.supported) inputs |= uint64_t(1) << bus.index;
       for (const auto &bus : p.buses()) if (!bus.input) {
         count = std::max(count, bus.index + 1); if (bus.active) enabled |= uint64_t(1) << bus.index;
       }
       processors.push_back({instances_[i], uint32_t(std::llround(p.latency() * sampleRate_)),
                             source ? std::max(2.0, p.tail()) : p.tail(), source,
-                            false, count, enabled, inputs,p.mainInputFallback()});
+                            false, count, enabled, inputs,p.mainInputFallback(),source});
     }
     auto graph=native->mixer;
     const auto bypassBytes=bypassStorageBytes();
@@ -434,8 +437,13 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
       sampleAdapterStorage_=sampleCopies*sizeof(SampleGraphAdapter);
     }
     mixerTracks_ = tracks; mixerProcessors_ = processors;
-    auto plan = compileMixer(graph, tracks, processors, uint32_t(sampleRate_));
+    auto plan = compileMixer(graph, tracks, processors, uint32_t(sampleRate_),SongGroupRuntime::timing(native->signal,graph,processors));
     auto mixer = std::make_unique<MixerRuntime>(std::move(graph), std::move(plan), sampleRate_, position_);
+    // Signal/group preparation currently adds processors and routes, not buses.
+    // Keep the reservation coupled to the final schedule if a later projection
+    // gains another kind of synthetic root, before installing any adapters.
+    if(mixer->graph().buses.size()!=mixerBuses||mixer->plan().order.size()!=mixerBuses)
+      throw std::invalid_argument("Prepared mixer bus count differs from the native adapter reservation");
     busObservations_.clear();
     for(size_t i=0;i<mixer->graph().buses.size();++i) {
       const auto &bus=mixer->graph().buses[i];const auto node="n"+std::to_string(bus.id);
@@ -550,9 +558,10 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
       slot.pMixPlugin = new MixerAdapter(song, slot, *this, bus, master);
       // Every song channel enters through its explicit mixer adapter. Keep
       // the unassigned core output separate for independent inspector previews.
-      if (!master && native->mixer.buses[bus].kind == MixerBusKind::Track)
+      const auto &preparedBus=mixer_->graph().buses[bus];
+      if (!master && preparedBus.kind == MixerBusKind::Track)
         for (const auto &[channel, track] : native->tracks)
-          if (track.id == native->mixer.buses[bus].id) song.ChnSettings[channel].nMixPlugin = PLUGINDEX(slotIndex + 1);
+          if (track.id == preparedBus.id) song.ChnSettings[channel].nMixPlugin = PLUGINDEX(slotIndex + 1);
       ++slotIndex;
     }
     // Inspector audio enters after the final mixer bus, so it cannot inherit

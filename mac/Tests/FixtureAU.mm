@@ -7,6 +7,8 @@
 #include <cstring>
 static std::atomic<bool> fixtureAUChannelWeights{false};
 static bool fixtureAUPitchMode=false,fixtureAUStepped=false,fixtureAUWideBuses=false;
+static bool fixtureAUInstrumentInputs=false;
+void setFixtureAUInstrumentInputs(bool enabled){fixtureAUInstrumentInputs=enabled;}
 void setFixtureAUWideBuses(bool enabled){fixtureAUWideBuses=enabled;}
 void setFixtureAUStepped(bool enabled){fixtureAUStepped=enabled;}
 static float fixtureAUHiddenGain=1;static uint64_t fixtureAUCreated=0;
@@ -19,6 +21,7 @@ struct FixtureAU {
   AudioComponentPlugInInterface interface{}; // Must be first for the AU C interface.
   bool instrument = false;
   const bool wideBuses=fixtureAUWideBuses;
+  const bool instrumentInputs=fixtureAUInstrumentInputs;
   UInt32 audioChannels(UInt32 bus)const{return wideBuses?(bus?3:5):(bus%2?1:2);}
   std::array<uint16_t, 16 * 128> notes{};
   float gain = .5f,hiddenGain=fixtureAUHiddenGain;
@@ -56,7 +59,7 @@ struct FixtureAU {
     UInt32 required = 0; if (info(self, id, scope, bus, &required, nullptr) || !size || *size < required) return kAudioUnitErr_InvalidProperty;
     *size = required;
     switch (id) {
-      case kAudioUnitProperty_ElementCount: *static_cast<UInt32 *>(out) = scope == kAudioUnitScope_Input ? (s.instrument ? 0 : 2) : (s.instrument ? 32 : s.wideBuses ? 2 : 1); break;
+      case kAudioUnitProperty_ElementCount: *static_cast<UInt32 *>(out) = scope == kAudioUnitScope_Input ? (s.instrument&&!s.instrumentInputs ? 0 : 2) : (s.instrument ? 32 : s.wideBuses ? 2 : 1); break;
       case kAudioUnitProperty_StreamFormat:
         if ((scope == kAudioUnitScope_Input && bus >= 2) || bus >= 32) return kAudioUnitErr_InvalidElement;
         *static_cast<AudioStreamBasicDescription *>(out) = scope == kAudioUnitScope_Input ? s.inputs[bus] : s.outputs[bus]; break;
@@ -141,7 +144,7 @@ struct FixtureAU {
     struct Buffers {UInt32 count;AudioBuffer data[5];} input{},side{};
     input.count=s.audioChannels(0);side.count=s.audioChannels(1);
     for(auto *list:{&input,&side})for(UInt32 channel=0;channel<list->count;++channel)list->data[channel]={1,frames*4,nullptr};
-    if (!s.instrument) {
+    if (!s.instrument||s.instrumentInputs) {
       if (!s.callbacks[0].inputProc || !s.callbacks[1].inputProc) return kAudioUnitErr_NoConnection;
       auto error = s.callbacks[0].inputProc(s.callbacks[0].inputProcRefCon, flags, time, 0, frames, reinterpret_cast<AudioBufferList *>(&input));
       if (error) return error;
@@ -158,6 +161,7 @@ struct FixtureAU {
       auto &dest = out->mBuffers[channel]; if (!dest.mData || dest.mDataByteSize < frames * 4) return kAudioUnitErr_TooManyFramesToProcess;
       for (UInt32 i = 0; i < frames; ++i) {
         float value = s.wideBuses ? static_cast<float *>((bus?side:input).data[channel].mData)[i]*s.gain : s.instrument ? (any ? .2f * s.gain * weight : 0) : static_cast<float *>(input.data[channel].mData)[i] * s.gain * (1 + static_cast<float *>(side.data[0].mData)[i]);
+        if(s.instrument&&s.instrumentInputs)value+=(static_cast<float *>(input.data[channel].mData)[i]+static_cast<float *>(side.data[0].mData)[i]) * s.gain;
         value*=s.hiddenGain;
         if (bus&&!s.wideBuses) value *= float(bus + 1) * (channel ? -.5f : 1);
         static_cast<float *>(dest.mData)[i] = value;

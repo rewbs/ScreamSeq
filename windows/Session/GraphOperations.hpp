@@ -43,6 +43,9 @@ struct GraphHostHooks {
   // parameter is unavailable; never infer writable/continuous from its number.
   std::function<std::vector<Tracker::PluginParameter>(const std::string &)> parameters;
   std::map<std::string,std::vector<Tracker::PluginParameter>> cachedParameters;
+  std::function<std::vector<Tracker::PluginAudioBus>(const std::string &)> audioBuses;
+  std::map<std::string,std::vector<Tracker::PluginAudioBus>> cachedAudioBuses;
+  double sampleRate=48000;
   std::function<Tracker::ParameterProvenanceRecording(const std::string &,uint32_t)> recording;
   std::map<std::pair<std::string,uint32_t>,Tracker::ParameterProvenanceRecording> cachedRecordings;
   std::function<void(const Tracker::NativeSong &)> validateCandidate;

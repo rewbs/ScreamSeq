@@ -126,6 +126,21 @@ struct SignalOutputRoute {
   uint64_t source=0,target=0;uint32_t output=1;
   bool operator==(const SignalOutputRoute &) const = default;
 };
+// Typed outer-stage routes address a bus aggregate, never an individual copy.
+// Stage inputs feed all prepared row/persistent/ordinary copies; outputs sum
+// their audible wet/tail contributions. Main serial ports are not exposed here.
+struct SignalStageEndpoint {
+  std::string plugin;
+  uint64_t stage=0;
+  bool operator==(const SignalStageEndpoint &) const = default;
+};
+struct SignalStageConnection {
+  SignalStageEndpoint source,target;
+  uint32_t output=0,input=0;
+  double gainDB=0;
+  bool enabled=true;
+  bool operator==(const SignalStageConnection &) const = default;
+};
 // Read-only playback observation. Order is one-based across the active stack;
 // role is row=0, persistent=1, ordinary=2. Inactive tails have order zero.
 struct SignalActivity { uint64_t target=0,graph=0; uint8_t role=0; uint16_t order=0; bool tail=false; uint64_t instrument=0; };
@@ -154,6 +169,7 @@ struct SignalSongSource {
   // notes. These are stable document identities, never mutable slot numbers.
   uint64_t noteTarget=0,noteInstrument=0;
   double amount=1;
+  uint64_t audioStage=0; // Aggregate channel graph auxiliary output; exclusive with bus/plugin taps.
   bool operator==(const SignalSongSource &) const = default;
 };
 struct SignalSongModulation {
@@ -176,12 +192,13 @@ struct SignalGraph {
   std::map<std::string,std::array<double,2>> layout;
   std::vector<SignalInputRoute> inputs;
   std::vector<SignalOutputRoute> outputs;
+  std::vector<SignalStageConnection> stageConnections;
   std::vector<SignalSongGroup> groups;
   std::vector<SignalSongSource> songSources;
   std::vector<SignalSongModulation> songModulation;
   SignalPresentation presentation;
   bool operator==(const SignalGraph &) const = default;
-  bool empty() const { return noteRouting.empty() && library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty() && groups.empty() && songSources.empty() && songModulation.empty() && presentation.empty(); }
+  bool empty() const { return noteRouting.empty() && library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty() && stageConnections.empty() && groups.empty() && songSources.empty() && songModulation.empty() && presentation.empty(); }
   size_t bytes() const;
   // Callers supply stable song identities, not slot numbers.
   void validate(const std::vector<uint64_t> &targets,
@@ -227,6 +244,11 @@ bool sameSignalControlLayout(SignalGraph, SignalGraph);
 // follower-tap and modulation changes without rebuilding vendor processors.
 bool sameSignalSourceLayout(SignalGraph, SignalGraph);
 std::string signalBusIdentity(uint64_t);
+std::string signalStageEndpointKey(const SignalStageEndpoint &);
+SignalRouteIdentity signalStageRouteIdentity(const SignalStageConnection &);
+std::vector<uint32_t> signalStagePorts(const SignalGraph &,uint64_t target,bool input);
+void setSignalStageConnection(SignalGraph &,const SignalStageConnection &,const SignalStageConnection *replace=nullptr);
+void removeSignalStageConnection(SignalGraph &,const SignalStageConnection &);
 MixerGraph signalRoutingGraph(MixerGraph,const SignalGraph &);
 struct SignalProcessorInfo {
   uint64_t node = 0;

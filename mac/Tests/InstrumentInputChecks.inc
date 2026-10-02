@@ -1,0 +1,19 @@
+static void liveInstrumentInputs(const PluginState &effect,PluginState instrument,uint32_t rate,uint32_t block,void(*mode)(bool)) {
+  auto document=Document::demo();enable(*document);
+  document->annotate([](NativeSong &n){for(size_t i=1;i+1<n.mixer.buses.size();++i)n.mixer.buses[i].mute=true;});
+  auto native=document->native();auto source=effect;source.instanceID="instrument-input-source";instrument.instanceID="instrument-input-target";instrument.instrument=0;instrument.aliases.clear();native.mixer.buses[0].inserts={source.instanceID};
+  SignalSongSource follower;follower.node={native.makeEntity().id,SignalNodeKind::Follower,"Current instrument input"};follower.audioPlugin=source.instanceID;follower.node.attack=.001;follower.node.release=.001;
+  native.signal.songSources={follower};native.signal.songModulation={{follower.node.id,instrument.instanceID,7,0,0}};
+  Renderer reference(document->serialize(),rate),renderer(document->serialize(),rate);PluginChain dry({},rate,true);dry.attachInstruments(reference,&document->native());mode(true);PluginChain host({source,instrument},rate,true);mode(false);host.attachInstruments(renderer,&native);
+  std::array<float,8192> plain{},actual{};uint32_t lastEdit=0;bool sounding=false;const auto warm=uint32_t(std::ceil(rate*.031));
+  for(uint32_t position=0;position<15000;){auto count=std::min(block,15000-position);for(auto boundary:{2048u,6144u,10240u})if(boundary>position)count=std::min(count,boundary-position);
+    if(position==2048||position==6144||position==10240){if(position==2048)native.mixer.pluginConnections={{source.instanceID,0,instrument.instanceID,0,0,true}};else if(position==6144){native.mixer.pluginConnections.push_back({source.instanceID,0,instrument.instanceID,1,0,true});native.signal.songModulation[0].minimum=native.signal.songModulation[0].maximum=.2;}else native.mixer.pluginConnections.clear();
+      auto plan=host.prepareMixerRouting(native);check(plan&&host.publishMixerRouting(plan),"Instrument main/aux inputs and current-block follower publish while retaining its vendor");lastEdit=position;
+    }
+    uint64_t alloc,free,locks;tracker_audit_begin();dry.beginRenderBlock();host.beginRenderBlock();dry.syncTransport(reference);host.syncTransport(renderer);reference.render(plain.data(),count);renderer.render(actual.data(),count);const bool okay=dry.process(plain.data(),count)&&host.process(actual.data(),count);tracker_audit_end(&alloc,&free,&locks);
+    check(okay&&alloc+free+locks==0,"Instrument input/follower schedule duplicated vendor time or violated realtime safety");
+    if(!lastEdit||position>=lastEdit+warm)for(uint32_t i=0;i<count;++i)for(unsigned ch=0;ch<2;++ch){const auto sample=i*2+ch;const double expected=plain[sample]*.5+(position>=2048&&position<10240?plain[sample]*(position<6144?.25:.35):0)+(position>=6144&&position<10240?(plain[i*2]+plain[i*2+1])*.175:0);sounding|=std::abs(plain[sample])>1e-5;if(std::abs(actual[sample]-expected)>=3e-6){std::cerr<<"instrument input rate="<<rate<<" block="<<block<<" frame="<<position+i<<" actual="<<actual[sample]<<" expected="<<expected<<'\n';check(false,"Instrument audio-input PCM/follower parameter disagrees with independent render");}}
+    check(reference.telemetry().frames==renderer.telemetry().frames,"Instrument input patch changed the transport");position+=count;
+  }
+  check(sounding&&host.mixerRoutingReady(),"Instrument input test completed audible prepared transitions");auto invalid=native;invalid.mixer.pluginConnections={{instrument.instanceID,0,source.instanceID,0,0,true},{source.instanceID,0,instrument.instanceID,0,0,true}};bool rejected=false;try{host.prepareMixerRouting(invalid);}catch(const std::invalid_argument&){rejected=true;}check(rejected&&host.mixerRoutingReady(),"Instrument audio feedback rejects before changing accepted routes");
+}

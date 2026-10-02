@@ -36,6 +36,13 @@ uint64_t identity(const Json &v) {
   for(size_t i=1;i<s.size();++i) { require(s[i]>='0'&&s[i]<='9'&&n<NativeSong::maximumID/10,"Invalid native identity"); n=n*10+s[i]-'0'; }
   require(n>0&&n<NativeSong::maximumID,"Invalid native identity"); return n;
 }
+SignalStageEndpoint stageEndpoint(const Json &v) {
+  keys(v,{"plugin","stage"});require(v.contains("plugin")!=v.contains("stage"),"Choose one plugin or graph stage endpoint");
+  return {v.contains("plugin")?text(v.at("plugin"),128):std::string{},v.contains("stage")?identity(v.at("stage")):0};
+}
+SignalStageConnection stageCable(const Json &v) {
+  return {stageEndpoint(field(v,"source")),stageEndpoint(field(v,"target")),uint32_t(integer(field(v,"output"),0,63)),uint32_t(integer(field(v,"input"),0,63)),number(v.value("gainDB",Json(0)),-96,12),v.contains("enabled")?boolean(v.at("enabled")):true};
+}
 uint64_t allocate(Tracker::NativeSong &next) {
   require(next.nextID>0&&next.nextID<Tracker::NativeSong::maximumID,"Native song identity limit reached");
   return next.makeEntity().id;
@@ -52,7 +59,7 @@ void strictPoints(Json &points) {
 }
 void strictSongSource(Json &source) {
   keys(source,{"id","kind","name","x","y","rate","phase","attack","release","controller","envelopes","muted",
-    "audioBus","audioPlugin","output","preFader","noteTarget","noteInstrument","amount"});
+    "audioBus","audioPlugin","audioStage","output","preFader","noteTarget","noteInstrument","amount"});
   integral(source,"controller",0,127);integral(source,"output",0,63);
   if(source.contains("envelopes")) {array(source["envelopes"],1024);for(auto &e:source["envelopes"]) {
     keys(e,{"pattern","enabled","points"});field(e,"points");strictPoints(e["points"]);
@@ -127,7 +134,7 @@ bool pluginInstrument(const std::vector<GraphRackRecord> &rack,uint16_t index) {
 GraphOperations::GraphOperations(Tracker::Document &d,std::function<void()> stop,GraphHostHooks host)
   : document_(d),stopPlayback_(std::move(stop)),host_(std::move(host)) {}
 std::vector<std::string> GraphOperations::reads() { return {"graph.note.activity","graph.get","graph.selection.copy","graph.group.boundary","graph.automation.get","graph.provenance.get"}; }
-std::vector<std::string> GraphOperations::writes() { return {"graph.note.connect","graph.note.update","graph.note.disconnect","graph.note.restoreAssignment","graph.create","graph.clone","graph.makeIndependent","graph.selection.paste","graph.selection.cut","graph.selection.duplicate","graph.source.mute","graph.group.bypass","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.automation.set","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set"}; }
+std::vector<std::string> GraphOperations::writes() { return {"graph.audio.connection.set","graph.note.connect","graph.note.update","graph.note.disconnect","graph.note.restoreAssignment","graph.create","graph.clone","graph.makeIndependent","graph.selection.paste","graph.selection.cut","graph.selection.duplicate","graph.source.mute","graph.group.bypass","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.automation.set","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set"}; }
 Json GraphOperations::invoke(const std::string &method,const Json &p) {
   using namespace Tracker;
   try {
@@ -196,6 +203,7 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
 #include "GraphPresentationOperations.inc"
 #include "NoteRoutingOperations.inc"
 #include "GroupBypassWriteOperations.inc"
+#include "StageConnectionOperations.inc"
     if(method=="graph.selection.cut") {
       keys(p,{"graph","nodes","dryRun"});affected=identity(field(p,"graph"));std::vector<uint64_t> ids;for(const auto &v:array(field(p,"nodes"),128))ids.push_back(identity(v));clipboardFragment=Project::encodeSignalDefinitionMetadata(cutSignalSelection(next,affected,ids));
     } else if(method=="graph.selection.paste"||method=="graph.selection.duplicate") {
@@ -220,12 +228,13 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
         else if(kind=="insert") {keys(c,{"kind","source","plugin"});ref.kind=SongConnectionKind::Insert;ref.source=identity(field(c,"source"));ref.plugin=text(field(c,"plugin"),128);}
         else if(kind=="master-output") {keys(c,{"kind","source"});ref.kind=SongConnectionKind::MasterOutput;ref.source=identity(field(c,"source"));}
         else if(kind=="graph-input"||kind=="graph-output") {const bool input=kind=="graph-input";if(input)keys(c,{"kind","source","target","input"});else keys(c,{"kind","source","target","output"});ref.kind=input?SongConnectionKind::GraphInput:SongConnectionKind::GraphOutput;ref.source=identity(field(c,"source"));ref.target=identity(field(c,"target"));ref.port=uint32_t(integer(field(c,input?"input":"output"),1,63));}
+        else if(kind=="stage-connection") {keys(c,{"kind","source","target","output","input"});const auto r=stageCable(c);ref.kind=SongConnectionKind::StageConnection;ref.source=r.source.stage;ref.sourcePlugin=r.source.plugin;ref.target=r.target.stage;ref.plugin=r.target.plugin;ref.output=r.output;ref.port=r.input;}
         else if(kind=="plugin-connection") {keys(c,{"kind","source","output","target","input"});ref.kind=SongConnectionKind::PluginConnection;ref.sourcePlugin=text(field(c,"source"),128);ref.plugin=text(field(c,"target"),128);ref.output=uint32_t(integer(field(c,"output"),0,63));ref.port=uint32_t(integer(field(c,"input"),0,63));}
         else if(kind=="plugin-input") {keys(c,{"kind","source","plugin","input"});ref.kind=SongConnectionKind::PluginInput;ref.source=identity(field(c,"source"));ref.plugin=text(field(c,"plugin"),256);ref.port=uint32_t(integer(field(c,"input"),0,63));}
         else if(kind=="plugin-output") {keys(c,{"kind","target","plugin","output"});ref.kind=SongConnectionKind::PluginOutput;ref.target=identity(field(c,"target"));ref.plugin=text(field(c,"plugin"),256);ref.port=uint32_t(integer(field(c,"output"),0,63));}
         else if(kind=="note") {keys(c,{"kind","route","instrument"});require(c.contains("route")!=c.contains("instrument"),"Choose an explicit note route or implicit instrument assignment");ref.kind=SongConnectionKind::Note;if(c.contains("route"))ref.source=identity(c.at("route"));else ref.target=identity(c.at("instrument"));}
         else if(kind=="modulation") {keys(c,{"kind","source","plugin","parameter"});ref.kind=SongConnectionKind::Modulation;ref.source=identity(field(c,"source"));ref.plugin=text(field(c,"plugin"),256);ref.port=uint32_t(integer(field(c,"parameter"),0,UINT32_MAX));}
-        else if(kind=="follower-input") {keys(c,{"kind","node","source","plugin","output","preFader"});ref.kind=SongConnectionKind::FollowerInput;ref.target=identity(field(c,"node"));if(c.contains("source"))ref.source=identity(c.at("source"));if(c.contains("plugin"))ref.plugin=text(c.at("plugin"),256);ref.port=c.contains("output")?uint32_t(integer(c.at("output"),0,63)):0;ref.preFader=c.contains("preFader")?boolean(c.at("preFader")):false;}
+        else if(kind=="follower-input") {keys(c,{"kind","node","source","plugin","stage","output","preFader"});ref.kind=SongConnectionKind::FollowerInput;ref.target=identity(field(c,"node"));if(c.contains("stage"))ref.stage=identity(c.at("stage"));if(c.contains("source"))ref.source=identity(c.at("source"));if(c.contains("plugin"))ref.plugin=text(c.at("plugin"),256);ref.port=c.contains("output")?uint32_t(integer(c.at("output"),0,63)):0;ref.preFader=c.contains("preFader")?boolean(c.at("preFader")):false;}
         else throw Api::ApiError(-32602,"Unknown song cable kind");
         cables.push_back(std::move(ref));
       }

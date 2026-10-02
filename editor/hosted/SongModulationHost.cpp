@@ -49,6 +49,9 @@ std::shared_ptr<PluginChain::HostedMixerPlan::SongControls> PluginChain::prepare
   std::erase_if(graph.songModulation,[&](const auto &edge){return !edge.enabled || std::none_of(parameters.begin(),parameters.end(),[&](const auto &p){return p.plugin==edge.plugin && p.parameter==edge.parameter;});});
   for(size_t i=0;i<graph.songSources.size();++i){auto &source=graph.songSources[i];
     if(source.node.kind==SignalNodeKind::Follower){
+      // The saved endpoint is typed as an aggregate stage; only the prepared
+      // evaluator resolves it to the synthetic processor that owns that PCM.
+      if(source.audioStage){source.audioPlugin=signalBusIdentity(source.audioStage);source.audioStage=0;}
       if(source.audioBus){auto bus=std::find_if(plan.runtime->graph().buses.begin(),plan.runtime->graph().buses.end(),[&](const auto &b){return b.id==source.audioBus;});
         if(bus==plan.runtime->graph().buses.end())source.audioBus=0;
         else result->taps.push_back({i,size_t(bus-plan.runtime->graph().buses.begin()),SIZE_MAX,source.preFader?0u:1u});
@@ -78,8 +81,8 @@ std::shared_ptr<PluginChain::HostedMixerPlan::SongControls> PluginChain::prepare
     auto &binding=result->processors[slot];binding.runtime=result->runtime.get();binding.targets.push_back({target.parameter,index,p->min,p->max});
     if(binding.targets.size()>128)throw std::invalid_argument("Song modulation supports at most 128 parameters per processor");
     for(const auto &contribution:target.contributions)for(const auto &tap:result->taps)if(tap.source==contribution.source){
-      if(plan.catalog[slot].instrument)throw std::invalid_argument("Audio followers cannot yet modulate source instruments; choose a downstream effect");
-      if(tap.processor!=SIZE_MAX && plan.catalog[tap.processor].instrument)continue; // Sources render before the mixer.
+      if(plan.catalog[slot].instrument&&!plan.catalog[slot].scheduledSource)throw std::invalid_argument("Follower target has no prepared instrument stage");
+      if(tap.processor!=SIZE_MAX && plan.catalog[tap.processor].instrument&&!plan.catalog[tap.processor].scheduledSource)continue; // Sources render before the mixer.
       plan.dependencies.push_back({tap.bus,tap.processor,slot});
     }
   }
@@ -93,7 +96,10 @@ void PluginChain::prepareSongGroups(const NativeSong &native,MixerTransition::Pl
   hosted.groups.reset();if(native.signal.groups.empty())return;
   hosted.groups=std::make_shared<SongGroupRuntime>(native.signal,plan.runtime->graph(),plan.runtime->plan(),plan.catalog,sampleRate_);
   hosted.groups->runtime(plan.runtime.get());
-  for(const auto &dependency:hosted.groups->dependencies())plan.dependencies.push_back(dependency);
+  // The compiled timing vertices already order each exact ingress capture
+  // before its egress; treating a processor input as its output would invent
+  // feedback in valid crossed dry maps.
+  if(plan.runtime->plan().timing.empty())for(const auto &dependency:hosted.groups->dependencies())plan.dependencies.push_back(dependency);
   plan.processorStorage+=hosted.groups->storageBytes();plan.runtime->routeTransform(HostedMixerPlan::transformRoute,&hosted);
   if(hosted.song)hosted.song->runtime->contributionGain([](void *p,uint64_t source,const std::string &target,uint64_t frame)noexcept {
     return static_cast<SongGroupRuntime *>(p)->modulation(source,target,frame);

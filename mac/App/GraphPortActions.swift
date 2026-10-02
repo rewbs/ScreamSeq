@@ -77,7 +77,7 @@ extension SignalGraphEditor {
         let from=canonicalPort(a.key),to=canonicalPort(b.key)
         if [from.node,to.node].contains(where:{$0.hasPrefix("instrument:") || $0.hasPrefix("instrument-graph:")}) {return "Assign an instrument graph; its output follows the note’s channel"}
         if songNodeGraph[to.node] != nil,to.number==0 {return "Assign this reusable channel copy; open it to edit its internal inputs"}
-        if let plugin=songNodePlugin[to.node],rackPlugins.contains(where:{$0["id"] as? String==plugin && $0["isInstrument"] as? Bool==true}) {return "Plugin instrument audio inputs are not scheduled yet; choose an effect input"}
+        if stageTarget(from.node) != nil || stageTarget(to.node) != nil,stageEndpoint(from.node) != nil,stageEndpoint(to.node) != nil{return nil}
         if to.number>0,!(songNodePlugin[from.node] != nil && songNodePlugin[to.node] != nil),!canSumSongInput(from){return "Sidechain inputs require a channel/return output or its final insert; use a subgraph for direct processor patching"}
       }
       return nil
@@ -99,7 +99,7 @@ extension SignalGraphEditor {
     let all=portChoices.filter{output==nil || $0.key.output==output},local=all.filter{$0.key.node==selected}
     let choices=local.isEmpty ? all:local,context=portActionContext
     let lookup=Dictionary(choices.map{($0.id,($0.key,canonicalPort($0.key)))},uniquingKeysWith:{a,_ in a})
-    chooseTarget(title:title,entries:choices.map{$0.entry(unavailable:editing ? portUnavailable($0):nil)}){[weak self] id in
+    chooseTarget(title:local.isEmpty ? title:title+" · selected "+(local.first?.node.title ?? "node"),entries:choices.map{$0.entry(unavailable:editing ? portUnavailable($0):nil)}){[weak self] id in
       guard let self,self.portActionContext==context,let (key,real)=lookup[id],self.socketStillMatches(key,real) else{return}
       action(key)
     }
@@ -132,9 +132,10 @@ extension SignalGraphEditor {
       self.connectPorts(from.node,to.node,out:from.number,input:to.number,modulation:from.modulation)
       self.canvas.addingMainInput=previous
     }
-    if graphID==nil,!from.modulation,!to.modulation,to.number==0,songNodePlugin[to.node] != nil {
+    let instrumentTarget=songNodePlugin[to.node].flatMap{id in rackPlugins.first{$0["id"] as? String==id}}?["isInstrument"] as? Bool==true
+    if graphID==nil,!from.modulation,!to.modulation,to.number==0,songNodePlugin[to.node] != nil,!instrumentTarget {
       let move=from.number==0 ? insertMove(from.node,to.node):nil
-      let sum=canSumSongInput(from) || songNodePlugin[from.node] != nil
+      let sum=canSumSongInput(from) || songNodePlugin[from.node] != nil || stageTarget(from.node) != nil
       chooseTarget(title:"How should this Main input connect?",entries:[
         .init(id:"move",title:"Move chain here",detail:"Move this effect and its following inserts to the source channel · one Undo",keywords:"move insert ownership",unavailable:move==nil ? "This output cannot own the selected effect chain":nil),
         .init(id:"sum",title:"Add / sum input",detail:"Keep the effect chain in place and mix the exact source into Main in · Option-drag equivalent",keywords:"mix add sum input",unavailable:sum ? nil:"Summing requires a channel/return output or a plugin audio output")

@@ -170,32 +170,41 @@ render thread releases it. Requested, rendered and failed revisions are distinct
 Superseded pending candidates are reclaimed off the callback. `commitStopped`
 requires a quiescent device and is not a concurrent publication shortcut.
 
-`MixerTransition` compiles the union of old/new dependencies. Retained vendors
-advance once per interval, with changed inputs interpolated before processing;
-changed outputs use a 10 ms sample-clock linear fade. Equivalent delay/fader
-histories retain state, including a prepared per-chunk cache so a delay cannot
-advance twice. `reusableMixerProcessors` and `MixerTransitionReuse` compare input
-expressions, stable identities, taps, gains, ports, latency and upstream state;
-identity alone does not prove two processing paths equivalent. The combined host
-storage is bounded. A cycle in the transition union, incompatible latency or an
-unprepared source/port change rejects before the document or transport changes.
+`MixerTransition` uses the union of old/new dependencies when retained vendors
+can advance once per interval while their changed inputs interpolate. Changed
+outputs use a 10 ms sample-clock linear fade. A union cycle or changed latency
+instead selects a prepared, latency-aligned dry bridge: old wet fades out,
+prepared audio bindings switch at a render-chunk boundary, and new wet fades in.
+Each accepted graph must still be acyclic. Equivalent delay/fader histories
+retain state; per-chunk caches prevent a retained processor or delay from
+advancing twice. `reusableMixerProcessors` and `MixerTransitionReuse` compare
+input expressions, stable identities, taps, gains, ports, latency and upstream
+state. Identity alone does not prove two paths equivalent. Preparation and all
+retained plans share a bounded storage budget.
 
-Both native session adapters enable this path for supported effect Add/Remove, reorder,
-detach/insert and bus routing, including grouped Undo/Redo. Fixed OpenMPT source
-adapter slots and held instrument state remain stable while effect catalogs
-change. Disconnected effects continue processing silence. Prepared built-in
-detector inputs and AU input storage allow live auxiliary-input connection;
-unprepared VST3 bus activation and new outputs still require stopped preparation.
-Arbitrary latency changes, new instrument adapters and instrument-assignment
-changes have no seamless handoff yet. A rejected live edit leaves the previous
-audible plan playing and reports the reason; it does not silently stop/restart.
-The Windows document worker prepares the same graph, mixer and rack plans and
-publishes them through native-only document/history commit callbacks. Grouped
-rack/routing Undo stages both domains before publishing. Unsupported live opaque
-rack-state changes reject rather than silently retaining a different preset.
-Windows-native worker tests cover publication, failure recovery and persistence;
-actual CI execution is the Windows qualification gate. Mac-hosted adapter tests
-do not establish Windows-native execution or desktop/device behavior.
+Both native session adapters prepare effect and instrument Add/Remove, reorder,
+detach/insert, routing, assignment and native-only Undo/Redo before committing
+history. Retained vendors preserve DSP state. Prepared source binding tables
+release notes owned by removed assignments; new destinations wait for the next
+note-on. Sample-graph adapters use reserved slots and prepared copy tables.
+Disconnected effects continue processing silence. Native AU/VST3 providers
+prepare supported physical buses and expose every channel through stereo or
+odd-mono logical ports; a first live cable uses this capacity without vendor
+activation. Saved `audioLayout` fingerprints prevent a changed physical layout
+from silently retargeting a logical port. Unsupported layout, capacity or
+preparation changes reject while the accepted plan and transport continue.
+
+Serial-guarded vendor latency snapshots prepare new mixer and bypass delays;
+audio adoption acknowledges only the accepted snapshot. Compatible effect rack
+presets prepare replacement vendors and crossfade through the stable facade,
+retaining scheduled automation. Instrument presets, changed physical layouts,
+latency-changing presets and incompatible parameter catalogs require stopped
+playback. Ordinary routing edits never reload saved opaque state. Grouped
+rack/routing Undo stages both domains before publishing. Windows uses the same
+prepared plans through native-only document/history commit callbacks.
+Windows-native worker CI is the execution gate for that platform; Mac-hosted
+adapter tests establish neither Windows-native execution nor desktop/device
+behavior. Current results and pending qualification belong in dated reports.
 
 Per-plan meter maps and the bounded append-only signal-port catalog publish
 stable identities and meter slots together. Failed preparation cannot publish
@@ -218,9 +227,21 @@ every affected copy, validates matching descriptor, ports, latency and parameter
 catalogs, then adopts all at one boundary with a 10 ms old/new vendor-output fade.
 Unchanged node vendors stay intact. Parameter ramps feed both sides during the
 fade, and producer-owned snapshots retain old instances until safe retirement.
-This handles hidden preset state as well as exposed values; it does not enable
-arbitrary recipe node/edge topology or incompatible vendor state changes. Recipe
-storage, replacement buffers and conservative tails remain budgeted off-thread.
+This handles hidden preset state as well as exposed values. Structural recipe
+edits take a separate prepared copy-set path: retained graph/node/role identities
+reuse their endpoints and runtime histories, new copies and ports prepare off
+thread, and removed copy observation domains retire at audio handoff. Copy
+membership and source bindings switch with mixer routing through the dry bridge.
+Producer-owned snapshots retain inactive copies needed for reuse and Undo;
+transient copy tables and retained vendor storage are accounted separately.
+Recipe storage, replacement buffers and conservative tails remain budgeted off
+thread. Incompatible opaque vendor state still rejects before commit.
+
+Typed outer stage routes address the aggregate channel/bus recipe stack:
+Row, persistent and ordinary copies share its auxiliary input, and audible
+outputs sum with their active/tail gains and latency alignment. Instrument
+copies are separate. An aggregate stage endpoint does not identify one selected
+copy; arbitrary outer audio routing to a specific copy is not supported.
 
 `hosted/SongModulationHost` evaluates song-level LFO, envelope, random, MIDI,
 amount, scoped note-envelope and current-block audio-follower sources against

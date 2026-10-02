@@ -79,6 +79,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   var deferredGraphCommand:(()->Void)?
   var manualConnection = false
   var noteActivityPending=false,noteActivityLastRead=0.0
+  let stageExplanation=NSTextField(wrappingLabelWithString:"Shared auxiliary inputs feed every prepared row, persistent and ordinary copy. Combined outputs sum their audible Wet and tail contributions. Open a copy to inspect its own processing.")
   let noteControls=GraphNoteRouteControls(frame:.zero)
   let connectionHeading=Theme.label("NEW CONNECTION",size:11,weight:.semibold)
   let connectionHint=Theme.label("Drag between matching ports, or choose endpoints below.",size:11,color:Theme.muted)
@@ -252,7 +253,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     connectionForm.stretchAcrossAxis()
     connectionSection=stack(.vertical,[stack(.horizontal,[connectionHeading,NSView(),ActionButton("New…"){[weak self] in self?.newConnection()}]),stack(.horizontal,[connectButton,updateConnectionButton,removeConnectionButton]),connection,connectionHint,openConnectionOwnerButton,noteControls,connectionForm],spacing:7)
     connectionSection.stretchAcrossAxis()
-    nodeSection=stack(.vertical,[detail,pluginControls,rackControls,name,
+    stageExplanation.font = .systemFont(ofSize:11);stageExplanation.textColor=Theme.muted;stageExplanation.preferredMaxLayoutWidth=246;stageExplanation.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    nodeSection=stack(.vertical,[detail,stageExplanation,pluginControls,rackControls,name,
       useDetector,busControls,busSection,sourceSection],spacing:7)
     nodeSection.stretchAcrossAxis()
     let help=Theme.label("Sockets add cables; wire handles reroute. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert. Hollow sockets enable automatically. Option-drag adds a Main input to an existing insert.",size:11,color:Theme.muted)
@@ -409,7 +411,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
         instrumentPicker.removeAllItems();manualConnection=false;pendingModulationFocus=nil;deferredGraphCommand=nil
         addGeneration+=1;addMenu.close();targetMenu.close()
         portCatalogs=[:];catalogFailures=[:];catalogGeneration+=1;exposedParameters=[:];catalogLoading=false
-        envelopeEditor.resetDocument()
+        envelopeEditor.resetDocument();copyObservation.resetDocument()
         playbackActivity=[];playbackRunning=false;showSignals([:]);lastOverload=nil
       }
       operationFailure=nil;shownFields=[:];pendingMoves=[:]
@@ -443,7 +445,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     enableRouting.isHidden = !buses.isEmpty
     canvas.emptyMessage = buses.isEmpty && graphID==nil ? "Open or create a song to connect channels, instruments and effects." : "Create a subgraph to start connecting sound."
     let scope=graphID != nil
-    if configuredScope != scope {configuredScope=scope;connectionGain.doubleValue=scope ? 1 : 0;connectionKind.removeAllItems();connectionKind.addItems(withTitles:scope ? ["Audio","Modulation"] : ["Main output","Send","Graph sidechain","Graph auxiliary","Plugin sidechain","Plugin auxiliary","Direct plugin audio","Mix into main","Modulation","Follower input"])}
+    if configuredScope != scope {configuredScope=scope;connectionGain.doubleValue=scope ? 1 : 0;connectionKind.removeAllItems();connectionKind.addItems(withTitles:scope ? ["Audio","Modulation"] : ["Main output","Send","Graph sidechain","Graph auxiliary","Plugin sidechain","Plugin auxiliary","Direct plugin audio","Stage audio","Mix into main","Modulation","Follower input"])}
     connectionModeChanged()
 
     var display=[SignalCanvasNode](),edges=[SignalCanvasEdge]()
@@ -491,7 +493,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     busControls.isHidden=selectedBus==nil;busControls.implicit=data["implicitMixer"] as? Bool==true;busControls.context(selectedBus,revision:revision)
     rackControls.isHidden=rackPlugin==nil;rackControls.context(rackPlugin,revision:revision)
     let copyGraph=selectedID.flatMap{songNodeGraph[$0]},ordinaryCopy=selectedID?.contains(":Ordinary:")==true
-    name.isHidden=rackPlugin != nil || (graphID==nil && (copyGraph != nil || selectedInstrument != nil))
+    stageExplanation.isHidden=graphID != nil || selectedID.flatMap{stageTarget($0)}==nil
+    name.isHidden = !stageExplanation.isHidden || rackPlugin != nil || (graphID==nil && (copyGraph != nil || selectedInstrument != nil))
     librarySection.isHidden=graphID==nil || canvas.selectedEdge != nil || selectedID != nil
     busSection.isHidden=graphID != nil || rackPlugin != nil || (selectedBus==nil && selectedInstrument==nil && !ordinaryCopy)
     assignmentHeading.stringValue=selectedInstrument==nil ? "ORDINARY CHANNEL GRAPH" : "INSTRUMENT GRAPH · ALL CHANNELS"
@@ -505,7 +508,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     configureParameterRanges()
     show(libraryName,definition?["name"] as? String ?? "",target:libraryTarget);show(libraryNumber,String(definition?["number"] as? Int ?? 1),target:libraryTarget)
 
-    if let rackPlugin{detail.stringValue=rackPlugin["name"] as? String ?? "Processor"}
+    if !stageExplanation.isHidden{detail.stringValue=(busID.flatMap{busLabels[$0]} ?? "Channel")+" · graph stage"}
+    else if let rackPlugin{detail.stringValue=rackPlugin["name"] as? String ?? "Processor"}
     else if graphID==nil,let instrument=selectedInstrument{
       let channel=busID.flatMap{id in buses.first{$0["id"] as? String==id}?["name"] as? String}
       detail.stringValue="I\(instrument["index"] ?? 0) · \(instrument["name"] as? String ?? "Instrument")"+(channel.map{" › \($0)"} ?? " · before channel");show(name,instrument["name"] as? String ?? "Instrument",target:context)
@@ -618,13 +622,13 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   private func renameLibrary(){guard let number=Int(libraryNumber.stringValue)else{return};updateDefinition{$0["name"]=libraryName.stringValue;$0["number"]=number}}
   @objc func connectionControlChanged(_ sender:NSControl){hasDraft=true;if sender===connectionKind {connectionModeChanged()}else if sender===source || sender===destination {refreshPortChoices();if canvas.selectedEdge==nil{inferConnectionKind()}};updateQuantizationControl();if canvas.selectedEdge != nil {updateConnection()}}
   @objc func connectionModeChanged(){let kind=connectionKind.titleOfSelectedItem ?? "",modulation=kind=="Modulation";modulationSection?.isHidden = !modulation;audioPorts?.isHidden=modulation
-    connectionEnabled.isHidden = !modulation && kind != "Direct plugin audio"
+    connectionEnabled.isHidden = !modulation && !["Direct plugin audio","Stage audio"].contains(kind)
     base.isHidden=graphID==nil;modulationBaseLabel.isHidden=graphID==nil;connectionQuantized.isHidden=false;connectionQuantized.title=graphID==nil ? "Quantize to parameter steps":"Quantize target (all sources)"
     gainLabel.stringValue=graphID == nil ? "Gain dB" : "Gain ×"
     connectionGain.toolTip=graphID == nil ? "Send / sidechain gain in dB" : "Audio gain multiplier, −16…16"
-    outputPort.isEnabled=graphID != nil || kind=="Graph auxiliary" || kind=="Plugin auxiliary" || kind=="Follower input" || kind=="Direct plugin audio"
-    inputPort.isEnabled=graphID != nil || kind=="Graph sidechain" || kind=="Plugin sidechain" || kind=="Direct plugin audio"
-    let hasGain=graphID != nil || kind=="Send" || kind.contains("sidechain") || kind=="Mix into main" || kind=="Direct plugin audio"
+    outputPort.isEnabled=graphID != nil || kind=="Graph auxiliary" || kind=="Plugin auxiliary" || kind=="Follower input" || ["Direct plugin audio","Stage audio"].contains(kind)
+    inputPort.isEnabled=graphID != nil || kind=="Graph sidechain" || kind=="Plugin sidechain" || ["Direct plugin audio","Stage audio"].contains(kind)
+    let hasGain=graphID != nil || kind=="Send" || kind.contains("sidechain") || kind=="Mix into main" || ["Direct plugin audio","Stage audio"].contains(kind)
     connectionGain.isEnabled=hasGain;connectionGainRow.isHidden = !hasGain
     portRow.isHidden=kind=="Send"
     refreshPortChoices()

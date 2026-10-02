@@ -85,7 +85,25 @@
 #include "GraphPresentationAPI.inc"
 #include "NoteRoutingAPI.inc"
 #include "GroupBypassAPI.inc"
-      if([method isEqual:@"graph.selection.cut"]) {
+      if([method isEqual:@"graph.audio.connection.set"]) {
+        allowed(@[@"source",@"target",@"output",@"input",@"gainDB",@"enabled",@"replace",@"dryRun"]);ensureMixer();auto value=decodeSignalStageCable(p);std::optional<SignalStageConnection> old;
+        if(p[@"replace"]){auto r=object(p[@"replace"]);keys(r,@[@"source",@"target",@"output",@"input"]);old=decodeSignalStageCable(r);}
+        const auto &key=old?*old:value;const auto previous=std::find_if(graph.stageConnections.begin(),graph.stageConnections.end(),[&](const auto &r){return r.source==key.source&&r.target==key.target&&r.output==key.output&&r.input==key.input;});
+        if(previous!=graph.stageConnections.end()){if(!p[@"gainDB"])value.gainDB=previous->gainDB;if(!p[@"enabled"])value.enabled=previous->enabled;}
+        for(bool input:{false,true}){const auto &e=input?value.target:value.source;if(e.stage){bus(nativeID(e.stage));continue;}
+          const auto found=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==e.plugin;});require(found!=_plugins.end(),"Plugin endpoint no longer exists");
+          const bool instrument=found->descriptor.instrument||found->descriptor.type==kAudioUnitType_MusicDevice;
+          const auto ports=_audio->pluginBuses(size_t(found-_plugins.begin()));const auto port=input?value.input:value.output;require(std::any_of(ports.begin(),ports.end(),[&](const auto &b){return b.input==input&&b.index==port&&b.supported;}),"Choose an available physical plugin audio port");
+          if(!instrument)rootDetachedMixerPlugin(next.mixer,e.plugin,[&]{return next.makeEntity().id;});
+        }
+        try{setSignalStageConnection(graph,value,old?&*old:nullptr);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+        // Validate the complete typed DAG even on dry runs. Declared stage ports
+        // are checked above; the real host rechecks its prepared catalogue.
+        std::vector<MixerProcessorInfo> processors;std::vector<uint64_t> tracks;for(const auto &[i,t]:next.tracks)tracks.push_back(t.id);
+        for(size_t slot=0;slot<_plugins.size();++slot){const auto &p=_plugins[slot];uint64_t inputs=0,outputs=1;uint32_t count=1;for(const auto &b:_audio->pluginBuses(slot))if(b.supported){if(b.input)inputs|=uint64_t(1)<<b.index;else{outputs|=uint64_t(1)<<b.index;count=std::max(count,b.index+1);}}processors.push_back({p.instanceID,0,0,p.descriptor.instrument||p.descriptor.type==kAudioUnitType_MusicDevice,false,count,outputs,inputs});processors.back().scheduledSource=processors.back().instrument;}
+        for(const auto &b:next.mixer.buses){const auto in=signalStagePorts(graph,b.id,true),out=signalStagePorts(graph,b.id,false);if(in.empty()&&out.empty()&&std::none_of(graph.assignments.begin(),graph.assignments.end(),[&](const auto &a){return a.target==b.id;})&&std::none_of(graph.commands.begin(),graph.commands.end(),[&](const auto &c){return c.target==b.id&&(c.kind==SignalCommandKind::Row||c.kind==SignalCommandKind::Start);}))continue;uint64_t inputs=0,outputs=1;uint32_t count=1;for(auto p:in)inputs|=uint64_t(1)<<p;for(auto p:out){outputs|=uint64_t(1)<<p;count=std::max(count,p+1);}processors.push_back({signalBusIdentity(b.id),0,0,false,false,count,outputs,inputs});processors.back().scheduledSource=processors.back().instrument;}
+        try{compileMixer(signalRoutingGraph(next.mixer,graph),tracks,processors,uint32_t(_audio->sampleRate()));}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+      } else if([method isEqual:@"graph.selection.cut"]) {
         allowed(@[@"graph",@"nodes",@"dryRun"]);affected=decodeNativeID(p[@"graph"]);std::vector<uint64_t> ids;for(id value:array(p[@"nodes"],128))ids.push_back(decodeNativeID(value));
         try{clipboardFragment=encodeSignalDefinition(cutSignalSelection(next,affected,ids));}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
       } else if([method isEqual:@"graph.selection.paste"]||[method isEqual:@"graph.selection.duplicate"]) {
@@ -114,12 +132,13 @@
           else if([kind isEqual:@"insert"]) {keys(c,@[@"kind",@"source",@"plugin"]);ref.kind=SongConnectionKind::Insert;ref.source=decodeNativeID(c[@"source"]);ref.plugin=string(c[@"plugin"],128).UTF8String;}
           else if([kind isEqual:@"master-output"]) {keys(c,@[@"kind",@"source"]);ref.kind=SongConnectionKind::MasterOutput;ref.source=decodeNativeID(c[@"source"]);}
           else if([kind isEqual:@"graph-input"]||[kind isEqual:@"graph-output"]) {const bool input=[kind isEqual:@"graph-input"];keys(c,input?@[@"kind",@"source",@"target",@"input"]:@[@"kind",@"source",@"target",@"output"]);ref.kind=input?SongConnectionKind::GraphInput:SongConnectionKind::GraphOutput;ref.source=decodeNativeID(c[@"source"]);ref.target=decodeNativeID(c[@"target"]);ref.port=uint32_t(integer(c[input?@"input":@"output"],1,63));}
+          else if([kind isEqual:@"stage-connection"]) {keys(c,@[@"kind",@"source",@"target",@"output",@"input"]);const auto r=decodeSignalStageCable(c);ref.kind=SongConnectionKind::StageConnection;ref.source=r.source.stage;ref.sourcePlugin=r.source.plugin;ref.target=r.target.stage;ref.plugin=r.target.plugin;ref.output=r.output;ref.port=r.input;}
           else if([kind isEqual:@"plugin-connection"]) {keys(c,@[@"kind",@"source",@"output",@"target",@"input"]);ref.kind=SongConnectionKind::PluginConnection;ref.sourcePlugin=string(c[@"source"],128).UTF8String;ref.plugin=string(c[@"target"],128).UTF8String;ref.output=uint32_t(integer(c[@"output"],0,63));ref.port=uint32_t(integer(c[@"input"],0,63));}
           else if([kind isEqual:@"plugin-input"]) {keys(c,@[@"kind",@"source",@"plugin",@"input"]);ref.kind=SongConnectionKind::PluginInput;ref.source=decodeNativeID(c[@"source"]);ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"input"],0,63));}
           else if([kind isEqual:@"plugin-output"]) {keys(c,@[@"kind",@"target",@"plugin",@"output"]);ref.kind=SongConnectionKind::PluginOutput;ref.target=decodeNativeID(c[@"target"]);ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"output"],0,63));}
           else if([kind isEqual:@"note"]) {keys(c,@[@"kind",@"route",@"instrument"]);require(bool(c[@"route"])!=bool(c[@"instrument"]),"Choose an explicit note route or implicit instrument assignment");ref.kind=SongConnectionKind::Note;if(c[@"route"])ref.source=decodeNativeID(c[@"route"]);else ref.target=decodeNativeID(c[@"instrument"]);}
           else if([kind isEqual:@"modulation"]) {keys(c,@[@"kind",@"source",@"plugin",@"parameter"]);ref.kind=SongConnectionKind::Modulation;ref.source=decodeNativeID(c[@"source"]);ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"parameter"],0,UINT32_MAX));}
-          else if([kind isEqual:@"follower-input"]) {keys(c,@[@"kind",@"node",@"source",@"plugin",@"output",@"preFader"]);ref.kind=SongConnectionKind::FollowerInput;ref.target=decodeNativeID(c[@"node"]);if(c[@"source"])ref.source=decodeNativeID(c[@"source"]);if(c[@"plugin"])ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"output"]?:@0,0,63));ref.preFader=c[@"preFader"]?boolean(c[@"preFader"]):false;}
+          else if([kind isEqual:@"follower-input"]) {keys(c,@[@"kind",@"node",@"source",@"stage",@"plugin",@"output",@"preFader"]);ref.kind=SongConnectionKind::FollowerInput;ref.target=decodeNativeID(c[@"node"]);if(c[@"stage"])ref.stage=decodeNativeID(c[@"stage"]);if(c[@"source"])ref.source=decodeNativeID(c[@"source"]);if(c[@"plugin"])ref.plugin=string(c[@"plugin"],256).UTF8String;ref.port=uint32_t(integer(c[@"output"]?:@0,0,63));ref.preFader=c[@"preFader"]?boolean(c[@"preFader"]):false;}
           else throw Error(-32602,"Unknown song cable kind");
           cables.push_back(std::move(ref));
         }

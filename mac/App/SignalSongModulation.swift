@@ -99,9 +99,10 @@ extension SignalGraphEditor {
     }else{create(nil)}
   }
   func songFollowerTap(_ key:String,output:UInt32)->[String:Any]? {
-    if let plugin=songNodePlugin[key]{return ["audioBus":"","audioPlugin":plugin,"output":output,"preFader":false]}
+    if let stage=stageTarget(key){guard stagePorts(stage,input:false).contains(output)else{status.stringValue="Choose an available combined graph output";return nil};return ["audioBus":"","audioPlugin":"","audioStage":stage,"output":output,"preFader":false]}
+    if let plugin=songNodePlugin[key]{return ["audioBus":"","audioStage":"","audioPlugin":plugin,"output":output,"preFader":false]}
     guard output==0,let bus=songNodeBus[key] else{status.stringValue="Choose a channel output or a plugin audio output for the follower";return nil}
-    return ["audioBus":bus,"audioPlugin":"","output":0,"preFader":false]
+    return ["audioBus":bus,"audioStage":"","audioPlugin":"","output":0,"preFader":false]
   }
   @discardableResult func connectSongControl(_ a:String,_ b:String,out:UInt32,input:UInt32,modulation:Bool)->Bool {
     guard graphID==nil else{return false}

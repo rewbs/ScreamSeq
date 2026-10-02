@@ -51,6 +51,8 @@ extern "C" __attribute__((visibility("default"))) uint64_t ResonanceFixtureSingl
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureLargeCatalog(bool enabled){fixtureLargeCatalog=enabled;}
 static uint64_t fixtureActivationCalls=0;
 extern "C" __attribute__((visibility("default"))) uint64_t ResonanceFixtureActivationCalls(){return fixtureActivationCalls;}
+static bool fixtureInstrumentInputs=false;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureInstrumentInputs(bool enabled){fixtureInstrumentInputs=enabled;}
 static bool fixtureWideBuses=false;
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureWideBuses(bool enabled){fixtureWideBuses=enabled;}
 static bool fixtureEffectDelay=false;
@@ -193,6 +195,7 @@ class Fixture final : public IComponent, public IAudioProcessor, public IEditCon
   std::atomic<uint32> refs{1};
   bool instrument, delayed, programs;
   const bool wideBuses=fixtureWideBuses;
+  const bool instrumentInputs=fixtureInstrumentInputs;
   int audioChannels(int bus)const{return wideBuses?(bus?3:5):(bus%2?1:2);}
   SpeakerArrangement arrangement(int bus)const{return wideBuses?SpeakerArrangement((uint64_t(1)<<audioChannels(bus))-1):(bus%2?SpeakerArr::kMono:SpeakerArr::kStereo);}
   const bool effectAuxiliary=fixtureEffectAuxiliary;
@@ -250,7 +253,7 @@ public:
   tresult PLUGIN_API getControllerClassId(TUID) override { return kResultFalse; }
   tresult PLUGIN_API setIoMode(IoMode) override { return kResultOk; }
   int32 PLUGIN_API getBusCount(MediaType type, BusDirection dir) override {
-    return type == kAudio ? (dir == kOutput ? (instrument ? 32 : (wideBuses||effectAuxiliary) ? 2 : 1) : (instrument ? 0 : 2))
+    return type == kAudio ? (dir == kOutput ? (instrument ? 32 : (wideBuses||effectAuxiliary) ? 2 : 1) : (instrument&&!instrumentInputs ? 0 : 2))
                           : (instrument && dir == kInput ? 1 : 0);
   }
   tresult PLUGIN_API getBusInfo(MediaType type, BusDirection dir, int32 index, BusInfo &b) override {
@@ -329,7 +332,7 @@ public:
         if (bool(bus.channelBuffers32[ch]) != outputsActive[i])
           return kResultFalse;
     }
-    if (!instrument && (d.inputs[1].numChannels != audioChannels(1) || !d.inputs[1].channelBuffers32 ||
+    if ((!instrument||instrumentInputs) && (d.inputs[1].numChannels != audioChannels(1) || !d.inputs[1].channelBuffers32 ||
         bool(d.inputs[1].channelBuffers32[0]) != inputsActive[1])) return kResultFalse;
     if(fixtureObserve&&d.numSamples){fixtureObservedFrames.fetch_add(d.numSamples,std::memory_order_relaxed);if(!d.processContext||std::abs(d.processContext->projectTimeMusic-double(d.processContext->projectTimeSamples)*2/rate)>1e-8)fixtureClockErrors.fetch_add(1,std::memory_order_relaxed);}
     const float beginningGain=gain.load();IParamValueQueue *gainQueue=nullptr;
@@ -387,7 +390,7 @@ public:
         delayPosition = (delayPosition + 1) % delay.size();
       }
       for (int ch = 0; ch < 2; ++ch)
-        d.outputs[0].channelBuffers32[ch][i] = instrument ? value : d.inputs[0].channelBuffers32[ch][i] * g *
+        d.outputs[0].channelBuffers32[ch][i] = instrument ? value+(instrumentInputs?(d.inputs[0].channelBuffers32[ch][i]+d.inputs[1].channelBuffers32[0][i])*g:0) : d.inputs[0].channelBuffers32[ch][i] * g *
           (inputsActive[1] ? 1 + d.inputs[1].channelBuffers32[0][i] : 1);
       if(delayed&&!instrument)for(int ch=0;ch<2;++ch){std::swap(d.outputs[0].channelBuffers32[ch][i],effectDelay[effectDelayPosition]);effectDelayPosition=(effectDelayPosition+1)%effectDelay.size();}
       if (appliedLatency && appliedLatency <= 128) for (int ch = 0; ch < 2; ++ch) {
@@ -396,7 +399,7 @@ public:
       }
       for (int bus = 1; bus < d.numOutputs; ++bus) if (outputsActive[bus])
         for (int ch = 0; ch < d.outputs[bus].numChannels; ++ch)
-          d.outputs[bus].channelBuffers32[ch][i] = (instrument ? value : d.outputs[0].channelBuffers32[ch][i]) * float(bus + 1) * float(ch ? -.5 : 1);
+          d.outputs[bus].channelBuffers32[ch][i] = (instrument&&!instrumentInputs ? value : d.outputs[0].channelBuffers32[ch][i]) * float(bus + 1) * float(ch ? -.5 : 1);
     }
     return kResultOk;
   }

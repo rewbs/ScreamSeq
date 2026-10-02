@@ -208,7 +208,7 @@ std::vector<size_t> MixerGraph::validate(const std::vector<uint64_t> &tracks) co
   for (const auto &side : sidechains) {
     require(indices.count(side.source) && !side.plugin.empty() && text(side.plugin, 128) && side.input < 64 &&
             range(side.gainDB, -96, 12) && sideSources.emplace(side.source, side.plugin, side.input).second, "Invalid or duplicate sidechain route");
-    require(owners.count(side.plugin)||std::none_of(instruments.begin(), instruments.end(), [&](const auto &s) { return s.plugin == side.plugin; }), "Sidechains target effect inserts");
+    if(!owners.count(side.plugin))continue; // Standalone instruments are ordered by the prepared processor DAG.
     const auto source = indices.at(side.source), target = owners.count(side.plugin) ? owners.at(side.plugin) : master;
     require(source!=master,"Master is the final sink and cannot feed another processor input");
     require(source != target, "A sidechain cannot feed an effect on its own source bus");
@@ -232,10 +232,10 @@ std::vector<size_t> MixerGraph::validate(const std::vector<uint64_t> &tracks) co
   return order;
 }
 MixerPlan compileMixer(const MixerGraph &savedGraph, const std::vector<uint64_t> &tracks,
-                       const std::vector<MixerProcessorInfo> &processors, uint32_t rate) {
+                       const std::vector<MixerProcessorInfo> &processors, uint32_t rate,std::span<const MixerTimingConstraint> timing) {
   const auto graph=projectMixerDetachedChains(savedGraph);
   require(rate >= 8000 && rate <= 384000, "Invalid mixer sample rate");
-  MixerPlan plan;
+  MixerPlan plan;plan.timing.assign(timing.begin(),timing.end());
   plan.order = graph.validate(tracks);
   if (!graph.active()) return plan;
   std::map<uint64_t, size_t> indices;
@@ -276,9 +276,11 @@ MixerPlan compileMixer(const MixerGraph &savedGraph, const std::vector<uint64_t>
   for (const auto &side : graph.sidechains) {
     auto found = pluginIndices.find(side.plugin); if (found == pluginIndices.end()) continue;
     const auto processor = found->second; const auto &p = processors[processor];
-    require(!p.instrument, "Sidechains target effect plugins");
+    require(!p.instrument||p.scheduledSource,"Instrument input needs a prepared source stage");
+    require(!p.instrument||(p.activeInputs&(uint64_t(1)<<side.input)),"Instrument input is absent from the prepared physical layout");
     require(!detached.contains(processor),"Insert an unconnected effect before routing audio into it");
     if (!side.enabled || p.bypass || (side.input && !(p.activeInputs & (uint64_t(1) << side.input)))) continue;
+    if(p.scheduledSource){const auto source=indices.at(side.source),index=plan.sidechains.size();plan.sidechains.push_back({source,SIZE_MAX,processor,side.input,0,0,std::pow(10.,side.gainDB/20),side.preFader});plan.nodes[source].sidechains.push_back(index);continue;}
     for (const auto &node : plan.nodes) {
       uint64_t prefix = 0;
       for (auto insert : node.processors) {
@@ -345,7 +347,7 @@ MixerPlan compileMixer(const MixerGraph &savedGraph, const std::vector<uint64_t>
     }
     for(const auto &source:plan.instruments)if(source.owner==i){auto &target=plan.nodes[source.target];target.inputLatency=std::max(target.inputLatency,node.inputLatency+source.prefixLatency);tails[target.bus]=std::max(tails[target.bus],tails[i]);}
     for (auto index : node.sidechains) {
-      const auto &side = plan.sidechains[index]; auto &target = plan.nodes[side.target];
+      const auto &side = plan.sidechains[index]; if(side.target==SIZE_MAX)continue; auto &target = plan.nodes[side.target];
       const uint32_t required = node.outputLatency > side.prefixLatency ? node.outputLatency - side.prefixLatency : 0;
       target.inputLatency = std::max(target.inputLatency, required);
       tails[target.bus] = std::max(tails[target.bus], tails[i]);
@@ -357,7 +359,7 @@ MixerPlan compileMixer(const MixerGraph &savedGraph, const std::vector<uint64_t>
                            std::llround(graph.buses[source.target].timingMS * rate / 1000));
     else source.delay=plan.nodes[source.target].inputLatency-plan.nodes[source.owner].inputLatency-source.prefixLatency;
   }
-  for (auto &side : plan.sidechains)
+  for (auto &side : plan.sidechains)if(side.target!=SIZE_MAX)
     side.delay = plan.nodes[side.target].inputLatency + side.prefixLatency - plan.nodes[side.source].outputLatency;
   std::set<size_t> solo, audible;
   for (size_t i = 0; i < graph.buses.size(); ++i) if (graph.buses[i].solo) solo.insert(i);

@@ -15,6 +15,7 @@ static void tracker_audit_begin(){ScreamSeq::AudioAudit::allocations=0;ScreamSeq
 static void auditEnd(bool ok){ScreamSeq::AudioAudit::active=false;check(ok,"Native VST3 channel-pair processing succeeds");check(!ScreamSeq::AudioAudit::allocations&&!ScreamSeq::AudioAudit::deallocations,"No host C++ allocation/free in native VST3 bus processing");}
 static void tracker_audit_end(uint64_t *a,uint64_t *f,uint64_t *locks){ScreamSeq::AudioAudit::active=false;*a=ScreamSeq::AudioAudit::allocations;*f=ScreamSeq::AudioAudit::deallocations;*locks=0;}
 #include "editor/Tests/HostedCopyMigrationChecks.hpp"
+#include "editor/Tests/HostedStageRoutingChecks.hpp"
 #include "editor/Tests/NativeWideBusChecks.hpp"
 #include "editor/Tests/ProviderLatencyChecks.hpp"
 #include "editor/Tests/LiveLatencyChecks.hpp"
@@ -40,7 +41,8 @@ int main(int argc,char **argv){try{
   PluginState effect{descriptors[0]};effect.instanceID="windows-live-latency";
   liveLatencyChecks(effect,[&](uint32_t frames){int count=0;WindowsVST3::pluginMainCall([&]{count=announce(frames);});return count;},[&]{uint64_t count=0;WindowsVST3::pluginMainCall([&]{count=activations();});return count;});
   WindowsVST3::pluginMainCall([&]{announce(0);});
+  for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u}){hostedStageRouting(descriptors[0],rate,block);hostedStageFollower(descriptors[0],rate,block);}
   for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u})for(bool sample:{false,true})hostedCopyMigration(descriptors[0],rate,block,sample);
   for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,512u,4096u}){hostedRackPreset(descriptors[0],rate,block);hostedRackPreset(descriptors[0],rate,block,true);hostedPresetRamp(descriptors[0],rate,block);}
-  std::cout<<"PASS actual Windows VST3 5/3-channel buses: all pairs, odd mono, inactive capacity, state identity, timed automation; 44.1/48/96 kHz, 17/128/4096 frames, host C++ allocation/free audit; live ordinary/sample graph add, Amount, remove/Undo, rejected publication and render clock; live rack/recipe 0/13/3-sample PDC without vendor activation; live rack preset/restore, subsequent routing and manual fence, ongoing ramp preservation\n";return 0;
+  std::cout<<"PASS actual Windows VST3 5/3-channel buses: all pairs, odd mono, inactive capacity, state identity, timed automation; 44.1/48/96 kHz, 17/128/4096 frames, host C++ allocation/free audit; live ordinary/sample graph add, Amount, remove/Undo, rejected publication and render clock; live rack/recipe 0/13/3-sample PDC without vendor activation; live rack preset/restore, subsequent routing and manual fence, ongoing ramp preservation; typed aggregate stage cables and exact auxiliary-output follower PCM\n";return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

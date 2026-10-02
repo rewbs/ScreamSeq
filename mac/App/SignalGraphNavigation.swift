@@ -34,8 +34,9 @@ extension SignalGraphEditor {
   func rememberGraphView() {
     graphViewStates[graphViewKey]=GraphViewState(origin:scroll.contentView.bounds.origin,scale:scroll.magnification,selection:selectedID,filter:filterID,search:nodeSearch.stringValue,category:nodeCategory.indexOfSelectedItem)
   }
-  func navigate(graph:String?, origin:String?=nil,target:String?=nil) {
+  func navigate(graph:String?, origin:String?=nil,target:String?=nil,observedCopy:GraphObservedCopy?=nil) {
     guard !hasDraft else { status.stringValue="Finish or cancel the current edit before leaving this group";return }
+    if let observedCopy {copyObservation.enter(observedCopy)}
     rememberGraphView();graphID=graph;processingGroupID=nil;graphOrigin=origin;graphTarget=target;selectedID=nil;canvas.selected=nil;canvas.selectedEdge=nil
     nodeSearch.stringValue="";nodeCategory.selectItem(at:0)
     let saved=graphViewStates[graphViewKey]

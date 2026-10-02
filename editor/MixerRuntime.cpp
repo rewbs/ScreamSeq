@@ -62,7 +62,7 @@ MixerRuntime::MixerRuntime(MixerGraph graph, MixerPlan plan, double rate, uint64
   };
   for(const auto &side:plan_.sidechains){sideTargets_.push_back(auxiliaryTarget(side.processor,side.input));sideDelays_.emplace_back(side.delay);}
   for(const auto &route:plan_.pluginConnections){pluginTargets_.push_back(auxiliaryTarget(route.target,route.input));pluginDelays_.emplace_back(route.delay);}
-  if(plan_.segmented){processorStages_.resize(plan_.processors.size());for(const auto &node:plan_.nodes)for(auto processor:node.processors)processorStages_[processor]=std::make_unique<ProcessorStage>(plan_.processors[processor].mainDelay);}
+  if(plan_.segmented){processorStages_.resize(plan_.processors.size());for(const auto &node:plan_.nodes)for(auto processor:node.processors)processorStages_[processor]=std::make_unique<ProcessorStage>(plan_.processors[processor].mainDelay);for(auto processor:plan_.scheduledSources)processorStages_[processor]=std::make_unique<ProcessorStage>(0);}
   meters_ = std::make_unique<std::atomic<float>[]>(nodes_.size() * 2);
   for (size_t i = 0; i < nodes_.size() * 2; ++i) meters_[i].store(0, std::memory_order_relaxed);
 }
@@ -135,7 +135,8 @@ size_t MixerRuntime::storageBytes() const noexcept {
     nodes_.capacity()*sizeof(nodes_[0])+(edges_.capacity()+instruments_.capacity()+sideDelays_.capacity())*sizeof(Delay)+
     auxiliaries_.capacity()*sizeof(Auxiliary)+sideTargets_.capacity()*sizeof(float *)+
     nodes_.size()*2*sizeof(std::atomic<float>)+controlHistory_.capacity()*sizeof(size_t);
-  result+=plan_.processors.capacity()*sizeof(MixerProcessorPlan)+plan_.execution.capacity()*sizeof(MixerExecutionStep)+plan_.pluginConnections.capacity()*sizeof(MixerPluginConnectionPlan);
+  result+=plan_.timing.capacity()*sizeof(MixerTimingConstraint);for(const auto &constraint:plan_.timing)result+=constraint.source.processor.capacity()+constraint.target.processor.capacity();
+  result+=plan_.scheduledSources.capacity()*sizeof(size_t)+plan_.processors.capacity()*sizeof(MixerProcessorPlan)+plan_.execution.capacity()*sizeof(MixerExecutionStep)+plan_.pluginConnections.capacity()*sizeof(MixerPluginConnectionPlan);
   result+=processorStages_.capacity()*sizeof(processorStages_[0])+pluginDelays_.capacity()*sizeof(Delay)+pluginTargets_.capacity()*sizeof(float *);for(const auto &p:processorStages_)if(p)result+=sizeof(ProcessorStage);
   for(const auto &aux:auxiliaries_)result+=aux.inputs.capacity()*sizeof(MixerAudioInput)+
     aux.buffers.capacity()*sizeof(aux.buffers[0])+(aux.buffers.size()+bool(aux.main))*sizeof(auxiliaryScratch_);
@@ -175,7 +176,7 @@ void MixerRuntime::begin(uint32_t frames, uint64_t position) noexcept {
   started_ = true;
   pending();
   for (auto &node : nodes_) { std::fill_n(node->input.data(), frames * 2, 0); node->stage=0; node->processor=0; }
-  processingBus_=SIZE_MAX;for(auto &processor:processorStages_)if(processor)processor->complete=false;
+  processingBus_=SIZE_MAX;for(auto &processor:processorStages_)if(processor){processor->complete=false;processor->prepared=false;}
   for (auto &aux : auxiliaries_) { if(aux.main)std::fill_n(aux.main->data(),frames*2,0); for (auto &buffer : aux.buffers) std::fill_n(buffer->data(), frames * 2, 0); }
 }
 std::span<const MixerAudioInput> MixerRuntime::inputs(size_t processor) const noexcept {
@@ -204,7 +205,7 @@ void MixerRuntime::instrument(size_t processor, uint32_t output, const float *bu
   for (size_t i = 0; i < plan_.instruments.size(); ++i) {
     const auto &source = plan_.instruments[i];
     if (source.processor == processor && source.output == output) {
-      if(source.owner==SIZE_MAX){if(next_){failed_=true;return;}if(!addRoute(instruments_[i],buffer,nodes_[source.target]->input.data(),1,RouteKind::Instrument,i))failed_=true;}
+      if(source.owner==SIZE_MAX){if(nodes_[source.target]->stage){failed_=true;return;}if(!addRoute(instruments_[i],buffer,nodes_[source.target]->input.data(),1,RouteKind::Instrument,i))failed_=true;}
       else {
         if(processingBus_!=source.owner){failed_=true;return;}
         const auto &owner=*nodes_[source.owner];
@@ -237,20 +238,21 @@ bool MixerRuntime::beginBus(size_t bus,const float *directLeft,const float *dire
   return true;
 }
 float *MixerRuntime::processorInput(size_t bus,size_t processor) noexcept {
-  if(!frames_ || bus>=nodes_.size()){failed_=true;return nullptr;}
-  auto &node=*nodes_[bus];const auto &plan=plan_.nodes[bus];
+  if(!frames_ || (bus>=nodes_.size()&&bus!=SIZE_MAX)){failed_=true;return nullptr;}
   if(plan_.segmented){
     if(processor>=processorStages_.size()||!processorStages_[processor]||processorStages_[processor]->complete||plan_.processors[processor].owner!=bus){failed_=true;return nullptr;}
-    auto &stage=*processorStages_[processor];const auto &prepared=plan_.processors[processor];processingBus_=bus;
+    auto &stage=*processorStages_[processor];const auto &prepared=plan_.processors[processor];processingBus_=bus;if(stage.prepared)return stage.work.data();stage.prepared=true;
     std::fill_n(stage.work.data(),frames_*2,0.f);
     const bool disconnected=std::find(plan_.disconnectedMainInputs.begin(),plan_.disconnectedMainInputs.end(),processor)!=plan_.disconnectedMainInputs.end();
-    if(!disconnected){const float *input=node.work.data();if(prepared.previous!=SIZE_MAX){if(!processorStages_[prepared.previous]->complete){failed_=true;return nullptr;}input=processorStages_[prepared.previous]->work.data();}else if(node.stage!=1){failed_=true;return nullptr;}
+    if(!disconnected&&bus!=SIZE_MAX){const auto &node=*nodes_[bus];const float *input=node.work.data();if(prepared.previous!=SIZE_MAX){if(!processorStages_[prepared.previous]->complete){failed_=true;return nullptr;}input=processorStages_[prepared.previous]->work.data();}else if(node.stage!=1){failed_=true;return nullptr;}
       if(!stage.main.add(input,stage.work.data(),frames_,position_)){failed_=true;return nullptr;}
       if(routeTransform_)routeTransform_(routeTransformContext_,RouteKind::Insert,processor,stage.work.data(),frames_,position_);
       if(routeObserver_)routeObserver_(routeObserverContext_,RouteKind::Insert,processor,stage.work.data(),frames_,position_);
     }
     for(const auto &aux:auxiliaries_)if(aux.processor==processor&&aux.main)for(uint32_t i=0;i<frames_*2;++i)stage.work[i]+=(*aux.main)[i];return stage.work.data();
   }
+  if(bus==SIZE_MAX){failed_=true;return nullptr;}
+  auto &node=*nodes_[bus];const auto &plan=plan_.nodes[bus];
   if(node.stage!=1 || node.processor>=plan.processors.size() || plan.processors[node.processor]!=processor){failed_=true;return nullptr;}
   processingBus_=bus;node.stage=2;
   const bool disconnected=std::find(plan_.disconnectedMainInputs.begin(),plan_.disconnectedMainInputs.end(),processor)!=plan_.disconnectedMainInputs.end();
@@ -262,7 +264,7 @@ float *MixerRuntime::processorInput(size_t bus,size_t processor) noexcept {
   return node.work.data();
 }
 bool MixerRuntime::finishProcessor(size_t bus,size_t processor) noexcept {
-  if(plan_.segmented){if(bus>=nodes_.size()||processor>=processorStages_.size()||!processorStages_[processor]||processorStages_[processor]->complete||processingBus_!=bus){failed_=true;return false;}auto &stage=*processorStages_[processor];instrument(processor,0,stage.work.data());stage.complete=true;++nodes_[bus]->processor;return !failed_;}
+  if(plan_.segmented){if((bus>=nodes_.size()&&bus!=SIZE_MAX)||processor>=processorStages_.size()||!processorStages_[processor]||processorStages_[processor]->complete||processingBus_!=bus){failed_=true;return false;}auto &stage=*processorStages_[processor];instrument(processor,0,stage.work.data());stage.complete=true;if(bus!=SIZE_MAX)++nodes_[bus]->processor;return !failed_;}
   if(bus>=nodes_.size() || nodes_[bus]->stage!=2 || processingBus_!=bus){failed_=true;return false;}
   auto &node=*nodes_[bus];instrument(processor,0,node.work.data());++node.processor;node.stage=1;
   return !failed_;

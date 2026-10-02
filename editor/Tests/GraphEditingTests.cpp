@@ -112,5 +112,27 @@ int main(){try{
   auto head=cableSong;head.mixer.detachedChains={{head.makeEntity().id,{"D","E","F"}}};head.mixer.disconnectedMainInputs={"E","F"};head.removePluginRoutes("D");CHECK(head.mixer.disconnectedMainInputs==std::vector<std::string>{"F"});
   auto removedTrack=doc.native();removedTrack.ensureMixer();const auto removedID=removedTrack.makeEntity().id;removedTrack.mixer.buses.push_back({removedID,removedTrack.masterID,MixerBusKind::Track,"Removed"});removedTrack.mixer.buses.back().inserts={"track-fx","after"};removedTrack.mixer.disconnectedMainInputs={"after"};removedTrack.reconcile(doc.song());
   CHECK(removedTrack.mixer.detachedChains.size()==1&&removedTrack.mixer.detachedChains[0].plugins==std::vector<std::string>({"track-fx","after"})&&removedTrack.mixer.disconnectedMainInputs==std::vector<std::string>{"after"});removedTrack.validate(doc.song());
+  // Aggregate auxiliary followers preserve a typed stage identity through
+  // validation, an exact mixed cut, Undo/Redo and source-bus reconciliation.
+  {
+    Document stageDoc(MOD_TYPE_MPT,4);auto stageSong=stageDoc.native();
+    const auto stage=stageSong.tracks[0].id;
+    SignalDefinition aux;aux.id=stageSong.makeEntity().id;aux.number=1;aux.name="Auxiliary";
+    SignalNode entry,exit;entry.id=stageSong.makeEntity().id;entry.kind=SignalNodeKind::Input;exit.id=stageSong.makeEntity().id;exit.kind=SignalNodeKind::Output;
+    aux.nodes={entry,exit};aux.audio={{entry.id,exit.id,1,2,1}};
+    stageSong.signal.library={aux};stageSong.signal.assignments={{stage,aux.id,1,1}};
+    SignalSongSource follower;follower.node.id=stageSong.makeEntity().id;follower.node.kind=SignalNodeKind::Follower;follower.node.name="Combined output follower";follower.audioStage=stage;follower.output=2;follower.amount=.6;
+    stageSong.signal.songSources={follower};stageSong.validate(stageDoc.song());
+    for(unsigned bad=0;bad<5;++bad){auto invalidStage=stageSong;auto &f=invalidStage.signal.songSources[0];if(bad==0)f.output=0;if(bad==1)f.output=3;if(bad==2)f.audioBus=stage;if(bad==3)f.audioPlugin="rack";if(bad==4)f.preFader=true;rejects([&]{invalidStage.validate(stageDoc.song());});}
+    SongConnectionRef tap{SongConnectionKind::FollowerInput};tap.target=follower.node.id;tap.stage=stage;tap.port=2;
+    const auto beforeFollower=stageSong;auto stale=tap;stale.port=3;
+    rejects([&]{removeSongConnections(stageSong,{tap,stale});});CHECK(stageSong==beforeFollower);
+    removeSongConnections(stageSong,{tap});
+    CHECK(stageSong.signal.songSources.size()==1&&stageSong.signal.songSources[0].audioStage==0&&stageSong.signal.songSources[0].output==0&&stageSong.signal.songSources[0].amount==.6);
+    CHECK(stageSong.signal.library==beforeFollower.signal.library&&stageSong.signal.assignments==beforeFollower.signal.assignments);
+    stageDoc.annotate([&](NativeSong &n){n=beforeFollower;});stageDoc.annotate([&](NativeSong &n){n=stageSong;});stageDoc.undo();CHECK(stageDoc.native()==beforeFollower);stageDoc.redo();CHECK(stageDoc.native()==stageSong);
+    auto removed=beforeFollower;const auto deleted=removed.makeEntity().id;removed.ensureMixer();removed.mixer.buses.push_back({deleted,removed.masterID,MixerBusKind::Track,"Removed"});removed.signal.assignments={{deleted,aux.id,1,1}};removed.signal.songSources[0].audioStage=deleted;removed.reconcile(stageDoc.song());
+    CHECK(removed.signal.songSources[0].audioStage==0&&removed.signal.songSources[0].output==0);removed.validate(stageDoc.song());
+  }
   std::cout<<"PASS atomic graph edits, independent uses, mixed note/audio cuts and stable event cable geometry\n";
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

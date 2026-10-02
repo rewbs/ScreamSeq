@@ -50,11 +50,11 @@ std::unique_ptr<MixerTransition::InputMorph> MixerTransition::prepareMorph(const
   std::vector<Step> nodes;
   std::vector<std::set<size_t>> edges;
   std::map<std::string,size_t> processors;
-  std::array<std::vector<size_t>,2> starts,ends,processorSteps;
+  std::array<std::vector<size_t>,2> starts,ends,processorSteps,inputSteps;
   auto add=[&](Step step){const auto id=nodes.size();nodes.push_back(step);edges.emplace_back();return id;};
   for(unsigned side=0;side<(single?1u:2u);++side){
     const auto &p=side?after:before;const auto &plan=p.runtime->plan();
-    processorSteps[side].assign(p.catalog.size(),SIZE_MAX);
+    processorSteps[side].assign(p.catalog.size(),SIZE_MAX);inputSteps[side].assign(p.catalog.size(),SIZE_MAX);
     for(size_t bus=0;bus<plan.nodes.size();++bus){
       const auto input=add({0,side?Location{}:Location{bus},side?Location{bus}:Location{}});
       starts[side].push_back(input);size_t previous=input;
@@ -64,26 +64,29 @@ std::unique_ptr<MixerTransition::InputMorph> MixerTransition::prepareMorph(const
         else step=found->second;
         auto &location=side?nodes[step].after:nodes[step].before;
         require(location.processor==SIZE_MAX,"A morph processor has multiple owners");location={bus,processor};
-        processorSteps[side][processor]=step;
-        if(!plan.segmented||std::find(plan.disconnectedMainInputs.begin(),plan.disconnectedMainInputs.end(),processor)==plan.disconnectedMainInputs.end())edges[previous].insert(step);
+        processorSteps[side][processor]=step;const auto inputStep=plan.segmented?add({3,side?Location{}:Location{bus,processor},side?Location{bus,processor}:Location{}}):step;inputSteps[side][processor]=inputStep;if(inputStep!=step)edges[inputStep].insert(step);
+        if(!plan.segmented||std::find(plan.disconnectedMainInputs.begin(),plan.disconnectedMainInputs.end(),processor)==plan.disconnectedMainInputs.end())edges[previous].insert(inputStep);
         previous=step;
       }
       const auto output=add({2,side?Location{}:Location{bus},side?Location{bus}:Location{}});
       ends[side].push_back(output);edges[previous].insert(output);
       if(plan.segmented){edges[input].insert(output);for(auto processor:plan.nodes[bus].processors)edges[processorSteps[side][processor]].insert(output);}
     }
-    for(auto processor:plan.detached){
+    auto standalone=plan.detached;standalone.insert(standalone.end(),plan.scheduledSources.begin(),plan.scheduledSources.end());
+    for(auto processor:standalone){
       const auto &info=p.catalog[processor];auto found=processors.find(info.instance);size_t step;
       if(found==processors.end()){step=add({1});processors.emplace(info.instance,step);}else step=found->second;
       auto &location=side?nodes[step].after:nodes[step].before;
       require(location.processor==SIZE_MAX,"A morph processor has multiple owners");
-      location={SIZE_MAX,processor};processorSteps[side][processor]=step;
+      location={SIZE_MAX,processor};processorSteps[side][processor]=step;const auto input= p.catalog[processor].scheduledSource?add({3,side?Location{}:Location{SIZE_MAX,processor},side?Location{SIZE_MAX,processor}:Location{}}):step;inputSteps[side][processor]=input;if(input!=step)edges[input].insert(step);
     }
     for(const auto &edge:plan.connections)edges[ends[side][edge.source]].insert(starts[side][edge.target]);
-    for(const auto &edge:plan.sidechains)edges[ends[side][edge.source]].insert(processorSteps[side][edge.processor]);
-    for(const auto &edge:plan.instruments)if(edge.owner!=SIZE_MAX)
+    for(const auto &edge:plan.sidechains)edges[ends[side][edge.source]].insert(inputSteps[side][edge.processor]);
+    for(const auto &edge:plan.instruments)if(edge.owner!=SIZE_MAX||p.catalog[edge.processor].scheduledSource)
       edges[processorSteps[side][edge.processor]].insert(starts[side][edge.target]);
-    for(const auto &edge:plan.pluginConnections)if(!p.catalog[edge.source].instrument)edges[processorSteps[side][edge.source]].insert(processorSteps[side][edge.target]);
+    for(const auto &edge:plan.pluginConnections)if(!p.catalog[edge.source].instrument||p.catalog[edge.source].scheduledSource)edges[processorSteps[side][edge.source]].insert(inputSteps[side][edge.target]);
+    auto timingPoint=[&](const MixerTimingPoint &point){if(!point.processor.empty()){const auto found=std::find_if(p.catalog.begin(),p.catalog.end(),[&](const auto &c){return c.instance==point.processor;});return found==p.catalog.end()?SIZE_MAX:(point.input?inputSteps[side]:processorSteps[side])[size_t(found-p.catalog.begin())];}const auto &buses=p.runtime->graph().buses;const auto bus=std::find_if(buses.begin(),buses.end(),[&](const auto &b){return b.id==point.bus;});return bus==buses.end()?SIZE_MAX:(point.input?starts[side]:ends[side])[size_t(bus-buses.begin())];};
+    for(const auto &timing:plan.timing){const auto from=timingPoint(timing.source),to=timingPoint(timing.target);if(from!=SIZE_MAX&&to!=SIZE_MAX&&from!=to)edges[from].insert(to);}
     for(const auto &edge:p.dependencies){
       const size_t target=edge.targetBus!=SIZE_MAX?(edge.targetBus<ends[side].size()?ends[side][edge.targetBus]:SIZE_MAX):(edge.target<processorSteps[side].size()?processorSteps[side][edge.target]:SIZE_MAX);
       require(target!=SIZE_MAX,"Group/modulation target is not a scheduled audio endpoint");
@@ -97,8 +100,8 @@ std::unique_ptr<MixerTransition::InputMorph> MixerTransition::prepareMorph(const
     }
   }
   auto prefix=[](const Plan &p,Location location){
-    if(location.bus==SIZE_MAX)return uint64_t(0);
     if(p.runtime->plan().segmented)return uint64_t(p.runtime->plan().processors[location.processor].inputLatency);
+    if(location.bus==SIZE_MAX)return uint64_t(0);
     uint64_t frames=p.runtime->plan().nodes[location.bus].inputLatency;
     for(auto processor:p.runtime->plan().nodes[location.bus].processors){if(processor==location.processor)return frames;frames+=p.catalog[processor].latency;}
     return UINT64_MAX;
@@ -128,9 +131,9 @@ void MixerTransition::prepareDependencies(Plan &plan) {
   if(plan.requiresAudioHandoff||plan.bridge)prepareBridge(plan);
   else if(plan.morph)try {plan.morph=prepareMorph(*stable_,plan);}catch(const std::invalid_argument &){prepareBridge(plan);}
 }
-std::unique_ptr<MixerTransition::Plan> MixerTransition::prepareRetained(MixerGraph graph,std::vector<MixerProcessorInfo> catalog) {
-  auto result=prepare(std::move(graph),std::move(catalog),{},true);
-  if(result->runtime->plan().latency!=stable_->runtime->plan().latency||result->runtime->plan().segmented||stable_->runtime->plan().segmented)prepareBridge(*result);
+std::unique_ptr<MixerTransition::Plan> MixerTransition::prepareRetained(MixerGraph graph,std::vector<MixerProcessorInfo> catalog,std::span<const MixerTimingConstraint> timing) {
+  auto result=prepare(std::move(graph),std::move(catalog),{},true,timing);
+  if(result->runtime->plan().latency!=stable_->runtime->plan().latency||!result->runtime->plan().pluginConnections.empty()||!stable_->runtime->plan().pluginConnections.empty())prepareBridge(*result);
   else try {result->morph=prepareMorph(*stable_,*result);}catch(const std::invalid_argument &){prepareBridge(*result);}
   require(storage(*result)<=storageLimit_-storage(*stable_),"Combined routing morph exceeds the audio storage budget");
   return result;
@@ -159,11 +162,11 @@ void MixerTransition::settle() noexcept {
   }
 }
 std::unique_ptr<MixerTransition::Plan> MixerTransition::prepare(MixerGraph graph,
-    std::vector<MixerProcessorInfo> catalog,const std::vector<std::string> &reset,bool allowHandoff) {
+    std::vector<MixerProcessorInfo> catalog,const std::vector<std::string> &reset,bool allowHandoff,std::span<const MixerTimingConstraint> timing) {
   require(ready(),"A routing transition is still preparing");
   for(const auto &[slot,source]:instrumentSources_)
     require(std::find(reset.begin(),reset.end(),source.instance)==reset.end(),"A source reset requires a prepared adapter handoff");
-  auto compiled=compileMixer(graph,tracks_,catalog,rate_);
+  auto compiled=compileMixer(graph,tracks_,catalog,rate_,timing);
   require(allowHandoff||compiled.latency==stable_->runtime->plan().latency,"A latency change requires a latency-aligned host transition");
   auto result=std::make_unique<Plan>();result->owner=owner_;result->sourceRevision=plans_.renderedRevision();
   result->reuse=mixerTransitionReuse(stable_->runtime->graph(),stable_->runtime->plan(),stable_->catalog,
@@ -221,15 +224,15 @@ bool MixerTransition::controls(const std::vector<MixerControls> &values) noexcep
   for(size_t n=1;n<count;++n)if(!targets[n]->controls(values))return false;
   return true;
 }
-void MixerTransition::refreshStopped(std::vector<MixerProcessorInfo> catalog) {
+MixerTransition::Plan &MixerTransition::refreshStopped(std::vector<MixerProcessorInfo> catalog) {
   require(commitStopped(),"Cannot refresh latency while a routing publication is pending");
   require(catalog.size()==stable_->catalog.size(),"Latency refresh cannot change processor identity");
   for(size_t i=0;i<catalog.size();++i)require(catalog[i].instance==stable_->catalog[i].instance,"Latency refresh cannot reorder processors");
-  auto plan=compileMixer(stable_->runtime->graph(),tracks_,catalog,rate_);
+  auto plan=compileMixer(stable_->runtime->graph(),tracks_,catalog,rate_,stable_->runtime->plan().timing);
   stable_->runtime->updateLatencyPlan(std::move(plan));stable_->catalog=std::move(catalog);
   for(auto &[slot,info]:instrumentSources_)for(const auto &current:stable_->catalog)if(current.instance==info.instance){info=current;break;}
-  stable_->execution=stable_->dependencies.empty()&&stable_->runtime->plan().detached.empty()?nullptr:prepareMorph(*stable_,*stable_,true);
-  require(withinBudget(),"Updated mixer latency exceeds the combined audio storage budget");
+  stable_->execution=stable_->dependencies.empty()&&stable_->runtime->plan().detached.empty()&&!stable_->runtime->plan().segmented?nullptr:prepareMorph(*stable_,*stable_,true);
+  require(withinBudget(),"Updated mixer latency exceeds the combined audio storage budget");return *stable_;
 }
 bool MixerTransition::commitStopped() noexcept {
   if(open_)return false;
@@ -320,14 +323,15 @@ void MixerTransition::instrument(std::string_view identity,uint32_t port,const f
 const float *MixerTransition::evaluate(Plan &plan,std::span<const DirectInput> sources) noexcept {
   if(plan.execution){
     for(const auto &step:plan.execution->steps){const auto location=step.before;
-      if(step.kind==0){const auto index=plan.directSources[location.bus];const auto input=index<sources.size()?sources[index]:DirectInput{};if(!plan.runtime->beginBus(location.bus,input.left,input.right))return nullptr;}
+      if(step.kind==3){if(!plan.runtime->processorInput(location.bus,location.processor))return nullptr;}
+      else if(step.kind==0){const auto index=plan.directSources[location.bus];const auto input=index<sources.size()?sources[index]:DirectInput{};if(!plan.runtime->beginBus(location.bus,input.left,input.right))return nullptr;}
       else if(step.kind==2){if(!plan.runtime->finishBus(location.bus))return nullptr;}
       else {
         float *buffer;
-        if(location.bus==SIZE_MAX){buffer=plan.execution->silentBefore.data();std::fill_n(buffer,frames_*2,0.f);}
+        if(location.bus==SIZE_MAX&&!plan.catalog[location.processor].scheduledSource){buffer=plan.execution->silentBefore.data();std::fill_n(buffer,frames_*2,0.f);}
         else buffer=plan.runtime->processorInput(location.bus,location.processor);
         if(!buffer || !plan.process(plan.processors.get(),*plan.runtime,location.processor,buffer,frames_,position_) ||
-           (location.bus!=SIZE_MAX && !plan.runtime->finishProcessor(location.bus,location.processor)))return nullptr;
+           ((location.bus!=SIZE_MAX||plan.catalog[location.processor].scheduledSource) && !plan.runtime->finishProcessor(location.bus,location.processor)))return nullptr;
       }
     }
     plan.runtime->complete();return plan.runtime->failed()?nullptr:plan.runtime->masterOutput();
@@ -354,6 +358,7 @@ bool MixerTransition::evaluateMorph(Plan &before,Plan &after,std::span<const Dir
   };
   for(const auto &step:morph.steps){
     const auto a=step.before,b=step.after;
+    if(step.kind==3){auto &p=a.processor!=SIZE_MAX?before:after;const auto location=a.processor!=SIZE_MAX?a:b;if(!p.runtime->processorInput(location.bus,location.processor))return false;continue;}
     if(step.kind!=1){
       auto &p=a.bus!=SIZE_MAX?before:after;const auto bus=a.bus!=SIZE_MAX?a.bus:b.bus;
       if(step.kind==0){const auto input=source(p,bus);if(!p.runtime->beginBus(bus,input.left,input.right))return false;}
@@ -362,7 +367,7 @@ bool MixerTransition::evaluateMorph(Plan &before,Plan &after,std::span<const Dir
     }
     auto input=[&](Plan &p,InputMorph::Location location,auto &silence)->float * {
       if(location.processor==SIZE_MAX)return nullptr;
-      if(location.bus!=SIZE_MAX)return p.runtime->processorInput(location.bus,location.processor);
+      if(location.bus!=SIZE_MAX||p.catalog[location.processor].scheduledSource)return p.runtime->processorInput(location.bus,location.processor);
       std::fill_n(silence.data(),frames_*2,0.f);return silence.data();
     };
     auto *old=input(before,a,morph.silentBefore),*next=input(after,b,morph.silentAfter);
@@ -411,8 +416,8 @@ bool MixerTransition::evaluateMorph(Plan &before,Plan &after,std::span<const Dir
         candidateFailed=true;std::fill_n(buffer,frames_*2,0.f);
       }
     }
-    if(old && a.bus!=SIZE_MAX && !before.runtime->finishProcessor(a.bus,a.processor))return false;
-    if(next && b.bus!=SIZE_MAX && !after.runtime->finishProcessor(b.bus,b.processor))return false;
+    if(old && (a.bus!=SIZE_MAX||before.catalog[a.processor].scheduledSource) && !before.runtime->finishProcessor(a.bus,a.processor))return false;
+    if(next && (b.bus!=SIZE_MAX||after.catalog[b.processor].scheduledSource) && !after.runtime->finishProcessor(b.bus,b.processor))return false;
   }
   before.runtime->complete();after.runtime->complete();
   candidateFailed|=after.runtime->failed();return !before.runtime->failed();

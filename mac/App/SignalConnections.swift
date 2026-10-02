@@ -107,6 +107,7 @@ extension SignalGraphEditor {
     if kind=="modulation",let m=songModulation.first(where:{$0["source"] as? String==action["source"] as? String && $0["plugin"] as? String==action["plugin"] as? String && ($0["parameter"] as? NSNumber)?.uint32Value==(action["parameter"] as? NSNumber)?.uint32Value}) {
       connectionKind.selectItem(withTitle:"Modulation");parameter.stringValue=String((m["parameter"] as? NSNumber)?.uint32Value ?? 0);minimum.doubleValue=m["minimum"] as? Double ?? 0;maximum.doubleValue=m["maximum"] as? Double ?? 0;connectionEnabled.state=m["enabled"] as? Bool==false ? .off:.on;connectionQuantized.state=m["quantized"] as? Bool==true ? .on:.off;return
     }
+    if kind=="stage-connection",let i=action["index"] as? Int,stageConnections.indices.contains(i){connectionKind.selectItem(withTitle:"Stage audio");connectionGain.doubleValue=stageConnections[i]["gainDB"] as? Double ?? 0;connectionEnabled.state=stageConnections[i]["enabled"] as? Bool==false ? .off:.on;return}
     if kind=="plugin-connection",let i=action["index"] as? Int,let all=mixer["pluginConnections"] as? [[String:Any]],all.indices.contains(i){connectionKind.selectItem(withTitle:"Direct plugin audio");connectionGain.doubleValue=all[i]["gainDB"] as? Double ?? 0;connectionEnabled.state=all[i]["enabled"] as? Bool==false ? .off:.on;return}
     if kind=="follower-input"{connectionKind.selectItem(withTitle:"Follower input");return}
     connectionKind.selectItem(withTitle:["output":"Main output","send":"Send","graph-input":"Graph sidechain","graph-output":"Graph auxiliary","plugin-input":"Plugin sidechain","plugin-output":"Plugin auxiliary"][kind] ?? "Main output")
@@ -132,6 +133,10 @@ extension SignalGraphEditor {
       guard let i=action["index"] as? Int,case let port=input,let gain=Double(connectionGain.stringValue),gain.isFinite else{return};var list=data["inputs"] as? [[String:Any]] ?? [];guard list.indices.contains(i)else{return};list[i].merge(["source":from,"target":to,"input":port,"gainDB":gain]){_,new in new};mutate("graph.routes.set",["inputs":list])
     case "graph-output":
       guard let i=action["index"] as? Int,case let port=output else{return};var list=data["outputs"] as? [[String:Any]] ?? [];guard list.indices.contains(i)else{return};list[i]=["source":from,"target":to,"output":port];mutate("graph.routes.set",["outputs":list])
+    case "stage-connection":
+      guard let i=action["index"] as? Int,let gain=Double(connectionGain.stringValue),gain.isFinite,stageConnections.indices.contains(i)else{return}
+      var old=[String:Any]();for key in ["source","output","target","input"]{old[key]=stageConnections[i][key]}
+      connectStage(a,b,output:UInt32(output),input:UInt32(input),gain:gain,enabled:connectionEnabled.state == .on,replacing:old)
     case "plugin-connection":
       guard let i=action["index"] as? Int,let gain=Double(connectionGain.stringValue),gain.isFinite,let all=mixer["pluginConnections"] as? [[String:Any]],all.indices.contains(i) else{return}
       var old=[String:Any]();for key in ["source","output","target","input"]{old[key]=all[i][key]}
@@ -149,7 +154,7 @@ extension SignalGraphEditor {
 extension SignalGraphEditor {
   var selectedConnectionIsEditable:Bool {
     guard let i=canvas.selectedEdge,canvas.edges.indices.contains(i) else{return false}
-    return graphID != nil || (songConnections.indices.contains(i) && ["output","send","graph-input","graph-output","plugin-input","plugin-output","plugin-connection","modulation","follower-input","note"].contains(songConnections[i]["kind"] as? String ?? ""))
+    return graphID != nil || (songConnections.indices.contains(i) && ["output","send","graph-input","graph-output","plugin-input","plugin-output","plugin-connection","stage-connection","modulation","follower-input","note"].contains(songConnections[i]["kind"] as? String ?? ""))
   }
   func configureConnectionInspector() {
     guard connectionSection != nil else{return}

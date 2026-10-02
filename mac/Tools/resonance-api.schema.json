@@ -15,6 +15,330 @@
           "maxLength": 80
         },
         "method": {
+          "const": "graph.audio.connection.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "plugin": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [
+                    "plugin"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "stage": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$"
+                    }
+                  },
+                  "required": [
+                    "stage"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "output": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "plugin": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [
+                    "plugin"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "stage": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$"
+                    }
+                  },
+                  "required": [
+                    "stage"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "input": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "gainDB": {
+              "type": "number",
+              "minimum": -96,
+              "maximum": 12
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "replace": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "plugin": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        }
+                      },
+                      "required": [
+                        "plugin"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "stage": {
+                          "type": "string",
+                          "pattern": "^n[1-9][0-9]*$"
+                        }
+                      },
+                      "required": [
+                        "stage"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "output": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                },
+                "target": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "plugin": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        }
+                      },
+                      "required": [
+                        "plugin"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "stage": {
+                          "type": "string",
+                          "pattern": "^n[1-9][0-9]*$"
+                        }
+                      },
+                      "required": [
+                        "stage"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "input": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                }
+              },
+              "required": [
+                "source",
+                "output",
+                "target",
+                "input"
+              ],
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "properties": {
+                    "source": {
+                      "required": [
+                        "stage"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "properties": {
+                    "target": {
+                      "required": [
+                        "stage"
+                      ]
+                    }
+                  }
+                }
+              ],
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "source": {
+                        "required": [
+                          "stage"
+                        ]
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "output": {
+                        "minimum": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "target": {
+                        "required": [
+                          "stage"
+                        ]
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "input": {
+                        "minimum": 1
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "source",
+            "output",
+            "target",
+            "input",
+            "expectedRevision"
+          ],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "properties": {
+                "source": {
+                  "required": [
+                    "stage"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "target": {
+                  "required": [
+                    "stage"
+                  ]
+                }
+              }
+            }
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "source": {
+                    "required": [
+                      "stage"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "output": {
+                    "minimum": 1
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "required": [
+                      "stage"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "input": {
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Atomic typed rack\u2194outer graph-stage auxiliary contribution. A stage is the combined row/persistent/ordinary bus stage, not one selected copy. Its auxiliary inputs feed every prepared copy; outputs sum audible wet/tail contributions. Input/output zero belongs to the main serial path and cannot address a stage. Omitted gain/enabled preserve the replaced connection."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
           "const": "graph.note.activity"
         },
         "params": {
@@ -495,7 +819,7 @@
       "description": "Load a validated portable plugin preset into a shared recipe in one Undo. Preserve audio ports, routing, bypass and modulation ranges; update all target manual modulation baselines from the loaded preset. All uses update together through prepared publication."
     },
     {
-      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument’s implicit cable.",
+      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument\u2019s implicit cable.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -707,7 +1031,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Restore an instrument’s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
+      "description": "Restore an instrument\u2019s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -1153,7 +1477,7 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 65535,
-              "description": "Final order position for move, preserving the entry’s section metadata."
+              "description": "Final order position for move, preserving the entry\u2019s section metadata."
             }
           },
           "required": [
@@ -8807,7 +9131,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1–63 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
+      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1\u201363 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -12869,7 +13193,7 @@
       "x-application-only": true
     },
     {
-      "description": "Atomically append 1–128 sample files, optionally creating instruments; one document Undo. Every file is decoded before commit.",
+      "description": "Atomically append 1\u2013128 sample files, optionally creating instruments; one document Undo. Every file is decoded before commit.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -13943,7 +14267,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Allocate a node. Effects require exactly one rack slot or independent plugin recipe. Optional insertAfter splices an effect into the node’s single main audio connection atomically."
+      "description": "Allocate a node. Effects require exactly one rack slot or independent plugin recipe. Optional insertAfter splices an effect into the node\u2019s single main audio connection atomically."
     },
     {
       "type": "object",
@@ -18087,7 +18411,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Upsert, move or remove a recorded point by stable plugin identity. Stops playback, preserves other points and supports plugin Undo; dryRun is non-mutating.",
+      "description": "Upsert, move or remove a recorded point by stable plugin identity. Prepared live edits preserve playback and other points, with unified Undo; dryRun is non-mutating.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -19280,6 +19604,11 @@
                       },
                       "preFader": {
                         "type": "boolean"
+                      },
+                      "stage": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
                       }
                     },
                     "required": [
@@ -19292,8 +19621,17 @@
                           "source"
                         ],
                         "not": {
-                          "required": [
-                            "plugin"
+                          "anyOf": [
+                            {
+                              "required": [
+                                "plugin"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "stage"
+                              ]
+                            }
                           ]
                         }
                       },
@@ -19302,13 +19640,63 @@
                           "plugin"
                         ],
                         "not": {
-                          "required": [
-                            "source"
+                          "anyOf": [
+                            {
+                              "required": [
+                                "source"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "stage"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "required": [
+                          "stage"
+                        ],
+                        "not": {
+                          "anyOf": [
+                            {
+                              "required": [
+                                "source"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "plugin"
+                              ]
+                            }
                           ]
                         }
                       }
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "allOf": [
+                      {
+                        "if": {
+                          "required": [
+                            "stage"
+                          ]
+                        },
+                        "then": {
+                          "required": [
+                            "output"
+                          ],
+                          "properties": {
+                            "output": {
+                              "minimum": 1
+                            },
+                            "preFader": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   {
                     "type": "object",
@@ -19423,6 +19811,152 @@
                       "input"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "plugin": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              }
+                            },
+                            "required": [
+                              "plugin"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "stage": {
+                                "type": "string",
+                                "pattern": "^n[1-9][0-9]*$"
+                              }
+                            },
+                            "required": [
+                              "stage"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "output": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      },
+                      "target": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "plugin": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              }
+                            },
+                            "required": [
+                              "plugin"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "stage": {
+                                "type": "string",
+                                "pattern": "^n[1-9][0-9]*$"
+                              }
+                            },
+                            "required": [
+                              "stage"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "input": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      },
+                      "kind": {
+                        "const": "stage-connection"
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "output",
+                      "target",
+                      "input",
+                      "kind"
+                    ],
+                    "additionalProperties": false,
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "source": {
+                            "required": [
+                              "stage"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "properties": {
+                          "target": {
+                            "required": [
+                              "stage"
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "allOf": [
+                      {
+                        "if": {
+                          "properties": {
+                            "source": {
+                              "required": [
+                                "stage"
+                              ]
+                            }
+                          }
+                        },
+                        "then": {
+                          "properties": {
+                            "output": {
+                              "minimum": 1
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "if": {
+                          "properties": {
+                            "target": {
+                              "required": [
+                                "stage"
+                              ]
+                            }
+                          }
+                        },
+                        "then": {
+                          "properties": {
+                            "input": {
+                              "minimum": 1
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 ]
               }
@@ -19661,6 +20195,19 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1
+                },
+                "audioStage": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    {
+                      "const": ""
+                    }
+                  ],
+                  "description": "Typed channel graph-stage auxiliary tap; exclusive with audioBus/audioPlugin. Use a declared output >=1 and preFader=false."
                 }
               },
               "required": [
@@ -19834,6 +20381,19 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1
+                },
+                "audioStage": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    {
+                      "const": ""
+                    }
+                  ],
+                  "description": "Typed channel graph-stage auxiliary tap; exclusive with audioBus/audioPlugin. Use a declared output >=1 and preFader=false."
                 }
               },
               "required": [],
@@ -20546,7 +21106,7 @@
       "description": "Bypass a real processing boundary while its contents keep running. A unique input/output dry path is inferred; ambiguous boundaries require an explicit dryRoutes map covering each outgoing boundary. graph:null selects a song group. One Undo; no per-member bypass substitution."
     },
     {
-      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1–63 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
+      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1\u201363 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
       "type": "object",
       "properties": {
         "jsonrpc": {

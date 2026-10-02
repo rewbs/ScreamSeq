@@ -93,8 +93,15 @@ extension SignalGraphEditor {
       guard filterID==nil || targets.contains(where:{visible.contains($0["target"] as? String ?? "")})else{continue};add(key,p["name"] as? String ?? "Instrument","Instrument \((p["instruments"] as? [Int] ?? []).map(String.init).joined(separator:", "))",30,Double(30+row*125));row+=1;songNodePlugin[key]=id
       for r in targets{if let target=r["target"] as? String,visible.contains(target){edge(key,firstStage[target] ?? target,"Out \(r["output"] as? Int ?? 0)",["kind":"plugin-output","plugin":id,"output":r["output"] ?? 0,"target":target],output:(r["output"] as? NSNumber)?.uint32Value ?? 0)}}
     }
-    for (i,r) in (data["inputs"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let b=r["target"] as? String,let from=lastStage[a],visible.contains(b){edge(from,firstStage[b] ?? b,"Graph in \(r["input"] ?? 1)",["kind":"graph-input","index":i],input:(r["input"] as? NSNumber)?.uint32Value ?? 1)}}
-    for (i,r) in (data["outputs"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let b=r["target"] as? String,visible.contains(a),visible.contains(b){let stage=display.last{songNodeBus[$0.id]==a && songNodeGraph[$0.id] != nil}?.id ?? a;edge(stage,firstStage[b] ?? b,"Graph out \(r["output"] ?? 1)",["kind":"graph-output","index":i],output:(r["output"] as? NSNumber)?.uint32Value ?? 1)}}
+    for b in buses {guard let id=b["id"] as? String else{continue};let inputs=stageSockets(id,input:true),outputs=stageSockets(id,input:false)
+      guard !inputs.isEmpty || !outputs.isEmpty else{continue}
+      let key="stage:"+id;add(key,busLabel(b)+" · graph stage","Auxiliary aggregate · row / persistent / ordinary",30,Double(30+row*125));row+=1;songNodeBus[key]=id
+    }
+    for (i,r) in stageConnections.enumerated(){guard let source=r["source"] as? [String:Any],let target=r["target"] as? [String:Any],let a=stageNode(source),let b=stageNode(target)else{continue}
+      edge(a,b,"Stage audio contribution",["kind":"stage-connection","index":i],output:(r["output"] as? NSNumber)?.uint32Value ?? 0,input:(r["input"] as? NSNumber)?.uint32Value ?? 0,enabled:r["enabled"] as? Bool ?? true)
+    }
+    for (i,r) in (data["inputs"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let b=r["target"] as? String,let from=lastStage[a],visible.contains(b){edge(from,"stage:"+b,"Graph in \(r["input"] ?? 1)",["kind":"graph-input","index":i],input:(r["input"] as? NSNumber)?.uint32Value ?? 1)}}
+    for (i,r) in (data["outputs"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let b=r["target"] as? String,visible.contains(a),visible.contains(b){let stage="stage:"+a;edge(stage,firstStage[b] ?? b,"Graph out \(r["output"] ?? 1)",["kind":"graph-output","index":i],output:(r["output"] as? NSNumber)?.uint32Value ?? 1)}}
     for (i,r) in (mixer["sidechains"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let plugin=r["plugin"] as? String,let from=lastStage[a],songNodePlugin["plugin:\(plugin)"] != nil{edge(from,"plugin:\(plugin)",(r["input"] as? Int==0 ? "Main input mix":"Sidechain \(r["input"] ?? 1)"),["kind":"plugin-input","index":i],input:(r["input"] as? NSNumber)?.uint32Value ?? 1)}}
     for (i,r) in (mixer["pluginConnections"] as? [[String:Any]] ?? []).enumerated(){
       guard let a=r["source"] as? String,let b=r["target"] as? String,songNodePlugin["plugin:"+a] != nil,songNodePlugin["plugin:"+b] != nil else{continue}
@@ -107,12 +114,12 @@ extension SignalGraphEditor {
       add(key,source["name"] as? String ?? kind,kind,source["x"] as? Double ?? 40,source["y"] as? Double ?? 40,kind:"modulation")
       if source["muted"] as? Bool==true{display[display.count-1].detail="Muted · "+kind}
       if kind=="follower" {
-        let bus=source["audioBus"] as? String ?? "",plugin=source["audioPlugin"] as? String ?? "",port=source["output"] as? Int ?? 0
-        let from = !bus.isEmpty ? lastStage[bus]:!plugin.isEmpty ? "plugin:"+plugin:nil
+        let bus=source["audioBus"] as? String ?? "",stage=source["audioStage"] as? String ?? "",plugin=source["audioPlugin"] as? String ?? "",port=source["output"] as? Int ?? 0
+        let from = !stage.isEmpty ? "stage:"+stage:!bus.isEmpty ? lastStage[bus]:!plugin.isEmpty ? "plugin:"+plugin:nil
         if let from,display.contains(where:{$0.id==from}) {
           var action:[String:Any]=["kind":"follower-input","node":id,"output":port,"preFader":source["preFader"] ?? false]
-          if !bus.isEmpty{action["source"]=bus}else{action["plugin"]=plugin}
-          edge(from,key,source["preFader"] as? Bool==true ? "Follower · pre-fader":"Follower · post-fader",action,output:UInt32(port))
+          if !stage.isEmpty{action["stage"]=stage}else if !bus.isEmpty{action["source"]=bus}else{action["plugin"]=plugin}
+          edge(from,key,!stage.isEmpty ? "Follower · combined graph output":source["preFader"] as? Bool==true ? "Follower · pre-fader":"Follower · post-fader",action,output:UInt32(port))
         }
       }
     }
@@ -126,8 +133,8 @@ extension SignalGraphEditor {
       let action=songConnections[i],kind=action["kind"] as? String ?? ""
       var amount:Double?
       if kind=="send",let bus=buses.first(where:{$0["id"] as? String==action["source"] as? String}),let index=action["index"] as? Int,let sends=bus["sends"] as? [[String:Any]],sends.indices.contains(index){amount=sends[index]["gainDB"] as? Double ?? -96}
-      if ["graph-input","plugin-input","plugin-connection"].contains(kind),let index=action["index"] as? Int {
-        let routes=(kind=="graph-input" ? data["inputs"]:kind=="plugin-connection" ? mixer["pluginConnections"]:mixer["sidechains"]) as? [[String:Any]] ?? []
+      if ["graph-input","plugin-input","plugin-connection","stage-connection"].contains(kind),let index=action["index"] as? Int {
+        let routes=(kind=="stage-connection" ? data["stageConnections"]:kind=="graph-input" ? data["inputs"]:kind=="plugin-connection" ? mixer["pluginConnections"]:mixer["sidechains"]) as? [[String:Any]] ?? []
         if routes.indices.contains(index){amount=routes[index]["gainDB"] as? Double ?? 0}
       }
       if let amount{edges[i].amount=amount;edges[i].amountRange = -96...12;edges[i].amountUnit="dB"}
@@ -141,15 +148,16 @@ extension SignalGraphEditor {
       let ports=plugin?["audioBuses"] as? [[String:Any]] ?? []
       func sockets(output:Bool)->[SignalCanvasPort] {
         let known=ports.filter{$0["direction"] as? String==(output ? "output":"input")}
-        var exposed=[UInt32]()
-        if let graph=songNodeGraph[id],let definition=definitions.first(where:{$0["id"] as? String==graph}),let endpoint=(definition["nodes"] as? [[String:Any]] ?? []).first(where:{$0["kind"] as? String==(output ? "output":"input")})?["id"] as? String {
-          exposed=(definition["audio"] as? [[String:Any]] ?? []).filter{$0[output ? "target":"source"] as? String==endpoint}.compactMap{($0[output ? "input":"output"] as? NSNumber)?.uint32Value}
-        }
+        let exposed=[UInt32]()
         let numbers=Set(exposed+edges.filter{!$0.modulation && (output ? $0.source:$0.target)==id}.map{output ? $0.output:$0.input}+known.compactMap{($0["index"] as? NSNumber)?.uint32Value}+[UInt32(0)])
         return numbers.sorted().map{number in Self.audioPort(number,output:output,catalog:known)}
       }
-      display[i].inputs=plugin?["isInstrument"] as? Bool==true || id.hasPrefix("instrument:") ? []:sockets(output:false)
+      display[i].inputs = id.hasPrefix("instrument:") ? []:plugin?["isInstrument"] as? Bool==true ? sockets(output:false).filter{socket in ports.contains{$0["direction"] as? String=="input" && ($0["index"] as? NSNumber)?.uint32Value==socket.number}}:sockets(output:false)
       display[i].outputs=sockets(output:true)
+      if let stage=stageTarget(id) {
+        display[i].inputs=stageSockets(stage,input:true)
+        display[i].outputs=stageSockets(stage,input:false)
+      }
       if let source=songSource(id) {display[i].inputs=source["kind"] as? String=="follower" ? [SignalCanvasPort(label:"Audio to follow")]:[];display[i].outputs=[SignalCanvasPort(label:"Signal",modulation:true)]}
       else if let pluginID=songNodePlugin[id] {
         var parameters=Set(songModulation.filter{$0["plugin"] as? String==pluginID}.compactMap{($0["parameter"] as? NSNumber)?.uint32Value})
@@ -219,7 +227,9 @@ extension SignalGraphEditor {
     if let graph=songNodeGraph[id] {
       let bus=songNodeBus[id],name=buses.first{$0["id"] as? String==bus}?["name"] as? String
       let role=instrumentForSongNode(id).map{"I\($0["index"] ?? 0) · \($0["name"] as? String ?? "Instrument")"} ?? id.split(separator:":").dropFirst(2).first.map(String.init)
-      navigate(graph:graph,origin:[name,role].compactMap{$0}.joined(separator:" › "),target:bus)
+      let parts=id.split(separator:":",omittingEmptySubsequences:false)
+      let observed:GraphObservedCopy? = parts.count==4 && parts[0]=="graph" ? GraphObservedCopy(["graph":graph,"target":bus ?? "","role":String(parts[2]).lowercased()]):nil
+      navigate(graph:graph,origin:[name,role].compactMap{$0}.joined(separator:" › "),target:bus,observedCopy:observed)
     }else if let plugin=songNodePlugin[id]{onPlugin?(plugin)}else if let bus=songNodeBus[id]{onBus?(bus)}
   }
   func connectSong(_ a:String,_ b:String){
@@ -233,6 +243,7 @@ extension SignalGraphEditor {
     let from=songNodeBus[a] ?? a,to=songNodeBus[b] ?? b
     guard let gain=Double(connectionGain.stringValue),gain.isFinite else{status.stringValue="Enter a finite gain in dB";return}
     let kind=connectionKind.titleOfSelectedItem ?? "Main output"
+    if stageTarget(a) != nil || stageTarget(b) != nil,stageEndpoint(a) != nil,stageEndpoint(b) != nil {connectStage(a,b,output:UInt32(output),input:UInt32(input),gain:gain,enabled:connectionEnabled.state == .on);return}
     if kind=="Direct plugin audio" || (songNodePlugin[a] != nil && songNodePlugin[b] != nil && ["Plugin sidechain","Mix into main"].contains(kind)) {connectSongPlugins(a,b,output:UInt32(output),input:UInt32(kind=="Mix into main" ? 0:input),gain:gain,enabled:connectionEnabled.state == .on);return}
     if ["Plugin sidechain","Mix into main","Graph sidechain"].contains(kind) {
       guard validateBusInputSource(a,port:output)else{return}

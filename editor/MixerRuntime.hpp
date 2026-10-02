@@ -65,7 +65,7 @@ private:
   std::vector<Auxiliary> auxiliaries_;
   std::vector<Delay> sideDelays_;
   std::vector<float *> sideTargets_;
-  struct ProcessorStage {std::array<float,maximumFrames*2> work{};Delay main;bool complete=false;explicit ProcessorStage(uint32_t delay):main(delay){}};
+  struct ProcessorStage {std::array<float,maximumFrames*2> work{};Delay main;bool complete=false,prepared=false;explicit ProcessorStage(uint32_t delay):main(delay){}};
   std::vector<std::unique_ptr<ProcessorStage>> processorStages_;
   std::vector<Delay> pluginDelays_;
   std::vector<float *> pluginTargets_;
@@ -126,6 +126,7 @@ public:
   float *processorInput(size_t,size_t) noexcept;
   bool finishProcessor(size_t,size_t) noexcept;
   const float *finishBus(size_t) noexcept;
+  const float *processorOutput(size_t processor) const noexcept {return processor<processorStages_.size()&&processorStages_[processor]&&processorStages_[processor]->complete?processorStages_[processor]->work.data():nullptr;}
   const float *busOutput(size_t bus) const noexcept {return bus<nodes_.size()?nodes_[bus]->work.data():nullptr;}
   const float *masterOutput() const noexcept {return graph_.masterOutputDisconnected?masterSilence_.data():busOutput(plan_.master);}
   const float *busPreFader(size_t bus) const noexcept {return bus<nodes_.size() && nodes_[bus]->stage==3?nodes_[bus]->input.data():nullptr;}

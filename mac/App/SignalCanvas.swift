@@ -313,7 +313,7 @@ final class SignalCanvas: NSView {
     if let selectedEdge,!edges.indices.contains(selectedEdge){self.selectedEdge=nil}
     selection.formIntersection(Set(nodes.map(\.id)))
     resizeCanvas()
-    setAccessibilityValue((nodes.map{node in node.title+(node.role.map{" · "+$0} ?? "")+" → "+edges.filter{$0.source==node.id}.map{$0.label}.joined(separator:", ")}+boundaries.map{$0.label+" · "+$0.help}).joined(separator:"; "))
+    setAccessibilityValue((nodes.map{node in node.title+(node.role.map{" · "+$0} ?? "")+(node.bypassed ? " · bypassed":node.detail.contains("Muted") ? " · muted":"")+" → "+edges.filter{$0.source==node.id}.map{$0.label}.joined(separator:", ")}+boundaries.map{$0.label+" · "+$0.help}).joined(separator:"; "))
     needsDisplay=true
   }
   private func resizeCanvas(){let content=contentRect;frame.size=NSSize(width:max(900,(content?.maxX ?? 0)+100),height:max(500,(content?.maxY ?? 0)+100))}

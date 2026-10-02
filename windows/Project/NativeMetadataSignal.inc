@@ -77,8 +77,8 @@ SignalDefinition decodeDefinition(const Json &v, unsigned version) {
   if(v.contains("presentation"))d.presentation=decodePresentation(v.at("presentation"));
   compileSignal(d); return d;
 }
-Json songSource(const SignalSongSource &s){auto v=signalNode(s.node);v["audioBus"]=s.audioBus?nativeID(s.audioBus):"";v["audioPlugin"]=s.audioPlugin;v["output"]=s.output;v["preFader"]=s.preFader;v["noteTarget"]=s.noteTarget?nativeID(s.noteTarget):"";v["noteInstrument"]=s.noteInstrument?nativeID(s.noteInstrument):"";v["amount"]=s.amount;return v;}
-SignalSongSource decodeSongSource(const Json &v,unsigned version){SignalSongSource s;s.node=decodeSignalNode(v,version);s.audioBus=optional(v,"audioBus","")==""?0:decodeID(v.at("audioBus"));s.audioPlugin=text(optional(v,"audioPlugin",""),256);s.output=uint32_t(integer(optional(v,"output",0),0,63));s.preFader=boolean(optional(v,"preFader",false));s.noteTarget=optional(v,"noteTarget","")==""?0:decodeID(v.at("noteTarget"));s.noteInstrument=optional(v,"noteInstrument","")==""?0:decodeID(v.at("noteInstrument"));s.amount=number(optional(v,"amount",1),0,1);return s;}
+Json songSource(const SignalSongSource &s){auto v=signalNode(s.node);v["audioBus"]=s.audioBus?nativeID(s.audioBus):"";v["audioStage"]=s.audioStage?nativeID(s.audioStage):"";v["audioPlugin"]=s.audioPlugin;v["output"]=s.output;v["preFader"]=s.preFader;v["noteTarget"]=s.noteTarget?nativeID(s.noteTarget):"";v["noteInstrument"]=s.noteInstrument?nativeID(s.noteInstrument):"";v["amount"]=s.amount;return v;}
+SignalSongSource decodeSongSource(const Json &v,unsigned version){SignalSongSource s;s.node=decodeSignalNode(v,version);s.audioBus=optional(v,"audioBus","")==""?0:decodeID(v.at("audioBus"));s.audioPlugin=text(optional(v,"audioPlugin",""),256);s.audioStage=optional(v,"audioStage","")==""?0:decodeID(v.at("audioStage"));s.output=uint32_t(integer(optional(v,"output",0),0,63));s.preFader=boolean(optional(v,"preFader",false));s.noteTarget=optional(v,"noteTarget","")==""?0:decodeID(v.at("noteTarget"));s.noteInstrument=optional(v,"noteInstrument","")==""?0:decodeID(v.at("noteInstrument"));s.amount=number(optional(v,"amount",1),0,1);return s;}
 Json noteRouting(const NoteRouting &routing) {
   Json routes=Json::array(),suppressed=Json::array(),sources=Json::array();
   for(const auto &r:routing.routes)routes.push_back({{"id",nativeID(r.id)},{"sourceKind",r.sourceKind==NoteSourceKind::Channel?"channel":"instrument"},{"source",nativeID(r.source)},{"plugin",r.plugin},{"midiChannel",r.midiChannel},{"enabled",r.enabled}});
@@ -98,9 +98,15 @@ NoteRouting decodeNoteRouting(const Json &v) {
   for(const auto &source:items(v,"triggerSources",255,true))routing.triggerSources.push_back({decodeID(field(source,"instrument")),uint8_t(integer(field(source,"midiChannel"),1,16))});
   return routing;
 }
+Json stageEndpoint(const SignalStageEndpoint &e) {return e.stage?Json{{"stage",nativeID(e.stage)}}:Json{{"plugin",e.plugin}};}
+SignalStageEndpoint decodeStageEndpoint(const Json &v) {
+  object(v);need(v.size()==1&&(v.contains("plugin")!=v.contains("stage")),"Choose one plugin or graph stage endpoint");
+  return {v.contains("plugin")?text(v.at("plugin"),128):std::string{},v.contains("stage")?decodeID(v.at("stage")):0};
+}
 Json signal(const SignalGraph &g) {
   Json library = Json::array(), assignments = Json::array(), instrumentAssignments = Json::array(), commands = Json::array(), lanes = Json::array(), inputs = Json::array(), outputs = Json::array(), layout = Json::array(), groups = Json::array();
-  Json songSources=Json::array(),songModulation=Json::array();
+  Json songSources=Json::array(),songModulation=Json::array(),stageConnections=Json::array();
+  for(const auto &r:g.stageConnections)stageConnections.push_back({{"source",stageEndpoint(r.source)},{"target",stageEndpoint(r.target)},{"output",r.output},{"input",r.input},{"gainDB",r.gainDB},{"enabled",r.enabled}});
   for(const auto &s:g.songSources)songSources.push_back(songSource(s));
   for(const auto &m:g.songModulation)songModulation.push_back({{"source",nativeID(m.source)},{"plugin",m.plugin},{"parameter",m.parameter},{"minimum",m.minimum},{"maximum",m.maximum},{"enabled",m.enabled},{"quantized",m.quantized}});
   for(const auto &v:g.groups)groups.push_back({{"id",nativeID(v.id)},{"parent",v.parent?nativeID(v.parent):""},{"name",v.name},{"x",v.x},{"y",v.y},{"nodes",v.nodes},{"bypass",v.bypass},{"dryRoutes",songGroupDryRoutes(v.dryRoutes)}});
@@ -112,10 +118,12 @@ Json signal(const SignalGraph &g) {
   for (const auto &r : g.inputs) inputs.push_back({{"source",nativeID(r.source)},{"target",nativeID(r.target)},{"input",r.input},{"gainDB",r.gainDB},{"preFader",r.preFader}});
   for (const auto &r : g.outputs) outputs.push_back({{"source",nativeID(r.source)},{"target",nativeID(r.target)},{"output",r.output}});
   for (const auto &[key,p] : g.layout) layout.push_back({{"node",key},{"x",p[0]},{"y",p[1]}});
-  return {{"library",library},{"assignments",assignments},{"instrumentAssignments",instrumentAssignments},{"commands",commands},{"lanes",lanes},{"inputs",inputs},{"outputs",outputs},{"layout",layout},{"groups",groups},{"songSources",songSources},{"songModulation",songModulation},{"noteRouting",noteRouting(g.noteRouting)},{"presentation",presentation(g.presentation)}};
+  return {{"stageConnections",stageConnections},{"library",library},{"assignments",assignments},{"instrumentAssignments",instrumentAssignments},{"commands",commands},{"lanes",lanes},{"inputs",inputs},{"outputs",outputs},{"layout",layout},{"groups",groups},{"songSources",songSources},{"songModulation",songModulation},{"noteRouting",noteRouting(g.noteRouting)},{"presentation",presentation(g.presentation)}};
 }
 SignalGraph decodeSignal(const Json &v, unsigned version) {
-  SignalGraph g;if(v.contains("presentation"))g.presentation=decodePresentation(v.at("presentation"));
+  SignalGraph g;
+  for(const auto &r:items(v,"stageConnections",256,true))g.stageConnections.push_back({decodeStageEndpoint(field(r,"source")),decodeStageEndpoint(field(r,"target")),u32(r,"output",0,63),u32(r,"input",0,63),number(optional(r,"gainDB",0),-96,12),boolean(optional(r,"enabled",true))});
+  if(v.contains("presentation"))g.presentation=decodePresentation(v.at("presentation"));
   if(v.contains("noteRouting"))g.noteRouting=decodeNoteRouting(v.at("noteRouting"));
   for(const auto &s:items(v,"songSources",64,true))g.songSources.push_back(decodeSongSource(s,version));
   for(const auto &e:items(v,"songModulation",256,true))g.songModulation.push_back({decodeID(field(e,"source")),text(field(e,"plugin"),256),u32(e,"parameter"),number(optional(e,"minimum",0),-1,1),number(optional(e,"maximum",0),-1,1),boolean(optional(e,"enabled",true)),boolean(optional(e,"quantized",false))});

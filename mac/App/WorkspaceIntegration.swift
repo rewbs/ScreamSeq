@@ -144,6 +144,17 @@ extension AppController {
     }
   }
   func followWorkspacePanel(_ id:String,force:Bool,opening:Bool=false){
+    // Explicit Follow must survive an unrelated inspector read or document
+    // operation. Hidden panels will not receive the periodic visible refresh.
+    if force && (busy || sessionReading) {
+      let document=model.revisionToken.split(separator:":").first,pinned=workspace?.panels[id]?.pinned
+      deferUntilIdle { [weak self] in
+        guard let self,self.model.revisionToken.split(separator:":").first==document,
+          self.workspace?.panels[id]?.pinned==pinned else{return}
+        self.followWorkspacePanel(id,force:true,opening:opening)
+      }
+      return
+    }
     guard !busy,let dock=workspace,let panel=dock.panels[id],id=="graph" || force || workspaceContextTokens[id] == nil || (!panel.pinned && (opening || !dock.containsFocus(id))) else{return}
     let position=patternView.navigation
     if workspaceReturnPoints[id]==nil {workspaceReturnPoints[id]=position}
@@ -267,6 +278,15 @@ extension AppController {
       guard Set(params.keys).isSubset(of:["panel","placement","pinned","focus","follow","return"]),let id=params["panel"] as? String,let panel=workspace?.panels[id] else{fail("Choose a known workspace panel");return true}
       if let raw=params["placement"] {guard let place=raw as? String,["right","bottom","secondary","float","hide"].contains(place) else{fail("Invalid panel placement");return true}}
       for key in ["pinned","focus","follow","return"] where params[key] != nil {guard let number=params[key] as? NSNumber,CFGetTypeID(number)==CFBooleanGetTypeID() else{fail("\(key) must be boolean");return true}}
+      if params["follow"] as? Bool==true && (busy || sessionReading) {
+        let document=model.revisionToken.split(separator:":").first
+        deferUntilIdle({ [weak self] in
+          guard let self else{reply(AutomationServer.error(-32002,"The application is shutting down"));return}
+          guard self.model.revisionToken.split(separator:":").first==document else{reply(AutomationServer.error(-32001,"The song changed; request panel Follow again"));return}
+          _=self.handleWorkspaceAutomation(method,params:params,reply:reply)
+        },cancel:{reply(AutomationServer.error(-32002,"The application is shutting down"))})
+        return true
+      }
       if let place=params["placement"] as? String{workspace?.place(id,at:place,select:false)}
       if let pin=params["pinned"] as? Bool{panel.pinned=pin};if params["follow"] as? Bool==true{panel.pinned=false;panel.onFollow?()};if params["return"] as? Bool==true{panel.onReturn?()};if params["focus"] as? Bool==true{workspace?.show(id,focus:true)}
     } else if method=="workspace.layout" {

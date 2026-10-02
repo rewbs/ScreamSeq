@@ -23,3 +23,28 @@ static void liveSongGroup(const PluginState &effect,uint32_t rate,uint32_t block
   native.signal.groups[0].bypass=true;auto stale=host.prepareGraphControls(native);check(bool(stale),"Prepare stale group flag snapshot");
   native.mixer.buses.push_back({native.makeEntity().id,native.masterID,MixerBusKind::Return,"New route"});auto routing=host.prepareMixerRouting(native);check(routing&&host.publishMixerRouting(routing),"Prepare a replacement group route");check(!host.publishGraphControls(std::move(stale)),"Retired routing rejects a stale group flag publication");
 }
+
+// Different branch depths expose a dry ingress later than the early wet egress.
+// Real VST3 delay rings plus an independent sample oracle qualify the input
+// capture vertices, crossing maps and stopped compensation rebuild together.
+static void delayedSongGroup(const PluginState &effect,uint32_t rate,uint32_t block,bool bypass,bool refresh,int (*latency)(uint32_t)) {
+  latency(13);
+  MixerGraph graph;graph.buses={{1,10,MixerBusKind::Track,"Early"},{2,10,MixerBusKind::Track,"Late"},{10,0,MixerBusKind::Master,"Main"}};graph.buses[0].inserts={"a"};graph.buses[1].inserts={"d","e","b"};
+  struct State {std::vector<std::unique_ptr<NativePlugin>> plugins;std::unique_ptr<SongGroupRuntime> groups;};auto state=std::make_shared<State>();std::vector<MixerProcessorInfo> catalog;
+  for(const auto *id:{"a","d","e","b"}){auto spec=effect;spec.instanceID=id;state->plugins.push_back(std::make_unique<NativePlugin>(spec,rate,true));check(state->plugins.back()->parameter(7,.5),"Prepare delayed group gain");catalog.push_back({id,uint32_t(std::llround(state->plugins.back()->latency()*rate)),0});}
+  SignalGraph signal;SignalSongGroup group;group.id=100;group.name="Crossed delayed vendors";group.nodes={"plugin:a","plugin:b"};group.bypass=bypass;
+  group.dryRoutes={{{"insert","n2",{},"b","main-path"},{"output","n1","n10"}},{{"insert","n1",{},"a","main-path"},{"output","n2","n10"}}};signal.groups={group};
+  auto plan=std::make_unique<MixerTransition::Plan>();plan->catalog=catalog;plan->processors=state;plan->runtime=std::make_unique<MixerRuntime>(graph,compileMixer(graph,{1,2},catalog,rate,SongGroupRuntime::timing(signal,graph,catalog)),rate);
+  state->groups=std::make_unique<SongGroupRuntime>(signal,graph,plan->runtime->plan(),catalog,rate);state->groups->runtime(plan->runtime.get());
+  plan->runtime->routeTransform([](void *p,MixerRuntime::RouteKind kind,size_t index,float *audio,uint32_t count,uint64_t frame)noexcept{static_cast<State *>(p)->groups->route(kind,index,audio,count,frame);},state.get());
+  plan->begin=[](void *p,uint32_t count,uint64_t frame,bool)noexcept{static_cast<State *>(p)->groups->begin(count,frame);};
+  plan->process=[](void *p,MixerRuntime &mixer,size_t slot,float *audio,uint32_t count,uint64_t frame)noexcept{return static_cast<State *>(p)->plugins[slot]->process(audio,count,frame,mixer.inputs(slot));};
+  MixerTransition transition(std::move(plan),{1,2,10},{1,2},rate);uint32_t delay=13;
+  if(refresh){latency(7);delay=7;for(size_t i=0;i<catalog.size();++i){state->plugins[i]->refreshLatency();catalog[i].latency=uint32_t(std::llround(state->plugins[i]->latency()*rate));}auto &updated=transition.refreshStopped(catalog);state->groups->refreshLatency(updated.runtime->plan(),catalog);}
+  check(transition.controlPlan().runtime->plan().latency==delay*3&&transition.controlPlan().runtime->plan().processors[0].mainDelay==delay,"Real delayed group pads only the early branch");
+  std::array<float,4096> a{},b{};std::array<MixerTransition::DirectInput,3> inputs{{{a.data(),a.data()},{b.data(),b.data()},{}}};
+  for(uint32_t frame=0;frame<3000;){const auto count=std::min(block,3000-frame);for(uint32_t i=0;i<count;++i){a[i]=float(.03*std::sin((frame+i)*.01));b[i]=float(.02*std::cos((frame+i)*.007));}uint64_t alloc,free,locks;tracker_audit_begin();const bool began=transition.begin(count,frame);const auto *audio=began?transition.render(inputs):nullptr;tracker_audit_end(&alloc,&free,&locks);
+    check(audio&&!transition.failed()&&!state->groups->failed()&&alloc+free+locks==0,"Real delayed group must render without RT allocation/free/lock");
+    for(uint32_t i=0;i<count;++i){const auto at=frame+i;const auto expected=at<delay*3?0.f:float(.03*std::sin((at-delay*3)*.01))*(bypass?1.f:.5f)+float(.02*std::cos((at-delay*3)*.007))*(bypass?.25f:.125f);check(std::abs(audio[i*2]-expected)<2e-7&&std::abs(audio[i*2+1]-expected)<2e-7,"Real delayed group differs from independent crossed wet/dry oracle");}frame+=count;
+  }
+}

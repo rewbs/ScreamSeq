@@ -10,6 +10,7 @@ namespace Tracker {
 // never on a processor's wet output shared with internal consumers.
 class SongGroupRuntime {
 public:
+  static std::vector<MixerTimingConstraint> timing(const SignalGraph &,const MixerGraph &,const std::vector<MixerProcessorInfo> &);
   struct Route {
     SignalRouteIdentity identity;
     MixerRuntime::RouteKind kind=MixerRuntime::RouteKind::Connection;
@@ -47,6 +48,9 @@ public:
   SongGroupRuntime(const SignalGraph &,const MixerGraph &,const MixerPlan &,
                    const std::vector<MixerProcessorInfo> &,double sampleRate);
   void runtime(const MixerRuntime *runtime) noexcept {runtime_=runtime;}
+  // Control owner only, with rendering quiescent. Keep the wrapper identity and
+  // bypass state while replacing all latency-dependent boundary buffers.
+  void refreshLatency(const MixerPlan &,const std::vector<MixerProcessorInfo> &);
   const std::vector<Route> &routes() const noexcept {return routes_;}
   // Prepared dependencies are added before validating the final execution DAG.
   std::vector<MixerTransition::Dependency> dependencies() const;

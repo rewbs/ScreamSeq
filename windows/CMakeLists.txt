@@ -258,7 +258,7 @@ if(BUILD_TESTING)
   target_link_options(graph-document-tests PRIVATE /STACK:8388608)
   # Separate processes expose a failing scenario and let unrelated API/history
   # cases finish even when a platform-only access violation occurs.
-  foreach(scenario noteRoutingOperations graphEditingOperations groupBypassOperations
+  foreach(scenario stageConnectionOperations noteRoutingOperations graphEditingOperations groupBypassOperations
       graphProvenance graphPresentation songModulationSources songAutomationAndBanks stableImplicitMaster songCableCuts
       createReadHistory nodesAndCloning automationAndBanks assignmentsRoutesLayoutCommands hostHooks
       automationOrderAndRedo cableInsertionAndDetachment songProcessingGroups processingGroups strictValidation dryRunsAndRedo callbackOrderingAndUnrelatedData)

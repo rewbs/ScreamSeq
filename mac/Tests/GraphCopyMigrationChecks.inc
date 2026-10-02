@@ -43,7 +43,8 @@ static void preparedCopyMigration(const PluginDescriptor &descriptor) {
     native.signal.assignments.push_back({4,900,.8,1});native.signal.outputs={{1,4,1}};publish();
     check(previous->processorOwners.front().state->entries.front().endpoint.get()==retained,"New copy reconstructed a retained vendor");render(.1f,.4f,true);
     uint32_t token=0;for(size_t i=0;i<observation->ports.size();++i){const auto &p=observation->ports[i];if(p.copy&&p.copy->target==1&&p.node=="node:n902"&&p.output&&!p.route)token=uint32_t(i+1);}check(token&&observation->available(token),"Rendered copy has no adopted observation");
-    native.signal.assignments.erase(native.signal.assignments.begin());native.signal.outputs.clear();publish();check(!observation->available(token),"Removed copy retained an active observation domain");render(.5f,.4f,false);
+    native.signal.assignments.erase(native.signal.assignments.begin());native.signal.outputs.clear();publish();check(!observation->available(token),"Removed copy retained an active observation domain");
+    check(previous->copyOwners.size()>previous->runtimeOwners.size(),"Inactive copy ownership disappeared from the shared storage budget");render(.5f,.4f,false);
     // The inactive copy must retain its controls and opaque preset after every
     // plan that actively referenced it is destroyed on the producer.
     previous.reset();native.signal.assignments.insert(native.signal.assignments.begin(),{1,900,.3,1});publish();
@@ -51,5 +52,18 @@ static void preparedCopyMigration(const PluginDescriptor &descriptor) {
     const auto before=observation->ports.size();const auto domains=observation->domainCount();auto invalid=native;invalid.signal.assignments.push_back({2,999,1,1});bool rejected=false;
     try{GraphControlPlan candidate;graph.prepareCopies(invalid,candidate,previous.get());}catch(const std::exception &){rejected=true;}
     check(rejected&&observation->ports.size()==before&&observation->domainCount()==domains,"Rejected assignment published phantom copy identities");render(.15f,.4f,false);
+    // Adding prepared row/persistent roles mid-row does not replay a command
+    // behind the cursor. Future events use independent retained processor copies.
+    native.signal.commands={{3,1,900,0,0,SignalCommandKind::Row,.9,1},
+      {3,1,900,3072u*8,0,SignalCommandKind::Row,.4,1},
+      {3,1,900,3584u*8,1,SignalCommandKind::Start,.5,1}};
+    publish();render(.15f,.4f,false);render(.06f,.4f,false);render(.03f,.4f,false);
+    if(rate==48000&&block==128){
+      const auto retainedBytes=graph.storageBytes();
+      for(unsigned edit=0;edit<64;++edit){native.signal.assignments[0].amount=edit%2?.3:.4;publish();
+        check(graph.storageBytes()==retainedBytes,"Retired copy routing tables permanently consumed the audio storage budget");
+        check(graph.copyTableStorageBytes(*copies)>0,"Current copy tables are absent from transient ownership accounting");}
+      render(.03f,.4f,false);
+    }
   }
 }

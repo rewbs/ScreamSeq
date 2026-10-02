@@ -4,6 +4,33 @@
 #include <stdexcept>
 
 namespace Tracker {
+std::vector<MixerTimingConstraint> SongGroupRuntime::timing(const SignalGraph &signal,const MixerGraph &saved,const std::vector<MixerProcessorInfo> &catalog) {
+  const auto graph=projectMixerDetachedChains(saved);std::vector<std::string> rack;
+  for(const auto &p:catalog)if(!p.instrument&&std::none_of(graph.buses.begin(),graph.buses.end(),[&](const auto &b){return p.instance==signalBusIdentity(b.id);}))rack.push_back(p.instance);
+  auto bus=[](const std::string &key)->uint64_t{return key.size()>1&&key[0]=='n'?std::stoull(key.substr(1)):0;};
+  auto plugin=[](const std::string &key){return key.starts_with("plugin:")?key.substr(7):std::string{};};
+  auto point=[&](const SignalRouteIdentity &route,bool ingress)->MixerTimingPoint{
+    if(route.kind=="follower-input"&&route.source.starts_with("stage:"))return {signalBusIdentity(bus(route.source.substr(6))),0,false};
+    if(ingress){if(route.kind=="insert"||route.kind=="plugin-input")return {route.plugin,0,true};
+      if(route.kind=="graph-input")return {signalBusIdentity(bus(route.target)),0,true};
+      if(route.kind=="plugin-connection")return {plugin(route.target),0,true};
+      if(route.kind=="output"||route.kind=="send"||route.kind=="plugin-output"||route.kind=="graph-output")return {{},bus(route.target),true};
+    }
+    if(route.kind=="insert")return {route.plugin,0,true};
+    if(route.kind=="plugin-output")return {route.plugin,0,false};
+    if(route.kind=="graph-output")return {signalBusIdentity(bus(route.source)),0,false};
+    if(route.kind=="plugin-connection")return {plugin(route.source),0,false};
+    if(route.kind=="follower-input"&&route.source.starts_with("plugin:"))return {plugin(route.source),0,false};
+    return {{},bus(route.source),false};
+  };
+  std::vector<MixerTimingConstraint> result;
+  for(const auto &group:signal.groups)for(const auto &mapping:resolvedSongGroupDryRoutes(signal,graph,rack,group.id,group.bypass))if(!mapping.input.kind.empty()){
+    MixerTimingConstraint constraint{point(mapping.input,true),point(mapping.output,false)};
+    auto valid=[&](const MixerTimingPoint &p){return p.processor.empty()?std::any_of(graph.buses.begin(),graph.buses.end(),[&](const auto &b){return b.id==p.bus;}):std::any_of(catalog.begin(),catalog.end(),[&](const auto &c){return c.instance==p.processor;});};
+    if(valid(constraint.source)&&valid(constraint.target)&&constraint.source!=constraint.target&&std::find(result.begin(),result.end(),constraint)==result.end())result.push_back(std::move(constraint));
+  }
+  return result;
+}
 SongGroupRuntime::SongGroupRuntime(const SignalGraph &signal,const MixerGraph &saved,const MixerPlan &plan,const std::vector<MixerProcessorInfo> &catalog,double rate) {
   const auto graph=projectMixerDetachedChains(saved);fadeFrames_=std::max(1u,uint32_t(std::llround(rate*.005)));
   auto busID=[&](size_t index){return "n"+std::to_string(graph.buses.at(index).id);};
@@ -11,22 +38,23 @@ SongGroupRuntime::SongGroupRuntime(const SignalGraph &signal,const MixerGraph &s
   std::vector<size_t> owners(catalog.size(),SIZE_MAX);std::vector<uint32_t> arrivals(catalog.size());
   for(size_t bus=0;bus<plan.nodes.size();++bus){auto arrival=plan.nodes[bus].inputLatency;
     for(auto processor:plan.nodes[bus].processors){owners[processor]=bus;arrivals[processor]=plan.segmented?plan.processors[processor].inputLatency:arrival;arrival=arrivals[processor]+catalog[processor].latency;}}
+  if(plan.segmented)for(auto processor:plan.scheduledSources)arrivals[processor]=plan.processors[processor].inputLatency;
   for(size_t i=0;i<plan.connections.size();++i){const auto &edge=plan.connections[i];routes_.push_back({{edge.send?"send":"output",busID(edge.source),busID(edge.target)},MixerRuntime::RouteKind::Connection,i,plan.nodes[edge.target].inputLatency,edge.gain,edge.source});routes_.back().postDelay=edge.delay;}
-  for(size_t i=0;i<plan.sidechains.size();++i){const auto &edge=plan.sidechains[i];SignalRouteIdentity id;id.source=busID(edge.source);id.input=edge.input;
+  for(size_t i=0;i<plan.sidechains.size();++i){const auto &edge=plan.sidechains[i];SignalRouteIdentity id;id.source=busID(edge.source);id.input=edge.input;id.tap="post-gain";
     const auto target=graphBus(edge.processor);if(target!=SIZE_MAX){id.kind="graph-input";id.target=busID(target);}else{id.kind="plugin-input";id.plugin=catalog[edge.processor].instance;}
     routes_.push_back({std::move(id),MixerRuntime::RouteKind::Sidechain,i,plan.segmented?plan.processors[edge.processor].inputLatency:plan.nodes[edge.target].inputLatency+edge.prefixLatency,edge.gain,edge.source});routes_.back().postDelay=edge.delay;}
-  for(size_t i=0;i<plan.instruments.size();++i){const auto &edge=plan.instruments[i];SignalRouteIdentity id;id.target=busID(edge.target);id.output=edge.output;
+  for(size_t i=0;i<plan.instruments.size();++i){const auto &edge=plan.instruments[i];SignalRouteIdentity id;id.target=busID(edge.target);id.output=edge.output;id.tap="post-gain";
     const auto source=graphBus(edge.processor);if(source!=SIZE_MAX){id.kind="graph-output";id.source=busID(source);}else{id.kind="plugin-output";id.plugin=catalog[edge.processor].instance;}
-    routes_.push_back({std::move(id),MixerRuntime::RouteKind::Instrument,i,plan.nodes[edge.target].inputLatency,1,SIZE_MAX,catalog[edge.processor].instrument?SIZE_MAX:edge.processor});routes_.back().postDelay=edge.delay;}
+    routes_.push_back({std::move(id),MixerRuntime::RouteKind::Instrument,i,plan.nodes[edge.target].inputLatency,1,SIZE_MAX,catalog[edge.processor].instrument&&!catalog[edge.processor].scheduledSource?SIZE_MAX:edge.processor});routes_.back().postDelay=edge.delay;}
   for(size_t i=0;i<plan.pluginConnections.size();++i){const auto &edge=plan.pluginConnections[i];SignalRouteIdentity id{"plugin-connection","plugin:"+catalog[edge.source].instance,"plugin:"+catalog[edge.target].instance,{},"post-gain",edge.input,edge.output};
-    routes_.push_back({std::move(id),MixerRuntime::RouteKind::PluginConnection,i,plan.processors[edge.target].inputLatency,edge.gain,SIZE_MAX,catalog[edge.source].instrument?SIZE_MAX:edge.source});routes_.back().postDelay=edge.delay;}
+    routes_.push_back({std::move(id),MixerRuntime::RouteKind::PluginConnection,i,plan.processors[edge.target].inputLatency,edge.gain,SIZE_MAX,catalog[edge.source].instrument&&!catalog[edge.source].scheduledSource?SIZE_MAX:edge.source});routes_.back().postDelay=edge.delay;}
   for(size_t bus=0;bus<plan.nodes.size();++bus)for(auto processor:plan.nodes[bus].processors)
     if(std::find(plan.disconnectedMainInputs.begin(),plan.disconnectedMainInputs.end(),processor)==plan.disconnectedMainInputs.end()&&graphBus(processor)==SIZE_MAX)
       routes_.push_back({{"insert",busID(bus),{},catalog[processor].instance,"main-path"},MixerRuntime::RouteKind::Insert,processor,arrivals[processor],1,SIZE_MAX,processor});
   if(!graph.masterOutputDisconnected)routes_.push_back({{"master-output",busID(plan.master),{},{},"pre-master-fader"},MixerRuntime::RouteKind::MasterInput,plan.master,plan.nodes[plan.master].outputLatency,1,plan.master});
   for(size_t index=0;index<signal.songSources.size();++index){const auto &source=signal.songSources[index];if(source.node.kind!=SignalNodeKind::Follower)continue;
     Route route;route.follower=true;route.index=index;route.identity={"follower-input",{},"source:n"+std::to_string(source.node.id),{},"post-gain",0,source.output};
-    if(!source.audioPlugin.empty()){const auto processor=std::find_if(catalog.begin(),catalog.end(),[&](const auto &p){return p.instance==source.audioPlugin;});if(processor==catalog.end())continue;const auto slot=size_t(processor-catalog.begin());route.identity.source="plugin:"+source.audioPlugin;route.arrival=arrivals[slot]+processor->latency;route.processor=processor->instrument?SIZE_MAX:slot;}
+    if(source.audioStage||!source.audioPlugin.empty()){const auto id=source.audioStage?signalBusIdentity(source.audioStage):source.audioPlugin;const auto processor=std::find_if(catalog.begin(),catalog.end(),[&](const auto &p){return p.instance==id;});if(processor==catalog.end())continue;const auto slot=size_t(processor-catalog.begin());route.identity.source=source.audioStage?"stage:n"+std::to_string(source.audioStage):"plugin:"+source.audioPlugin;route.arrival=arrivals[slot]+processor->latency;route.processor=processor->instrument&&!processor->scheduledSource?SIZE_MAX:slot;}
     else if(source.audioBus){const auto bus=std::find_if(graph.buses.begin(),graph.buses.end(),[&](const auto &b){return b.id==source.audioBus;});if(bus==graph.buses.end())continue;route.bus=size_t(bus-graph.buses.begin());route.identity.source=busID(route.bus);route.arrival=plan.nodes[route.bus].outputLatency;route.preFader=source.preFader;}
     else continue;routes_.push_back(std::move(route));
   }
@@ -47,6 +75,31 @@ SongGroupRuntime::SongGroupRuntime(const SignalGraph &signal,const MixerGraph &s
     }
   }
   for(auto &route:transforms_)std::stable_sort(route.begin(),route.end(),[&](auto a,auto b){return groups_[mappings_[a]->group].depth>groups_[mappings_[b]->group].depth;});
+}
+void SongGroupRuntime::refreshLatency(const MixerPlan &plan,const std::vector<MixerProcessorInfo> &catalog) {
+  auto routes=routes_;std::vector<uint32_t> arrivals(catalog.size());
+  for(size_t bus=0;bus<plan.nodes.size();++bus){auto arrival=plan.nodes[bus].inputLatency;for(auto processor:plan.nodes[bus].processors){arrivals[processor]=plan.segmented?plan.processors[processor].inputLatency:arrival;arrival=arrivals[processor]+catalog[processor].latency;}}
+  if(plan.segmented)for(auto processor:plan.scheduledSources)arrivals[processor]=plan.processors[processor].inputLatency;
+  for(auto &route:routes){if(route.follower){route.arrival=route.processor!=SIZE_MAX?arrivals.at(route.processor)+catalog.at(route.processor).latency:route.bus!=SIZE_MAX?plan.nodes.at(route.bus).outputLatency:route.arrival;continue;}
+    switch(route.kind){
+      case MixerRuntime::RouteKind::Connection:{const auto &edge=plan.connections.at(route.index);route.arrival=plan.nodes.at(edge.target).inputLatency;route.postDelay=edge.delay;break;}
+      case MixerRuntime::RouteKind::Sidechain:{const auto &edge=plan.sidechains.at(route.index);route.arrival=arrivals.at(edge.processor);route.postDelay=edge.delay;break;}
+      case MixerRuntime::RouteKind::Instrument:{const auto &edge=plan.instruments.at(route.index);route.arrival=plan.nodes.at(edge.target).inputLatency;route.postDelay=edge.delay;break;}
+      case MixerRuntime::RouteKind::PluginConnection:{const auto &edge=plan.pluginConnections.at(route.index);route.arrival=plan.processors.at(edge.target).inputLatency;route.postDelay=edge.delay;break;}
+      case MixerRuntime::RouteKind::Insert:route.arrival=arrivals.at(route.index);break;
+      case MixerRuntime::RouteKind::MasterInput:route.arrival=plan.nodes.at(route.index).outputLatency;break;
+    }
+  }
+  struct Delays {std::vector<float> main,post;};std::vector<Delays> buffers(mappings_.size());size_t bytes=captures_.size()*sizeof(Capture);
+  for(size_t i=0;i<mappings_.size();++i){const auto &mapping=*mappings_[i];if(mapping.input==SIZE_MAX)continue;const auto &input=routes.at(captures_.at(mapping.input)->route),&output=routes.at(mapping.output);
+    if(output.arrival<input.arrival+output.postDelay)throw std::invalid_argument("Refreshed group output precedes its dry ingress");
+    const auto delay=size_t(output.arrival-input.arrival-output.postDelay)*2,post=size_t(output.postDelay)*2;bytes+=(delay+post)*sizeof(float);
+    if(bytes>64*1024*1024)throw std::invalid_argument("Refreshed group alignment exceeds its 64 MB budget");buffers[i].main.resize(delay);buffers[i].post.resize(post);
+  }
+  // All validation/allocation precedes mutation. The contribution callback still
+  // addresses this same object and keeps its source/group membership and fade.
+  routes_.swap(routes);for(size_t i=0;i<mappings_.size();++i){auto &mapping=*mappings_[i];mapping.delay.swap(buffers[i].main);mapping.postDelay.swap(buffers[i].post);mapping.cursor=mapping.postCursor=0;}
+  for(auto &capture:captures_){capture->position=UINT64_MAX;capture->frames=0;}
 }
 std::vector<MixerTransition::Dependency> SongGroupRuntime::dependencies() const {
   std::vector<MixerTransition::Dependency> result;

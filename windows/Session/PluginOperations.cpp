@@ -62,6 +62,9 @@ GraphRackClone PluginOperations::cloneRackSlot(uint32_t index) {
 std::vector<PluginAudioBus> PluginOperations::audioBuses(size_t index,bool required) {
   try{return editor(index).buses();}catch(const std::exception &){if(required)throw;return {};}
 }
+std::vector<PluginAudioBus> PluginOperations::audioBusMetadata(const std::string &identity) {
+  return audioBuses(slot({{"plugin",identity}}),true);
+}
 std::vector<PluginParameter> PluginOperations::parameterMetadata(const std::string &identity) {
   return editor(slot({{"plugin",identity}})).parameters();
 }

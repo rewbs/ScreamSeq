@@ -81,6 +81,7 @@ std::unique_ptr<Document> richDocument() {
     n.signal.songSources.push_back(source);n.signal.songModulation.push_back({source.node.id,"persistent-plugin-uuid",uint32_t(kind),-.2,.3,kind%2!=0,kind==5});}
   n.signal.groups.push_back({id(),0,"Rack group",300,100,{"plugin:fx-identity"}});
   SignalSongSource busFollower;busFollower.node.id=id();busFollower.node.kind=SignalNodeKind::Follower;busFollower.audioBus=track;busFollower.preFader=true;n.signal.songSources.push_back(busFollower);
+  SignalSongSource stageFollower;stageFollower.node.id=id();stageFollower.node.kind=SignalNodeKind::Follower;stageFollower.audioStage=track;stageFollower.output=2;n.signal.songSources.push_back(stageFollower);
   EnvelopeShape instrumentShape; instrumentShape.span = 2561; instrumentShape.instrument = true; instrumentShape.flags = 7; instrumentShape.markers = {0,2560,256,1024,UINT32_MAX}; instrumentShape.points = {{0,0},{256,1},{1024,.5},{2560,0}};
   const auto instrumentTemplate = id(); n.envelopeBank.push_back({instrumentTemplate,"Instrument template",instrumentShape});
   for (auto kind : {EnvelopeTargetKind::Volume,EnvelopeTargetKind::Pan,EnvelopeTargetKind::Pitch}) { EnvelopeTarget t{kind,instrument,0}; applyEnvelope(n,doc->song(),t,instrumentShape,11); n.envelopeLinks.push_back({t,instrumentTemplate,11}); }
@@ -125,7 +126,7 @@ void optionalDefaults(const Json &encoded) {
   for (const char *key : {"amount","wet"}) { compare("/signalGraph/assignments/0",key,1); compare("/signalGraph/instrumentAssignments/0",key,1); compare("/signalGraph/commands/0",key,1); }
   compare("/signalGraph/commands/0","tails",false); compare("/signalGraph/commands/0","column",0);
   compare("/signalGraph/inputs/0","gainDB",0); compare("/signalGraph/inputs/0","preFader",false);
-  for(const char *key:{"audioBus","audioPlugin","noteTarget","noteInstrument"})compare("/signalGraph/songSources/0",key,"");
+  for(const char *key:{"audioBus","audioPlugin","audioStage","noteTarget","noteInstrument"})compare("/signalGraph/songSources/0",key,"");
   compare("/signalGraph/songSources/0","output",0);compare("/signalGraph/songSources/0","preFader",false);compare("/signalGraph/songSources/0","amount",1);
   for(const char *key:{"minimum","maximum"})compare("/signalGraph/songModulation/0",key,0);
   compare("/signalGraph/songModulation/0","enabled",true);compare("/signalGraph/songModulation/0","quantized",false);
@@ -181,6 +182,8 @@ void negativeTests(const Json &j) {
   rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","A==="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA=A"); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AB=="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA==AA=="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA\n=");
   rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/inputs/0",0); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/outputs/0",64); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/format","CLAP"); rejectAt(j,"/signalGraph/library/0/nodes/0/plugin",Json::object()); rejectAt(j,"/signalGraph/library/0/nodes/0/envelopes",Json::array());
   rejectAt(j,"/signalGraph/library/0/audio/0/source","n999999"); rejectAt(j,"/signalGraph/library/0/audio/0/input",62); rejectAt(j,"/signalGraph/library/0/modulation/0/minimum",-2); rejectAt(j,"/signalGraph/library/0/modulation/0/quantized",1); rejectAt(j,"/signalGraph/library/0/nodes/9/envelopes/0/pattern","n999999");
+  const auto stagePath="/signalGraph/songSources/"+std::to_string(j["signalGraph"]["songSources"].size()-1);
+  rejectAt(j,(stagePath+"/audioStage").c_str(),"n999999");rejectAt(j,(stagePath+"/output").c_str(),0);rejectAt(j,(stagePath+"/output").c_str(),3);rejectAt(j,(stagePath+"/preFader").c_str(),true);rejectAt(j,(stagePath+"/audioPlugin").c_str(),"fx-identity");
   rejectAt(j,"/signalGraph/songSources/0/kind","plugin");rejectAt(j,"/signalGraph/songSources/0/audioBus","n999999");rejectAt(j,"/signalGraph/songSources/0/amount",2);
   rejectAt(j,"/signalGraph/songModulation/0/source","n999999");rejectAt(j,"/signalGraph/songModulation/0/minimum",-2);rejectAt(j,"/signalGraph/songModulation/0/plugin","");
   rejectAt(j,"/signalGraph/songSources/0/id",j["signalGraph"]["library"][0]["nodes"][0]["id"]);

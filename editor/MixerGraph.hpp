@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <span>
 #include <vector>
 
 namespace Tracker {
@@ -100,6 +101,7 @@ struct MixerProcessorInfo {
   uint64_t activeOutputs = UINT64_MAX;
   uint64_t activeInputs = 0; // Prepared auxiliary capacity; main input belongs to the insert chain.
   uint64_t mainInputFallback = 0; // Missing detector input uses this processor's main input (native dynamics only).
+  bool scheduledSource = false; // Real instrument endpoint: render in the dependency DAG, not before it.
 };
 struct MixerConnection {
   size_t source = 0, target = 0;
@@ -137,6 +139,10 @@ struct MixerProcessorPlan {
   uint32_t inputLatency=0,outputLatency=0,mainDelay=0;
 };
 struct MixerExecutionStep {uint8_t kind=0;size_t bus=SIZE_MAX,processor=SIZE_MAX;};
+// Prepared timing-only edges preserve a group's dry boundary when its chosen
+// ingress is later than the wet egress. They carry no audio and are never saved.
+struct MixerTimingPoint {std::string processor;uint64_t bus=0;bool input=false;bool operator==(const MixerTimingPoint &) const=default;};
+struct MixerTimingConstraint {MixerTimingPoint source,target;bool operator==(const MixerTimingConstraint &) const=default;};
 struct MixerPlan {
   std::vector<MixerNodePlan> nodes; // Indexed by bus, evaluated in order.
   std::vector<size_t> order;
@@ -148,6 +154,8 @@ struct MixerPlan {
   bool segmented=false;
   std::vector<MixerPluginConnectionPlan> pluginConnections;
   std::vector<MixerProcessorPlan> processors;
+  std::vector<size_t> scheduledSources;
+  std::vector<MixerTimingConstraint> timing;
   std::vector<MixerExecutionStep> execution;
   size_t master = 0;
   uint32_t latency = 0;
@@ -164,7 +172,7 @@ void moveMixerInserts(MixerGraph &, const std::vector<std::string> &effectRack,
 void detachMixerInsert(MixerGraph &, const std::vector<std::string> &effectRack,
                        const std::string &plugin);
 MixerPlan compileMixer(const MixerGraph &, const std::vector<uint64_t> &tracks,
-                       const std::vector<MixerProcessorInfo> &, uint32_t sampleRate);
+                       const std::vector<MixerProcessorInfo> &, uint32_t sampleRate, std::span<const MixerTimingConstraint> timing={});
 // Control-thread dependency comparison for a prepared live transition. Each
 // destination processor maps to an old processor slot only if every main and
 // auxiliary input has the same expression, including gain, summing order and

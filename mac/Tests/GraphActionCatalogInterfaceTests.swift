@@ -229,6 +229,9 @@ extension InterfaceTests {
     editor.onRequest={method,params,reply in writes.append((method,params));reply(["error":["message":"captured"]])}
     editor.selectedID="source:n200";editor.canvas.selectNodes(["source:n200"]);editor.toggleSelectedBypass()
     try require(editor.bypassActionTitle=="Unmute source" && writes.last?.0=="graph.source.mute" && writes.last?.1["node"] as? String=="n200" && writes.last?.1["graph"] is NSNull && writes.last?.1["muted"] as? Bool==false,"Root source mute addresses the source identity and does not mutate a rack bypass")
+    let sourceMenu=NSMenu();editor.appendSelectedObjectActions(to:sourceMenu)
+    try require(sourceMenu.items.first?.title=="Unmute source" && sourceMenu.items.first?.keyEquivalent=="m","A source right-click exposes mute directly with its shortcut, without nested panel menus")
+    try require((editor.canvas.accessibilityValue() as? String)?.contains("muted")==true,"Canvas accessibility describes source mute state")
     editor.graphID="n100";editor.update(song);editor.selectedID="n102";editor.canvas.selectNodes(["n102"]);editor.toggleSelectedBypass()
     try require(writes.last?.0=="graph.source.mute" && writes.last?.1["graph"] as? String=="n100" && writes.last?.1["node"] as? String=="n102" && writes.last?.1["muted"] as? Bool==true && editor.bypassActionTitle.contains("all uses"),"Reusable source mute states and edits the shared-definition scope")
     editor.chooseIndependentUse(graph:"n100")

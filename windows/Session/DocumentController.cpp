@@ -476,6 +476,8 @@ Json DocumentController::operation(const std::string &method,Json params) {
     GraphHostHooks hooks;hooks.rack=[&]{return plugins_->graphRack();};hooks.cloneRackSlot=[&](uint32_t slot){return plugins_->cloneRackSlot(slot);};
     hooks.prepareRecipe=[&](Tracker::GraphPluginRecipe &recipe){plugins_->prepareRecipe(recipe);};
     hooks.parameters=[&](const std::string &identity){return plugins_->parameterMetadata(identity);};
+    hooks.audioBuses=[&](const std::string &identity){return plugins_->audioBusMetadata(identity);};
+    hooks.sampleRate=playbackFeedback().sampleRate;
     hooks.recording=[&](const std::string &identity,uint32_t parameter){
       Tracker::ParameterProvenanceRecording result;const auto &rack=project_.preserved.at("plugins");
       const auto found=std::find_if(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==identity;});

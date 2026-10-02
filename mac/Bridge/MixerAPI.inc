@@ -54,7 +54,7 @@
         allowed(@[@"enabled", @"dryRun"]);
         bool enabled = p[@"enabled"] ? boolean(p[@"enabled"]) : true;
         if (enabled) candidate.ensureMixer();
-        else { require(graph.detachedChains.empty()&&graph.disconnectedMainInputs.empty()&&graph.pluginConnections.empty()&&!graph.masterOutputDisconnected,"Reconnect cut cables and place detached chains before disabling routing"); auto detached=std::move(graph.detached); graph = {}; graph.detached=std::move(detached); candidate.noteTracks.clear(); candidate.signal.assignments.clear(); candidate.signal.commands.clear(); candidate.signal.lanes.clear();candidate.signal.inputs.clear();candidate.signal.outputs.clear(); }
+        else { require(graph.detachedChains.empty()&&graph.disconnectedMainInputs.empty()&&graph.pluginConnections.empty()&&candidate.signal.stageConnections.empty()&&std::none_of(candidate.signal.songSources.begin(),candidate.signal.songSources.end(),[](const auto &s){return s.audioStage!=0;})&&!graph.masterOutputDisconnected,"Reconnect cut cables and place detached chains before disabling routing"); auto detached=std::move(graph.detached); graph = {}; graph.detached=std::move(detached); candidate.noteTracks.clear(); candidate.signal.assignments.clear(); candidate.signal.commands.clear(); candidate.signal.lanes.clear();candidate.signal.inputs.clear();candidate.signal.outputs.clear(); }
       } else if ([method isEqual:@"mixer.bus.add"]) {
         allowed(@[@"kind", @"name", @"output", @"sendFrom", @"position", @"dryRun"]);
         const auto kind = decodeMixerKind(p[@"kind"]);
@@ -108,6 +108,8 @@
         std::erase_if(candidate.signal.assignments,[&](const auto &a){return a.target==affected;});
         std::erase_if(candidate.signal.commands,[&](const auto &c){return c.target==affected;});candidate.signal.lanes.erase(affected);
         std::erase_if(candidate.signal.inputs,[&](const auto &r){return r.source==affected||r.target==affected;});
+        std::erase_if(candidate.signal.stageConnections,[&](const auto &r){return r.source.stage==affected||r.target.stage==affected;});
+        for(auto &s:candidate.signal.songSources)if(s.audioStage==affected){s.audioStage=0;s.output=0;s.preFader=false;}
         std::erase_if(candidate.signal.outputs,[&](const auto &r){return r.source==affected||r.target==affected;});
         std::erase_if(graph.buses, [&](const auto &item) { return item.id == affected; });
         for (auto &item : graph.buses) {
@@ -136,7 +138,7 @@
         if(previous!=graph.pluginConnections.end()){value.gainDB=previous->gainDB;value.enabled=previous->enabled;}
         if(p[@"gainDB"])value.gainDB=number(p[@"gainDB"],-96,12);if(p[@"enabled"])value.enabled=boolean(p[@"enabled"]);
         for(bool input:{false,true}){const auto &id=input?value.target:value.source;auto found=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==id;});require(found!=_plugins.end(),"Plugin endpoint no longer exists");
-          const bool instrument=found->descriptor.instrument||found->descriptor.type==kAudioUnitType_MusicDevice;require(!input||!instrument,"Audio inputs on plugin instruments require source scheduling support; choose an effect input");
+          const bool instrument=found->descriptor.instrument||found->descriptor.type==kAudioUnitType_MusicDevice;
           const auto ports=_audio->pluginBuses(size_t(found-_plugins.begin()));const auto port=input?value.input:value.output;require(std::any_of(ports.begin(),ports.end(),[&](const auto &b){return b.input==input&&b.index==port&&b.supported;}),"Choose an available physical plugin audio port");
           if(!instrument)rootDetachedMixerPlugin(graph,id,[&]{return candidate.makeEntity().id;});
         }
@@ -149,8 +151,8 @@
         const auto input = uint32_t(integer(p[@"input"], 0, 63));
         const auto sources = array(p[@"sources"], 128);
         if (sources.count) {
-          targetPlugin = plugin(p[@"plugin"], false);
-          rootDetachedMixerPlugin(graph,targetPlugin,[&]{return candidate.makeEntity().id;});
+          auto known=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==targetPlugin;});require(known!=_plugins.end(),"Plugin endpoint no longer exists");
+          if(!known->descriptor.instrument&&known->descriptor.type!=kAudioUnitType_MusicDevice)rootDetachedMixerPlugin(graph,targetPlugin,[&]{return candidate.makeEntity().id;});
           auto found = std::find_if(_plugins.begin(), _plugins.end(), [&](const auto &p) { return p.instanceID == targetPlugin; });
           const auto available = _audio->pluginBuses(size_t(found - _plugins.begin()));
           require(std::any_of(available.begin(), available.end(), [&](const auto &b) { return b.input && b.index == input && b.supported; }),
@@ -190,21 +192,36 @@
         else if (!remove) graph.instruments.push_back({std::move(id), target, output});
       } else throw Error(-32601, "Unknown mixer method");
       std::vector<uint64_t> tracks; for (const auto &[index, track] : _document->native().tracks) tracks.push_back(track.id);
+      // Validate the complete projected DAG, including channel graph stages.
+      // A routing preview retains the current signal graph without copying its envelopes.
+      const auto &signal = preview ? _document->native().signal : candidate.signal;
+      const auto routingGraph = signalRoutingGraph(graph, signal);
       std::vector<MixerProcessorInfo> processors;
       for (size_t slot = 0; slot < _plugins.size(); ++slot) {
         const auto &p = _plugins[slot]; uint32_t count = 1; uint64_t enabled = 1, inputs = 0;
-        for (const auto &b : _audio->pluginBuses(slot)) if (!b.input) { count = std::max(count, b.index + 1); if (b.active) enabled |= uint64_t(1) << b.index; }
-        for (const auto &b : _audio->pluginBuses(slot)) if (b.input && b.index && b.active) inputs |= uint64_t(1) << b.index;
-        for(const auto &r:graph.pluginConnections)if(r.enabled){if(r.source==p.instanceID)enabled|=uint64_t(1)<<r.output;if(r.target==p.instanceID)inputs|=uint64_t(1)<<r.input;}
-        for(const auto &r:graph.sidechains)if(r.plugin==p.instanceID&&r.enabled)inputs|=uint64_t(1)<<r.input;
-        for(const auto &r:graph.instruments)if(r.plugin==p.instanceID&&r.target)enabled|=uint64_t(1)<<r.output;
-        processors.push_back({p.instanceID, 0, 0, p.descriptor.instrument || p.descriptor.type == kAudioUnitType_MusicDevice, p.bypass, count, enabled, inputs});
+        for (const auto &b : _audio->pluginBuses(slot)) if (b.supported) {
+          if (b.input) inputs |= uint64_t(1) << b.index;
+          else { count = std::max(count, b.index + 1); enabled |= uint64_t(1) << b.index; }
+        }
+        // Host bypass retains and clocks the processor; it is not a missing endpoint.
+        processors.push_back({p.instanceID, 0, 0, p.descriptor.instrument || p.descriptor.type == kAudioUnitType_MusicDevice, false, count, enabled, inputs});
+        processors.back().scheduledSource = processors.back().instrument;
+      }
+      for (const auto &bus : graph.buses) {
+        const auto in = signalStagePorts(signal, bus.id, true), out = signalStagePorts(signal, bus.id, false);
+        const bool used = std::any_of(signal.assignments.begin(), signal.assignments.end(), [&](const auto &a) { return a.target == bus.id; }) ||
+          std::any_of(signal.commands.begin(), signal.commands.end(), [&](const auto &c) { return c.target == bus.id && (c.kind == SignalCommandKind::Row || c.kind == SignalCommandKind::Start); });
+        if (in.empty() && out.empty() && !used) continue;
+        uint64_t inputs = 0, outputs = 1; uint32_t count = 1;
+        for (auto p : in) inputs |= uint64_t(1) << p;
+        for (auto p : out) { outputs |= uint64_t(1) << p; count = std::max(count, p + 1); }
+        processors.push_back({signalBusIdentity(bus.id), 0, 0, false, false, count, outputs, inputs});
       }
       MixerPlan plan;
       try {
         validatePluginCapacity(_plugins, graph.buses.size());
         if (!preview) candidate.validate(song);
-        plan = compileMixer(graph, tracks, processors, uint32_t(_audio->sampleRate()));
+        plan = compileMixer(routingGraph, tracks, processors, uint32_t(_audio->sampleRate()));
       } catch (const std::invalid_argument &e) { throw Error(-32602, e.what()); }
       auto structural = graph;
       if (structural.buses.size() == original.buses.size()) for (size_t i = 0; i < structural.buses.size(); ++i) {

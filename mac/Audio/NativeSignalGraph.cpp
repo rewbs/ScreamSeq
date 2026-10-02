@@ -27,7 +27,7 @@ struct NativeSignalGraph::Instance {
   struct Remembered {
     std::shared_ptr<SignalRuntime> runtime;
     std::shared_ptr<GraphProcessorSet> processors;
-    GraphControlPlan prior; // Only per-copy presets/ranges/touched controls.
+    std::shared_ptr<GraphControlPlan> prior=std::make_shared<GraphControlPlan>();
   };
   std::shared_ptr<void> remembered; // Producer-only; immutable after publication.
   SignalCopyIdentity copyIdentity() const noexcept {return {identity.graph,identity.target,identity.instrument?uint8_t(3):identity.role,identity.instrument,identity.channel};}
@@ -232,7 +232,7 @@ struct NativeSignalGraph::CopySet {
   std::vector<Assignment> assignments;
   struct Buffers {Instance *instance=nullptr;std::vector<float> dry;std::vector<Instance::Auxiliary> auxiliary;};
   std::vector<Buffers> buffers;
-  size_t storage=0,processors=0;
+  size_t storage=0,tableStorage=0,processors=0;
   uint32_t domainBase=0,domains=0;
 };
 const std::vector<std::shared_ptr<NativeSignalGraph::Bus>> &NativeSignalGraph::controlBuses() const noexcept {return controlCopies_?controlCopies_->buses:buses_;}
@@ -288,6 +288,9 @@ NativeSignalGraph::NativeSignalGraph(const NativeSong &native,double rate,bool o
     }
     if(prepared->reserved>1048576)throw std::invalid_argument("Channel graph compensation exceeds supported delay");
     for(const auto &route:native.signal.outputs)if(route.source==bus.id)prepared->outputPorts.push_back(route.output);
+    for(const auto &route:native.signal.stageConnections)if(route.source.stage==bus.id)prepared->outputPorts.push_back(route.output);
+    for(const auto &source:native.signal.songSources)if(source.node.kind==SignalNodeKind::Follower&&source.audioStage==bus.id)prepared->outputPorts.push_back(source.output);
+    std::sort(prepared->outputPorts.begin(),prepared->outputPorts.end());prepared->outputPorts.erase(std::unique(prepared->outputPorts.begin(),prepared->outputPorts.end()),prepared->outputPorts.end());
     budget(prepared->outputPorts.size()*sizeof(std::array<float,8192>));prepared->outputBuffers.resize(prepared->outputPorts.size());
     const size_t delaySamples=size_t(prepared->reserved)*2+2;
     for(auto &instance:prepared->instances)for(auto port:prepared->outputPorts)if(instance->runtime->output(port)){
@@ -314,7 +317,7 @@ std::shared_ptr<NativeSignalGraph::CopySet> NativeSignalGraph::prepareCopies(con
   // Stable outer processor slots survive removal and Undo. Empty slots do not
   // enter the compiled mixer but old fading plans can keep their original index.
   for(const auto &old:controlBuses()){auto empty=std::make_shared<Bus>();empty->id=old->id;empty->rate=rate_;next->buses.push_back(std::move(empty));}
-  const auto reserve=[&](size_t bytes){if(bytes>controls.preparationHeadroom)throw std::invalid_argument("Live graph copies exceed the prepared audio storage budget");controls.preparationHeadroom-=bytes;next->storage+=bytes;};
+  const auto reserve=[&](size_t bytes,bool retained=false){if(bytes>controls.preparationHeadroom)throw std::invalid_argument("Live graph copies exceed the prepared audio storage budget");controls.preparationHeadroom-=bytes;(retained?next->storage:next->tableStorage)+=bytes;};
   const auto sameCopy=[](const SignalCopyIdentity &a,const SignalCopyIdentity &b){return std::tie(a.graph,a.target,a.role,a.instrument,a.channel)==std::tie(b.graph,b.target,b.role,b.instrument,b.channel);};
   for(const auto &bus:native.mixer.buses){
     std::set<std::pair<uint64_t,uint8_t>> required;
@@ -338,10 +341,10 @@ std::shared_ptr<NativeSignalGraph::CopySet> NativeSignalGraph::prepareCopies(con
       }else {
         instance=std::make_shared<Instance>(*definition,role,rate_,offline_);instance->identity.graph=id;instance->identity.target=identity.target;instance->identity.role=role;instance->identity.instrument=identity.instrument;instance->identity.channel=identity.channel;
         instance->identity.name=bus.name+" · "+definition->name+" · ";
-        reserve(sizeof(Instance)+sizeof(GraphProcessorSet)+instance->processors->entries.capacity()*sizeof(GraphProcessorSet::Entry)+instance->dryDelay.capacity()*sizeof(float)+instance->runtime->storageBytes()+instance->bypassStorage());
-        for(const auto &p:instance->processors->entries)reserve(p.endpoint->storageBytes()+p.endpoint->initial()->storageBytes());
+        reserve(sizeof(Instance)+sizeof(GraphProcessorSet)+instance->processors->entries.capacity()*sizeof(GraphProcessorSet::Entry)+instance->dryDelay.capacity()*sizeof(float)+instance->runtime->storageBytes()+instance->bypassStorage(),true);
+        for(const auto &p:instance->processors->entries)reserve(p.endpoint->storageBytes()+p.endpoint->initial()->storageBytes(),true);
         if(observation_){if(!controls.signalDomains)controls.signalDomainBase=observation_->domainCount();instance->observationDomain=observation_->prepareDomain(controls.signalDomains++);
-          const auto before=instance->runtime->storageBytes();instance->runtime->observer(std::make_shared<GraphSignalObservation>(*observation_,instance->observationDomain,identity,*definition,instance->runtime->plan(),controls.signalPortIdentities,Instance::observedBuses(*instance->processors)));reserve(instance->runtime->storageBytes()-before);}
+          const auto before=instance->runtime->storageBytes();instance->runtime->observer(std::make_shared<GraphSignalObservation>(*observation_,instance->observationDomain,identity,*definition,instance->runtime->plan(),controls.signalPortIdentities,Instance::observedBuses(*instance->processors)));reserve(instance->runtime->storageBytes()-before,true);}
         if(activity_)for(auto &p:instance->processors->entries){const auto node=std::find_if(definition->nodes.begin(),definition->nodes.end(),[&](const auto &n){return n.id==p.id;});auto observed=instance->observation(*node,*p.endpoint->initial());
           const auto old=std::find_if(activity_->processors.begin(),activity_->processors.end(),[&](const auto &p){return p.key==observed.key;});uint32_t token=0;
           if(old!=activity_->processors.end())token=uint32_t(old-activity_->processors.begin()+1);
@@ -355,6 +358,8 @@ std::shared_ptr<NativeSignalGraph::CopySet> NativeSignalGraph::prepareCopies(con
       prepared->instances.push_back(instance);if(role<2)prepared->renderOrder[role].push_back(prepared->instances.size()-1);
     }
     for(const auto &route:native.signal.outputs)if(route.source==bus.id)prepared->outputPorts.push_back(route.output);
+    for(const auto &route:native.signal.stageConnections)if(route.source.stage==bus.id)prepared->outputPorts.push_back(route.output);
+    for(const auto &source:native.signal.songSources)if(source.node.kind==SignalNodeKind::Follower&&source.audioStage==bus.id)prepared->outputPorts.push_back(source.output);
     std::sort(prepared->outputPorts.begin(),prepared->outputPorts.end());prepared->outputPorts.erase(std::unique(prepared->outputPorts.begin(),prepared->outputPorts.end()),prepared->outputPorts.end());
     reserve(prepared->outputPorts.size()*sizeof(std::array<float,8192>));prepared->outputBuffers.resize(prepared->outputPorts.size());prepared->row.reserve(required.size());prepared->persistent.reserve(required.size());
     for(const auto &command:native.signal.commands)if(command.target==bus.id){const auto pattern=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &p){return p.second.id==command.pattern;});if(pattern==native.patterns.end())throw std::invalid_argument("Graph command pattern is unavailable");prepared->patterns[pattern->first].push_back(command);}
@@ -363,6 +368,9 @@ std::shared_ptr<NativeSignalGraph::CopySet> NativeSignalGraph::prepareCopies(con
   }
   prepareParameters(native.signal,controls,previous,next.get());
   for(auto &bus:next->buses){
+    if(!bus->sampleSource&&bus->instances.empty())reserve(sizeof(Bus));
+    reserve(bus->instances.capacity()*sizeof(bus->instances[0])+(bus->row.capacity()+bus->persistent.capacity()+bus->renderOrder[0].capacity()+bus->renderOrder[1].capacity())*sizeof(size_t)+bus->outputPorts.capacity()*sizeof(uint32_t));
+    for(const auto &[pattern,commands]:bus->patterns)reserve(sizeof(pattern)+sizeof(commands)+4*sizeof(void*)+commands.capacity()*sizeof(SignalCommand));
     for(const auto &instance:bus->instances){const auto owner=std::find_if(controls.runtimeOwners.begin(),controls.runtimeOwners.end(),[&](const auto &owner){return owner.target==&instance->runtime;});if(owner==controls.runtimeOwners.end())throw std::logic_error("Missing prepared copy runtime");bus->reserved+=owner->state->latency();
       for(const auto &[target,tail]:controls.tails)if(target==&instance->tailFrames){bus->tailSeconds=std::min(mixerMaximumTailSeconds,bus->tailSeconds+double(tail)/rate_);break;}
       const auto processor=std::find_if(controls.processorOwners.begin(),controls.processorOwners.end(),[&](const auto &p){return p.target==&instance->processors;});if(processor!=controls.processorOwners.end())next->processors+=processor->state->entries.size();
@@ -372,12 +380,14 @@ std::shared_ptr<NativeSignalGraph::CopySet> NativeSignalGraph::prepareCopies(con
       for(const auto port:bus->outputPorts)if(owner->state->output(port)){const auto delay=size_t(bus->reserved)*2+2;reserve(sizeof(Instance::Auxiliary)+delay*sizeof(float));buffers.auxiliary.push_back({port,std::vector<float>(delay),0});}next->buffers.push_back(std::move(buffers));
     }
   }
-  reserve(sizeof(CopySet)+next->retained.capacity()*sizeof(next->retained[0])+next->buses.capacity()*sizeof(next->buses[0])+next->assignments.capacity()*sizeof(CopySet::Assignment)+next->buffers.capacity()*sizeof(CopySet::Buffers));
+  reserve(sizeof(CopySet)+next->routing.bytes()+next->retained.capacity()*sizeof(next->retained[0])+next->buses.capacity()*sizeof(next->buses[0])+next->assignments.capacity()*sizeof(CopySet::Assignment)+next->buffers.capacity()*sizeof(CopySet::Buffers));
   return next;
 }
 size_t NativeSignalGraph::copyIndex(const CopySet &set,uint64_t target) const noexcept {for(size_t i=0;i<set.buses.size();++i)if(set.buses[i]->id==target&&(set.buses[i]->sampleSource||!set.buses[i]->instances.empty()))return i;return SIZE_MAX;}
 std::span<const uint32_t> NativeSignalGraph::copyOutputs(const CopySet &set,size_t index) const noexcept {return index<set.buses.size()?std::span<const uint32_t>(set.buses[index]->outputPorts):std::span<const uint32_t>{};}
 size_t NativeSignalGraph::copyStorageBytes(const CopySet &set) const noexcept {return set.storage;}
+size_t NativeSignalGraph::copyTableStorageBytes(const CopySet &set) const noexcept {return set.tableStorage;}
+const NativeSignalGraph::CopySet *NativeSignalGraph::previousCopySet(const CopySet &set) const noexcept {return set.predecessor.get();}
 size_t NativeSignalGraph::copyProcessors(const CopySet &set) const noexcept {return set.processors;}
 void NativeSignalGraph::compileCopies(const CopySet &set,MixerGraph &mixer,std::vector<MixerProcessorInfo> &processors) const {
   mixer=set.routing;for(const auto &bus:set.buses)if(bus->sampleSource||!bus->instances.empty()){uint32_t count=1;uint64_t mask=1;for(const auto port:bus->outputPorts){count=std::max(count,port+1);mask|=uint64_t(1)<<port;}processors.push_back({signalBusIdentity(bus->id),bus->reserved,bus->tailSeconds,false,false,count,mask,bus->inputMask});}
@@ -406,7 +416,7 @@ void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPl
   for(const auto &b:(copies?copies->buses:controlBuses()))for(const auto &instance:b->instances){
     const auto saved=std::static_pointer_cast<Instance::Remembered>(instance->remembered);
     const bool inPrevious=previous&&std::any_of(previous->runtimeOwners.begin(),previous->runtimeOwners.end(),[&](const auto &owner){return owner.target==&instance->runtime;});
-    const auto *prior=inPrevious?previous:(saved?&saved->prior:nullptr);
+    const auto *prior=inPrevious?previous:(saved?saved->prior.get():nullptr);
     const auto d=std::find_if(next.library.begin(),next.library.end(),[&](const auto &d){return d.id==instance->graph;});
     if(d==next.library.end())throw std::invalid_argument("Playing subgraph no longer exists");
     const SignalControls *controls=nullptr;
@@ -556,13 +566,26 @@ void NativeSignalGraph::prepareParameters(const SignalGraph &next,GraphControlPl
     plan.tails.emplace_back(&instance->tailFrames,uint64_t(std::ceil(tail*rate_))+runtime->latency());
     auto remember=std::make_shared<Instance::Remembered>();remember->runtime=runtime;remember->processors=processorSet;
     const auto ownsEndpoint=[&](const GraphPluginEndpoint *endpoint){for(const auto *entries:{&processorSet->entries,&processorSet->retired})for(const auto &p:*entries)if(p.endpoint.get()==endpoint)return true;return false;};
-    for(const auto &preset:plan.presets)if(ownsEndpoint(preset.endpoint))remember->prior.presets.push_back(preset);
-    for(const auto &control:plan.controls)if(control->definition.id==instance->graph)remember->prior.controls.push_back(control);
-    const auto ownsPlugin=[&](const NativePlugin *plugin){for(const auto &preset:remember->prior.presets)for(const auto &state:{preset.state,preset.previous})if(state&&state->plugin.get()==plugin)return true;return false;};
-    for(const auto &range:plan.ranges)if(ownsPlugin(range.plugin))remember->prior.ranges.push_back(range);
-    for(size_t i=updateStart;i<plan.updates.size();++i)if(ownsEndpoint(plan.updates[i].endpoint))remember->prior.updates.push_back(plan.updates[i]);
-    const size_t rememberedBytes=sizeof(Instance::Remembered)+remember->prior.presets.capacity()*sizeof(GraphControlPlan::Preset)+remember->prior.ranges.capacity()*sizeof(GraphControlPlan::Range)+remember->prior.updates.capacity()*sizeof(GraphParameterUpdate);
-    reserve(rememberedBytes+remember->prior.controls.capacity()*sizeof(remember->prior.controls[0]));plan.rememberedCopies.push_back({&instance->remembered,std::move(remember),rememberedBytes});
+    auto &memory=*remember->prior;
+    for(const auto &preset:plan.presets)if(ownsEndpoint(preset.endpoint))memory.presets.push_back(preset);
+    for(const auto &control:plan.controls)if(control->definition.id==instance->graph)memory.controls.push_back(control);
+    const auto ownsPlugin=[&](const NativePlugin *plugin){for(const auto &preset:memory.presets)for(const auto &state:{preset.state,preset.previous})if(state&&state->plugin.get()==plugin)return true;return false;};
+    for(const auto &range:plan.ranges)if(ownsPlugin(range.plugin))memory.ranges.push_back(range);
+    for(const auto &scheduled:plan.scheduling)if(ownsPlugin(scheduled.state->plugin.get()))memory.scheduling.push_back(scheduled);
+    for(size_t i=updateStart;i<plan.updates.size();++i)if(ownsEndpoint(plan.updates[i].endpoint))memory.updates.push_back(plan.updates[i]);
+    memory.runtimeOwners.push_back(plan.runtimeOwners.back());
+    memory.processorOwners.push_back(plan.processorOwners.back());
+    const size_t rememberedBytes=sizeof(Instance::Remembered);
+    memory.copyOwnerStorage=rememberedBytes;
+    reserve(rememberedBytes+sizeof(GraphControlPlan)+memory.presets.capacity()*sizeof(GraphControlPlan::Preset)+memory.ranges.capacity()*sizeof(GraphControlPlan::Range)+memory.updates.capacity()*sizeof(GraphParameterUpdate)+memory.controls.capacity()*sizeof(memory.controls[0])+memory.scheduling.capacity()*sizeof(GraphControlPlan::Scheduling)+memory.runtimeOwners.capacity()*sizeof(GraphControlPlan::Runtime)+memory.processorOwners.capacity()*sizeof(GraphControlPlan::Processors));
+    plan.copyOwners.push_back(remember->prior);plan.rememberedCopies.push_back({&instance->remembered,std::move(remember),0});
+  }
+  // The coordinator retains removed copies for Undo. Their most recent state
+  // can outlive every previously active publication, so keep that ownership
+  // visible to the same deduplicating budget as active copies.
+  for(const auto &instance:(copies?copies->retained:controlCopies_->retained)){
+    if(std::any_of(plan.runtimeOwners.begin(),plan.runtimeOwners.end(),[&](const auto &owner){return owner.target==&instance->runtime;}))continue;
+    if(const auto memory=std::static_pointer_cast<Instance::Remembered>(instance->remembered))plan.copyOwners.push_back(memory->prior);
   }
   for(const auto &bus:(copies?copies->buses:controlBuses())){uint64_t frames=0;for(const auto &instance:bus->instances)for(const auto &[target,value]:plan.tails)if(target==&instance->tailFrames){frames+=value;break;}
     plan.graphTails.emplace_back(signalBusIdentity(bus->id),std::min(mixerMaximumTailSeconds,double(frames)/rate_));}
@@ -620,6 +643,7 @@ void NativeSignalGraph::refreshLatencies(std::vector<MixerProcessorInfo> &mixerP
       p.latency = b->reserved; p.tail = b->tailSeconds;
     }
   }
+  controlCopies_->storage=storageBytes_;
 }
 void NativeSignalGraph::compile(MixerGraph &mixer,std::vector<MixerProcessorInfo> &processors){compileCopies(*controlCopies_,mixer,processors);}
 bool NativeSignalGraph::sameNoteMembership(const NativeSong &native) const {

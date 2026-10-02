@@ -101,7 +101,7 @@ bool PluginChain::HostedMixerPlan::renderSources(void *opaque,MixerTransition::P
     uint32_t frames,uint64_t position,bool current) noexcept {
   auto &hosted=*static_cast<HostedMixerPlan *>(opaque);auto &chain=*hosted.owner;
   for(size_t index=0;index<hosted.rack.size();++index){
-    const auto &entry=*hosted.rack[index];if(!entry.plugin->isInstrument())continue;
+    const auto &entry=*hosted.rack[index];if(!entry.plugin->isInstrument()||routing.catalog[index].scheduledSource)continue;
     auto &wrapper=*hosted.processors[index];auto &device=wrapper.processor();
     device.plugin->transport(chain.currentTransport_);
     device.modulation=chain.modulationFor(hosted,index);

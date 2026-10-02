@@ -18,7 +18,7 @@
       };
       // Source scope is a read of the implicit routing projection, not a mixer edit.
       auto validateScope=[&](const Json &spec) {
-        for(auto key:{"audioBus","noteTarget"})if(spec.contains(key)&&text(spec.at(key),32)!="") {
+        for(auto key:{"audioBus","audioStage","noteTarget"})if(spec.contains(key)&&text(spec.at(key),32)!="") {
           const auto wanted=identity(spec.at(key));
           const bool exists=next.mixer.active() ? std::any_of(next.mixer.buses.begin(),next.mixer.buses.end(),[&](const auto &b){return b.id==wanted;}) :
             wanted==next.masterID||std::any_of(next.tracks.begin(),next.tracks.end(),[&](const auto &t){return t.second.id==wanted;});

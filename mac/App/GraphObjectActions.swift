@@ -1,6 +1,19 @@
 import AppKit
 
 extension SignalGraphEditor {
+  func appendSelectedObjectActions(to menu:NSMenu) {
+    guard let node=canvas.selected,canvas.selectedEdge==nil else{return}
+    let isPlugin=songNodePlugin[node] != nil || (graphID != nil && nodes.contains{$0["id"] as? String==node && $0["kind"] as? String=="plugin"})
+    if isPlugin {
+      menu.addItem(GraphCommand.openPlugin.item("Open plugin interface",key:"\r"){[weak self] in self?.openNode(node)})
+    }
+    // Sources and groups deserve the same direct comparison action as plugins.
+    // Keep unavailable reasons on the complete catalog, not on unrelated objects.
+    if bypassUnavailableReason==nil {
+      menu.addItem(GraphCommand.bypass.item(bypassActionTitle,key:"m"){[weak self] in self?.toggleSelectedBypass()})
+    }
+    if isPlugin || bypassUnavailableReason==nil {menu.addItem(.separator())}
+  }
   func makeIndependentUse() {
     guard !hasDraft else{status.stringValue="Finish the current edit before making a use independent";return}
     if data.isEmpty || loading{prepareCommand{[weak self] in self?.makeIndependentUse()};return}

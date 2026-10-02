@@ -32,7 +32,7 @@ struct NativeNoteTrack {
 };
 // Semantic cable identities survive filtering, grouping and route reordering.
 // Cutting implicit rack inputs records a disconnection without healing the chain.
-enum class SongConnectionKind { Output, Send, GraphInput, GraphOutput, PluginInput, PluginOutput, FollowerInput, Modulation, Note, Insert, MasterOutput, PluginConnection };
+enum class SongConnectionKind { Output, Send, GraphInput, GraphOutput, PluginInput, PluginOutput, FollowerInput, Modulation, Note, Insert, MasterOutput, PluginConnection, StageConnection };
 struct SongConnectionRef {
   SongConnectionKind kind;
   uint64_t source = 0, target = 0;
@@ -41,6 +41,7 @@ struct SongConnectionRef {
   bool preFader = false;
   std::string sourcePlugin; // Direct plugin contribution; plugin is its target.
   uint32_t output = 0;
+  uint64_t stage = 0; // Follower input from a typed aggregate graph stage.
 };
 struct NativeSong {
   static constexpr uint64_t maximumID = 1000000000000ULL;

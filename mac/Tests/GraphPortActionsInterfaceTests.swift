@@ -12,6 +12,9 @@ extension InterfaceTests {
     search.search.stringValue="n2";search.filter()
     try require(search.filtered.count==1 && search.filtered.first?.id=="n2","Stable IDs remain available as deliberate exact search terms")
 
+    search.search.stringValue="";search.replace([.init(id:"invalid",title:"Compressor audio input",detail:"",keywords:"",unavailable:"Notes require Notes sockets"),.init(id:"valid",title:"Synth Notes input",detail:"",keywords:"")])
+    try require(search.filtered.map(\.id)==["valid","invalid"] && search.table.selectedRow==0,"Compatible note targets come first; incompatible choices retain explanations below them")
+
     func key(_ node:String,_ number:UInt32=0,_ output:Bool=true,_ modulation:Bool=false)->GraphBoundaryPort {.init(node:node,number:number,output:output,modulation:modulation)}
     func choose(_ editor:SignalGraphEditor,_ id:String) throws {
       guard let index=editor.targetMenu.filtered.firstIndex(where:{$0.id==id})else{throw InterfaceFailure(message:"Missing socket choice \(id)")}

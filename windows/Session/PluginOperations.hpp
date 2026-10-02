@@ -77,6 +77,7 @@ public:
   GraphRackClone cloneRackSlot(uint32_t);
   void prepareRecipe(Tracker::GraphPluginRecipe &);
   std::vector<Tracker::PluginAudioBus> audioBuses(size_t,bool required=false);
+  std::vector<Tracker::PluginAudioBus> audioBusMetadata(const std::string &identity);
   std::vector<Tracker::PluginParameter> parameterMetadata(const std::string &identity);
   // Both API domain names and all UI Undo entry points share chronological
   // history. The callback applies one document entry; alreadyStopped prevents

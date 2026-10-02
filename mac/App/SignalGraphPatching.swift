@@ -61,6 +61,7 @@ extension SignalGraphEditor {
     switch kind {
     case "graph-input":routes=data["inputs"] as? [[String:Any]] ?? [];fields=["source","target","input"]
     case "graph-output":routes=data["outputs"] as? [[String:Any]] ?? [];fields=["source","target","output"]
+    case "stage-connection":routes=stageConnections;fields=["source","output","target","input"]
     case "plugin-connection":routes=mixer["pluginConnections"] as? [[String:Any]] ?? [];fields=["source","output","target","input"]
     case "plugin-input":routes=mixer["sidechains"] as? [[String:Any]] ?? [];fields=["source","plugin","input"]
     default:return nil

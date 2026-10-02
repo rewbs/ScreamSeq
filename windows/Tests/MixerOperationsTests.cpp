@@ -92,7 +92,7 @@ int main() {
       CHECK(Project::decodeNativeMetadata(Project::encodeNativeMetadata(added))==added);
       const auto noop=d.revision;m.invoke("mixer.plugin.connection.set",route);CHECK(d.revision==noop);
       auto rejectDirect=[&](Json value){const auto prior=d.native();const auto revision=d.revision;bool rejected=false;try{m.invoke("mixer.plugin.connection.set",value);}catch(const Api::ApiError &){rejected=true;}CHECK(rejected&&d.native()==prior&&d.revision==revision);};
-      for(const auto *field:{"source","target","output","input","gainDB","enabled","extra"}){auto bad=route;if(std::string(field)=="source")bad[field]="missing";else if(std::string(field)=="target")bad[field]="synth";else if(std::string(field)=="enabled")bad[field]=1;else bad[field]=99;rejectDirect(bad);}
+      for(const auto *field:{"source","target","output","input","gainDB","enabled","extra"}){auto bad=route;if(std::string(field)=="source")bad[field]="missing";else if(std::string(field)=="target")bad[field]="missing";else if(std::string(field)=="enabled")bad[field]=1;else bad[field]=99;rejectDirect(bad);}
       m.invoke("mixer.plugin.connection.set",{{"source","A"},{"output",0},{"target","B"},{"input",1}}); // Independent fan-in from another slice.
       const auto two=d.native();
       auto collision=route;collision["output"]=0;collision["replace"]={{"source","A"},{"output",2},{"target","B"},{"input",1}};rejectDirect(collision);
@@ -103,6 +103,32 @@ int main() {
       const auto beforeCut=d.native();SongConnectionRef cut{SongConnectionKind::PluginConnection};cut.sourcePlugin="synth";cut.plugin="C";
       d.annotate([&](NativeSong &n){removeSongConnections(n,{cut},{"synth"},{"A","B","C"});});CHECK(d.native().mixer.pluginConnections.size()==1&&d.native().mixer.buses[2].inserts==std::vector<std::string>{"C"});d.undo();CHECK(d.native()==beforeCut);
       const auto beforeDelete=d.native();d.annotate([](NativeSong &n){n.removePluginRoutes("B");});CHECK(d.native().mixer.pluginConnections.size()==1);d.undo();CHECK(d.native()==beforeDelete);
+      const auto beforeInput=d.native();Json instrumentInput={{"source","A"},{"output",0},{"target","synth"},{"input",0}};
+      auto dryInput=instrumentInput;dryInput["dryRun"]=true;m.invoke("mixer.plugin.connection.set",dryInput);CHECK(d.native()==beforeInput);
+      m.invoke("mixer.plugin.connection.set",instrumentInput);CHECK(d.native().mixer.pluginConnections.back().target=="synth");
+      CHECK(std::find(d.native().mixer.detached.begin(),d.native().mixer.detached.end(),"synth")==d.native().mixer.detached.end());
+      d.undo();CHECK(d.native()==beforeInput);d.redo();
+      m.invoke("mixer.sidechains.set",{{"plugin","synth"},{"input",1},{"sources",Json::array({{{"source",bs[0]["id"]}}})}});
+      CHECK(d.native().mixer.sidechains.back().plugin=="synth");
+      CHECK(Project::decodeNativeMetadata(Project::encodeNativeMetadata(d.native()))==d.native());
+      auto unavailable=instrumentInput;unavailable["input"]=2;rejectDirect(unavailable);
+
+    }
+
+    {
+      auto d=std::make_unique<Document>(MOD_TYPE_MPT,4);MixerHostHooks h;
+      for(const auto *name:{"A","B"}){auto p=effect;p.instanceID=name;h.plugins.push_back(p);}
+      h.buses=[](size_t,bool){return std::vector<PluginAudioBus>{{0,2,"Input",true,true,true},{0,2,"Output",false,true,true}};};
+      MixerOperations m(*d,[]{},h);m.invoke("mixer.inserts.move",{{"plugins",{"A"}},{"target",track}});
+      const auto second="n"+std::to_string(d->native().tracks.at(1).id);m.invoke("mixer.inserts.move",{{"plugins",{"B"}},{"target",second}});
+      d->annotate([&](NativeSong &n){SignalDefinition g;g.id=n.makeEntity().id;g.number=1;g.name="Stage";
+        const auto input=n.makeEntity().id,output=n.makeEntity().id;g.nodes={{input,SignalNodeKind::Input,"Input"},{output,SignalNodeKind::Output,"Output"}};g.audio={{input,output},{input,output,1,0}};
+        n.signal.library={g};n.signal.assignments={{n.tracks.at(0).id,g.id,1,1}};n.signal.stageConnections={{{"B",0},{{},n.tracks.at(0).id},0,1,0,true}};});
+      const auto before=d->native();const auto revision=d->revision;bool failed=false;
+      try{m.invoke("mixer.plugin.connection.set",{{"source","A"},{"output",0},{"target","B"},{"input",0},{"dryRun",true}});}catch(const Api::ApiError &){failed=true;}
+      CHECK(failed&&d->native()==before&&d->revision==revision); // The mixed stage/rack cycle is visible during dry runs.
+      failed=false;try{m.invoke("mixer.enable",{{"enabled",false}});}catch(const Api::ApiError &){failed=true;}CHECK(failed&&d->native()==before);
+      m.invoke("mixer.bus.set",{{"bus",track},{"gainDB",-3},{"preview",true}});CHECK(d->native()==before);
     }
 
     const auto beforeReturn=native();

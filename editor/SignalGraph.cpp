@@ -139,7 +139,7 @@ SignalDefinition extractSongSignalGroup(const SignalGraph &graph,const MixerGrap
     selected.insert(key.substr(7));
   }
   require(!selected.empty()&&selected.size()<=62,"Save a group containing one to 62 rack effects");
-  require(std::none_of(mixer.disconnectedMainInputs.begin(),mixer.disconnectedMainInputs.end(),[&](const auto &id){return selected.contains(id);})&&std::none_of(mixer.pluginConnections.begin(),mixer.pluginConnections.end(),[&](const auto &r){return selected.contains(r.source)||selected.contains(r.target);}),"This group has cut or direct plugin cables; use its song group until all boundary routes can be preserved in a reusable recipe");
+  require(std::none_of(graph.stageConnections.begin(),graph.stageConnections.end(),[&](const auto &r){return selected.contains(r.source.plugin)||selected.contains(r.target.plugin);})&&std::none_of(mixer.disconnectedMainInputs.begin(),mixer.disconnectedMainInputs.end(),[&](const auto &id){return selected.contains(id);})&&std::none_of(mixer.pluginConnections.begin(),mixer.pluginConnections.end(),[&](const auto &r){return selected.contains(r.source)||selected.contains(r.target);}),"This group has cut or direct plugin cables; use its song group until all boundary routes can be preserved in a reusable recipe");
   std::vector<std::string> order;const MixerBus *owner=nullptr;
   const auto loose=detachedMixerPlugins(mixer);std::set<std::string> assigned(loose.begin(),loose.end());for(const auto &bus:mixer.buses)assigned.insert(bus.inserts.begin(),bus.inserts.end());
   for(const auto &bus:mixer.buses) {
@@ -224,6 +224,7 @@ size_t SignalGraph::bytes() const {
   for(const auto &s:songSources){n+=sizeof(s)+s.node.name.size()+s.audioPlugin.size();
     for(const auto &lane:s.node.envelopes){n+=sizeof(lane)+lane.points.size()*sizeof(AutomationPoint);for(const auto &point:lane.points)n+=point.formula.bytes();}}
   for(const auto &m:songModulation)n+=sizeof(m)+m.plugin.size();
+  for(const auto &r:stageConnections)n+=sizeof(r)+r.source.plugin.size()+r.target.plugin.size();
   for(const auto &g:groups){n+=sizeof(g)+g.name.size()+g.dryRoutes.size()*sizeof(SignalSongGroupDryRoute);for(const auto &key:g.nodes)n+=sizeof(key)+key.size();for(const auto &r:g.dryRoutes)for(const auto *p:{&r.input,&r.output})n+=p->kind.size()+p->source.size()+p->target.size()+p->plugin.size()+p->tap.size();}
   return n;
 }
@@ -502,9 +503,9 @@ bool sameSignalProcessing(const SignalGraph &a,const SignalGraph &b) {
   if(a.noteRouting!=b.noteRouting)return false;
   if(a.songModulation!=b.songModulation || a.songSources.size()!=b.songSources.size())return false;
   for(size_t i=0;i<a.songSources.size();++i){const auto &x=a.songSources[i],&y=b.songSources[i];const auto &n=x.node,&m=y.node;
-    if(n.id!=m.id||n.kind!=m.kind||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes||n.muted!=m.muted||x.audioBus!=y.audioBus||x.audioPlugin!=y.audioPlugin||x.output!=y.output||x.preFader!=y.preFader||x.noteTarget!=y.noteTarget||x.noteInstrument!=y.noteInstrument||x.amount!=y.amount)return false;
+    if(n.id!=m.id||n.kind!=m.kind||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes||n.muted!=m.muted||x.audioBus!=y.audioBus||x.audioStage!=y.audioStage||x.audioPlugin!=y.audioPlugin||x.output!=y.output||x.preFader!=y.preFader||x.noteTarget!=y.noteTarget||x.noteInstrument!=y.noteInstrument||x.amount!=y.amount)return false;
   }
-  if(a.instrumentAssignments!=b.instrumentAssignments||a.inputs!=b.inputs||a.outputs!=b.outputs||a.assignments!=b.assignments||a.commands!=b.commands)return false;
+  if(a.stageConnections!=b.stageConnections||a.instrumentAssignments!=b.instrumentAssignments||a.inputs!=b.inputs||a.outputs!=b.outputs||a.assignments!=b.assignments||a.commands!=b.commands)return false;
   std::set<uint64_t> used;
   for(const auto &assignment:a.assignments)used.insert(assignment.graph);
   for(const auto &assignment:a.instrumentAssignments)used.insert(assignment.graph);
@@ -552,11 +553,47 @@ bool sameSignalSourceLayout(SignalGraph a,SignalGraph b) {
   return sameSignalControlLayout(std::move(a),std::move(b));
 }
 std::string signalBusIdentity(uint64_t bus){return "signal-bus-"+std::to_string(bus);}
+std::string signalStageEndpointKey(const SignalStageEndpoint &e){return e.stage?"stage:n"+std::to_string(e.stage):"plugin:"+e.plugin;}
+SignalRouteIdentity signalStageRouteIdentity(const SignalStageConnection &r){return {"plugin-connection","plugin:"+(r.source.stage?signalBusIdentity(r.source.stage):r.source.plugin),"plugin:"+(r.target.stage?signalBusIdentity(r.target.stage):r.target.plugin),{},"post-gain",r.input,r.output};}
+std::vector<uint32_t> signalStagePorts(const SignalGraph &g,uint64_t target,bool input){
+  std::set<uint64_t> used;for(const auto &a:g.assignments)if(a.target==target)used.insert(a.graph);
+  for(const auto &c:g.commands)if(c.target==target&&(c.kind==SignalCommandKind::Row||c.kind==SignalCommandKind::Start))used.insert(c.graph);
+  std::set<uint32_t> ports;for(const auto &d:g.library)if(used.contains(d.id))for(const auto &n:d.nodes)if(n.kind==(input?SignalNodeKind::Input:SignalNodeKind::Output))for(const auto &e:d.audio)
+    if(input?e.source==n.id:e.target==n.id){const auto p=input?e.output:e.input;if(p&&p<64)ports.insert(p);}
+  return {ports.begin(),ports.end()};
+}
+namespace {
+bool sameStageCable(const SignalStageConnection &a,const SignalStageConnection &b){return a.source==b.source&&a.target==b.target&&a.output==b.output&&a.input==b.input;}
+void validateStageCable(const SignalGraph &g,const SignalStageConnection &r){
+  auto endpoint=[&](const SignalStageEndpoint &e,uint32_t port,bool input){
+    require(bool(e.stage)!=!e.plugin.empty()&&text(e.plugin,128)&&port<64,"Choose one stable plugin or graph stage endpoint");
+    if(e.stage){const auto ports=signalStagePorts(g,e.stage,input);require(port&&std::find(ports.begin(),ports.end(),port)!=ports.end(),"Graph stage port is unavailable; assign a recipe exposing that auxiliary port first");}
+  };
+  require(r.source.stage||r.target.stage,"Use mixer.plugin.connection.set for two rack endpoints");
+  endpoint(r.source,r.output,false);endpoint(r.target,r.input,true);
+  require(r.source!=r.target&&finite(r.gainDB,-96,12),"Invalid graph stage connection or self-cycle");
+}
+}
+void setSignalStageConnection(SignalGraph &g,const SignalStageConnection &r,const SignalStageConnection *replace){
+  validateStageCable(g,r);auto next=g.stageConnections;
+  auto found=std::find_if(next.begin(),next.end(),[&](const auto &v){return sameStageCable(v,replace?*replace:r);});
+  if(replace)require(found!=next.end(),"Graph stage cable no longer exists; refresh before repatching");
+  require(std::none_of(next.begin(),next.end(),[&](const auto &v){return &v!=(found==next.end()?nullptr:&*found)&&sameStageCable(v,r);}),"Graph stage cable already exists");
+  if(found==next.end()){require(next.size()<256,"Too many graph stage connections");next.push_back(r);}else *found=r;
+  if(replace){const auto before=signalStageRouteIdentity(*replace),after=signalStageRouteIdentity(r);for(auto &group:g.groups)for(auto &map:group.dryRoutes){if(map.input==before)map.input=after;if(map.output==before)map.output=after;}const auto source=signalStageEndpointKey(replace->source),target=signalStageEndpointKey(replace->target);
+    for(auto &c:g.presentation.cables)if(!c.modulation&&c.source==source&&c.target==target&&c.output==replace->output&&c.input==replace->input){c.source=signalStageEndpointKey(r.source);c.target=signalStageEndpointKey(r.target);c.output=r.output;c.input=r.input;}}
+  g.stageConnections=std::move(next);
+}
+void removeSignalStageConnection(SignalGraph &g,const SignalStageConnection &r){
+  const auto count=std::erase_if(g.stageConnections,[&](const auto &v){return sameStageCable(v,r);});require(count==1,"Graph stage cable no longer exists; refresh before cutting");
+  std::erase_if(g.presentation.cables,[&](const auto &c){return !c.modulation&&c.source==signalStageEndpointKey(r.source)&&c.target==signalStageEndpointKey(r.target)&&c.output==r.output&&c.input==r.input;});
+}
 MixerGraph signalRoutingGraph(MixerGraph mixer,const SignalGraph &signal){
   std::set<uint64_t> targets;for(const auto &a:signal.assignments)targets.insert(a.target);for(const auto &c:signal.commands)if(c.kind==SignalCommandKind::Row||c.kind==SignalCommandKind::Start)targets.insert(c.target);
   for(auto &bus:mixer.buses)if(targets.contains(bus.id))bus.inserts.insert(bus.inserts.begin(),signalBusIdentity(bus.id));
   for(const auto &r:signal.inputs)mixer.sidechains.push_back({r.source,signalBusIdentity(r.target),r.input,r.gainDB,r.preFader,true});
   for(const auto &r:signal.outputs)mixer.instruments.push_back({signalBusIdentity(r.source),r.target,r.output});
+  for(const auto &r:signal.stageConnections)mixer.pluginConnections.push_back({r.source.stage?signalBusIdentity(r.source.stage):r.source.plugin,r.output,r.target.stage?signalBusIdentity(r.target.stage):r.target.plugin,r.input,r.gainDB,r.enabled});
   return mixer;
 }
 void SignalGraph::validate(const std::vector<uint64_t> &targets,const std::map<uint64_t,uint32_t> &patterns,const std::vector<uint64_t> &instruments) const {
@@ -577,9 +614,10 @@ void SignalGraph::validate(const std::vector<uint64_t> &targets,const std::map<u
     validateSourceSettings(n);
     require(n.plugin==GraphPluginRecipe{},"Song modulation sources cannot contain a plugin recipe");
     require(finite(s.amount,0,1)&&s.output<64&&text(s.audioPlugin,256),"Invalid song modulation input or amount");
-    require(!(s.audioBus&&!s.audioPlugin.empty())&&(!s.audioBus||target(s.audioBus)),"Choose one existing bus or plugin follower input");
-    require(n.kind==SignalNodeKind::Follower||(!s.audioBus&&s.audioPlugin.empty()&&!s.output&&!s.preFader),"Only followers accept an audio tap");
-    require(s.audioPlugin.empty()||!s.preFader,"Pre-fader applies to a mixer bus tap, not a plugin output");
+    require(int(bool(s.audioBus))+int(bool(s.audioStage))+int(!s.audioPlugin.empty())<=1&&(!s.audioBus||target(s.audioBus))&&(!s.audioStage||target(s.audioStage)),"Choose one existing bus, stage or plugin follower input");
+    if(s.audioStage){const auto ports=signalStagePorts(*this,s.audioStage,false);require(s.output&&std::find(ports.begin(),ports.end(),s.output)!=ports.end(),"Choose a declared aggregate graph-stage auxiliary output");}
+    require(n.kind==SignalNodeKind::Follower||(!s.audioBus&&!s.audioStage&&s.audioPlugin.empty()&&!s.output&&!s.preFader),"Only followers accept an audio tap");
+    require((s.audioPlugin.empty()&&!s.audioStage)||!s.preFader,"Pre-fader applies to a mixer bus tap, not a plugin or graph-stage output");
     require(!s.audioBus||!s.output,"Mixer bus taps have one stereo output");
     require(n.kind==SignalNodeKind::NoteEnvelope||(!s.noteTarget&&!s.noteInstrument),"Only note envelopes accept a note scope");
     require(!(s.noteTarget&&s.noteInstrument)&&(!s.noteTarget||target(s.noteTarget))&&(!s.noteInstrument||std::find(instruments.begin(),instruments.end(),s.noteInstrument)!=instruments.end()),"Choose one existing note channel or instrument");
@@ -596,7 +634,9 @@ void SignalGraph::validate(const std::vector<uint64_t> &targets,const std::map<u
   assigned.clear();require(instrumentAssignments.size()<=128,"Use at most 128 instrument graphs");
   for(const auto &a:instrumentAssignments)require(std::find(instruments.begin(),instruments.end(),a.target)!=instruments.end()&&definitions.contains(a.graph)&&assigned.insert(a.target).second&&finite(a.amount,0,1)&&finite(a.wet,0,1),"Invalid or duplicate instrument graph assignment");
   for(const auto &[id,count]:lanes)require(target(id)&&count>0&&count<=8,"Graph lanes require an existing bus and one to eight columns");
-  require(inputs.size()<=128&&outputs.size()<=128,"Too many external graph routes");
+  require(inputs.size()<=128&&outputs.size()<=128&&stageConnections.size()<=256,"Too many external graph routes");
+  for(size_t i=0;i<stageConnections.size();++i){const auto &r=stageConnections[i];validateStageCable(*this,r);require((!r.source.stage||target(r.source.stage))&&(!r.target.stage||target(r.target.stage)),"Graph stage target no longer exists");
+    for(size_t j=0;j<i;++j)require(!sameStageCable(r,stageConnections[j]),"Duplicate graph stage cable");}
   auto hasPort=[&](uint64_t target,uint32_t port,bool input){std::set<uint64_t> used;for(const auto &a:assignments)if(a.target==target)used.insert(a.graph);for(const auto &c:commands)if(c.target==target&&(c.kind==SignalCommandKind::Row||c.kind==SignalCommandKind::Start))used.insert(c.graph);
     for(const auto &d:library)if(used.contains(d.id))for(const auto &n:d.nodes)if(n.kind==(input?SignalNodeKind::Input:SignalNodeKind::Output))for(const auto &e:d.audio)if(input?(e.source==n.id&&e.output==port):(e.target==n.id&&e.input==port))return true;return false;};
   std::set<std::tuple<uint64_t,uint64_t,uint32_t>> inputRoutes;std::set<std::tuple<uint64_t,uint32_t,uint64_t>> outputRoutes;

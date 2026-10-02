@@ -30,7 +30,6 @@ extension SignalGraphEditor {
   func connectSongPlugins(_ a:String,_ b:String,output:UInt32,input:UInt32,gain:Double=0,enabled:Bool=true,replacing:[String:Any]?=nil) {
     guard let source=songNodePlugin[a],let target=songNodePlugin[b] else{status.stringValue="Choose two plugin audio sockets";return}
     guard source != target else{status.stringValue="A processor cannot connect to itself";return}
-    guard !rackPlugins.contains(where:{$0["id"] as? String==target && $0["isInstrument"] as? Bool==true})else{status.stringValue="Audio inputs on plugin instruments are not scheduled yet; choose an effect input";return}
     var value:[String:Any]=["source":source,"output":output,"target":target,"input":input,"gainDB":gain,"enabled":enabled]
     if let replacing {value["replace"]=replacing}
     mutate("mixer.plugin.connection.set",value)
@@ -61,13 +60,15 @@ extension SignalGraphEditor {
       connectionGain.doubleValue=1;minimum.doubleValue=0;maximum.doubleValue=modulation ? 0:1;base.doubleValue=modulation ? modulationBase(node:realTarget.node,parameter:realTarget.number):0;connectionEnabled.state = .on;connectionQuantized.state = .off
       connect(a,b);return
     }
+    if stageTarget(a) != nil || stageTarget(b) != nil,stageEndpoint(a) != nil,stageEndpoint(b) != nil {connectStage(a,b,output:out,input:input);return}
     if out==0,input==0,mixer["masterOutputDisconnected"] as? Bool==true,let master=buses.first(where:{$0["kind"] as? String=="master"}),let id=master["id"] as? String,b==id,songNodeBus[a]==id {
       let last=effectiveInserts(master).last.map{"plugin:"+$0};if a==last {mutate("mixer.bus.set",["bus":id,"mainOutputConnected":true]);return}
     }
     if out==0,input==0,let move=insertMove(a,b),!canvas.addingMainInput {connectionKind.selectItem(withTitle:"Main output");mutate("mixer.inserts.move",move);return}
     if songNodePlugin[a] != nil,songNodePlugin[b] != nil {connectSongPlugins(a,b,output:out,input:input);return}
     if songNodePlugin[b] != nil,input==0 {
-      if canvas.addingMainInput {connectionKind.selectItem(withTitle:"Mix into main");connectionGain.doubleValue=0;connectSong(a,b)}
+      let instrument=songNodePlugin[b].flatMap{id in rackPlugins.first{$0["id"] as? String==id}}?["isInstrument"] as? Bool==true
+      if canvas.addingMainInput || instrument {connectionKind.selectItem(withTitle:"Mix into main");connectionGain.doubleValue=0;connectSong(a,b)}
       else{status.stringValue="Move an effect chain onto a channel wire, or Option-drag to mix another channel into Main in"};return
     }
     if songNodeGraph[b] != nil,input==0 {status.stringValue="Use Assign for a reusable channel copy; double-click it to rewire its internal nodes";return}
@@ -112,7 +113,7 @@ extension SignalGraphEditor {
     // Do not turn a fixed insert wire into an unrelated bus-output mutation.
     guard songConnections.indices.contains(index)else{return}
     let kind=songConnections[index]["kind"] as? String ?? ""
-    if kind=="plugin-connection" {selectConnection(index);outputPort.stringValue=String(out);inputPort.stringValue=String(input);updateSongConnection(index,source:a,target:b);return}
+    if kind=="plugin-connection" || kind=="stage-connection" {selectConnection(index);outputPort.stringValue=String(out);inputPort.stringValue=String(input);updateSongConnection(index,source:a,target:b);return}
     if out==0,input==0,kind != "plugin-input",let move=insertMove(a,b) {mutate("mixer.inserts.move",move);return}
     guard ["output","send","graph-input","graph-output","plugin-input","plugin-output"].contains(kind) else {
       status.stringValue="Move a chain by dragging its first input to another channel’s output. Open a reusable subgraph to edit its wires.";return

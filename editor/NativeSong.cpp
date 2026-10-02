@@ -37,6 +37,7 @@ void NativeSong::removePluginRoutes(const std::string &instance) {
   std::erase_if(mixer.detachedChains,[](const auto &chain){return chain.plugins.empty();});for(const auto &chain:mixer.detachedChains)std::erase(mixer.disconnectedMainInputs,chain.plugins.front());
   for(auto &bus:mixer.buses)std::erase(bus.inserts,instance);
   std::erase_if(mixer.instruments,[&](const auto &route){return route.plugin==instance;});
+  std::erase_if(signal.stageConnections,[&](const auto &r){return r.source.plugin==instance||r.target.plugin==instance;});
   std::erase_if(mixer.pluginConnections,[&](const auto &route){return route.source==instance||route.target==instance;});
   std::erase_if(mixer.sidechains,[&](const auto &route){return route.plugin==instance;});
   const auto node="plugin:"+instance;
@@ -63,14 +64,17 @@ void removeSongConnections(NativeSong &song,const std::vector<SongConnectionRef>
   if(connections.size()>512)throw std::invalid_argument("At most 512 song cables can be removed at once");
   auto next=song;if(std::any_of(connections.begin(),connections.end(),[](const auto &c){return c.kind!=SongConnectionKind::FollowerInput&&c.kind!=SongConnectionKind::Modulation&&c.kind!=SongConnectionKind::Note;}))next.ensureMixer();
   auto require=[](bool valid,const char *message){if(!valid)throw std::invalid_argument(message);};
-  std::set<std::tuple<SongConnectionKind,uint64_t,uint64_t,std::string,uint32_t,bool,std::string,uint32_t>> seen;
+  std::set<std::tuple<SongConnectionKind,uint64_t,uint64_t,std::string,uint32_t,bool,std::string,uint32_t,uint64_t>> seen;
   auto remove=[&](auto &routes,auto predicate){const auto count=std::erase_if(routes,predicate);require(count==1,"Song cable no longer exists; refresh the graph");};
   for(const auto &c:connections) {
-    require(seen.emplace(c.kind,c.source,c.target,c.plugin,c.port,c.preFader,c.sourcePlugin,c.output).second,"The cable removal batch contains a duplicate");
+    require(seen.emplace(c.kind,c.source,c.target,c.plugin,c.port,c.preFader,c.sourcePlugin,c.output,c.stage).second,"The cable removal batch contains a duplicate");
     require(c.kind==SongConnectionKind::Modulation||c.port<=63,"Cable port is outside 0…63");
+    require(c.kind==SongConnectionKind::FollowerInput||!c.stage,"Only follower identities accept a stage");
     require(c.kind==SongConnectionKind::FollowerInput||!c.preFader,"Only follower tap identities accept preFader");
-    require(c.kind==SongConnectionKind::PluginConnection||(c.sourcePlugin.empty()&&!c.output),"Only direct plugin cables accept a plugin source/output");
+    require(c.kind==SongConnectionKind::PluginConnection||c.kind==SongConnectionKind::StageConnection||(c.sourcePlugin.empty()&&!c.output),"Only direct plugin cables accept a plugin source/output");
     switch(c.kind) {
+    case SongConnectionKind::StageConnection:
+      removeSignalStageConnection(next.signal,{{c.sourcePlugin,c.source},{c.plugin,c.target},c.output,c.port});break;
     case SongConnectionKind::PluginConnection:
       require(!c.source&&!c.target&&!c.plugin.empty()&&!c.sourcePlugin.empty()&&c.output<64,"Invalid direct plugin cable identity");
       remove(next.mixer.pluginConnections,[&](const auto &r){return r.source==c.sourcePlugin&&r.target==c.plugin&&r.output==c.output&&r.input==c.port;});
@@ -124,11 +128,11 @@ void removeSongConnections(NativeSong &song,const std::vector<SongConnectionRef>
       break;
     }
     case SongConnectionKind::FollowerInput: {
-      require(c.target&&((c.source&&!c.port&&c.plugin.empty())||(!c.source&&!c.plugin.empty()&&!c.preFader)),"Invalid follower input identity");
+      require(c.target&&((c.source&&!c.stage&&!c.port&&c.plugin.empty())||(!c.source&&!c.stage&&!c.plugin.empty()&&!c.preFader)||(!c.source&&c.stage&&c.port&&c.plugin.empty()&&!c.preFader)),"Invalid follower input identity");
       auto s=std::find_if(next.signal.songSources.begin(),next.signal.songSources.end(),[&](const auto &v){return v.node.id==c.target&&v.node.kind==SignalNodeKind::Follower;});
-      require(s!=next.signal.songSources.end()&&s->audioBus==c.source&&s->audioPlugin==c.plugin&&s->output==c.port&&s->preFader==c.preFader,"Follower input no longer exists; refresh the graph");
+      require(s!=next.signal.songSources.end()&&s->audioBus==c.source&&s->audioStage==c.stage&&s->audioPlugin==c.plugin&&s->output==c.port&&s->preFader==c.preFader,"Follower input no longer exists; refresh the graph");
       std::erase_if(next.signal.presentation.cables,[&](const auto &path){return path.target=="source:n"+std::to_string(c.target)&&!path.modulation;});
-      s->audioBus=0;s->audioPlugin.clear();s->output=0;s->preFader=false;break;
+      s->audioBus=0;s->audioStage=0;s->audioPlugin.clear();s->output=0;s->preFader=false;break;
     }
     case SongConnectionKind::Modulation:
       require(c.source&&!c.target&&!c.plugin.empty(),"Invalid modulation cable identity");
@@ -228,6 +232,7 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
   std::erase_if(signal.assignments,[&](const auto &a){return !graphTargets.contains(a.target);});
   std::erase_if(signal.inputs,[&](const auto &r){return !graphTargets.contains(r.source)||!graphTargets.contains(r.target);});
   std::erase_if(signal.outputs,[&](const auto &r){return !graphTargets.contains(r.source)||!graphTargets.contains(r.target);});
+  std::erase_if(signal.stageConnections,[&](const auto &r){return (r.source.stage&&!graphTargets.contains(r.source.stage))||(r.target.stage&&!graphTargets.contains(r.target.stage));});
   std::erase_if(signal.lanes,[&](const auto &a){return !graphTargets.contains(a.first);});
   std::erase_if(signal.commands,[&](const auto &c){
     auto pattern=std::find_if(patterns.begin(),patterns.end(),[&](const auto &p){return p.second.id==c.pattern;});
@@ -238,6 +243,7 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
     if((source.noteTarget&&!graphTargets.contains(source.noteTarget)) ||
       (source.noteInstrument&&std::none_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.second.id==source.noteInstrument;}))){removedSongSources.insert(source.node.id);return true;}
     if(source.audioBus&&!graphTargets.contains(source.audioBus)){source.audioBus=0;source.preFader=false;}
+    if(source.audioStage&&!graphTargets.contains(source.audioStage)){source.audioStage=0;source.output=0;source.preFader=false;}
     return false;
   });
   std::erase_if(signal.songModulation,[&](const auto &edge){return removedSongSources.contains(edge.source);});

@@ -101,6 +101,13 @@ static void sourceMute() {
   SongModulationRuntime resumed(original,metadata,48000);resumed.inheritState(silent);reference.renderSource(0,32,512,{});resumed.renderSource(0,32,512,{});
   for(uint32_t at=512;at<544;++at){double a,b;check(reference.overlay(0,at,0,a)&&resumed.overlay(0,at,0,b)&&a==b,"Unmuting retains the continuously advancing envelope");}
 }
+static void stageFollower() {
+  auto g=graph(SignalNodeKind::Follower);g.songSources[0].audioStage=42;g.songSources[0].output=3;g.songSources[0].node.attack=g.songSources[0].node.release=.001;
+  SongModulationRuntime runtime(g,metadata,48000);std::array<float,64> pcm{};pcm.fill(.25f);
+  check(!runtime.renderSource(0,32,0,{}),"A stage follower cannot silently reuse missing PCM");check(runtime.renderSource(0,32,0,{},pcm.data()),"Pure evaluator accepts explicitly captured stage PCM");
+  const auto expected=.25*(1-std::exp(-32./48));check(std::abs(runtime.values(0).back()-expected)<1e-12,"Stage follower uses exact source PCM rather than silence");
+  auto invalid=g;invalid.songSources[0].audioBus=2;rejects([&]{SongModulationRuntime bad(invalid,metadata,48000);});invalid=g;invalid.songSources[0].output=0;rejects([&]{SongModulationRuntime bad(invalid,metadata,48000);});
+}
 static void realtimeAudit() {
   auto g=graph(SignalNodeKind::Automation);g.songSources[0].node.envelopes={{91,true,{{0,.2,AutomationCurve::Scripted,CurveFormula("mix(start,end,t*t)+sin(beat)*0.01")},{127,.8,AutomationCurve::Smooth}}}};
   for(uint64_t id=2;id<=8;++id){auto source=g.songSources[0];source.node.id=id;source.node.kind=id%2?SignalNodeKind::LFO:SignalNodeKind::NoteEnvelope;source.node.envelopes.clear();g.songSources.push_back(source);g.songModulation.push_back({id,"effect",7,-.01,.01});}
@@ -118,4 +125,4 @@ static void realtimeAudit() {
 #endif
   check(success&&checksum>0&&r.storageBytes()<4*1024*1024,"Realtime evaluation failed or exceeded bounded storage");
 }
-int main(){try{partitionInvariance();sourceMute();overlaysAndValidation();notesAndFollowers();realtimeAudit();std::cout<<"PASS song modulation: absolute-grid/step/script/random invariance, live baseline additive overlays, explicit quantization, scoped held notes, current-PCM follower AR, publication inheritance, invalid/stale guards, zero callback allocations/frees/locks\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}
+int main(){try{partitionInvariance();sourceMute();overlaysAndValidation();notesAndFollowers();stageFollower();realtimeAudit();std::cout<<"PASS song modulation: absolute-grid/step/script/random invariance, live baseline additive overlays, explicit quantization, scoped held notes, current-PCM follower AR, publication inheritance, invalid/stale guards, zero callback allocations/frees/locks\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

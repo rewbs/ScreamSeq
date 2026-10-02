@@ -28,6 +28,7 @@
             return id==next.masterID||std::any_of(next.tracks.begin(),next.tracks.end(),[&](const auto &t){return t.second.id==id;});
           };
           require(!s.audioBus||exists(s.audioBus),"Follower input channel or bus does not exist");
+          require(!s.audioStage||exists(s.audioStage),"Follower graph stage does not exist");
           require(!s.noteTarget||exists(s.noteTarget),"Note source channel or bus does not exist");
           if(!s.audioPlugin.empty())require(std::any_of(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==s.audioPlugin;}),"Follower input plugin does not exist");
         };

@@ -32,16 +32,24 @@ final class GraphCopyObservation:NSView {
   required init?(coder:NSCoder){fatalError()}
   @objc private func change(){guard let graph,let key=picker.selectedItem?.representedObject as? String else{return};selection[graph]=key;onChange?()}
   func select(_ key:String){guard let graph else{return};selection[graph]=key;onChange?()}
+  func enter(_ copy:GraphObservedCopy){selection[copy.graph]=copy.key}
+  func resetDocument(){selection=[:];graph=nil;copies=[];items=[];picker.removeAllItems();isHidden=true}
+
   func update(graph:String?,ports:[[String:Any]],preferred:String?,buses:[[String:Any]],instruments:[[String:Any]]) {
     self.graph=graph;isHidden=graph==nil
     guard let graph else{return}
     var seen=Set<GraphObservedCopy>()
     copies=ports.compactMap{($0["copy"] as? [String:Any]).flatMap(GraphObservedCopy.init)}.filter{$0.graph==graph && seen.insert($0).inserted}
     if selection[graph]==nil,let copy=copies.first(where:{$0.target==preferred || $0.instrument==preferred}) ?? copies.first {selection[graph]=copy.key}
-    var next=copies.map{($0.title(buses:buses,instruments:instruments),$0.key)}
+    let titles=copies.map{$0.title(buses:buses,instruments:instruments)}
+    let counts=Dictionary(titles.map{($0,1)},uniquingKeysWith:+)
+    var next=zip(copies,titles).map{copy,title in (title+((counts[title] ?? 0)>1 ? " · "+(copy.instrument.isEmpty ? copy.target:copy.instrument):""),copy.key)}
     if let selected,!copies.contains(where:{$0.key==selected}) {next.insert(("Selected copy unavailable",selected),at:0)}
     if next.isEmpty {next=[("No prepared copy","")]}
-    if !next.elementsEqual(items,by:{$0.0==$1.0 && $0.1==$1.1}) {items=next;picker.removeAllItems();for (title,key) in next {picker.addItem(withTitle:title);picker.lastItem?.representedObject=key}}
+    if !next.elementsEqual(items,by:{$0.0==$1.0 && $0.1==$1.1}) {
+      items=next;picker.removeAllItems()
+      for (title,key) in next {let item=NSMenuItem(title:title,action:nil,keyEquivalent:"");item.representedObject=key;item.toolTip="Exact copy: "+key;picker.menu?.addItem(item)}
+    }
     if let selected,let i=items.firstIndex(where:{$0.1==selected}){picker.selectItem(at:i)}
     picker.isEnabled = !copies.isEmpty
     let missingSelection=selected.map{key in !copies.contains(where:{$0.key==key})} ?? false

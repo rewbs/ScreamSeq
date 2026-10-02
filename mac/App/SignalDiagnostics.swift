@@ -157,6 +157,9 @@ extension SignalGraphEditor {
     case "send":
       guard let source=action["source"] as? String,let i=action["index"] as? Int,let sends=buses.first(where:{$0["id"] as? String==source})?["sends"] as? [[String:Any]],sends.indices.contains(i),sends[i]["enabled"] as? Bool != false else{return nil}
       descriptor["target"]=sends[i]["target"]
+    case "stage-connection":
+      guard let i=action["index"] as? Int,stageConnections.indices.contains(i),stageConnections[i]["enabled"] as? Bool != false,let from=stageConnections[i]["source"] as? [String:Any],let to=stageConnections[i]["target"] as? [String:Any]else{return nil}
+      descriptor=stageConnections[i];descriptor["kind"]="plugin-connection";descriptor["source"]=stageRuntimeEndpoint(from);descriptor["target"]=stageRuntimeEndpoint(to)
     case "plugin-connection":
       guard let i=action["index"] as? Int,let all=mixer["pluginConnections"] as? [[String:Any]],all.indices.contains(i),all[i]["enabled"] as? Bool != false else{return nil}
       descriptor=all[i];descriptor["kind"]=kind;descriptor["source"]="plugin:"+(all[i]["source"] as? String ?? "");descriptor["target"]="plugin:"+(all[i]["target"] as? String ?? "")
@@ -172,7 +175,7 @@ extension SignalGraphEditor {
   }
   func signalRouteName(_ route:GraphSignalRouteID)->String {
     func bus(_ id:String)->String {buses.first{$0["id"] as? String==id}.map(busLabel) ?? id}
-    func plugin(_ id:String)->String {(signalNamePrefixes["plugin:"+id] ?? [id]).joined(separator:" › ")}
+    func plugin(_ id:String)->String {if id.hasPrefix("signal-bus-"){return bus("n"+id.dropFirst(11))+" · combined graph stage"};return (signalNamePrefixes["plugin:"+id] ?? [id]).joined(separator:" › ")}
     switch route.kind {
     case "send":return bus(route.source)+" → "+bus(route.target)+" · send"
     case "output":return bus(route.source)+" → "+bus(route.target)+" · main route"
