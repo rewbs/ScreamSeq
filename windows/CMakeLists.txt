@@ -256,8 +256,15 @@ if(BUILD_TESTING)
   add_executable(graph-document-tests Tests/GraphOperations/GraphOperationsTests.cpp Session/GraphOperations.cpp)
   target_link_libraries(graph-document-tests PRIVATE ScreamSeqProject)
   target_link_options(graph-document-tests PRIVATE /STACK:8388608)
-  add_test(NAME graph-document-tests COMMAND graph-document-tests)
-  set_tests_properties(graph-document-tests PROPERTIES LABELS "worker;functional;no-realtime-audit" TIMEOUT 120)
+  # Separate processes expose a failing scenario and let unrelated API/history
+  # cases finish even when a platform-only access violation occurs.
+  foreach(scenario noteRoutingOperations graphEditingOperations groupBypassOperations
+      graphProvenance graphPresentation songModulationSources songAutomationAndBanks stableImplicitMaster songCableCuts
+      createReadHistory nodesAndCloning automationAndBanks assignmentsRoutesLayoutCommands hostHooks
+      automationOrderAndRedo cableInsertionAndDetachment songProcessingGroups processingGroups strictValidation dryRunsAndRedo callbackOrderingAndUnrelatedData)
+    add_test(NAME graph-document-${scenario} COMMAND graph-document-tests ${scenario})
+    set_tests_properties(graph-document-${scenario} PROPERTIES LABELS "worker;functional;no-realtime-audit" TIMEOUT 120)
+  endforeach()
   target_link_libraries(mixer-document-tests PRIVATE ScreamSeqProject ScreamSeqPlayback)
   add_test(NAME mixer-document-tests COMMAND mixer-document-tests)
   set_tests_properties(mixer-document-tests PROPERTIES LABELS "worker;functional;no-realtime-audit" TIMEOUT 120)

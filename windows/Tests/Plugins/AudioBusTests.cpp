@@ -1,5 +1,7 @@
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"
+#include "windows/Plugins/NativeArchitecture.hpp"
+#include <fstream>
 #include <filesystem>
 #include "editor/hosted/HostedAudio.hpp"
 #include "windows/Audio/RealtimeAudit.hpp"
@@ -20,6 +22,11 @@ static void tracker_audit_end(uint64_t *a,uint64_t *f,uint64_t *locks){ScreamSeq
 int main(int argc,char **argv){try{
   check(argc==4,"Scanner, fixture and cache paths required");
   WindowsVST3::configure(argv[1],argv[3]);const auto descriptors=WindowsVST3::rescan(argv[2]);check(!descriptors.empty(),"Actual VST3 fixture discovered");
+  const auto wrongMachine=std::filesystem::u8path(argv[3]).parent_path()/L"audio-bus-wrong-machine.vst3";
+  std::filesystem::copy_file(std::filesystem::u8path(argv[2]),wrongMachine,std::filesystem::copy_options::overwrite_existing);
+  {std::fstream file(wrongMachine,std::ios::in|std::ios::out|std::ios::binary);file.seekg(0x3c);int32_t pe=0;file.read(reinterpret_cast<char*>(&pe),4);file.seekp(pe+4);const uint16_t machine=WindowsVST3::nativeMachine==IMAGE_FILE_MACHINE_ARM64?IMAGE_FILE_MACHINE_AMD64:IMAGE_FILE_MACHINE_ARM64;file.write(reinterpret_cast<const char*>(&machine),2);check(bool(file),"Prepare incompatible PE fixture");}
+  bool wrongRejected=false;try{const auto path=wrongMachine.u8string();WindowsVST3::rescan(std::string(reinterpret_cast<const char*>(path.data()),path.size()));}catch(const std::exception &e){wrongRejected=std::string(e.what()).find("Incompatible VST3 architecture")!=std::string::npos;}
+  std::filesystem::remove(wrongMachine);check(wrongRejected,"Reject incompatible PE architecture before loading vendor code");
   auto keep=std::make_unique<NativePlugin>(PluginState{descriptors[0]},48000,true);
   auto dll=LoadLibraryW(std::filesystem::u8path(descriptors[0].path).c_str());check(dll,"Actual VST3 fixture DLL loaded");struct FixtureModule {HMODULE handle;~FixtureModule(){FreeLibrary(handle);}} module{dll};
   auto wide=reinterpret_cast<void(*)(bool)>(GetProcAddress(dll,"ResonanceFixtureWideBuses"));check(wide,"Wide native fixture export available");

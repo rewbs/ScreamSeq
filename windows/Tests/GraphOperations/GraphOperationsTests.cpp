@@ -637,8 +637,9 @@ int main(int argc,char **argv) {
       {"assignmentsRoutesLayoutCommands",assignmentsRoutesLayoutCommands},{"hostHooks",hostHooks},
       {"automationOrderAndRedo",automationOrderAndRedo},{"cableInsertionAndDetachment",cableInsertionAndDetachment},
       {"songProcessingGroups",songProcessingGroups},{"processingGroups",processingGroups},{"strictValidation",strictValidation},{"dryRunsAndRedo",dryRunsAndRedo},{"callbackOrderingAndUnrelatedData",callbackOrderingAndUnrelatedData}};
+    std::cout<<std::unitbuf;std::cerr<<std::unitbuf;
     unsigned ran=0;
-    for(const auto &[name,test]:tests) if(argc==1||std::string(argv[1])==name) { test(); ++ran; std::cout<<"PASS "<<name<<'\n'; }
+    for(const auto &[name,test]:tests) if(argc==1||std::string(argv[1])==name) { std::cout<<"RUN "<<name<<'\n'; test(); ++ran; std::cout<<"PASS "<<name<<'\n'; }
     CHECK(ran>0); std::cout<<"Passed "<<ran<<" scenario groups\n";
   } catch(const std::exception &e) { std::cerr<<e.what()<<'\n'; return 1; }
 }

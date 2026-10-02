@@ -1,4 +1,5 @@
 #include "windows/Plugins/WindowsVST3.hpp"
+#include "windows/Plugins/NativeArchitecture.hpp"
 #include <windows.h>
 #include <filesystem>
 #include <fstream>
@@ -20,11 +21,11 @@ int main(int argc,char **argv){try{
  fs::remove(unicode);rejected([&]{factory.create(PluginState{ds[0]},48000,true);},"canonical");
  for(int fault=0;fault<3;++fault){auto start=GetTickCount64();rejected([&]{WindowsVST3::rescan(argv[4+fault],fault==1?150:3000);},fault==0?"crashed":fault==1?"timeout":"output");check(GetTickCount64()-start<5000,"scanner fault exceeded wall clock bound");}
  check(factory.discover().size()==4,"failed scans destroyed cache");
- // A real ARM64 PE copied then marked AMD64 must reject before LoadLibrary.
+ // A native PE marked with the other supported machine must reject before LoadLibrary.
  auto x64=folder/L"wrong-architecture.vst3";fs::copy_file(fs::u8path(argv[2]),x64,fs::copy_options::overwrite_existing);
- {std::fstream f(x64,std::ios::in|std::ios::out|std::ios::binary);f.seekg(0x3c);int32_t pe=0;f.read(reinterpret_cast<char*>(&pe),4);f.seekp(pe+4);uint16_t machine=IMAGE_FILE_MACHINE_AMD64;f.write(reinterpret_cast<char*>(&machine),2);}
- rejected([&]{WindowsVST3::rescan(utf(x64));},"ARM64");fs::remove(x64);
- auto bundle=folder/L"Bundle.vst3";auto binary=bundle/L"Contents"/L"arm64-win"/L"Bundle.vst3";fs::create_directories(binary.parent_path());fs::copy_file(fs::u8path(argv[2]),binary,fs::copy_options::overwrite_existing);auto bundleClasses=WindowsVST3::rescan(utf(bundle));check(bundleClasses.size()==4,"ARM64 VST3 bundle discovery");
+ {std::fstream f(x64,std::ios::in|std::ios::out|std::ios::binary);f.seekg(0x3c);int32_t pe=0;f.read(reinterpret_cast<char*>(&pe),4);f.seekp(pe+4);uint16_t machine=WindowsVST3::nativeMachine==IMAGE_FILE_MACHINE_ARM64?IMAGE_FILE_MACHINE_AMD64:IMAGE_FILE_MACHINE_ARM64;f.write(reinterpret_cast<char*>(&machine),2);}
+ rejected([&]{WindowsVST3::rescan(utf(x64));},"Incompatible VST3 architecture");fs::remove(x64);
+ auto bundle=folder/L"Bundle.vst3";auto binary=bundle/L"Contents"/WindowsVST3::nativeBundleDirectory/L"Bundle.vst3";fs::create_directories(binary.parent_path());fs::copy_file(fs::u8path(argv[2]),binary,fs::copy_options::overwrite_existing);auto bundleClasses=WindowsVST3::rescan(utf(bundle));check(bundleClasses.size()==4,"Native VST3 bundle discovery");
  auto other=binary.parent_path()/L"Other.vst3";fs::copy_file(binary,other,fs::copy_options::overwrite_existing);rejected([&]{WindowsVST3::rescan(utf(bundle));},"ambiguous");fs::remove(other);fs::remove_all(bundle);
  std::cout<<"PASS cached/no-execution startup, Unicode, fingerprint mismatch, missing/ambiguous/wrong-PE, isolated crash/timeout/bounded-output\n";
  return 0;

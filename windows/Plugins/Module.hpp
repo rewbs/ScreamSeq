@@ -3,6 +3,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include "NativeArchitecture.hpp"
 #include "pluginterfaces/base/ipluginbase.h"
 #include "editor/hosted/PluginTypes.hpp"
 #include <filesystem>

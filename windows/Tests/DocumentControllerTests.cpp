@@ -283,20 +283,22 @@ void graphRecipeRenderTests(const std::filesystem::path &directory) {
     DocumentController guarded({},"recipe-bypass",[&]{++stops;running=audition=false;},[](const auto &){},{},64u*1024u*1024u,{},std::move(hooks));
     const auto graph=invoke(guarded,"graph.create",Json::object()).at("graph");
     const auto node=invoke(guarded,"graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",{{"format","Built-in"},{"classID","resonance.gainer.v1"}}},{"insertEdge",0}}).at("node");
+    const auto bus=call(guarded,"graph.get",{{"includeImplicitMixer",true}}).at("mixer").at("buses")[0].at("id");
+    invoke(guarded,"graph.assign",{{"graph",graph},{"target",bus}});
     const auto before=guarded.view();const auto beforeStops=stops;running=true;
     invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true},{"dryRun",true}});
     need(guarded.view()==before&&running&&stops==beforeStops,"Bypass preview stopped playback or changed history");
     bool rejected=false;try{invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});}catch(const Api::ApiError &e){rejected=e.code==-32002;}
-    need(rejected&&running&&stops==beforeStops&&guarded.view()==before,"Windows bypass must reject unsupported live edit without stopping or committing");
+    need(rejected&&running&&stops==beforeStops&&guarded.view()==before,"An active graph without a prepared playback instance must reject bypass without stopping or committing");
     running=false;audition=true;rejected=false;try{invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});}catch(const Api::ApiError &e){rejected=e.code==-32002;}
-    need(rejected&&audition&&stops==beforeStops,"Independent audition has the same explicit bypass limitation");
+    need(rejected&&audition&&stops==beforeStops,"Independent audition without a prepared graph has the same publication guard");
     audition=false;invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});
     need(call(guarded,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("bypass")==true,"Recipe metadata lost requested host bypass");
     const auto changed=guarded.view();const auto afterStops=stops;running=true;
     invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});
     need(guarded.view()==changed&&stops==afterStops&&running,"Identical bypass is a live no-op");
     rejected=false;try{invoke(guarded,"history.undo",Json::object());}catch(const Api::ApiError &e){rejected=e.code==-32002;}
-    need(rejected&&guarded.view()==changed&&running&&stops==afterStops,"Unsupported live bypass Undo must preserve history and transport");
+    need(rejected&&guarded.view()==changed&&running&&stops==afterStops,"Unprepared live bypass Undo must preserve history and transport");
     running=false;invoke(guarded,"history.undo",Json::object());need(call(guarded,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("bypass")==false,"Stopped bypass Undo lost baseline");
     invoke(guarded,"history.redo",Json::object());need(call(guarded,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("bypass")==true,"Stopped bypass Redo lost flag");
   }
@@ -405,7 +407,7 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
   add();const auto third=plugin(2);
   invoke(c,"automation.replaceLane",{{"slot",2},{"id",1},{"points",Json::array({{{"frame",0},{"value",-6}}})}});
   const auto groupSource=invoke(c,"graph.song.source.add",{{"source",{{"kind","lfo"},{"name","Grouped motion"}}}}).at("node");
-  invoke(c,"graph.song.group.create",{{"nodes",Json::array({"source:"+groupSource.get<std::string>()})},{"parent",group}});
+  invoke(c,"graph.song.group.create",{{"nodes",Json::array({"source:"+groupSource.get<std::string>()})},{"groups",Json::array({group})}});
   const auto beforeRemove=graph();const auto beforeRemoveView=c.view();
   invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})},{"sources",Json::array({groupSource})},{"dryRun",true}});
   need(c.view()==beforeRemoveView&&graph()==beforeRemove,"Batch removal dry run changed native history");
