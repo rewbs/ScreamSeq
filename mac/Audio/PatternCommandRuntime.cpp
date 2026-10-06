@@ -46,10 +46,9 @@ PatternCommandRuntime::PatternCommandRuntime(const NativeSong &native,const std:
 bool PatternCommandRuntime::render(const OpenMPT::PlayState &state,uint32_t frames,uint64_t absoluteFrame) noexcept {
   using namespace OpenMPT;
   if(!frames||state.m_flags[SONG_PAUSED]||state.m_flags[SONG_FADINGSONG]||!state.m_nSamplesPerTick||!state.TicksOnRow())return true;
-  const double unitsPerSample=double(performanceUnitsPerRow)/(double(state.TicksOnRow())*state.m_nSamplesPerTick);
-  const double tickPosition=double(state.m_nRow)*performanceUnitsPerRow+double(state.m_nTickCount)*performanceUnitsPerRow/state.TicksOnRow();
-  const auto samplesIntoTick=state.SamplesIntoTick();
-  auto musical=[&](uint32_t offset){return tickPosition+double(samplesIntoTick+offset)*unitsPerSample;};
+  const double unitsPerSample=state.NativeRowStep(performanceUnitsPerRow);
+  const double start=state.NativeRowPosition(performanceUnitsPerRow);
+  auto musical=[&](uint32_t offset){return start+double(offset)*unitsPerSample;};
   const auto begin=musical(0);
   const bool entering=pattern_!=state.m_nPattern||order_!=state.m_nCurrentOrder||begin<=previousPosition_;
   pattern_=state.m_nPattern;order_=state.m_nCurrentOrder;previousPosition_=begin;
@@ -67,7 +66,7 @@ bool PatternCommandRuntime::render(const OpenMPT::PlayState &state,uint32_t fram
         target.source={event.slide?ParameterOrigin::PatternSlide:ParameterOrigin::PatternSet,0,pattern_,event.position,event.channel,event.binding,event.column};
       }
       uint32_t count=frames-offset;
-      auto boundary=[&](double position){if(position<=at+1e-8)return;const double sample=std::ceil((position-tickPosition)/unitsPerSample-1e-9)-samplesIntoTick;
+      auto boundary=[&](double position){if(position<=at+1e-8)return;const double sample=std::ceil((position-start)/unitsPerSample-1e-9);
         if(sample>offset&&sample<frames)count=std::min(count,uint32_t(sample)-offset);};
       if(target.events&&target.next<target.events->size())boundary((*target.events)[target.next].position);
       boundary(target.curve.end);

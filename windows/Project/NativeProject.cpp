@@ -9,6 +9,8 @@
 #include <set>
 #include <string_view>
 #include <cstring>
+#include <cwctype>
+#include <map>
 #include <objbase.h>
 
 namespace ScreamSeq::Project {
@@ -95,49 +97,7 @@ void validateRecords(Json &root,const Tracker::NativeSong &native) {
 	}
 }
 }
-OpenedProject openNativeProject(const std::filesystem::path &path) {
-	auto bytes=readProjectBytes(path);auto root=decodePlist(bytes);
-	need(root.is_object(),"Native project root must be a dictionary");
-	const auto version=integer(root.at("version"),6);need(version==6,"Unsupported native container version; this build requires project 6 / metadata 17");
-	need(root.at("native").at("version")==17,"Unsupported native metadata version; this build requires metadata 17");
-	auto snapshot=data(root.at("module"),512u*1024u*1024u);need(!snapshot.empty(),"Empty project snapshot");
-	need(Tracker::isSongSnapshot(snapshot)==(version>=4),"Snapshot framing differs from container version");
-	OpenedProject result;result.document=std::make_unique<Tracker::Document>(snapshot);
-	if(root.contains("sequence")) {
-		auto sequence=integer(root.at("sequence"),255);
-		need(sequence<result.document->song().Order.GetNumSequences(),"Selected sequence does not exist");
-		result.document->song().Order.SetSequence(static_cast<OpenMPT::SEQUENCEINDEX>(sequence));
-	}
-	if(version>=3) result.document->restoreNative(decodeNativeMetadata(root.at("native")));
-	else if(root.contains("native")) {
-		// Do not silently drop an unexpected native layer in a legacy wrapper.
-		result.document->restoreNative(decodeNativeMetadata(root.at("native")));
-	}
-	validateRecords(root,result.document->native());
-	if(root.contains("recoveryTake")) {
-		const auto &take=root.at("recoveryTake");need(take.is_object(),"Invalid recovery take");
-		(void)flag(take.at("compatible"));
-		for(const auto *key:{"missingTime","exhaustedVoices","overflow"}) (void)integer(take.at(key),UINT32_MAX);
-		for(const auto &event:array(take.at("events"),Tracker::maximumPreciseNotes)) {
-			need(event.is_object(),"Invalid recovery event");
-			for(const auto *key:{"pattern","track"}) {
-				auto id=text(event.at(key),32);need(id.size()>1 && id.front()=='n' && id[1]!='0',"Invalid recovered identity");
-				uint64_t value=0;for(size_t i=1;i<id.size();++i) {need(id[i]>='0' && id[i]<='9' && value<Tracker::NativeSong::maximumID/10,"Invalid recovered identity");value=value*10+id[i]-'0';}
-				need(value>0,"Empty recovered identity");
-			}
-			(void)integer(event.at("position"),UINT32_MAX);(void)integer(event.at("instrument"),255);
-			auto note=integer(event.at("note"),255),velocity=integer(event.at("velocity"),127);
-			need((note>=1 && note<=120 || note==254 || note==255) && velocity>0,"Invalid recovered note or velocity");
-		}
-		result.state.issues.push_back("Recovery take retained for review; recording commit is not yet available");
-		result.state.recoveryOrigin=RecoveryOrigin{result.document->revision,unsigned(result.document->song().Order.GetCurrentSequenceIndex())};
-	}
-	result.state.preserved=std::move(root);
-	result.state.metadataBaseline=encodeNativeMetadata(result.document->native());
-	result.state.savedRevision=result.document->revision;result.state.path=path;
-	if(requiresHostedPlayback(*result.document,result.state)) result.state.issues.push_back("Project requires hosted routing/effects; do not substitute dry playback");
-	return result;
-}
+#include "NativeProjectRecovery.inc"
 ProjectState newProjectState(const Tracker::Document &document) {
 	ProjectState result;
 	result.preserved={{"version",6},{"plugins",Json::array()},{"automation",Json::array()}};
@@ -190,11 +150,20 @@ Json nativeProjectTree(Tracker::Document &document,const ProjectState &state) {
 std::vector<std::byte> serializeNativeProject(Tracker::Document &document,const ProjectState &state) {
 	return encodePlist(nativeProjectTree(document,state));
 }
+void validateProjectSaveDestination(const ProjectState &state,const std::filesystem::path &path) {
+	if(!state.requiresSaveAs||state.loadSourcePath.empty())return;
+	std::error_code error;
+	if(std::filesystem::equivalent(path,state.loadSourcePath,error)&&!error)
+		throw std::invalid_argument("Recovered project source is protected; save a new copy at a different path");
+	auto normalized=[](const std::filesystem::path &p){std::error_code ec;auto value=std::filesystem::weakly_canonical(p,ec);if(ec)value=std::filesystem::absolute(p).lexically_normal();auto name=value.wstring();std::transform(name.begin(),name.end(),name.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});return name;};
+	if(normalized(path)==normalized(state.loadSourcePath))throw std::invalid_argument("Recovered project source is protected; save a new copy at a different path");
+}
 void saveNativeProject(Tracker::Document &document,ProjectState &state,const std::filesystem::path &path,bool overwrite) {
+	validateProjectSaveDestination(state,path);
 	auto tree=nativeProjectTree(document,state);auto bytes=encodePlist(tree);
 	// Compute every allocating state update before publishing the destination.
 	ProjectState saved=state;saved.preserved=std::move(tree);saved.metadataBaseline=encodeNativeMetadata(document.native());
-	saved.savedRevision=document.revision;saved.savedPluginRevision=state.pluginRevision;saved.path=path;
+	saved.savedRevision=document.revision;saved.savedPluginRevision=state.pluginRevision;saved.path=path;saved.requiresSaveAs=false;
 	writeProjectFile(path,bytes,overwrite);
 	state=std::move(saved);
 }

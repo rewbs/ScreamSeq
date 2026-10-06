@@ -46,6 +46,9 @@ final class QualificationRunLoopTrace {
 final class UIWorkTrace {
   enum Phase:String,CaseIterable {
     case tick,snapshot,pluginEdits,drainNotes,positionTimeline,telemetry,midi,mixer
+    // Emitted only with --ui-test-runloop-trace. Queue spans deliberately
+    // overlap other work: they measure waiting to enter main, not CPU work.
+    case snapshotRecoveryQueue,snapshotRecoveryRefresh,snapshotRecoverySkipped
     case patternGraphRefresh,graphTelemetry,graphSignalRead,graphSignalDisplay,workspaceContext,signalScope,graphDraw
     case qualificationTick,qualificationProgress
     case windowLayout

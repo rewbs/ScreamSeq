@@ -679,8 +679,8 @@ const float *NativeSignalGraph::output(size_t index,uint32_t port) const noexcep
 }
 void NativeSignalGraph::begin(const OpenMPT::PlayState &state,uint32_t,uint64_t,PluginTransport transport,uint32_t patternRows)noexcept {
   const bool valid=!state.m_flags[OpenMPT::SONG_PAUSED|OpenMPT::SONG_FADINGSONG]&&state.m_nSamplesPerTick&&state.TicksOnRow();
-  const double units=valid?65536.0/(double(state.TicksOnRow())*state.m_nSamplesPerTick):0;
-  const double at=double(state.m_nRow)*65536+(valid?double(state.m_nTickCount)*65536/state.TicksOnRow()+state.SamplesIntoTick()*units:0);
+  const double units=valid?state.NativeRowStep():0;
+  const double at=valid?state.NativeRowPosition():double(state.m_nRow)*65536;
   const bool entering=pattern_!=state.m_nPattern||order_!=state.m_nCurrentOrder||at<=previous_;
   const bool rowChanged=entering||row_!=state.m_nRow;
   pattern_=state.m_nPattern;order_=state.m_nCurrentOrder;row_=state.m_nRow;previous_=at;

@@ -2,6 +2,7 @@
 #include "common/stdafx.h"
 #include "soundlib/Sndfile.h"
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 #include "MusicalAutomation.hpp"
@@ -10,6 +11,7 @@
 #include "PreciseNotes.hpp"
 #include "SignalGraph.hpp"
 #include "EnvelopeBank.hpp"
+#include "ScratchGesture.hpp"
 
 namespace Tracker {
 // Stable, project-local identities and UTF-8 metadata. Module playback stays in
@@ -55,6 +57,7 @@ struct NativeSong {
   MixerGraph mixer;
   SignalGraph signal;
   PatternPerformance performance;
+  std::map<uint16_t, ScratchGesture> scratchGestures; // Stable song-local slots 1..255.
   std::vector<PreciseNote> preciseNotes;
   std::vector<NativeNoteTrack> noteTracks;
   std::map<uint64_t, bool> columnMutes; // Overrides; absence preserves imported mute state.
@@ -76,6 +79,15 @@ struct NativeSong {
   size_t bytes() const;
   bool operator==(const NativeSong &) const = default;
 };
+struct ScratchPatternCell {
+  uint16_t pattern = 0, row = 0, channel = 0;
+  uint8_t column = 0;
+};
+// Control-thread candidate edit. A target must contain an SK use of source;
+// only that reference changes, retaining its exact onset and other parameters.
+uint16_t cloneScratchGesture(NativeSong &, uint16_t source,
+                            const std::optional<std::string> &name = {},
+                            const std::optional<ScratchPatternCell> &target = {});
 // Validate the entire batch before replacing song. instrumentPlugins identifies
 // live instrument instances whose unrecorded main output defaults to Master.
 void removeSongConnections(NativeSong &song, const std::vector<SongConnectionRef> &connections,

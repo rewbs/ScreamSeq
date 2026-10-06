@@ -85,7 +85,7 @@ extension SignalGraphEditor {
     }
     for p in rackPlugins where (mixer["detached"] as? [String] ?? []).contains(p["id"] as? String ?? "") {
       guard let id=p["id"] as? String else{continue};let key="plugin:"+id
-      add(key,p["name"] as? String ?? "Effect","Unconnected · drag into a path",30,Double(30+row*125));row+=1;songNodePlugin[key]=id
+      add(key,p["name"] as? String ?? "Effect","Unconnected · connect its sockets",30,Double(30+row*125));row+=1;songNodePlugin[key]=id
     }
     for p in rackPlugins where p["isInstrument"] as? Bool==true {guard let id=p["id"] as? String else{continue};let key="plugin:\(id)";let routes=(mixer["instruments"] as? [[String:Any]] ?? []).filter{$0["plugin"] as? String==id};let master=buses.first{$0["kind"] as? String=="master"}?["id"] as? String ?? ""
       var targets=routes
@@ -102,12 +102,12 @@ extension SignalGraphEditor {
     }
     for (i,r) in (data["inputs"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let b=r["target"] as? String,let from=lastStage[a],visible.contains(b){edge(from,"stage:"+b,"Graph in \(r["input"] ?? 1)",["kind":"graph-input","index":i],input:(r["input"] as? NSNumber)?.uint32Value ?? 1)}}
     for (i,r) in (data["outputs"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let b=r["target"] as? String,visible.contains(a),visible.contains(b){let stage="stage:"+a;edge(stage,firstStage[b] ?? b,"Graph out \(r["output"] ?? 1)",["kind":"graph-output","index":i],output:(r["output"] as? NSNumber)?.uint32Value ?? 1)}}
-    for (i,r) in (mixer["sidechains"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let plugin=r["plugin"] as? String,let from=lastStage[a],songNodePlugin["plugin:\(plugin)"] != nil{edge(from,"plugin:\(plugin)",(r["input"] as? Int==0 ? "Main input mix":"Sidechain \(r["input"] ?? 1)"),["kind":"plugin-input","index":i],input:(r["input"] as? NSNumber)?.uint32Value ?? 1)}}
+    for (i,r) in (mixer["sidechains"] as? [[String:Any]] ?? []).enumerated(){if let a=r["source"] as? String,let plugin=r["plugin"] as? String,let from=lastStage[a],songNodePlugin["plugin:\(plugin)"] != nil{edge(from,"plugin:\(plugin)",(r["input"] as? Int==0 ? "Main input mix":"Sidechain \(r["input"] ?? 1)"),["kind":"plugin-input","index":i],input:(r["input"] as? NSNumber)?.uint32Value ?? 1,enabled:r["enabled"] as? Bool ?? true)}}
     for (i,r) in (mixer["pluginConnections"] as? [[String:Any]] ?? []).enumerated(){
       guard let a=r["source"] as? String,let b=r["target"] as? String,songNodePlugin["plugin:"+a] != nil,songNodePlugin["plugin:"+b] != nil else{continue}
       edge("plugin:"+a,"plugin:"+b,"Audio contribution",["kind":"plugin-connection","index":i],output:(r["output"] as? NSNumber)?.uint32Value ?? 0,input:(r["input"] as? NSNumber)?.uint32Value ?? 0,enabled:r["enabled"] as? Bool ?? true)
     }
-    for r in mixer["instruments"] as? [[String:Any]] ?? []{let plugin=r["plugin"] as? String ?? "";if rackPlugins.first(where:{$0["id"] as? String==plugin})?["isInstrument"] as? Bool != true,let target=r["target"] as? String,visible.contains(target),songNodePlugin["plugin:\(plugin)"] != nil{edge("plugin:\(plugin)",firstStage[target] ?? target,"Aux \(r["output"] ?? 0)",["kind":"plugin-output","plugin":plugin,"output":r["output"] ?? 0,"target":target],output:(r["output"] as? NSNumber)?.uint32Value ?? 0)}}
+    for r in mixer["instruments"] as? [[String:Any]] ?? []{let plugin=r["plugin"] as? String ?? "";if rackPlugins.first(where:{$0["id"] as? String==plugin})?["isInstrument"] as? Bool != true,let target=r["target"] as? String,visible.contains(target),songNodePlugin["plugin:\(plugin)"] != nil{edge("plugin:\(plugin)",firstStage[target] ?? target,((r["output"] as? Int ?? 0)==0 ? "Main output":"Output \(r["output"] ?? 0)"),["kind":"plugin-output","plugin":plugin,"output":r["output"] ?? 0,"target":target],output:(r["output"] as? NSNumber)?.uint32Value ?? 0)}}
     for source in songSources {
       guard let id=source["id"] as? String else{continue};let key="source:"+id,kind=source["kind"] as? String ?? "lfo"
       if saved[key]==nil{saved[key]=["x":source["x"] ?? 40,"y":source["y"] ?? 40]}

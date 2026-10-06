@@ -92,7 +92,7 @@ extension SignalGraphEditor {
     let owner=songNodeBus[node].flatMap{id in buses.first{$0["id"] as? String==id}}
     let isBus=node==songNodeBus[node],atBusEnd=songNodePlugin[node].map{effectiveInserts(owner ?? [:]).last==$0} ?? false
     guard port==0,owner != nil,isBus || atBusEnd else {
-      status.stringValue="This input needs a channel or return output. Route the plugin output into a bus first, then connect that bus here; direct plugin patching is available inside subgraphs.";return false
+      status.stringValue="This bus-tap cable needs a channel or return output. Route the plugin output into a bus first, or add a direct cable between plugin sockets.";return false
     };return true
   }
   var selectedBuiltinDetector:[String:Any]? {

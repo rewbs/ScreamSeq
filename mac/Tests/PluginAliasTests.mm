@@ -128,7 +128,10 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
       check(std::abs(sample-std::array{25.,23.,16.,0.}[row]*.2*.3/16)<1e-6,"Actual WAV preserves each channel and saved plugin parameter");}
     [NSFileManager.defaultManager removeItemAtPath:wav error:nil];[NSFileManager.defaultManager removeItemAtPath:reopened error:nil];
     auto broken=[root mutableCopy];broken[@"version"]=@4;[[NSPropertyListSerialization dataWithPropertyList:broken format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:file atomically:YES];
-    revision=session.automationRevision;check(![session openPath:file error:&error]&&[revision isEqual:session.automationRevision],"Legacy version cannot silently ignore aliases");
+    NSData *legacyBytes=[NSData dataWithContentsOfFile:file];
+    check([session openPath:file error:&error]&&[[session snapshot:0][@"loadWarnings"] count]>0&&[[session snapshot:0][@"requiresSaveAs"] boolValue],"Historical version recovers known aliases with explicit warnings");
+    check([call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"] isEqual:routing]&&! [session savePath:file error:&error]&&[[NSData dataWithContentsOfFile:file] isEqual:legacyBytes],"Historical recovery preserves alias routing and protects the original");
+    NSArray *savedCells=[session snapshot:0][@"cells"];
     for(int failure=0;failure<4;++failure){
       auto malformed=[root mutableCopy];auto plugin=[root[@"plugins"][0] mutableCopy];
       if(failure==0)[plugin removeObjectForKey:@"instrumentAssignments"];
@@ -136,8 +139,12 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
       if(failure==2)plugin[@"instrumentAssignments"]=@[@{@"instrument":@1,@"channel":@17}];
       if(failure==3)plugin[@"instrumentAssignments"]=@[@{@"instrument":@1,@"channel":@2},@{@"instrument":@1,@"channel":@7}];
       malformed[@"plugins"]=@[plugin];[[NSPropertyListSerialization dataWithPropertyList:malformed format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:file atomically:YES];
-      check(![session openPath:file error:&error]&&[revision isEqual:session.automationRevision],"Malformed v5 assignments reject atomically");
+      NSData *badBytes=[NSData dataWithContentsOfFile:file];
+      check([session openPath:file error:&error]&&[[session snapshot:0][@"loadWarnings"] count]>0&&[[session snapshot:0][@"requiresSaveAs"] boolValue],"Malformed plugin assignments recover song with warnings");
+      check([[session snapshot:0][@"nativePlugins"] count]==0&&[[session snapshot:0][@"cells"] isEqual:savedCells],"Invalid assignment owner is skipped without losing valid pattern cells");
+      check(![session savePath:file error:&error]&&[[NSData dataWithContentsOfFile:file] isEqual:badBytes],"Malformed assignment recovery protects original bytes");
     }
+    [saved writeToFile:file atomically:YES];check([session openPath:file error:&error],"Restore known current alias fixture for ordinary edit");
     [NSFileManager.defaultManager removeItemAtPath:file error:nil];
     call(@"plugin.instruments.set",@{@"plugin":identity,@"assignments":@[@{@"instrument":@1,@"channel":@1}]},true);
     root=[NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil];check([root[@"version"] intValue]==6,"Ordinary single-channel assignment uses the same current project format");

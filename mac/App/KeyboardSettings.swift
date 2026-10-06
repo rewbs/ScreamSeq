@@ -20,6 +20,11 @@ final class KeyboardSettings {
     flags.intersection([.command, .control, .option]).isEmpty
   }
   static func isDataTyping(_ event: NSEvent) -> Bool { isDataTyping(event.modifierFlags) }
+  // Opening a panel can leave already-queued keystrokes addressed to its owner.
+  // Keyboard focus belongs to the current key window, even for those events.
+  static func focusWindow(for event: NSEvent, keyWindow: NSWindow?) -> NSWindow? {
+    keyWindow ?? event.window
+  }
   static func note(for key: String) -> Int? {
     if let index = Array(lowKeys).firstIndex(where: { String($0) == key }) { return index }
     if let index = Array(highKeys).firstIndex(where: { String($0) == key }) { return index + 12 }

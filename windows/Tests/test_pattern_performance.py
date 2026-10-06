@@ -66,6 +66,96 @@ class PatternPerformanceTests(unittest.TestCase):
         buffer = ctypes.create_unicode_buffer(str(value))
         self.desktop.send(self.control(identifier), 0xC, 0, ctypes.addressof(buffer))
 
+    def test_cursor_field_clear_and_channel_row_delete(self):
+        self.write('pattern.apply', cells=[dict(pattern=0, row=row, channel=channel,
+            note=61+row, instrument=1, volumeCommand=1, volume=32, effect=1, parameter=37)
+            for row in (1, 2, 63) for channel in (0, 1)])
+        self.write('pattern.notes.set', pattern=0, events=[dict(channel=channel,
+            position=2*65536+8192, instrument=1, note=65, velocity=100) for channel in (0, 1)])
+        self.navigate(row=2, channel=1, column=0, following=False)
+        before=self.cells()
+        notes=self.read('pattern.notes.get', pattern=0)['events']
+        self.key(0xBE)  # Dot on the note field, not Delete's whole-cell path.
+        after=self.cells()
+        for original, actual in zip(before, after):
+            expected=dict(original)
+            if original['row']==2 and original['channel']==1:
+                expected['note']=0
+            self.assertEqual(actual, expected)
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], [n for n in notes if n['channel']!=1])
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.cells(), before)
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], notes)
+        for column, fields in ((1, ('instrument',)), (2, ('volumeCommand', 'volume'))):
+            self.navigate(column=column)
+            self.key(0xBE)
+            for original, actual in zip(before, self.cells()):
+                expected=dict(original)
+                if original['row']==2 and original['channel']==1:
+                    expected.update({name:0 for name in fields})
+                self.assertEqual(actual, expected)
+            self.write('history.undo', domain='document')
+
+        extended=next(c for c in self.read('pattern.commands')['effect'] if c['parameterMask']==240 and c['parameterValue']!=0
+            and c['minimum'] <= (c['parameterValue']|3) <= c['maximum'])
+        self.write('pattern.effect.set',pattern=0,row=2,channel=1,column=0,
+            command=dict(kind='tracker',effect=extended['command'],parameter=extended['parameterValue']|3))
+        self.navigate(column=4);self.key(0xBE)
+        current=next(c for c in self.read('pattern.effects.get',pattern=0)['commands'] if c['channel']==1 and c['position']==2*65536 and c['column']==0)
+        self.assertEqual((current['effect'],current['parameter']),(extended['command'],extended['parameterValue']))
+        self.write('history.undo',domain='document')
+
+        self.write('pattern.effects.set', pattern=0, columns=[dict(channel=1, count=8)],
+            commands=[dict(channel=1, column=7, position=2*65536+4096,
+                kind='nudge-reverse', value=.75, durationBeats=.125)])
+        effects=self.read('pattern.effects.get', pattern=0)['commands']
+        self.navigate(column=18)
+        self.key(0xBE)
+        reset=next(c for c in self.read('pattern.effects.get', pattern=0)['commands'] if c['column']==7)
+        expected=next(c for c in effects if c['column']==7)
+        self.assertEqual(reset, dict(expected, value=0))
+        self.write('history.undo', domain='document')
+        self.navigate(column=17)
+        self.key('N')  # Unfinished two-character prefix must not consume clear.
+        self.key(0xBE)
+        self.assertFalse(any(c['column']==7 for c in self.read('pattern.effects.get', pattern=0)['commands']))
+        self.write('history.undo', domain='document')
+
+        # A multi-channel selection must not broaden Delete Channel Row.
+        self.write('pattern.effects.set', pattern=0, columns=[dict(channel=1, count=1)], commands=[])
+        self.navigate(row=0, channel=0, column=0)
+        workspace=self.read('workspace.get')
+        grid,scale=workspace['geometry']['pattern'],workspace['dpi']/96
+        x,y=grid['x']+44,grid['y']+56
+        for message,px,py,flags in ((0x201,x,y,1),(0x200,x+264,y+18,1),(0x202,x+264,y+18,0)):
+            self.desktop.send(self.desktop.hwnd(self.pid), message, flags, round(px*scale)|(round(py*scale)<<16))
+        context=self.read('context.get')
+        self.assertEqual(context['selection'],dict(startRow=0,endRow=1,startChannel=0,endChannel=1))
+        self.assertEqual((context['row'],context['channel']),(1,1))
+        self.write('pattern.effects.set', pattern=0, columns=[dict(channel=1, count=8)], commands=[expected])
+        before=self.cells();notes=self.read('pattern.notes.get', pattern=0)['events']
+        effects=self.read('pattern.effects.get', pattern=0)['commands']
+        # Native menu/palette entry uses the same handler as Shift+Delete.
+        self.desktop.send(self.desktop.hwnd(self.pid), 0x111, 151)
+        lookup={(c['row'],c['channel']):c for c in before}
+        for actual in self.cells():
+            row,channel=actual['row'],actual['channel']
+            expected=dict(lookup[row,channel])
+            if channel==1 and row>=1:
+                if row<63:
+                    expected=dict(lookup[row+1,channel],row=row)
+                else:
+                    expected.update({field:0 for field in ('note','instrument','volumeCommand','volume','effect','parameter')})
+            self.assertEqual(actual,expected)
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'],
+            [dict(n,position=n['position']-65536) if n['channel']==1 else n for n in notes])
+        self.assertEqual(self.read('pattern.effects.get', pattern=0)['commands'],
+            [dict(c,position=c['position']-65536) if c['channel']==1 and c['position']//65536>=1 else c for c in effects])
+        self.write('history.undo',domain='document')
+        self.assertEqual(self.cells(),before)
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'],notes)
+        self.assertEqual(self.read('pattern.effects.get', pattern=0)['commands'],effects)
+
     def test_native_grid_eight_columns_two_character_entry_scroll_and_delete(self):
         user = ctypes.WinDLL('user32')
         user.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
@@ -127,8 +217,8 @@ class PatternPerformanceTests(unittest.TestCase):
         self.key('S')
         self.assertEqual(self.read('pattern.effects.get', pattern=0)['bindings'], [])
         self.assertGreater(self.desktop.send(self.control(346), 0x146), 0)
-        self.text(342, .375)
-        self.text(343, 12345)
+        self.text(342, 37.5)
+        self.text(343, 12345 / (65536 * 4))
         self.command(347)
         effects = self.read('pattern.effects.get', pattern=0)
         self.assertEqual(len(effects['bindings']), 1)
@@ -149,7 +239,7 @@ class PatternPerformanceTests(unittest.TestCase):
         state = self.read('workspace.get')['effectEditor']
         self.assertTrue(state['visible'])
         self.assertEqual((state['row'], state['column']), (8, 7))
-        self.text(343, 16384)
+        self.text(343, .0625)
         self.navigate(row=10, channel=1, column=0)
         self.command(347)
         cut = next(c for c in self.read('pattern.effects.get', pattern=0)['commands'] if c['kind'] == 'note-cut')
@@ -167,8 +257,8 @@ class PatternPerformanceTests(unittest.TestCase):
         self.desktop.send(self.control(341), 0x14E, 0)
         self.command(341, 1)
         self.text(342, 7.5)
-        self.text(343, 32768)
-        self.text(344, 98304)
+        self.text(343, .125)
+        self.text(344, .375)
         self.text(345, 12)
         self.command(347)
         effects = self.read('pattern.effects.get', pattern=0)
@@ -181,6 +271,139 @@ class PatternPerformanceTests(unittest.TestCase):
         self.write('document.save', path=str(path))
         self.write('document.open', path=str(path))
         self.assertEqual(self.read('pattern.effects.get', pattern=0), effects)
+
+    def test_typed_native_inline_slots_and_musical_unit_draft(self):
+        catalog = self.read('pattern.commands')['native']
+        vibrato = next(c for c in catalog if c.get('native') == 'vibrato')
+        self.assertEqual([f['key'] for f in vibrato['parameters']],
+                         ['depth', 'rate', 'rateMode', 'shape', 'phase', 'reset', 'duration', 'offset'])
+        self.assertEqual([f['key'] for f in vibrato['parameters'] if f['inline']],
+                         ['depth', 'rate', 'duration'])
+        self.write('pattern.effect.set', pattern=0, row=5, channel=0, column=0,
+                   command=dict(kind='native', native='vibrato', offset=12345, duration=98304,
+                                parameters=dict(depth=.125, rate=3.75, rateMode='beat',
+                                                shape='triangle', phase=.12345678912345678, reset=False)))
+        original = self.read('pattern.effects.get', pattern=0)['commands']
+        self.navigate(row=5, channel=0, column=4, following=False)
+        self.key(0x27)  # Depth -> Rate, within the same legacy value column.
+        state = self.read('workspace.get')['effectEditor']
+        self.assertEqual(state['fieldIndex'], 1)
+        self.assertEqual(self.read('context.get')['column'], 4)
+        self.key(0x0D)
+        self.assertTrue(self.read('workspace.get')['effectEditor']['inline'])
+        user = ctypes.WinDLL('user32')
+        user.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+        def control_rect(identifier):
+            rect = wintypes.RECT()
+            self.assertTrue(user.GetWindowRect(self.control(identifier), ctypes.byref(rect)))
+            return rect
+        before_scroll = control_rect(601)
+        self.desktop.send(self.desktop.hwnd(self.pid), 0x20A, ((-120 & 65535) << 16))
+        after_scroll = control_rect(601)
+        self.assertLess(after_scroll.top, before_scroll.top)
+        self.desktop.send(self.desktop.hwnd(self.pid), 0x20A, (120 << 16))
+        self.assertEqual(control_rect(601).top, before_scroll.top)
+        self.text(601, 7.125)
+        self.command(347)
+        changed = self.read('pattern.effects.get', pattern=0)['commands']
+        expected = [dict(c, parameters=dict(c['parameters'], rate=7.125)) if c.get('native') == 'vibrato' else c for c in original]
+        self.assertEqual(changed, expected)
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('pattern.effects.get', pattern=0)['commands'], original)
+        self.command(348)
+        self.assertEqual(self.read('workspace.get')['effectEditor']['timeUnit'], 'beats')
+        self.text(344, .625)  # 2.5 rows at the default four-row beat.
+        self.text(343, 12345 / (65536 * 4))
+        self.desktop.send(self.control(623), 0x14E, 3)  # Named square shape.
+        self.command(623, 1)
+        self.command(347)
+        command = next(c for c in self.read('pattern.effects.get', pattern=0)['commands'] if c.get('native') == 'vibrato')
+        self.assertEqual(command['duration'], 163840)
+        self.assertEqual(command['position'], 5 * 65536 + 12345)
+        self.assertEqual(command['parameters']['shape'], 'square')
+        self.assertFalse(command['parameters']['reset'])
+        # Returning to the previous text must write that value, not reuse the
+        # successful Apply's newer raw baseline.
+        self.text(601, 9.5)
+        self.command(347)
+        self.text(601, 3.75)
+        self.command(347)
+        command = next(c for c in self.read('pattern.effects.get', pattern=0)['commands'] if c.get('native') == 'vibrato')
+        self.assertEqual(command['parameters']['rate'], 3.75)
+        # Switching units is presentation-only, including an exact odd offset.
+        before = self.doc()
+        self.desktop.send(self.control(350), 0x14E, 1)
+        self.command(350, 1)
+        self.assertEqual(self.read('workspace.get')['effectEditor']['timeUnit'], 'rows')
+        rate_text = ctypes.create_unicode_buffer(128)
+        self.desktop.send(self.control(601), 0xD, 128, ctypes.addressof(rate_text))
+        self.assertAlmostEqual(float(rate_text.value), .9375)
+        self.command(347)
+        self.assertEqual(self.doc(), before)
+        saved = self.folder / 'typed-native.screamseq'
+        self.write('document.save', path=str(saved))
+        self.write('document.open', path=str(saved))
+        reopened = next(c for c in self.read('pattern.effects.get', pattern=0)['commands'] if c.get('native') == 'vibrato')
+        self.assertEqual(reopened, command)
+
+    def test_nudge_duration_is_stored_and_edited_in_beats(self):
+        self.write('pattern.effect.set', pattern=0, row=5, channel=1, column=0,
+                   command=dict(kind='nudge-forward', value=.75))
+        def current():
+            return next(c for c in self.read('pattern.effects.get', pattern=0)['commands']
+                        if c['kind'] == 'nudge-forward')
+        self.assertEqual(current()['durationBeats'], 1)
+        self.assertNotIn('duration', current())
+        self.navigate(row=5, channel=1, column=4, following=False)
+        self.key(0x27)
+        self.key(0x0D)
+        self.text(344, .375123456789)
+        self.command(347)
+        self.assertEqual(current()['durationBeats'], .375123456789)
+        self.command(348)
+        before = self.doc()
+        self.desktop.send(self.control(350), 0x14E, 1)
+        self.command(350, 1)
+        value = ctypes.create_unicode_buffer(128)
+        self.desktop.send(self.control(344), 0xD, 128, ctypes.addressof(value))
+        self.assertAlmostEqual(float(value.value), .375123456789 * 4)
+        self.command(347)
+        self.assertEqual(self.doc(), before)
+        self.text(344, 2.500123456)
+        self.command(347)
+        self.assertEqual(current()['durationBeats'], 2.500123456 / 4)
+        before = self.doc()
+        with self.assertRaises(ApiError):
+            self.write('pattern.effect.set', pattern=0, row=5, channel=1, column=0,
+                       command=dict(kind='nudge-forward', value=.75, duration=65536))
+        self.assertEqual(self.doc(), before)
+
+    def test_stale_inline_slot_survives_command_geometry_shrink(self):
+        self.write('pattern.effect.set', pattern=0, row=5, channel=0, column=0,
+                   command=dict(kind='native', native='vibrato', duration=65536,
+                                parameters=dict(depth=.25, rate=2)))
+        self.navigate(row=5, channel=0, column=4, following=False)
+        for _ in range(2):
+            self.key(0x27)
+        self.key(0x0D)  # Duration is the third common inline slot.
+        state = self.read('workspace.get')['effectEditor']
+        self.assertTrue(state['inline'])
+        self.assertEqual(state['fieldIndex'], 2)
+        self.text(344, .75)
+        generation = self.read('workspace.get')['effectEditor']['draftGeneration']
+        self.write('pattern.effect.set', pattern=0, row=5, channel=0, column=0, command=None)
+        state = self.read('workspace.get')['effectEditor']
+        self.assertTrue(state['stale'])
+        self.assertTrue(state['draft'])
+        self.assertEqual(state['draftGeneration'], generation)
+        user = ctypes.WinDLL('user32')
+        user.IsWindowVisible.argtypes = [wintypes.HWND]
+        self.assertFalse(user.IsWindowVisible(self.control(344)))
+        before = self.doc()
+        self.command(347)  # Stale captured draft cannot repopulate the deleted cell.
+        self.assertEqual(self.doc(), before)
+        self.command(340)  # Reopen the retained draft in the inspector.
+        self.assertTrue(self.read('workspace.get')['effectEditor']['visible'])
 
     def test_shared_row_transform_preserves_other_columns_notes_and_history(self):
         self.write('pattern.effects.set', pattern=0, columns=[dict(channel=0, count=8)], commands=[

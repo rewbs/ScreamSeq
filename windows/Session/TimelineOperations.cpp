@@ -1,5 +1,6 @@
 #include "TimelineOperations.hpp"
 #include "windows/Api/SessionAdapter.hpp"
+#include "windows/Project/NativeMetadata.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/PatternCommands.hpp"
 #include "editor/SongTiming.hpp"
@@ -26,8 +27,7 @@ uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){
 }
 double number(const Json &v,double lo,double hi){need(v.is_number(),"Expected number");auto n=v.get<double>();need(std::isfinite(n)&&n>=lo&&n<=hi,"Number out of range");return n;}
 std::string text(const Json &v,size_t maximum){
-  need(v.is_string(),"Expected text");const auto &s=v.get_ref<const std::string&>();need(s.size()<=maximum*4&&s.find('\0')==std::string::npos,"Text exceeds its bound or contains NUL");
-  if(!s.empty()){auto count=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0);need(count>0&&size_t(count)<=maximum,"Invalid UTF-8 or text length");}return s;
+  try{return Project::validatedNativeText(v,maximum);}catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
 }
 AutomationPoint decodePoint(const Json &v,uint32_t maximum){
   keys(v,{"position","value","curve","formula"});
@@ -79,15 +79,17 @@ Json TimelineOperations::invoke(const std::string &method,const Json &p){
     return {{"symbols",symbols},{"notes",std::string(curveFormulaNotes)}};
   }
   if(method=="automation.formula.preview"){
-    keys(p,{"points","rows","rowsPerBeat","span","start","end","samples"});
+    keys(p,{"points","rows","rowsPerBeat","span","start","end","samples","scratchBeats"});
     auto rows=uint32_t(integer(field(p,"rows"),1,65536));auto beat=number(p.value("rowsPerBeat",Json(4)),1,65536);
     auto span=uint32_t(integer(p.value("span",Json(rows*256)),1,rows*256));auto start=number(p.value("start",Json(0)),0,span);
     auto end=number(p.value("end",Json(span)),start,span);auto count=uint32_t(integer(p.value("samples",Json(1024)),2,4096));
     // Previews also serve reusable bank shapes, whose span can exceed a pattern.
     EnvelopeShape preview;preview.span=span;auto &points=preview.points;
-    try{for(const auto &point:array(field(p,"points"),4096))points.push_back(decodePoint(point,span-1));validateEnvelopeShape(preview);}
+    const bool scratch=p.contains("scratchBeats");const double scratchBeats=scratch?number(p.at("scratchBeats"),1.0/8388608,256):1;
+    need(!scratch||(span==65537&&rows==257),"Scratch preview requires span 65537 and rows 257");
+    try{for(const auto &point:array(field(p,"points"),scratch?maximumScratchPoints:4096))points.push_back(decodePoint(point,span-1));if(scratch)validateScratchGesture({"Preview",points,points});else validateEnvelopeShape(preview);}
     catch(const std::invalid_argument&e){throw Api::ApiError(-32602,e.what());}
-    Json values=Json::array();for(uint32_t i=0;i<count;++i){double position=start+(end-start)*i/(count-1);values.push_back(Json::array({position,automationValue(points,position,span,beat)}));}
+    Json values=Json::array();for(uint32_t i=0;i<count;++i){double position=start+(end-start)*i/(count-1);values.push_back(Json::array({position,scratch?scratchEnvelopeValue(points,position/65536,scratchBeats):automationValue(points,position,span,beat)}));}
     return {{"values",values},{"fallback","Domain errors use linear interpolation; output is clamped to 0..1"}};
   }
   if(method=="document.timing.get"){keys(p,{});return timingInfo(songTiming(song),song);}

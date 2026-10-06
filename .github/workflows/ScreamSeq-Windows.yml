@@ -27,6 +27,17 @@ jobs:
         shell: pwsh
         run: |
           ./windows/build.ps1 -Architecture x64 -BuildDirectory bin/windows-ci -Jobs 2 -Test *>&1 | Tee-Object screamseq-windows.log
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Scratch editor on an owned private desktop
+        shell: pwsh
+        run: |
+          $env:SCREAMSEQ_TEST_EXE = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
+          $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-scratch-ui'
+          New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
+          python -m unittest discover -s windows/Tests -p test_scratch_editor.py -v *>&1 | Tee-Object screamseq-scratch-ui.log
+          if ($LASTEXITCODE -ne 0) { throw 'Scratch private-desktop checks failed.' }
       - name: Preserve qualification logs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -34,6 +45,7 @@ jobs:
           name: screamseq-windows-logs
           path: |
             screamseq-windows.log
+            screamseq-scratch-ui.log
             bin/windows-ci/Testing/Temporary/*.log
             bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: warn

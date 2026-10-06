@@ -12,6 +12,9 @@
 #include "stdafx.h"
 
 #include "Sndfile.h"
+#ifdef OPENMPT_EDITOR_CORE
+#include "NativeNoteEffects.h"
+#endif
 #include "MixerLoops.h"
 #include "MIDIEvents.h"
 #include "Tables.h"
@@ -308,6 +311,7 @@ samplecount_t CSoundFile::Read(samplecount_t count, IAudioTarget &target, IAudio
 		samplecount_t countChunk = std::min({ static_cast<samplecount_t>(MIXBUFFERSIZE), static_cast<samplecount_t>(m_PlayState.m_nBufferCount), static_cast<samplecount_t>(countToRender) });
 
 #if defined(OPENMPT_EDITOR_CORE)
+		if(nativeTimingPrepare) countChunk = std::clamp<samplecount_t>(nativeTimingPrepare(nativeTimingContext, m_PlayState, countChunk), 1, countChunk);
 		if(nativeMixLimit) countChunk = std::clamp<samplecount_t>(nativeMixLimit(nativeMixContext, countChunk), 1, countChunk);
 		if(nativePrepareMix) countChunk = std::clamp<samplecount_t>(nativePrepareMix(nativePrepareContext, countChunk), 1, countChunk);
 #endif
@@ -391,6 +395,13 @@ samplecount_t CSoundFile::Read(samplecount_t count, IAudioTarget &target, IAudio
 		countToRender -= countChunk;
 		m_PlayState.m_nBufferCount -= countChunk;
 		m_PlayState.m_lTotalSampleCount += countChunk;
+#if defined(OPENMPT_EDITOR_CORE)
+		if(!m_PlayState.m_nBufferCount && m_PlayState.nativeClockActive)
+		{
+			m_PlayState.m_nMusicTempo = TEMPO(m_PlayState.nativeTempo.bpm);
+			m_PlayState.nativeTempo.published = m_PlayState.m_nMusicTempo.GetRaw();
+		}
+#endif
 		const ROWINDEX rowsPerBeat = m_PlayState.m_nCurrentRowsPerBeat ? m_PlayState.m_nCurrentRowsPerBeat : DEFAULT_ROWS_PER_BEAT;
 		if(!m_PlayState.m_nBufferCount && !m_PlayState.m_flags[SONG_PAUSED])
 			m_PlayState.m_ppqPosFract += 1.0 / (rowsPerBeat * m_PlayState.TicksOnRow());
@@ -1121,6 +1132,10 @@ bool CSoundFile::IsEnvelopeProcessed(const ModChannel &chn, EnvelopeType env) co
 
 void CSoundFile::ProcessVolumeEnvelope(ModChannel &chn, int &vol) const
 {
+#ifdef OPENMPT_EDITOR_CORE
+	chn.nativePatternVoice.beforeEnvelopeVolume=vol;chn.nativePatternVoice.legacyVolumeFactor=1;
+	if(chn.nativePatternVoice.envelopes[0].active) return;
+#endif
 	if(IsEnvelopeProcessed(chn, ENV_VOLUME))
 	{
 		const ModInstrument *pIns = chn.pModInstrument;
@@ -1131,6 +1146,9 @@ void CSoundFile::ProcessVolumeEnvelope(ModChannel &chn, int &vol) const
 			return;
 		}
 		const int envpos = chn.VolEnv.nEnvPosition - (m_playBehaviour[kITEnvelopePositionHandling] ? 1 : 0);
+		#ifdef OPENMPT_EDITOR_CORE
+		chn.nativePatternVoice.legacyEnvelopePosition[0]=envpos;
+#endif
 		// Get values in [0, 256]
 		int envval = pIns->VolEnv.GetValueFromPosition(envpos, 256);
 
@@ -1164,6 +1182,9 @@ void CSoundFile::ProcessVolumeEnvelope(ModChannel &chn, int &vol) const
 			}
 		}
 		vol = (vol * Clamp(envval, 0, 512)) / 256;
+#ifdef OPENMPT_EDITOR_CORE
+		if(chn.nativePatternVoice.beforeEnvelopeVolume)chn.nativePatternVoice.legacyVolumeFactor=double(vol)/chn.nativePatternVoice.beforeEnvelopeVolume;
+#endif
 	}
 
 }
@@ -1171,6 +1192,11 @@ void CSoundFile::ProcessVolumeEnvelope(ModChannel &chn, int &vol) const
 
 void CSoundFile::ProcessPanningEnvelope(ModChannel &chn) const
 {
+#ifdef OPENMPT_EDITOR_CORE
+	chn.nativePatternVoice.legacyPanBefore=chn.nativePatternVoice.legacyPanAfter=chn.nRealPan/128.-1;
+	chn.nativePatternVoice.legacyPanEnvelope=0;
+	if(chn.nativePatternVoice.envelopes[1].active) return;
+#endif
 	if(IsEnvelopeProcessed(chn, ENV_PANNING))
 	{
 		const ModInstrument *pIns = chn.pModInstrument;
@@ -1182,9 +1208,15 @@ void CSoundFile::ProcessPanningEnvelope(ModChannel &chn) const
 		}
 
 		const int envpos = chn.PanEnv.nEnvPosition - (m_playBehaviour[kITEnvelopePositionHandling] ? 1 : 0);
+		#ifdef OPENMPT_EDITOR_CORE
+		chn.nativePatternVoice.legacyEnvelopePosition[1]=envpos;
+#endif
 		// Get values in [-32, 32]
 		const int envval = pIns->PanEnv.GetValueFromPosition(envpos, 64) - 32;
 
+		#ifdef OPENMPT_EDITOR_CORE
+		chn.nativePatternVoice.legacyPanEnvelope=envval/32.;
+#endif
 		int pan = chn.nRealPan;
 		if(pan >= 128)
 		{
@@ -1194,12 +1226,20 @@ void CSoundFile::ProcessPanningEnvelope(ModChannel &chn) const
 			pan += (envval * (pan)) / 32;
 		}
 		chn.nRealPan = Clamp(pan, 0, 256);
+#ifdef OPENMPT_EDITOR_CORE
+		chn.nativePatternVoice.legacyPanAfter=chn.nRealPan/128.-1;
+#endif
 	}
 }
 
 
 int CSoundFile::ProcessPitchFilterEnvelope(ModChannel &chn, int32 &period) const
 {
+#ifdef OPENMPT_EDITOR_CORE
+	chn.nativePatternVoice.legacyPitchRatio=1;
+	const int32 nativeBeforeEnvelope=period;
+	if(chn.nativePatternVoice.envelopes[2].active) return -1;
+#endif
 	if(IsEnvelopeProcessed(chn, ENV_PITCH))
 	{
 		const ModInstrument *pIns = chn.pModInstrument;
@@ -1216,6 +1256,9 @@ int CSoundFile::ProcessPitchFilterEnvelope(ModChannel &chn, int32 &period) const
 		}
 
 		const int envpos = chn.PitchEnv.nEnvPosition - (m_playBehaviour[kITEnvelopePositionHandling] ? 1 : 0);
+		#ifdef OPENMPT_EDITOR_CORE
+		chn.nativePatternVoice.legacyEnvelopePosition[2]=envpos;
+#endif
 		// Get values in [-256, 256]
 #ifdef MODPLUG_TRACKER
 		const int32 range = ENVELOPE_MAX;
@@ -1271,12 +1314,18 @@ int CSoundFile::ProcessPitchFilterEnvelope(ModChannel &chn, int32 &period) const
 			} //End: Original behavior.
 		}
 	}
+#ifdef OPENMPT_EDITOR_CORE
+	if(nativeBeforeEnvelope>0&&period>0)chn.nativePatternVoice.legacyPitchRatio=PeriodsAreFrequencies()?double(period)/nativeBeforeEnvelope:double(nativeBeforeEnvelope)/period;
+#endif
 	return -1;
 }
 
 
 void CSoundFile::IncrementEnvelopePosition(ModChannel &chn, EnvelopeType envType) const
 {
+#ifdef OPENMPT_EDITOR_CORE
+	if(chn.nativePatternVoice.envelopes[static_cast<size_t>(envType)].active) return;
+#endif
 	ModChannel::EnvInfo &chnEnv = chn.GetEnvelope(envType);
 
 	if(chn.pModInstrument == nullptr || !chnEnv.flags[ENV_ENABLED])
@@ -2167,6 +2216,10 @@ bool CSoundFile::ReadNote(
 
 	m_PlayState.m_globalScriptState.NextTick(m_PlayState, *this);
 	m_PlayState.m_nSamplesPerTick = GetTickDuration(m_PlayState);
+#if defined(OPENMPT_EDITOR_CORE)
+	m_PlayState.nativeClockActive = false;
+	if(nativeTimingTick) m_PlayState.m_nSamplesPerTick = nativeTimingTick(nativeTimingContext, m_PlayState, m_PlayState.m_nSamplesPerTick);
+#endif
 	m_PlayState.m_nBufferCount = m_PlayState.m_nSamplesPerTick;
 	}
 
@@ -2322,6 +2375,14 @@ bool CSoundFile::ReadNote(
 					chn.nRealVolume = Util::muldiv(vol * m_PlayState.m_nGlobalVolume, chn.nGlobalVol * insVol, 1 << 20);
 				}
 			}
+
+#ifdef OPENMPT_EDITOR_CORE
+   if(pIns){
+    int neutral=chn.nativePatternVoice.beforeEnvelopeVolume;
+    if(chn.dwFlags[CHN_NOTEFADE]){if(pIns->nFadeOut)neutral=(neutral*chn.nFadeOutVol)/65536;else if(!chn.nFadeOutVol)neutral=0;}
+    chn.nativePatternVoice.neutralRealVolume=(chn.isPaused||chn.dwFlags[CHN_SYNCMUTE])?0:Util::muldiv(neutral*(m_PlayConfig.getGlobalVolumeAppliesToMaster()?MAX_GLOBAL_VOLUME:m_PlayState.m_nGlobalVolume),chn.nGlobalVol*insVol,1<<20);
+   }
+#endif
 
 			chn.nCalcVolume = vol;	// Update calculated volume for MIDI macros
 
@@ -2603,6 +2664,19 @@ bool CSoundFile::ReadNote(
 					chn.newRightVol = (realvol * pan) / 256;
 				}
 			}
+#ifdef OPENMPT_EDITOR_CORE
+   if(chn.pModInstrument){
+    const int pan=m_MixerSettings.gnChannels>=2?Clamp(chn.nRealPan,0,256):128;
+    int32 amplitude=(chn.nativePatternVoice.neutralRealVolume*kChnMasterVol)/128;if(!m_PlayConfig.getUseGlobalPreAmp())amplitude/=2;
+    const auto mode=m_PlayConfig.getPanningMode();int32 l,r;
+    if(mode==PanningMode::SoftPanning||(mode==PanningMode::Undetermined&&(m_MixerSettings.MixerFlags&SNDMIX_SOFTPANNING))){l=amplitude*std::min(128,256-pan)/256;r=amplitude*std::min(128,pan)/256;}
+    else if(mode==PanningMode::FT2Panning){const int p=std::min(pan,255);l=amplitude*(p?XMPanningTable[256-p]:65536)/65536;r=amplitude*XMPanningTable[p]/65536;}
+    else {l=amplitude*(256-pan)/256;r=amplitude*pan/256;}
+    const auto attenuation=1<<m_PlayConfig.getExtraSampleAttenuation();chn.nativePatternVoice.neutralLeft=l/attenuation;chn.nativePatternVoice.neutralRight=r/attenuation;
+    if(chn.dwFlags[CHN_SURROUND]&&m_MixerSettings.gnChannels==2)chn.nativePatternVoice.neutralRight=-chn.nativePatternVoice.neutralRight;
+   }
+#endif
+
 			// Clipping volumes
 			//if (chn.nNewRightVol > 0xFFFF) chn.nNewRightVol = 0xFFFF;
 			//if (chn.nNewLeftVol > 0xFFFF) chn.nNewLeftVol = 0xFFFF;
@@ -2681,7 +2755,7 @@ bool CSoundFile::ReadNote(
 
 
 #ifdef OPENMPT_EDITOR_CORE
-void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect, uint8 parameter, bool releasePlugin)
+void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect, uint8 parameter, bool releasePlugin, const ModCommand *rowNote)
 {
 	if(channel >= GetNumChannels()) return;
 	auto &chn = m_PlayState.Chn[channel];
@@ -2692,10 +2766,12 @@ void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 inst
 	chn.rowCommand.instr = static_cast<uint8>(instrument);
 	chn.rowCommand.command = static_cast<EffectCommand>(effect);
 	chn.rowCommand.param = parameter;
+	if(rowNote) { chn.rowCommand.volcmd = rowNote->volcmd; chn.rowCommand.vol = rowNote->vol; }
+	const bool porta = rowNote && (rowNote->IsTonePortamento() || RowTonePortamento(chn));
 	if(ModCommand::IsNote(note))
 	{
 		chn.nNewNote = chn.nLastNote = note;
-		const auto nna = CheckNNA(channel, instrument, note, false);
+		const auto nna = porta ? CHANNELINDEX_INVALID : CheckNNA(channel, instrument, note, false);
 		if(nna != CHANNELINDEX_INVALID)
 		{
 			auto &old = m_PlayState.Chn[nna];
@@ -2710,11 +2786,13 @@ void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 inst
 				m_PlayState.ChnMix[m_nMixChannels++] = nna;
 		}
 		chn.RestorePanAndFilter();
-		if(instrument) InstrumentChange(m_PlayState, channel, instrument, false, true);
-		else if(chn.nNewIns) InstrumentChange(m_PlayState, channel, chn.nNewIns, false, true);
+		if(instrument) InstrumentChange(m_PlayState, channel, instrument, porta, true);
+		else if(chn.nNewIns) InstrumentChange(m_PlayState, channel, chn.nNewIns, porta, true);
 		chn.nNewIns = 0;
-		NoteChange(chn, note, false, true, false, channel);
-		chn.nVolume = static_cast<int32>((uint32(velocity) * 256 + 63) / 127);
+		NoteChange(chn, note, porta, true, false, channel);
+		if(!rowNote) chn.nVolume = static_cast<int32>((uint32(velocity) * 256 + 63) / 127);
+  else if(rowNote->volcmd==VOLCMD_VOLUME) chn.nVolume=std::min<int>(64,rowNote->vol)*4;
+  else if(rowNote->volcmd==VOLCMD_PANNING) Panning(chn,rowNote->vol,Pan6bit);
 		chn.dwFlags.set(CHN_FASTVOLRAMP);
 		const auto tick = m_PlayState.m_nTickCount;
 		const bool first = m_PlayState.m_flags[SONG_FIRSTTICK];
@@ -2722,7 +2800,18 @@ void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 inst
 		m_PlayState.m_nTickCount = 0;
 		m_PlayState.m_flags.set(SONG_FIRSTTICK);
 		chn.isFirstTick = true;
+		if(rowNote) {
+			auto volcmd = rowNote->volcmd; auto vol = rowNote->vol; auto cmd = rowNote->command;
+			ProcessVolumeColumn(channel, volcmd, vol, cmd, rowNote->param, 0, true);
+		}
 		ApplyNativeNoteEffect(channel, effect, parameter);
+		if(rowNote) for(uint8 column = 1; column <= chn.nativeExtraEffects.size(); ++column) {
+			const auto extra = chn.nativeExtraEffects[column - 1];
+			if(extra.command != CMD_NONE && NativeNoteEffectSupported(extra.command, extra.param)) {
+				NativeEffectScope scope(*this, chn, column, extra, true);
+				ApplyNativeNoteEffect(channel, extra.command, extra.param);
+			}
+		}
 		ReadNote(channel);
 		m_PlayState.m_nTickCount = tick;
 		m_PlayState.m_flags.set(SONG_FIRSTTICK, first);
@@ -2748,9 +2837,13 @@ void CSoundFile::TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 inst
 		const auto realNote = ModCommand::IsNote(note) ? chn.pModInstrument->NoteMap[note - NOTE_MIN] : note;
 		// NC sends per-track note-offs; it must not broadcast All Sounds Off
 		// to other parts sharing the same plugin and MIDI channel.
-		SendMIDINote(channel, releasePlugin ? NOTE_KEYOFF : realNote, effect == CMD_VOLUME ? static_cast<uint16>(std::min<uint8>(parameter, 64) * 4) : static_cast<uint16>(velocity * 2));
+		SendMIDINote(channel, releasePlugin ? NOTE_KEYOFF : realNote, rowNote ? static_cast<uint16>(chn.nVolume) : effect == CMD_VOLUME ? static_cast<uint16>(std::min<uint8>(parameter, 64) * 4) : static_cast<uint16>(velocity * 2));
 	}
 	chn.rowCommand = row;
+	if(rowNote) {
+		// Restore continuing volume/effect columns, without replaying the row note.
+		chn.rowCommand = *rowNote; chn.rowCommand.note = NOTE_NONE; chn.rowCommand.instr = 0;
+	}
 	if(effect && ModCommand::IsNote(note)) {
 		chn.rowCommand.command = static_cast<EffectCommand>(effect);
 		chn.rowCommand.param = parameter;

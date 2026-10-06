@@ -10,7 +10,7 @@
         case effectsCommand:case mixerCommand:case mixerRouting:case graphCommand:
         case curveBank:case curveReference:case graphCommandsCommand:
         case parameterAutomationCommand:case absoluteAutomationCommand:
-        case sampleDetailCommand:case sampleBrowseCommand:case audioSettingsCommand:case instrumentEnvelopeCommand:case auditionCommand:return true;
+        case sampleDetailCommand:case sampleBrowseCommand:case audioSettingsCommand:case instrumentEnvelopeCommand:case auditionCommand:case scratchGesturesCommand:return true;
         default:return false;
         }
     }

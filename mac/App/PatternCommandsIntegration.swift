@@ -10,14 +10,17 @@ extension AppController {
     picker.onDismiss = {[weak self] in
       guard let self else{return};self.commandPickerWindow?.close();self.window.makeKeyAndOrderFront(nil);self.window.makeFirstResponder(self.patternView)
     }
-    picker.onNativeCommand = {[weak self,weak picker] kind,model,row,channel,column in
+    picker.onNativeSelection = {[weak self,weak picker] entry,model,row,channel,column in
+      guard let kind=entry.nativeKind else{return}
       guard let self else{return}
       guard self.session.automationRevision==model.revisionToken else{picker?.status.stringValue="The song changed. Close and reopen this list to choose a new target.";return}
+      guard self.patternView.model.pattern==model.pattern else {picker?.status.stringValue="The displayed pattern changed. Close and reopen this list to edit that pattern.";return}
       self.commandPickerWindow?.close()
-      if kind.hasPrefix("nudge-") {
+      if entry.nativeName=="scratch" {self.patternView.cursorRow=row;self.patternView.cursorChannel=channel;self.patternView.column=max(3,column);self.showScratchGestures();return}
+      if model.commands.schema(kind:kind,native:entry.nativeName) != nil {
         self.window.makeKeyAndOrderFront(nil)
         self.patternView.cursorRow=row;self.patternView.cursorChannel=channel;self.patternView.column=max(3,column)
-        _=self.patternView.beginNudgeEdit(kind:kind)
+        _=self.patternView.beginNudgeEdit(kind:kind,native:entry.nativeName)
       } else {self.openPatternPerformance(context:(model,row,channel,column),kind:kind)}
     }
     let panel=EffectFinderPanel(picker:picker);commandPickerWindow=panel;picker.capture()

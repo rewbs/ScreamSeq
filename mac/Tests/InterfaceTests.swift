@@ -807,6 +807,7 @@ struct InterfaceFailure: Error { let message: String }
       try pluginInstrumentsChecks()
       try instrumentEnvelopeChecks()
       try envelopeBankChecks()
+      try scratchGestureChecks()
       try navigationChecks()
       try patternGridChecks()
       try noteTrackChecks()

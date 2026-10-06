@@ -162,7 +162,7 @@ extension InterfaceTests {
     try require(editor.songNodeBus["plugin:loose"]==nil && editor.effectiveInserts(editor.buses.last!).isEmpty,"Detached effects must not inherit a fallback Master owner")
     let main=editor.songConnections.firstIndex{$0["kind"] as? String=="output"}!
     try require(editor.insertionMove(["plugin:loose"],edge:main)?["target"] as? String=="track","Dropping an unconnected processor on a channel wire creates an exact insertion request")
-    try require(editor.insertMove("track","plugin:loose")?["plugins"] as? [String]==["loose"],"Dragging a channel socket to a detached input establishes ownership of exactly that processor")
+    try require(editor.insertMove("track","plugin:loose")?["plugins"] as? [String]==["loose"],"An explicit chain move can establish ownership of exactly the detached processor")
     editor.addCatalog=[effect];editor.selectedID=nil;editor.canvas.selected=nil
     let entry=editor.addEntries(connecting:nil).first{$0.payload["kind"] as? String=="plugin"}!
     try require(entry.unavailable==nil && entry.detail.contains("Unconnected"),"Blank-canvas Add offers effects with their unconnected destination clearly named")
@@ -378,7 +378,7 @@ extension InterfaceTests {
     writes=[];editor.detachNodes(["plugin:A","plugin:B"],positions:[],remove:false)
     try require(writes.last?.0=="mixer.inserts.detach" && writes.last?.1["plugins"] as? [String]==["A","B"],"Multi-processor detach follows existing order")
     let move=editor.insertMove("n1","plugin:A")
-    try require(move?["plugins"] as? [String]==["A","B"] && move?["target"] as? String=="n1","Dragging the first loose input moves its whole suffix into the destination path")
+    try require(move?["plugins"] as? [String]==["A","B"] && move?["target"] as? String=="n1","An explicit chain move places the loose suffix into the destination path")
     mixer["disconnectedMainInputs"]=["B"];mixer["masterOutputDisconnected"]=true;song["mixer"]=mixer;editor.update(song)
     try require(!editor.canvas.edges.contains{$0.source=="plugin:A" && $0.target=="plugin:B"} && !editor.songConnections.contains{$0["kind"] as? String=="master-output"},"Cut hides exactly its implicit and terminal wires without hiding processors")
     writes=[];editor.selectedID="plugin:B";editor.reconnectSongMain()
@@ -409,10 +409,10 @@ extension InterfaceTests {
     try require(writes.count==1 && writes[0].0=="mixer.plugin.connection.set" && writes[0].1["source"] as? String=="C" && writes[0].1["input"] as? UInt32==0,"Repatching direct cable into main is one endpoint transaction, never an insert-owner move")
     let replaced=writes[0].1["replace"] as? [String:Any]
     try require(replaced?["source"] as? String=="A" && replaced?["output"] as? Int==2 && writes[0].1["gainDB"] as? Double == -8,"Rewire retains exact previous identity and gain")
-    writes=[];editor.canvas.addingMainInput=true;editor.connectPorts("plugin:A","plugin:B",out:0,input:0,modulation:false);editor.canvas.addingMainInput=false
-    try require(writes.last?.0=="mixer.plugin.connection.set" && writes.last?.1["gainDB"] as? Double==0,"Option main-input gesture adds unity contribution while retaining chain ownership")
+    writes=[];editor.connectPorts("plugin:A","plugin:B",out:0,input:0,modulation:false)
+    try require(writes.last?.0=="mixer.plugin.connection.set" && writes.last?.1["gainDB"] as? Double==0,"A normal main-input gesture adds unity contribution while retaining chain ownership")
     writes=[];editor.connectPorts("plugin:A","plugin:B",out:2,input:1,modulation:false)
-    try require(writes.last?.0=="mixer.plugin.connection.set" && writes.last?.1["output"] as? UInt32==2,"An auxiliary processor socket goes directly to detector, not its owning bus output")
+    try require(writes.isEmpty && editor.status.stringValue.contains("already connected"),"Reconnecting an existing direct auxiliary cable leaves its gain and enabled state unchanged")
     let choices=editor.portChoices
     let a=choices.first{$0.key.node=="plugin:A" && $0.key.output && $0.key.number==2}!,b=choices.first{$0.key.node=="plugin:B" && !$0.key.output && $0.key.number==1}!
     try require(editor.portPairUnavailable(a,b)==nil,"Keyboard patcher offers the same direct processor connection")

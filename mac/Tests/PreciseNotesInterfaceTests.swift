@@ -88,6 +88,31 @@ extension InterfaceTests {
     mini.capture()
     try require(mini.effect.itemArray[1] === originalEffectItem && mini.effect.indexOfSelectedItem==1,
       "Recapturing a note preserves the native effect menu and selects its actual effect")
+    // Moving between populated rows must update native controls in place: a
+    // full table rebuild can occupy the main run loop for several display frames.
+    let follow=PreciseNotesEditor(frame:NSRect(x:0,y:0,width:640,height:1100))
+    let followWindow=NSWindow(contentRect:NSRect(x:0,y:0,width:640,height:1100),styleMask:[.titled],backing:.buffered,defer:false)
+    followWindow.isReleasedWhenClosed=false;followWindow.contentView=follow
+    var followRow=0,followEvents:[[String:Any]]=[["channel":0,"position":0,"note":61,"instrument":2,"velocity":90]]
+    follow.onContext={(PatternModel(["rows":64,"channels":1]),followRow,0,2)}
+    follow.onRequest={_,_,reply in reply(["result":["revision":"follow:1","data":["pattern":0,"effects":fx,"events":followEvents]]])}
+    follow.capture();follow.layoutSubtreeIfNeeded();follow.table.layoutSubtreeIfNeeded()
+    let cells=follow.table.tableColumns.indices.compactMap{follow.table.view(atColumn:$0,row:0,makeIfNecessary:true) as? PreciseNoteCell}
+    try require(cells.count==7,"Following-row fixture has all visible table cells")
+    followRow=1;followEvents=[["channel":0,"position":65536+32768,"note":65,"instrument":3,"velocity":72,"effect":9,"parameter":160]]
+    follow.capture();follow.layoutSubtreeIfNeeded();follow.table.layoutSubtreeIfNeeded()
+    try require(cells.enumerated().allSatisfy{follow.table.view(atColumn:$0.offset,row:0,makeIfNecessary:true) === $0.element},
+      "Following another populated row retains each native table cell")
+    try require(cells[0].stringValue=="0.125" && cells[1].stringValue=="0.5" && cells[2].stringValue=="E-5" && cells[3].stringValue=="3" && cells[4].stringValue=="72" && cells[6].stringValue=="A0" && follow.note.selectedTag()==65,
+      "Retained cells and detail fields show the newly captured note, timing, instrument, velocity and effect")
+    followEvents=[];follow.capture();follow.layoutSubtreeIfNeeded()
+    try require(follow.table.numberOfRows==0 && follow.table.selectedRow == -1 && follow.effect.indexOfSelectedItem==0 && !follow.hasDraft,
+      "Following a blank row removes obsolete rows and clears the selected effect without creating a draft")
+    followEvents=[["channel":0,"position":65536,"note":61,"instrument":2,"velocity":90],["channel":0,"position":65536+4096,"note":255]]
+    follow.capture();follow.layoutSubtreeIfNeeded()
+    try require(follow.table.numberOfRows==2 && follow.table.selectedRow==0 && follow.selectEvent(1) && follow.note.selectedTag()==255,
+      "Row-count changes keep selection and note-release editing correct")
+    followWindow.close()
     let blank=PreciseNotesEditor(frame:.zero)
     var blankEvents:[[String:Any]]=[["channel":0,"position":0,"note":61,"instrument":1,"effect":9,"parameter":128]]
     blank.onContext={(PatternModel(["rows":64,"channels":1]),0,0,1)}

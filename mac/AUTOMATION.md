@@ -2,6 +2,28 @@
 
 ScreamSeq exposes the open song to local applications and agents through a versioned JSON interface. It can read the cursor and song, edit patterns, manipulate samples and instruments, and change native plugins and automation. It works without screen capture, simulated clicks, or audio playback. No language model is embedded: an external agent translates a musical request into explicit edits.
 
+## Scratch phrases
+
+`scratch.gestures.get` returns song-local `gestures` with integer `id` (1–255), `name`, `motion`, `fader`, and `uses`; the read also returns factory `presets`, `unitsPerCycle:65536`, and limits. Preset identifiers are `baby`, `chirp`, `transform`, `one-click-flare`, `two-click-flare`, `crab`, and `scribble`. These are editable starting gestures, not recorded commercial presets.
+
+`scratch.gestures.set` creates the first free slot when `id` is omitted, or patches/upserts that numbered slot. Supply a `preset`, or a complete `name`, `motion` and `fader` for a new phrase. Omitted fields on an existing phrase are preserved; explicit fields override a preset. Edits affect every SK reference in this song. `scratch.gestures.clone {id,name?,target?}` creates a fresh independent slot. Its optional `target:{pattern,row,channel,column}` must still contain SK referencing the source `id`; that cell alone is reassigned, preserving all other parameters and its exact onset. Copy and reassignment share one Undo and reject atomically. Reassigning a cell follows the current stopped pattern-edit path; a bank-only clone preserves playback. `scratch.gestures.remove` rejects a used phrase; replace/remove its SK commands first. All scratch writes require `expectedRevision`, support `dryRun`, avoid history for no-ops, and use global Undo. Curve edits publish during playback without restarting the active phrase's clock.
+
+Each lane has 2–256 strictly ordered points `{position,value,curve,formula?}`, including endpoints **0 and 65536**, with values in **0…1**. Curves use the existing automation names. Formula source is compiled before publication; scripts have no filesystem, networking or executable-code access. For an exact display preview, `automation.formula.preview` accepts `scratchBeats` (duration of one cycle), `rows:257`, `span:65537`, and the lane's points. Formula `beat` starts at zero each cycle; `beats` is time within the current segment, and `t` is normalized segment progress.
+
+Trigger with `pattern.effect.set`, for example:
+
+```json
+{"pattern":0,"row":0,"channel":0,"column":0,"expectedRevision":"<current>",
+ "command":{"kind":"native","native":"scratch","parameters":
+   {"gesture":1,"beats":2,"travelMs":200,"repeats":4,"reverse":false}}}
+```
+
+The grid displays this as **SK**. `beats` is total duration; `repeats` divides it into cycles. `travelMs` is source distance measured at the voice's captured normal pitch, independent of phrase tempo. Rising/falling motion moves forward/back; a flat segment holds position. The motion is relative to its initial value and the current cue. Closed cycles return to that cue; open cycles accumulate displacement. `reverse` flips travel. **SX** (`native:"scratch-stop", parameters:{}`) releases it at the command's exact offset. A new note cancels the previous voice's scratch. Normal playback resumes at the final position, with a short fader release.
+
+SK controls the main active sample voice, not a VST/AU instrument or its NNA tail. While active it traverses physical sample data, clamps at sample ends, and temporarily bypasses sample-loop wrapping; normal loop behavior resumes afterward. Use SO before SK to choose a different cue, particularly before reverse travel near the sample start. Fader cuts multiply existing volume/envelopes, with a 0.5 ms smoothing limit. Up to 16 tracks may contain scratch commands. Strict mutation requires the gesture duration to fit within its pattern.
+
+Native projects persist the paired curves and all SK references. `pattern.paste` accepts `scratchGestures` alongside copied SK effects and remaps phrase slots without replacing unrelated destination-song phrases. Incompatible phrase data is recovered independently with warnings; dependent commands are skipped if their phrase cannot be recovered.
+
 ## Sample library and bulk import
 
 The native app exposes the same cached library used by **Browse Samples…**. These methods do not touch the song, its transport, undo history or plugin rack. The standalone test host exposes `sample.importMany` but not the application-owned library. `api.describe` and the bundled schema identify these methods.
@@ -808,6 +830,16 @@ including when preparing a dry run. Empty discarded fields need no override.
 The full result is one document Undo step, with identical preview/commit changes,
 strict revision checking, and revision/redo preservation for no-ops and errors.
 
+The grid's **Shift-Delete** invokes `deleteRows` from the cursor to the pattern end
+with `startChannel` set to the cursor channel, `channelCount:1`, `amount:1` and
+`allowDataLoss:true`, regardless of selection. With the default all-fields mask,
+this also shifts that channel's precise notes, all native FX and graph commands;
+other channels and pattern-wide automation retain their positions. The `.` key
+uses a one-cell `clear` with the current note/instrument/volume field mask, or
+`pattern.effect.set` for the current FX slot. FX code clearing sends `command:null`;
+FX value clearing preserves the command and its timing/binding while resetting
+the value (NC resets its displayed offset). No new API or history domain is used.
+
 For example, insert two empty note/instrument rows in one column from row 8
 through the end of a 64-row pattern:
 
@@ -927,7 +959,7 @@ the editor window and does not overwrite the macOS pasteboard.
 - `mixer.instrument.route {expectedRevision, plugin, target, output?, dryRun?}` routes one supported plugin instrument output to the chosen bus. The plugin must still be assigned to a tracker instrument with `plugin.instruments.set` or the legacy `plugin.assign`. `output` is the logical channel-pair port index (0–63); the default is main output 0. Mono outputs are duplicated to stereo. Null `target` removes an explicit route. An unrouted main output defaults to Master; unrouted auxiliaries are silent. Connected outputs auto-enable at playback; disconnect routing to stop them.
 - `mixer.bus.remove {expectedRevision, bus, dryRun?}` removes a group/return. Child outputs and instrument sources reconnect to its output, sends targeting it are removed, and its insert chain moves to the beginning of its output's chain. Master and track buses cannot be removed with this method.
 
-Routing is an acyclic graph. Outputs/sends may feed groups, returns or Master; plugin instruments may feed track buses too. Solo keeps selected buses, their upstream contributors and downstream groups/returns audible, while unrelated sibling tracks remain silent. Explicit mute takes precedence. Compensation aligns plugin, sample, group and send paths; intentional track offsets remain audible. Negative offsets introduce a common lookahead delay, removed during WAV export. Both native hosts use prepared live routing for supported structural changes, including dry-bridge handoffs when latency or the old/new dependency union prevents an ordinary fade. Unsupported active transitions reject without stopping playback. Graph limits are 240 buses, 32 inserts and 16 sends per bus; the native rack supports 64 AU/VST3/built-in devices. Assigned plugin instances (including bypassed assignments) and mixer buses together share a 250-slot budget; extra aliases and effects use no additional adapter slots. Assignment, graph edits, channel resizing, load and playback validate this budget. Document Undo/Redo that would exceed it with the current plugin assignments remains unavailable until an instrument is unassigned; the API returns an error without consuming that history. Every history alias validates the complete resulting plugin and graph state. These counts include unresolved retained plugin references.
+Routing is an acyclic graph. Outputs/sends may feed tracks, groups, returns or Master, subject to the no-feedback rule. Plugin outputs can also feed any of these buses. Master is the final sink. Solo keeps selected buses, their upstream contributors and downstream groups/returns audible, while unrelated sibling tracks remain silent. Explicit mute takes precedence. Compensation aligns plugin, sample, group and send paths; intentional track offsets remain audible. Negative offsets introduce a common lookahead delay, removed during WAV export. Both native hosts use prepared live routing for supported structural changes, including dry-bridge handoffs when latency or the old/new dependency union prevents an ordinary fade. Unsupported active transitions reject without stopping playback. Graph limits are 240 buses, 32 inserts and 16 sends per bus; the native rack supports 64 AU/VST3/built-in devices. Assigned plugin instances (including bypassed assignments) and mixer buses together share a 250-slot budget; extra aliases and effects use no additional adapter slots. Assignment, graph edits, channel resizing, load and playback validate this budget. Document Undo/Redo that would exceed it with the current plugin assignments remains unavailable until an instrument is unassigned; the API returns an error without consuming that history. Every history alias validates the complete resulting plugin and graph state. These counts include unresolved retained plugin references.
 
 Input balance (`prePan`) follows pre gain and precedes all inserts. Output balance
 (`pan`) follows inserts and width at the fader. Both use linear stereo balance:
@@ -958,7 +990,7 @@ Host behavior follows [VST3 bus indices and buffers](https://steinbergmedia.gith
 
 Multiple sources sum into one input. Stereo-to-mono inputs average their channels. Both pre/post taps are after source inserts; the pre-fader tap precedes the bus fader, balance and width. Sidechains honor source mute and solo. Solo the key source too if it must continue triggering a soloed receiver. For an almost silent key track, use a pre-fader route and turn its track fader down. There is no automatic unmuting of unrelated tracks.
 
-The graph rejects self-routing and feedback cycles, including disabled routes. Sources process before their receiver. Delay compensation aligns each source with the program signal at the receiving insert's position, including preceding inserts on that bus. Changes validate atomically and have one Undo step; both native hosts prepare the complete routing DAG before live publication. Bypassing or removing a plugin retains dormant routes; supported connected inputs auto-enable on the playback copy even if their manual activation is off; removing a source bus removes its sidechain routes. Native metadata version 4 stores sidechains and ensures older applications reject new projects rather than silently discarding plugin bus activation. Only the current native project metadata is accepted.
+The graph rejects self-routing and feedback cycles, including disabled routes. Sources process before their receiver. Delay compensation aligns each source with the program signal at the receiving insert's position, including preceding inserts on that bus. Changes validate atomically and have one Undo step; both native hosts prepare the complete routing DAG before live publication. Bypassing or removing a plugin retains dormant routes; supported connected inputs auto-enable on the playback copy even if their manual activation is off; removing a source bus removes its sidechain routes. Native metadata version 4 stores sidechains and ensures older applications reject new projects rather than silently discarding plugin bus activation. Canonical saves use current metadata; incompatible project loads recover known data best effort and report warnings.
 
 Open **Mixer → Sidechains…**, choose the receiving effect and input, then add/update or remove source buses. **Audio buses…** opens input activation; use Reload after changing the plugin's enabled inputs. The window uses the same revision-checked API as external agents.
 
@@ -1229,13 +1261,20 @@ starting a quarter-row into the pattern, over 1.5 rows. Set pitch to zero to
 return to the original note.
 
 Native sample voices integrate the bend at every sample, independently of tracker
-ticks. AU and VST3 instruments receive sample-timed 14-bit MIDI pitch wheel
-values; the plugin must support MIDI pitch bend (VST3 uses its MIDI-controller
-mapping). Its configured wheel range determines audible pitch, and values beyond
-that range saturate. Notes sharing a plugin MIDI channel share its bend. Up to
-16 raw channels may have pitch commands; use distinct plugin MIDI channels for
-independent bends. A bend carries forward until changed, including onto new notes.
-The plugin's own pitch response and smoothing remain under plugin control.
+ticks. BS/BL affects the sample currently playing on the track. A new sample onset
+or sample retrigger starts with zero native bend; a BS/BL command at that same
+onset then applies to the new voice. A command issued with no active sample does
+not prime a later note. Tone-portamento continues the existing sample and keeps
+its bend. An older NNA voice retains its own bend/slide when another note starts,
+and later BS/BL commands on the track affect the new foreground voice.
+
+AU and VST3 instruments receive sample-timed 14-bit MIDI pitch wheel values; the
+plugin must support MIDI pitch bend (VST3 uses its MIDI-controller mapping). Its
+configured wheel range determines audible pitch, and values beyond that range
+saturate. Notes sharing a plugin MIDI channel share its bend, which carries
+forward until changed, including onto new notes. Up to 16 raw channels may have
+pitch commands; use distinct plugin MIDI channels for independent bends. The
+plugin's own pitch response and smoothing remain under plugin control.
 
 Native metadata uses version 7 for parameter commands and version 8 when pitch
 commands are present. Plain module export rejects loss of this metadata; use a
@@ -1609,15 +1648,19 @@ plugin oscillators and recorded plugin output cannot be reversed this way.
 Use `pattern.effect.set` to edit one cell without replacing unrelated effects:
 
 ```json
-{"method":"pattern.effect.set","params":{"expectedRevision":"<current revision>","pattern":0,"row":4,"channel":0,"column":0,"command":{"kind":"nudge-reverse","value":0.75,"offset":8192,"duration":65536}}}
+{"method":"pattern.effect.set","params":{"expectedRevision":"<current revision>","pattern":0,"row":4,"channel":0,"column":0,"command":{"kind":"nudge-reverse","value":0.75,"offset":8192,"durationBeats":1}}}
 ```
 
 `value` is strength **0–1**, displayed as a percentage; it is not a semitone or
-hexadecimal amount. `duration` includes the push and recovery, in 65536 units per
-row. It must be positive and end within the pattern. `offset` is 0–65535 within
+hexadecimal amount. `durationBeats` is a floating-point number of beats, including
+the push and recovery; it defaults to **1 beat**. The supported range starts at
+1/65536 beat and the nudge must end within the pattern. NF/NR no longer accept
+positive row-unit `duration` values; no migration is provided. `offset` is 0–65535 within
 this row (`position` is the absolute pattern coordinate in collection requests).
 Binding is zero, pitchRange is its default 2, and tracker effect/parameter bytes
 are zero. Both commands have Undo/Redo, dry-run, clipboard and native persistence.
+The inspector opens both nudge duration and offset in Beats; Rows remains an
+explicit display choice. The API onset coordinate stays in common row units.
 
 Forward and reverse refer to the sample's physical direction. At normal speed,
 an opposing nudge below 50% slows playback, 50% reaches zero, and above 50%
@@ -1638,8 +1681,11 @@ ends normally. Sample loops remain enabled. Preview keyboard voices are excluded
 The combined native pitch/nudge limit is 16 raw tracks per song.
 
 The in-pattern NF/NR fields use the existing `pattern.effect.set` operation.
-Strength is displayed as percent and sent as normalized `value`; displayed row
-duration becomes integer `duration` at 65536 units/row. Both numbers commit in one
+Strength is displayed as percent and sent as normalized `value`; duration is
+displayed in beats by default and sent unchanged as `durationBeats`. The optional
+Rows display converts using the actual pattern signature (4 rows = 1 beat at
+4 rows/beat). Playback advances the nudge in musical beats, including across
+tempo and row-length changes. Both numbers commit in one
 revision-guarded transaction, preserving `offset` and unrelated cells. No new
 project format or API operation is needed. The graph connection inspector uses
 `graph.update`, `graph.routes.set`, and the existing mixer route operations with
@@ -2310,7 +2356,7 @@ outer wet/dry or structural transition mix.
 
 Direct plugin audio uses `mixer.plugin.connection.set` with stable `source` and `target` plugin IDs, explicit logical `output` / `input` slice numbers, optional `gainDB` (−96…12) and `enabled`. This adds one contribution while preserving the insert owner and all other fan-in/out. Input `0` adds to the existing Main input; a serial cable can be cut separately when replacement rather than summing is intended. The optional `replace:{source,output,target,input}` rewires exactly one existing contribution atomically and preserves its controls unless supplied. A stale replacement or duplicate destination tuple rejects the whole edit. `dryRun` validates without history. Plugin instruments that expose supported physical audio inputs accept the same routes and are scheduled after their audio dependencies. Missing inputs and feedback cycles reject atomically.
 
-`graph.connections.remove` accepts `{kind:"plugin-connection",source,output,target,input}` alongside other cable types in one Undo transaction. `mixer.get` / `graph.get.mixer` include `pluginConnections`; native save/load retains them. The graph's “Direct plugin audio” connection inspector edits both endpoints, gain and enabled state; Option-drag into Main adds a contribution without moving the insert chain. Exact adopted route observations use `kind:"plugin-connection"`, canvas `plugin:<id>` source/target keys and both slice numbers. An endpoint's aggregate meter is never substituted for missing route telemetry.
+`graph.connections.remove` accepts `{kind:"plugin-connection",source,output,target,input}` alongside other cable types in one Undo transaction. `mixer.get` / `graph.get.mixer` include `pluginConnections`; native save/load retains them. The graph's “Direct plugin audio” connection inspector edits both endpoints, gain and enabled state; Dragging either socket adds a contribution without moving the insert chain; dragging a selected cable’s endpoint handle rewires only that cable. Moving a chain is an explicit socket-menu action or a node drop onto a wire. Exact adopted route observations use `kind:"plugin-connection"`, canvas `plugin:<id>` source/target keys and both slice numbers. An endpoint's aggregate meter is never substituted for missing route telemetry.
 
 `graph.audio.connection.set` adds or replaces an exact auxiliary cable involving
 an outer channel graph stage. Endpoints are typed objects: `{plugin: instanceID}`
@@ -2332,3 +2378,64 @@ selected-copy input or output. Instrument graph copies remain separate.
 other routes. Repatching retains gain, enabled state and existing cable bends.
 
 A song envelope follower can also use `audioStage: "n…"` with a declared auxiliary `output` (1–63). This is the channel graph stage's combined audible output, not an individual recipe copy or its channel's stereo bus. `audioBus`, `audioPlugin`, and `audioStage` are mutually exclusive; clear the previous selector when repatching. Stage taps are always after the stage's graph processing (`preFader: false`). Dragging that output onto a parameter offers a follower and creates its zero-depth modulation target in one Undo step. An exact input cut uses `graph.connections.remove` with `{kind:"follower-input",node,stage,output}` and preserves the follower and its modulation edges. Source dry runs validate the model and declared ports; actual publication additionally validates prepared runtime dependencies before committing.
+
+### Typed native pattern effects
+
+The `native` array returned by `pattern.commands` is the shared catalog for precise effects (it is a response property, not a separate API method). Each entry
+has `kind`, `displayCode`, `name`, a native operation ID where applicable, ordered
+`parameters`, and a duration policy. Fields expose their semantic `key`, API
+`storage` path, numeric/integer/choice/boolean type, raw `unit`, `displayUnit`,
+range, default, choices, preferred character width and `inline` visibility.
+The existing PS/PL/BS/BL/NC/NF/NR commands also use this catalog.
+
+A new operation uses `kind:"native"`, its stable string `native` identifier and a
+`parameters` object. Choice values are named strings, switches are JSON booleans,
+and numeric parameters retain double precision. Missing known parameters take
+the catalog defaults. Unknown operations/parameters, wrong types and invalid
+ranges reject before changes. The operation and parameter object are mandatory;
+legacy `value`, `binding`, `effect` and `parameter` must be zero if supplied.
+
+```json
+{"method":"pattern.effect.set","params":{"expectedRevision":"<current revision>","pattern":0,"row":4,"channel":0,"column":1,"command":{"kind":"native","native":"vibrato","parameters":{"depth":0.375,"rate":2.5,"rateMode":"beat","shape":"sine","phase":0,"reset":true},"offset":8192,"duration":262144}}}
+```
+
+UI timing defaults to beats, with rows available as an alternative. API
+`position`, `offset` and `duration` retain 65536 units per row; convert using this
+pattern's actual `rowsPerBeat`, returned by `pattern.effects.get`. Parameters
+whose raw unit is `beats` already use beats. LFO `rateMode:"beat"` means cycles per
+beat; `"hz"` means cycles per second. Identifiers, counts, switches and waveform
+choices remain discrete. No command inherits hidden tracker effect memory.
+
+| Family | Native operation IDs | Codes |
+| --- | --- | --- |
+| Gain | `gain-set`, `gain-slide` | GS, GL |
+| Pan | `pan-set`, `pan-slide` | PN, PA |
+| Pitch | `pitch-relative`, `tone-portamento`, `vibrato`, `arpeggio` | PR, PT, VB, AR |
+| Modulation | `tremolo`, `panbrello`, `tremor` | TM, PB, TR |
+| Note timing | `retrigger`, `note-release`, `note-delay` | RT, NO, ND |
+| Sample playback | `sample-offset`, `sample-direction` | SO, DR |
+| Instrument envelopes | `envelope-position`, `envelope-enable` | EP, EN |
+| Musical clock | `tempo-set`, `tempo-slide`, `row-length` | TS, TL, RL |
+
+The catalog states each operation's scope and lifetime. Sample voice effects do
+not rewrite a plugin's private polyphonic state. Sample gain's channel/song
+scopes apply to sample voices; use plugin parameters and native routing for
+plugin output gain. `tone-portamento.note` uses the tracker encoding (C4 = 49),
+with fractional notes allowed. Sample offset mode `cue` uses integer 0 for the
+sample start and 1–9 for saved cues. `row-length` is valid only at offset zero.
+Imported tracker commands retain their original byte ranges and playback rules.
+
+Single-cell edits, complete-pattern replacement, clipboard paste, Undo/Redo and
+native save/reopen retain the entire typed payload. All fields in one command
+commit together under the same revision guard; changing one inline field must
+preserve the command's other fields. Native metadata remains version 17 during
+this unreleased format iteration; an older reader rejects the new kind rather
+than dropping its parameters.
+
+The exhaustive source-effect mapping, including discrete/import-only controls and plugin scope, is maintained in [Native pattern precision map](../doc/NATIVE_PATTERN_PRECISION.md).
+
+### Best-effort native project recovery
+
+Opening `.screamseq` or `.resonance` attempts compatible content even when wrapper or metadata versions differ. The embedded song must decode successfully; failure leaves the current document untouched. Compatible metadata is validated before publication. Unsupported independent fields/entries are omitted with bounded, readable warnings. Legacy NF/NR `duration` row units convert to `durationBeats` using each embedded pattern’s rows-per-beat setting. API writes still reject unknown fields and invalid units.
+
+On macOS, `document.get` includes `loadWarnings: string[]`, `loadSourcePath: string`, and `requiresSaveAs: boolean`; warnings also appear in `issues`. Recovery with conversions or omissions protects the original file. `document.save` (including `dryRun` or `overwrite:true`) cannot target that source while protection is active. Save to a different `.screamseq` path; a successful copy clears `requiresSaveAs`. The UI displays a persistent report banner and suggests a recovered-copy name. Autosave continues to use separate recovery files.

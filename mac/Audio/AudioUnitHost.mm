@@ -19,6 +19,54 @@
     self.onClose();
 }
 @end
+bool RSValidPluginEditorSize(NSSize size) {
+  return std::isfinite(size.width)&&std::isfinite(size.height)&&size.width>=1&&size.height>=1&&size.width<=8192&&size.height<=8192;
+}
+void RSResizePluginEditorWindow(NSWindow *window,NSSize size) {
+  if(!window||!RSValidPluginEditorSize(size)||NSEqualSizes(window.contentView.frame.size,size))return;
+  const auto previous=window.frame;
+  auto frame=[window frameRectForContentRect:NSMakeRect(0,0,size.width,size.height)];
+  frame.origin=NSMakePoint(NSMinX(previous),NSMaxY(previous)-frame.size.height);
+  [window setFrame:frame display:NO];
+}
+NSWindow *RSCreatePluginEditorWindow(NSSize size,NSString *title) {
+  if(!RSValidPluginEditorSize(size))throw std::runtime_error("Invalid plugin editor dimensions");
+  NSWindow *window=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,size.width,size.height)
+    styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
+  window.releasedWhenClosed=NO;window.title=title;
+  window.contentView=[[NSView alloc] initWithFrame:NSMakeRect(0,0,size.width,size.height)];
+  return window;
+}
+@implementation RSPluginEditorContainer {
+  __weak NSView *_pluginView;
+  BOOL _synchronizing;
+}
+- (instancetype)initWithPluginView:(NSView *)view {
+  self=[super initWithFrame:NSMakeRect(0,0,view.frame.size.width,view.frame.size.height)];
+  if(self){
+    _pluginView=view;
+    // Vendor-driven frame changes resize the container. Letting AppKit also
+    // stretch this child would apply that same resize twice.
+    view.autoresizingMask=NSViewNotSizable;
+    [view setFrameOrigin:NSZeroPoint];
+    view.postsFrameChangedNotifications=YES;
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(pluginFrameChanged:) name:NSViewFrameDidChangeNotification object:view];
+    [self addSubview:view];
+  }
+  return self;
+}
+- (void)pluginFrameChanged:(NSNotification *)notification { [self synchronizePluginFrame]; }
+- (void)synchronizePluginFrame {
+  NSView *view=_pluginView;
+  if(_synchronizing||!view||!RSValidPluginEditorSize(view.frame.size))return;
+  _synchronizing=YES;
+  const auto size=view.frame.size;
+  [view setFrameOrigin:NSZeroPoint];
+  if(self.window)RSResizePluginEditorWindow(self.window,size);else [self setFrameSize:size];
+  _synchronizing=NO;
+}
+- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
+@end
 namespace Tracker {
 static_assert(audioUnitMusicDeviceType == kAudioUnitType_MusicDevice);
 static_assert(kAudioUnitParameterUnit_Generic == 0 && kAudioUnitParameterUnit_Indexed == 1 &&
@@ -468,13 +516,10 @@ void MacPluginBackend::showEditor() {
       CFRelease(info->mCocoaAUViewClass[i]);
   if (!view)
     throw std::runtime_error("Audio Unit custom interface could not be created");
-  NSWindow *window = [[NSWindow alloc] initWithContentRect:view.bounds
-                                                 styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
-                                                   backing:NSBackingStoreBuffered
-                                                     defer:NO];
-  window.releasedWhenClosed = NO;
-  window.title = @(descriptor_.name.c_str());
-  window.contentView = view;
+  NSWindow *window=RSCreatePluginEditorWindow(view.frame.size,@(descriptor_.name.c_str()));
+  RSPluginEditorContainer *container=[[RSPluginEditorContainer alloc] initWithPluginView:view];
+  window.contentView=container;
+  [container synchronizePluginFrame];
   auto observer = std::make_unique<AUEditObserver>();
   checkAU(AUEventListenerCreate(AUEditObserver::callback, observer.get(), CFRunLoopGetMain(), kCFRunLoopCommonModes,
                                 0.01, 0.01, &observer->listener),

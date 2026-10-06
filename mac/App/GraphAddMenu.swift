@@ -46,7 +46,9 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
       parent.addChildWindow(panel, ordered: .above); panel.makeKeyAndOrderFront(nil); panel.makeFirstResponder(search)
     }
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      guard let self, event.window === self.panel else { return event }
+      guard let self else { return event }
+      let event = Self.eventForFocusedSearch(event, keyWindow: NSApp.keyWindow, owner: self.owner, panel: self.panel, search: self.search)
+      guard event.window === self.panel else { return event }
       if event.keyCode == 53 { self.close(); return nil }
       if event.keyCode == 36 { self.choose(); return nil }
       if event.keyCode == 125 || event.keyCode == 126 {
@@ -56,6 +58,21 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
       }
       return event
     }
+  }
+  /// Keep typing queued during a graph chooser's activation in its focused search.
+  /// Returning a retargeted key event uses AppKit's normal text-input path; it does
+  /// not recursively dispatch events or synthesize text/marked-text operations.
+  static func eventForFocusedSearch(_ event: NSEvent, keyWindow: NSWindow?, owner: NSWindow?, panel: NSPanel?, search: NSSearchField) -> NSEvent {
+    guard event.type == .keyDown, let owner, let panel, owner !== panel,
+      keyWindow === panel, event.window === owner, search.window === panel,
+      let focus = panel.firstResponder, focus === search || focus === search.currentEditor(),
+      KeyboardSettings.isDataTyping(event), let characters = event.characters, !characters.isEmpty,
+      characters.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) && !(0xF700...0xF8FF).contains($0.value) })
+    else { return event }
+    return NSEvent.keyEvent(with: .keyDown, location: event.locationInWindow,
+      modifierFlags: event.modifierFlags, timestamp: event.timestamp, windowNumber: panel.windowNumber,
+      context: nil, characters: characters, charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? characters,
+      isARepeat: event.isARepeat, keyCode: event.keyCode) ?? event
   }
   func replace(_ values: [Entry]) { entries = values; filter() }
   func filter() {

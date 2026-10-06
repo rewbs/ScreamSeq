@@ -2,14 +2,14 @@ import AppKit
 
 extension AppController {
   func focusedView(_ event: NSEvent) -> NSView? {
-    (event.window ?? NSApp.keyWindow)?.firstResponder as? NSView
+    KeyboardSettings.focusWindow(for: event, keyWindow: NSApp.keyWindow)?.firstResponder as? NSView
   }
   func handlePlaybackKey(_ event: NSEvent) -> Bool {
     guard NSApp.isActive, event.type == .keyDown,
       event.keyCode == 49 || event.keyCode == KeyboardSettings.transportKey,
       commandPalette.window?.isKeyWindow != true else { return false }
     // Space belongs to an open dialog or sheet (file lists, buttons), not the transport.
-    let target = event.window ?? NSApp.keyWindow
+    let target = KeyboardSettings.focusWindow(for: event, keyWindow: NSApp.keyWindow)
     guard NSApp.modalWindow == nil, window.attachedSheet == nil, target?.attachedSheet == nil, target?.sheetParent == nil else { return false }
     let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
     guard !modifiers.contains(.command), !modifiers.contains(.option) else { return false }

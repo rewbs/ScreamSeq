@@ -1,4 +1,5 @@
 #include "NativeSong.hpp"
+#include "NativeTimingRuntime.hpp"
 #include "soundlib/NativeNoteEffects.h"
 #include "soundlib/mod_specifications.h"
 #include <set>
@@ -6,6 +7,30 @@
 #include <tuple>
 
 namespace Tracker {
+uint16_t cloneScratchGesture(NativeSong &native, uint16_t source,
+                            const std::optional<std::string> &name,
+                            const std::optional<ScratchPatternCell> &target) {
+  const auto phrase=native.scratchGestures.find(source);
+  if(phrase==native.scratchGestures.end())throw std::invalid_argument("Scratch phrase no longer exists");
+  auto command=native.performance.commands.end();
+  if(target) {
+    const auto pattern=native.patterns.find(target->pattern),track=native.tracks.find(target->channel);
+    if(pattern==native.patterns.end()||track==native.tracks.end()||target->column>=maximumEffectColumns)
+      throw std::invalid_argument("Scratch pattern destination no longer exists");
+    command=std::find_if(native.performance.commands.begin(),native.performance.commands.end(),[&](const auto &c){
+      return c.pattern==pattern->second.id&&c.track==track->second.id&&c.position/performanceUnitsPerRow==target->row&&c.column==target->column;
+    });
+    if(command==native.performance.commands.end()||command->kind!=PatternCommandKind::Native||command->native!=NativePatternOp::Scratch||command->arguments[0]!=source)
+      throw std::invalid_argument("The captured FX cell no longer uses this scratch phrase");
+  }
+  uint16_t id=0;
+  for(uint16_t candidate=1;candidate<=255;++candidate)if(!native.scratchGestures.contains(candidate)){id=candidate;break;}
+  if(!id)throw std::invalid_argument("The song holds at most 255 scratch phrases");
+  auto copy=phrase->second;if(name)copy.name=*name;validateScratchGesture(copy);
+  native.scratchGestures.emplace(id,std::move(copy));
+  if(target)command->arguments[0]=id;
+  return id;
+}
 size_t PatternPerformance::bytes() const {
   size_t result=sizeof(*this)+columns.size()*(sizeof(uint64_t)+sizeof(uint8_t))+commands.size()*sizeof(PatternCommand);
   for(const auto &[id,binding]:bindings)result+=sizeof(binding)+sizeof(id)+binding.plugin.size()+binding.name.size();
@@ -187,7 +212,16 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
     if(pattern==patterns.end()||!performanceTracks.contains(command.track))return true;
     const uint64_t end=uint64_t(s.Patterns[pattern->first].GetNumRows())*performanceUnitsPerRow;
     if(command.position>=end)return true;
-    command.duration=uint32_t(std::min<uint64_t>(command.duration,end-command.position));return false;
+    command.duration=uint32_t(std::min<uint64_t>(command.duration,end-command.position));
+    if(isNudge(command.kind) || (command.kind==PatternCommandKind::Native && command.native==NativePatternOp::Scratch)){
+      const auto &p=s.Patterns[pattern->first];
+      const auto rowsPerBeat=std::max(1u,p.GetOverrideSignature()?unsigned(p.GetRowsPerBeat()):s.m_nDefaultRowsPerBeat?unsigned(s.m_nDefaultRowsPerBeat):4u);
+      const double remaining=double(end-command.position)/(performanceUnitsPerRow*double(rowsPerBeat));
+      if(remaining<1.0/performanceUnitsPerRow)return true;
+      if(isNudge(command.kind))command.durationBeats=std::min(command.durationBeats,remaining);
+      else command.arguments[1]=std::min(command.arguments[1],remaining);
+    }
+    return false;
   });
   std::erase_if(preciseNotes,[&](const auto &note){
     const auto pattern=std::find_if(patterns.begin(),patterns.end(),[&](const auto &p){return p.second.id==note.pattern;});
@@ -311,6 +345,7 @@ void NativeSong::prepareEffects(OpenMPT::CSoundFile &song) const {
     auto &e=song.nativePatternEffects[{patternIndices.at(c.pattern),OpenMPT::ROWINDEX(c.position/performanceUnitsPerRow),trackIndices.at(c.track)}][c.column-1];
     e.command=OpenMPT::EffectCommand(c.effect); e.param=c.parameter;
   }
+  prepareNativeTiming(song,*this);
 }
 
 void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
@@ -377,6 +412,10 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   }
   if(performance.bindings.size()>255||performance.commands.size()>maximumPatternCommands)
     throw std::invalid_argument("Pattern performance exceeds binding or command limits");
+  for(const auto &[slot,gesture]:scratchGestures) {
+    if(!slot || slot>255)throw std::invalid_argument("Scratch gesture slot must be 1..255");
+    validateScratchGesture(gesture);
+  }
   for(const auto &[track,count]:performance.columns)if(!count||count>maximumEffectColumns)
     throw std::invalid_argument("Use between one and eight FX columns");
   for(const auto &[id,binding]:performance.bindings)if(!id||id>255||binding.plugin.empty()||binding.plugin.size()>128||
@@ -384,18 +423,25 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
     throw std::invalid_argument("Invalid stable plugin parameter binding");
   std::set<std::tuple<uint64_t,uint64_t,uint32_t,uint8_t>> cells;
   std::set<uint64_t> pitchTracks;
+  std::set<uint64_t> scratchTracks;
   for(const auto &command:performance.commands){
     const auto columns=performance.columns.find(command.track);
     const bool parameter=command.kind==PatternCommandKind::ParameterSet||command.kind==PatternCommandKind::ParameterSlide;
     const bool nudge=isNudge(command.kind);
-    const bool slide=command.kind==PatternCommandKind::ParameterSlide||command.kind==PatternCommandKind::PitchSlide||nudge;
+    const bool slide=command.kind==PatternCommandKind::ParameterSlide||command.kind==PatternCommandKind::PitchSlide;
     const bool cut=command.kind==PatternCommandKind::NoteCut;
     const bool tracker=command.kind==PatternCommandKind::TrackerEffect;
-    if(!parameter&&!cut&&!tracker)pitchTracks.insert(command.track);
-    if(uint8_t(command.kind)>uint8_t(PatternCommandKind::NudgeReverse)||command.column>=(columns==performance.columns.end()?1:columns->second)||
+    const bool native=command.kind==PatternCommandKind::Native;
+    validateNativePatternCommand(command);
+    if(native && command.native==NativePatternOp::Scratch) {
+      if(!scratchGestures.contains(uint16_t(command.arguments[0])))throw std::invalid_argument("Scratch command references a missing gesture; remove or change its uses first");
+      scratchTracks.insert(command.track);
+    }
+    if(!parameter&&!cut&&!tracker&&!native)pitchTracks.insert(command.track);
+    if(uint8_t(command.kind)>uint8_t(PatternCommandKind::Native)||command.column>=(columns==performance.columns.end()?1:columns->second)||
        !cells.emplace(command.pattern,command.track,command.position/performanceUnitsPerRow,command.column).second||
        !std::isfinite(command.value)||(parameter?(command.value<0||command.value>1||!performance.bindings.contains(command.binding)):
-       (command.value< -96||command.value>96||command.binding!=0))||(slide?!command.duration:command.duration!=0)||
+       (command.value< -96||command.value>96||command.binding!=0))||(!native&&(slide?!command.duration:command.duration!=0))||
        command.pitchRange<1||command.pitchRange>96||((parameter||cut||nudge)&&command.pitchRange!=2)||(nudge&&(command.value<0||command.value>1))||
        ((cut||tracker)&&(command.value!=0||command.binding!=0)) ||
        (tracker && (!command.column || command.position%performanceUnitsPerRow || command.effect>=OpenMPT::MAX_EFFECTS || !s.GetModSpecifications().HasCommand(OpenMPT::EffectCommand(command.effect)))) ||
@@ -403,6 +449,7 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
       throw std::invalid_argument("Invalid or duplicate FX-column command");
   }
   if(pitchTracks.size()>16)throw std::invalid_argument("Use at most 16 tracks with native pitch commands");
+  if(scratchTracks.size()>16)throw std::invalid_argument("Use at most 16 tracks with scratch gestures");
   if(preciseNotes.size()>maximumPreciseNotes)throw std::invalid_argument("Use at most 65536 precise note events");
   std::set<std::tuple<uint64_t,uint64_t,uint32_t,bool>> notePositions;
   for(const auto &note:preciseNotes) {
@@ -436,6 +483,7 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   if (bytes() > 16 * 1024 * 1024) throw std::invalid_argument("Native song metadata exceeds 16 MB");
 }
 bool NativeSong::hasAnnotations() const {
+  if(!scratchGestures.empty())return true;
   if (!envelopeBank.empty() || !envelopeLinks.empty() || !signal.empty() || !preciseNotes.empty() || !performance.empty() || !automation.empty() || mixer.active() || !mixer.detached.empty() || !mixer.detachedChains.empty() || !mixer.disconnectedMainInputs.empty() || mixer.masterOutputDisconnected || !noteTracks.empty() || !columnMutes.empty()) return true;
   auto has = [](const NativeEntity &e) { return !e.name.empty() || !e.annotation.empty() || e.color; };
   for (const auto *items : {&patterns, &tracks, &samples, &instruments})
@@ -448,6 +496,7 @@ bool NativeSong::hasAnnotations() const {
 }
 size_t NativeSong::bytes() const {
   size_t n = sizeof(NativeSong) + signal.bytes() + preciseNotes.size()*sizeof(PreciseNote) + performance.bytes() + mixer.bytes() + columnMutes.size() * (sizeof(uint64_t) + sizeof(bool));
+  for(const auto &[slot,gesture]:scratchGestures)n+=sizeof(slot)+scratchGestureBytes(gesture);
   for (const auto &track : noteTracks) n += sizeof(track) + track.columns.size() * sizeof(uint64_t);
   auto add = [&](const NativeEntity &e) { n += sizeof(e) + e.name.size() + e.annotation.size(); };
   for (const auto *items : {&patterns, &tracks, &samples, &instruments})

@@ -43,6 +43,26 @@ final class FormulaCodeView:NSTextView {
 final class FormulaReferenceView:NSView,NSTableViewDataSource,NSTableViewDelegate,NSSearchFieldDelegate {
   let search=NSSearchField(),table=NSTableView(),notes=Theme.label("Loading reference…",size:11,color:Theme.muted)
   var filtered=[[String:String]](),onInsert:((String)->Void)?
+  var scratchContext=false {didSet{reload()}}
+  // Context belongs to this view; the shared catalogue also serves pattern envelopes.
+  var symbols:[[String:String]] {
+    guard scratchContext else{return FormulaCatalog.symbols}
+    let descriptions=[
+      "row":"Position in this scratch cycle, scaled to 0–256 synthetic rows.",
+      "beat":"Beats since this scratch cycle began; resets for each repeat.",
+      "beats":"Beats elapsed in this envelope segment.",
+      "duration":"This segment's duration in beats, within the scratch cycle.",
+      "startBeat":"Segment start in beats from this scratch cycle's start.",
+      "endBeat":"Segment end in beats from this scratch cycle's start."
+    ]
+    return FormulaCatalog.symbols.map{symbol in var symbol=symbol;if let text=descriptions[symbol["name"] ?? ""]{symbol["description"]=text};return symbol}
+  }
+  var referenceNotes:String {
+    guard scratchContext else{return FormulaCatalog.notes}
+    let common=FormulaCatalog.notes.components(separatedBy:"\n").filter{!$0.hasPrefix("Playback evaluates") && !$0.hasPrefix("The final node's scripted segment")}.joined(separator:"\n")
+    return "Each repeat starts a new cycle. Cycle duration = SK beats ÷ repeats; t is still 0–1 within the current segment.\n" + common +
+      "\nThe final endpoint ends the cycle; its formula has no following segment.\nMotion and fader formulas evaluate for every audio sample. Fader cuts receive click-reducing smoothing."
+  }
   override init(frame:NSRect){
     super.init(frame:frame)
     search.placeholderString="Find a value or function";search.delegate=self
@@ -54,9 +74,9 @@ final class FormulaReferenceView:NSView,NSTableViewDataSource,NSTableViewDelegat
     let body=stack(.vertical,[search,scroll,notes],spacing:6);body.stretchAcrossAxis();body.fill(self)
   }
   required init?(coder:NSCoder){fatalError()}
-  func reload(){notes.stringValue=FormulaCatalog.notes;filter()}
+  func reload(){notes.stringValue=referenceNotes;filter()}
   func controlTextDidChange(_ notification:Notification){filter()}
-  func filter(){let q=search.stringValue;filtered=FormulaCatalog.symbols.filter{q.isEmpty || ($0["name"] ?? "").localizedCaseInsensitiveContains(q) || ($0["description"] ?? "").localizedCaseInsensitiveContains(q)};table.reloadData()}
+  func filter(){let q=search.stringValue;filtered=symbols.filter{q.isEmpty || ($0["name"] ?? "").localizedCaseInsensitiveContains(q) || ($0["description"] ?? "").localizedCaseInsensitiveContains(q)};table.reloadData()}
   func numberOfRows(in tableView:NSTableView)->Int{filtered.count}
   func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int)->NSView?{
     let s=filtered[row],title=Theme.label(s["insert"] ?? "",size:12,weight:.semibold)
@@ -86,10 +106,10 @@ final class FormulaWorkbench:NSWindowController,NSTextViewDelegate {
   var onUse:((String)->Bool)?,onRequest:EnvelopeRequest?
   var previewParams=[String:Any](),pointIndex=0,generation=0,validSource:String?,work:DispatchWorkItem?
   static var referenceWindow:NSWindow?
-  init(source:String,title:String,points:[[String:Any]],selected:Int,rows:Int,rowsPerBeat:Int,span:Int?=nil,request:EnvelopeRequest?,use:@escaping (String)->Bool){
+  init(source:String,title:String,points:[[String:Any]],selected:Int,rows:Int,rowsPerBeat:Int,span:Int?=nil,scratchContext:Bool=false,request:EnvelopeRequest?,use:@escaping (String)->Bool){
     let window=NSWindow(contentRect:NSRect(x:0,y:0,width:960,height:660),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
     super.init(window:window);window.title=title;window.minSize=NSSize(width:740,height:510);window.isReleasedWhenClosed=false
-    onRequest=request;onUse=use;pointIndex=selected
+    onRequest=request;onUse=use;pointIndex=selected;reference.scratchContext=scratchContext
     status.maximumNumberOfLines=3;status.lineBreakMode = .byWordWrapping;status.preferredMaxLayoutWidth=540;status.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
     previewParams=["points":points,"rows":rows,"rowsPerBeat":rowsPerBeat,"samples":1024];if let span{previewParams["span"]=span}
     code.allowsUndo=true;code.isRichText=false;code.isAutomaticQuoteSubstitutionEnabled=false;code.isAutomaticDashSubstitutionEnabled=false
@@ -124,10 +144,11 @@ final class FormulaWorkbench:NSWindowController,NSTextViewDelegate {
     }};self.work=work;DispatchQueue.main.asyncAfter(deadline:.now()+0.12,execute:work)
   }
   func apply(){guard validSource==code.string else{status.stringValue="Wait for a valid formula preview before applying.";return};if onUse?(code.string)==true{close()}else{status.stringValue="The envelope or selection changed. Your formula remains here; copy it or reopen the original point."}}
-  static func showReference(_ request:EnvelopeRequest?){
+  static func showReference(_ request:EnvelopeRequest?,scratchContext:Bool=false){
     let view=FormulaReferenceView(frame:.zero),root=NSView();view.fill(root,inset:12)
+    view.scratchContext=scratchContext
     let window=NSWindow(contentRect:NSRect(x:0,y:0,width:640,height:700),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
-    window.title="Envelope formula reference";window.minSize=NSSize(width:440,height:450);window.isReleasedWhenClosed=false;window.contentView=root
+    window.title=scratchContext ? "Scratch formula reference":"Envelope formula reference";window.minSize=NSSize(width:440,height:450);window.isReleasedWhenClosed=false;window.contentView=root
     referenceWindow?.close();referenceWindow=window;window.center();window.makeKeyAndOrderFront(nil);FormulaCatalog.load(request){view.reload()}
   }
 }

@@ -1,6 +1,7 @@
 #include "windows/Project/NativeMetadata.hpp"
 #include "editor/TrackerDocument.hpp"
 #include <bit>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -57,8 +58,8 @@ std::unique_ptr<Document> richDocument() {
   for (uint8_t kind = 0; kind < 4; ++kind) n.performance.commands.push_back({pattern,track,uint32_t(kind)*65536+17,kind%2 ? 1234u : 0u,kind,PatternCommandKind(kind),uint16_t(kind < 2 ? 255 : 0),kind < 2 ? .75 : -12,uint8_t(kind < 2 ? 2 : 48)});
   n.performance.commands.push_back({pattern,track,8*performanceUnitsPerRow+123,0,0,PatternCommandKind::NoteCut});
   n.performance.commands.push_back({pattern,track,8*performanceUnitsPerRow,0,7,PatternCommandKind::TrackerEffect,0,0,2,OpenMPT::CMD_VIBRATO,0x34});
-  n.performance.commands.push_back({pattern,track,9*performanceUnitsPerRow+8192,65536,0,PatternCommandKind::NudgeForward,0,.25});
-  n.performance.commands.push_back({pattern,track,10*performanceUnitsPerRow+1234,90001,0,PatternCommandKind::NudgeReverse,0,.875});
+  n.performance.commands.push_back({pattern,track,9*performanceUnitsPerRow+8192,0,0,PatternCommandKind::NudgeForward,0,.25});n.performance.commands.back().durationBeats=.123456789012345;
+  n.performance.commands.push_back({pattern,track,10*performanceUnitsPerRow+1234,0,0,PatternCommandKind::NudgeReverse,0,.875});n.performance.commands.back().durationBeats=1.23456789012345;
   n.mixer.buses[2].output=0; // A disconnected track still retains its other routes.
   n.mixer.instruments[1].target=0;
   n.preciseNotes = {{pattern,track,77,1,60,91,uint8_t(OpenMPT::CMD_VIBRATO),0x34},{pattern,track,999,0,254,127},{pattern,track,2000,0,255,127}};
@@ -132,6 +133,7 @@ void optionalDefaults(const Json &encoded) {
   compare("/signalGraph/songModulation/0","enabled",true);compare("/signalGraph/songModulation/0","quantized",false);
   compare("/signalGraph","layout",Json::array()); compare("/signalGraph","instrumentAssignments",Json::array());
   compare("/performance/commands/2","pitchRange",2);
+  compare("/performance/commands/6","durationBeats",1);
   compare("/envelopeBank/entries/0/shape","rowsPerBeat",4); compare("/envelopeBank/entries/0/shape","instrument",false); compare("/envelopeBank/entries/0/shape","flags",1); compare("/envelopeBank/entries/0/shape","markers",Json::array({0,0,0,0,UINT32_MAX}));
   compare("/envelopeBank/entries/0/shape/points/0","curve","linear");
   compare("/envelopeBank/links/0/target","pattern","");
@@ -176,7 +178,9 @@ void negativeTests(const Json &j) {
   rejectAt(j,"/performance/columns/0/1",0); rejectAt(j,"/performance/bindings/0/id",256); rejectAt(j,"/performance/commands/0/binding",2); rejectAt(j,"/performance/commands/0/value",2); rejectAt(j,"/performance/commands/1/duration",0); rejectAt(j,"/performance/commands/2/pitchRange",97); rejectAt(j,"/performance/commands/0/track","n999999");
   rejectAt(j,"/performance/commands/4/value",1); rejectAt(j,"/performance/commands/4/duration",1); rejectAt(j,"/performance/commands/4/binding",255);
   rejectAt(j,"/performance/commands/5/column",0); rejectAt(j,"/performance/commands/5/position",8*performanceUnitsPerRow+1); rejectAt(j,"/performance/commands/5/effect",255);
-  rejectAt(j,"/performance/commands/6/value",-0.1); rejectAt(j,"/performance/commands/7/value",1.1); rejectAt(j,"/performance/commands/6/duration",0);
+  rejectAt(j,"/performance/commands/6/value",-0.1); rejectAt(j,"/performance/commands/7/value",1.1); rejectAt(j,"/performance/commands/6/duration",65536);
+  for(Json value:{Json(0),Json(-1),Json(true),Json("1"),Json(65537),Json(1.0/131072)})rejectAt(j,"/performance/commands/6/durationBeats",value);
+  rejectAt(j,"/performance/commands/0/durationBeats",0);
   rejectAt(j,"/performance/commands/0/effect",OpenMPT::CMD_VIBRATO); rejectAt(j,"/performance/commands/4/parameter",1);
   rejectAt(j,"/preciseNotes/0/position",4294967296ULL); rejectAt(j,"/preciseNotes/0/note",121); rejectAt(j,"/preciseNotes/0/velocity",0); rejectAt(j,"/preciseNotes/0/effect",255); rejectAt(j,"/preciseNotes/1/instrument",1); rejectAt(j,"/preciseNotes/0/pattern","n999999");
   rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","A==="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA=A"); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AB=="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA==AA=="); rejectAt(j,"/signalGraph/library/0/nodes/2/plugin/state","AA\n=");
@@ -193,8 +197,25 @@ void negativeTests(const Json &j) {
   for (const char *path : {"/patterns","/columnMutes","/performance/columns","/performance/bindings","/performance/commands","/preciseNotes","/signalGraph/library","/signalGraph/songSources","/signalGraph/songModulation","/signalGraph/lanes","/signalGraph/layout","/envelopeBank/links"}) { auto bad = j; auto &a = bad[Json::json_pointer(path)]; a.push_back(a[0]); rejects([&] { (void)decodeNativeMetadata(bad); },std::string("duplicate array entry ")+path); }
 }
 }
+static void nativePatternMetadataChecks() {
+  Document doc;auto native=doc.native();uint32_t row=0;
+  native.scratchGestures[1]=scratchPresets().front().gesture;
+  for(const auto &entry:nativePatternCommands()){
+    PatternCommand command{native.patterns.at(0).id,native.tracks.at(0).id,row++*performanceUnitsPerRow,entry.duration==NativePatternDuration::Required?65536u:0u,0,PatternCommandKind::Native};
+    command.native=entry.operation;command.arguments=nativePatternDefaults(command.native);native.performance.commands.push_back(command);
+  }
+  native.performance.commands[0].arguments[0]=.123456789012345;
+  doc.restoreNative(native);const auto encoded=encodeNativeMetadata(native);
+  check(decodeNativeMetadata(encoded)==native,"All typed native operations must roundtrip exactly");
+  auto bad=encoded;bad["performance"]["commands"][0]["parameters"]["gain"]=true;rejects([&]{decodeNativeMetadata(bad);},"Native numeric parameter accepts bool");
+  bad=encoded;bad["performance"]["commands"][0]["parameters"]["unknown"]=1;rejects([&]{decodeNativeMetadata(bad);},"Unknown native parameter accepted");
+  bad=encoded;bad["performance"]["commands"][0].erase("parameters");rejects([&]{decodeNativeMetadata(bad);},"Missing native payload accepted");
+  bad=encoded;bad["performance"]["commands"][0]["native"]="unknown";rejects([&]{decodeNativeMetadata(bad);},"Unknown native operation accepted");
+}
+#include "NativeRecoveryChecks.inc"
 int main(int argc, char **argv) {
   try {
+    nativePatternMetadataChecks();nativeRecoveryChecks();
     auto doc = std::make_unique<Document>();
     const auto baseline = encodeNativeMetadata(doc->native());
     check(baseline.at("version") == 17,"canonical metadata version must be 17");

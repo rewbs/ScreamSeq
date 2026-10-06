@@ -26,8 +26,8 @@ while another panel has focus; disable it to type text normally.
    More complex routing can be connected manually.
    At song level, selecting a channel or its cable sets the insertion destination.
    With no destination selected, Add places an **Unconnected** effect at the
-   pointer. Drag it onto a channel wire, or drag a channel output to its main
-   input, to insert it in that path. The disconnected state and placement are
+   pointer. Drag it onto a channel wire to insert it in that path. Alternatively,
+   cable its input and output separately to build a parallel branch. The disconnected state and placement are
    saved, and each Add or insertion is one Undo action.
 3. Select an effect to see its searchable parameter controls. Parameter values use the plugin's native
    units. Named audio sockets and port menus come from its bus catalog. Hollow auxiliary
@@ -78,8 +78,10 @@ from the keyboard. Float a crowded graph panel using its upper-right overflow me
 ## Patching and moving nodes
 
 For **Channel 1 → Compressor**, drag Channel 1's Main out to the compressor's
-**Main in**, or select those endpoints and ports then Connect. This moves the
-compressor and its following inserts onto Channel 1. For **Channel 2 → detector**,
+**Main in**. This adds Channel 1 to the compressor’s existing input mix and
+keeps Channel 1’s other outputs. Cable the compressor’s output to the desired
+bus as well. To replace a dry path, select that path’s wire and Delete it, or
+drop the compressor card onto the path to insert it in one operation. For **Channel 2 → detector**,
 drag Channel 2's Main out to **Detector sidechain**, or pick that named input in
 the connection form. Built-in detector inputs and already-prepared AU inputs can
 connect during playback. A vendor bus that cannot activate live reports the
@@ -93,9 +95,10 @@ be inaudible. A hollow port means available but currently inactive.
 
 A socket drag adds a cable; selecting a wire and dragging its round handles
 reroutes that wire. Multiple sources into one input sum. Multiple destinations
-share one processed output. **Option-drag** to an insert's Main in, or choose
-**Mix into main** in the form, to sum an additional channel into its existing
-main input instead of moving the chain. Main/auxiliary plugin output fan-out is
+share one processed output. No modifier is needed, including for an insert’s
+Main input. Each drag preserves existing routes. Use a selected wire’s handles
+to replace that wire, or the socket menu’s explicit chain-moving action to
+change insert ownership. Main/auxiliary plugin output fan-out is
 independent of its normal serial path. Mono and stereo buses are supported;
 unsupported multichannel layouts are not offered as destinations.
 
@@ -336,9 +339,9 @@ performance evidence.
 
 ### Cable gestures and moving rack chains
 
-Drag either an input or output socket to a matching socket. Socket drags add another source or destination, retaining existing wires. In the song view, Option-drag an insert Main input to sum another channel; a normal main-input drag moves the chain. Select a wire to expose round handles just outside both nodes, then drag a handle to reroute that endpoint. Escape or dropping in empty space cancels; use Delete on a selected route to disconnect it.
+Drag either an input or output socket to a matching socket. Socket drags add another source or destination, retaining existing wires. In the song view, an insert Main input sums additional sources with no modifier; socket drags never move its chain. Select a wire to expose round handles just outside both nodes, then drag a handle to reroute that endpoint. Escape or dropping in empty space cancels; use Delete on a selected route to disconnect it.
 
-In the song graph, drag a channel output onto a rack effect's main input to move that effect **and all subsequent inserts in its chain** onto the channel. For example, Track 8 → Distortion moves Master’s Distortion → Compressor chain onto Track 8; Track 8's output still feeds Master. Dragging Distortion's existing input back to Track 8's output performs the same atomic edit. A processor output inserts the moved chain immediately after that processor. Plugin identities/settings and automation survive, with one document Undo. Sidechains and auxiliary routes are validated, so a move introducing feedback is rejected unchanged.
+In the song graph, use the Main socket’s explicit **Move insert chain…** menu action to move an effect **and all subsequent inserts in its chain** onto another channel. For example, moving Distortion’s chain to Track 8 moves Master’s Distortion → Compressor chain onto Track 8; Track 8’s output still feeds Master. A processor output inserts the moved chain immediately after that processor. Dragging a selected card or serial chain onto a wire also inserts it at that point. Ordinary cable drags only add connections. Plugin identities/settings and automation survive, with one document Undo. Sidechains and auxiliary routes are validated, so a move introducing feedback is rejected unchanged.
 
 Main is a final sink at the right of the default layout. If it has processing, **Master input** represents the summing stage before those effects, and **Master** represents the final output after them. Saved manual positions are retained; Arrange places visible nodes in flow order.
 
@@ -363,9 +366,8 @@ or targets. **Patch by keyboard…** in More / ⌘K first chooses a socket, then
 its exposed opposite endpoints by node name, port name, signal type or stable ID.
 The list includes filter-hidden channels at the current group depth. Unsupported
 signal types and read-only parameters explain why they cannot be connected.
-For a rack effect’s Main input, choose **Move chain here** or **Add / sum input**
-explicitly; these are the same ownership and additive operations as the normal
-and Option socket gestures. Parameter targets retain the explicit discrete-value
+For a rack effect’s Main input, **Connect to…** adds a source just like a socket
+drag. **Move insert chain…** is a separate explicit ownership action. Parameter targets retain the explicit discrete-value
 choice; an audio-to-parameter connection offers an envelope follower.
 
 **Show cable source / target** follows the selected wire without moving any saved
@@ -441,3 +443,7 @@ levels.
 Plugin buses with more than two channels appear as separate mono/stereo sockets with explicit channel ranges. For example, an eight-channel output exposes four independently routable pairs; the socket label shows which physical channels it carries. Saved routing is pinned to that layout, so a vendor update cannot silently redirect an old connection to another channel pair.
 
 When a plugin assignment is removed but explicit note routes remain, its tracker instrument stays a **Plugin trigger** with no default destination. The graph keeps that source visible. **Use instrument sample mapping…** explicitly restores sample playback; any retained note cables then appear inactive. **Assign plugin to note instrument…** makes those routes useful again without losing their settings.
+
+### Audio tap semantics
+
+Song channel/bus socket cables currently tap the bus **after its inserts**; extra plugin output cables tap the named processor directly, before the owner fader. The hover and connection chooser identify the bus tap. A channel’s normal dry output remains when another destination is added, so parallel branches can increase level. Root-level envelope followers have one analysis tap; mix several sources into a bus first to follow their sum. Recipe follower inputs can sum multiple cables.

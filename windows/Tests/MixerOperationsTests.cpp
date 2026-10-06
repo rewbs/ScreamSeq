@@ -1,6 +1,7 @@
 #include "windows/Session/MixerOperations.hpp"
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Project/NativeMetadata.hpp"
+#include "windows/App/GraphCableEdits.hpp"
 #include "editor/SignalGroupBypass.hpp"
 #include <iostream>
 #include <memory>
@@ -147,6 +148,27 @@ int main() {
       CHECK(failed&&d->native()==before&&d->revision==revision); // The mixed stage/rack cycle is visible during dry runs.
       failed=false;try{m.invoke("mixer.enable",{{"enabled",false}});}catch(const Api::ApiError &){failed=true;}CHECK(failed&&d->native()==before);
       m.invoke("mixer.bus.set",{{"bus",track},{"gainDB",-3},{"preview",true}});CHECK(d->native()==before);
+    }
+
+    {
+      auto storageFan=std::make_unique<Document>(MOD_TYPE_MPT,4);auto &d=*storageFan;auto synth=effect;synth.instanceID="fan-synth";synth.descriptor.instrument=true;
+      MixerHostHooks h;h.plugins={synth};h.buses=[](size_t,bool){return std::vector<PluginAudioBus>{{0,2,"Main",false,true,true},{1,2,"Aux",false,true,true}};};
+      MixerOperations m(d,[]{},h);m.invoke("mixer.enable",Json::object());const auto initial=d.native();
+      const auto view=m.invoke("mixer.get",Json::object());const auto main=view["buses"].back()["id"].get<std::string>();
+      const auto t0=view["buses"][0]["id"].get<std::string>(),t1=view["buses"][1]["id"].get<std::string>();
+      const auto targets=GraphCableEdits::pluginTargets(view["instruments"],synth.instanceID,0,main,{},t0);
+      Json request={{"plugin",synth.instanceID},{"output",0},{"targets",targets}};auto preview=request;preview["dryRun"]=true;m.invoke("mixer.plugin.route",preview);CHECK(d.native()==initial);
+      m.invoke("mixer.plugin.route",request);CHECK(d.native().mixer.instruments.size()==2);
+      m.invoke("mixer.plugin.route",{{"plugin",synth.instanceID},{"output",1},{"target",t1}});const auto branched=d.native();
+      const auto revision=d.revision;const auto history=d.historyBytes();std::reverse(request["targets"].begin(),request["targets"].end());m.invoke("mixer.plugin.route",request);
+      CHECK(d.native()==branched&&d.revision==revision&&d.historyBytes()==history);
+      CHECK(Project::decodeNativeMetadata(Project::encodeNativeMetadata(branched))==branched);
+      const auto current=m.invoke("mixer.get",Json::object());request["targets"]=GraphCableEdits::pluginTargets(current["instruments"],synth.instanceID,0,main,t0,t1);m.invoke("mixer.plugin.route",request);
+      CHECK(d.native().mixer.instruments.size()==3&&d.native().mixer.instruments[0]==branched.mixer.instruments[0]&&d.native().mixer.instruments[1]==branched.mixer.instruments[2]);
+      const auto repatched=d.native();d.undo();CHECK(d.native()==branched);d.redo();CHECK(d.native()==repatched);
+      request["targets"]=GraphCableEdits::pluginTargets(m.invoke("mixer.get",Json::object())["instruments"],synth.instanceID,0,main,t1,{});m.invoke("mixer.plugin.route",request);
+      CHECK(d.native().mixer.instruments.size()==2&&d.native().mixer.instruments[0]==branched.mixer.instruments[0]&&d.native().mixer.instruments[1]==branched.mixer.instruments[2]);
+      d.undo();CHECK(d.native()==repatched);
     }
 
     const auto beforeReturn=native();

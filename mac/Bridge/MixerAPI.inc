@@ -190,9 +190,22 @@
           require(std::any_of(available.begin(), available.end(), [&](const auto &b) { return !b.input && b.index == output && b.supported; }),
                   "Select an available plugin output; connected auxiliary ports enable on playback");
         }
-        std::erase_if(graph.instruments, [&](const auto &source) { return source.plugin == id && source.output == output; });
-        if(p[@"targets"]&&!targets.empty())for(auto bus:targets)graph.instruments.push_back({id,bus,output});
-        else if (!remove) graph.instruments.push_back({std::move(id), target, output});
+        // Keep unchanged destinations in place. Repeating a target set (even
+        // in another order) must not reorder unrelated cables or create Undo.
+        if(!p[@"targets"] || targets.empty()) {
+          targets.clear();
+          if(!remove) targets.push_back(target);
+        }
+        std::erase_if(graph.instruments, [&](const auto &source) {
+          return source.plugin == id && source.output == output
+            && std::find(targets.begin(), targets.end(), source.target) == targets.end();
+        });
+        for(auto bus : targets) {
+          const auto existing = std::find_if(graph.instruments.begin(), graph.instruments.end(), [&](const auto &source) {
+            return source.plugin == id && source.output == output && source.target == bus;
+          });
+          if(existing == graph.instruments.end()) graph.instruments.push_back({id, bus, output});
+        }
       } else throw Error(-32601, "Unknown mixer method");
       std::vector<uint64_t> tracks; for (const auto &[index, track] : _document->native().tracks) tracks.push_back(track.id);
       // Validate the complete projected DAG, including channel graph stages.

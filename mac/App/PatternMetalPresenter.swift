@@ -12,6 +12,26 @@ struct PatternRenderTiming {
   let timestamp:CFTimeInterval,deadline:CFTimeInterval,snapshotAgeMS:Double
   let generation:Int,starved:Bool
 }
+// Accessed under the presenter's lock. A queued recovery must recheck the
+// latest snapshot: the ordinary UI tick may have refreshed it in the meantime.
+struct PatternSnapshotRecovery {
+  let interval:Double
+  private(set) var pending:UInt64?
+  private var serial:UInt64=0
+  init(interval:Double){self.interval=interval}
+  private func due(now:Double,preparedAt:Double?,external:Bool)->Bool {
+    !external || preparedAt == nil || now-preparedAt!>interval
+  }
+  mutating func enqueue(now:Double,preparedAt:Double?,external:Bool,active:Bool)->UInt64? {
+    guard active,pending==nil,due(now:now,preparedAt:preparedAt,external:external) else{return nil}
+    serial &+= 1;pending=serial;return serial
+  }
+  func shouldRefresh(_ token:UInt64,now:Double,preparedAt:Double?,external:Bool,active:Bool)->Bool {
+    pending==token && active && due(now:now,preparedAt:preparedAt,external:external)
+  }
+  mutating func finish(_ token:UInt64){if pending==token{pending=nil}}
+  mutating func cancel(){pending=nil}
+}
 // Qualification-only, bounded correlation of one drawable through its complete
 // lifetime. GPU/presentation callbacks can arrive in either order. Keep their
 // timestamps together instead of inferring compositor behaviour from percentiles
@@ -44,23 +64,26 @@ final class PatternFrameTrace {
 final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
   private let lock=NSLock()
   private var latest:PatternRenderSnapshot?,freeBuffers:[MTLBuffer]
-  private var stopped=false,paused=false,snapshotPending=false,externalSnapshots=false
+  private var stopped=false,paused=false,externalSnapshots=false
+  private var recovery:PatternSnapshotRecovery
   private var runLoop:CFRunLoop?,thread:Thread?
   private var displayLink:CAMetalDisplayLink? // Render-thread owned.
   private let queue:MTLCommandQueue,pipeline:MTLRenderPipelineState,atlas:MTLTexture
   private let request:()->PatternRenderSnapshot?
+  private let refreshHost:(()->Void)?
   private let timing:(PatternRenderTiming)->Void
   private let submitted:(Int,Double)->Void,completed:(Int,Double)->Void,presented:(Int,Double)->Void
   let frameTrace=CommandLine.arguments.contains("--ui-test") ? PatternFrameTrace():nil
   let runLoopTrace=QualificationRunLoopTrace.enabled ? QualificationRunLoopTrace():nil
   init(layer:CAMetalLayer,frameRate:Float=60,bufferLength:Int,queue:MTLCommandQueue,pipeline:MTLRenderPipelineState,atlas:MTLTexture,
-       snapshot:@escaping()->PatternRenderSnapshot?,timing:@escaping(PatternRenderTiming)->Void,
+       snapshot:@escaping()->PatternRenderSnapshot?,refreshHost:(()->Void)?=nil,timing:@escaping(PatternRenderTiming)->Void,
        submitted:@escaping(Int,Double)->Void,completed:@escaping(Int,Double)->Void,presented:@escaping(Int,Double)->Void) {
     // Each presenter owns its pool. A view moving between windows can start
     // another presenter before the old presenter's GPU commands retire.
     self.freeBuffers=(0..<3).map{_ in queue.device.makeBuffer(length:bufferLength,options:.storageModeShared)!}
     self.queue=queue;self.pipeline=pipeline;self.atlas=atlas
-    self.request=snapshot;self.timing=timing;self.submitted=submitted;self.completed=completed;self.presented=presented
+    self.request=snapshot;self.refreshHost=refreshHost;self.timing=timing;self.submitted=submitted;self.completed=completed;self.presented=presented
+    self.recovery=PatternSnapshotRecovery(interval:1/Double(max(60,min(120,frameRate))))
     super.init()
     latest=snapshot()
     let worker=Thread{[self] in
@@ -90,13 +113,13 @@ final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
     lock.lock();externalSnapshots=true;if !stopped{latest=next};lock.unlock()
   }
   func setPaused(_ value:Bool) {
-    lock.lock();guard paused != value else{lock.unlock();return};paused=value;let loop=runLoop;lock.unlock()
+    lock.lock();guard paused != value else{lock.unlock();return};paused=value;if value{recovery.cancel()};let loop=runLoop;lock.unlock()
     if let loop {CFRunLoopPerformBlock(loop,CFRunLoopMode.commonModes.rawValue){[weak self] in
       guard let self else{return};self.lock.lock();let value=self.paused;self.lock.unlock();self.displayLink?.isPaused=value
     };CFRunLoopWakeUp(loop)}
   }
   func stop() {
-    lock.lock();stopped=true;latest=nil;let loop=runLoop;lock.unlock()
+    lock.lock();stopped=true;latest=nil;recovery.cancel();let loop=runLoop;lock.unlock()
     if let loop {CFRunLoopStop(loop)}
     // In-flight command buffers retain their own immutable resources. There
     // is no main-thread wait on a GPU or a render-thread-to-main dependency.
@@ -108,19 +131,38 @@ final class PatternMetalPresenter:NSObject,CAMetalDisplayLinkDelegate {
       let active = !stopped && !paused
       let frame=latest
       let buffer=active && frame != nil ? freeBuffers.popLast():nil
-      // The app's 60 Hz UI tick already prepares geometry after advancing the
-      // playhead. Asking again on every display callback doubled main-thread
-      // geometry work and competed with that tick. Standalone view hosts still
-      // get display-driven snapshots; an external host gets a bounded fallback
-      // only if its tick has stopped producing them.
-      let ask=active && !snapshotPending && (!externalSnapshots || frame==nil || now-frame!.preparedAt>0.1)
-      if ask{snapshotPending=true}
+      // Recover a delayed UI tick after one cadence, without adding work while
+      // its snapshots are fresh. This is coalesced and checked again on main.
+      let refreshToken=recovery.enqueue(now:now,preparedAt:frame?.preparedAt,external:externalSnapshots,active:active)
       lock.unlock()
-      if ask {DispatchQueue.main.async{[weak self] in
+      if let refreshToken {
+        // Opt-in diagnostics only. Keep the request's enqueue time distinct
+        // from callback time so a stale frame can be attributed to either a
+        // late recovery request or delayed servicing of the main queue. Reuse
+        // the run-loop diagnostic flag (and its non-clean qualification label).
+        let traceRecovery=runLoopTrace != nil
+        let queuedAt=traceRecovery ? CACurrentMediaTime():0
+        DispatchQueue.main.async{[weak self] in
         guard let self else{return}
-        self.lock.lock();let active = !self.stopped;self.lock.unlock()
-        let next=active ? self.request():nil
-        self.lock.lock();if !self.stopped{self.latest=next};self.snapshotPending=false;self.lock.unlock()
+        let recoveryTrace=traceRecovery ? UIWorkTrace.active:nil
+        let dequeuedAt=recoveryTrace == nil ? 0:CACurrentMediaTime()
+        recoveryTrace?.record(.snapshotRecoveryQueue,start:queuedAt,end:dequeuedAt)
+        self.lock.lock()
+        let external=self.externalSnapshots
+        let refresh=self.recovery.shouldRefresh(refreshToken,now:CACurrentMediaTime(),preparedAt:self.latest?.preparedAt,
+          external:external,active:!self.stopped && !self.paused)
+        self.lock.unlock()
+        if refresh {
+          // The app must advance telemetry/playhead state before publishing;
+          // merely rebuilding geometry would give an old playhead a new age.
+          if external,let refreshHost=self.refreshHost{refreshHost()}
+          else {
+            let next=self.request()
+            self.lock.lock();if !self.stopped && !self.paused{self.latest=next};self.lock.unlock()
+          }
+        }
+        self.lock.lock();self.recovery.finish(refreshToken);self.lock.unlock()
+        recoveryTrace?.finish(refresh ? .snapshotRecoveryRefresh:.snapshotRecoverySkipped,start:dequeuedAt)
       }}
       guard active,let frame else{return}
       let report=PatternRenderTiming(timestamp:now,deadline:update.targetTimestamp,snapshotAgeMS:(now-frame.preparedAt)*1000,generation:frame.generation,starved:buffer==nil)

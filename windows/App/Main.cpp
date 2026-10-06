@@ -10,9 +10,11 @@
 #include "WorkspaceState.hpp"
 #include "CommandPalette.hpp"
 #include "PatternClipboard.hpp"
+#include "PatternFields.hpp"
 #include "GraphCanvas.hpp"
 #include "AutomationCanvas.hpp"
 #include "EnvelopeBankWindow.hpp"
+#include "ScratchGestureWindow.hpp"
 #include "PluginInstrumentsWindow.hpp"
 #include "PluginLibraryWindow.hpp"
 #include "PluginPathWindow.hpp"
@@ -55,6 +57,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     undoCommand=122, redoCommand=123, copyCommand=124, pasteCommand=125, clearCommand=126,
     patternChooser=130, orderChooser=131, octaveChooser=132, stepChooser=133, effectColumnChooser=134, soundChooser=135, liveKeysCommand=507, sampleCommandBase=200,
     patternReverse=140,patternRotate=141,patternExpand=142,patternShrink=143,patternInsertRows=144,patternDeleteRows=145,patternTransposeUp=146,patternTransposeDown=147,
+    patternClearField=150,patternDeleteChannelRow=151,
     patternPasteMix=148,patternPasteMerge=149,
     sampleImportCommand=201,sampleImportRawCommand=508,sampleImportInstrumentsCommand=509,instrumentImportCommand=510,sampleAllCommand=202,sampleReverseCommand=203,sampleNormalizeCommand=204,
     sampleFadeInCommand=205,sampleFadeOutCommand=206,sampleTrimCommand=207,sampleLoopCommand=208,
@@ -67,7 +70,8 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
     pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,pluginAliases=323,pluginSavePreset=324,pluginLoadPreset=325,pluginBrowse=326,pluginReconnect=327,
     effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
-    effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,
+    effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,effectUnits=350,
+    effectFieldBase=600,effectChoiceBase=620,
     noteList=360,notePitch=361,noteInstrument=362,noteVelocity=363,noteOffset=364,noteUnitControl=365,
     noteSnapControl=366,noteEffectControl=367,noteParameter=368,noteAdd=369,noteRemove=370,noteCheck=371,
     noteApply=372,noteReload=373,noteReplace=374,noteRepeat=375,noteRepeatCount=376,noteEndVelocity=377,
@@ -84,7 +88,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     curvePattern=480,curveKind=481,curveSnap=482,curveRow=483,curveValue=484,curveFormula=485,
     curveApply=486,curveReload=487,curveSetPoint=488,curveDelete=489,curveRamp=490,curveClear=491,
     curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497,curveExpand=498,curveReference=499,
-    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511,audioSettingsCommand=512;
+    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511,audioSettingsCommand=512,scratchGesturesCommand=513;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -265,6 +269,7 @@ public:
             {"formulaWorkbench",formulaWorkbench?formulaWorkbench->snapshot():Json{{"visible",false}}},
             {"formulaReference",formulaReference?formulaReference->snapshot():Json{{"visible",false}}},
             {"envelopeBank",envelopeBank?envelopeBank->snapshot():Json{{"visible",false}}},
+            {"scratchGestures",scratchGestureWindow?scratchGestureWindow->snapshot():Json{{"visible",false}}},
             {"pluginInstruments",pluginInstruments?pluginInstruments->snapshot():Json{{"visible",false}}},
             {"pluginLibrary",pluginLibraryWindow?pluginLibraryWindow->snapshot():Json{{"visible",false}}},
             {"pluginPath",pluginPathWindow?pluginPathWindow->snapshot():Json{{"visible",false}}},
@@ -285,7 +290,8 @@ public:
                 {"timeline",rect(noteTimelineRect())},{"status",utf8Path(noteStatus)}}},
             {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
                 {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
-                {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
+                {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)},
+                {"inline",effectInline},{"draft",effectDraftDirty},{"draftGeneration",effectDraftGeneration},{"fieldIndex",effectFieldIndex},{"fields",effectFieldsDraft},{"timeUnit",effectRows?"rows":"beats"}}},
             {"unavailable",{"floatingPanels","savedLayouts"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
@@ -331,6 +337,7 @@ public:
 
 		bool moved=std::tie(patternIndex,row,channel,column)!=std::tie(p,r,c,col);
 		if(moved) effectPrefix.clear();
+        if(c!=channel||col!=column||p!=patternIndex)effectFieldIndex=0;
 		patternIndex=p; row=r; channel=c; column=col; follow=f; ++contextRevision;
 
 		updateInspector();
@@ -484,6 +491,7 @@ public:
 		status = L"Stopped / Space: play from song start / cursor remains independent";
 	}
     #include "DeferredViews.inc"
+	#include "PatternGeometry.inc"
 	#include "WorkspaceView.inc"
     #include "EditingView.inc"
     #include "SampleEditor.inc"
@@ -494,6 +502,7 @@ public:
     #include "GraphEditor.inc"
     #include "GraphCurveEditor.inc"
     #include "GraphPatternLanes.inc"
+    #include "ScratchGestureIntegration.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
     void openInstrumentEnvelope(){
         if(!instrumentEnvelopeWindow)instrumentEnvelopeWindow=std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();});
@@ -704,7 +713,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             if((LOWORD(wp)==notePitch||LOWORD(wp)==noteUnitControl||LOWORD(wp)==noteSnapControl||LOWORD(wp)==noteEffectControl)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==noteList&&HIWORD(wp)!=LBN_SELCHANGE&&HIWORD(wp)!=LBN_DBLCLK)return 0;
             if(LOWORD(wp)==effectSearch){if(HIWORD(wp)==EN_CHANGE)app->filterEffects();return 0;}
-            if(LOWORD(wp)>=effectValue&&LOWORD(wp)<=effectRange)return 0;
+            if((LOWORD(wp)>=effectValue&&LOWORD(wp)<=effectRange)||(LOWORD(wp)>=effectFieldBase&&LOWORD(wp)<effectFieldBase+10)){if(HIWORD(wp)==EN_CHANGE)app->effectFieldChanged();return 0;}
+            if((LOWORD(wp)==effectUnits||(LOWORD(wp)>=effectChoiceBase&&LOWORD(wp)<effectChoiceBase+10))&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if((LOWORD(wp)==effectKind||LOWORD(wp)==effectBinding)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==pluginValue) {if(HIWORD(wp)==EN_CHANGE)app->pluginFieldChanged();return 0;}
             if((LOWORD(wp)==pluginLibrary || LOWORD(wp)==pluginParameter || LOWORD(wp)==pluginInstrument || LOWORD(wp)==pluginPage || LOWORD(wp)==pluginProgram || LOWORD(wp)==pluginPort) && HIWORD(wp)!=CBN_SELCHANGE)return 0;
@@ -719,9 +729,10 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         case WM_KEYUP:case WM_SYSKEYUP:if(app->handleKeyUp(wp))return 0;break;
         case WM_KILLFOCUS:if(!app->liveKeyboard)app->releaseTypedNotes(window);break;
         case WM_ACTIVATEAPP:if(!wp)app->releaseTypedNotes();break;
+        case WM_CONTEXTMENU:if(app->scratchContextMenu({GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
-        case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->graphLaneClick(x,y,true))app->noteMouseDown(x,y,true);return 0;}
+        case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->scratchDoubleClick(x,y)&&!app->graphLaneClick(x,y,true))app->noteMouseDown(x,y,true);return 0;}
 		case WM_LBUTTONUP: app->graphMouseUp(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));app->noteMouseUp();app->dragging=0;ReleaseCapture();return 0;
 		case WM_CAPTURECHANGED:if(app->dragging>=6)app->graphCancelDrag();app->noteMouseUp();app->dragging=0;return 0;
 		case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT at{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};ScreenToClient(window,&at);const float scale=96.0f/GetDpiForWindow(window);if(app->curveWheel(at.x*scale,at.y*scale,GET_WHEEL_DELTA_WPARAM(wp),message==WM_MOUSEHWHEEL,(GET_KEYSTATE_WPARAM(wp)&MK_CONTROL)!=0))return 0;if(message==WM_MOUSEHWHEEL)app->scrollHorizontal(GET_WHEEL_DELTA_WPARAM(wp));else if(GET_KEYSTATE_WPARAM(wp)&MK_SHIFT)app->scrollHorizontal(-GET_WHEEL_DELTA_WPARAM(wp));else app->scroll(GET_WHEEL_DELTA_WPARAM(wp));return 0;}

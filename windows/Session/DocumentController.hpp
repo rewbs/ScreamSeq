@@ -34,6 +34,7 @@ struct PatternGraphView {
 };
 struct NativePatternView {
   Tracker::PatternPerformance performance;
+  Tracker::ScratchGestureLibrary scratchGestures;
   std::vector<Tracker::PreciseNote> preciseNotes;
   std::vector<PatternEffectView> effects;
   std::vector<PatternNoteView> notes;
@@ -55,6 +56,7 @@ struct DocumentView {
   std::shared_ptr<const NativePatternView> nativePattern;
   std::shared_ptr<const PatternGraphView> graphPattern;
   std::vector<uint8_t> effectColumns;
+  std::map<unsigned,unsigned> patternRowsPerBeat;
   size_t nativePatternBytes=0;
   std::filesystem::path path;
   bool dirty=false, hosted=false;

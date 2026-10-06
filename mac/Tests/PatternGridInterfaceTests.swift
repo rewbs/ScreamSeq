@@ -7,6 +7,34 @@ private final class UnavailableCommandTarget: NSObject, NSMenuItemValidation {
 }
 extension InterfaceTests {
   static func patternGridChecks() throws {
+    var recovery=PatternSnapshotRecovery(interval:1.0/60)
+    try require(recovery.enqueue(now:10.010,preparedAt:10,external:true,active:true)==nil,
+      "A fresh host snapshot does not add another UI tick to normal display cadence")
+    let delayed=recovery.enqueue(now:10.020,preparedAt:10,external:true,active:true)!
+    try require(recovery.enqueue(now:10.040,preparedAt:10,external:true,active:true)==nil,
+      "Several display callbacks coalesce into one delayed host refresh")
+    try require(!recovery.shouldRefresh(delayed,now:10.041,preparedAt:10.040,external:true,active:true),
+      "A normal tick which refreshes while recovery is queued prevents duplicate host work")
+    recovery.finish(delayed)
+    let stale=recovery.enqueue(now:10.065,preparedAt:10.040,external:true,active:true)!
+    try require(recovery.shouldRefresh(stale,now:10.072,preparedAt:10.040,external:true,active:true),
+      "Recovery remains eligible when the latest playhead snapshot is still stale on main")
+    try require(!recovery.shouldRefresh(stale,now:10.072,preparedAt:10.040,external:true,active:false),
+      "Paused and stopped presenters never refresh from a queued callback")
+    recovery.cancel()
+    let resumed=recovery.enqueue(now:10.080,preparedAt:10.040,external:true,active:true)!
+    recovery.finish(stale)
+    try require(resumed != stale && recovery.pending==resumed &&
+      !recovery.shouldRefresh(stale,now:10.081,preparedAt:10.040,external:true,active:true),
+      "A retired recovery cannot run or clear a newer request after pause and resume")
+    recovery.finish(resumed)
+    let standalone=recovery.enqueue(now:10.090,preparedAt:10.089,external:false,active:true)!
+    try require(recovery.shouldRefresh(standalone,now:10.091,preparedAt:10.089,external:false,active:true),
+      "Standalone views retain display-driven snapshot requests without a host tick")
+    recovery.finish(standalone)
+    try require(recovery.enqueue(now:10.100,preparedAt:nil,external:true,active:false)==nil &&
+      recovery.enqueue(now:10.100,preparedAt:nil,external:true,active:true) != nil,
+      "An active presenter recovers a missing snapshot, while an inactive presenter stays idle")
     let workTrace=UIWorkTrace(capacity:3)
     for index in 0..<5 {workTrace.record(.graphDraw,start:Double(index),end:Double(index)+0.25)}
     try require(workTrace.snapshot().map(\.sequence)==[2,3,4] && workTrace.overwritten==2,
@@ -48,6 +76,12 @@ extension InterfaceTests {
     let grid = PatternView()
     grid.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
     grid.model = freshModel()
+    var hostRefreshes=0
+    grid.onNeedsRefresh={hostRefreshes+=1;grid.playRow=3;grid.playPattern=0}
+    grid.refreshForPresentation()
+    try require(hostRefreshes==1 && grid.playRow==3 && grid.playPattern==0,
+      "Presentation recovery asks the host to advance playback state instead of restamping cached geometry")
+    grid.onNeedsRefresh=nil;grid.playRow = -1;grid.playPattern = -1
     var edits = 0, auditions = [(Int, Bool)](), busy = false
     grid.onEdit = { row, channel, values in
       edits += 1
@@ -225,6 +259,82 @@ extension InterfaceTests {
     tools.amount.stringValue = "5"; tools.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
     replies.removeFirst()(success)
     try require(!tools.applyButton.isEnabled && tools.summary.stringValue == "Preview a change before applying it.", "A stale preview still cannot be applied")
-    print("PASS pattern grid: modifier-safe typing, busy key queue, audition release, repeat handling, clamped navigation, plus-key shortcuts, palette validation, apply reporting, background paste")
+    try patternCursorEditingChecks()
+    print("PASS pattern grid: modifier-safe typing, busy key queue, audition release, repeat handling, clamped navigation, plus-key shortcuts, palette validation, apply reporting, background paste, cursor-only field clear and channel row deletion")
+  }
+  static func patternCursorEditingChecks() throws {
+    let grid=PatternView();grid.frame=NSRect(x:0,y:0,width:800,height:400)
+    let commands:[[String:Any]]=[
+      ["channel":1,"column":1,"position":2*65536,"kind":"tracker","effect":1,"parameter":37],
+      ["channel":1,"column":2,"position":2*65536+8192,"kind":"nudge-reverse","value":0.75,"durationBeats":0.1875],
+      ["channel":1,"column":3,"position":2*65536+4096,"kind":"parameter-slide","binding":7,"value":0.4,"duration":131072],
+      ["channel":1,"column":4,"position":2*65536+2048,"kind":"pitch-slide","value":-3.0,"duration":65536,"pitchRange":12],
+      ["channel":1,"column":5,"position":2*65536+16384,"kind":"note-cut"]]
+    grid.model=PatternModel(["pattern":4,"revisionToken":"field:1","rows":8,"channels":3,"effectColumns":[1,8,1],"performanceCommands":commands,
+      "cells":Data(repeating:0,count:8*3*6)])
+    grid.model.replaceCell(2,1,with:[49,3,1,32,1,37])
+    grid.cursorRow=2;grid.cursorChannel=1;key(grid,0,"a",flags:.command)
+    grid.commandRevision={"field:latest"}
+    var transforms=[[String:Any]](),effects=[[String:Any]](),unexpected=0
+    grid.onRowShift={transforms.append($0)}
+    grid.onEdit={_,_,_ in unexpected += 1};grid.onClearPreciseNotes={_,_ in unexpected += 1}
+    grid.onTypedNativeEffect={_ in unexpected += 1};grid.onTrackerEffect={_,_,_,_,_ in unexpected += 1}
+    grid.onAudition={_,_,_,_ in unexpected += 1}
+    grid.onNudgeRequest={params,reply in effects.append(params);reply(["result":[:]])}
+    for (column,field) in ["note","instrument","volume"].enumerated() {
+      grid.column=column
+      grid.parameterIndex=grid.parameterFields().firstIndex{$0.storage=="value" || $0.storage=="offset"} ?? 0
+      key(grid,47,".")
+      let edit=transforms.last!
+      try require(edit["operation"] as? String=="clear" && edit["fields"] as? [String]==[field] &&
+        edit["startRow"] as? Int==2 && edit["rowCount"] as? Int==1 && edit["startChannel"] as? Int==1 && edit["channelCount"] as? Int==1,
+        "Dot clears only the cursor \(field), ignoring a larger selection")
+    }
+    for (column,kind) in [(4,"tracker"),(6,"tracker"),(8,"nudge-reverse"),(10,"parameter-slide"),(12,"pitch-slide"),(14,"note-cut")] {
+      grid.column=column
+      grid.parameterIndex=grid.parameterFields().firstIndex{$0.storage=="value" || $0.storage=="offset"} ?? 0
+      key(grid,47,".")
+      let edit=effects.last!,command=edit["command"] as! [String:Any]
+      try require(edit["column"] as? Int==(column-3)/2 && command["kind"] as? String==kind,
+        "Dot targets the exact FX value column, including extra FX")
+      if kind=="tracker" {try require(command["effect"] as? Int==1 && command["parameter"] as? Int==0,"Tracker value clear keeps its command")}
+      if kind=="nudge-reverse" {try require(command["value"] as? Double==0 && command["durationBeats"] as? Double==0.1875 && command["duration"]==nil && command["offset"] as? Int==8192,"Nudge strength clear retains duration and fractional onset")}
+      if kind=="parameter-slide" {try require(command["value"] as? Double==0 && command["binding"] as? Int==7 && command["duration"] as? Int==131072 && command["offset"] as? Int==4096,"Parameter value clear retains binding, duration and onset")}
+      if kind=="pitch-slide" {try require(command["value"] as? Double==0 && command["pitchRange"] as? Int==12 && command["duration"] as? Int==65536,"Pitch value clear retains range and duration")}
+      if kind=="note-cut" {try require(command["offset"] as? Int==0 && command["value"]==nil,"Note-cut displayed offset resets to the row start")}
+    }
+    for column in [3,5,7,9,11,13] {
+      grid.column=column
+      grid.parameterIndex=grid.parameterFields().firstIndex{$0.storage=="value" || $0.storage=="offset"} ?? 0
+      key(grid,47,".")
+      try require(effects.last?["command"] is NSNull && effects.last?["column"] as? Int==(column-3)/2,"Dot on an FX code removes only that logical command")
+    }
+    grid.model.commands=PatternCommandCatalog(["effect":[["command":20,"parameterMask":240,"parameterValue":208,"label":"SDx"]]])
+    grid.model.replaceCell(2,1,with:[49,3,1,32,20,211]);grid.column=4;key(grid,47,".")
+    let extended=effects.last?["command"] as? [String:Any]
+    try require(extended?["effect"] as? Int==20 && extended?["parameter"] as? Int==208,"Clearing SD3's value keeps the SD command and resets only its value to SD0")
+    grid.column=3;key(grid,45,"n")
+    try require(grid.effectPrefix=="N","Fixture begins a two-character FX command")
+    key(grid,47,".")
+    try require(grid.effectPrefix.isEmpty && unexpected==0,"Dot cancels an unfinished prefix without inserting or auditioning another command")
+    for code:UInt16 in [51,117] {
+      grid.column=3;key(grid,45,"n");key(grid,code,"",flags:.shift)
+      let edit=transforms.last!
+      try require(edit["operation"] as? String=="deleteRows" && edit["startRow"] as? Int==2 && edit["rowCount"] as? Int==6 &&
+        edit["startChannel"] as? Int==1 && edit["channelCount"] as? Int==1 && edit["amount"] as? Int==1 && edit["allowDataLoss"] as? Bool==true && edit["fields"]==nil,
+        "Shift+Delete moves every field of the current channel through the tail, regardless of selection")
+    }
+    try require(transforms.allSatisfy{$0["expectedRevision"] as? String=="field:latest"} && effects.allSatisfy{$0["expectedRevision"] as? String=="field:latest"} &&
+      grid.cursorRow==2 && grid.cursorChannel==1 && grid.automationSelection==["startRow":0,"endRow":7,"startChannel":0,"endChannel":2],"Cursor edits retain location/selection and use the current revision")
+    grid.column=0;key(grid,51,"")
+    try require(transforms.last?["operation"] as? String=="clear" && transforms.last?["channelCount"] as? Int==3 && transforms.last?["rowCount"] as? Int==8,
+      "Plain Delete still clears the rectangular selection")
+    let count=transforms.count
+    key(grid,47,".",flags:.control);key(grid,47,">",flags:.shift)
+    try require(transforms.count==count,"Modified non-dot characters do not trigger field clearing")
+    var busy=true;grid.canEdit = {!busy};key(grid,47,".");key(grid,51,"",flags:.shift)
+    try require(grid.deferredKeyCount==2 && transforms.count==count,"Both cursor edits wait behind a pending document edit")
+    busy=false;grid.replayDeferredKeys()
+    try require(transforms.count==count+2 && grid.deferredKeyCount==0,"Queued cursor edits replay without being lost")
   }
 }

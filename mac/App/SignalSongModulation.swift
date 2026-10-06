@@ -104,6 +104,11 @@ extension SignalGraphEditor {
     guard output==0,let bus=songNodeBus[key] else{status.stringValue="Choose a channel output or a plugin audio output for the follower";return nil}
     return ["audioBus":bus,"audioStage":"","audioPlugin":"","output":0,"preFader":false]
   }
+  func songFollowerAddUnavailable(_ key:String)->String? {
+    guard let follower=songSource(key),follower["kind"] as? String=="follower",
+      ["audioBus","audioPlugin","audioStage"].contains(where:{!(follower[$0] as? String ?? "").isEmpty})else{return nil}
+    return "This follower already has an analysis tap. Reroute its cable handle to change the tap, or mix sources into a bus and follow that bus."
+  }
   @discardableResult func connectSongControl(_ a:String,_ b:String,out:UInt32,input:UInt32,modulation:Bool)->Bool {
     guard graphID==nil else{return false}
     if modulation {
@@ -113,6 +118,7 @@ extension SignalGraphEditor {
       return true
     }
     if let follower=songSource(b),follower["kind"] as? String=="follower",let node=follower["id"] {
+      if let reason=songFollowerAddUnavailable(b){status.stringValue=reason;return true}
       if let tap=songFollowerTap(a,output:out){mutate("graph.song.source.update",["node":node,"source":tap])};return true
     }
     return false

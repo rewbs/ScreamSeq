@@ -283,6 +283,17 @@ remains a virtual grid. Catalog cache revisions avoid resetting native selection
 on every musical edit. Inspector pins/Return, keyboard focus and cursor/playback
 state remain separate. Removed Return targets reject safely after Undo.
 
+In the pattern grid, `.` clears only the current field, ignoring rectangular
+selection. FX code clearing removes that one command; FX value clearing resets
+its value while retaining kind, binding, duration and fractional onset (NC resets
+its displayed onset instead). NF/NR strength becomes zero with duration intact.
+Shift+Delete deletes only the current channel row, moves following cells, precise
+notes, every FX column and that channel's graph commands up, and empties the tail.
+Pattern-wide automation and other channels stay unchanged. The two actions are
+also in Ctrl+K; ordinary Delete keeps selection clearing. Native numeric text
+controls keep decimal entry. All edits use the same revision-guarded APIs and
+document Undo as other pattern changes.
+
 The sample editor draws bounded live voice cursors from shared atomic telemetry;
 overlapping voices and sample loops use actual positions. Stopped transport
 publishes `audioActive:false` and no `voicePositions`. Envelope cursors, the
@@ -497,3 +508,9 @@ Windows yet; qualify them with `windows/build.ps1 -Test` and the desktop suites.
   replies carry `pluginEditorWarning`. A busy UI owner (`UiOwnerBusy`) is
   transient: the editor stays open and its capture is postponed to the next
   flush.
+
+### Typed pattern fields
+
+Native FX descriptors from `pattern.commands.native` drive the Windows picker, named inline slots and retained inspector. The grid caches each FX column’s slot widths over its current pattern; draw, hit testing and arrow-key focus use that same geometry. API context columns keep their existing code/value addresses, while local field focus selects one parameter within the value column. Enter on a typed value opens its numeric or choice control in the grid. The inspector exposes all fields, including advanced offset, phase-reset and MIDI bend-range settings.
+
+Time displays default to beats; Rows changes presentation using the captured pattern signature. Common duration/offset values still persist as integer 65536-row units, and unchanged unit conversions preserve exact odd offsets. New edits use the existing revision-guarded `pattern.effect.set` path; stale drafts retain their captured target. Native parameters, timing, choices and switches survive cell edits, clipboard, Undo and project save. The exhaustive scope and source-effect mapping is in [`NATIVE_PATTERN_PRECISION.md`](../../doc/NATIVE_PATTERN_PRECISION.md). Native desktop qualification is separate from the portable field/API tests.

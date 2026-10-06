@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 BUILD = Path(os.environ.get("RESONANCE_BUILD_DIR", str(ROOT / "bin/mac-native"))).resolve()
 sys.path.insert(0, str(ROOT / "mac/Tools"))
 from resonance_api import APIError, Client, drum_roll, endpoints
+from test_audio_fanout import audio_fanout
+from test_scratch_gestures import scratch_gestures
 import plistlib
 
 
@@ -2260,6 +2262,8 @@ def main():
                 navigation_pattern(client)
                 note_routing_tools(client)
                 graph_stage_routing(client, directory)
+                audio_fanout(client, directory)
+                scratch_gestures(client, directory)
                 print("PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output")
             finally:
                 process.terminate()

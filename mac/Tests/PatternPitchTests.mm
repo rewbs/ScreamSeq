@@ -60,6 +60,7 @@ static void sessionTest() {
   check([expected isEqual:call(@"pattern.performance.get",@{@"pattern":@0})[@"data"]],"Version 8 preserves exact pitch metadata");
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
 }
+#include "SamplePitchLifecycleChecks.inc"
 int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Fixture bundle required");
   void *bundle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW);
@@ -137,6 +138,7 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
       for(size_t i=0;i<reference.size();++i)check(std::abs(reference[i]-other[i])<2e-6,"Bent sample audio is callback-size independent");}
     check(std::any_of(reference.begin(),reference.end(),[](float sample){return std::abs(sample)>.001f;}),"Pitch test produces real sample audio");
   }
+  for(uint32_t rate:{44100u,48000u,96000u})for(bool slide:{false,true}){samplePitchLifetime(rate,slide,false,false,false);samplePitchLifetime(rate,slide,true,false,false);samplePitchLifetime(rate,slide,false,true,false);samplePitchLifetime(rate,slide,false,false,true);samplePitchContinuations(rate,slide,true,false);samplePitchContinuations(rate,slide,true,true);samplePitchContinuations(rate,slide,false,false);samplePitchIdle(rate,slide);samplePitchFinishedPortamento(rate,slide);}
   sessionTest();
   std::cout<<"PASS sub-tick sample phase, continuous pitch interpolation, AU/VST3 MIDI pitch at every sample, interruption, repeated patterns, three rates, four callback sizes and realtime audit\n";
   return 0;

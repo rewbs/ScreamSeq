@@ -8,6 +8,8 @@
 #include "../Plugins/PluginPreset.hpp"
 #include "AutomationValidation.hpp"
 #include "editor/PatternTools.hpp"
+#include "editor/ProjectLoadRecovery.hpp"
+#include <sys/stat.h>
 #include "editor/ParameterProvenance.hpp"
 #include "editor/ParameterBaseline.hpp"
 #include "editor/GraphEditing.hpp"
@@ -40,6 +42,7 @@
 using namespace Tracker;
 namespace {
 #include "NativeSongMetadata.inc"
+#include "ProjectLoadRecovery.inc"
 #include "PatternCommands.inc"
 #include "TrackLayout.inc"
 #include "SongTiming.inc"
@@ -161,7 +164,7 @@ NSArray *pluginBusDictionaries(const std::vector<PluginAudioBus> &buses) {
 }
 NSString *songString(const CSoundFile &song, const std::string &value);
 #include "PluginAssignments.inc"
-NSDictionary *decodeProject(NSData *data) {
+NSDictionary *decodeProject(NSData *data, ProjectLoadRecovery *recovery = nullptr) {
   if (!data || data.length > 600 * 1024 * 1024)
     throw std::runtime_error("Project is unreadable or exceeds 600 MB");
   NSError *error = nil;
@@ -170,19 +173,23 @@ NSDictionary *decodeProject(NSData *data) {
                                                        format:nil
                                                         error:&error];
   if (![root isKindOfClass:NSDictionary.class] ||
-      ![root[@"module"] isKindOfClass:NSData.class] || ![root[@"plugins"] isKindOfClass:NSArray.class])
+      ![root[@"module"] isKindOfClass:NSData.class] || (!recovery && ![root[@"plugins"] isKindOfClass:NSArray.class]))
     throw std::runtime_error("Invalid or unsupported ScreamSeq project.");
   if ([root[@"module"] length] == 0 || [root[@"module"] length] > 512 * 1024 * 1024)
     throw std::runtime_error("Invalid embedded module size");
-  Automation::integer(root[@"version"], nativeProjectVersion, nativeProjectVersion);
+  if(recovery) {
+    if(![root[@"version"] isEqual:@(nativeProjectVersion)])recovery->warn("Read known fields from an incompatible project container version (current: " + std::to_string(nativeProjectVersion) + ").",false,true);
+    for(NSString *key in root)if(![key hasPrefix:@"screamseqLoadRecovery"] && ![@[@"version",@"module",@"native",@"sequence",@"plugins",@"automation",@"recoveryTake"] containsObject:key])recovery->warn("Ignored unsupported project field: "+std::string(key.UTF8String),true);
+  } else Automation::integer(root[@"version"], nativeProjectVersion, nativeProjectVersion);
   NSData *module = root[@"module"];
   const bool snapshot = isSongSnapshot({static_cast<const std::byte *>(module.bytes), module.length});
-  if (!snapshot)
-    throw std::runtime_error("The embedded song does not match the project version");
+  if (!snapshot && !recovery)throw std::runtime_error("The embedded song does not match the project version");
   return root;
 }
 std::vector<PluginState> decodePlugins(NSDictionary *root) {
   NSArray *plugins = root[@"plugins"];
+  if (![plugins isKindOfClass:NSArray.class])
+    throw std::runtime_error("Invalid plugin rack; expected an array");
   if (plugins.count > maximumNativePlugins)
     throw std::runtime_error("Project exceeds 64 native devices");
   std::vector<PluginState> states;
@@ -382,6 +389,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   std::chrono::steady_clock::time_point _lastParameterEdit;
   std::string _pluginError;
   std::string _pluginWarning; // Non-blocking; reported with the document issues.
+  ProjectLoadRecovery _loadRecovery;
+  NSString *_loadSourcePath;
+  NSDictionary *_loadRecoveryArchives; // Inactive opaque source fragments from portable recovery.
   PluginPathHints _pluginPathHints;
   std::unique_ptr<NativePlugin> _graphEditorPlugin;
   GraphPluginRecipe _graphEditorRecipe;
@@ -473,6 +483,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   _pluginPathHints.clear();
   _document = demo ? Document::demo() : std::make_unique<Document>();
   _automationDocumentID = NSUUID.UUID.UUIDString;
+  _loadRecovery={};_loadSourcePath=nil;_loadRecoveryArchives=nil;
   _graphEditorPlugin.reset();_graphEditorID=nil;
   _lastTouchedPlugin.clear(); _touchSequence = 0; _lastTouchedSource = nil;
 }
@@ -486,25 +497,58 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     bool recoveredTakeCompatible = false;
     PluginPathHints hints;
     std::string missing;
+    ProjectLoadRecovery recovery;
+    NSMutableDictionary *recoveryArchives=[NSMutableDictionary dictionary];
     if ([@[@"screamseq", @"resonance"] containsObject:path.pathExtension.lowercaseString]) {
       auto attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil];
       if ([attributes fileSize] > 600 * 1024 * 1024)
         throw std::runtime_error("Project exceeds 600 MB");
-      NSDictionary *root = decodeProject([NSData dataWithContentsOfFile:path]);
-      next = std::make_unique<Document>(byteVector(root[@"module"]));
-      if (root[@"sequence"]) {
+      NSDictionary *root = decodeProject([NSData dataWithContentsOfFile:path], &recovery);
+      auto snapshot=byteVector(root[@"module"]);
+      recoverLegacySongSnapshot(snapshot,recovery);
+      if(!isSongSnapshot(snapshot))recovery.warn("Opening the legacy embedded tracker module; native sample/timing extensions may be unavailable.",false,true);
+      next = std::make_unique<Document>(snapshot);
+      for(NSString *key in root)if([key hasPrefix:@"screamseqLoadRecovery"])recoveryArchives[key]=root[key];
+      if (root[@"sequence"]) try {
         const auto sequence = unsignedInteger(root[@"sequence"], UINT8_MAX, "Invalid sequence selection");
         if (sequence >= next->song().Order.GetNumSequences())
           throw std::runtime_error("The selected sequence is missing from this project.");
         next->song().Order.SetSequence(SEQUENCEINDEX(sequence));
+      } catch(const std::exception &e) {recovery.warn("Reset unavailable sequence selection: "+std::string(e.what()),true);}
+      auto native = recoverNativeSong(root[@"native"], *next, recovery);
+      std::map<uint32_t,uint32_t> recoveredSlots;
+      try {auto decoded=decodePlugins(root);validatePluginCapacity(decoded,native.mixer.buses.size());plugins=std::move(decoded);for(uint32_t i=0;i<plugins.size();++i)recoveredSlots[i]=i;}
+      catch(const std::exception &e) {
+        id entries=root[@"plugins"];
+        if(![entries isKindOfClass:NSArray.class] || [entries count]>maximumNativePlugins)recovery.warn("Skipped incompatible plugin rack: "+std::string(e.what()),true);
+        else for(NSUInteger i=0;i<[entries count];++i)try {
+          auto one=decodePlugins(@{@"plugins":@[entries[i]]});
+          if(std::any_of(plugins.begin(),plugins.end(),[&](const auto &p){return p.instanceID==one[0].instanceID;}))throw std::invalid_argument("Duplicate plugin instance identity");
+          auto candidate=plugins;candidate.push_back(std::move(one[0]));
+          validatePluginCapacity(candidate,native.mixer.buses.size());
+          recoveredSlots[uint32_t(i)]=uint32_t(plugins.size());plugins=std::move(candidate);
+        }catch(const std::exception &error){recovery.warn("Skipped plugin slot "+std::to_string(i+1)+": "+error.what(),true);}
       }
-      auto native = decodeNativeSong(root[@"native"]);
-      plugins = decodePlugins(root);
-      for(const auto &r:native.signal.stageConnections)for(const auto &e:{r.source,r.target})if(!e.plugin.empty()&&std::none_of(plugins.begin(),plugins.end(),[&](const auto &p){return p.instanceID==e.plugin;}))throw std::invalid_argument("Graph stage cable refers to a missing rack plugin");
+      const auto removedCables=std::erase_if(native.signal.stageConnections,[&](const auto &r){
+        for(const auto &e:{r.source,r.target})if(!e.plugin.empty()&&std::none_of(plugins.begin(),plugins.end(),[&](const auto &p){return p.instanceID==e.plugin;})) {
+          recovery.warn("Disconnected a graph cable referring to an unavailable rack plugin: "+e.plugin,true);return true;
+        }return false;
+      });
+      if(removedCables)native.reconcile(next->song());
       missing = resolvePluginLocations(plugins, &native, _pluginInventory->cached(), hints);
       next->restoreNative(std::move(native));
-      automation = decodeAutomation(root);
-      if (root[@"recoveryTake"]) {
+      id recorded=root[@"automation"];
+      if(recorded) {
+        if(![recorded isKindOfClass:NSArray.class] || [recorded count]>100000)recovery.warn("Skipped invalid or oversized recorded automation.",true);
+        else for(NSUInteger i=0;i<[recorded count];++i)try {
+          NSArray *savedPlugins=[root[@"plugins"] isKindOfClass:NSArray.class]?root[@"plugins"]:@[];
+          auto points=decodeAutomation(@{@"plugins":savedPlugins,@"automation":@[recorded[i]]});
+          auto &point=points[0];const auto slot=recoveredSlots.find(point.slot);
+          if(slot==recoveredSlots.end())throw std::invalid_argument("Target plugin was not recovered");
+          point.slot=slot->second;automation.push_back(point);
+        }catch(const std::exception &e){recovery.warn("Skipped recorded automation["+std::to_string(i)+"]: "+e.what(),true);}
+      }
+      if (root[@"recoveryTake"]) try {
         using namespace Automation;
         const auto data = object(root[@"recoveryTake"]);
         keys(data, @[@"compatible", @"events", @"missingTime", @"exhaustedVoices", @"overflow"]);
@@ -523,7 +567,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
         recoveredTake->missingTime = uint32_t(integer(data[@"missingTime"], 0, UINT32_MAX));
         recoveredTake->exhaustedVoices = uint32_t(integer(data[@"exhaustedVoices"], 0, UINT32_MAX));
         recoveredTake->overflow = uint32_t(integer(data[@"overflow"], 0, UINT32_MAX));
-      }
+      }catch(const std::exception &e){recoveredTake.reset();recovery.warn("Skipped incompatible recording take: "+std::string(e.what()),true);}
     } else
       next = Document::open(path.UTF8String);
     validatePluginCapacity(plugins, next->native().mixer.buses.size());
@@ -549,6 +593,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     _knownHistorySequence = _parameterGestureSequence = 0; _parameterGesture = NO;
     _graphEditorPlugin.reset();_graphEditorID=nil;
     _document = std::move(next);
+    _loadRecovery=std::move(recovery);_loadSourcePath=[path copy];_loadRecoveryArchives=[recoveryArchives copy];
     _automationDocumentID = NSUUID.UUID.UUIDString;
     _recording = std::move(recoveredTake);
     _recordingID = _recording ? NSUUID.UUID.UUIDString : nil;
@@ -813,6 +858,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     @"plugins" : plugins,
     @"automation" : automation
   } mutableCopy];
+  if(_loadRecoveryArchives)[root addEntriesFromDictionary:_loadRecoveryArchives];
   if (recovery && _recording) {
     // Close held notes in a copy. The live take and audio clock keep running.
     auto take = *_recording;
@@ -837,6 +883,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)saveRecoveryPath:(NSString *)path error:(NSError **)error {
   try {
+    [self validateRecoveredSavePath:path];
     NSData *data = [self projectDataForRecovery:YES];
     NSError *writeError = nil;
     if (![data writeToFile:path options:NSDataWritingAtomic error:&writeError])
@@ -848,8 +895,16 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   try { return [self projectDataForRecovery:YES]; }
   catch (const std::exception &e) { failure(error, e); return nil; }
 }
+- (void)validateRecoveredSavePath:(NSString *)path {
+  if(!_loadRecovery.protectSource || !_loadSourcePath.length)return;
+  const auto canonical=[](NSString *p){return p.stringByStandardizingPath.stringByResolvingSymlinksInPath;};
+  struct stat original{},destination{};
+  const bool sameInode=::stat(_loadSourcePath.fileSystemRepresentation,&original)==0 && ::stat(path.fileSystemRepresentation,&destination)==0 && original.st_dev==destination.st_dev && original.st_ino==destination.st_ino;
+  if(sameInode || [canonical(path) isEqual:canonical(_loadSourcePath)])throw std::runtime_error("This project was recovered with compatibility warnings. Save a new .screamseq copy to preserve the original file.");
+}
 - (BOOL)savePath:(NSString *)path error:(NSError **)error {
   try {
+    [self validateRecoveredSavePath:path];
     if(_recording)throw std::runtime_error("Finish or discard the recording take before saving.");
     if ([@[@"screamseq", @"resonance"] containsObject:path.pathExtension.lowercaseString]) {
       NSData *data = [self projectData];
@@ -862,6 +917,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
             "Use Save As and the .screamseq project format to retain native metadata, effects and automation.");
       _document->save(path.UTF8String, true);
     }
+    _loadRecovery.protectSource=false;
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);
@@ -1121,7 +1177,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
                        : s.GetType() == MOD_TYPE_MOD ? "MOD"
                        : s.GetType() == MOD_TYPE_S3M ? "S3M"
                                                      : "Legacy";
+  NSMutableArray *loadWarnings=[NSMutableArray array];
+  for(const auto &warning:_loadRecovery.warnings)[loadWarnings addObject:@(warning.c_str())];
+  [issues addObjectsFromArray:loadWarnings];
   return @{
+    @"loadWarnings":loadWarnings,@"requiresSaveAs":@(_loadRecovery.protectSource),@"loadSourcePath":_loadSourcePath?:@"",
     @"issues" : issues,
     @"editable" : @(_document->editable()),
     @"nativePlugins" : nativePlugins,
@@ -1132,7 +1192,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     @"effectLetters" : effects,
     @"commandCatalog" : patternCommandCatalog(s.GetType()),
     @"preciseNoteEffects": preciseNoteEffects(s.GetType()),
-    @"graphLanes":graphLanes,@"graphCommands":graphCommands, @"preciseNotes":preciseNotes, @"effectColumns": extraColumns, @"performanceCommands": performanceCommands, @"effectBindings":encodePatternPerformance(native.performance)[@"bindings"],
+    @"graphLanes":graphLanes,@"graphCommands":graphCommands, @"preciseNotes":preciseNotes, @"effectColumns": extraColumns, @"performanceCommands": performanceCommands, @"effectBindings":encodePatternPerformance(native.performance)[@"bindings"], @"scratchGestures":encodeScratchGestures(native),
     @"volumeLetters" : volumes,
     @"title" : songString(s, s.m_songName),
     @"format" : @(format),
@@ -1209,8 +1269,10 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   else if (_document->undoChangesAutomation()) {
     try { _audio->updateMusicalAutomation(next); } catch (...) { _audio->stop(); }
   }
-  auto publish=[&]{if(parameters && !_audio->publishGraphControls(std::move(parameters)))throw std::runtime_error("Graph parameter publication is busy; retry Undo");if(routing && !_audio->publishMixerRouting(routing))throw std::runtime_error("Routing publication is busy; retry Undo");};
-  auto e = routing||parameters?_document->undo(publish):_document->undo();
+  auto scratch=next.scratchGestures!=_document->native().scratchGestures?_audio->prepareScratchUpdate(next):nullptr;
+  if(scratch&&(routing||parameters))throw std::runtime_error("This combined scratch/routing history edit requires stopped playback");
+  auto publish=[&]{if(scratch&&!_audio->publishScratchUpdate(scratch))throw std::runtime_error("Scratch publication is busy; retry history edit");if(parameters && !_audio->publishGraphControls(std::move(parameters)))throw std::runtime_error("Graph parameter publication is busy; retry Undo");if(routing && !_audio->publishMixerRouting(routing))throw std::runtime_error("Routing publication is busy; retry Undo");};
+  auto e = routing||parameters||scratch?_document->undo(publish):_document->undo();
   if (_audio->renderer()) _audio->renderer()->applyColumnMutes(_document->native(), _document->song());
   if (_audio->playing() && !_audio->renderer()->enqueue(e))
     _audio->stop();
@@ -1240,8 +1302,10 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   else if (_document->redoChangesAutomation()) {
     try { _audio->updateMusicalAutomation(next); } catch (...) { _audio->stop(); }
   }
-  auto publish=[&]{if(parameters && !_audio->publishGraphControls(std::move(parameters)))throw std::runtime_error("Graph parameter publication is busy; retry Redo");if(routing && !_audio->publishMixerRouting(routing))throw std::runtime_error("Routing publication is busy; retry Redo");};
-  auto e = routing||parameters?_document->redo(publish):_document->redo();
+  auto scratch=next.scratchGestures!=_document->native().scratchGestures?_audio->prepareScratchUpdate(next):nullptr;
+  if(scratch&&(routing||parameters))throw std::runtime_error("This combined scratch/routing history edit requires stopped playback");
+  auto publish=[&]{if(scratch&&!_audio->publishScratchUpdate(scratch))throw std::runtime_error("Scratch publication is busy; retry history edit");if(parameters && !_audio->publishGraphControls(std::move(parameters)))throw std::runtime_error("Graph parameter publication is busy; retry Redo");if(routing && !_audio->publishMixerRouting(routing))throw std::runtime_error("Routing publication is busy; retry Redo");};
+  auto e = routing||parameters||scratch?_document->redo(publish):_document->redo();
   if (_audio->renderer()) _audio->renderer()->applyColumnMutes(_document->native(), _document->song());
   if (_audio->playing() && !_audio->renderer()->enqueue(e))
     _audio->stop();

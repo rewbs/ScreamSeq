@@ -75,7 +75,7 @@ Json performance(const PatternPerformance &p) {
   for (const auto &c : p.commands) {
     Json j{{"pattern",nativeID(c.pattern)},{"track",nativeID(c.track)},{"position",c.position},{"duration",c.duration},{"column",c.column},{"kind",uint8_t(c.kind)},{"binding",c.binding},{"value",c.value},{"effect",c.effect},{"parameter",c.parameter}};
     if (c.kind == PatternCommandKind::PitchSet || c.kind == PatternCommandKind::PitchSlide) j["pitchRange"] = c.pitchRange;
-    commands.push_back(std::move(j));
+    PatternJSON::append(j,c);commands.push_back(std::move(j));
   }
   return {{"columns",columns},{"bindings",bindings},{"commands",commands}};
 }
@@ -84,8 +84,9 @@ PatternPerformance decodePerformance(const Json &v) {
   for (const auto &c : items(v,"columns",127)) { array(c,2); need(c.size() == 2,"Invalid effect-column count"); need(p.columns.emplace(decodeID(c[0]),uint8_t(integer(c[1],1,maximumEffectColumns))).second,"Duplicate effect-column configuration"); }
   for (const auto &b : items(v,"bindings",255)) need(p.bindings.emplace(uint16_t(u32(b,"id",1,255)),ParameterBinding{text(field(b,"plugin"),128),u32(b,"parameter"),text(field(b,"name"),256)}).second,"Duplicate parameter binding");
   for (const auto &c : items(v,"commands",maximumPatternCommands)) {
-    const auto kind = u32(c,"kind",0,7);
-    p.commands.push_back({decodeID(field(c,"pattern")),decodeID(field(c,"track")),u32(c,"position"),u32(c,"duration"),uint8_t(u32(c,"column",0,maximumEffectColumns-1)),PatternCommandKind(kind),uint16_t(u32(c,"binding",0,255)),real(c,"value",-96,96),uint8_t(integer(optional(c,"pitchRange",2),1,96)),uint8_t(u32(c,"effect",0,255)),uint8_t(u32(c,"parameter",0,255))});
+    const auto kind = u32(c,"kind",0,8);
+    p.commands.push_back({decodeID(field(c,"pattern")),decodeID(field(c,"track")),u32(c,"position"),isNudge(PatternCommandKind(kind))?uint32_t(integer(optional(c,"duration",0),0,UINT32_MAX)):u32(c,"duration"),uint8_t(u32(c,"column",0,maximumEffectColumns-1)),PatternCommandKind(kind),uint16_t(u32(c,"binding",0,255)),real(c,"value",-96,96),uint8_t(integer(optional(c,"pitchRange",2),1,96)),uint8_t(u32(c,"effect",0,255)),uint8_t(u32(c,"parameter",0,255))});
+    PatternJSON::decode(p.commands.back(),c);validateNativePatternCommand(p.commands.back());
   }
   return p;
 }

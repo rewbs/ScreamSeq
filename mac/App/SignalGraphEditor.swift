@@ -173,6 +173,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     canvas.cableOrigin = {[weak self] key in self?.cableOrigin(key)}
     canvas.validateCable = {[weak self] a,b,index in self?.previewCable(a,b,replacing:index)}
     canvas.describeCable = {[weak self] a,b,out,input,mod in self?.cableDescription(a,b,out:out,input:input,modulation:mod) ?? "Release to connect"}
+    canvas.describeSocket = {[weak self] key in self?.socketPatchHelp(key)}
     canvas.onMoveNodes = {[weak self] positions in self?.moveNodes(positions)}
     canvas.onInsertNodes = {[weak self] ids,edge,positions in self?.insertNodes(ids,edge:edge,positions:positions)}
     canvas.onDetachNodes = {[weak self] ids,positions,remove in self?.detachNodes(ids,positions:positions,remove:remove)}
@@ -260,7 +261,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     nodeSection=stack(.vertical,[detail,stageExplanation,pluginControls,rackControls,name,
       useDetector,busControls,busSection,sourceSection],spacing:7)
     nodeSection.stretchAcrossAxis()
-    let help=Theme.label("Sockets add cables; wire handles reroute. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert. Hollow sockets enable automatically. Option-drag adds a Main input to an existing insert.",size:11,color:Theme.muted)
+    let help=Theme.label("Sockets add cables and mix audio into inputs; selected wire handles reroute only that cable. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert, or choose Move insert chain…. Hollow sockets enable automatically.",size:11,color:Theme.muted)
     help.lineBreakMode = .byWordWrapping;help.maximumNumberOfLines=0;help.preferredMaxLayoutWidth=246
     let controls=stack(.vertical,[connectionSection,librarySection,provenanceControls,visualControls,nodeSection,help],spacing:12)
     controls.stretchAcrossAxis();controls.fill(inspector,inset:8)

@@ -14,6 +14,7 @@ extern "C" void tracker_audit_begin();
 extern "C" void tracker_audit_end(uint64_t *,uint64_t *,uint64_t *);
 #endif
 static void check(bool value,const char *message){if(!value)throw std::runtime_error(message);}
+#include "NativePatternSessionChecks.inc"
 static void sessionTest(const PluginDescriptor &descriptor) {
   TrackerSession *session=[TrackerSession new];NSError *error=nil;
   NSDictionary *d=@{@"type":@(descriptor.type),@"subtype":@(descriptor.subtype),@"manufacturer":@(descriptor.manufacturer),
@@ -119,6 +120,7 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
     const auto groove=render(1),grooveOther=render(4096);
     for(size_t i=0;i<groove.size();++i)check(std::abs(groove[i]-grooveOther[i])<3e-8,"Uneven-row commands retain sample precision");doc.undo();
   }
+  nativePatternSessionChecks();
   sessionTest(gain.descriptor);
   std::cout<<"PASS native command reference audio, exact fractional starts, interruption, column precedence, repeats, seek, rack identity, tempo/groove, callback partition, realtime audit, document history, guarded API, conflict rejection and saved project recall\n";
   return 0;

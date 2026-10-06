@@ -817,10 +817,11 @@ extension InterfaceTests {
     var method="",params=[String:Any](),calls=0
     editor.onRequest={m,p,r in method=m;params=p;calls+=1;r(["error":["message":"captured"]])}
     editor.connectPorts("n1","plugin:dist",out:0,input:0,modulation:false)
-    try require(method=="mixer.inserts.move" && params["plugins"] as? [String]==["dist","comp"] && params["target"] as? String=="n1" && params["expectedRevision"] != nil,"Track output to an effect input atomically moves the entire suffix onto that track")
+    try require(method=="mixer.sidechains.set" && params["plugin"] as? String=="dist" && params["input"] as? Int==0 && params["expectedRevision"] != nil,"Track output to an effect input adds a main contribution without moving the effect or its following inserts")
     let insert=editor.songConnections.firstIndex{$0["plugin"] as? String=="dist"}!
+    let beforeInsertRewire=calls
     editor.rewire(insert,source:"n1",target:"plugin:dist",out:0,input:0,modulation:false)
-    try require(method=="mixer.inserts.move" && params["plugins"] as? [String]==["dist","comp"],"Dragging the existing input endpoint has identical chain-move semantics")
+    try require(calls==beforeInsertRewire && editor.status.stringValue.contains("Move insert chain"),"A fixed insert cable never silently turns a handle gesture into a chain ownership move")
     editor.detachNodes(["plugin:dist"],positions:[("plugin:dist",810,390)],remove:false)
     try require(method=="mixer.inserts.detach" && params["plugins"] as? [String]==["dist"] && (params["positions"] as? [[String:Any]])?.first?["x"] as? Double==810 && params["expectedRevision"] != nil,"Option-dragging one song insert sends one captured-revision detach and layout transaction")
     let detachCalls=calls;editor.detachNodes(["plugin:dist","plugin:comp"],positions:[],remove:false)
@@ -865,8 +866,8 @@ extension InterfaceTests {
     editor.connectPorts("plugin:comp","plugin:comp",out:1,input:1,modulation:false)
     try require(calls==beforeInvalidSource && editor.status.stringValue.contains("itself"),"Direct plugin patching rejects a self-cycle before sending a mutation")
     editor.selectedID="plugin:comp";editor.useConnectedDetector();try require(method=="plugin.parameters.set" && (params["values"] as? [[String:Any]])?.first?["value"] as? Int==2,"Existing compressors expose a graph action to follow their connected detector")
-    editor.canvas.addingMainInput=true;editor.connectPorts("n1","plugin:comp",out:0,input:0,modulation:false);editor.canvas.addingMainInput=false
-    try require(method=="mixer.sidechains.set" && params["input"] as? Int==0,"Option-drag can sum an additional channel into an insert main input")
+    editor.connectPorts("n1","plugin:comp",out:0,input:0,modulation:false)
+    try require(method=="mixer.sidechains.set" && params["input"] as? Int==0,"A normal socket drag sums an additional channel into an insert main input")
     var patchedMixer=portSong["mixer"] as! [String:Any]
     var patchedBuses=patchedMixer["buses"] as! [[String:Any]];patchedBuses.append(["id":"n3","name":"Key","kind":"track","output":"n2"]);patchedMixer["buses"]=patchedBuses
     patchedMixer["sidechains"]=[["plugin":"comp","source":"n3","input":0,"gainDB":0]];portSong["mixer"]=patchedMixer;editor.update(portSong)
@@ -910,6 +911,12 @@ extension InterfaceTests {
     canvas.selectedEdge=nil;rewired=nil
     canvas.mouseDown(with:event(.leftMouseDown,b.portPoint(SignalCanvasPort(),output:false),.option));canvas.mouseUp(with:event(.leftMouseUp,c.portPoint(SignalCanvasPort(),output:true)))
     try require(connected?.0=="c" && connected?.1=="b" && rewired==nil,"Option-drag preserves existing cables and adds a source")
+    canvas.update([a,b,c],edges:[SignalCanvasEdge(source:"a",target:"b",label:"First"),SignalCanvasEdge(source:"c",target:"b",label:"Second")]);canvas.selectedEdge=0;connected=nil;rewired=nil
+    canvas.mouseDown(with:event(.leftMouseDown,a.portPoint(SignalCanvasPort(),output:true)));canvas.mouseUp(with:event(.leftMouseUp,c.portPoint(SignalCanvasPort(),output:false)))
+    try require(connected?.0=="a" && connected?.1=="c" && rewired==nil && canvas.edges.count==2,"A selected cable never steals its output-socket fan-out gesture or removes another input source")
+    canvas.mouseMoved(with:event(.mouseMoved,b.portPoint(SignalCanvasPort(),output:false)))
+    try require(canvas.toolTip?.contains("2 visible cables")==true && canvas.toolTip?.contains("Drag to add another connection")==true,"Occupied socket hover describes its cable count and how to add or explicitly reroute")
+    canvas.update([a,b,c],edges:[SignalCanvasEdge(source:"a",target:"b",label:"")])
     canvas.edges[0].amount=0;canvas.edges[0].amountRange = -1...1;canvas.edges[0].amountUnit="depth";canvas.selectedEdge=0
     let covered=SignalCanvasNode(id:"cover",title:"Cover",detail:"",kind:"audio",x:260,y:60)
     let withAmount=canvas.edges

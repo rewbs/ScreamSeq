@@ -5,7 +5,11 @@ struct PatternCommand {
   let minimum: Int, maximum: Int
   let label: String, name: String, family: String, hint: String
   let nativeKind: String?
+  let nativeName:String?
+  let equivalents:String
+  private let catalogueDisplayCode:String?
   var displayCode: String {
+    if let catalogueDisplayCode {return catalogueDisplayCode}
     if nativeKind != nil {return label}
     if command==0 {return ".."}
     return mask==0 ? "0"+String(label.prefix(1)) : String(label.prefix(2))
@@ -15,16 +19,17 @@ struct PatternCommand {
     ["label":"PL","name":"Slide plugin parameter","kind":"parameter-slide","description":"Glide from the current parameter value to a precise target over a duration, with sample-resolution timing."],
     ["label":"BS","name":"Set pitch bend","kind":"pitch-set","description":"Set an absolute pitch offset in semitones. Native samples or a plugin MIDI pitch wheel."],
     ["label":"BL","name":"Slide pitch bend","kind":"pitch-slide","description":"Glide to an absolute pitch offset over a duration, with fractional row timing."],
-    ["label":"NF","name":"Nudge record forward","kind":"nudge-forward","description":"Push sample playback forward with a smooth per-sample speed curve. Strength 0–100%; an opposing push above 50% reverses playback temporarily. Duration includes recovery."],
-    ["label":"NR","name":"Nudge record reverse","kind":"nudge-reverse","description":"Pull sample playback backward with an elastic scratching curve. Below 50% slows forward playback; above 50% reverses it. Samples only; duration includes recovery."],
+    ["label":"NF","name":"Nudge record forward","kind":"nudge-forward","description":"Push sample playback forward with a smooth per-sample speed curve. Strength 0–100%; an opposing push above 50% reverses playback temporarily. Duration is in beats and includes recovery."],
+    ["label":"NR","name":"Nudge record reverse","kind":"nudge-reverse","description":"Pull sample playback backward with an elastic scratching curve. Below 50% slows forward playback; above 50% reverses it. Samples only; duration is in beats and includes recovery."],
     ["label":"NC","name":"Precise note cut / plugin note-off","kind":"note-cut","description":"Cut the current sample or send plugin note-offs at a precise row/beat offset. Plugin release envelopes remain active; other tracks are unaffected."]
   ].map { PatternCommand($0.merging(["family":"precise"]){first,_ in first}) }
   init(_ data: [String: Any]) {
-    nativeKind = data["kind"] as? String
+    nativeKind = data["kind"] as? String;nativeName=data["native"] as? String;equivalents=data["equivalents"] as? String ?? ""
     command = data["command"] as? Int ?? 0; mask = data["parameterMask"] as? Int ?? 0
     value = data["parameterValue"] as? Int ?? 0; suggested = data["suggestedParameter"] as? Int ?? 0
     minimum = data["minimum"] as? Int ?? 0; maximum = data["maximum"] as? Int ?? 255
-    label = data["label"] as? String ?? "?"; name = data["name"] as? String ?? "Unknown"
+    catalogueDisplayCode=data["displayCode"] as? String
+    label = data["label"] as? String ?? catalogueDisplayCode ?? "?"; name = data["name"] as? String ?? "Unknown"
     family = data["family"] as? String ?? "sound"; hint = data["description"] as? String ?? ""
   }
   var rgba: SIMD4<Float> {
@@ -40,15 +45,20 @@ struct PatternCommand {
 }
 
 final class PatternCommandCatalog {
-  let effects: [PatternCommand], volumes: [PatternCommand]
+  let effects: [PatternCommand], volumes: [PatternCommand], native:[PatternCommand]
+  let nativeSchemas:[PatternEffectSchema]
   private var effectLookup = [Int: PatternCommand](), volumeLookup = [Int: PatternCommand]()
   static let empty = PatternCommandCatalog([:])
   init(_ data: [String: Any]) {
+    let provided=data["native"] as? [[String:Any]] ?? []
+    nativeSchemas=provided.isEmpty ? PatternEffectSchema.existing : provided.map(PatternEffectSchema.init)
+    native=provided.isEmpty ? PatternCommand.native : provided.map(PatternCommand.init)
     effects = (data["effect"] as? [[String: Any]] ?? []).map(PatternCommand.init)
     volumes = (data["volume"] as? [[String: Any]] ?? []).map(PatternCommand.init)
     for entry in effects { for digit in 0..<16 where (digit * 16 & entry.mask) == entry.value { effectLookup[entry.command * 16 + digit] = entry } }
     for entry in volumes { volumeLookup[entry.command] = entry }
   }
+  func schema(kind:String,native:String?=nil)->PatternEffectSchema? {nativeSchemas.first{$0.kind==kind && $0.native==native} ?? PatternEffectSchema.existing.first{$0.kind==kind}}
   func entry(command: Int, parameter: Int, volume: Bool = false) -> PatternCommand? {
     volume ? volumeLookup[command] : effectLookup[command * 16 + (parameter >> 4)]
   }
@@ -67,7 +77,11 @@ extension PatternView {
     if column<=2 && !precise.isEmpty {return "\(precise.count) precise note events · Return or double-click to edit fractional timing"}
     if column>=3 {
       guard let fx=model.nativeCommand(cursorRow,cursorChannel,effectColumn) else{return "FX \(effectColumn+1) · all effects supported · ? finds effects · Return edits"}
-      if fx.kind != "tracker" {return fx.description}
+      if fx.kind != "tracker",let schema=model.commands.schema(kind:fx.kind,native:fx.native) {
+        let fields=schema.inlineFields,field=fields.isEmpty ? nil : fields[min(selectedParameterIndex,fields.count-1)]
+        if fx.native=="scratch" {let id=(fx.parameters["gesture"] as? NSNumber)?.intValue ?? 0,name=model.scratchGestures.first{$0["id"] as? Int==id}?["name"] as? String ?? "Missing phrase";return "SK \(id) · \(name) · "+(column%2==0 ? (field?.help(model:model,timing:timingUnit,rateMode:nil) ?? "")+" · ":"")+"Return edits values inline · Double-click SK edits motion and fader"}
+        return schema.name+(column%2==0 ? " · "+(field?.help(model:model,timing:timingUnit,rateMode:fx.parameters["rateMode"] as? String) ?? "") : "")+" · Return or click edits inline · Left/Right selects a parameter · timing: "+timingUnit.title.lowercased()
+      }
       let entry=model.commands.entry(command:fx.effect,parameter:fx.parameter)
       return entry.map {"\($0.name) · \($0.hint)"} ?? "Tracker effect · ? finds effects"
     }
@@ -87,6 +101,7 @@ final class PatternCommandPicker: NSView, NSTableViewDataSource, NSTableViewDele
   let parameter = NSTextField(string: "00"), valueLabel = Theme.label("Parameter (hex)", size: 12)
   let target = Theme.label("", size: 12), detail = Theme.label("", size: 12), status = Theme.label("", size: 12, color: Theme.muted)
   var onContext: (() -> (PatternModel, Int, Int, Int))?
+  var onNativeSelection: ((PatternCommand,PatternModel,Int,Int,Int)->Void)?
   var onNativeCommand: ((String, PatternModel, Int, Int, Int) -> Void)?
   var onDismiss: (() -> Void)?
   private(set) var capturedColumn=3
@@ -134,9 +149,9 @@ final class PatternCommandPicker: NSView, NSTableViewDataSource, NSTableViewDele
   func reload(selectCurrent: Bool) {
     valueLabel.stringValue = isVolume ? "Value (decimal)" : "Parameter (hex)"
     let query = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    let source = isVolume ? captured.commands.volumes : captured.commands.effects + PatternCommand.native
+    let source = isVolume ? captured.commands.volumes : captured.commands.effects + captured.commands.native
     let words=query.split(whereSeparator:{$0.isWhitespace}).map(String.init)
-    filtered = source.filter { entry in words.allSatisfy { "\(entry.displayCode) \(entry.label) \(entry.name) \(entry.family) \(entry.hint)".localizedCaseInsensitiveContains($0) } }
+    filtered = source.filter { entry in words.allSatisfy { "\(entry.displayCode) \(entry.label) \(entry.name) \(entry.family) \(entry.hint) \(entry.equivalents)".localizedCaseInsensitiveContains($0) } }
     suppressSelection = true; table.reloadData(); table.deselectAll(nil)
     let cell = captured.drawCell(row, channel)
     let fx=captured.nativeCommand(row,channel,max(0,(capturedColumn-3)/2))
@@ -182,7 +197,11 @@ final class PatternCommandPicker: NSView, NSTableViewDataSource, NSTableViewDele
   }
   func apply() {
     guard !pending, captured.editable, filtered.indices.contains(table.selectedRow), let onRequest else { return }
-    if let kind=filtered[table.selectedRow].nativeKind {onNativeCommand?(kind,captured,row,channel,capturedColumn);return}
+    if let kind=filtered[table.selectedRow].nativeKind {
+      if let onNativeSelection {onNativeSelection(filtered[table.selectedRow],captured,row,channel,capturedColumn)}
+      else {onNativeCommand?(kind,captured,row,channel,capturedColumn)}
+      return
+    }
     let note = captured.drawCell(row, channel).note
     guard (note != 251 && note != 252) || (!isVolume && capturedColumn>=5) else { status.stringValue = "This parameter-control note owns its volume and FX 1 data. Choose another FX column or an ordinary note cell."; return }
     let entry = filtered[table.selectedRow]

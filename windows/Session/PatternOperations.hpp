@@ -8,10 +8,11 @@ struct PatternHostHooks {
   std::function<Json(size_t)> parameters; // Current native-unit parameter catalog.
   std::function<bool(size_t,uint32_t)> absoluteAutomation;
   std::function<void(const Tracker::NativeSong &)> validateCandidate;
+  std::function<std::function<void()>(const Tracker::NativeSong &)> prepareScratchPublication;
 };
 // Serial document owner only. The dispatcher owns expectedRevision. Every
-// musical mutation uses shared editNative validation/history and stops playback
-// only after complete validation. Omitted replacement collections are retained.
+// musical mutation uses shared validation/history. Pattern edits stop only
+// after validation; scratch-bank edits publish prepared snapshots while live.
 class PatternOperations {
   Tracker::Document &document_;
   std::function<void()> stop_;

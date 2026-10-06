@@ -5,19 +5,29 @@ extension AppController {
     let menu=NSMenu(title:"Pattern");menu.autoenablesItems=false
     let location=NSMenuItem(title:"Row \(patternView.cursorRow) · Channel \(channel+1)",action:nil,keyEquivalent:"");location.isEnabled=false;menu.addItem(location)
     menu.addItem(ContextAction("Find effect…",key:"?",enabled:!busy){[weak self] in self?.showPatternCommands()})
+    menu.addItem(ContextAction("Edit all effect parameters inline…",enabled:!busy && patternView.column>=3 && !patternView.parameterFields().isEmpty){[weak self] in _=self?.patternView.beginNudgeEdit(allParameters:true)})
     menu.addItem(ContextAction("Edit parameter / pitch effect…",key:"e",modifiers:[.command,.shift],enabled:!busy){[weak self] in self?.showPatternPerformance()})
     menu.addItem(ContextAction("Precise notes & retriggers…",key:"n",modifiers:[.command,.shift],enabled:!busy){[weak self] in self?.showPreciseNotes()})
+    menu.addItem(ContextAction("Scratch phrases…",enabled:!busy){[weak self] in self?.showScratchGestures()})
     let columns=NSMenu(title:"FX columns");columns.autoenablesItems=false
     for count in 1...8 {
       let item=ContextAction(count==0 ? "None" : "\(count) columns",enabled:!busy){[weak self] in self?.setEffectColumns(channel:channel,count:count)}
       item.state=model.effectCount(channel)==count ? .on : .off;columns.addItem(item)
     }
     ContextActions.appendMenu(columns,to:menu)
+    let timing=NSMenu(title:"Effect timing units");timing.autoenablesItems=false
+    for unit in PatternTimingUnit.allCases {
+      let item=ContextAction(unit.title,enabled:patternView.nudgeEditor==nil){[weak self] in self?.patternView.setTimingUnit(unit)}
+      item.state=patternView.timingUnit==unit ? .on : .off;timing.addItem(item)
+    }
+    ContextActions.appendMenu(timing,to:menu)
     menu.addItem(.separator())
     menu.addItem(ContextAction("Cut selection",key:"x",modifiers:.command,enabled:!busy){[weak self] in self?.patternView.cut(nil)})
     menu.addItem(ContextAction("Use instrument from cursor",key:"\r",enabled:!busy){[weak self] in self?.patternView.useCursorInstrument(nil)})
     menu.addItem(ContextAction("Copy selection",key:"c",modifiers:.command){[weak self] in self?.patternView.copy(nil)})
     menu.addItem(ContextAction("Paste",key:"v",modifiers:.command,enabled:!busy){[weak self] in self?.patternView.paste(nil)})
+    menu.addItem(ContextAction("Clear field under cursor",key:".",enabled:!busy){[weak self] in self?.patternView.clearCursorField(nil)})
+    menu.addItem(ContextAction("Delete channel row",key:"\u{7f}",modifiers:.shift,enabled:!busy){[weak self] in self?.patternView.deleteChannelRow(nil)})
     menu.addItem(ContextAction("Mute / unmute channel"){[weak self] in self?.patternView.onMute?(channel)})
     if let commands=NSApp.mainMenu?.items.first(where:{$0.title=="Pattern"})?.submenu?.copy() as? NSMenu {ContextActions.appendMenu(commands,to:menu,title:"Pattern tools")}
     if let playback=NSApp.mainMenu?.items.first(where:{$0.title=="Playback"})?.submenu?.copy() as? NSMenu {ContextActions.appendMenu(playback,to:menu)}

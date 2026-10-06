@@ -19,6 +19,7 @@
 #include "tuningbase.h"
 #ifdef OPENMPT_EDITOR_CORE
 #include "NativeReverseLoop.h"
+#include "NativePatternVoice.h"
 #endif
 
 #include <bitset>
@@ -89,6 +90,28 @@ struct ModChannel
 #ifdef OPENMPT_EDITOR_CORE
 	NativeReverseLoopState nativeReverseLoop;
 	bool nativeNudgeInterpolating = false; // Retain fractional resampling after a record push.
+	struct NativeScratchFilter {
+		std::array<double,2> previous{}, output{};
+		double wet=0;
+	} nativeScratchFilter;
+	// BS/BL belongs to this sample voice. NNA copies retain the old curve;
+	// a new onset clears it without changing tracker or MIDI effect memory.
+	struct NativeSamplePitch
+	{
+		double from = 0, to = 0, elapsed = 0, duration = 0;
+		bool active = false;
+		double Value(double offset = 0) const noexcept
+		{
+			if(duration <= 0 || elapsed + offset >= duration) return to;
+			if(elapsed + offset <= 0) return from;
+			return from + (to - from) * ((elapsed + offset) / duration);
+		}
+		void Advance(double units) noexcept { elapsed = std::min(duration, elapsed + units); }
+		void Freeze() noexcept { from = to = Value(); elapsed = duration = 0; }
+	} nativeSamplePitch;
+	NativePatternVoice nativePatternVoice;
+	ModCommand nativeDelayedNote{};
+	bool nativeHasDelayedNote = false;
 	uint64 nativeNoteGeneration = 0; // Accepted onsets for native modulation envelopes.
 	bool HasNativeReverseLoop() const noexcept;
 	void ExitNativeReverseLoop() noexcept;

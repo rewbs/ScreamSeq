@@ -22,21 +22,30 @@ with tempfile.TemporaryDirectory(prefix='screamseq-nudge-') as directory:
             assert 'nudge-forward' in description['kinds']
             write('pattern.effect.set',pattern=0,row=1,channel=0,column=0,command={'kind':'note-cut','offset':32768})
             original=read();assert len(original)==1
-            effect={'pattern':0,'row':2,'channel':0,'column':0,'command':{'kind':'nudge-reverse','value':.75,'offset':12345,'duration':70001}}
+            effect={'pattern':0,'row':2,'channel':0,'column':0,'command':{'kind':'nudge-reverse','value':.75,'offset':12345,'durationBeats':.750123456}}
             assert not write('pattern.effect.set',**effect,dryRun=True)['changed'] and read()==original
             write('pattern.effect.set',**effect);saved=read()
-            assert len(saved)==2 and saved[0]==original[0] and saved[1]['value']==.75 and saved[1]['duration']==70001
+            assert len(saved)==2 and saved[0]==original[0] and saved[1]['value']==.75 and saved[1]['durationBeats']==.750123456 and 'duration' not in saved[1]
             assert not write('pattern.effect.set',**effect)['changed']
             write('history.undo',domain='document');assert read()==original
             write('history.redo',domain='document');assert read()==saved
+            for invalid in ({'durationBeats':0},{'durationBeats':-.1},{'durationBeats':True},{'durationBeats':1000000},{'duration':65536}):
+                before=c.call('document.get')['revision']
+                try: write('pattern.effect.set',**{**effect,'command':{**effect['command'],**invalid}})
+                except APIError: pass
+                else: raise AssertionError(f'Invalid beat duration accepted: {invalid}')
+                assert c.call('document.get')['revision']==before and read()==saved
+            write('pattern.effect.set',pattern=0,row=4,channel=0,column=0,command={'kind':'nudge-forward','value':.5})
+            assert read()[-1]['durationBeats']==1 and 'duration' not in read()[-1]
+            write('history.undo',domain='document');assert read()==saved
             # All eight columns accept both commands. Direction survives copy/paste.
             write('pattern.effects.set',pattern=0,columns=[{'channel':0,'count':8}])
-            write('pattern.effect.set',pattern=0,row=3,channel=0,column=7,command={'kind':'nudge-forward','value':.625,'duration':65536})
-            effect=read()[-1];assert effect['column']==7 and effect['kind']=='nudge-forward'
+            write('pattern.effect.set',pattern=0,row=3,channel=0,column=7,command={'kind':'nudge-forward','value':.625,'durationBeats':.375})
+            effect=read()[-1];assert effect['column']==7 and effect['kind']=='nudge-forward' and effect['durationBeats']==.375
             paste={k:v for k,v in effect.items() if k not in ('track',)};paste['position']=0
             write('pattern.paste',pattern=0,startRow=5,startChannel=0,rows=1,channels=1,cells=[[0]*6],effects=[paste],bindings=[])
-            assert any(e['position']==5*65536 and e['column']==7 and e['kind']=='nudge-forward' for e in read())
-            print('PASS real socket: NF/NR discovery, cell edit, unrelated preservation, dry-run/no-op, Undo/Redo, eight columns and clipboard')
+            assert any(e['position']==5*65536 and e['column']==7 and e['kind']=='nudge-forward' and e['durationBeats']==.375 for e in read())
+            print('PASS real socket: NF/NR discovery, cell edit, unrelated preservation, dry-run/no-op, Undo/Redo, one-beat default, validation, eight columns and beat-preserving clipboard')
         except Exception:
             log.flush();log.seek(0);print(log.read(),file=sys.stderr);raise
         finally:

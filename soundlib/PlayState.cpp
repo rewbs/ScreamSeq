@@ -64,6 +64,10 @@ void PlayState::UpdatePPQ(bool patternTransition) noexcept
 double PlayState::PPQPos() const noexcept
 {
 	const ROWINDEX rpb = m_nCurrentRowsPerBeat ? m_nCurrentRowsPerBeat : DEFAULT_ROWS_PER_BEAT;
+#if defined(OPENMPT_EDITOR_CORE)
+	if(nativeClockActive && TicksOnRow())
+		return m_ppqPosBeat + m_ppqPosFract + (m_nBufferCount ? (NativeRowPosition(1) - m_nRow - double(m_nTickCount) / TicksOnRow()) / rpb : 0);
+#endif
 	return m_ppqPosBeat + m_ppqPosFract + static_cast<double>(m_nSamplesPerTick - m_nBufferCount) / (m_nSamplesPerTick * rpb * TicksOnRow());
 }
 

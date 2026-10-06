@@ -115,6 +115,46 @@ class GraphEditorTests(unittest.TestCase):
         self.write('history.undo', domain='document')
         self.assertEqual(self.read('graph.get')['library'][0], changed)
 
+    def test_audio_socket_adds_and_explicit_handle_rewires_one_branch(self):
+        graph, plugin = self.setup_graph()
+        other = self.write('graph.node.add', graph=graph, kind='plugin', slot=0)['node']
+        definition = self.read('graph.get', includeState=False)['library'][0]
+        source = next(n['id'] for n in definition['nodes'] if n['kind'] == 'input')
+        target = next(n['id'] for n in definition['nodes'] if n['kind'] == 'output')
+        positions = {source:(0,100), plugin:(240,0), other:(240,220), target:(480,100)}
+        for node in definition['nodes']:
+            node['x'], node['y'] = positions[node['id']]
+        definition['audio'] = [dict(source=source,target=plugin,output=0,input=0,gain=1),
+                               dict(source=plugin,target=target,output=0,input=0,gain=.375)]
+        self.write('graph.update', definition=definition)
+        self.command(441); self.command(439)
+        def socket(node, output):
+            return next(s for s in self.state()['sockets'] if s['node']==node and s['output']==output and not s['modulation'] and s['port']==0)
+        def drag(start, end):
+            self.mouse(0x201,start,1); self.mouse(0x200,end,1); self.mouse(0x202,end)
+        drag(socket(source,True),socket(other,False))
+        drag(socket(target,False),socket(other,True))
+        self.assertTrue(self.state()['dirty'])
+        self.command(440)
+        branched = self.read('graph.get',includeState=False)['library'][0]
+        self.assertEqual(branched['audio'][:2],definition['audio'])
+        self.assertEqual(len(branched['audio']),4)
+        self.assertEqual(sum(e['source']==source for e in branched['audio']),2)
+        self.assertEqual(sum(e['target']==target for e in branched['audio']),2)
+        selected = next(w for w in self.state()['wires'] if not w['modulation'] and w['index']==1)
+        self.mouse(0x201,selected,1); self.mouse(0x202,selected)
+        drag(selected['targetHandle'],socket(other,False))
+        self.command(440)
+        edited = self.read('graph.get',includeState=False)['library'][0]
+        expected = [dict(e) for e in branched['audio']]; expected[1]['target']=other
+        self.assertEqual(edited['audio'],expected)
+        self.write('history.undo',domain='document')
+        self.assertEqual(self.read('graph.get',includeState=False)['library'][0],branched)
+        self.write('history.redo',domain='document')
+        path=self.folder/'branched-recipe.screamseq';self.write('document.save',path=str(path))
+        self.write('document.open',path=str(path),discard=True)
+        self.assertEqual(self.read('graph.get',includeState=False)['library'][0],edited)
+
     def test_canvas_drag_cancel_stale_draft_and_keyboard_history(self):
         graph, plugin = self.setup_graph()
         original = self.read('graph.get')['library'][0]

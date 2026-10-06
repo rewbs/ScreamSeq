@@ -19,6 +19,9 @@ private final class PatternRulerAccessibility: NSAccessibilityElement {
 final class PatternView: MTKView, MTKViewDelegate {
   var model = PatternModel([:]) {
     didSet {
+      model.rebuildEffectLayout()
+      if let draft=inlineDraftLayout {model.includeEffectFields(channel:draft.channel,fx:draft.fx,fields:draft.fields)}
+      rebuildInlineText()
       if oldValue.revisionToken != model.revisionToken { clearEffectPrefix() }
       if oldValue.pattern != model.pattern || oldValue.rows != model.rows || oldValue.channels != model.channels
         || oldValue.revisionToken.split(separator: ":").first != model.revisionToken.split(separator: ":").first
@@ -57,7 +60,21 @@ final class PatternView: MTKView, MTKViewDelegate {
       }
     }
   }
-  var cursorRow = 0, cursorChannel = 0, column = 0, step = 1
+  var cursorRow = 0, cursorChannel = 0, step = 1
+  var column = 0 {didSet {if oldValue != column {parameterIndex=0}}}
+  var parameterIndex=0
+  var timingUnit=PatternTimingUnit(rawValue:UserDefaults.standard.string(forKey:"patternTimingUnit") ?? "") ?? .beats {didSet {rebuildInlineText()}}
+  private var inlineText=[Int:[String]]()
+  private func rebuildInlineText() {
+    inlineText=[:]
+    for (key,command) in model.performanceCommands {
+      if let schema=model.commands.schema(kind:command.kind,native:command.native) {inlineText[key]=schema.inlineFields.map{$0.text($0.value(command),model:model,timing:timingUnit,rateMode:command.parameters["rateMode"] as? String)}}
+    }
+  }
+  func setTimingUnit(_ unit:PatternTimingUnit) {
+    guard nudgeEditor == nil else {onMessage?("Save or cancel the current value before changing timing units.");return}
+    timingUnit=unit;UserDefaults.standard.set(unit.rawValue,forKey:"patternTimingUnit");onCursor?()
+  }
   var octave = 4 { didSet { if octave != oldValue { onInputChanged?() } } }
   var instrument = 1 { didSet { if instrument != oldValue { onInputChanged?() } } }
   var onInputChanged:(()->Void)?
@@ -69,7 +86,7 @@ final class PatternView: MTKView, MTKViewDelegate {
   }
   var contextToken: String {
     let region = automationSelection
-    return navigation.token + ":" + ["startRow","endRow","startChannel","endChannel"].map { String(region[$0] ?? 0) }.joined(separator: ":") + ":\(instrument):\(octave):\(step)"
+    return navigation.token + ":" + ["startRow","endRow","startChannel","endChannel"].map { String(region[$0] ?? 0) }.joined(separator: ":") + ":\(instrument):\(octave):\(step):\(parameterFields().indices.contains(selectedParameterIndex) && column>=4 && column%2==0 ? parameterFields()[selectedParameterIndex].key : "")"
   }
   func navigate(_ state: EditorNavigation, clearSelection: Bool) {
     if clearSelection { selectionStart = nil; selectionEnd = nil }
@@ -92,6 +109,7 @@ final class PatternView: MTKView, MTKViewDelegate {
   var onClearPreciseNotes: ((Int,Int)->Void)?
   var onNativeEffect: (() -> Void)?
   var nudgeEditor: PatternNudgeEditor?
+  var inlineDraftLayout:(channel:Int,fx:Int,fields:[PatternEffectField])?
   var onNudgeRequest: (([String:Any], @escaping ([String:Any])->Void)->Void)?
   var onTrackerEffect: ((Int,Int,Int,Int,Int)->Void)?
   // Preserve rapid typing while an FX transaction refreshes the displayed model,
@@ -128,6 +146,7 @@ final class PatternView: MTKView, MTKViewDelegate {
     }
   }
   var onTypedNativeEffect: ((String) -> Void)?
+  var onScratchPhrase:(()->Void)?
   private(set) var effectPrefix = ""
   private var effectPrefixTarget: EditorNavigation?
   private func clearEffectPrefix() { if !effectPrefix.isEmpty {onMessage?("")};effectPrefix="";effectPrefixTarget=nil }
@@ -141,11 +160,12 @@ final class PatternView: MTKView, MTKViewDelegate {
     if !effectPrefix.isEmpty && effectPrefixTarget != navigation {clearEffectPrefix()}
     if event.keyCode==53 {clearEffectPrefix();return true}
     let key=(event.charactersIgnoringModifiers ?? "").uppercased()
-    let entries=model.commands.effects + PatternCommand.native
+    let entries=model.commands.effects + model.commands.native
     if !effectPrefix.isEmpty {
       if let entry=entries.first(where:{$0.displayCode==effectPrefix+key}) {
         clearEffectPrefix()
-        if let kind=entry.nativeKind {if !beginNudgeEdit(kind:kind) {onTypedNativeEffect?(kind)}}
+        if entry.nativeName=="scratch",model.scratchGestures.isEmpty {onScratchPhrase?();return true}
+        if let kind=entry.nativeKind {if !beginNudgeEdit(kind:kind,native:entry.nativeName) {onTypedNativeEffect?(kind)}}
         else {let old=model.nativeCommand(cursorRow,cursorChannel,effectColumn);onTrackerEffect?(cursorRow,cursorChannel,effectColumn,entry.command,((old?.kind=="tracker" ? old!.parameter : 0) & ~entry.mask) | entry.value);column += 1;revealCursor()}
         return true
       }
@@ -167,6 +187,7 @@ final class PatternView: MTKView, MTKViewDelegate {
     if !selected(r,c) {selectionStart=nil;selectionEnd=nil;cursorRow=r;cursorChannel=c
       let x=Float(p.x)-channelX(c)
       column=fieldAt(x,c)
+      parameterIndex=parameterAt(x,c,r,effectColumn)
     };onCursor?();onContextMenu?(event)
   }
   var onClearNativeEffect: ((Int,Int,Int) -> Void)?
@@ -246,6 +267,7 @@ final class PatternView: MTKView, MTKViewDelegate {
   var rowHeight: Float = KeyboardSettings.rowHeight
   private var horizontalInset: Float = 0
   private var clipLeft: Float = 0
+  private var clipRight:Float = .greatestFiniteMagnitude
   func channelX(_ channel: Int) -> Float { gutterWidth + model.channelOffset(channel) - model.channelOffset(firstChannel) - horizontalInset }
   func visibleChannelCount() -> Int {
     var last=firstChannel
@@ -258,9 +280,41 @@ final class PatternView: MTKView, MTKViewDelegate {
     horizontalInset=max(0,min(horizontalInset,model.channelWidth(firstChannel)-1))
   }
   var effectColumn:Int {max(0,(column-3)/2)}
-  func fieldOffset(_ column:Int) -> Float { column < 3 ? [7,44,72][max(0,column)] : 109 + Float((column-3)/2)*PatternModel.effectWidth + (column%2==0 ? 25 : 0) }
-  func fieldAt(_ x:Float,_ channel:Int)->Int {x<43 ? 0 : x<70 ? 1 : x<104 ? 2 : min(model.lastField(channel),3+Int((x-104)/PatternModel.effectWidth)*2+((x-104).truncatingRemainder(dividingBy:PatternModel.effectWidth)>=28 ? 1 : 0))}
-  func fieldWidth(_ column:Int) -> Float { column < 3 ? [32,24,28][max(0,column)] : column%2==0 ? PatternModel.effectWidth-31 : 23 }
+  func parameterFields(row:Int?=nil,channel:Int?=nil,fx:Int?=nil)->[PatternEffectField] {
+    if let editor=nudgeEditor,editor.target.row==(row ?? cursorRow),editor.target.channel==(channel ?? cursorChannel),editor.fx==(fx ?? effectColumn) {return editor.descriptors}
+    guard let command=model.nativeCommand(row ?? cursorRow,channel ?? cursorChannel,fx ?? effectColumn) else{return []}
+    return model.commands.schema(kind:command.kind,native:command.native)?.inlineFields ?? []
+  }
+  var selectedParameterIndex:Int {max(0,min(parameterIndex,parameterFields().count-1))}
+  func fieldOffset(_ column:Int,channel:Int?=nil,row:Int?=nil,slot:Int?=nil)->Float {
+    if column<3 {return [7,44,72][max(0,column)]}
+    let ch=channel ?? cursorChannel,fx=max(0,(column-3)/2)
+    return model.effectOffset(ch,fx)+(column%2==1 ? 5 : model.effectLayout(ch,fx).slotOffset(slot ?? (channel==nil ? selectedParameterIndex : 0))+3)
+  }
+  func fieldAt(_ x:Float,_ channel:Int)->Int {
+    if x<104 {return x<43 ? 0 : x<70 ? 1 : 2}
+    var fx=0
+    while fx<model.effectCount(channel)-1 && x>=model.effectOffset(channel,fx+1) {fx += 1}
+    return 3+fx*2+(x-model.effectOffset(channel,fx)>=30 ? 1 : 0)
+  }
+  func parameterAt(_ x:Float,_ channel:Int,_ row:Int,_ fx:Int)->Int {
+    let layout=model.effectLayout(channel,fx),count=max(1,parameterFields(row:row,channel:channel,fx:fx).count)
+    var slot=0
+    while slot<count-1 && x-model.effectOffset(channel,fx)>=layout.slotOffset(slot+1) {slot += 1}
+    return slot
+  }
+  func fieldWidth(_ column:Int,channel:Int?=nil,slot:Int?=nil)->Float {
+    if column<3 {return [32,24,28][max(0,column)]}
+    if column%2==1 {return 23}
+    let layout=model.effectLayout(channel ?? cursorChannel,max(0,(column-3)/2))
+    let index=max(0,min(slot ?? selectedParameterIndex,layout.slotWidths.count-1))
+    return layout.slotWidths[index]-6
+  }
+  func channelHeaderLabel(_ channel:Int)->String {
+    let number=Self.decimal[channel+1]
+    let name=channel<model.tracks.count ? model.tracks[channel]["name"] as? String ?? "" : ""
+    return name.isEmpty ? (model.noteTrackByChannel[channel]==nil ? "CH "+number : "N"+number) : number+" "+String(name.prefix(8)).uppercased()
+  }
   private let notes = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
   private let normal = SIMD4<Float>(0.66, 0.72, 0.79, 1), faint = SIMD4<Float>(0.22, 0.28, 0.34, 1)
   override var acceptsFirstResponder: Bool { true }
@@ -313,6 +367,8 @@ final class PatternView: MTKView, MTKViewDelegate {
   }
   required init(coder: NSCoder) { fatalError() }
   deinit { metalPresenter?.stop() }
+  var onNeedsRefresh:(()->Void)?
+  func refreshForPresentation(){if let onNeedsRefresh{onNeedsRefresh()}else{refreshRenderSnapshot()}}
   func refreshRenderSnapshot(){metalPresenter?.refreshSnapshot()}
   var qualificationFrameTrace:[PatternFrameTrace.Entry] {metalPresenter?.frameTrace?.snapshot(generation:metricsGeneration) ?? []}
   var qualificationRunLoopTrace:QualificationRunLoopTrace? {metalPresenter?.runLoopTrace}
@@ -325,6 +381,7 @@ final class PatternView: MTKView, MTKViewDelegate {
       metalLayer.presentsWithTransaction=false
       metalPresenter=PatternMetalPresenter(layer:metalLayer,frameRate:60,bufferLength:vertexBufferBytes,queue:commandQueue,pipeline:pipeline,atlas:atlas,
         snapshot:{[weak self] in self?.prepareRenderSnapshot()},
+        refreshHost:{[weak self] in self?.refreshForPresentation()},
         timing:{[weak self] value in
           guard let self,value.generation==self.metricsGeneration else{return}
           self.displayLinkCallbacks+=1;if value.starved{self.bufferStarvations+=1}
@@ -404,8 +461,8 @@ final class PatternView: MTKView, MTKViewDelegate {
     _ x: Float, _ y: Float, _ w: Float, _ h: Float, _ color: SIMD4<Float>,
     _ uv0: SIMD2<Float> = SIMD2(-1, -1), _ uv1: SIMD2<Float> = SIMD2(-1, -1)
   ) {
-    guard w>0,x+w>clipLeft,x<Float(bounds.width) else{return}
-    let left=max(x,clipLeft),right=min(x+w,Float(bounds.width))
+    guard w>0,x+w>clipLeft,x<min(Float(bounds.width),clipRight) else{return}
+    let left=max(x,clipLeft),right=min(x+w,min(Float(bounds.width),clipRight))
     let u0=uv0.x < 0 ? uv0.x : uv0.x+(uv1.x-uv0.x)*(left-x)/w
     let u1=uv1.x < 0 ? uv1.x : uv0.x+(uv1.x-uv0.x)*(right-x)/w
     let x=left,w=right-left,uv0=SIMD2(u0,uv0.y),uv1=SIMD2(u1,uv1.y)
@@ -461,15 +518,15 @@ final class PatternView: MTKView, MTKViewDelegate {
     for v in 0..<max(0, visibleChannels) {
       let ch = firstChannel + v
       let x = channelX(ch)
+      clipRight=x+model.effectOffset(ch,0)-4
       text(
-        Self.decimal[ch + 1] + "  " + (ch < model.tracks.count && !(model.tracks[ch]["name"] as? String ?? "").isEmpty ? String((model.tracks[ch]["name"] as? String ?? "").prefix(8)).uppercased() : (model.noteTrackByChannel[ch] == nil ? "CHANNEL" : "NOTE")), x + 9, headerHeight - 28,
+        channelHeaderLabel(ch), x + 9, headerHeight - 28,
         muted.contains(ch) ? SIMD4(0.38, 0.41, 0.45, 1) : SIMD4(0.66, 0.73, 0.79, 1))
+      clipRight = .greatestFiniteMagnitude
       text("+FX",x+model.channelWidth(ch)-30,headerHeight-28,SIMD4(0.43,0.88,0.76,1))
-      quad(x, 0, 1, height, SIMD4(0.16, 0.19, 0.23, 1))
       for effect in 0..<model.effectCount(ch) {
-        let fx=x+104+Float(effect)*PatternModel.effectWidth
+        let fx=x+model.effectOffset(ch,effect)
         text("FX \(effect+1)",fx+7,headerHeight-28,SIMD4(0.59,0.63,0.78,1))
-        quad(fx,headerHeight,1,height-headerHeight,SIMD4(0.13,0.16,0.21,1))
       }
     }
     for v in 0..<visibleRows {
@@ -526,14 +583,30 @@ final class PatternView: MTKView, MTKViewDelegate {
         for fx in 0..<model.effectCount(ch) {
           let command=model.nativeCommand(r,ch,fx)
           let entry=command.flatMap {model.commands.entry(command:$0.effect,parameter:$0.parameter)}
-          let draft=nudgeEditor.flatMap{editor in editor.target.pattern==model.pattern && editor.target.row==r && editor.target.channel==ch && editor.fx==fx ? editor.kind : nil}
-          let code=draft.map{$0=="nudge-forward" ? "NF" : "NR"} ?? command.map {$0.kind=="tracker" ? entry?.displayCode ?? "??" : $0.code} ?? ".."
-          let value=command?.valueText ?? "...."
+          let draft=nudgeEditor.flatMap{editor in editor.target.pattern==model.pattern && editor.target.row==r && editor.target.channel==ch && editor.fx==fx ? model.commands.schema(kind:editor.kind,native:editor.native)?.code : nil}
+          let code=draft ?? command.map {$0.kind=="tracker" ? entry?.displayCode ?? "??" : model.commands.schema(kind:$0.kind,native:$0.native)?.code ?? $0.code} ?? ".."
+          let values=inlineText[(r*model.channels+ch)*8+fx] ?? [command.map{$0.kind=="tracker" ? String(format:"%02X",$0.parameter) : $0.valueText} ?? ".."]
           let color=command == nil ? faint : command?.kind=="tracker" ? entry?.rgba ?? SIMD4(0.77,0.57,0.86,1) : SIMD4(0.69,0.66,0.98,1)
-          text(effectPrefixTarget==navigation && !effectPrefix.isEmpty && r==cursorRow && ch==cursorChannel && column==3+fx*2 ? effectPrefix+"_" : code,x+fieldOffset(3+fx*2),y+1,color)
-          text(value,x+fieldOffset(4+fx*2),y+1,color)
+          text(effectPrefixTarget==navigation && !effectPrefix.isEmpty && r==cursorRow && ch==cursorChannel && column==3+fx*2 ? effectPrefix+"_" : code,x+fieldOffset(3+fx*2,channel:ch),y+1,color)
+          for (slot,value) in values.enumerated() {
+            let layout=model.effectLayout(ch,fx),start=x+fieldOffset(4+fx*2,channel:ch,slot:slot)
+            clipRight=start+(slot<layout.slotWidths.count ? layout.slotWidths[slot]-6 : 38)
+            text(value,start,y+1,color);clipRight = .greatestFiniteMagnitude
+          }
         }
       }
+    }
+    // Backgrounds and selection span complete rows. Draw structural rails last
+    // so those fills never erase the distinction between channels and FX slots.
+    for v in 0..<max(0,visibleChannels) {
+      let ch=firstChannel+v,x=channelX(ch)
+      for effect in 0..<model.effectCount(ch) {
+        let origin=x+model.effectOffset(ch,effect),layout=model.effectLayout(ch,effect)
+        quad(origin,headerHeight,1,max(0,height-headerHeight),SIMD4(0.19,0.23,0.29,1))
+        for slot in 1..<layout.slotWidths.count {quad(origin+layout.slotOffset(slot),headerHeight,1,max(0,height-headerHeight),SIMD4(0.12,0.16,0.21,1))}
+      }
+      quad(x,0,2,height,SIMD4(0.34,0.40,0.48,1))
+      if v==visibleChannels-1 {quad(x+model.channelWidth(ch),0,2,height,SIMD4(0.34,0.40,0.48,1))}
     }
     clipLeft=0
   }
@@ -608,7 +681,8 @@ final class PatternView: MTKView, MTKViewDelegate {
     cursorChannel = c
     let x = Float(p.x)-channelX(c)
     column=fieldAt(x,c)
-    if event.clickCount >= 2 && beginNudgeEdit() {return}
+    parameterIndex=parameterAt(x,c,r,effectColumn)
+    if column>=4 && column%2==0 && beginNudgeEdit() {return}
     if event.clickCount >= 2 {if column>=3 && model.nativeCommand(cursorRow,cursorChannel,effectColumn)?.kind != "tracker" && model.nativeCommand(cursorRow,cursorChannel,effectColumn) != nil {onNativeEffect?()} else if column<=2 {onPreciseNotes?()} else {onEffectPicker?()}}
     selectionStart = (r, c)
     selectionEnd = nil
@@ -679,6 +753,15 @@ final class PatternView: MTKView, MTKViewDelegate {
     // Busy is short-lived: keep typed and navigation keys in order rather than
     // dropping them. Transport and modified shortcuts are never queued.
     if typing, event.keyCode != KeyboardSettings.transportKey, waitingForDocument { deferKey(event); return }
+    // These edits are cursor-local even with a rectangular selection or an
+    // unfinished two-character FX code. Do not let note mapping consume '.'.
+    let editModifiers=event.modifierFlags.intersection([.command,.control,.option,.shift])
+    if event.characters == ".", editModifiers.isDisjoint(with:[.command,.control,.option]) {
+      clearCursorField(nil);return
+    }
+    if (event.keyCode==51 || event.keyCode==117), editModifiers == .shift {
+      deleteChannelRow(nil);return
+    }
     if canEdit(), typeEffectCode(event) { return }
     // Moving away can commit a pending one-letter tracker command. Preserve
     // that navigation key until the resulting transaction has completed too.
@@ -735,14 +818,17 @@ final class PatternView: MTKView, MTKViewDelegate {
     case 126: cursorRow = max(0, cursorRow - 1)
     case 125: cursorRow = min(model.rows - 1, cursorRow + 1)
     case 123:
-      if column > 0 {
+      if column>=4 && column%2==0 && selectedParameterIndex>0 {parameterIndex=selectedParameterIndex-1}
+      else if column > 0 {
         column -= 1
+        if column>=4 && column%2==0 {parameterIndex=max(0,parameterFields().count-1)}
       } else {
         cursorChannel = max(0, cursorChannel - 1)
         column = model.lastField(cursorChannel)
       }
     case 124:
-      if column < model.lastField(cursorChannel) {
+      if column>=4 && column%2==0 && selectedParameterIndex+1<parameterFields().count {parameterIndex=selectedParameterIndex+1}
+      else if column < model.lastField(cursorChannel) {
         column += 1
       } else {
         cursorChannel = min(model.channels - 1, cursorChannel + 1)
@@ -770,10 +856,10 @@ final class PatternView: MTKView, MTKViewDelegate {
       if column<=2 && (event.keyCode==36 || (!model.notes(cursorRow,cursorChannel).isEmpty && (KeyboardSettings.note(for:ch) != nil || Int(ch,radix:16) != nil))) {onPreciseNotes?();return}
       if column >= 3 {
         let command=model.nativeCommand(cursorRow,cursorChannel,effectColumn)
-        if event.keyCode==36 {if beginNudgeEdit() {return};if let command,command.kind != "tracker" {onNativeEffect?()} else {onEffectPicker?()};return}
+        if event.keyCode==36 || event.keyCode==76 {if beginNudgeEdit() {return};if let command,command.kind != "tracker" {onNativeEffect?()} else {onEffectPicker?()};return}
         if column%2==1 {
           if let index=model.effectLetters.firstIndex(where:{$0.lowercased()==ch && $0 != "?" && $0 != "."}) {onTrackerEffect?(cursorRow,cursorChannel,effectColumn,index,command?.kind=="tracker" ? command!.parameter : 0)}
-        } else if command?.kind.hasPrefix("nudge-")==true,Int(ch) != nil || ch=="." {
+        } else if let command,command.kind != "tracker",ch.count==1 && (ch.first!.isLetter || ch.first!.isNumber || ch=="-" || ch=="+") {
           _=beginNudgeEdit(replacing:ch);return
         } else if let hex=Int(ch,radix:16) {
           if let command,command.kind != "tracker" {onNativeEffect?();return}
@@ -895,6 +981,61 @@ final class PatternView: MTKView, MTKViewDelegate {
       "startChannel": 0, "channelCount": model.channels, "amount": 1, "allowDataLoss": !insert,
       "expectedRevision": commandRevision?() ?? model.revisionToken])
   }
+  @objc func clearCursorField(_ sender:Any?) {
+    guard canEdit(),model.editable,cursorRow>=0,cursorRow<model.rows,cursorChannel>=0,cursorChannel<model.channels else{return}
+    clearEffectPrefix()
+    if column<3 {
+      onRowShift?(["operation":"clear","scope":"selection","pattern":model.pattern,
+        "startRow":cursorRow,"rowCount":1,"startChannel":cursorChannel,"channelCount":1,
+        "fields":[["note","instrument","volume"][column]],"expectedRevision":commandRevision?() ?? model.revisionToken])
+      return
+    }
+    guard let old=model.nativeCommand(cursorRow,cursorChannel,effectColumn),let onNudgeRequest else{return}
+    var command:Any=NSNull(),message="Command cleared · Undo restores it"
+    if column%2==0 {
+      var reset:[String:Any]=["kind":old.kind]
+      if old.kind=="tracker" {
+        reset["effect"]=old.effect
+        reset["parameter"]=old.parameter & (model.commands.entry(command:old.effect,parameter:old.parameter)?.mask ?? 0)
+      }
+      else {
+        reset=old.editCommand
+        let fields=parameterFields()
+        if fields.indices.contains(selectedParameterIndex) {
+          let field=fields[selectedParameterIndex]
+          let zeroAllowed=field.minimum<=0 && field.maximum>=0 && field.choices.isEmpty && field.type != "boolean" && field.type != "bool"
+          var value:Any=zeroAllowed ? (field.rowUnits || field.type=="integer" || field.type=="int" ? 0 as Any : 0.0 as Any) : field.defaultValue
+          if field.storage=="binding" {
+            let declared=model.effectBindings.compactMap{$0["id"] as? Int}
+            if let proposed=value as? Int,declared.contains(proposed) {value=proposed}
+            else {value=declared.first ?? old.binding}
+          }
+          if field.storage=="duration",let amount=value as? NSNumber {value=min(amount.intValue,(model.rows-cursorRow)*65536-old.position%65536)}
+          if field.storage=="durationBeats",let amount=value as? NSNumber {
+            value=min(amount.doubleValue,(Double(model.rows-cursorRow)-Double(old.position%65536)/65536)/Double(max(1,model.rowsPerBeat)))
+          }
+          message=field.name+" reset to "+field.text(value,model:model,timing:timingUnit)+" · Undo restores it"
+          if field.storage.hasPrefix("parameters.") {var values=reset["parameters"] as? [String:Any] ?? [:];values[String(field.storage.dropFirst(11))]=value;reset["parameters"]=values}
+          else {reset[field.storage]=value}
+        } else {onMessage?("This command has no editable parameter at the cursor.");return}
+      }
+      command=reset
+    }
+    deferringEffectKeys=true
+    onNudgeRequest(["pattern":model.pattern,"row":cursorRow,"channel":cursorChannel,"column":effectColumn,
+      "command":command,"expectedRevision":commandRevision?() ?? model.revisionToken]) {[weak self] reply in
+      if let error=reply["error"] as? [String:Any] {self?.onMessage?(error["message"] as? String ?? "Field could not be cleared")}
+      else {self?.onMessage?(message)}
+      self?.finishEffectKeys(success:reply["error"]==nil)
+    }
+  }
+  @objc func deleteChannelRow(_ sender:Any?) {
+    guard canEdit(),model.editable,cursorRow>=0,cursorRow<model.rows,cursorChannel>=0,cursorChannel<model.channels else{return}
+    clearEffectPrefix()
+    onRowShift?(["operation":"deleteRows","scope":"selection","pattern":model.pattern,
+      "startRow":cursorRow,"rowCount":model.rows-cursorRow,"startChannel":cursorChannel,"channelCount":1,
+      "amount":1,"allowDataLoss":true,"expectedRevision":commandRevision?() ?? model.revisionToken])
+  }
   private func copySelection(cutting:Bool=false) {
     guard !copying, model.rows > 0, model.channels > 0 else { return }
     let a = selectionStart ?? (cursorRow, cursorChannel)
@@ -906,17 +1047,17 @@ final class PatternView: MTKView, MTKViewDelegate {
     onMessage?("Preparing clipboard…")
     clipboardWorker.async {
       let firstRow=min(a.0,b.0),firstChannel=min(a.1,b.1),lastRow=max(a.0,b.0),lastChannel=max(a.1,b.1)
-      var cells=[[Int]](),effects=[[String:Any]](),usedBindings=Set<Int>()
+      var cells=[[Int]](),effects=[[String:Any]](),usedBindings=Set<Int>(),usedScratchGestures=Set<Int>()
       for row in firstRow...lastRow {for channel in firstChannel...lastChannel {
         cells.append(snapshot.cell(row,channel).map(Int.init))
         for fx in 0..<snapshot.effectCount(channel) {if let c=snapshot.nativeCommand(row,channel,fx),!(fx==0 && c.kind=="tracker") {
-          var command=c.dictionary;command["channel"]=channel-firstChannel;command["position"]=c.position-firstRow*65536;effects.append(command);if c.binding>0 {usedBindings.insert(c.binding)}
+          var command=c.dictionary;command["channel"]=channel-firstChannel;command["position"]=c.position-firstRow*65536;effects.append(command);if c.binding>0 {usedBindings.insert(c.binding)};if c.native=="scratch",let id=(c.parameters["gesture"] as? NSNumber)?.intValue {usedScratchGestures.insert(id)}
         }}
       }}
       let notes=snapshot.preciseNotes.values.flatMap{$0}.filter{$0.row>=firstRow && $0.row<=lastRow && $0.channel>=firstChannel && $0.channel<=lastChannel}.map { event -> [String:Int] in
         var note=event.dictionary;note["channel"]=event.channel-firstChannel;note["position"]=event.position-firstRow*65536;return note
       }
-      let payload:[String:Any]=["notes":notes,"rows":lastRow-firstRow+1,"channels":lastChannel-firstChannel+1,"cells":cells,"effects":effects,"bindings":snapshot.effectBindings.filter{usedBindings.contains($0["id"] as? Int ?? 0)}]
+      let payload:[String:Any]=["notes":notes,"rows":lastRow-firstRow+1,"channels":lastChannel-firstChannel+1,"cells":cells,"effects":effects,"bindings":snapshot.effectBindings.filter{usedBindings.contains($0["id"] as? Int ?? 0)},"scratchGestures":snapshot.scratchGestures.filter{usedScratchGestures.contains($0["id"] as? Int ?? 0)}.map{$0.filter{$0.key != "uses"}}]
       guard let data=try? JSONSerialization.data(withJSONObject:payload,options:[.sortedKeys]),data.count<=16*1024*1024,let json=String(data:data,encoding:.utf8) else {DispatchQueue.main.async {self.copying=false;self.onMessage?("Selection is too large to copy.")};return}
       let text="ScreamSeq Pattern 2\n"+json
       DispatchQueue.main.async {
@@ -952,7 +1093,7 @@ final class PatternView: MTKView, MTKViewDelegate {
       copying=true
       clipboardWorker.async {
         var parsed:[String:Any]?
-        if let data=s.dropFirst("ScreamSeq Pattern 2\n".count).data(using:.utf8),let request=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],Set(request.keys).isSubset(of:["rows","channels","cells","effects","bindings","notes"]) {parsed=request}
+        if let data=s.dropFirst("ScreamSeq Pattern 2\n".count).data(using:.utf8),let request=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],Set(request.keys).isSubset(of:["rows","channels","cells","effects","bindings","notes","scratchGestures"]) {parsed=request}
         DispatchQueue.main.async {
           self.copying=false
           guard var request=parsed else {self.onMessage?("Invalid pattern clipboard.");return}
@@ -1038,7 +1179,7 @@ final class PatternView: MTKView, MTKViewDelegate {
           note >= 1 && note <= 120
           ? notes[(note - 1) % 12] + String((note - 1) / 12) : note == 0 ? "empty" : "note off"
         element.setAccessibilityLabel(
-          "Row \(row), channel \(channel+1), \(label), instrument \(cell[1]), volume \(cell[3]), FX \((0..<model.effectCount(channel)).map{fx in model.nativeCommand(row,channel,fx).map{c in c.kind=="tracker" ? "\(fx+1): \(model.commands.entry(command:c.effect,parameter:c.parameter)?.displayCode ?? "??") \(c.valueText)" : "\(fx+1): \(c.code) \(c.valueText)"} ?? "\(fx+1): empty"}.joined(separator:", "))"
+          "Row \(row), channel \(channel+1), \(label), instrument \(cell[1]), volume \(cell[3]), FX \((0..<model.effectCount(channel)).map{fx in model.nativeCommand(row,channel,fx).map{c in c.kind=="tracker" ? "\(fx+1): \(model.commands.entry(command:c.effect,parameter:c.parameter)?.displayCode ?? "??") \(c.valueText)" : "\(fx+1): \(model.commands.schema(kind:c.kind,native:c.native)?.code ?? c.code) \((model.commands.schema(kind:c.kind,native:c.native)?.inlineFields ?? []).map{$0.name+" "+$0.text($0.value(c),model:model,timing:timingUnit,rateMode:c.parameters["rateMode"] as? String)}.joined(separator:", "))"} ?? "\(fx+1): empty"}.joined(separator:", "))"
         )
         let rect = NSRect(
           x: CGFloat(channelX(channel)),
@@ -1051,10 +1192,10 @@ final class PatternView: MTKView, MTKViewDelegate {
       }
     }
     var result:[Any]=elements
-    if let nudgeEditor {result.insert(contentsOf:[nudgeEditor.strength,nudgeEditor.duration],at:0)}
+    if let nudgeEditor {result.insert(contentsOf:nudgeEditor.fields,at:0)}
     return result
   }
   override func accessibilityValue() -> Any? {
-    "Row \(cursorRow), channel \(cursorChannel+1), column \(column+1)"
+    "Row \(cursorRow), channel \(cursorChannel+1), column \(column+1)"+(column>=4 && column%2==0 && !parameterFields().isEmpty ? ", "+parameterFields()[selectedParameterIndex].help(model:model,timing:timingUnit,rateMode:model.nativeCommand(cursorRow,cursorChannel,effectColumn)?.parameters["rateMode"] as? String) : "")
   }
 }

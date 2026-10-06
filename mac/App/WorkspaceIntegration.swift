@@ -105,7 +105,7 @@ extension AppController {
         let menu = ContextActions.controls(in: panel.content, title: panel.title)
         ContextActions.appendMenu(panel.actionMenu(), to: menu)
         return menu
-      } + [ContextActions.controls(in: self.orderEditor, title: "Arrangement")]
+      } + [ContextActions.controls(in: self.orderEditor, title: "Arrangement")] + (self.scratchGestureWindow?.isVisible==true ? self.scratchGestureWindow?.contentView.map{[ContextActions.controls(in:$0,title:"Scratch phrases")]} ?? []:[])
     }
     commandPalette.collect()
     for tabs in [dock.right,dock.bottom,dock.secondary] {

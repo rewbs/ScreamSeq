@@ -101,6 +101,31 @@ public:
 	}
 #if defined(OPENMPT_EDITOR_CORE)
 	constexpr uint32 SamplesIntoTick() const noexcept { return m_nSamplesPerTick - m_nBufferCount; }
+	// Native timing may vary inside an ordinary tracker tick. All native
+	// schedulers share this clock instead of inventing additional engine ticks.
+	bool nativeClockActive = false;
+	double nativeClockRow = 0, nativeClockRowsPerSample = 0, nativeClockBeatsPerRow = 0;
+	uint32 nativeClockAnchorSample = 0;
+	struct NativeTempoState {
+		double bpm = 0, from = 0, target = 0, begin = 0, end = 0, previous = -1, error = 0;
+		uint32 pattern = uint32_max, order = uint32_max, published = 0;
+		bool active = false;
+	} nativeTempo;
+	double NativeRowPosition(double unitsPerRow = 65536.0) const noexcept
+	{
+		if(nativeClockActive) return (nativeClockRow + (double(SamplesIntoTick()) - nativeClockAnchorSample) * nativeClockRowsPerSample) * unitsPerRow;
+		if(!m_nSamplesPerTick || !TicksOnRow()) return m_nRow * unitsPerRow;
+		return (double(m_nRow) + (double(m_nTickCount) + double(SamplesIntoTick()) / m_nSamplesPerTick) / TicksOnRow()) * unitsPerRow;
+	}
+	double NativeRowStep(double unitsPerRow = 65536.0) const noexcept
+	{
+		if(nativeClockActive) return nativeClockRowsPerSample * unitsPerRow;
+		return m_nSamplesPerTick && TicksOnRow() ? unitsPerRow / (double(TicksOnRow()) * m_nSamplesPerTick) : 0;
+	}
+	double NativeBeatStep() const noexcept
+	{
+		return NativeRowStep(1) * (nativeClockActive ? nativeClockBeatsPerRow : 1.0 / (m_nCurrentRowsPerBeat ? m_nCurrentRowsPerBeat : DEFAULT_ROWS_PER_BEAT));
+	}
 #endif
 
 	constexpr uint32 TicksOnRow() const noexcept
