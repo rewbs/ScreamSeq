@@ -1,6 +1,22 @@
 # Windows / Mac parity plan
 
-Current visual-consistency checkpoint (2026-10-07): the pattern header fits its
+Current arrangement-matrix checkpoint (2026-10-07): a retained native matrix
+provides paged order-by-track density, exact occurrence navigation, captured
+Copy/Paste and guarded Overwrite/Merge/Mix. Shared copying includes precise notes
+and all FX columns, preserves exact independent pattern properties, and validates
+the complete prospective document before changing playback or history. One Undo
+and native save/reopen are covered. The final candidate passes **385/385 app
+tests**, **11/11 focused matrix cases**, **44/44 native tests**, **9/9 shared
+groups**, **3/3 controller groups**, and separate **15/15 Editing groups** with
+exact nonzero PCM comparisons. Fifteen source-matched 192-DPI views pass review.
+See [matrix evidence](MATRIX_PROGRESS.md), including retained failures and limits.
+Checkpoint destination: `bin/windows-checkpoints/arrangement-matrix-20261007/`;
+its manifest confirms completed packaging.
+
+Next are [independent dock regions](INDEPENDENT_DOCKING_PLAN.md), including useful
+short instrument and automation panels. Full Windows/Mac parity remains the goal.
+
+Previous visual-consistency checkpoint (2026-10-07): the pattern header fits its
 available width, and Arrangement, Recovery and MIDI lists share restrained
 active/inactive selections, visible keyboard focus, dark complete headers and
 correct Unicode column clipping. Retained native interactions and drafts remain
@@ -10,9 +26,8 @@ See [visual-consistency evidence](UI_CONSISTENCY_PROGRESS.md), including prior
 failures and the explicit limits of this presentation-only pass. Checkpoint:
 `bin/windows-checkpoints/ui-consistency-20261007/`; its manifest confirms packaging.
 
-Next are the [arrangement matrix](MATRIX_PLAN.md) and
-[independent dock groups](INDEPENDENT_DOCKING_PLAN.md).
-Full Windows/Mac parity remains the goal.
+Its original [arrangement matrix plan](MATRIX_PLAN.md) remains a scope audit;
+the current implementation and evidence are above.
 
 Previous sections/annotations checkpoint (2026-10-07): Arrange now has named
 order-occurrence sections, Previous/Next section navigation, and retained Section
