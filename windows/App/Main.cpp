@@ -32,6 +32,9 @@
 #include "../Samples/Preview.hpp"
 #include "SampleLibraryWindow.hpp"
 #include "AudioSettingsWindow.hpp"
+#include "../Project/RecoveryStore.hpp"
+#include "RecoveryWriter.hpp"
+#include "RecoveryWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -53,7 +56,7 @@
 namespace {
 constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
-    deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547;
+    deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548;
 constexpr int dockAutomationCommand=530,dockInstrumentCommand=531,editorTrackerTab=532,
     editorAutomationTab=533,editorInstrumentTab=534,editorFloatCommand=535,editorHideCommand=536,
     editorPinCommand=537,editorCursorCommand=538,editorReturnCommand=539;
@@ -203,13 +206,14 @@ public:
 	bool playbackLoop = true;
 	Json playbackRegion = Json::object();
 	ScreamSeq::Api::SessionSnapshot snapshot() override {
+        serviceRecovery();
         if(!busy && controller->publicationPending()) {await(controller->invoke("synchronizeView",Json::object()));refreshDocument();}
 		auto t = renderer ? renderer->telemetry() : Tracker::Telemetry{};
 		auto audio = device.stats();
 		auto result=view->session;
 		result.context = {{"documentId",documentId},{"contextRevision",documentId + ":context:" + std::to_string(contextRevision) + ":" + selection().dump()},
 			{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",column},{"following",follow},{"follow",follow},{"selection",selection()},
-			{"file",view->path.empty() ? Json(nullptr) : Json(utf8Path(view->path))},{"dirty",view->dirty},
+			{"file",view->path.empty() ? Json(nullptr) : Json(utf8Path(view->path))},{"dirty",view->dirty},{"autosave",recoveryStatus()},
             {"playback",{{"playing",device.running()&&!auditionOnly},{"pattern",t.pattern},{"row",t.row}}}};
 		result.transport = {{"playing",device.running()&&!auditionOnly},{"loop",playbackLoop},{"region",playbackRegion},
 			{"order",t.order},{"pattern",t.pattern},{"row",t.row},{"voices",t.voices},{"left",t.left},{"right",t.right},
@@ -285,6 +289,7 @@ public:
             {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"pendingViewCommands",deferredViews.size()+(drainingViews?1u:0u)},{"status",utf8Path(status)},
             {"sampleEditor",sampleEditorSnapshot()},{"sampleLibrary",sampleLibrarySnapshot()},
             {"audioSettings",audioSettingsSnapshot()},
+            {"recovery",recoveryWindow?recoveryWindow->snapshot():Json{{"visible",false}}},
             {"graphEditor",graphEditorSnapshot()},
             {"graphCurve",graphCurveSnapshot()},
             {"formulaWorkbench",formulaWorkbench?formulaWorkbench->snapshot():Json{{"visible",false}}},
@@ -413,7 +418,7 @@ public:
         row=std::min(row,patternRows()-1);channel=std::min(channel,view->channels-1);
         column=std::min(column,2u+2u*view->effectColumns.at(channel));
         anchorRow=std::min(anchorRow,patternRows()-1);anchorChannel=std::min(anchorChannel,view->channels-1);
-        if(previous!=documentId) {releaseTypedNotes();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;}
+        if(previous!=documentId) {releaseTypedNotes();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
         else if(oldPosition!=position()) ++contextRevision;
         revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();
     }
@@ -422,12 +427,13 @@ public:
     std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     Json documentOperation(const std::string &method,const Json &params) override {
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
-        if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
-        try {auto result=await(controller->invoke(method,params));refreshDocument();return result;}
+        if(busy||recoveryRestoring) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
+        try {auto result=await(controller->invoke(method,params));refreshDocument();if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();return result;}
         catch(...) {refreshDocument();throw;}
     }
     #include "SampleLibrary.inc"
     #include "AudioSettings.inc"
+    #include "RecoveryIntegration.inc"
     explicit Application(const std::filesystem::path &input={},bool inspectionMode=false,std::optional<std::filesystem::path> catalogue={},std::optional<std::filesystem::path> library={}) : inspection(inspectionMode) {
         GUID id{};ScreamSeq::check(CoCreateGuid(&id),"Create session identity");
         wchar_t buffer[40]{};StringFromGUID2(id,buffer,40);for(auto ch:std::wstring_view(buffer)) documentId+=char(ch);
@@ -450,7 +456,7 @@ public:
         cpuDraw.reserve(120000);submitIntervals.reserve(120000);updateInspector();
         status=input.empty() ? L"Ready / select a pattern cell or a sample" : L"Project opened";
     }
-	~Application() { api.reset();sampleBrowser.reset();++samplePreviewGeneration;samplePreview.stop();sampleDecoder.reset();sampleLibrary.reset();device.close();palette.reset();if(controlFont)DeleteObject(controlFont); }
+	~Application() { api.reset();shutdownRecovery();sampleBrowser.reset();++samplePreviewGeneration;samplePreview.stop();sampleDecoder.reset();sampleLibrary.reset();device.close();palette.reset();if(controlFont)DeleteObject(controlFont); }
 	static void renderAudio(void *context, float *samples, uint32_t frames) noexcept {
 		auto &self = *static_cast<Application *>(context);
 		self.preparedPlayback->render(samples, frames);
@@ -627,10 +633,14 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		switch(message) {
 		case ScreamSeq::ApiDispatch::message: if(app->api && !app->refreshingPlugins) app->api->drain(); return 0;
         case deferredViewsMessage: app->drainViews();return 0;
-		case WM_CLOSE: if(app->busy||app->libraryWaits) {app->stop();++app->samplePreviewGeneration;app->samplePreview.stop();return 0;} if(!app->protectUnsaved()) return 0;break;
+		case WM_CLOSE:
+            app->recoveryClosePosted=false;
+            if(app->recoverySaving||app->recoveryRestoring||app->recoveryReads||(app->recoveryCloseRequested&&(app->busy||app->libraryWaits))) {app->recoveryCloseRequested=true;return 0;}
+            if(app->busy||app->libraryWaits) {app->stop();++app->samplePreviewGeneration;app->samplePreview.stop();return 0;}
+            app->recoveryCloseRequested=false;if(!app->protectUnsaved())return 0;break;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
         case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
-        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==5)app->graphCurveTimer();if(wp==8)app->shortcutTimer();return 0;
+        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==5)app->graphCurveTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();return 0;
 		case WM_DPICHANGED: {
 			auto rect = reinterpret_cast<RECT *>(lp);
 			SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE); return 0;
@@ -698,8 +708,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		if(!argv) throw std::runtime_error("Cannot parse command line");
 		std::vector<std::wstring> args(argv, argv + argc); LocalFree(argv);
         bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false, audioTestAllowStop=false;
-        unsigned auditionSample=0,auditionInstrument=0;
-		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride,libraryOverride,sampleLibraryOverride;
+        unsigned auditionSample=0,auditionInstrument=0,recoveryTestWriteDelay=0;
+		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride,libraryOverride,sampleLibraryOverride,recoveryOverride;
 		for(size_t i = 1; i < args.size(); ++i) {
 			if(args[i] == L"--offline-test") offline = true;
             else if(args[i]==L"--offline-hosted-test") hostedOffline=true;
@@ -720,9 +730,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             else if(args[i]==L"--envelope-test-catalogue" && i+1<args.size()) catalogueOverride=args[++i];
             else if(args[i]==L"--plugin-test-library" && i+1<args.size()) libraryOverride=args[++i];
             else if(args[i]==L"--sample-test-library" && i+1<args.size()) sampleLibraryOverride=args[++i];
+            else if(args[i]==L"--recovery-test-directory" && i+1<args.size()) recoveryOverride=args[++i];
+            else if(args[i]==L"--recovery-test-write-delay-ms" && i+1<args.size()) {size_t end=0;const auto value=std::stoul(args[++i],&end);if(end!=args[i].size()||value>2000)throw std::runtime_error("Invalid private recovery write delay");recoveryTestWriteDelay=unsigned(value);}
 			else throw std::runtime_error("Unknown/incomplete command-line argument");
 		}
 		if(seconds < 0 || seconds > 1800 || !std::isfinite(seconds)) throw std::runtime_error("Invalid test duration");
+        if(!recoveryOverride.empty()&&(!automation||!(inspection||audioTest)||offline||hostedOffline||!recoveryOverride.is_absolute()))throw std::runtime_error("An absolute private recovery directory requires an automated inspection or audio qualification session");
+        if(recoveryTestWriteDelay&&(recoveryOverride.empty()||!inspection))throw std::runtime_error("A recovery write delay requires a private inspection recovery directory");
         if(!pluginCache.empty()) {
             if(!(inspection || audioTest || hostedOffline) || !pluginCache.is_absolute()) throw std::runtime_error("An absolute private VST3 test cache requires inspection or audio qualification mode");
             Tracker::WindowsVST3::configure(utf8Path(std::filesystem::absolute(args[0]).parent_path()/L"ScreamSeqVST3Scanner.exe"),utf8Path(pluginCache));
@@ -775,6 +789,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         const BOOL darkFrame=TRUE;DwmSetWindowAttribute(window,DWMWA_USE_IMMERSIVE_DARK_MODE,&darkFrame,sizeof(darkFrame));
 		app.surface = std::make_unique<ScreamSeq::RenderSurface>(window);
 		app.installControls();
+        std::optional<std::filesystem::path> recoveryDirectory;
+        if(!recoveryOverride.empty())recoveryDirectory=recoveryOverride;
+        else if(!inspection&&!audioTest){
+            PWSTR local{};ScreamSeq::check(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local),"Find recovery directory");
+            try{recoveryDirectory=std::filesystem::path(local)/L"org.resonance.tracker"/L"Recovery";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
+        }
+        app.recoveryTestWriteDelay=recoveryTestWriteDelay;app.configureRecovery(std::move(recoveryDirectory));
         if(!inspection&&!audioTest){
             PWSTR local{};ScreamSeq::check(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local),"Find shortcut preferences directory");
             std::filesystem::path path;try{path=std::filesystem::path(local)/L"org.resonance.tracker"/L"workspace-shortcuts-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
@@ -783,6 +804,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         app.updateTitle();
 		if(automation) app.api = std::make_unique<ScreamSeq::ApiDispatch>(window, app);
 		ShowWindow(window, SW_SHOWNOACTIVATE);
+        if(!inspection&&!audioTest&&!automation)app.reloadRecoveryBrowser(true);
 		if(audioTest) { app.play(); if(!app.device.running()) throw std::runtime_error("Audio test could not start endpoint"); }
 		bool closed = false; double start = ScreamSeq::ticks();
 		while(!closed) {
@@ -802,12 +824,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			if(closed) break;
             app.drainViews();
             app.samplePreview.service();
+            app.serviceRecovery();
 			if(result == WAIT_FAILED) throw std::runtime_error("Frame wait failed");
 			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) app.draw();
 			if(seconds && (ScreamSeq::ticks() - start) / app.frequency >= seconds) break;
             if(audioTest && !audioTestAllowStop && !app.device.running()) throw std::runtime_error("Audio device stopped during test");
 		}
 		app.api.reset();
+		app.shutdownRecovery();
 		app.stop();
 		app.report(report, (ScreamSeq::ticks() - start) / app.frequency);
 		DestroyWindow(window); window = nullptr;

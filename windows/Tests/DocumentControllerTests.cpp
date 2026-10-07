@@ -2,6 +2,8 @@
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"
 #include "windows/App/PatternClipboard.hpp"
+#include "windows/Project/BinaryPlist.hpp"
+#include "windows/Project/ProjectIO.hpp"
 #include "common/mptString.h"
 #include <iostream>
 
@@ -317,8 +319,11 @@ void graphPatternViewTests() {
   need(call(limited,"graph.get",{{"includeState",false}}).at("commands").empty(),"rejected graph command left partial data");
   std::cout<<"PASS graph lane projection, exact offsets, immutable reuse, rename Undo and precommit cache budget\n";
 }
+#include "RecoveryControllerTests.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--recovery") {recoveryControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==5 && std::string(argv[1])=="--recovery-manual") {recoveryManualEditorTests(std::filesystem::u8path(argv[2]),std::filesystem::u8path(argv[3]),std::filesystem::u8path(argv[4]));return 0;}
     if(argc==2 && std::string(argv[1])=="--graph-pattern-view") {graphPatternViewTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--graph-recipes") {graphRecipeRenderTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--mixer-integration") {mixerIntegrationTests(std::filesystem::u8path(argv[2]));return 0;}

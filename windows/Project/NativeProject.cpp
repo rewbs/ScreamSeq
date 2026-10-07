@@ -93,7 +93,11 @@ void validateRecords(Json &root,const Tracker::NativeSong &native) {
 }
 }
 OpenedProject openNativeProject(const std::filesystem::path &path) {
-	auto bytes=readProjectBytes(path);auto root=decodePlist(bytes);
+	auto result=openNativeProjectBytes(readProjectBytes(path));result.state.path=path;return result;
+}
+OpenedProject openNativeProjectBytes(std::span<const std::byte> bytes) {
+	need(!bytes.empty() && bytes.size()<=maximumProjectBytes,"Native project exceeds the read limit or is empty");
+	auto root=decodePlist(bytes);
 	need(root.is_object(),"Native project root must be a dictionary");
 	const auto version=integer(root.at("version"),6);need(version==6,"Unsupported native container version; this build requires project 6 / metadata 17");
 	need(root.at("native").at("version")==17,"Unsupported native metadata version; this build requires metadata 17");
@@ -131,7 +135,7 @@ OpenedProject openNativeProject(const std::filesystem::path &path) {
 	}
 	result.state.preserved=std::move(root);
 	result.state.metadataBaseline=encodeNativeMetadata(result.document->native());
-	result.state.savedRevision=result.document->revision;result.state.path=path;
+	result.state.savedRevision=result.document->revision;
 	if(requiresHostedPlayback(*result.document,result.state)) result.state.issues.push_back("Project requires hosted routing/effects; do not substitute dry playback");
 	return result;
 }
@@ -187,7 +191,7 @@ void saveNativeProject(Tracker::Document &document,ProjectState &state,const std
 	auto tree=nativeProjectTree(document,state);auto bytes=encodePlist(tree);
 	// Compute every allocating state update before publishing the destination.
 	ProjectState saved=state;saved.preserved=std::move(tree);saved.metadataBaseline=encodeNativeMetadata(document.native());
-	saved.savedRevision=document.revision;saved.savedPluginRevision=state.pluginRevision;saved.path=path;
+	saved.savedRevision=document.revision;saved.savedPluginRevision=state.pluginRevision;saved.path=path;saved.recoveredUnsaved=false;
 	writeProjectFile(path,bytes,overwrite);
 	state=std::move(saved);
 }

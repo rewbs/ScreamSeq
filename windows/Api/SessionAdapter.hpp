@@ -159,6 +159,11 @@ class SessionAdapter {
       for(const auto &m:host_->independentReads())result["reads"].push_back(m);
       for(const auto &m:host_->independentWrites())result["writes"].push_back(m);
       result["revisionGuards"].update(host_->independentGuards());
+      const auto independent=host_->independentReads();
+      if(std::find(independent.begin(),independent.end(),"recovery.status")!=independent.end())
+        result["recovery"]={{"schema","windows/Api/recovery.schema.json"},{"intervalSeconds",10},{"generations",10},
+          {"restore","Opaque listed ID; protects the current unsaved song, then opens an unsaved document with a new identity."},
+          {"recording","Imported native recording takes are preserved; Windows live recording controls remain unavailable."}};
     }
     return result;
   }

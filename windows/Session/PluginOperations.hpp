@@ -48,6 +48,10 @@ public:
   Json invokePath(const std::string &,const Json &);
   Json invokeGraph(const std::string &,const Json &,unsigned sampleRate);
   bool flushEditors(bool force=false); // Debounce gestures; save/close forces capture.
+  // Copy manual rack editor state into an independent recovery project only.
+  // Does not consume notifications, commit history, stop playback or apply the
+  // graph recipe editor's explicit-Apply draft.
+  bool overlayRecoveryState(Project::ProjectState &copy) const;
   std::vector<GraphRackRecord> graphRack() const;
   GraphRackClone cloneRackSlot(uint32_t);
   std::vector<Tracker::PluginAudioBus> audioBuses(size_t,bool required=false);

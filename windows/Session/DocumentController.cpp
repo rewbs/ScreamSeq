@@ -3,6 +3,8 @@
 #include "soundlib/ModInstrument.h"
 #include "soundlib/mod_specifications.h"
 #include "common/mptString.h"
+#include "../Project/ProjectIO.hpp"
+#include "mpt/crypto/hash.hpp"
 #include <cwctype>
 
 namespace ScreamSeq {
@@ -109,6 +111,9 @@ void DocumentController::open(const std::filesystem::path &path) {
   if(path.empty()) {candidate.document=Tracker::Document::demo();candidate.state=Project::newProjectState(*candidate.document);}
   else if(extension(path)==L".screamseq" || extension(path)==L".resonance") candidate=Project::openNativeProject(path);
   else {candidate.document=Tracker::Document::open(utf8(path));candidate.state=Project::newProjectState(*candidate.document);candidate.state.path=path;}
+  installCandidate(std::move(candidate));
+}
+void DocumentController::installCandidate(Project::OpenedProject candidate,std::function<void()> beforeCommit) {
   bool valid=false;for(unsigned p=0;p<candidate.document->song().Patterns.Size();++p) valid|=candidate.document->song().Patterns.IsValidPat(p);
   if(!valid) throw Api::ApiError(-32602,"Document has no allocated pattern");
   // Every fallible view conversion/allocation precedes playback or ownership changes.
@@ -121,7 +126,7 @@ void DocumentController::open(const std::filesystem::path &path) {
   };
   auto plugins=std::make_unique<PluginOperations>(*candidate.document,project_,[this]{onMain(stop_);},std::move(liveParameters),libraryPath_);
   if(view_) retired_.push_back(view_);
-  try {if(document_) onMain(stop_);} catch(...) {if(view_) retired_.pop_back();throw;}
+  try {if(beforeCommit)beforeCommit();if(document_) onMain(stop_);} catch(...) {if(view_) retired_.pop_back();throw;}
   static_assert(std::is_nothrow_swappable_v<Project::ProjectState>);
   document_.swap(candidate.document);std::swap(project_,candidate.state);++generation_;
   assets_.swap(assets);
@@ -170,7 +175,8 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   }
   for(unsigned c=0;c<song.GetNumChannels();++c){const auto track=native.tracks.at(c).id;next->effectColumns.push_back(native.performance.columns.contains(track)?native.performance.columns.at(track):1);}
   next->channels=song.GetNumChannels();next->instruments=song.GetNumInstruments();next->path=project.path;
-  next->dirty=document.revision!=project.savedRevision || project.pluginRevision!=project.savedPluginRevision;next->hosted=Project::requiresHostedPlayback(document,project);
+  next->dirty=project.recoveredUnsaved || document.revision!=project.savedRevision || project.pluginRevision!=project.savedPluginRevision;next->hosted=Project::requiresHostedPlayback(document,project);
+  next->hasOpenEditors=same&&plugins_&&plugins_->openEditorCount()!=0;
   auto &result=next->session;result.documentId=identity_+":"+std::to_string(generation);result.revision=result.documentId+":"+std::to_string(document.revision)+":"+std::to_string(song.Order.GetCurrentSequenceIndex())+":"+std::to_string(project.pluginRevision);
   Json patterns=Json::array(),orders=Json::array(),samples=Json::array(),instruments=Json::array(),plugins=Json::array(),sequences=Json::array();
   for(unsigned n=0;n<256;++n) next->noteNames[n]=::OpenMPT::mpt::ToWide(song.GetNoteName(uint8_t(n)));
@@ -230,7 +236,7 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     {"channels",next->channels},{"effectColumns",next->effectColumns},{"orders",orders},{"patterns",patterns},{"samples",samples},{"instruments",instruments},{"nativePlugins",plugins},{"editable",document.editable()},
     {"sequence",song.Order.GetCurrentSequenceIndex()},{"sequences",sequences},{"tempo",song.Order().GetDefaultTempo().ToDouble()},{"speed",song.Order().GetDefaultSpeed()},
     {"nativeSummary",{{"preciseNotes",native.preciseNotes.size()},{"signalDefinitions",native.signal.library.size()},{"envelopeTemplates",native.envelopeBank.size()}}},
-    {"canUndo",document.canUndo()},{"canRedo",document.canRedo()},{"canUndoPlugins",same&&plugins_&&plugins_->canUndo()},{"canRedoPlugins",same&&plugins_&&plugins_->canRedo()},{"openPluginEditors",same&&plugins_?plugins_->openEditorCount():0},{"issues",project.issues}};
+    {"canUndo",document.canUndo()},{"canRedo",document.canRedo()},{"canUndoPlugins",same&&plugins_&&plugins_->canUndo()},{"canRedoPlugins",same&&plugins_&&plugins_->canRedo()},{"openPluginEditors",same&&plugins_?plugins_->openEditorCount():0},{"hasRecoveryTake",project.preserved.contains("recoveryTake")},{"issues",project.issues}};
   {
     std::lock_guard lock(mutex_);
     bool changed=!view_ || view_->session.documentId!=result.documentId;
@@ -352,7 +358,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(params["expectedRevision"]!=revision()) throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
     params.erase("expectedRevision");
   }
-  const auto beforeRevision=revision();const auto beforePath=project_.path;const auto beforeSaved=project_.savedRevision;const auto beforeSavedPlugins=project_.savedPluginRevision;const auto beforeEditors=plugins_->openEditorCount();
+  const auto beforeRevision=revision();const auto beforePath=project_.path;const auto beforeSaved=project_.savedRevision;const auto beforeSavedPlugins=project_.savedPluginRevision;const auto beforeEditors=plugins_->openEditorCount();const bool beforeRecovered=project_.recoveredUnsaved;
   changedPatterns_.clear();
   changedSamples_.clear();
   const bool pcmWrite=method=="sample.process" || method=="sample.draw" || method=="sample.crossfade" || method=="sample.cut" || method=="sample.delete" || method=="sample.paste";
@@ -369,7 +375,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(!params.contains("path")) throw Api::ApiError(-32602,"path is required");auto path=pathValue(params["path"]);
     if(method=="document.open") {
       bool discard=flag(params,"discard");
-      if((document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision) && !discard) throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before opening");
+      if((project_.recoveredUnsaved || document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision) && !discard) throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before opening");
       result={{"path",utf8(path)}};open(path);return result;
     } else {
       auto ext=extension(path);if(ext!=L".screamseq" && ext!=L".resonance") throw Api::ApiError(-32602,"Use .screamseq or .resonance for a native project");
@@ -426,7 +432,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
       result=operations.invoke(method,params);
     }
   }
-  if(write && (beforeRevision!=revision() || beforePath!=project_.path || beforeSaved!=project_.savedRevision || beforeSavedPlugins!=project_.savedPluginRevision || beforeEditors!=plugins_->openEditorCount())) {
+  if(write && (beforeRevision!=revision() || beforePath!=project_.path || beforeSaved!=project_.savedRevision || beforeSavedPlugins!=project_.savedPluginRevision || beforeEditors!=plugins_->openEditorCount() || beforeRecovered!=project_.recoveredUnsaved)) {
     publicationPending_=true;
     try {publish();} catch(...) {
       // Music may already be committed. Repair a transient cache failure before
@@ -452,6 +458,7 @@ std::future<Json> DocumentController::invoke(std::string method,Json params) {
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
 }
+#include "RecoveryOperations.inc"
 std::future<HostedProjectPlayback *> DocumentController::prepare(unsigned rate,Json settings,bool loop,bool offline,bool audition) {
   auto task=std::make_shared<std::packaged_task<HostedProjectPlayback *()>>([this,rate,settings,loop,offline,audition]{
     Tracker::PlaybackRegion region;region.pattern=settings.value("pattern",UINT32_MAX);region.startRow=settings.value("startRow",0u);

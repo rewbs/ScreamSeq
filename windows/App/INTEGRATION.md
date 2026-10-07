@@ -1,5 +1,17 @@
 # Windows document-worker application integration
 
+`RecoveryIntegration.inc` connects the ten-second timer, native browser, footer
+and `recovery.*` APIs to immutable document-owner capture and a serial disk worker.
+Manual plugin state is overlaid on copied project bytes without consuming live
+gestures/history or stopping playback. Restore protects the current song under a
+fresh recovery identity, validates a replacement fully, checks the latest
+fingerprint and publishes a pathless dirty document. Save/open epochs prevent
+late writes from repainting stale status; close drains outstanding work.
+`RecoveryWindow.hpp` retains selected copy identity and native keyboard ownership.
+The default store keeps the legacy `org.resonance.tracker` identifier. Qualification
+uses explicitly enabled private stores. See `../RECOVERY_PROGRESS.md` and
+`../Api/recovery.schema.json`; live recording/take editing remains unimplemented.
+
 The workspace now exposes a persistent lower editor tab strip, dock collapse,
 named layout manager and storage, and categorized multi-word command search.
 Layouts preserve current editor drafts, pins and targets, with guarded atomic

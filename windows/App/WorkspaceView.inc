@@ -57,6 +57,8 @@
         place(patternChooser,10,389,146,250);place(orderChooser,10,420,146,250);
         place(octaveChooser,10,452,70,230);place(stepChooser,84,452,72,230);
         place(soundChooser,10,484,146,230);
+        RECT client{};GetClientRect(window,&client);
+        place(recoveryCommand,client.right/s-178,client.bottom/s-26,168,23);
 		auto g=geometry(); bool show=workspaceState.visible();
         const bool dock=workspaceState.layout!="Pattern focus"&&workspaceState.lowerVisible;
         float tabX=g.lowerTabs.x+6;
@@ -126,6 +128,7 @@
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
             {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},{liveKeysCommand,L"Live keys"},{sampleBrowseCommand,L"Browse samples…"},
             {audioSettingsCommand,L"Audio settings…"},
+            {recoveryCommand,L"Recovery copies"},
             {layoutsCommand,L"Layouts…"},{dockNotes,L"Notes"},{dockSamples,L"Samples"},{dockEffects,L"Pattern FX"},
             {editorTrackerTab,L"Tracker"},{editorAutomationTab,L"Automation"},{editorInstrumentTab,L"Instrument"},{editorFloatCommand,L"Float"},{editorHideCommand,L"Hide"},{editorPinCommand,L"Pinned"},{editorCursorCommand,L"Cursor"},{editorReturnCommand,L"Return"},
             {dockPlugins,L"Plugins"},{dockMixer,L"Mixer"},{dockGraph,L"Graph"},{dockToggle,L"Collapse dock"},
@@ -180,6 +183,7 @@
             else if(id==sampleDetailCommand){openSampleDetail();return;}
             else if(id==sampleBrowseCommand){openSampleBrowser();return;}
             else if(id==audioSettingsCommand){openAudioSettings();return;}
+            else if(id==recoveryCommand){openRecoveryBrowser();return;}
             else if(id==auditionCommand){openAudition();return;}
             else if(id==instrumentEnvelopeCommand){openInstrumentEnvelope();return;}
             else if(id==instrumentImportCommand){openInstrumentEnvelope();instrumentEnvelopeWindow->importInstrument();return;}

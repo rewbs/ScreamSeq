@@ -9,7 +9,23 @@ struct Desktop {
   HWND foreground=GetForegroundWindow();DWORD clipboard=GetClipboardSequenceNumber();
   Desktop(){const auto name=L"ScreamSeqDockTest-"+std::to_wstring(GetCurrentProcessId());owned=CreateDesktopW(name.c_str(),nullptr,nullptr,0,GENERIC_ALL,nullptr);require(owned&&SetThreadDesktop(owned),"Create private dock desktop");}
   ~Desktop(){SetThreadDesktop(original);CloseDesktop(owned);}
-  void check(){require(SetThreadDesktop(original),"Restore test desktop");require(GetForegroundWindow()==foreground,"Dock test changed foreground");require(GetClipboardSequenceNumber()==clipboard,"Dock test changed clipboard");}
+  static std::string narrow(const wchar_t *value){const auto count=WideCharToMultiByte(CP_UTF8,0,value,-1,nullptr,0,nullptr,nullptr);std::string result(size_t(std::max(1,count)),0);if(count)WideCharToMultiByte(CP_UTF8,0,value,-1,result.data(),count,nullptr,nullptr);result.resize(size_t(std::max(1,count)-1));return result;}
+  static std::string name(HDESK desktop){wchar_t value[256]{};DWORD bytes=0;if(!GetUserObjectInformationW(desktop,UOI_NAME,value,sizeof(value),&bytes))return "<unavailable:"+std::to_string(GetLastError())+">";return narrow(value);}
+  static BOOL CALLBACK remainingWindow(HWND window,LPARAM){
+    wchar_t kind[256]{};GetClassNameW(window,kind,256);DWORD process=0;const auto thread=GetWindowThreadProcessId(window,&process);
+    std::cerr<<"  Remaining HWND="<<window<<" class="<<narrow(kind)<<" thread="<<thread<<" process="<<process<<" parent="<<GetParent(window)<<" owner="<<GetWindow(window,GW_OWNER)<<" visible="<<IsWindowVisible(window)<<" enabled="<<IsWindowEnabled(window)<<'\n';return TRUE;
+  }
+  void check(){
+    SetLastError(ERROR_SUCCESS);
+    if(!SetThreadDesktop(original)){
+      const auto error=GetLastError();wchar_t message[512]{};FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS,nullptr,error,0,message,512,nullptr);
+      std::cerr<<"Restore test desktop failed: Win32 "<<error<<" ("<<narrow(message)<<") current="<<name(GetThreadDesktop(GetCurrentThreadId()))<<" original="<<name(original)<<" owned="<<name(owned)<<" thread="<<GetCurrentThreadId()<<'\n';
+      EnumThreadWindows(GetCurrentThreadId(),remainingWindow,0);
+      for(HWND window=FindWindowExW(HWND_MESSAGE,nullptr,nullptr,nullptr);window;window=FindWindowExW(HWND_MESSAGE,window,nullptr,nullptr))if(GetWindowThreadProcessId(window,nullptr)==GetCurrentThreadId())remainingWindow(window,0);
+      throw std::runtime_error("Restore test desktop");
+    }
+    require(GetForegroundWindow()==foreground,"Dock test changed foreground");require(GetClipboardSequenceNumber()==clipboard,"Dock test changed clipboard");
+  }
 };
 struct Window {
   HWND value{};

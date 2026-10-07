@@ -90,7 +90,8 @@
     }
     void updateTitle() {
         if(!window) return;
-        auto name=view->path.empty() ? L"Demo" : view->path.filename().wstring();
+        auto name=view->path.empty() ? wide(view->session.document.value("title",std::string())) : view->path.filename().wstring();
+        if(name.empty())name=L"Untitled";
         auto title=(view->dirty ? L"* " : L"")+name+L" - "+wide(view->session.document.at("format").get<std::string>())+L" - ScreamSeq";
         if(busy) title+=L" [Document worker busy]";
         SetWindowTextW(window,title.c_str());

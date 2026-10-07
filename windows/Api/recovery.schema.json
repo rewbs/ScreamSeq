@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScreamSeq Windows application recovery requests",
+  "description": "Immutable native recovery copies, ten completed generations per session. Save changes neither document revision nor unsaved status. Restore protects the current unsaved song under a separate session and opens the chosen copy unsaved with a new document identity. Available in the application, not the standalone protocol fixture.",
+  "type": "object",
+  "required": ["jsonrpc", "id", "method", "params"],
+  "additionalProperties": false,
+  "properties": {
+    "jsonrpc": {"const": "2.0"},
+    "id": {"type": "string", "minLength": 1, "maxLength": 80},
+    "method": {"enum": ["recovery.status", "recovery.list", "recovery.save", "recovery.restore"]},
+    "params": {"type": "object"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"method": {"enum": ["recovery.status", "recovery.list"]}}},
+      "then": {"properties": {"params": {"maxProperties": 0}}}
+    },
+    {
+      "if": {"properties": {"method": {"const": "recovery.save"}}},
+      "then": {"properties": {"params": {
+        "required": ["expectedRevision"], "additionalProperties": false,
+        "properties": {"expectedRevision": {"$ref": "#/$defs/revision"}}
+      }}}
+    },
+    {
+      "if": {"properties": {"method": {"const": "recovery.restore"}}},
+      "then": {"properties": {"params": {
+        "required": ["expectedRevision", "id"], "additionalProperties": false,
+        "properties": {
+          "expectedRevision": {"$ref": "#/$defs/revision"},
+          "id": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^/\\\\:\\u0000]+$", "description": "Opaque id returned by recovery.list. Never an absolute or relative path."}
+        }
+      }}}
+    }
+  ],
+  "$defs": {"revision": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\u0000]+$"}}
+}

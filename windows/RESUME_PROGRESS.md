@@ -1,6 +1,24 @@
 # Windows continuation
 
-Latest UI gap pass (2026-10-07): `SAMPLE_WORKFLOWS_PROGRESS.md` records retained
+Latest parity pass (2026-10-07): `RECOVERY_PROGRESS.md` records ten-second
+immutable autosave, ten retained generations per session, a native recovery
+browser and revision-guarded recovery APIs. Restore protects current unsaved work,
+validates before replacement and opens a pathless dirty document. Manual plugin
+state and imported unfinished takes survive snapshots without modifying the live
+song. Real recording/take editing remains a separate gap.
+
+The final candidate passes **345/345 application tests** in 890.030 seconds,
+**14/14 focused recovery cases** and a separate **1/1 vendor-input regression**,
+all with successful strict outer isolation. The diagnostic native suite passes
+**38/38**; its earlier 37/38 desktop-teardown failure remains unexplained and
+preserved, with no production fix claimed. Eight final renderer/native-control
+views are reviewed at 192 DPI. See the recovery report for exact executable
+identity, logs, historical failures and visual limits. The committed package is
+`bin/windows-checkpoints/recovery-20261007/`.
+The next substantial slice is timestamped MIDI and native recording, documented
+in `RECORDING_PLAN.md`. Full Mac parity remains active.
+
+Previous sample UI pass (2026-10-07): `SAMPLE_WORKFLOWS_PROGRESS.md` records retained
 Drawing, Process, Loops, Paste and Snap pages, independent normal/sustain drafts
 with joint preview/Apply, reviewed paste with rate/gain options, and selection
 or loop snapping with grid origin and automatic selection. Shared musical
@@ -29,7 +47,8 @@ Both candidate-4 outer isolation failures are preserved:
 `bin/windows-sample-workflows-candidate4-isolation-final.log` and
 `bin/windows-sample-workflows-candidate4-outer-isolation-failure.log`.
 No reactivation or further equality-chasing test run was attempted.
-Full Mac parity remains active; the next planned slice is recovery.
+The later recovery checkpoint above supersedes this checkpoint's next-step plan;
+its historical isolation failure remains preserved.
 
 ## Previous checkpoints
 

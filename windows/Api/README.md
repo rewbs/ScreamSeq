@@ -6,6 +6,37 @@ query the running instance's `api.describe` for its current method catalog. Do n
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
 
+Application recovery uses the Mac-compatible `recovery.status`, `recovery.list`,
+`recovery.save` and `recovery.restore` contracts, also described in
+[`recovery.schema.json`](recovery.schema.json). `context.get.data.autosave` has
+the same status: enabled, ten-second interval, ten retained generations per
+session, last successful timestamp/copy, persistent error and saving flag.
+Save and restore require `expectedRevision`; successful request-ID replay is
+idempotent. Save captures immutable native bytes and writes them on a serial disk
+worker, leaving revision, dirty state, original path, Undo and playback unchanged.
+Its response revision identifies the captured song even if editing continues
+while those bytes are written. Unchanged automatic snapshots are deduplicated,
+including opaque manual plugin editor state; prepared playback automation is
+never written into the saved baseline.
+
+Restore accepts only a listed opaque ID. It durably protects the current unsaved
+song under a separate session identity, then validates and opens the selected
+copy as a new unsaved document with no file destination. Ordinary Save clears
+only this session's copies, ordered after its pending writes. Storage is
+`%LOCALAPPDATA%/org.resonance.tracker/Recovery`. Incomplete writes do not appear;
+damaged metadata falls back to a generic title without hiding the song bytes.
+The modeless recovery browser opens from the footer or File / Recover a song in
+the command palette. Existing copies are offered on normal interactive startup.
+
+Inspection/audio qualification never accesses that real recovery store. Explicit
+`--recovery-test-directory ABSOLUTE_PATH` with `--automation` and inspection or
+audio-test mode enables private fixture storage. The optional
+`--recovery-test-write-delay-ms 0..2000` is restricted to inspection with that
+private directory, to exercise concurrent editing and ordered Save cleanup.
+Windows preserves imported unfinished recording takes and their compatibility
+metadata; live recording/finish-take UI and API remain a separate parity gap.
+Unapplied graph recipe editor drafts retain their explicit Apply semantics.
+
 Windows output selection is available through `audio.devices.get`,
 `audio.settings.get` and `audio.settings.set`; see
 [`audio-settings.schema.json`](audio-settings.schema.json). Set requires

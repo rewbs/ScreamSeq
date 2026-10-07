@@ -84,6 +84,19 @@ Tracker::NativePlugin &PluginOperations::editor(size_t index) {
   auto state=projectPluginStates(project_).at(index);auto &p=editors_[state.instanceID];
   if(!p)p=std::make_unique<NativePlugin>(state,48000);return *p;
 }
+bool PluginOperations::overlayRecoveryState(Project::ProjectState &copy) const {
+  bool changed=false;
+  for(auto &record:copy.preserved.at("plugins")) {
+    const auto found=editors_.find(record.at("instanceID").get<std::string>());
+    if(found==editors_.end() || !found->second)continue;
+    // These retained instances never receive song automation. Do not consume
+    // popEdit() or touch gesture bookkeeping while taking a recovery copy.
+    const auto state=blob(found->second->state().state);
+    if(record.at("state")!=state){record["state"]=state;changed=true;}
+  }
+  if(changed)Project::invalidateRecoveryTake(copy);
+  return changed;
+}
 bool PluginOperations::flushEditors(bool force) {
   const bool graphClosed=graphEditorWindowOpen_&&graphEditor_&&!graphEditor_->editorOpen();
   if(graphClosed)graphEditorWindowOpen_=false;

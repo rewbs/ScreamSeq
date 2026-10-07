@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <optional>
+#include <span>
 
 namespace ScreamSeq::Project {
 struct RecoveryOrigin {
@@ -19,6 +20,7 @@ struct ProjectState {
 	nlohmann::json metadataBaseline=nlohmann::json::object();
 	uint64_t savedRevision=0;
     uint64_t pluginRevision=0,savedPluginRevision=0; // Session history, not persisted musical data.
+	bool recoveredUnsaved=false; // Session-only: recovery must be saved explicitly.
 	std::filesystem::path path;
 	std::vector<std::string> issues;
 };
@@ -29,6 +31,9 @@ struct OpenedProject {
 // Control/worker-thread operations only. Open fully restores the shared song
 // snapshot and validates metadata against that actual song before publishing it.
 OpenedProject openNativeProject(const std::filesystem::path &path);
+// The same strict native decoder, without a filesystem destination. Recovery
+// supplies bounded immutable bytes and prepares a candidate before publication.
+OpenedProject openNativeProjectBytes(std::span<const std::byte> bytes);
 ProjectState newProjectState(const Tracker::Document &document);
 // Hook for musical changes outside Document::revision (future plugin/capture
 // owners, and sequence changes). Never call this to establish a new origin.

@@ -123,7 +123,7 @@
     void cancelWorkspaceShortcut(){if(workspaceShortcuts){workspaceShortcuts->cancel();shortcutTimer();}}
     bool nativeOwnsShortcut(WPARAM key,bool ctrl,bool alt)const {
         const auto focus=GetFocus();wchar_t klass[64]{};GetClassNameW(focus,klass,64);
-        const bool edit=_wcsicmp(klass,L"Edit")==0||_wcsnicmp(klass,L"RichEdit",8)==0,combo=_wcsicmp(klass,L"ComboBox")==0,list=_wcsicmp(klass,L"ListBox")==0;
+        const bool edit=_wcsicmp(klass,L"Edit")==0||_wcsnicmp(klass,L"RichEdit",8)==0,combo=_wcsicmp(klass,L"ComboBox")==0,list=_wcsicmp(klass,L"ListBox")==0||_wcsicmp(klass,L"SysListView32")==0;
         if(combo&&SendMessageW(focus,CB_GETDROPPEDSTATE,0,0))return true;
         if(edit||combo||list) {
             // Open selectors and editor-local Escape already took priority.

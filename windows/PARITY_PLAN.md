@@ -1,6 +1,19 @@
 # Windows / Mac parity plan
 
-Current sample UI checkpoint (2026-10-07): the detailed editor now has retained
+Current recovery checkpoint (2026-10-07): ten-second immutable autosave, ten
+generations per session, a retained native browser and guarded recovery APIs are
+implemented. Restore protects current work before replacement and opens a pathless
+dirty document; snapshots preserve manual plugin state and imported unfinished
+takes. See [recovery evidence](RECOVERY_PROGRESS.md) for final build identity,
+qualification, retained failures and visual limits. Live recording/take editing
+is the next substantial slice; see [recording plan](RECORDING_PLAN.md).
+The final recovery build passes 345 application tests, 14 focused recovery cases
+and a supplemental vendor-input case with strict isolation. The diagnostic native
+suite passes 38/38; the original unexplained 37/38 desktop-teardown failure is
+retained. Eight rendered views at 192 DPI pass review; foreground, other scales
+and sustained presentation remain separate gates.
+
+Previous sample UI checkpoint (2026-10-07): the detailed editor now has retained
 Drawing, Process, Loops, Paste and Snap pages. Independent normal/sustain rows
 support joint preview/Apply and dashed pending boundaries; paste has a reviewed
 clipboard/revision, rate conversion and gain controls; selection and loop
@@ -15,9 +28,9 @@ foreground isolation with exit 1**. The foreground change is unattributed;
 final-build isolation qualification remains unresolved. Its 19 reviewed
 renderer/native-control views at large, compact and minimum client sizes pass
 their own isolation checks, which do not qualify the failed test run. The report
-records the distinct candidate hashes and both isolation-failure traces. The next
-planned slice is recovery; recording, independent dock groups, remaining editor
-menus and the cross-platform qualification gates below remain open.
+records the distinct candidate hashes and both isolation-failure traces. Those
+historical failures remain preserved. Recording, independent dock groups,
+remaining editor menus and the cross-platform qualification gates below remain open.
 
 Current UI work (2026-10-07): the workspace has direct lower-editor tabs,
 collapse/reopen, named saved arrangements and a retained layout manager. Command
@@ -29,7 +42,7 @@ The current docking checkpoint adds retained automation/instrument docking, comp
 pages, floating/redocking and local keyboard routing. Wide windows can show the
 graph beside the selected editor; smaller windows retain each editor behind tabs.
 See [docking evidence](WORKSPACE_DOCKING_PROGRESS.md) for qualification and limits.
-Arbitrary independent dock groups, recovery, recording and the cross-platform
+Arbitrary independent dock groups, recording and the cross-platform
 qualification gates below remain open.
 
 Native context menus now connect pattern, sample, graph, instrument and detailed
@@ -43,7 +56,7 @@ candidate-specific tests and visual limits.
 The sample UI retains independent raw loop drafts and paste preview signatures
 bound to document, sample identity, revision and clipboard ID. Unrelated edits
 cannot silently rebase those drafts. Completing these interactions does not
-replace recovery, recording, accessibility or cross-platform qualification.
+replace recording, accessibility or cross-platform qualification.
 
 ## Upstream integration checkpoint — 2026-09-21
 
@@ -111,12 +124,16 @@ follows `SampleLibraryIntegration.swift`: separate library revisions,
 bounded background indexing/search, folder tags, preview, and the existing
 atomic `sample.importMany` / `instrument.importMultisample` transactions.
 
-## Next: devices, timestamped MIDI/recording and recovery
+## Next: timestamped MIDI and recording
 
 The current Mac source has output selection/64–512-frame preferences in
 `mac/App/main.swift`, CoreMIDI input, shared `NoteRecording` transactions, and
-application-owned autosave/recovery. Windows has shared recording primitives
-and preserved recovery-take data, but no integrated capture/recovery workflow.
+application-owned autosave/recovery. Windows now has application-owned recovery
+and preserves imported recovery-take data. Shared recording primitives compile,
+but Windows has no integrated timestamped input or inspectable/committable live
+take. The audio callback does not yet publish host-time mappings to the shared
+recording clock. [The recording plan](RECORDING_PLAN.md) records the current
+source audit, ownership boundaries and required tests.
 
 1. Explicit endpoint selection and truthful negotiated periods are now implemented
    and tested (`AUDIO_SETTINGS_PROGRESS.md`), without changing system defaults.
@@ -136,10 +153,12 @@ and preserved recovery-take data, but no integrated capture/recovery workflow.
    contract and shared `NoteRecording`. Preserve takes across stale edits; validate
    whole capture batches, use actual presentation-clock history, keep replies
    bounded, and commit in one document Undo. Save/Open protect unfinished takes.
-4. Add private immutable recovery snapshots, atomic generation writes, browser,
-   explicit guarded restore and take recovery. `windows/Project/NativeProject.cpp`
-   already preserves `recoveryTake` and its compatibility provenance; retain that
-   boundary and never overwrite the source song during restore.
+4. Extend the implemented immutable recovery workflow to snapshot live takes
+   without mutating them and hydrate imported/restored takes into stopped worker
+   state. Preserve compatibility provenance; incompatible takes must not silently
+   become committable. Commit/discard must consume the retained take so later
+   saves cannot resurrect it. Keep native format 6 / metadata 17 and shared
+   musical semantics, with one document Undo for commit.
 
 Clock contracts were checked against Microsoft's
 [IAudioClock::GetPosition](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclock-getposition)
@@ -169,7 +188,7 @@ delayed timestamp lookup, with equivalent PCM at different callback sizes.
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields, sample waveform markers and native instrument-envelope markers integrated. See `INSTRUMENT_ENVELOPE_PROGRESS.md`. | Audition piano, detailed waveform markers and preview releases are implemented in `AUDITION_PROGRESS.md`; broader vendor release-tail qualification remains. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
 | Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, program/port controls, modeless instrument aliases/MIDI channels, sound presets, library organization, explicit VST3 location repair and native graph/mixer connections integrated; live parameters reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. See `PLUGIN_ALIASES_PROGRESS.md`, `PLUGIN_PRESETS_PROGRESS.md`, `PLUGIN_LIBRARY_PROGRESS.md`, `PLUGIN_PATH_PROGRESS.md` and `SONG_ROUTING_PROGRESS.md`. | Live opaque-state replacement (including Surge's first-open zoom state) and broader missing-plugin recovery. |
-| Mac context menus, docking, focus, recovery and visual refinements | Retained automation/instrument docking, compact pages, named layouts, five native context-menu surfaces and configurable application shortcuts are implemented; see the workspace reports above. | Other editor menu surfaces, independent dock groups, recovery and actual foreground comparison at multiple scales remain open. |
+| Mac context menus, docking, focus, recovery and visual refinements | Retained automation/instrument docking, compact pages, named layouts, five native context-menu surfaces, configurable application shortcuts and native autosave/recovery are implemented; see the workspace and recovery reports above. | Other editor menu surfaces, independent dock groups, live recording/take recovery and actual foreground comparison at multiple scales remain open. |
 
 ## Execution order and completion gates
 
