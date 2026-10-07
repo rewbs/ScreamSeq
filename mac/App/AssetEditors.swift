@@ -185,15 +185,17 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     picker.target = self
     picker.action = #selector(selectSample)
     picker.fixed(width: 180)
-    let top = stack(
-      .horizontal,
-      [
-        heading, NSView(), picker,
-        ActionButton("Browse…", symbol: "square.and.arrow.down") { [weak self] in self?.onImport?()
-        }, ActionButton("Record…", symbol: "mic") { [weak self] in self?.onRecord?() },
+    // Keep recording visible in a narrow dock instead of pushing it beyond the
+    // sample picker into the inspector's horizontal scroll area.
+    let top = stack(.vertical, [
+      stack(.horizontal, [heading, picker, NSView()], spacing: 8),
+      stack(.horizontal, [
+        ActionButton("Record…", symbol: "mic") { [weak self] in self?.onRecord?() },
+        ActionButton("Browse…") { [weak self] in self?.onImport?() },
         ActionButton("Replace…") { [weak self] in self?.onReplace?() },
-        ActionButton("Audition", symbol: "play.fill") { [weak self] in self?.onPreview?(61) },
-      ], spacing: 8)
+        ActionButton("Audition") { [weak self] in self?.onPreview?(61) },
+      ], spacing: 8),
+    ], spacing: 8)
     heading.lineBreakMode = .byTruncatingTail
     heading.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     name.setAccessibilityLabel("Sample name")

@@ -153,6 +153,8 @@ final class SampleRecordingView: NSView, NSWindowDelegate {
         }
       }
       details.stringValue = "\(rate) Hz · \(count == 1 ? "Mono" : "Stereo") · \(frames) frames · limit \(String(format: "%.1f", maximum)) s"
+    } else {
+      details.stringValue = "Mono or stereo input · no monitoring"
     }
     if let error = data["error"] as? String, !error.isEmpty { status.stringValue = error }
     else if data["limitReached"] as? Bool == true { status.stringValue = "Recording limit reached. Add this take to your song or discard it." }

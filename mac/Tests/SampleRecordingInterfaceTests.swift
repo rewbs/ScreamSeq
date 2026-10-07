@@ -59,5 +59,6 @@ extension InterfaceTests {
     try require(view.status.stringValue.contains("limit reached") && view.add.isEnabled, "Bounded capture completion stays importable")
     view.discardTake(); answer(["take": "", "capturing": false, "frames": 0])
     try require(view.take.isEmpty && !view.add.isEnabled, "Discard retires take state")
+    try require(!view.details.stringValue.contains("frames"), "Discard removes the retired take's frame count")
   }
 }
