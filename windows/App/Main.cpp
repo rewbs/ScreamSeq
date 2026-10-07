@@ -38,6 +38,7 @@
 #include "../Audio/MidiInput.hpp"
 #include "MidiRecordingWindow.hpp"
 #include "ArrangementWindow.hpp"
+#include "ArrangementMatrixWindow.hpp"
 #include "SongTimingWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
@@ -63,7 +64,7 @@ constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=5
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
     arrangementCommand=553,songTimingCommand=554,newPatternCommand=555,duplicatePatternCommand=556,
-    previousSectionCommand=557,nextSectionCommand=558,editSectionCommand=559,patternDetailsCommand=560;
+    previousSectionCommand=557,nextSectionCommand=558,editSectionCommand=559,patternDetailsCommand=560,arrangementMatrixCommand=561;
 constexpr int dockAutomationCommand=530,dockInstrumentCommand=531,editorTrackerTab=532,
     editorAutomationTab=533,editorInstrumentTab=534,editorFloatCommand=535,editorHideCommand=536,
     editorPinCommand=537,editorCursorCommand=538,editorReturnCommand=539;
@@ -303,6 +304,7 @@ public:
             {"recording",view->recording},{"midi",midiSettingsSnapshot()},{"midiWindow",midiWindow?midiWindow->snapshot():Json{{"visible",false}}},
             {"arrangementSelection",arrangementSelection()},
             {"arrangementWindow",arrangementWindow?arrangementWindow->snapshot():Json{{"visible",false}}},
+            {"arrangementMatrixWindow",arrangementMatrixWindow?arrangementMatrixWindow->snapshot():Json{{"visible",false}}},
             {"songTimingWindow",songTimingWindow?songTimingWindow->snapshot():Json{{"visible",false}}},
             {"graphEditor",graphEditorSnapshot()},
             {"graphCurve",graphCurveSnapshot()},
