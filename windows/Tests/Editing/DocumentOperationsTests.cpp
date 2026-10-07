@@ -2,6 +2,7 @@
 #include "windows/Api/SessionAdapter.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/PatternCommands.hpp"
+#include "editor/TrackLayout.hpp"
 #include "soundlib/mod_specifications.h"
 #ifdef small
 #undef small
@@ -377,8 +378,8 @@ void sampleReads() {
   CHECK(f.doc->revision==rev); CHECK(f.doc->historyBytes()==bytes); CHECK(f.stops==0); CHECK(f.publications==0);
 }
 void structuralFormatsAndInventory() {
-  const std::vector<std::string> reads={"pattern.commands","sample.get","sample.waveform.get"};
-  const std::vector<std::string> writes={"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select"};
+  const std::vector<std::string> reads={"pattern.commands","sample.get","sample.waveform.get","arrangement.get"};
+  const std::vector<std::string> writes={"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","song.annotate"};
   CHECK(DocumentOperations::reads()==reads); CHECK(DocumentOperations::writes()==writes);
   for(auto type:{MOD_TYPE_MOD,MOD_TYPE_XM,MOD_TYPE_S3M,MOD_TYPE_IT,MOD_TYPE_MPT}) {
     Fixture f(type);
@@ -417,6 +418,216 @@ void largeBatchAndNativeValidation() {
   });
   rejected(capacity,"pattern.create",{{"rows",64},{"source",0}});
   CHECK(capacity.doc->native().automation.size()==256); CHECK(capacity.stops==0);
+}
+std::string annotationID(uint64_t id) {return "n"+std::to_string(id);}
+void annotationFixture(Fixture &f) {
+  f.doc->transaction([](CSoundFile &song) {
+    song.Order().assign(6,0);song.Order()[2]=PATTERNINDEX_INVALID;song.Order()[3]=PATTERNINDEX_SKIP;
+    CHECK(song.Order.AddSequence()==1);song.Order(1).assign(2,0);song.Order.SetSequence(0);
+    song.m_nSamples=1;song.GetSample(1).Initialize(MOD_TYPE_MPT);
+    CHECK(song.AllocateInstrument(1));song.m_nInstruments=1;
+  });
+  f.doc->annotate([](NativeSong &n) {
+    const std::array<uint16_t,2> columns={0,1};groupNoteColumns(n,columns,"Shared note group");
+    const auto pattern=n.patterns.at(0).id,track=n.tracks.at(0).id;
+    n.columnMutes[track]=true;n.performance.columns[track]=2;
+    n.preciseNotes.push_back({pattern,track,17,1,60,90});
+    const auto lane=n.makeEntity().id,bank=n.makeEntity().id;
+    n.automation.push_back({lane,pattern,"retained-plugin",7,true,{{0,.25},{256,.75}}});
+    EnvelopeShape shape;shape.points={{0,.25},{256,.75}};
+    n.envelopeBank.push_back({bank,"Retained template",shape});
+    n.envelopeLinks.push_back({{EnvelopeTargetKind::Parameter,lane,0},bank,64*256});
+    n.signal.lanes[track]=2;n.signal.layout["retained-node"]={123.5,456.25};
+  });
+}
+void annotationEdits() {
+  Fixture f;annotationFixture(f);
+  auto expected=f.doc->native();const auto core=f.doc->snapshotData();
+  std::vector<NativeEntity *> targets={&expected.patterns.at(0),&expected.tracks.at(1),&expected.sequences[0].info,
+    &expected.sequences[0].orders[2],&expected.sequences[1].info,&expected.sequences[1].orders[1]};
+  for(auto *target:targets) {
+    const auto before=f.doc->native();const auto revision=f.doc->revision;
+    target->name="Café 🎵 ";target->annotation="line one\nline two";target->color=0xabcdef;
+    const auto result=f.api.invoke("song.annotate",{{"id",annotationID(target->id)},{"name",target->name},{"annotation",target->annotation},{"color",target->color}});
+    CHECK(result==DocumentOperations::entityInfo(*target));CHECK(f.doc->native()==expected);
+    CHECK(f.doc->snapshotData()==core);CHECK(f.doc->revision==revision+1);CHECK(f.stops==0);CHECK(f.publications==0);
+    f.api.invoke("history.undo",{{"domain","document"}});CHECK(f.doc->native()==before);CHECK(f.doc->canRedo());
+    const auto undone=f.doc->revision,history=f.doc->historyBytes();
+    f.api.invoke("song.annotate",{{"id",annotationID(target->id)},{"name",""}});
+    CHECK(f.doc->revision==undone&&f.doc->historyBytes()==history&&f.doc->canRedo());
+    f.api.invoke("history.redo",{{"domain","document"}});CHECK(f.doc->native()==expected);CHECK(f.stops==0);
+  }
+  const auto id=annotationID(expected.patterns.at(0).id);
+  const auto before=f.doc->native();
+  auto result=f.api.invoke("song.annotate",{{"id",id},{"color",0}});
+  expected.patterns.at(0).color=0;CHECK(f.doc->native()==expected);CHECK(result==DocumentOperations::entityInfo(expected.patterns.at(0)));
+  f.api.invoke("history.undo",{{"domain","document"}});CHECK(f.doc->native()==before);
+  f.api.invoke("history.redo",{{"domain","document"}});CHECK(f.doc->native()==expected);
+  // History snapshots carry an older allocator watermark after undone creation.
+  f.api.invoke("pattern.create",{{"rows",32}});f.api.invoke("history.undo",{{"domain","document"}});
+  const auto allocated=f.doc->native().nextID;const auto stopped=f.stops;
+  f.api.invoke("history.undo",{{"domain","document"}});CHECK(f.doc->native().nextID==allocated&&f.stops==stopped);
+  f.api.invoke("history.redo",{{"domain","document"}});CHECK(f.doc->native().nextID==allocated&&f.stops==stopped);
+}
+void annotationValidation() {
+  Fixture f;annotationFixture(f);const auto id=annotationID(f.doc->native().patterns.at(0).id);
+  for(const Json bad:{Json(),Json(true),Json(1),Json(""),Json("n"),Json("n0"),Json("n01"),Json("n+1"),Json("n-1"),Json(" n1"),Json("n1 "),Json("n１"),Json("n1000000000000"),Json("n999999999999999999999999999")})
+    rejected(f,"song.annotate",{{"id",bad},{"name","unchanged"}});
+  for(const auto missing:{f.doc->native().samples.at(1).id,f.doc->native().instruments.at(1).id,uint64_t(999999999999)})
+    rejected(f,"song.annotate",{{"id",annotationID(missing)},{"name","unchanged"}});
+  for(const auto &bad:std::vector<Json>{{{"id",id}},{{"name","missing ID"}},{{"id",id},{"dryRun",true},{"name","x"}},
+      {{"id",id},{"name",nullptr}},{{"id",id},{"annotation",7}},{{"id",id},{"name",true}},
+      {{"id",id},{"name",std::string("x\0y",3)}},{{"id",id},{"annotation",std::string("\xc0\xaf",2)}},
+      {{"id",id},{"name",std::string(257,'x')}},{{"id",id},{"annotation",std::string(4097,'x')}},
+      {{"id",id},{"name","valid"},{"color",0x1000000}},{{"id",id},{"color",-1}},{{"id",id},{"color",true}},
+      {{"id",id},{"color",1.5}},{{"id",id},{"color","1"}},{{"id",id},{"color",UINT64_MAX}},{{"id",id},{"color",nullptr}}})rejected(f,"song.annotate",bad);
+  std::string name,notes;for(int i=0;i<128;++i)name+="🎵";for(int i=0;i<2048;++i)notes+="🎵";
+  f.api.invoke("song.annotate",{{"id",id},{"name",name},{"annotation",notes},{"color",0xffffff}});
+  rejected(f,"song.annotate",{{"id",id},{"name",name+"x"}});rejected(f,"song.annotate",{{"id",id},{"annotation",notes+"x"}});
+  f.api.invoke("song.annotate",{{"id",id},{"name",""},{"annotation",""},{"color",0}});CHECK(f.doc->native().patterns.at(0).name.empty());
+  Fixture readonly(MOD_TYPE_DSM);const auto original=readonly.doc->native();bool refused=false;
+  try{readonly.api.invoke("song.annotate",{{"id",annotationID(original.patterns.at(0).id)},{"name","x"}});}catch(const ScreamSeq::Api::ApiError &e){refused=e.code==-32602;}
+  CHECK(refused&&readonly.doc->native()==original&&readonly.doc->revision==0&&!readonly.doc->canUndo()&&readonly.stops==0);
+}
+void arrangementSections() {
+  Fixture f;annotationFixture(f);auto slots=f.doc->native().sequences[0].orders;
+  auto annotate=[&](size_t order,const std::string &name){f.api.invoke("song.annotate",{{"id",annotationID(slots[order].id)},{"name",name}});};
+  CHECK(f.api.invoke("arrangement.get",Json::object()).at("sections").empty());
+  annotate(1,"Verse");annotate(2," ");annotate(5,"Outro");
+  const auto read=f.api.invoke("arrangement.get",Json::object());CHECK(read.at("sequence")==0);
+  CHECK(read.at("sequenceID")==annotationID(f.doc->native().sequences[0].info.id));CHECK(read.at("orders").size()==6);
+  for(size_t i=0;i<6;++i){const auto &order=read.at("orders")[i];CHECK(order.at("id")==annotationID(slots[i].id));CHECK(order.at("order")==i);CHECK(order.at("pattern")==f.doc->song().Order()[i]);CHECK(order.contains("patternID")==f.doc->song().Patterns.IsValidPat(f.doc->song().Order()[i]));}
+  CHECK(read.at("sections")==Json::array({{{"id",annotationID(slots[1].id)},{"name","Verse"},{"firstOrder",1},{"lastOrder",1},{"color",0}},
+    {{"id",annotationID(slots[2].id)},{"name"," "},{"firstOrder",2},{"lastOrder",4},{"color",0}},
+    {{"id",annotationID(slots[5].id)},{"name","Outro"},{"firstOrder",5},{"lastOrder",5},{"color",0}}}));
+  annotate(2,"");CHECK(f.api.invoke("arrangement.get",Json::object()).at("sections")[0].at("lastOrder")==4);
+  f.api.invoke("history.undo",{{"domain","document"}});CHECK(f.api.invoke("arrangement.get",Json::object())==read);
+  f.api.invoke("order.edit",{{"order",1},{"operation","down"}});
+  CHECK(f.api.invoke("arrangement.get",Json::object()).at("orders")[2].at("name")=="Verse");
+  f.api.invoke("order.edit",{{"order",2},{"operation","remove"}});
+  CHECK(f.api.invoke("arrangement.get",Json::object()).at("sections").size()==2);
+  rejected(f,"song.annotate",{{"id",annotationID(slots[1].id)},{"name","Removed occurrence"}});
+  f.api.invoke("history.undo",{{"domain","document"}});f.api.invoke("history.undo",{{"domain","document"}});
+  CHECK(f.api.invoke("arrangement.get",Json::object())==read);
+  f.api.invoke("sequence.select",{{"sequence",1}});CHECK(f.api.invoke("arrangement.get",Json::object()).at("orders").size()==2);
+  CHECK(f.api.invoke("arrangement.get",Json::object()).at("sections").empty());
+  rejected(f,"arrangement.get",{{"sequence",0}});
+  Fixture bounded;bounded.doc->transaction([](CSoundFile &song){song.Order().assign(1400,0);});
+  bounded.doc->annotate([](NativeSong &n){for(auto &order:n.sequences[0].orders)order.annotation.assign(4096,'\1');});
+  rejected(bounded,"arrangement.get",Json::object(),-32003);
+}
+void checkHistoryProjection(Document &document) {
+  for(const bool redo:{false,true}) {
+    const auto bytes=document.snapshotData();const auto native=document.native();
+    const auto revision=document.revision,history=document.historyBytes();
+    const auto sequence=document.song().Order.GetCurrentSequenceIndex();
+    const auto undoAvailable=document.canUndo(),redoAvailable=document.canRedo();
+    const auto waveformReads=document.waveformReadFrames();
+    auto candidate=document.historyCandidate(redo);CHECK(candidate);
+    CHECK(document.snapshotData()==bytes&&document.native()==native&&document.revision==revision);
+    CHECK(document.historyBytes()==history&&document.canUndo()==undoAvailable&&document.canRedo()==redoAvailable);
+    CHECK(document.song().Order.GetCurrentSequenceIndex()==sequence&&document.waveformReadFrames()==waveformReads);
+    CHECK(candidate->revision==revision+1&&candidate->native().nextID>=native.nextID);
+    // Mutating the independent candidate must not mutate the live song or PCM.
+    const auto projectedBytes=candidate->snapshotData();const auto projectedNative=candidate->native();
+    const auto projectedSequence=candidate->song().Order.GetCurrentSequenceIndex();
+    candidate->song().SetTitle("Private validation copy");
+    if(candidate->song().GetNumSamples()&&candidate->song().GetSample(1).HasSampleData())
+      candidate->song().GetSample(1).sample16()[0]^=1;
+    CHECK(document.snapshotData()==bytes&&document.native()==native&&document.historyBytes()==history);
+    if(redo)document.redo();else document.undo();
+    CHECK(document.snapshotData()==projectedBytes&&document.native()==projectedNative);
+    CHECK(document.revision==revision+1&&document.song().Order.GetCurrentSequenceIndex()==projectedSequence);
+  }
+}
+void historyCandidateForms() {
+  Fixture empty;CHECK(!empty.doc->historyCandidate(false)&&!empty.doc->historyCandidate(true));
+  Fixture cells;cells.api.invoke("pattern.apply",patch(3,65));checkHistoryProjection(*cells.doc);
+  Fixture native;native.doc->annotate([](auto &n){n.patterns.at(0).annotation="Native-only history";});
+  checkHistoryProjection(*native.doc);
+  Fixture structure;annotationFixture(structure);
+  structure.doc->addPattern(32,true,0);
+  auto allocated=structure.doc->native();allocated.nextID+=100;structure.doc->restoreNative(allocated);
+  structure.doc->song().Order.SetSequence(1); // Undo must restore the captured sequence zero.
+  checkHistoryProjection(*structure.doc);CHECK(structure.doc->native().nextID==allocated.nextID);
+  Fixture pcm;
+  pcm.doc->transaction([](CSoundFile &song){
+    song.m_nSamples=1;auto &sample=song.GetSample(1);sample.Initialize(MOD_TYPE_MPT);
+    sample.uFlags.set(CHN_16BIT|CHN_STEREO|CHN_LOOP|CHN_SUSTAINLOOP);
+    sample.nLength=8;sample.nLoopStart=0;sample.nLoopEnd=8;sample.nSustainStart=2;sample.nSustainEnd=6;
+    sample.nativeReverseLoops=3;CHECK(sample.AllocateSample());
+    for(int i=0;i<16;++i)sample.sample16()[i]=int16_t((i-8)*1024);
+    sample.PrecomputeLoops(song,false);
+  });
+  SampleProcessOptions process;process.operation="invert";process.last=8;
+  CHECK(pcm.doc->processSample(1,process).changedSamples>0);checkHistoryProjection(*pcm.doc);
+  pcm.doc->applySampleProcess(pcm.doc->prepareSampleLoops(1,SampleLoopSettings{1,7,true,true,false},std::nullopt));
+  checkHistoryProjection(*pcm.doc); // SampleUndo with geometry but no changed PCM.
+  pcm.doc->applySampleEdit(pcm.doc->prepareSampleErase(1,2,4));checkHistoryProjection(*pcm.doc);
+  CHECK(pcm.doc->applySampleCopy(pcm.doc->prepareSampleCopy(1,0,4,SampleChannels::Both,std::string("Copied PCM")))==2);
+  checkHistoryProjection(*pcm.doc);
+}
+void annotationHistoryGuards() {
+  // Each difference outside the four supported entities' presentation fields
+  // must still stop the renderer, even when an annotation shares the Undo entry.
+  const std::vector<std::function<void(NativeSong&)>> changes={
+    [](auto &n){n.columnMutes.begin()->second=false;},[](auto &n){n.preciseNotes[0].velocity=91;},
+    // This lane is linked: a valid musical edit updates its song template and
+    // linked use together. Changing the use alone is rejected before history.
+    [](auto &n){n.envelopeBank[0].shape.points[0].value=.5;n.automation[0].points[0].value=.5;},
+    [](auto &n){n.performance.columns.begin()->second=3;},
+    [](auto &n){n.mixer.buses[0].gainDB=-3;},[](auto &n){n.signal.lanes.begin()->second=3;},
+    [](auto &n){n.signal.layout.begin()->second[0]=200;},[](auto &n){n.noteTracks.clear();},
+    [](auto &n){n.envelopeBank[0].name="Other template";},[](auto &n){n.envelopeLinks.clear();},
+    [](auto &n){n.samples.at(1).name="Sample";},[](auto &n){n.instruments.at(1).annotation="Instrument";},
+    [](auto &n){std::swap(n.sequences[0].orders[0],n.sequences[0].orders[1]);},
+    [](auto &n){std::swap(n.sequences[0].orders[0],n.sequences[1].orders[0]);}};
+  for(const auto &change:changes) {
+    Fixture f;annotationFixture(f);const auto before=f.doc->native();
+    f.doc->annotate([&](auto &n){change(n);n.patterns.at(0).annotation="Mixed change";});const auto after=f.doc->native();
+    f.api.invoke("history.undo",{{"domain","document"}});CHECK(f.stops==1&&f.doc->native()==before);
+    f.api.invoke("history.redo",{{"domain","document"}});CHECK(f.stops==2&&f.doc->native()==after);
+  }
+  Fixture guarded;annotationFixture(guarded);const auto before=guarded.doc->native();const auto bytes=guarded.doc->snapshotData();
+  const auto revision=guarded.doc->revision,history=guarded.doc->historyBytes();unsigned validations=0;
+  DocumentOperations api(*guarded.doc,[&]{++guarded.stops;},{},[&](Document &candidate){++validations;CHECK(candidate.song().Patterns.IsValidPat(1));throw ScreamSeq::Api::ApiError(-32602,"test budget");},
+    [&](const NativeSong &candidate){++validations;CHECK(candidate!=before);throw ScreamSeq::Api::ApiError(-32602,"test budget");});
+  for(const auto &request:std::vector<std::pair<std::string,Json>>{{"pattern.create",{{"rows",32}}},{"song.annotate",{{"id",annotationID(before.patterns.at(0).id)},{"name","Too large"}}}}) {
+    bool refused=false;try{api.invoke(request.first,request.second);}catch(const ScreamSeq::Api::ApiError &e){refused=e.code==-32602;}
+    CHECK(refused&&guarded.doc->native()==before&&guarded.doc->snapshotData()==bytes&&guarded.doc->revision==revision&&guarded.doc->historyBytes()==history&&guarded.stops==0);
+  }
+  CHECK(validations==2);
+  api.invoke("song.annotate",{{"id",annotationID(before.patterns.at(0).id)},{"name",before.patterns.at(0).name}});
+  CHECK(validations==2&&guarded.doc->revision==revision);
+  guarded.doc->annotate([](auto &n){n.patterns.at(0).name="Undo target";});
+  const auto changed=guarded.doc->native();const auto changedRevision=guarded.doc->revision,changedHistory=guarded.doc->historyBytes();
+  DocumentOperations blockedHistory(*guarded.doc,[&]{++guarded.stops;},{},{},[&](const NativeSong &candidate){CHECK(candidate==before);throw ScreamSeq::Api::ApiError(-32602,"history budget");});
+  bool refused=false;try{blockedHistory.invoke("history.undo",{{"domain","document"}});}catch(const ScreamSeq::Api::ApiError &e){refused=e.code==-32602;}
+  CHECK(refused&&guarded.doc->native()==changed&&guarded.doc->revision==changedRevision&&guarded.doc->historyBytes()==changedHistory&&!guarded.doc->canRedo()&&guarded.stops==0);
+  // Structural history admission sees the exact restored state before stop or
+  // live mutation, and refusal consumes neither Undo nor Redo.
+  Fixture structural;annotationFixture(structural);
+  structural.doc->addPattern(32,true,0);auto high=structural.doc->native();high.nextID+=100;structural.doc->restoreNative(high);
+  for(const bool redo:{false,true}) {
+    const auto snapshot=structural.doc->snapshotData();const auto metadata=structural.doc->native();
+    const auto rev=structural.doc->revision,bytesUsed=structural.doc->historyBytes();
+    const auto canUndo=structural.doc->canUndo(),canRedo=structural.doc->canRedo();
+    const auto expected=structural.doc->historyCandidate(redo);unsigned staged=0;bool reject=true;
+    DocumentOperations admission(*structural.doc,[&]{++structural.stops;},{},[&](Document &candidate){
+      ++staged;CHECK(candidate.snapshotData()==expected->snapshotData()&&candidate.native()==expected->native());
+      CHECK(candidate.revision==rev+1&&candidate.native().nextID==high.nextID);
+      CHECK(structural.doc->revision==rev&&structural.doc->snapshotData()==snapshot&&structural.stops==unsigned(redo));
+      if(reject)throw ScreamSeq::Api::ApiError(-32602,"structural history budget");
+    });
+    const auto method=redo?"history.redo":"history.undo";bool blocked=false;
+    try{admission.invoke(method,{{"domain","document"}});}catch(const ScreamSeq::Api::ApiError &e){blocked=e.code==-32602;}
+    CHECK(blocked&&staged==1&&structural.doc->revision==rev&&structural.doc->native()==metadata&&structural.doc->snapshotData()==snapshot);
+    CHECK(structural.doc->historyBytes()==bytesUsed&&structural.doc->canUndo()==canUndo&&structural.doc->canRedo()==canRedo&&structural.stops==unsigned(redo));
+    reject=false;admission.invoke(method,{{"domain","document"}});
+    CHECK(staged==2&&structural.doc->revision==rev+1&&structural.doc->snapshotData()==expected->snapshotData());
+    CHECK(structural.doc->native()==expected->native()&&structural.stops==unsigned(redo)+1);
+  }
+  historyCandidateForms();
 }
 // Strict regression: exercise both API transactions and the shared core directly.
 int snapshotProbe() {
@@ -460,7 +671,8 @@ int main(int argc,char **argv) {
       {"patternApply",patternApply},{"historyAndPreview",historyAndPreview},{"invalidBatches",invalidBatches},
       {"commandCatalogAndFormatLimits",commandCatalogAndFormatLimits},{"documentPatch",documentPatch},
       {"patternCreate",patternCreate},{"orderEdit",orderEdit},{"sequenceSelect",sequenceSelect},{"sampleReads",sampleReads},
-      {"structuralFormatsAndInventory",structuralFormatsAndInventory},{"largeBatchAndNativeValidation",largeBatchAndNativeValidation}}) {
+      {"structuralFormatsAndInventory",structuralFormatsAndInventory},{"largeBatchAndNativeValidation",largeBatchAndNativeValidation},
+      {"annotationEdits",annotationEdits},{"annotationValidation",annotationValidation},{"arrangementSections",arrangementSections},{"annotationHistoryGuards",annotationHistoryGuards}}) {
     try { test(); std::cout << "PASS " << name << '\n'; }
     catch(const std::exception &e) { ++failed; std::cerr << "FAIL " << name << ": " << e.what() << '\n'; }
   }

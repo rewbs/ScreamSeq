@@ -254,7 +254,9 @@ class RecoveryTests(unittest.TestCase):
         self.command(548)
         browser = self.window('ScreamSeq.Recovery')
         private_desktop.check(private_desktop.user.PostMessageW(browser, 0x111, 7003, 0))
-        self.wait(lambda: self.read('recovery.status')['saving'])
+        # saving becomes true before immutable snapshot capture finishes. Switch
+        # during the delayed disk write, after the document worker is available.
+        self.wait(lambda: self.read('recovery.status')['saving'] and not self.read('workspace.get')['documentBusy'])
         self.write('document.open', path=str(path), discard=True)
         self.wait(lambda: not self.read('recovery.status')['saving'])
         status = self.read('recovery.status')

@@ -4,9 +4,10 @@
 
 A native tracker DAW built on OpenMPT, with precise note timing, sample instruments, AU/VST3 hosting, musical automation, a shared audio/modulation graph and an agent-facing editing API. This is an independent derivative, not an official OpenMPT release.
 
-The macOS app uses AppKit, Metal and Core Audio. A Windows-native sibling is planned alongside it, sharing musical data and DSP while using native Windows UI/audio facilities.
+The macOS app uses AppKit, Metal and Core Audio. The Windows-native sibling in `windows/` shares musical data and DSP and uses native Windows UI/audio facilities. Windows parity work is ongoing; implementation and qualification are recorded in the Windows progress reports.
 
 - [Build and use the macOS application](mac/README.md)
+- [Windows sections and annotations checkpoint](windows/ANNOTATION_PROGRESS.md), [Windows API](windows/Api/README.md), and [Windows qualification](windows/Tests/README.md)
 - [Architecture and development workflow](doc/SCREAMSEQ_ARCHITECTURE.md)
 - [Graph workflow](mac/GRAPH_WORKFLOW.md), [precise notes](mac/PRECISE_NOTES.md), [agent API](mac/AUTOMATION.md)
 - [Project agent skills](.agents/skills/) and [Windows agent kickoff prompt](doc/WINDOWS_AGENT_PROMPT.md)

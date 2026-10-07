@@ -30,6 +30,7 @@ struct Fixture {
   HWND control(int id)const{const auto value=GetDlgItem(tool.window(),id);require(value,"Arrangement control missing");return value;}
   void click(int id){SendMessageW(tool.window(),WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),reinterpret_cast<LPARAM>(control(id)));}
   void text(const wchar_t *value){SetWindowTextW(control(8011),value);}
+  void notes(const wchar_t *value){const auto edit=control(8027);SendMessageW(edit,EM_SETSEL,0,-1);SendMessageW(edit,EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(value));}
   void select(int index){ListView_SetItemState(control(8001),-1,0,LVIS_SELECTED|LVIS_FOCUSED);ListView_SetItemState(control(8001),index,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);}
   void choose(int id,int index){SendMessageW(control(id),CB_SETCURSEL,index,0);SendMessageW(tool.window(),WM_COMMAND,MAKEWPARAM(id,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(id)));}
   std::wstring cell(int row,int column){wchar_t buffer[256]{};NMLVDISPINFOW info{};info.hdr={control(8001),8001,LVN_GETDISPINFOW};info.item.mask=LVIF_TEXT;info.item.iItem=row;info.item.iSubItem=column;info.item.pszText=buffer;info.item.cchTextMax=256;SendMessageW(tool.window(),WM_NOTIFY,8001,reinterpret_cast<LPARAM>(&info));return buffer;}
@@ -45,6 +46,11 @@ struct Fixture {
     }else if(method=="pattern.create"){
       const auto index=doc["patterns"].size();const auto id="created"+std::to_string(writes.size());doc["patterns"].push_back({{"index",index},{"id","p"+id},{"rows",params.at("rows")},{"name",""}});doc["orders"].push_back(index);doc["orderMetadata"].push_back({{"id",id}});current["selectedOrderID"]=id;result["pattern"]=index;
     }else if(method=="sequence.select")doc["sequence"]=params.at("sequence");
+    else if(method=="song.annotate"){
+      Json *entity=nullptr;for(auto &value:doc["orderMetadata"])if(value.at("id")==params.at("id"))entity=&value;
+      for(auto &value:doc["patterns"])if(value.at("id")==params.at("id"))entity=&value;
+      require(entity,"Annotation target missing");for(const char *field:{"name","annotation","color"})if(params.contains(field))(*entity)[field]=params.at(field);result=*entity;
+    }
     current["revision"]="r"+std::to_string(writes.size());return {{"state",current},{"result",result}};
   }
 };
@@ -130,5 +136,57 @@ void pumpedHostSelectionReveal(Owner &owner){
   require(ListView_GetTopIndex(f.control(8001))==0,"Accepted sequence command left its new selected occurrence offscreen");
   ListView_EnsureVisible(f.control(8001),220,FALSE);const auto scrolled=ListView_GetTopIndex(f.control(8001));f.tool.update(f.current);require(ListView_GetTopIndex(f.control(8001))==scrolled,"Ordinary publication reset deliberate user scroll");
 }
+void sectionNavigationAndDetails(Owner &owner){
+  Fixture f(owner.window);auto &metadata=f.current["document"]["orderMetadata"];
+  metadata[0]["name"]="Intro";metadata[2]["name"]=" ";metadata[3]["name"]="Ending";metadata[1]["annotation"]="Preserve order notes";metadata[1]["color"]=123456;
+  f.current["document"]["patterns"][0]["annotation"]="Shared notes";f.current["document"]["patterns"][0]["color"]=4321;
+  f.tool.open(f.current);require(Header_GetItemCount(ListView_GetHeader(f.control(8001)))==4&&f.cell(0,3)==L"Intro"&&f.cell(2,3)==L" ","Section column changed whitespace or lost native markers");
+  f.click(8018);require(f.selected.back()=="o1"&&!IsWindowEnabled(f.control(8018)),"Previous section did not stop at first strict marker");
+  f.click(8019);require(f.selected.back()=="skip","Next section ignored named Skip or whitespace marker");f.click(8019);require(f.selected.back()=="stop"&&!IsWindowEnabled(f.control(8019)),"Next section wrapped or ignored named Stop");
+  const auto navigations=f.selected.size();f.click(8019);require(f.selected.size()==navigations&&f.played.empty()&&f.writes.empty(),"Section endpoint or navigation altered playback/song");
+  f.select(1);f.click(8021);require(f.tool.snapshot()["sectionDraft"]["targetID"]=="o2","Section first visit did not capture repeated order identity");
+  const auto sectionLabel=f.tool.snapshot()["sectionDraft"]["targetLabel"];require(sectionLabel.get<std::string>().find("Order 1")!=std::string::npos&&sectionLabel.get<std::string>().find("Verse")!=std::string::npos,"Captured order label lacks recognizable occurrence/pattern");SetWindowTextW(f.control(8023),L"Second occurrence");f.select(0);require(f.tool.snapshot()["sectionDraft"]["targetLabel"]==sectionLabel,"Selection rewrote the captured human label");require(f.tool.snapshot()["sectionDraft"]["selectionDiffers"].get<bool>()&&f.tool.snapshot()["sectionDraft"]["targetID"]=="o2","Selection redirected section draft");
+  f.click(8024);require(f.writes.back().first=="song.annotate"&&f.writes.back().second.at("id")=="o2"&&f.writes.back().second.size()==3,"Set section patched the wrong entity or unrelated fields");
+  require(metadata[1]["name"]=="Second occurrence"&&metadata[1]["annotation"]=="Preserve order notes"&&metadata[1]["color"]==123456&&f.tool.snapshot()["selectedOrderID"]=="o1","Section apply replaced unrelated fields or moved selection");
+  require(!f.tool.snapshot()["sectionDraft"]["stale"].get<bool>()&&f.tool.snapshot()["sectionDraft"]["selectionDiffers"].get<bool>(),"Successful section apply silently retargeted its draft");
+  f.click(8022);require(f.tool.snapshot()["patternDraft"]["targetID"]=="p1"&&f.tool.snapshot()["patternDraft"]["annotationText"]=="Shared notes","Pattern page did not capture shared pattern details");
+  SetWindowTextW(f.control(8026),L"Shared phrase");f.notes(L"Notes across every occurrence\r\n音色 — café");f.select(4);
+  f.click(8028);require(f.writes.back().second.at("id")=="p1"&&f.writes.back().second.size()==4,"Save details targeted new selection or overwrote color");
+  require(f.current["document"]["patterns"][0]["color"]==4321&&f.cell(0,1)==L"0 · Shared phrase"&&f.cell(1,1)==L"0 · Shared phrase","Pattern metadata did not refresh all repeated occurrences");
+  f.click(8021);require(f.tool.snapshot()["sectionDraft"]["stale"].get<bool>()&&f.tool.snapshot()["sectionDraft"]["nameText"]=="Second occurrence","Independent section draft was rebased by pattern apply");
+  f.select(3);f.click(8025);SetWindowTextW(f.control(8023),L"");f.click(8024);require(f.current["document"]["orderMetadata"][3]["name"]=="","Section name clearing on Stop failed");
+  f.click(8022);f.click(8029);require(!f.tool.snapshot()["patternDraft"]["bound"].get<bool>()&&!IsWindowEnabled(f.control(8028))&&!IsWindowEnabled(f.control(8027)),"Stop acquired nonexistent pattern details");
+  const auto writes=f.writes.size();f.click(8028);require(f.writes.size()==writes,"Unbound pattern page submitted an edit");
+  f.click(8020);require(IsWindowVisible(f.control(8011))&&f.tool.snapshot()["rowsText"]=="64","Details pages lost the independent creation draft");
 }
-int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqArrangementTest",[]{HWND parent{},edit{};{Owner owner;parent=owner.window;edit=owner.edit;stableOrders(owner);draftsAndPumpedCompletion(owner);boundsScrollAndLimits(owner);firstOpenPlacement(owner);pumpedHostSelectionReveal(owner);owner.close();}require(!IsWindow(parent)&&!IsWindow(edit),"Destroy owned arrangement test windows");});std::cout<<"PASS arrangement window: repeated occurrence IDs, sentinels, retained stale drafts, pumped completion guards, native keys, scroll, bounds and first-open placement\n";return 0;}catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}
+void retainedAnnotationDrafts(Owner &owner){
+  Fixture f(owner.window);f.tool.open(f.current,"pattern");
+  std::wstring longNotes;for(int i=0;i<70;++i)longNotes+=L"音色 café \U0001f3b5 retained line\r\n";
+  f.notes(longNotes.c_str());SetActiveWindow(f.tool.window());SetFocus(f.control(8027));SendMessageW(f.control(8027),EM_SETSEL,47,62);SendMessageW(f.control(8027),EM_LINESCROLL,0,35);
+  const auto top=SendMessageW(f.control(8027),EM_GETFIRSTVISIBLELINE,0,0);require(top>0,"Multiline retention fixture did not scroll");
+  f.click(8021);SetWindowTextW(f.control(8023),L"Independent section");f.select(4);f.tool.update(f.current);f.click(8022);
+  DWORD first=0,last=0;SendMessageW(f.control(8027),EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+  require(f.tool.snapshot()["patternDraft"]["targetID"]=="p1"&&f.tool.snapshot()["patternDraft"]["nameText"]=="Verse"&&first==47&&last==62&&SendMessageW(f.control(8027),EM_GETFIRSTVISIBLELINE,0,0)==top&&GetFocus()==f.control(8027),"Page/selection/polling lost captured pattern, caret, scroll or focus");
+  const auto raw=f.tool.snapshot()["patternDraft"]["annotationText"];f.tool.hide();f.tool.open(f.current,"pattern");require(f.tool.snapshot()["patternDraft"]["annotationText"]==raw&&GetFocus()==f.control(8027),"Hidden reopen reset multiline draft/focus");
+  RECT rect{};GetWindowRect(f.tool.window(),&rect);SetWindowPos(f.tool.window(),nullptr,0,0,rect.right-rect.left+20,rect.bottom-rect.top+20,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+  SendMessageW(f.control(8027),EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));require(first==47&&last==62&&f.tool.snapshot()["patternDraft"]["annotationText"]==raw,"Resize changed UTF-16 notes/caret");
+  f.current["revision"]="outside";f.tool.update(f.current);require(f.tool.snapshot()["patternDraft"]["stale"].get<bool>()&&!IsWindowEnabled(f.control(8028)),"External revision did not disable stale details apply");
+  const auto writes=f.writes.size();f.click(8028);require(f.writes.size()==writes&&f.tool.snapshot()["patternDraft"]["annotationText"]==raw,"Stale apply submitted or erased text");
+  f.click(8029);require(f.tool.snapshot()["patternDraft"]["targetID"]=="p2"&&f.tool.snapshot()["patternDraft"]["nameText"]=="Chorus"&&!f.tool.snapshot()["patternDraft"]["stale"].get<bool>(),"Explicit Reload did not capture selected pattern");
+  f.onOperate=[&](std::string method,Json params){require(method=="song.annotate"&&params.at("id")=="p2","Wrong pumped annotation target");const auto generation=f.tool.snapshot()["patternDraft"]["generation"].get<uint64_t>();f.notes(L"Newer unsent notes");require(f.tool.snapshot()["patternDraft"]["generation"].get<uint64_t>()>generation,"Native multiline replacement did not emit an edit notification");auto published=f.current;published["revision"]="accepted";published["document"]["patterns"][1]["annotation"]=params.at("annotation");f.current=published;f.tool.update(published);return Json{{"state",published},{"result",published["document"]["patterns"][1]}};};
+  f.notes(L"Submitted notes");f.click(8028);require(f.tool.snapshot()["patternDraft"]["annotationText"]=="Newer unsent notes"&&f.tool.snapshot()["patternDraft"]["dirty"].get<bool>()&&f.tool.snapshot()["patternDraft"]["stale"].get<bool>(),"Pumped completion overwrote or rebased newer raw notes");
+  f.click(8029);const auto oldLabel=f.tool.snapshot()["patternDraft"]["targetLabel"];const auto old=f.current;f.onOperate=[&](std::string,Json){auto replacement=state();replacement["documentId"]="replacement";replacement["revision"]="fresh";f.current=replacement;f.tool.update(replacement);auto completed=old;completed["revision"]="old-completion";return Json{{"state",completed},{"result",old["document"]["patterns"][1]}};};
+  f.click(8028);require(f.tool.snapshot()["documentId"]=="replacement"&&f.tool.snapshot()["patternDraft"]["documentId"]=="document-a"&&f.tool.snapshot()["patternDraft"]["targetLabel"]==oldLabel&&f.tool.snapshot()["patternDraft"]["stale"].get<bool>()&&!f.tool.snapshot()["pending"].get<bool>(),"Old-document annotation completion replaced the new song or retargeted retained details");
+}
+void annotationBoundsAndKeys(Owner &owner){
+  Fixture f(owner.window);f.tool.open(f.current);MINMAXINFO minimum{};SendMessageW(f.tool.window(),WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&minimum));SetWindowPos(f.tool.window(),nullptr,0,0,minimum.ptMinTrackSize.x,minimum.ptMinTrackSize.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+  RECT client{};GetClientRect(f.tool.window(),&client);
+  for(int page:{8020,8021,8022}){f.click(page);std::vector<RECT> boxes;for(HWND child=GetWindow(f.tool.window(),GW_CHILD);child;child=GetWindow(child,GW_HWNDNEXT)){if(!IsWindowVisible(child))continue;RECT box{};GetWindowRect(child,&box);MapWindowPoints(nullptr,f.tool.window(),reinterpret_cast<POINT *>(&box),2);require(box.left>=0&&box.top>=0&&box.right<=client.right&&box.bottom<=client.bottom&&box.right>box.left&&box.bottom>box.top,"Annotation page control escapes minimum client");for(const auto &other:boxes){RECT overlap{};require(!IntersectRect(&overlap,&box,&other),"Annotation page controls overlap at minimum");}boxes.push_back(box);}}
+  SetActiveWindow(f.tool.window());SetFocus(f.control(8027));SendMessageW(f.control(8027),WM_KEYDOWN,VK_DELETE,0);require(f.writes.empty(),"Delete in pattern notes removed an order");
+  f.click(8021);f.click(8028);require(f.writes.empty(),"Hidden pattern Apply was interactive");
+  SetFocus(f.control(8023));BYTE previous[256]{},modified[256]{};require(GetKeyboardState(previous),"Read annotation keyboard state");std::copy(std::begin(previous),std::end(previous),std::begin(modified));modified[VK_CONTROL]|=0x80;require(SetKeyboardState(modified),"Set annotation Ctrl key");SetWindowTextW(f.control(8023),L"Keyboard section");SendMessageW(f.control(8023),WM_KEYDOWN,VK_RETURN,0);require(SetKeyboardState(previous),"Restore annotation keyboard state");require(f.writes.size()==1&&f.writes.back().first=="song.annotate","Ctrl+Enter did not use active section action");
+  const auto returned=f.returned;SendMessageW(f.control(8023),WM_KEYDOWN,VK_F6,0);require(f.returned==returned+1,"Detail field F6 did not return to pattern");
+  f.current["document"]["editable"]=false;f.tool.update(f.current);f.click(8025);SetWindowTextW(f.control(8023),L"Read-only draft");f.click(8024);require(f.writes.size()==1,"Read-only details applied annotation");
+}
+}
+int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqArrangementTest",[]{HWND parent{},edit{};{Owner owner;parent=owner.window;edit=owner.edit;stableOrders(owner);draftsAndPumpedCompletion(owner);boundsScrollAndLimits(owner);firstOpenPlacement(owner);pumpedHostSelectionReveal(owner);sectionNavigationAndDetails(owner);retainedAnnotationDrafts(owner);annotationBoundsAndKeys(owner);owner.close();}require(!IsWindow(parent)&&!IsWindow(edit),"Destroy owned arrangement test windows");});std::cout<<"PASS arrangement window: repeated occurrence IDs, sentinels, independent annotation/creation drafts, section navigation, pumped completion guards, native keys, UTF-16 notes, scroll, bounds and first-open placement\n";return 0;}catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}

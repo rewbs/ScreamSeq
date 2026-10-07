@@ -135,8 +135,8 @@ class SessionAdapter {
         {"schema","windows/Api/workspace.schema.json"}}},
       {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. Workspace operations accept neither revision token; unsupported parameters reject."}};
     if(host_ && host_->supportsDocumentOperations()) {
-      for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
-      for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.open","pattern.notes.set","document.timing.set"}) {
+      for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","arrangement.get","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
+      for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.open","pattern.notes.set","document.timing.set","song.annotate"}) {
         result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
       }
       result["musicalEditing"]=true;
@@ -259,8 +259,8 @@ public:
     const auto separateWrites=host_?host_->independentWrites():std::vector<std::string>{};
     const bool independentRead=std::find(separateReads.begin(),separateReads.end(),method)!=separateReads.end();
     const bool independentWrite=std::find(separateWrites.begin(),separateWrites.end(),method)!=separateWrites.end();
-    const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="document.timing.get" || method=="automation.formula.reference" || method=="automation.formula.preview");
-    const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set");
+    const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="document.timing.get" || method=="arrangement.get" || method=="automation.formula.reference" || method=="automation.formula.preview");
+    const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set" || method=="song.annotate");
     const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || method=="context.set" || (workspace && method!="workspace.get" && method!="workspace.commands.get");
     if(!write && !independentRead && !docRead && !workspace && method!="api.describe" && method!="document.get" && method!="context.get" && method!="pattern.get" && method!="transport.get")
       return errorResponse(q["id"],-32601,"Unknown method; call api.describe");

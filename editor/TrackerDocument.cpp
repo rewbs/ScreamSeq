@@ -442,6 +442,20 @@ bool Document::editNative(NativeSong metadata, const std::vector<Edit> &input)
 	native_=std::move(metadata);undo_.push_back(std::move(entry));redo_.clear();++revision;trimHistory();
 	return true;
 }
+std::unique_ptr<Document> Document::historyCandidate(bool redo)
+{
+	const auto &history = redo ? redo_ : undo_;
+	if(history.empty()) return {};
+	auto candidate = std::make_unique<Document>(snapshotData());
+	candidate->native_ = native_;
+	candidate->song_->Order.SetSequence(song_->Order.GetCurrentSequenceIndex());
+	candidate->sourcePath_ = sourcePath_;
+	candidate->revision = revision;
+	(redo ? candidate->redo_ : candidate->undo_).push_back(history.back());
+	if(redo) candidate->redo();
+	else candidate->undo();
+	return candidate;
+}
 std::vector<Edit> Document::undo()
 {
 	if(undo_.empty()) return {};

@@ -1,7 +1,8 @@
 # Windows sections and annotations
 
-Source audit and proposed next checkpoint, 2026-10-07. **Not implemented or
-qualified by this plan.** The current arrangement/timing checkpoint is recorded
+Source audit and proposed checkpoint, 2026-10-07. This plan records the original
+scope; current implementation and qualification status are in
+[ANNOTATION_PROGRESS.md](ANNOTATION_PROGRESS.md). The arrangement/timing checkpoint is recorded
 separately in [ARRANGEMENT_PROGRESS.md](ARRANGEMENT_PROGRESS.md). This scope adds
 section navigation and retained annotation editing to that native workspace;
 the arrangement matrix and block-copy workflow remain a later checkpoint.

@@ -1,6 +1,24 @@
 # Windows / Mac parity plan
 
-Current arrangement/timing checkpoint (2026-10-07): retained native order
+Current sections/annotations checkpoint (2026-10-07): Arrange now has named
+order-occurrence sections, Previous/Next section navigation, and retained Section
+and Pattern details pages. Independent drafts preserve raw Unicode names/notes
+through navigation, hiding and stale revisions. Guarded annotation APIs, native
+persistence and playback-preserving annotation Undo/Redo are connected.
+The final candidate passes **373/373 application tests** with strict isolation,
+**14/14 focused cases**, **42/42 native tests**, a separate **15/15
+document-operation groups** and six exact offline PCM comparisons. Fifteen
+source-matched 192-DPI views pass review. See
+[annotation evidence](ANNOTATION_PROGRESS.md) for executable identity and retained
+earlier failures. Checkpoint destination: `bin/windows-checkpoints/annotations-20261007/`;
+its manifest confirms packaging.
+
+Next is a compact-header and native-selection appearance pass, followed by the
+[arrangement matrix](MATRIX_PLAN.md) and
+[independent dock groups](INDEPENDENT_DOCKING_PLAN.md).
+Full Windows/Mac parity remains the goal.
+
+Previous arrangement/timing checkpoint (2026-10-07): retained native order
 and tempo/groove tools expose guarded arrangement edits, stable order-occurrence
 selection, sequence selection, new/duplicate patterns and timing preview/Apply.
 Candidate 6 passes **367/367 application tests** with strict outer isolation,
@@ -10,9 +28,8 @@ source-matched 192-DPI views pass review. Shared duplication also preserves exac
 pattern-specific timing and metadata. See [arrangement evidence](ARRANGEMENT_PROGRESS.md)
 for executable identity, logs and earlier failures. Checkpoint destination:
 `bin/windows-checkpoints/arrangement-20261007/`; its manifest confirms packaging.
-Next is
-[sections and annotations](ANNOTATION_PLAN.md), followed by the arrangement
-matrix and independent dock groups. Full Windows/Mac parity remains the goal.
+Its original next-step [sections and annotations plan](ANNOTATION_PLAN.md) is
+retained as a scope audit; current annotation implementation is above.
 
 Previous recording checkpoint (2026-10-07): timestamped WinMM input, correlated
 WASAPI presentation history, worker-owned precise-note takes and a retained

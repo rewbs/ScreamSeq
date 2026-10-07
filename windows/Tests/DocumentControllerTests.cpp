@@ -322,8 +322,10 @@ void graphPatternViewTests() {
 #include "RecoveryControllerTests.inc"
 #include "RecordingControllerTests.inc"
 #include "ArrangementControllerTests.inc"
+#include "AnnotationControllerTests.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--annotations") {annotationControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--arrangement") {arrangementControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--recording") {recordingControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--recovery") {recoveryControllerTests(std::filesystem::u8path(argv[2]));return 0;}

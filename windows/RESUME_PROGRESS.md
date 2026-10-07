@@ -1,6 +1,38 @@
 # Windows continuation
 
-Latest arrangement/timing checkpoint (2026-10-07): native Arrange orders
+Latest sections/annotations checkpoint (2026-10-07): native Arrange has named
+order-occurrence sections, strict Previous/Next section navigation and retained
+Section and Pattern details pages. Independent captured targets and draft
+generations preserve unfinished Unicode text across selection/page changes,
+hide/reopen and stale revisions. `arrangement.get` and guarded `song.annotate`
+share the Mac contracts; annotation Undo/Redo preserves active playback.
+Structural history now validates its exact prospective document/cache before
+stopping or consuming the pending history entry.
+
+Final application SHA256:
+`085DB141035EEA3C1EB0A8987EE65580A13C6A2A2447199BC840346828F8075F`.
+Native tests pass **42/42**, focused application tests **14/14** with strict
+isolation, and the separate document-operation suite **15/15 groups** with six
+exact offline PCM comparisons. Fifteen source-matched views pass review at
+192 DPI. Full application run 2 passes **373/373** in **887.795 seconds**, no
+failures or skips, with strict outer isolation. Checkpoint destination:
+`bin/windows-checkpoints/annotations-20261007/`; its manifest confirms packaging.
+See [ANNOTATION_PROGRESS.md](ANNOTATION_PROGRESS.md) for exact evidence and
+retained earlier production, test-fixture and build outcomes.
+
+Next is compact-header and native-selection visual consistency, followed by the
+[arrangement matrix](MATRIX_PLAN.md) and
+[independent dock groups](INDEPENDENT_DOCKING_PLAN.md).
+The Windows/Mac parity goal stays open.
+
+Drafts for the next visual-consistency and shared matrix-copy scopes are in the
+attached managed worktree `arrangement-matrix-core`. They are not included in
+this annotation checkpoint or qualified by its tests. Integrate and qualify the
+Windows visual files separately before completing the matrix adapters/UI. The
+shared matrix draft still needs build wiring, tests and both adapters using its
+native-aware `changed()` result and prospective-view admission callback.
+
+Previous arrangement/timing checkpoint (2026-10-07): native Arrange orders
 and Tempo and groove tools are connected to the shared guarded worker. Stable
 occurrence selection, sequence switching, pattern creation/duplication, explicit
 selected-order playback and normalized timing preview are implemented. Drafts,
@@ -17,13 +49,8 @@ Checkpoint: `bin/windows-checkpoints/arrangement-20261007/`; its manifest is the
 authority for packaging completion. The report retains earlier production,
 fixture and foreground-isolation failures without relabeling them as passes.
 
-The next implementation scope is [sections and annotations](ANNOTATION_PLAN.md):
-per-occurrence sections, shared pattern details, section navigation, guarded
-annotation APIs and native persistence. The arrangement matrix and independent
-dock groups remain later UI work, with source-backed plans in
-[MATRIX_PLAN.md](MATRIX_PLAN.md) and
-[INDEPENDENT_DOCKING_PLAN.md](INDEPENDENT_DOCKING_PLAN.md).
-The Windows/Mac parity goal stays open.
+Its original next-step [sections and annotations plan](ANNOTATION_PLAN.md)
+remains a historical scope audit; the current implementation is above.
 
 Previous recording checkpoint (2026-10-07): timestamped WinMM input, correlated
 WASAPI presentation history and worker-owned precise-note takes are connected to

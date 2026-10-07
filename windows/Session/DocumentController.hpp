@@ -62,6 +62,9 @@ struct DocumentView {
   std::filesystem::path path;
   bool dirty=false, hosted=false, hasOpenEditors=false;
   uint64_t catalogRevision=0;
+  // Internal catalog invalidation, including entities in inactive sequences.
+  // Never exposed as document data or used as musical identity.
+  std::array<std::byte,32> metadataFingerprint{};
   size_t cacheBytes=0;
   unsigned channels=0, instruments=0;
   unsigned noteMin=1,noteMax=120;

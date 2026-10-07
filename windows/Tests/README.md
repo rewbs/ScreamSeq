@@ -23,6 +23,13 @@ case. The module also runs the controller's identity/capacity/budget regressions
 in an independent temporary directory. Native `arrangement-window-tests` and
 `song-timing-window-tests` use the shared private-desktop GUI harness.
 
+`test_annotations_ui` uses the same fixture and explicit silent-output flag for
+section navigation, retained Section/Pattern details pages, metadata API
+discovery/guards/replay, inactive-sequence annotations, native save/reopen and
+uninterrupted annotation history. Its HWND checks cover minimum geometry,
+Unicode notes, caret/scroll retention and stale drafts. Controller annotation
+tests cover immutable view reuse and exact cache-admission boundaries.
+
 The separate `windows/Tests/Editing` CMake project exercises document operations;
 it is not part of the main application's CTest count. Set its
 `SCREAMSEQ_ENGINE_LIB_DIR` to the matching current Release engine libraries.

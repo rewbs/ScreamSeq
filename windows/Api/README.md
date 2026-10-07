@@ -7,9 +7,11 @@ infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
 
 `document.get` includes stable current-sequence order identities in
-`orderMetadata: [{id: "n…"}]`, aligned with every untrimmed entry in `orders`,
+`orderMetadata: [{id: "n…", name, annotation, color}]`, aligned with every untrimmed entry in `orders`,
 including End (`65535`), Skip (`65534`) and entries after End. Each existing
-`sequences` entry also has a stable `id`. Use these identities to retain an
+`sequences` entry also has a stable `id`, annotation and color; a nonempty native
+name takes precedence over the engine sequence name. Patterns and tracks expose
+the same metadata fields, with `index` identifying the engine slot. Use these identities to retain an
 occurrence when repeated patterns are moved; numeric order indexes remain the
 arguments to revision-guarded `order.edit` and `transport.play`.
 `formatLimits` reports `patternRowsMin`, `patternRowsMax`, `patternsMax`,
@@ -28,8 +30,35 @@ Changing timing creates one document Undo and stops playback; preview and no-op
 leave playback and history intact. Existing pattern timing overrides remain in
 force. Pattern duplication preserves exact source pattern timing overrides and
 engine name/color alongside native musical metadata; changing its requested row
-count truncates or extends cells while retaining those properties. These tools
-do not add section annotation or arrangement-matrix methods.
+count truncates or extends cells while retaining those properties.
+
+`arrangement.get {}` returns `{sequence, sequenceID, orders, sections}`. Every
+untrimmed order has `{id, name, annotation, color, order, pattern}`, plus
+`patternID` when it references a valid pattern. Each nonempty order name starts
+a section: `{id, name, firstOrder, lastOrder, color}`. Its range ends before the
+next named order or at the sequence's final slot. An unnamed prefix has no
+implicit section; whitespace names count as nonempty, including on End/Skip.
+
+`song.annotate` requires `expectedRevision`, a canonical `n…` entity `id`, and
+one or more of `name`, `annotation`, `color`. It accepts patterns, tracks,
+sequences and order occurrences, including orders in inactive sequences.
+Omitted fields are retained. Names allow 256 UTF-16 code units, annotations
+4096, and colors integer `0..16777215`. It returns the full entity metadata;
+unknown fields and `dryRun` reject. An empty order name removes its section.
+Changes create one document Undo and persist in the existing native format.
+No-ops preserve revision and Redo; annotation edits and their Undo/Redo preserve
+playback. Musical and structural history retain their existing stop behavior.
+
+Arrange now has Orders, Section and Pattern details pages. Section edits the
+captured order occurrence's name; Pattern details edits the captured pattern's
+name and notes. Each has independent retained drafts, captured identity and
+revision, explicit Reload, and stale-edit rejection. Selection changes do not
+retarget unfinished text. `arrangementWindow.sectionDraft` and `.patternDraft`
+report these contexts. Previous/Next section use strict earlier/later named
+orders without wrapping or relocating playback; selecting End/Skip leaves the
+pattern cursor unchanged. These actions and both editors appear in the
+configurable command catalog. Color editing is available through the API;
+there is no native color picker or arrangement matrix in this checkpoint.
 
 Application recovery uses the Mac-compatible `recovery.status`, `recovery.list`,
 `recovery.save` and `recovery.restore` contracts, also described in
