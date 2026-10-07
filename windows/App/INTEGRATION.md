@@ -90,6 +90,13 @@ staged drawing points, with per-sample viewport/selection state. Painting reads
 cached data; shared prepared operations perform validation, PCM edits, history
 and stop-before-publication. See `../SAMPLE_DETAIL_PROGRESS.md`.
 
+The detailed sample editor now keeps the waveform and selection visible above
+five retained native pages: Drawing, Process, Loops, Paste and Snap. Normal and
+sustain loop drafts preview and apply together; paste exposes rate conversion
+and gains with an exact reviewed clipboard guard. Snapping supports either loop,
+grid origin and completed-selection snapping. Section reload preserves other
+raw fields and their revision guards. See `../SAMPLE_WORKFLOWS_PROGRESS.md`.
+
 ## Owner boundaries
 
 `Session/DocumentController` constructs, owns and disposes the shared Document on

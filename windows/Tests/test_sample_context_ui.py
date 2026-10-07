@@ -24,6 +24,7 @@ class SampleContextUITests(unittest.TestCase):
     field = support.SampleDetailUITests.field
     idle = support.SampleDetailUITests.idle
     press = support.SampleDetailUITests.press
+    page = support.SampleDetailUITests.page
     select = support.SampleDetailUITests.select
     start = support.SampleDetailUITests.start
     region = support.SampleDetailUITests.region
@@ -74,6 +75,7 @@ class SampleContextUITests(unittest.TestCase):
         self.assertEqual(self.doc(), document)
 
     def test_processing_preview_apply_and_undo_use_selected_saved_audio(self):
+        self.page('process')
         self.region(10, 20)
         before = self.doc()
         self.choose(4832)  # Existing Reverse process, dry run.
@@ -97,6 +99,7 @@ class SampleContextUITests(unittest.TestCase):
         with self.menu() as menu:
             commands = self.commands(menu.items())
             self.assertTrue(commands[4825]['enabled'])
+            self.assertIn('Ctrl+Enter', commands[4825]['label'])
             self.assertFalse(commands[4833]['enabled'])
             self.assertFalse(commands[4860]['enabled'])
             menu.cancel()
@@ -142,8 +145,20 @@ class SampleContextUITests(unittest.TestCase):
         self.assertEqual(self.read('sample.get', sample=2), saved)
 
     def test_loop_crossfade_and_private_clipboard_submenus_use_existing_actions(self):
+        self.page('loops')
+        with self.menu() as menu:
+            commands = self.commands(menu.items())
+            self.assertIn('Ctrl+Enter', commands[5017]['label'])
+            self.assertNotIn('Ctrl+Enter', commands[4825]['label'])
+            self.assertNotIn('Ctrl+Enter', commands[4853]['label'])
+            menu.cancel()
         self.region(16, 112)
+        document = self.doc()
         self.choose(4844)
+        self.assertEqual(self.doc(), document)
+        self.choose(5016)
+        self.assertEqual(self.doc(), document)
+        self.choose(5017)
         info = self.read('sample.get', sample=1)
         self.assertTrue(info['loop'])
         self.assertEqual((info['loopStart'], info['loopEnd']), (16, 112))
@@ -156,10 +171,18 @@ class SampleContextUITests(unittest.TestCase):
         self.assertNotEqual(self.pcm(), self.raw)
         self.choose(4804)
         self.assertEqual(self.pcm(), self.raw)
+        self.page('clipboard')
+        with self.menu() as menu:
+            commands = self.commands(menu.items())
+            self.assertIn('Ctrl+Enter', commands[4853]['label'])
+            self.assertNotIn('Ctrl+Enter', commands[5017]['label'])
+            self.assertNotIn('Ctrl+Enter', commands[4825]['label'])
+            menu.cancel()
         self.region(0, 4)
         self.choose(4849)
         self.assertTrue(self.read('sample.clipboard.get')['available'])
         self.region(8, 12)
+        self.choose(5019)
         self.choose(4853)
         self.assertEqual(self.pcm(), self.raw[:16] + self.raw[:8] + self.raw[16:])
         self.choose(4804)

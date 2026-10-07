@@ -1,5 +1,24 @@
 # Windows / Mac parity plan
 
+Current sample UI checkpoint (2026-10-07): the detailed editor now has retained
+Drawing, Process, Loops, Paste and Snap pages. Independent normal/sustain rows
+support joint preview/Apply and dashed pending boundaries; paste has a reviewed
+clipboard/revision, rate conversion and gain controls; selection and loop
+snapping include grid origin and automatic selection. The existing shared APIs,
+Undo and native storage remain authoritative. See
+[sample workflow evidence](SAMPLE_WORKFLOWS_PROGRESS.md).
+
+The baseline passes all 330 application tests with strict outer isolation, plus
+32 affected UI tests and 36 native CTests. The final focus-restoration/menu-hint
+candidate's 33 individual UI tests pass, **but its outer run fails strict
+foreground isolation with exit 1**. The foreground change is unattributed;
+final-build isolation qualification remains unresolved. Its 19 reviewed
+renderer/native-control views at large, compact and minimum client sizes pass
+their own isolation checks, which do not qualify the failed test run. The report
+records the distinct candidate hashes and both isolation-failure traces. The next
+planned slice is recovery; recording, independent dock groups, remaining editor
+menus and the cross-platform qualification gates below remain open.
+
 Current UI work (2026-10-07): the workspace has direct lower-editor tabs,
 collapse/reopen, named saved arrangements and a retained layout manager. Command
 search now ranks relevant titles, supports unordered words and restores field
@@ -21,21 +40,10 @@ local editor commands and note release. See
 [command and menu evidence](WORKSPACE_COMMANDS_PROGRESS.md) for exact scope,
 candidate-specific tests and visual limits.
 
-The next sample-editor gaps are independent normal/sustain numeric loop bounds
-with joint preview/Apply, paste preview, loop snapping and automatic selection
-snap. These must reuse the shared sample operations and one Undo transaction.
-Other editor surfaces still need context-menu coverage, and independent dock
-groups remain unfinished. Completing these interactions does not replace the
-recovery, recording, accessibility and cross-platform qualification gates.
-
-The current sample backend already supports joint `sample.loops.set` previews
-and one-step Undo, complete paste options and dry-run reports, and selection or
-loop-boundary snapping. The UI must retain separate raw loop/paste drafts and
-preview signatures bound to document, sample ID, revision and clipboard ID.
-`SampleDetailWindow::mutate` currently clears all edited fields after unrelated
-operations; it must not erase or silently rebase these independent drafts.
-Use the Mac sample loop/clipboard/snap editors as the interaction reference and
-qualify joint Apply/Undo/save-reopen, stale drafts and minimum-size layouts.
+The sample UI retains independent raw loop drafts and paste preview signatures
+bound to document, sample identity, revision and clipboard ID. Unrelated edits
+cannot silently rebase those drafts. Completing these interactions does not
+replace recovery, recording, accessibility or cross-platform qualification.
 
 ## Upstream integration checkpoint — 2026-09-21
 

@@ -48,6 +48,8 @@ class SampleDetailUITests(unittest.TestCase):
         self.fail(str(local))
     def press(self,identifier):
         self.idle();self.desktop.send(self.window(),0x111,identifier,self.control(identifier));self.idle()
+    def page(self,name):
+        self.press({'draw':5001,'process':5002,'loops':5003,'clipboard':5004,'snap':5005}[name]);self.assertEqual(self.state()['page'],name)
     def select(self,identifier,index):
         self.idle();self.desktop.send(self.control(identifier),0x14E,index);self.desktop.send(self.window(),0x111,identifier|(1<<16),self.control(identifier));self.idle()
     def start(self):
@@ -56,7 +58,7 @@ class SampleDetailUITests(unittest.TestCase):
     def key(self,key):self.desktop.send(self.window(),0x100,key);self.idle()
     def region(self,first,last):self.field(4815,first);self.field(4816,last);self.press(4817)
     def view(self,first,last):self.field(4819,first);self.field(4820,last);self.press(4821)
-    def stage(self,frame,value):self.field(4822,frame);self.field(4823,value);self.press(4824)
+    def stage(self,frame,value):self.page('draw');self.field(4822,frame);self.field(4823,value);self.press(4824)
 
     def test_zoom_exact_waveform_cache_selection_identity_and_bounds(self):
         values=[int(16000*math.sin(i*.13)) for i in range(20000)];self.install(1,values);self.press(4803)
@@ -80,15 +82,17 @@ class SampleDetailUITests(unittest.TestCase):
         self.press(4804);self.assertEqual(self.pcm(),self.raw);self.mouse(0x201,x+w*.125,y+h*.25);self.write('document.patch',title='Concurrent edit');before=self.doc();self.mouse(0x200,x+w*.375,y+h*.75);self.idle();self.assertFalse(self.state()['dragging']);self.assertEqual(self.state()['points'],[]);self.assertEqual(self.doc(),before)
 
     def test_loop_crossfade_preview_modes_curves_history_and_native_storage(self):
+        self.page('loops')
         for mode in range(2):
             for curve in range(2):
-                self.install(1,self.raw,2);self.install(2,self.raw,2);self.press(4803);self.region(16,112);self.press(4844);self.field(4837,8);self.select(4835,mode);self.select(4836,curve);before=self.doc();self.press(4838);preview=self.state()['report'];self.assertTrue(preview['dryRun']);self.assertEqual(self.doc(),before);self.assertGreater(preview['changedFrames'],0)
+                self.install(1,self.raw,2);self.install(2,self.raw,2);self.press(4803);self.region(16,112);self.press(4844);self.press(5017);self.field(4837,8);self.select(4835,mode);self.select(4836,curve);before=self.doc();self.press(4838);preview=self.state()['report'];self.assertTrue(preview['dryRun']);self.assertEqual(self.doc(),before);self.assertGreater(preview['changedFrames'],0)
                 self.press(4839);actual=self.pcm();self.assertNotEqual(actual,self.raw);info=self.read('sample.get',sample=1);self.assertEqual(info['loopStart'],24 if mode else 16);self.press(4804);self.assertEqual(self.pcm(),self.raw);self.assertEqual(self.read('sample.get',sample=1)['loopStart'],16);self.press(4805);self.assertEqual(self.pcm(),actual)
                 self.write('sample.loops.set',sample=2,normal=dict(start=16,end=112,enabled=True));self.write('sample.crossfade',sample=2,loop='normal',mode='overlap' if mode else 'preserve',curve='equal-power' if curve else 'linear',frames=8);self.assertEqual(self.pcm(2),actual);self.press(4803)
-        self.region(16,112);self.press(4845);self.select(4834,1);before=self.doc();self.press(4838);self.assertEqual(self.doc(),before);self.press(4839);self.assertEqual(self.read('sample.get',sample=1)['sustainStart'],24)
+        self.region(16,112);self.press(4845);self.press(5017);self.select(4834,1);before=self.doc();self.press(4838);self.assertEqual(self.doc(),before);self.press(4839);self.assertEqual(self.read('sample.get',sample=1)['sustainStart'],24)
         path=self.folder/'sample-crossfade.screamseq';saved=self.pcm();info=self.read('sample.get',sample=1);self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.assertEqual(self.pcm(),saved);self.assertEqual(self.read('sample.get',sample=1),info);self.press(4802);self.field(4837,1);before=self.doc();self.press(4839);self.assertEqual(self.doc(),before)
 
     def test_every_processing_operation_matches_shared_api_and_preserves_other_channel(self):
+        self.page('process')
         operations=['reverse','normalize','gain','fade-in','fade-out','invert','remove-dc','smooth','trim','silence','swap-channels','copy-left','copy-right','stereo-average']
         for index,name in enumerate(operations):
             with self.subTest(operation=name):
@@ -101,12 +105,12 @@ class SampleDetailUITests(unittest.TestCase):
                 if channel=='right':self.assertEqual(actual[::2],self.raw[::2])
 
     def test_snapping_normal_sustain_directions_and_private_clipboard_modes(self):
-        self.region(11,53);self.select(4840,1);self.field(4842,8);before=self.doc();self.press(4843);self.assertEqual(self.doc(),before);self.assertEqual((self.state()['start'],self.state()['end']),(8,56));self.select(4848,2);self.press(4844);info=self.read('sample.get',sample=1);self.assertTrue(info['reverseLoop']);self.assertEqual((info['loopStart'],info['loopEnd']),(8,56))
-        self.region(16,96);self.select(4848,1);self.press(4845);info=self.read('sample.get',sample=1);self.assertTrue(info['sustainPingpong']);self.press(4846);self.press(4847);info=self.read('sample.get',sample=1);self.assertFalse(info['loop']);self.assertFalse(info['sustainLoop'])
-        self.press(4803);self.select(4840,0);self.field(4842,32);self.region(11,53);expected=self.read('sample.snap.get',sample=1,positions=[11,53],radius=32);self.press(4843);self.assertEqual([self.state()['start'],self.state()['end']],[v['after'] for v in expected['positions']])
-        self.region(0,4);self.press(4849);self.assertEqual(self.pcm(),self.raw)
+        self.page('snap');self.region(11,53);self.select(4840,1);self.field(4842,8);before=self.doc();self.press(4843);self.assertEqual(self.doc(),before);self.assertEqual((self.state()['start'],self.state()['end']),(8,56));self.page('loops');self.select(5009,2);self.press(4844);self.press(5017);info=self.read('sample.get',sample=1);self.assertTrue(info['reverseLoop']);self.assertEqual((info['loopStart'],info['loopEnd']),(8,56))
+        self.region(16,96);self.select(5013,1);self.press(4845);self.press(5017);info=self.read('sample.get',sample=1);self.assertTrue(info['sustainPingpong']);self.press(5006);self.press(5010);self.press(5017);info=self.read('sample.get',sample=1);self.assertFalse(info['loop']);self.assertFalse(info['sustainLoop'])
+        self.press(4803);self.page('snap');self.select(4840,0);self.field(4842,32);self.region(11,53);expected=self.read('sample.snap.get',sample=1,positions=[11,53],radius=32);self.press(4843);self.assertEqual([self.state()['start'],self.state()['end']],[v['after'] for v in expected['positions']])
+        self.page('clipboard');self.region(0,4);self.press(4849);self.assertEqual(self.pcm(),self.raw)
         for mode in range(4):
-            self.region(8,12);self.select(4852,mode);self.press(4853);actual=self.pcm();self.assertNotEqual(actual,self.raw)
+            self.region(8,12);self.select(4852,mode);self.press(5019);self.press(4853);actual=self.pcm();self.assertNotEqual(actual,self.raw)
             if mode==0:self.assertEqual(actual,self.raw[:16]+self.raw[:8]+self.raw[16:])
             if mode in (1,3):self.assertEqual(actual,self.raw[:16]+self.raw[:8]+self.raw[24:])
             self.press(4804);self.assertEqual(self.pcm(),self.raw)
@@ -142,21 +146,34 @@ class SampleDetailUITests(unittest.TestCase):
             except TransportError:pass
             time.sleep(.1)
         else:self.fail('silent sample test did not start')
-        before=self.read('transport.get');self.start();self.view(0,32);self.select(4828,2);self.field(4830,0);self.press(4832);self.press(4833);self.field(4830,99);self.press(4833);playing=self.read('transport.get');self.assertTrue(playing['audioActive']);self.assertGreater(playing['frames'],before['frames']);self.assertFalse(playing['fault']);self.assertEqual(playing['overruns'],0)
+        before=self.read('transport.get');self.start();self.page('process');self.view(0,32);self.select(4828,2);self.field(4830,0);self.press(4832);self.press(4833);self.field(4830,99);self.press(4833);playing=self.read('transport.get');self.assertTrue(playing['audioActive']);self.assertGreater(playing['frames'],before['frames']);self.assertFalse(playing['fault']);self.assertEqual(playing['overruns'],0)
         self.field(4830,-6);self.press(4833);after=self.read('transport.get');self.assertFalse(after['audioActive']);self.assertNotEqual(self.pcm(),self.raw)
         if os.environ.get('SCREAMSEQ_SAMPLE_EVIDENCE_DIR'):
             folder=Path(os.environ['SCREAMSEQ_SAMPLE_EVIDENCE_DIR']);folder.mkdir(parents=True,exist_ok=True);(folder/'sample-live.json').write_text(json.dumps(dict(before=before,playing=playing,after=after,workspace=self.state())),encoding='utf-8')
 
+    def verify_visible_controls_fit(self):
+        user=private_desktop.user;user.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT];user.GetClientRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)];user.GetWindowRect.argtypes=user.GetClientRect.argtypes;user.MapWindowPoints.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.POINTER(wintypes.POINT),wintypes.UINT];user.IsWindowVisible.argtypes=[wintypes.HWND]
+        user.GetWindowLongW.argtypes=[wintypes.HWND,ctypes.c_int];user.GetDpiForWindow.argtypes=[wintypes.HWND];user.AdjustWindowRectExForDpi.argtypes=[ctypes.POINTER(wintypes.RECT),wintypes.DWORD,wintypes.BOOL,wintypes.DWORD,wintypes.UINT]
+        window=self.window();dpi=user.GetDpiForWindow(window);scale=dpi/96;outer=wintypes.RECT(0,0,int(900*scale),int(720*scale));private_desktop.check(user.AdjustWindowRectExForDpi(ctypes.byref(outer),user.GetWindowLongW(window,-16)&0xffffffff,False,user.GetWindowLongW(window,-20)&0xffffffff,dpi));private_desktop.check(user.SetWindowPos(window,None,0,0,outer.right-outer.left,outer.bottom-outer.top,0x16));self.idle();client=wintypes.RECT();user.GetClientRect(window,ctypes.byref(client));self.assertEqual((client.right,client.bottom),(int(900*scale),int(720*scale)));seen=set()
+        expected=(set(range(4801,4864))-{4846,4847,4848})|set(range(5001,5025))
+        for page in ('draw','process','loops','clipboard','snap'):
+            self.page(page);rects=[]
+            if page=='clipboard':self.select(4852,2)
+            if page=='snap':self.select(4840,1)
+            for identifier in sorted(expected):
+                control=self.control(identifier)
+                if not user.IsWindowVisible(control):continue
+                seen.add(identifier);rect=wintypes.RECT();user.GetWindowRect(control,ctypes.byref(rect));p=(wintypes.POINT*2)(wintypes.POINT(rect.left,rect.top),wintypes.POINT(rect.right,rect.bottom));user.MapWindowPoints(None,self.window(),p,2);self.assertGreaterEqual(p[0].x,0,(page,identifier));self.assertGreaterEqual(p[0].y,0,(page,identifier));self.assertLessEqual(p[1].x,client.right,(page,identifier));self.assertLessEqual(p[1].y,client.bottom,(page,identifier));rects.append((identifier,p[0].x,p[0].y,p[1].x,p[1].y))
+            for i,a in enumerate(rects):
+                for b in rects[i+1:]:self.assertFalse(max(a[1],b[1])<min(a[3],b[3]) and max(a[2],b[2])<min(a[4],b[4]),(page,a,b))
+        self.assertEqual(seen,expected)
+
     def test_native_controls_fit_minimum_without_overlap(self):
-        user=private_desktop.user;user.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT];user.GetClientRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)];user.GetWindowRect.argtypes=user.GetClientRect.argtypes;user.MapWindowPoints.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.POINTER(wintypes.POINT),wintypes.UINT];scale=self.read('workspace.get')['dpi']/96;private_desktop.check(user.SetWindowPos(self.window(),None,0,0,int(1080*scale),int(790*scale),0x16));self.idle();client=wintypes.RECT();user.GetClientRect(self.window(),ctypes.byref(client));rects=[]
-        for identifier in range(4801,4856):
-            rect=wintypes.RECT();user.GetWindowRect(self.control(identifier),ctypes.byref(rect));p=(wintypes.POINT*2)(wintypes.POINT(rect.left,rect.top),wintypes.POINT(rect.right,rect.bottom));user.MapWindowPoints(None,self.window(),p,2);self.assertGreaterEqual(p[0].x,0,identifier);self.assertGreaterEqual(p[0].y,0,identifier);self.assertLessEqual(p[1].x,client.right,identifier);self.assertLessEqual(p[1].y,client.bottom,identifier);rects.append((identifier,p[0].x,p[0].y,p[1].x,p[1].y))
-        for i,a in enumerate(rects):
-            for b in rects[i+1:]:self.assertFalse(max(a[1],b[1])<min(a[3],b[3]) and max(a[2],b[2])<min(a[4],b[4]),(a,b))
+        self.verify_visible_controls_fit()
 
     def test_native_sample_process_changes_rendered_audio_across_rates_and_blocks(self):
-        values=[round(math.sin(i*2*math.pi/128)*16000) for i in range(4096)];self.install(1,values);self.press(4803);self.region(0,4096);self.press(4844);baseline_path=self.folder/'sample-before.screamseq';baseline_report=self.folder/'sample-before-pcm.json';self.write('document.save',path=str(baseline_path));baseline=self.render(baseline_path,baseline_report)
-        self.press(4803);self.select(4828,2);self.field(4830,-6);self.press(4833);path=self.folder/'sample-gain.screamseq';report=self.folder/'sample-gain-pcm.json';saved=self.pcm();self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.assertEqual(self.pcm(),saved);active=self.render(path,report);delta=max(abs(a-b) for x,y in zip(active['renders'],baseline['renders']) for a,b in zip(x['quarterSecondEnergy'],y['quarterSecondEnergy']));self.assertGreater(delta,.01)
+        values=[round(math.sin(i*2*math.pi/128)*16000) for i in range(4096)];self.install(1,values);self.press(4803);self.page('loops');self.region(0,4096);self.press(4844);self.press(5017);baseline_path=self.folder/'sample-before.screamseq';baseline_report=self.folder/'sample-before-pcm.json';self.write('document.save',path=str(baseline_path));baseline=self.render(baseline_path,baseline_report)
+        self.press(4803);self.page('process');self.select(4828,2);self.field(4830,-6);self.press(4833);path=self.folder/'sample-gain.screamseq';report=self.folder/'sample-gain-pcm.json';saved=self.pcm();self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.assertEqual(self.pcm(),saved);active=self.render(path,report);delta=max(abs(a-b) for x,y in zip(active['renders'],baseline['renders']) for a,b in zip(x['quarterSecondEnergy'],y['quarterSecondEnergy']));self.assertGreater(delta,.01)
         if os.environ.get('SCREAMSEQ_SAMPLE_EVIDENCE_DIR'):
             folder=Path(os.environ['SCREAMSEQ_SAMPLE_EVIDENCE_DIR']);folder.mkdir(parents=True,exist_ok=True)
             for file in (path,report,baseline_path,baseline_report):shutil.copy2(file,folder/file.name)

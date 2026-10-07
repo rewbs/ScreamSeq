@@ -1,12 +1,45 @@
 # Windows continuation
 
-Latest UI gap pass (2026-10-07): `WORKSPACE_COMMANDS_PROGRESS.md` records native
+Latest UI gap pass (2026-10-07): `SAMPLE_WORKFLOWS_PROGRESS.md` records retained
+Drawing, Process, Loops, Paste and Snap pages, independent normal/sustain drafts
+with joint preview/Apply, reviewed paste with rate/gain options, and selection
+or loop snapping with grid origin and automatic selection. Shared musical
+operations, Undo and native storage are reused. The minimum client is 900×720
+DIPs; pending loop bounds appear as dashed waveform markers.
+
+Candidate 3 passes the complete **330/330 application tests** with no failures
+or skips in 835.843 seconds and a successful strict outer isolation check, plus
+**32/32 affected UI tests** and **36/36 native CTests**. Its **19
+renderer/native-control views** are reviewed with exact
+source/binary identity. The full-suite log is
+`bin/windows-sample-workflows-final-app-tests.log`.
+An additional isolated probe reproduced native-focus loss after loop/paste
+Preview/Apply. Candidate 4 contains that correction and page-specific menu
+hints; all **33/33 individual affected UI tests pass** in 194.613 seconds, but
+**the outer run fails strict foreground isolation with exit 1**. The foreground
+change is unattributed, so final-build isolation qualification remains unresolved.
+Its **19 refreshed rendering views** are reviewed and pass their own isolation
+checks; those do not qualify the failed application run. The final UI log is
+`bin/windows-sample-workflows-candidate4-ui-final.log`. The full-suite and native
+CTest results remain tied to the retained `bin/ScreamSeq-sample-candidate3.exe`
+baseline; the report records both exact executable hashes. It also retains the
+first candidate's 31/32 failure and correction, and the final candidate's initial
+32/33 result caused by a mistaken test expectation about native button focus.
+Both candidate-4 outer isolation failures are preserved:
+`bin/windows-sample-workflows-candidate4-isolation-final.log` and
+`bin/windows-sample-workflows-candidate4-outer-isolation-failure.log`.
+No reactivation or further equality-chasing test run was attempted.
+Full Mac parity remains active; the next planned slice is recovery.
+
+## Previous checkpoints
+
+The command/menu pass (2026-10-07): `WORKSPACE_COMMANDS_PROGRESS.md` records native
 context menus for pattern, sample, graph, instrument and detailed sample editors,
 plus a 99-command palette with configurable shortcuts/sequences, atomic saved
 preferences, Clear/Reset and Reload. Native text and local editor input retain
 priority; captured menu targets reject stale actions. Full Mac parity remains
-active. The next sample UI work is joint loop editing, paste preview and snapping;
-the current shared APIs already support those operations.
+active. The following sample workflow checkpoint connects its existing backend
+capabilities to the retained UI described above.
 
 The command checkpoint's full baseline passes **324/324 application tests** with
 no failures or skips. Final palette-only conflict feedback passes **9/9 focused
@@ -14,8 +47,6 @@ app tests** and **35/35 native CTests**. The report distinguishes the full-run
 and final-build hashes and records the earlier regressions and their fixes.
 The preserved ARM64 package is
 `bin/windows-checkpoints/workspace-commands-20261007/`.
-
-## Previous checkpoints
 
 The preceding UI pass (2026-10-07): `WORKSPACE_DOCKING_PROGRESS.md` records retained
 automation/instrument docking, responsive workspace tabs and compact editor

@@ -59,6 +59,17 @@ cache and latest operation report. Its native controls call the existing
 The dock's Detail button and command palette open this window. See
 `../SAMPLE_DETAIL_PROGRESS.md`.
 
+The retained sample pages add `page`, `loops`, `pastePreview` and `autoSnap` to
+that read-only snapshot. `loops` includes independent raw normal/sustain frame
+strings, enabled/direction flags, `dirty` and `stale`; invalid input remains
+observable without becoming song data. Joint Preview/Apply uses
+`sample.loops.set`. Paste Preview retains its exact options, target revision and
+clipboard ID; Apply uses that reviewed clipboard or rejects a mismatch.
+`pastePreview` describes a locally retained preview, not a guarantee that an
+external clipboard or document change has not occurred. Snap selection and
+either loop use `sample.snap.get`; only explicit Apply changes saved loops.
+See `../SAMPLE_WORKFLOWS_PROGRESS.md` for scope and qualification.
+
 The actual application now also registers `graph.*`, `mixer.*` and
 `envelope.bank.*` / `envelope.catalogue.*` operations. Their fields match the
 existing Mac schema. Graph recipe copies use the real rack's saved baseline;
