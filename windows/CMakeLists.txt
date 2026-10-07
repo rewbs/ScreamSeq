@@ -137,10 +137,10 @@ if(BUILD_TESTING)
   add_executable(native-delay-tests "${ROOT}/mac/Tests/NativeDelayTests.cpp")
   target_link_libraries(native-delay-tests PRIVATE TrackerEditor)
   add_test(NAME native-delay COMMAND native-delay-tests)
-  foreach(target IN ITEMS native-pattern-command-tests pattern-field-tests native-pattern-runtime-tests native-timing-tests native-delay-tests)
+  foreach(target IN ITEMS native-pattern-command-tests pattern-field-tests native-pattern-runtime-tests scratch-runtime-tests native-timing-tests native-delay-tests)
     target_link_options(${target} PRIVATE /STACK:8388608)
   endforeach()
-  set_tests_properties(native-pattern-commands pattern-fields native-pattern-runtime native-timing native-delay PROPERTIES LABELS "portable;functional;no-realtime-audit" TIMEOUT 120)
+  set_tests_properties(native-pattern-commands pattern-fields native-pattern-runtime scratch-runtime native-timing native-delay PROPERTIES LABELS "portable;functional;no-realtime-audit" TIMEOUT 120)
   add_executable(native-control-tests Tests/NativeControlTests.cpp)
   target_link_libraries(native-control-tests PRIVATE ScreamSeqBuildOptions comctl32)
   add_test(NAME native-control-tests COMMAND native-control-tests)
@@ -152,6 +152,8 @@ if(BUILD_TESTING)
   add_test(NAME sample-preview-tests COMMAND sample-preview-tests "${CMAKE_CURRENT_BINARY_DIR}")
   set_tests_properties(sample-preview-tests PROPERTIES LABELS "samples;cxx-allocation-audit" TIMEOUT 60)
   include(cmake/PortableTests.cmake)
+  add_dependencies(portable-tests native-pattern-command-tests pattern-field-tests native-pattern-runtime-tests
+    scratch-runtime-tests native-timing-tests native-delay-tests)
   add_executable(document-history-allocation-tests "${ROOT}/editor/Tests/DocumentHistoryAllocationTests.cpp")
   target_link_libraries(document-history-allocation-tests PRIVATE TrackerEditor)
   target_compile_options(document-history-allocation-tests PRIVATE "/FI${ROOT}/windows/cmake/WindowsTestPreamble.hpp")
@@ -286,10 +288,10 @@ if(BUILD_TESTING)
   target_link_options(graph-document-tests PRIVATE /STACK:8388608)
   # Separate processes expose a failing scenario and let unrelated API/history
   # cases finish even when a platform-only access violation occurs.
-  foreach(scenario audioFanConnections stageConnectionOperations noteRoutingOperations graphEditingOperations groupBypassOperations
+  foreach(scenario audioFanConnections stageConnectionOperations noteRoutingOperations graphEditingOperations groupBypassOperations groupDryMapDetachment
       graphProvenance graphPresentation songModulationSources songAutomationAndBanks stableImplicitMaster songCableCuts
       createReadHistory nodesAndCloning automationAndBanks assignmentsRoutesLayoutCommands hostHooks
-      automationOrderAndRedo cableInsertionAndDetachment songProcessingGroups processingGroups strictValidation dryRunsAndRedo callbackOrderingAndUnrelatedData)
+      automationOrderAndRedo cableInsertionAndDetachment songSourceGroupOperations songProcessingGroups processingGroups strictValidation dryRunsAndRedo callbackOrderingAndUnrelatedData)
     add_test(NAME graph-document-${scenario} COMMAND graph-document-tests ${scenario})
     set_tests_properties(graph-document-${scenario} PROPERTIES LABELS "worker;functional;no-realtime-audit" TIMEOUT 120)
   endforeach()
