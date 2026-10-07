@@ -271,6 +271,26 @@ def song_processing_groups(client):
     assert read() == before
     write("history.redo")
     assert read() == grouped
+    arguments = {"parent":group, "source":{"kind":"lfo", "name":"Inside rack group"},
+                 "connect":{"plugin":plugin, "parameter":1}}
+    revision = client.call("document.get")["revision"]
+    assert write("graph.song.source.add", **arguments, dryRun=True)["data"]["wouldChange"]
+    assert read() == grouped and client.call("document.get")["revision"] == revision
+    source = write("graph.song.source.add", **arguments)["data"]["node"]
+    with_source = read()
+    assert "source:"+source in next(g for g in with_source["groups"] if g["id"] == group)["nodes"]
+    assert any(e["source"] == source and e["plugin"] == plugin for e in with_source["songModulation"])
+    write("history.undo")
+    assert read() == grouped
+    write("history.redo")
+    assert read() == with_source
+    for parent in [None, True, "n999999999", plugin]:
+        expect_error(-32602, lambda: write("graph.song.source.add", **{**arguments, "parent":parent}))
+        assert read() == with_source
+    expect_error(-32001, lambda: client.call("graph.song.source.add", {**arguments, "expectedRevision":revision}))
+    assert read() == with_source
+    write("graph.song.source.remove", nodes=[source])
+    assert read() == grouped
     for bad in [[], [key,key], [True], ["plugin:missing"]]:
         expect_error(-32602, lambda: write("graph.song.group.create", nodes=bad))
         assert read() == grouped
@@ -292,7 +312,7 @@ def song_processing_groups(client):
     write("graph.song.group.remove", group=group)
     assert read()["groups"] == before["groups"]
     write("plugin.remove", slot=len(read()["plugins"])-1)
-    print("PASS song groups socket: rack identity, dry run, strict/rejected edits, grouped movement, independent export, Undo/Redo")
+    print("PASS song groups socket: rack identity, atomic grouped-source insertion, dry run, strict/rejected edits, grouped movement, independent export, Undo/Redo")
 
 
 def parameter_activity(client):

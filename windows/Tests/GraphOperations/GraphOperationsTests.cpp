@@ -633,6 +633,7 @@ void callbackOrderingAndUnrelatedData() {
 #include "StageConnectionOperationsTests.inc"
 #include "NoteRoutingOperationsTests.inc"
 #include "GraphEditingOperationsTests.inc"
+#include "SongSourceGroupOperationsTests.inc"
 int main(int argc,char **argv) {
   try {
     if(argc==2&&std::string(argv[1])=="--catalog") { std::cout<<Json{{"reads",GraphOperations::reads()},{"writes",GraphOperations::writes()}}.dump(2)<<'\n'; return 0; }
@@ -642,7 +643,7 @@ int main(int argc,char **argv) {
       {"createReadHistory",createReadHistory},{"nodesAndCloning",nodesAndCloning},{"automationAndBanks",automationAndBanks},
       {"assignmentsRoutesLayoutCommands",assignmentsRoutesLayoutCommands},{"hostHooks",hostHooks},
       {"automationOrderAndRedo",automationOrderAndRedo},{"cableInsertionAndDetachment",cableInsertionAndDetachment},
-      {"songProcessingGroups",songProcessingGroups},{"processingGroups",processingGroups},{"strictValidation",strictValidation},{"dryRunsAndRedo",dryRunsAndRedo},{"callbackOrderingAndUnrelatedData",callbackOrderingAndUnrelatedData}};
+      {"songSourceGroupOperations",songSourceGroupOperations},{"songProcessingGroups",songProcessingGroups},{"processingGroups",processingGroups},{"strictValidation",strictValidation},{"dryRunsAndRedo",dryRunsAndRedo},{"callbackOrderingAndUnrelatedData",callbackOrderingAndUnrelatedData}};
     std::cout<<std::unitbuf;std::cerr<<std::unitbuf;
     unsigned ran=0;
     for(const auto &[name,test]:tests) if(argc==1||std::string(argv[1])==name) { std::cout<<"RUN "<<name<<'\n'; test(); ++ran; std::cout<<"PASS "<<name<<'\n'; }

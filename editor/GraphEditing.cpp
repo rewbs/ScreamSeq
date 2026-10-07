@@ -48,4 +48,16 @@ void muteSignalSource(NativeSong &song,uint64_t graph,uint64_t id,bool muted) {
   else {for(auto &s:song.signal.songSources)if(s.node.id==id)node=&s.node;}
   need(node&&node->kind>=SignalNodeKind::LFO&&node->kind<=SignalNodeKind::Automation,"Select a modulation source to mute");node->muted=muted;
 }
+void assignSongSourceToGroup(NativeSong &song,uint64_t node,uint64_t parent) {
+  auto &signal=song.signal;
+  need(std::any_of(signal.songSources.begin(),signal.songSources.end(),[&](const auto &s){return s.node.id==node;}),"Song modulation source does not exist");
+  auto group=std::find_if(signal.groups.begin(),signal.groups.end(),[&](const auto &g){return g.id==parent;});
+  need(parent&&group!=signal.groups.end(),"Parent processing group does not exist");
+  const auto key="source:n"+std::to_string(node);
+  for(const auto &g:signal.groups)if(std::find(g.nodes.begin(),g.nodes.end(),key)!=g.nodes.end()) {
+    need(g.id==parent,"Modulation source already belongs to another processing group");return;
+  }
+  need(group->nodes.size()<240,"Too many group members");
+  group->nodes.push_back(key);
+}
 }

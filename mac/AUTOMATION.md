@@ -2076,11 +2076,13 @@ outputs address `songModulation` edges by stable source ID, plugin instance ID
 and parameter ID. Existing rack instances, presets, pattern bindings and recorded
 lanes keep their identities.
 
-- `graph.song.source.add {source, connect?}` allocates a source. `source` contains
+- `graph.song.source.add {source, connect?, parent?}` allocates a source. `source` contains
   `kind` (`lfo`, `follower`, `random`, `note-envelope`, `midi`, `amount` or
   `automation`) and optional name/layout/source settings. An optional
   `connect:{plugin,parameter,quantized?}` creates its target edge at zero depth
-  in the same Undo transaction.
+  in the same Undo transaction. Optional `parent` is an existing song processing
+  group ID; creation, membership and wiring commit together. Omit it for song root.
+  Missing/invalid parents reject without allocating identities or editing history.
 - `graph.song.source.update {node, source}` patches only supplied settings.
   Identity and kind cannot change. Use `graph.automation.set` for pattern curves.
 - `graph.song.source.remove {nodes}` removes all listed sources, their cables

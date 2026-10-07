@@ -20595,6 +20595,12 @@
             },
             "dryRun": {
               "type": "boolean"
+            },
+            "parent": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32,
+              "description": "Existing song processing group. Source, optional edge and membership share one Undo; omitted creates at song root."
             }
           },
           "required": [
@@ -20611,7 +20617,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Allocate a song-level control source, optionally connect to a stable rack parameter at zero depth, in one Undo. No processor is replaced."
+      "description": "Allocate a song-level control source, optionally connect to a stable rack parameter at zero depth and add to a processing group, in one Undo. No processor is replaced."
     },
     {
       "type": "object",

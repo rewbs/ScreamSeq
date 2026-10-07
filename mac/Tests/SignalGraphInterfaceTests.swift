@@ -1,5 +1,27 @@
 import AppKit
 extension InterfaceTests {
+  static func graphSongSourceDepthChecks() throws {
+    let editor=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1000,height:700))
+    var song:[String:Any]=["plugins":[["id":"rack","name":"Compressor","slot":0]],
+      "mixer":["buses":[["id":"n1","name":"Track 1","kind":"track","inserts":["rack"]]]],
+      "groups":[["id":"n2","name":"Dynamics","nodes":["plugin:rack"]]],"songSources":[]]
+    editor.revision="depth:1";editor.update(song);editor.navigateProcessingGroup("n2")
+    var writes=[(String,[String:Any])](),revision=1
+    editor.onRequest={method,params,reply in
+      if method=="graph.song.source.add" {
+        writes.append((method,params));revision+=1
+        var source=params["source"] as! [String:Any];source["id"]="n3";song["songSources"]=[source]
+        var groups=song["groups"] as! [[String:Any]]
+        if params["parent"] as? String=="n2"{groups[0]["nodes"]=["plugin:rack","source:n3"]};song["groups"]=groups
+        reply(["result":["revision":"depth:\(revision)","data":["node":"n3"]]])
+      }else if method=="graph.get"{reply(["result":["revision":"depth:\(revision)","data":song]])}
+      else{reply(["error":["message":"No processor catalog needed"]])}
+    }
+    editor.addSongSource(kind:"lfo",name:"LFO",position:NSPoint(x:420,y:160))
+    try require(writes.count==1 && writes[0].1["parent"] as? String=="n2","Adding a song source inside a processing group captures its parent in the single source-add transaction")
+    try require(editor.processingGroupID=="n2" && editor.selectedID=="source:n3" && editor.canvas.nodes.contains{$0.id=="source:n3"},"Source-add completion stays in the entered group with the new source visible and selected")
+    try require(editor.name.stringValue=="LFO","Source-add completion opens the new source controls without navigating to song root")
+  }
   static func graphAppendPlacementChecks() throws {
     let editor=SignalGraphEditor(frame:.zero)
     let song:[String:Any]=["mixer":["buses":[["id":"n4","name":"Track 4","kind":"track","output":"n9","inserts":["compressor"]],["id":"n9","name":"Master","kind":"master","output":""]]],"plugins":[["id":"compressor","name":"Compressor"]],"layout":[["node":"n4","x":40.0,"y":100.0],["node":"plugin:compressor","x":534.0,"y":100.0],["node":"n9","x":1200.0,"y":100.0]]]
@@ -144,6 +166,7 @@ extension InterfaceTests {
     try require(placement.canvas.nodes.first{$0.id=="b"}?.y==152,"An explicit musician position remains authoritative even when it overlaps another card")
   }
   static func signalGraphChecks() throws {
+    try graphSongSourceDepthChecks()
     try graphAppendPlacementChecks()
     try graphFollowerGestureChecks()
     try graphControlRefreshChecks()

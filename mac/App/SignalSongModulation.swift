@@ -87,7 +87,6 @@ extension SignalGraphEditor {
       guard let self else{return};var params:[String:Any]=["source":spec];if let connect{params["connect"]=connect}
       self.mutate("graph.song.source.add",params){[weak self] result in
         guard let self,let node=(result["data"] as? [String:Any])?["node"] as? String else{return}
-        if self.processingGroupID != nil {self.navigateProcessingGroup(nil)}
         self.selectedID="source:"+node;self.canvas.selected=self.selectedID;self.graphFilterState.revealed.insert("source:"+node);self.rebuild();self.inspect();self.revealAddedNode()
         if let connect,let plugin=connect["plugin"] as? String,let parameter=(connect["parameter"] as? NSNumber)?.uint32Value{self.focusSongModulation(source:node,plugin:plugin,parameter:parameter)}
       }

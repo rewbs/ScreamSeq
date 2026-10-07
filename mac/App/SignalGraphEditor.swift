@@ -566,7 +566,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     guard onRequest != nil else{return}
     operationFailure=nil;status.stringValue="Applying graph change…"
     var p=params
-    if method=="graph.node.add",let processingGroupID{p["parent"]=processingGroupID}
+    if ["graph.node.add","graph.song.source.add"].contains(method),let processingGroupID{p["parent"]=processingGroupID}
     p["expectedRevision"]=revision
     startMutation(method,p,document:projectionDocument,context:viewContext,after:after)
   }

@@ -46,6 +46,25 @@ int main(){try{
   SignalSongSource source;source.node={song.makeEntity().id,SignalNodeKind::Follower,"Root follower"};song.signal.songSources={source};
   muteSignalSource(song,0,source.node.id,true);CHECK(song.signal.songSources[0].node.muted);
   auto rootMuted=song;rejects([&]{muteSignalSource(song,0,UINT64_MAX,true);});CHECK(song==rootMuted);
+  {
+    Document grouped(MOD_TYPE_MPT,4);auto initial=grouped.native();
+    SignalSongSource seed;seed.node={initial.makeEntity().id,SignalNodeKind::LFO,"Existing"};
+    initial.signal.songSources.push_back(seed);const auto owner=initial.makeEntity().id;
+    initial.signal.groups.push_back({owner,0,"Controls",10,20,{"source:n"+std::to_string(seed.node.id)}});
+    grouped.annotate([&](NativeSong &n){n=initial;});auto added=initial;
+    SignalSongSource freshSource;freshSource.node={added.makeEntity().id,SignalNodeKind::LFO,"Added"};
+    added.signal.songSources.push_back(freshSource);const auto beforeAssignment=added;
+    rejects([&]{assignSongSourceToGroup(added,freshSource.node.id,UINT64_MAX);});CHECK(added==beforeAssignment);
+    rejects([&]{assignSongSourceToGroup(added,UINT64_MAX,owner);});CHECK(added==beforeAssignment);
+    assignSongSourceToGroup(added,freshSource.node.id,owner);
+    CHECK(added.signal.groups[0].nodes.back()=="source:n"+std::to_string(freshSource.node.id));
+    const auto assigned=added;assignSongSourceToGroup(added,freshSource.node.id,owner);CHECK(added==assigned);
+    const auto other=added.makeEntity().id;added.signal.groups.push_back({other,0,"Other",30,40,{"plugin:other"}});
+    const auto owned=added;rejects([&]{assignSongSourceToGroup(added,freshSource.node.id,other);});CHECK(added==owned);
+    grouped.annotate([&](NativeSong &n){n=assigned;});grouped.undo();
+    auto undone=initial;undone.nextID=assigned.nextID;CHECK(grouped.native()==undone); // Undo never reuses issued identities.
+    grouped.redo();CHECK(grouped.native()==assigned);
+  }
   auto fragment=copySignalSelection(d,{group});CHECK(fragment.nodes.size()==4&&fragment.audio.empty()&&fragment.modulation.size()==1&&fragment.groups.size()==2);
   auto clip=song;const auto previousCount=clip.signal.library[0].nodes.size();auto pasted=pasteSignalSelection(clip,d.id,fragment,{},0,500,600);
   CHECK(clip.signal.library[0].nodes.size()==previousCount+2&&pasted.identities.size()==4);

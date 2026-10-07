@@ -295,12 +295,14 @@ int main(){@autoreleasepool{try{
     auto snapshot=[&](){return api(@"graph.get",@{});};
     api(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1",@"name":@"Gainer",@"type":@0,@"subtype":@0,@"manufacturer":@0}},true);
     NSString *plugin=snapshot()[@"plugins"][0][@"id"];
-    NSDictionary *add=@{@"source":@{@"kind":@"lfo",@"name":@"Movement",@"rate":@2},@"connect":@{@"plugin":plugin,@"parameter":@1}};
+    NSString *sourceGroup=api(@"graph.song.group.create",@{@"nodes":@[[ @"plugin:" stringByAppendingString:plugin]],@"name":@"Dynamics"},true)[@"group"];
+    NSDictionary *add=@{@"source":@{@"kind":@"lfo",@"name":@"Movement",@"rate":@2},@"connect":@{@"plugin":plugin,@"parameter":@1},@"parent":sourceGroup};
     auto before=snapshot();auto rev=mod.automationRevision;
     auto preview=[add mutableCopy];preview[@"dryRun"]=@YES;api(@"graph.song.source.add",preview,true);
     check([rev isEqual:mod.automationRevision]&&[before isEqual:snapshot()],"Song source dry-run changed identities/history");
     NSString *source=api(@"graph.song.source.add",add,true)[@"node"];auto connected=snapshot();
     check([connected[@"songSources"] count]==1&&[connected[@"songModulation"] count]==1&&[connected[@"songModulation"][0][@"maximum"] doubleValue]==0,"Add source connects at zero depth");
+    check([connected[@"groups"][0][@"nodes"] containsObject:[@"source:" stringByAppendingString:source]],"A source added inside a song group must join that group atomically");
     check([before[@"plugins"] isEqual:connected[@"plugins"]]&&[before[@"mixer"] isEqual:connected[@"mixer"]],"Song modulation replaced rack instances or routing");
     api(@"history.undo",@{},true);check([before isEqual:snapshot()],"One Undo must remove source and zero-depth connection");
     api(@"history.redo",@{},true);check([connected isEqual:snapshot()],"Redo must restore source and stable target identities");
@@ -319,6 +321,9 @@ int main(){@autoreleasepool{try{
     check(hasBase&&hasSource&&[rev isEqual:mod.automationRevision],"Activity must expose the unmodulated base and stable source edit link without editing the song");
     auto rejectSong=[&](NSString *method,NSDictionary *p){auto guarded=[p mutableCopy];guarded[@"expectedRevision"]=mod.automationRevision;NSError *failure=nil;auto state=snapshot();auto revision=mod.automationRevision;
       check(![mod automationMethod:method params:guarded error:&failure],"Invalid song control edit accepted");check([state isEqual:snapshot()]&&[revision isEqual:mod.automationRevision],"Invalid song control partially committed");};
+    for(id parent in @[@"n999999",@YES,NSNull.null])rejectSong(@"graph.song.source.add",@{@"source":@{@"kind":@"lfo"},@"parent":parent});
+    auto staleAdd=[add mutableCopy];staleAdd[@"expectedRevision"]=@"stale";
+    check(![mod automationMethod:@"graph.song.source.add" params:staleAdd error:&problem]&&[depthState isEqual:snapshot()],"A stale grouped-source add must not change allocator, membership or routes");
     rejectSong(@"graph.song.modulation.set",@{@"source":source,@"plugin":plugin,@"parameter":@1,@"minimum":@(-2)});
     rejectSong(@"graph.song.modulation.set",@{@"source":source,@"plugin":plugin,@"parameter":@YES});
     rejectSong(@"graph.song.modulation.set",@{@"source":source,@"plugin":plugin,@"parameter":@99999});

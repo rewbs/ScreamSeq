@@ -39,7 +39,6 @@ extension SignalGraphEditor {
             var spec:[String:Any]=["kind":"follower","name":label+" follower","x":location.x,"y":location.y];spec.merge(tap){_,new in new}
             self.mutate("graph.song.source.add",["source":spec,"connect":["plugin":plugin,"parameter":to.number,"quantized":quantized]]) {[weak self] result in
               guard let self,let node=(result["data"] as? [String:Any])?["node"] as? String else{return}
-              if self.processingGroupID != nil{self.navigateProcessingGroup(nil)}
               self.graphFilterState.revealed.insert("source:"+node);self.rebuild();self.revealAddedNode();self.focusSongModulation(source:node,plugin:plugin,parameter:to.number)
             }
           }

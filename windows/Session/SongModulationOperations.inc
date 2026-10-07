@@ -27,12 +27,13 @@
         if(spec.contains("audioPlugin")) {const auto plugin=text(spec.at("audioPlugin"),256);require(plugin.empty()||pluginExists(plugin),"Follower input plugin does not exist");}
       };
       if(method=="graph.song.source.add") {
-        keys(p,{"source","connect","dryRun"});auto spec=field(p,"source");strictSongSource(spec);
+        keys(p,{"source","connect","parent","dryRun"});auto spec=field(p,"source");strictSongSource(spec);
         require(!spec.contains("id"),"Source identities are allocated by the document");nodeID=allocate(next);spec["id"]=id(nodeID);
         validateScope(spec);patchModel(next,[&](Json &m){m["signalGraph"]["songSources"].push_back(spec);});
         require(songSource(next,id(nodeID)).node.kind>=SignalNodeKind::LFO,"Choose a modulation source kind");
         if(p.contains("connect")) {const auto &c=p.at("connect");keys(c,{"plugin","parameter","quantized"});const bool quantized=c.contains("quantized")?boolean(c.at("quantized")):false;
           auto [plugin,parameter]=target(field(c,"plugin"),field(c,"parameter"),quantized);graph.songModulation.push_back({nodeID,std::move(plugin),parameter,0,0,true,quantized});}
+        if(p.contains("parent"))assignSongSourceToGroup(next,nodeID,identity(p.at("parent")));
       } else if(method=="graph.song.source.update") {
         keys(p,{"node","source","dryRun"});nodeID=songSource(next,field(p,"node")).node.id;auto patch=field(p,"source");strictSongSource(patch);
         require(!patch.contains("id")&&!patch.contains("kind")&&!patch.contains("envelopes"),"Source identity and kind cannot change; use graph.automation.set for pattern curves");

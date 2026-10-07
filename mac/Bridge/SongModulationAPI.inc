@@ -33,10 +33,11 @@
           if(!s.audioPlugin.empty())require(std::any_of(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==s.audioPlugin;}),"Follower input plugin does not exist");
         };
         if([method isEqual:@"graph.song.source.add"]) {
-          allowed(@[@"source",@"connect",@"dryRun"]);auto spec=[object(p[@"source"]) mutableCopy];
+          allowed(@[@"source",@"connect",@"parent",@"dryRun"]);auto spec=[object(p[@"source"]) mutableCopy];
           require(!spec[@"id"],"Source identities are allocated by the document");nodeID=next.makeEntity().id;spec[@"id"]=nativeID(nodeID);
           auto s=decodeSongSource(spec);require(s.node.kind>=SignalNodeKind::LFO,"Choose a modulation source kind");validateScope(s);
           graph.songSources.push_back(std::move(s));
+          if(p[@"parent"])assignSongSourceToGroup(next,nodeID,decodeNativeID(p[@"parent"]));
           if(p[@"connect"]) {auto c=object(p[@"connect"]);keys(c,@[@"plugin",@"parameter",@"quantized"]);const bool quantized=c[@"quantized"]?boolean(c[@"quantized"]):false;
             auto [plugin,parameter]=target(c[@"plugin"],c[@"parameter"],quantized);graph.songModulation.push_back({nodeID,std::move(plugin),parameter,0,0,true,quantized});}
         } else if([method isEqual:@"graph.song.source.update"]) {
