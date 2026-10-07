@@ -3,6 +3,7 @@
 #include "windows/Api/PipeServer.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/PatternCommands.hpp"
+#include "editor/ArrangementTools.hpp"
 #include "soundlib/mod_specifications.h"
 #include <cmath>
 #include <set>
@@ -126,12 +127,68 @@ Tracker::NativeSong DocumentOperations::annotationCandidate(const Tracker::Docum
   if(name)target->name=*name;if(annotation)target->annotation=*annotation;if(color)target->color=*color;
   next.validate(document.song());return next;
 }
-std::vector<std::string> DocumentOperations::reads() { return {"pattern.commands","sample.get","sample.waveform.get","arrangement.get"}; }
+std::vector<std::string> DocumentOperations::reads() { return {"pattern.commands","sample.get","sample.waveform.get","arrangement.get","arrangement.matrix"}; }
 std::vector<std::string> DocumentOperations::writes() {
-  return {"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","song.annotate"};
+  return {"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","song.annotate","arrangement.copyBlock"};
 }
 Json DocumentOperations::invoke(const std::string &method, const Json &p) {
   using namespace Tracker;
+  if(method=="arrangement.matrix") {
+    keys(p,{"startOrder","orderCount","startChannel","channelCount"});
+    const auto &song=document_.song();const auto &native=document_.native();ArrangementMatrixRange range;
+    if(p.contains("startOrder"))range.startOrder=uint32_t(integer(p.at("startOrder"),0,song.Order().size()));
+    if(p.contains("orderCount"))range.orderCount=uint32_t(integer(p.at("orderCount"),1,128));
+    if(p.contains("startChannel"))range.startChannel=uint32_t(integer(p.at("startChannel"),0,song.GetNumChannels()-1));
+    if(p.contains("channelCount"))range.channelCount=uint32_t(integer(p.at("channelCount"),1,std::min<uint32_t>(32,song.GetNumChannels()-range.startChannel)));
+    ArrangementMatrixSummary summary;
+    try {summary=summarizeArrangement(document_,range);}
+    catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+    const auto &slots=native.sequences.at(summary.sequence).orders;
+    std::vector<Json> blocks;blocks.reserve(summary.patterns.size());
+    for(const auto &pattern:summary.patterns) {
+      auto values=Json::array();for(const auto &block:pattern.blocks)values.push_back({{"channel",block.channel},{"trackID","n"+std::to_string(block.trackID)},
+        {"events",block.events},{"notes",block.notes},{"bins",block.bins},{"trackerEvents",block.trackerEvents},{"preciseEvents",block.preciseEvents},{"nativeFxEvents",block.nativeFxEvents}});
+      blocks.push_back(std::move(values));
+    }
+    Json result={{"orders",Json::array()},{"tracks",Json::array()},{"totalOrders",summary.totalOrders},{"totalChannels",summary.totalChannels},
+      {"startOrder",summary.startOrder},{"startChannel",summary.startChannel}};
+    constexpr size_t maximum=Api::PipeServer::maxResponseBytes-4096;size_t bytes=result.dump().size();
+    auto append=[&](const char *key,Json item) {
+      const auto size=item.dump().size()+1;
+      if(size>maximum||bytes>maximum-size)throw Api::ApiError(-32003,"Matrix response exceeds transport limit; request a smaller page");
+      bytes+=size;result[key].push_back(std::move(item));
+    };
+    for(const auto &order:summary.orders) {
+      auto item=entityInfo(slots.at(order.order));item["order"]=order.order;item["pattern"]=order.pattern;item["rows"]=0;item["blocks"]=Json::array();
+      if(order.summaryIndex!=noArrangementPatternSummary) {
+        const auto &pattern=summary.patterns.at(order.summaryIndex);item["rows"]=pattern.rows;item["blocks"]=blocks.at(order.summaryIndex);
+        item["patternID"]="n"+std::to_string(pattern.patternID);item["patternName"]=native.patterns.at(pattern.pattern).name;
+      }
+      append("orders",std::move(item));
+    }
+    for(uint32_t ch=summary.startChannel;ch<summary.startChannel+summary.channelCount;++ch) {
+      auto item=entityInfo(native.tracks.at(ch));item["channel"]=ch;append("tracks",std::move(item));
+    }
+    return result;
+  }
+  if(method=="arrangement.copyBlock") {
+    keys(p,{"sourceOrder","targetOrder","sourceChannel","targetChannel","channelCount","mode","makeUnique","clip","dryRun"});
+    require(document_.editable(),"This document is read-only");ArrangementCopy copy;
+    copy.sourceOrder=uint16_t(integer(field(p,"sourceOrder"),0,UINT16_MAX));copy.targetOrder=uint16_t(integer(field(p,"targetOrder"),0,UINT16_MAX));
+    copy.sourceChannel=uint16_t(integer(field(p,"sourceChannel"),0,UINT16_MAX));copy.targetChannel=uint16_t(integer(field(p,"targetChannel"),0,UINT16_MAX));
+    if(p.contains("channelCount"))copy.channels=uint16_t(integer(p.at("channelCount"),1,document_.song().GetNumChannels()));
+    if(p.contains("mode"))copy.mode=string(p.at("mode"),20);
+    if(p.contains("makeUnique"))copy.makeUnique=boolean(p.at("makeUnique"));if(p.contains("clip"))copy.clip=boolean(p.at("clip"));
+    const bool dry=p.contains("dryRun")?boolean(p.at("dryRun")):false;
+    try {
+      const auto plan=prepareArrangementCopy(document_,copy,validateCandidate_);
+      Json result={{"dryRun",dry},{"wouldChange",plan.changed()},{"changedCells",plan.edits.size()},{"clonesPattern",plan.clone},
+        {"targetPattern",plan.targetPattern},{"targetOrder",plan.targetOrder}};
+      if(!dry&&plan.changed()){if(stopPlayback_)stopPlayback_();applyArrangementCopy(document_,plan);}
+      return result;
+    }catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+     catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
+  }
   if(method=="arrangement.get") {
     keys(p,{});const auto &song=document_.song();const auto &native=document_.native();
     const auto sequence=song.Order.GetCurrentSequenceIndex();const auto &slots=native.sequences.at(sequence).orders;

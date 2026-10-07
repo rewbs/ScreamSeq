@@ -385,15 +385,17 @@ std::vector<Edit> Document::edit(const std::vector<Edit> &input)
 {
 	validateEdits(input);
 	std::optional<NativeSong> metadata;
+	PrimaryEffectCells replacedEffects;
 	for(const auto &e:input) {
 		const auto before=cell(e.pattern,e.row,e.channel);
 		if(before.effect==e.after.effect && before.parameter==e.after.parameter) continue;
-		const auto pattern=native_.patterns.at(e.pattern).id,track=native_.tracks.at(e.channel).id;
-		auto matches=[&](const auto &c){return c.pattern==pattern&&c.track==track&&!c.column&&c.position/performanceUnitsPerRow==e.row;};
-		if(std::any_of(native_.performance.commands.begin(),native_.performance.commands.end(),matches)) {
-			if(!metadata) metadata=native_;
-			std::erase_if(metadata->performance.commands,matches);
-		}
+		replacedEffects.emplace(native_.patterns.at(e.pattern).id,native_.tracks.at(e.channel).id,e.row);
+	}
+	if(!replacedEffects.empty() && std::any_of(native_.performance.commands.begin(),native_.performance.commands.end(),[&](const auto &c) {
+		return !c.column && replacedEffects.contains({c.pattern,c.track,c.position/performanceUnitsPerRow});
+	})) {
+		metadata=native_;
+		metadata->clearPrimaryEffects(replacedEffects);
 	}
 	if(metadata) {
 		std::vector<Edit> changes;

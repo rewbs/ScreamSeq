@@ -58,7 +58,22 @@ report these contexts. Previous/Next section use strict earlier/later named
 orders without wrapping or relocating playback; selecting End/Skip leaves the
 pattern cursor unchanged. These actions and both editors appear in the
 configurable command catalog. Color editing is available through the API;
-there is no native color picker or arrangement matrix in this checkpoint.
+there is no native color picker in this checkpoint.
+
+`arrangement.matrix` and `arrangement.copyBlock` use the shared Mac request
+schema and copy semantics in [AUTOMATION.md](../../mac/AUTOMATION.md). The read
+returns full order/track entities and bounded block summaries, including precise
+notes and native FX. Pages default to 64 orders and up to 16 tracks; maximums are
+128 and 32. Counts/bins are unsigned 32-bit, and repeated occurrences retain
+independent order identities. End/Skip slots have no blocks. The copy requires
+`expectedRevision`; `dryRun` validates the complete prospective song and view
+cache before any playback stop, ID allocation in the live song, or history edit.
+`wouldChange` includes native-only changes even when `changedCells` is zero.
+Changed Apply creates one document Undo; no-op preserves revision, playback and
+Redo. Native project persistence retains exact cloned pattern timing and metadata.
+Responses are charged as escaped JSON before appending each bounded page item,
+leaving room for the transport envelope under 32 MiB. Query `api.describe` for
+the live `arrangementMatrix` contract and available native interaction paths.
 
 Application recovery uses the Mac-compatible `recovery.status`, `recovery.list`,
 `recovery.save` and `recovery.restore` contracts, also described in

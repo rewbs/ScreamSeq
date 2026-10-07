@@ -30,6 +30,29 @@ uninterrupted annotation history. Its HWND checks cover minimum geometry,
 Unicode notes, caret/scroll retention and stale drafts. Controller annotation
 tests cover immutable view reuse and exact cache-admission boundaries.
 
+`document-controller-tests --matrix <scratch-dir>` covers native-only and tracker
+block copying, exact view-cache admission at the byte boundary, parameter and
+revision rejection, stable repeated-order identities, no-op Redo, one Undo, and
+native persistence. The shared `arrangement-tools` CTest target links the Windows
+native project codec and checks all three copy modes, overlapping channels,
+clipping, exact clone timing/metadata, density pagination and over 65,535 events in one
+bin. Its offline audio comparison requires nonzero native-only PCM, an audible
+extra-FX difference, exact source/destination equality and 128/511-buffer
+invariance. It does not open an audio device. The same source builds against
+TrackerEditor on Mac; Mac NativeSongTests additionally exercises the API adapter.
+
+`test_matrix_api` exercises the actual named-pipe matrix adapters, bounded pages,
+native density, revision/replay guards, all copy modes, clipping, one Undo and
+save/reopen. It creates disposable fixtures through public APIs, without devices.
+`test_matrix_ui` exercises native keyboard Copy/Paste, stable block selection,
+retained options and stale copied sources, minimum-size control bounds, paging,
+Open/Return focus, native-only independent copies and persistence. Enable
+`SCREAMSEQ_TEST_LIVE_AUDIO=1` for its explicitly silent output case: navigation
+and exact self-copy preserve advancing playback; a changed Paste stops it.
+Run both through `run_isolated.py` with a new absolute log path. These modules
+require `SCREAMSEQ_TEST_EXE` and `TMPDIR`; the API module's controller wrapper
+also expects the matching `document-controller-tests.exe` beside the app.
+
 The separate `windows/Tests/Editing` CMake project exercises document operations;
 it is not part of the main application's CTest count. Set its
 `SCREAMSEQ_ENGINE_LIB_DIR` to the matching current Release engine libraries.

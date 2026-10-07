@@ -112,6 +112,11 @@ bool PatternPerformance::controls(const std::string &plugin, uint32_t parameter)
   }
   return false;
 }
+bool NativeSong::clearPrimaryEffects(const PrimaryEffectCells &cells) {
+  return std::erase_if(performance.commands,[&](const auto &command) {
+    return !command.column && cells.contains({command.pattern,command.track,command.position/performanceUnitsPerRow});
+  }) != 0;
+}
 void NativeSong::clonePatternAutomation(uint64_t source, uint64_t destination) {
   std::vector<MusicalAutomationLane> copies;
   for (const auto &lane : automation) if (lane.pattern == source) {

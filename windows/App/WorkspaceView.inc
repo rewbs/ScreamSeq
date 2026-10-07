@@ -190,6 +190,7 @@
             else if(id==recoveryCommand){openRecoveryBrowser();return;}
             else if(id==midiRecordingCommand){openMidiRecording();return;}
             else if(id==arrangementCommand||id==newPatternCommand||id==duplicatePatternCommand){openArrangement(id==newPatternCommand?"new":id==duplicatePatternCommand?"duplicate":"arrange");return;}
+            else if(id==arrangementMatrixCommand){openArrangementMatrix();return;}
             else if(id==previousSectionCommand||id==nextSectionCommand){navigateArrangementSection(id==nextSectionCommand);return;}
             else if(id==editSectionCommand||id==patternDetailsCommand){openArrangement(id==editSectionCommand?"section":"pattern");return;}
             else if(id==songTimingCommand){openSongTiming();return;}

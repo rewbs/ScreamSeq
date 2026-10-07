@@ -1,8 +1,10 @@
 # Windows arrangement matrix
 
-Source audit for a later parity checkpoint, 2026-10-07. This document does not
-implement or qualify a matrix. Finish the retained order/timing tools and
-[sections and annotations](ANNOTATION_PLAN.md) first.
+Source audit and implementation plan, 2026-10-07. The retained order/timing and
+[sections and annotations](ANNOTATION_PLAN.md) checkpoints are complete. The
+isolated matrix draft now addresses the shared gaps below and adds reciprocal
+Mac/Windows API adapters. This note is not runtime qualification; build, native
+and actual-app evidence must be recorded for the final integrated source.
 
 ## Existing behavior and shared boundaries
 
@@ -21,7 +23,14 @@ adapter must bound response construction, preflight view-cache growth, stop only
 when a changed musical operation is accepted, and preserve one Undo/persistence.
 Reuse the stable order and track IDs exposed by the annotation checkpoint.
 
-## Verified shared gaps to resolve before exposing block editing
+## Original shared gaps and current draft
+
+The following gaps were verified in the preceding source. The shared draft now
+has one native-aware summary, complete candidate validation with a Windows view
+admission callback, exact independent clones, and explicit native copy policies.
+See the contract beside `ArrangementCopy` and the public API guide for precise
+collision/clipping rules. Shared and controller fixtures cover these changes;
+their presence alone does not establish that they have passed.
 
 - Matrix density currently counts only six-field tracker cells. A block with
   only precise notes or extra FX appears empty. Define a native-aware summary

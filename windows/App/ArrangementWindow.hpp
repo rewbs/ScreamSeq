@@ -14,12 +14,13 @@ public:
     std::function<void(std::string)> selectOrder;
     std::function<void(std::string)> playOrder;
     std::function<void()> returnToPattern;
+    std::function<void()> openMatrix;
   };
 private:
   enum:int {orders=8001,sequence,assignment,assign,before,after,up,down,remove,play,
     rows,source,createNew,duplicate,reload,returnPattern,close,previousSection,nextSection,
     ordersPage,sectionPage,patternPage,sectionName,sectionApply,sectionReload,
-    patternName,patternNotes,patternApply,patternReload,
+    patternName,patternNotes,patternApply,patternReload,matrixButton,
     heading=8100,sequenceLabel,countLabel,assignmentLabel,creationLabel,rowsLabel,
     sourceLabel,helpLabel,statusLabel,sectionTarget,sectionNameLabel,sectionHelp,
     patternTarget,patternNameLabel,patternNotesLabel};
@@ -226,6 +227,7 @@ private:
   void leave(){const bool focused=owns(GetFocus());hide();if(!focused&&callbacks_.returnToPattern)callbacks_.returnToPattern();}
   void action(int id,unsigned notification)override{
     if(setting_)return;
+    if(id==matrixButton){if(page_=="orders"&&!unavailable()&&callbacks_.openMatrix)callbacks_.openMatrix();return;}
     if(id==sectionName||id==patternName||id==patternNotes){
       const bool section=id==sectionName;auto &draft=section?sectionDraft_:patternDraft_;
       if(notification==EN_SETFOCUS)pageFocus_[section?1:2]=controls_.at(id);
@@ -265,7 +267,7 @@ private:
       if(value==VK_RETURN&&!ctrl&&!shift){select(selected_,true);return true;}
     }
     if(value==VK_RETURN&&ctrl&&!shift&&((page_=="section"&&focus==controls_.at(sectionName))||(page_=="pattern"&&(focus==controls_.at(patternName)||focus==controls_.at(patternNotes))))){action(page_=="section"?sectionApply:patternApply,BN_CLICKED);return true;}
-    if(value==VK_RETURN&&!shift){for(const int id:{assign,before,after,up,down,remove,play,createNew,duplicate,reload,returnPattern,close,previousSection,nextSection,ordersPage,sectionPage,patternPage,sectionApply,sectionReload,patternApply,patternReload})if(focus==controls_.at(id)){if(IsWindowEnabled(focus))action(id,BN_CLICKED);return true;}}
+    if(value==VK_RETURN&&!shift){for(const int id:{assign,before,after,up,down,remove,play,createNew,duplicate,reload,returnPattern,close,previousSection,nextSection,ordersPage,sectionPage,patternPage,sectionApply,sectionReload,patternApply,patternReload,matrixButton})if(focus==controls_.at(id)){if(IsWindowEnabled(focus))action(id,BN_CLICKED);return true;}}
     return false;
   }
   void resizeColumns(){
@@ -290,6 +292,7 @@ private:
     place(createNew,w-326,h-160,126,30,orderPage);place(duplicate,w-188,h-160,172,30,orderPage);
     place(helpLabel,16,h-122,w-32,32,orderPage);place(statusLabel,16,h-84,w-32,36);
     place(reload,16,h-42,132,30,orderPage);place(close,w-96,h-42,80,30);
+    place(matrixButton,160,h-42,132,30,orderPage);
     place(sectionTarget,16,h-286,w-32,22,section);place(sectionNameLabel,16,h-252,w-32,20,section);
     place(sectionName,16,h-224,w-32,30,section);place(sectionHelp,16,h-182,w-32,42,section);
     place(sectionApply,176,h-42,144,30,section);place(sectionReload,16,h-42,148,30,section);
@@ -310,6 +313,7 @@ private:
     EnableWindow(controls_.at(sequence),available&&sequences_.size()>1);
     EnableWindow(controls_.at(createNew),available&&!stale()&&roomForPattern());EnableWindow(controls_.at(duplicate),available&&!stale()&&roomForPattern()&&pattern(patterns_,sourceID_));
     EnableWindow(controls_.at(reload),!unavailable());
+    EnableWindow(controls_.at(matrixButton),!unavailable()&&bool(callbacks_.openMatrix));
     EnableWindow(controls_.at(previousSection),!unavailable()&&sectionIndex(false)>=0);EnableWindow(controls_.at(nextSection),!unavailable()&&sectionIndex(true)>=0);
     EnableWindow(controls_.at(sectionApply),available&&sectionDraft_.bound&&!detailStale(sectionDraft_));EnableWindow(controls_.at(patternApply),available&&patternDraft_.bound&&!detailStale(patternDraft_));
     EnableWindow(controls_.at(sectionReload),!unavailable());EnableWindow(controls_.at(patternReload),!unavailable());
@@ -364,6 +368,7 @@ public:
     NativeReportList::install(list);
     int column=0;for(const auto name:{L"Order",L"Pattern",L"Rows",L"Section"}){LVCOLUMNW item{};item.mask=LVCF_TEXT|LVCF_WIDTH;item.pszText=const_cast<wchar_t *>(name);item.cx=100;ListView_InsertColumn(list,column++,&item);}
     combo(sequence);combo(assignment);edit(rows,L"64",5);combo(source);
+    button(matrixButton,L"Matrix…");
     for(const auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{assign,L"Assign"},{before,L"Insert before"},{after,L"Insert after"},{up,L"Move up"},{down,L"Move down"},{remove,L"Remove"},{play,L"Play selected"},{createNew,L"New + append"},{duplicate,L"Duplicate + append"},{reload,L"Reload draft"},{returnPattern,L"Return to pattern (F6)"},{close,L"Close"}})button(id,label);
     for(const auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"ARRANGE ORDERS"},{sequenceLabel,L"Sequence"},{countLabel,L""},{assignmentLabel,L"PATTERN FOR THE SELECTED ORDER"},{creationLabel,L"CREATE A PATTERN AND APPEND ONE ORDER"},{rowsLabel,L"Rows"},{sourceLabel,L"Source"},{helpLabel,L""},{statusLabel,L""}})label(id,text);
     for(const auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{previousSection,L"Previous section"},{nextSection,L"Next section"},{ordersPage,L"Orders"},{sectionPage,L"Section"},{patternPage,L"Pattern details"},{sectionApply,L"Set section"},{sectionReload,L"Reload section"},{patternApply,L"Save pattern details"},{patternReload,L"Reload pattern"}})button(id,text);

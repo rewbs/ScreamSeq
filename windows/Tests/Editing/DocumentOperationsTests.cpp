@@ -378,8 +378,8 @@ void sampleReads() {
   CHECK(f.doc->revision==rev); CHECK(f.doc->historyBytes()==bytes); CHECK(f.stops==0); CHECK(f.publications==0);
 }
 void structuralFormatsAndInventory() {
-  const std::vector<std::string> reads={"pattern.commands","sample.get","sample.waveform.get","arrangement.get"};
-  const std::vector<std::string> writes={"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","song.annotate"};
+  const std::vector<std::string> reads={"pattern.commands","sample.get","sample.waveform.get","arrangement.get","arrangement.matrix"};
+  const std::vector<std::string> writes={"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","song.annotate","arrangement.copyBlock"};
   CHECK(DocumentOperations::reads()==reads); CHECK(DocumentOperations::writes()==writes);
   for(auto type:{MOD_TYPE_MOD,MOD_TYPE_XM,MOD_TYPE_S3M,MOD_TYPE_IT,MOD_TYPE_MPT}) {
     Fixture f(type);
