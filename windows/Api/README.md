@@ -830,3 +830,67 @@ it does not introduce different musical editing semantics. Windows-only
 `workspace.get.instrumentEnvelope.mappingFields`, `mappingDirty` and
 `selectedKey` expose unfinished range fields, staged mapping state and the
 native list selection. See `../INSTRUMENT_IMPORT_PROGRESS.md`.
+
+## MIDI input and retained recording takes
+
+`recording.get/start/capture/stop/commit/discard` use shared precise-note recording;
+see `recording.schema.json`. Writes require current `expectedRevision`, plus an
+opaque `take` ID for operations on an existing take. Start pins the base revision,
+distinct zero-based raw `channels`, `instrument` (1–255), optional `quantization`
+(0–65536 row units) and `latencyMS` (−500 through +500; positive places input earlier).
+
+Capture validates its entire array of at most 1024 events before changing the
+take, then sorts equal timestamps stably. Events supply decimal uint64
+`timestamp`, MIDI `status`, `note` and `velocity`. Windows host time is QPC
+converted to 100 ns units. Note-on/off and CC120/123 are accepted. The audio
+presentation clock accounts for primed silence and each renderer slice. Missing
+or expired mappings increase `missingTime`; no cursor time is substituted.
+A take binds its first valid stream generation and cannot join a restarted
+stream. `transport.get.recordingClock` reports validity, generation,
+discontinuities and host ticks per second.
+
+Get returns `take`, `capturing`, `compatible`, `baseRevision`, `eventCount`,
+`events`, `missingTime`, `exhaustedVoices`, `overflow`, `inputError` and current
+`hostTime`. Events contain stable native `patternID` and `track`, row-unit
+`position`, core `note`, `instrument` and `velocity`. The compact
+`workspace.get.recording` summary omits event payloads. A stopped compatible take
+commits with optional `replaceRows` and `dryRun`. Commit validates the complete
+candidate and applies one document Undo. Dry runs, invalid requests and stale
+commits retain the take. Take lifecycle alone does not advance musical revision.
+Successful commit/discard consumes the take and any imported recovery wrapper.
+
+API `transport.stop` ends capture and retains the take. Native Stop/Space also
+attempts Finish. Lost input, exhausted voices, overflow or an incompatible base
+retain the stopped take for review. Explicit Finish can accept a compatible
+partial take; it cannot rebase a stale one. Save/Open/close require Finish or
+Discard first. Recovery snapshots copy and close held notes without changing
+the live take. Restore deliberately ends old capture before protecting/replacing
+the song, excludes input during that boundary and hydrates a fresh stopped take.
+Failed restore leaves the old take stopped and available. Optional
+`recoveryTake.inputError` preserves loss reasons; older files remain supported.
+
+Windows-only `midi.devices.get` and `midi.settings.get/set` use a separate
+`expectedMidiRevision` guard; see `midi.schema.json`. They expose opaque device
+interface IDs, connection state and input-loss/timestamp counters. Preferences
+are `source` (empty disconnects), `armed`, `channelsCount`, `quantization` and
+`latencyMS`; they are session state outside musical Undo. No-ops preserve their
+revision. Dry runs validate without changing input, takes or music. Device calls
+run on a control worker. WinMM callbacks queue bounded raw messages; driver
+milliseconds map to host time with precision and anchor uncertainty exposed.
+Source loss releases input holds and retains the take. Input during Finish,
+Discard or song replacement cannot later become a cursor step edit.
+
+The native MIDI & recording window and command palette expose input selection,
+Arm, timing, adjacent columns, review, Finish, Discard and precise-note navigation.
+Armed stopped MIDI enters cursor notes; armed playback starts a take after Play.
+The main Sound selector is authoritative. Computer keyboard step entry and Live
+keys keep their existing behavior. MIDI and keyboard holds for the same current
+sound/pitch share audition voice ownership.
+
+Qualification only: `--midi-test-input` requires automated inspection or explicit
+audio-test mode. It substitutes an owned input adapter and advertises
+`midi.test.inject`, guarded by settings revision and connection generation.
+Injected driver messages traverse the production queue and timestamp conversion.
+Its optional `after` barrier invokes actual `apiStop` or `nativeStop` before timer
+servicing to test pending batches. Normal sessions never expose this method.
+This fixture does not qualify physical MIDI drivers, hotplug or hardware latency.

@@ -8,6 +8,8 @@
 #include "MixerOperations.hpp"
 #include "../Api/SessionAdapter.hpp"
 #include "../Project/NativeProject.hpp"
+#include "../Audio/PresentationClock.hpp"
+#include "editor/NoteRecording.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -52,6 +54,7 @@ struct DocumentView {
   std::array<wchar_t,256> volumeLetters{},effectLetters{};
   std::array<uint8_t,256> effectMasks{};
   Json commands;
+  Json recording; // Compact immutable take status; events are read explicitly.
   std::shared_ptr<const NativePatternView> nativePattern;
   std::shared_ptr<const PatternGraphView> graphPattern;
   std::vector<uint8_t> effectColumns;
@@ -72,18 +75,27 @@ struct DocumentView {
 // project-sized JSON response; the disk service can write them independently.
 struct RecoverySnapshot {
   std::shared_ptr<const std::vector<std::byte>> bytes;
-  std::string revision,title,fingerprint;
+  std::string revision,title,fingerprint,guardFingerprint;
   std::optional<std::filesystem::path> source;
   bool hasRecording=false,needsProtection=false,hasOpenEditors=false;
 };
 // One serial document owner. Work, cache construction and retired cache disposal
 // run here. service() is called ONLY by the UI thread for playback hooks.
 class DocumentController {
+  struct RecordingTake {
+    Tracker::NoteRecording notes;
+    std::string id,baseRevision;
+    double latencyMS=0;
+    uint64_t startTimestamp=0,lastTimestamp=0,clockGeneration=0;
+    std::shared_ptr<const RecordingTimeline> timeline;
+    explicit RecordingTake(Tracker::NoteRecording value):notes(std::move(value)){}
+  };
   std::unique_ptr<Tracker::Document> document_;
   std::unique_ptr<AssetOperations> assets_;
   std::unique_ptr<PluginOperations> plugins_;
   std::unique_ptr<HostedProjectPlayback> playback_;
   Project::ProjectState project_;
+  std::unique_ptr<RecordingTake> recording_;
   std::string identity_;
   uint64_t generation_=0;
   std::shared_ptr<const DocumentView> view_;
@@ -118,6 +130,13 @@ class DocumentController {
   void open(const std::filesystem::path &path);
   void installCandidate(Project::OpenedProject candidate,std::function<void()> beforeCommit={});
   std::shared_ptr<const RecoverySnapshot> recoverySnapshot();
+  Json recordingSummary(const RecordingTake *,const std::string &atRevision,bool events=false) const;
+  std::unique_ptr<RecordingTake> hydrateRecording(const Tracker::Document &,const Project::ProjectState &,const std::string &nextRevision) const;
+  std::optional<Tracker::RecordedPosition> recordingPosition(RecordingTake &,uint64_t timestamp);
+  std::optional<Tracker::RecordedPosition> recordingStopPosition(RecordingTake &);
+  void overlayRecording(Project::ProjectState &,const RecordingTake &,bool closeHeld=true);
+  void installRecording(std::unique_ptr<RecordingTake>,bool removePreserved=false);
+  Json recordingOperation(const std::string &method,const Json &params);
   std::string revision() const;
   Json operation(const std::string &method,Json params);
 public:

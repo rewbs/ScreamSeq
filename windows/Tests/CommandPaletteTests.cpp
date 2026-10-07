@@ -1,4 +1,5 @@
 // Isolated native message tests; no global input, clipboard writes or audio.
+#include "PrivateGuiTest.hpp"
 #include "../App/CommandPalette.hpp"
 #include <iostream>
 #include <map>
@@ -15,24 +16,6 @@ std::wstring item(HWND list,int row) {
   require(length>=0,"Result row is missing");std::wstring value(size_t(length)+1,0);
   SendMessageW(list,LB_GETTEXT,row,reinterpret_cast<LPARAM>(value.data()));value.resize(size_t(length));return value;
 }
-struct PrivateDesktop {
-  HDESK original=GetThreadDesktop(GetCurrentThreadId()),isolated{};
-  HWND foreground=GetForegroundWindow();DWORD clipboard=GetClipboardSequenceNumber();
-  PrivateDesktop() {
-    const auto name=L"ScreamSeqPaletteTests-"+std::to_wstring(GetCurrentProcessId());
-    isolated=CreateDesktopW(name.c_str(),nullptr,nullptr,0,GENERIC_ALL,nullptr);
-    require(isolated!=nullptr,"Cannot create private test desktop");
-    if(!SetThreadDesktop(isolated)){CloseDesktop(isolated);isolated=nullptr;throw std::runtime_error("Cannot attach private test desktop");}
-  }
-  ~PrivateDesktop() {SetThreadDesktop(original);if(isolated)CloseDesktop(isolated);}
-  void verifyUnchanged() const {
-    require(GetClipboardSequenceNumber()==clipboard,"Palette tests changed the clipboard");
-    // GetForegroundWindow is desktop-local; check the musician's desktop only
-    // after all test windows have been destroyed and this thread is restored.
-    require(SetThreadDesktop(original)!=FALSE,"Cannot restore original test-thread desktop");
-    require(GetForegroundWindow()==foreground,"Palette tests changed the user's foreground window");
-  }
-};
 void key(HWND control,WPARAM code) {SendMessageW(control,WM_KEYDOWN,code,0);}
 void ctrlKey(HWND control,WPARAM code) {
   BYTE original[256]{},modified[256]{};GetKeyboardState(original);std::copy(std::begin(original),std::end(original),std::begin(modified));
@@ -60,9 +43,9 @@ void checkBounds(HWND popup) {
 void runTests() {
   const auto instance=GetModuleHandleW(nullptr);WNDCLASSW wc{};wc.hInstance=instance;wc.lpfnWndProc=DefWindowProcW;wc.lpszClassName=L"ScreamSeqPaletteTestOwner";RegisterClassW(&wc);
   HWND owner=CreateWindowExW(0,wc.lpszClassName,L"Palette tests",WS_OVERLAPPEDWINDOW|WS_VISIBLE,0,0,1000,700,nullptr,nullptr,instance,nullptr);
-  require(owner!=nullptr,"Cannot create test owner");
+  require(owner!=nullptr,"Cannot create test owner");ScreamSeq::Tests::ownGuiWindow(owner);
   HWND origin=CreateWindowExW(0,L"EDIT",L"Retained draft",WS_CHILD|WS_VISIBLE|WS_TABSTOP,10,10,200,24,owner,nullptr,instance,nullptr);
-  require(origin!=nullptr,"Cannot create original focus target");SetActiveWindow(owner);SetFocus(origin);
+  require(origin!=nullptr,"Cannot create original focus target");ScreamSeq::Tests::ownGuiWindow(origin);SetActiveWindow(owner);SetFocus(origin);
   int executed=0,executions=0;
   {
     std::vector<ScreamSeq::WorkspaceCommand> commands={
@@ -84,7 +67,7 @@ void runTests() {
       {16,L"Pattern / Focus graph command lanes",L"F6 from pattern",L"F6 from pattern"}};
     ScreamSeq::CommandPalette palette(owner,commands,[&](int id){executed=id;++executions;});palette.show();
     const HWND popup=GetAncestor(GetFocus(),GA_ROOT),search=GetDlgItem(popup,101),results=GetDlgItem(popup,102),run=GetDlgItem(popup,103);
-    require(popup!=owner&&search&&results&&run,"Palette native controls were not created");
+    require(popup!=owner&&search&&results&&run,"Palette native controls were not created");ScreamSeq::Tests::ownGuiWindow(popup);
     require(GetFocus()==search,"Palette did not focus the search field");
     require(SendMessageW(results,LB_GETCOUNT,0,0)==LRESULT(commands.size()),"Initial results omitted commands");
     require(item(results,0).find(L"File / Save As")==0,"Initial commands are not grouped alphabetically");
@@ -207,13 +190,13 @@ void runTests() {
     palette.show();ShowWindow(origin,SW_HIDE);key(search,VK_ESCAPE);
     require(GetFocus()==owner,"Unavailable original focus did not fall back to the owner");
   }
-  DestroyWindow(owner);
+  require(DestroyWindow(owner)&&!IsWindow(owner)&&!IsWindow(origin),"Destroy owned palette test windows");
 }
 }
 int main() {
   try {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    PrivateDesktop desktop;INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_STANDARD_CLASSES};InitCommonControlsEx(&controls);
-    runTests();desktop.verifyUnchanged();std::cout<<"Command palette native message tests passed\n";return 0;
+    ScreamSeq::Tests::runPrivateGui(L"ScreamSeqPaletteTests",[]{INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_STANDARD_CLASSES};InitCommonControlsEx(&controls);
+    runTests();});std::cout<<"Command palette native message tests passed\n";return 0;
   } catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}
 }

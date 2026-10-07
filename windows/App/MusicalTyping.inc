@@ -36,12 +36,26 @@
     Json typedParameters(const TypedNote &held,bool on)const {
         return {{"expectedRevision",view->session.revision},{"note",held.note},{"on",on},{"velocity",100},{held.sample?"sample":"instrument",held.slot}};
     }
+    static bool sameInputSound(const TypedNote &a,const TypedNote &b) {
+        return a.document==b.document&&a.identity==b.identity&&a.sample==b.sample&&a.slot==b.slot&&a.note==b.note;
+    }
+    std::optional<TypedNote> sharedInputVoice(const TypedNote &held)const {
+        const auto matches=[&](const auto &entry){const auto &h=entry.second;return h.started&&sameInputSound(h,held)&&h.voice==auditionVoices[held.note]&&(h.pending||h.epoch==stopGeneration);};
+        if(const auto it=std::find_if(typedNotes.begin(),typedNotes.end(),matches);it!=typedNotes.end())return it->second;
+        if(const auto it=std::find_if(midiNotes.begin(),midiNotes.end(),matches);it!=midiNotes.end())return it->second;
+        return {};
+    }
+    void completeInputVoice(const TypedNote &held,uint64_t voice,bool success) {
+        const auto matches=[&](const auto &entry){return sameInputSound(entry.second,held)&&entry.second.voice==voice;};
+        if(!success){std::erase_if(typedNotes,matches);std::erase_if(midiNotes,matches);return;}
+        const auto complete=[&](auto &notes){for(auto &[key,h]:notes)if(sameInputSound(h,held)&&h.voice==voice){h.pending=false;h.epoch=stopGeneration;}};
+        complete(typedNotes);complete(midiNotes);
+    }
     bool releaseTypedKey(WPARAM key) {
         auto found=typedNotes.find(key);if(found==typedNotes.end())return false;
         const auto held=found->second;typedNotes.erase(found);frameRequested=true;
         if(!held.started||!typingTargetExists(held)||held.voice!=auditionVoices[held.note]||(!held.pending&&held.epoch!=stopGeneration))return true;
-        const bool shared=std::any_of(typedNotes.begin(),typedNotes.end(),[&](const auto &v){return v.second.started&&v.second.note==held.note&&v.second.voice==held.voice;});
-        if(!shared)auditionOperation("transport.note",typedParameters(held,false));
+        if(!sharedInputVoice(held))auditionOperation("transport.note",typedParameters(held,false));
         return true;
     }
     void releaseTypedNotes(HWND owner=nullptr)noexcept {
@@ -54,15 +68,14 @@
         if(!typingTargetExists(held)){typedNotes.erase(found);return;}
         // Inspection still exercises normal editing, without opening audio.
         if(inspection)return;
-        const auto shared=std::find_if(typedNotes.begin(),typedNotes.end(),[&](const auto &v){const auto &h=v.second;return h.started&&h.note==held.note&&h.sample==held.sample&&h.identity==held.identity&&h.voice==auditionVoices[held.note]&&(h.pending||h.epoch==stopGeneration);});
-        if(shared!=typedNotes.end()){found->second.started=true;found->second.pending=shared->second.pending;found->second.epoch=shared->second.epoch;found->second.voice=shared->second.voice;return;}
+        if(const auto shared=sharedInputVoice(held)){found->second.started=true;found->second.pending=shared->pending;found->second.epoch=shared->epoch;found->second.voice=shared->voice;return;}
         found->second.started=true;found->second.pending=true;found->second.voice=auditionVoices[held.note]+1;
         const auto voice=found->second.voice;
         try {
             auditionOperation("transport.note",typedParameters(held,true));
             // A key-up or focus change may have retired this input during prepare.
-            for(auto &[k,h]:typedNotes)if(h.note==held.note&&h.voice==voice){h.pending=false;h.epoch=stopGeneration;}
-        }catch(...){std::erase_if(typedNotes,[&](const auto &v){return v.second.note==held.note&&v.second.voice==voice;});throw;}
+            completeInputVoice(held,voice,true);
+        }catch(...){completeInputVoice(held,voice,false);throw;}
     }
     void beginTypedNote(WPARAM key,TypedNote held) {
         if(typedNotes.contains(key))return;

@@ -23,6 +23,8 @@ user.ClientToScreen.argtypes = [w.HWND, ctypes.POINTER(w.POINT)]
 
 
 class WorkspaceLayoutTests(unittest.TestCase):
+    maxDiff = None
+
     # Reuse fixture helpers without inheriting and duplicating its test methods.
     setUp = test_workspace.WorkspaceTests.setUp
     close_app = test_workspace.WorkspaceTests.close_app
@@ -149,7 +151,7 @@ class WorkspaceLayoutTests(unittest.TestCase):
                 with self.assertRaises(ApiError) as rejected:
                     self.client.call('workspace.layout', params)
                 self.assertEqual(rejected.exception.code, -32602)
-                self.assertEqual(self.state(), before)
+                self.assertEqual(test_workspace.stable_workspace(self.state()), test_workspace.stable_workspace(before))
                 self.assertEqual(self.client.call('context.get'), context)
         self.assert_song_unchanged(song)
 

@@ -118,6 +118,7 @@
     Json restoreRecovery(const std::string &id,const std::string &expected) {
         if(busy||recoverySaving||recoveryRestoring||recoveryClosing)throw ScreamSeq::Api::ApiError(-32002,"Recovery is busy; retry shortly");
         if(!recoveryStore)throw ScreamSeq::Api::ApiError(-32003,"Recovery storage is unavailable in this test session");
+        MidiTransaction midiBoundary(*this);midiBoundary.capture();stopRecordingForRecovery();
         recoveryRestoring=true;updateRecoveryStatus();const auto store=recoveryStore;
         const bool wasPlaying=device.running()&&!auditionOnly;
         try {
@@ -130,7 +131,7 @@
                 const auto delay=recoveryTestWriteDelay;
                 awaitLibrary(recoveryWriter->submit([store,protectedID,captured,delay]{if(delay)std::this_thread::sleep_for(std::chrono::milliseconds(delay));return store->save(protectedID,*captured->bytes,captured->title,captured->source,captured->hasRecording);}));
             }
-            await(controller->recover(std::move(bytes),expected,true,captured->fingerprint));refreshDocument();
+            await(controller->recover(std::move(bytes),expected,true,captured->guardFingerprint));refreshDocument();
             status=L"Recovered song / Save As to keep this version";
             if(view->session.document.value("hasRecoveryTake",false))status+=L" / imported recording take preserved";
             settleRecoveryWork();

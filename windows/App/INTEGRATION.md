@@ -1,5 +1,16 @@
 # Windows document-worker application integration
 
+`RecordingIntegration.inc` connects native WinMM input and the retained
+`MidiRecordingWindow.hpp` to document-owned `recording.*` transactions. Callbacks
+queue bounded driver timestamps; a correlated WASAPI presentation clock maps
+them through the shared renderer. Armed playback captures precise notes; armed
+stopped input performs cursor step entry. Native Stop finishes one document Undo,
+while API Stop retains the take. Loss or a stale base retains review. Fixed input
+boundaries prevent queued events from crossing Finish, Discard or song replacement.
+MIDI and keyboard holds share current audition voices without changing Live keys.
+See `../Api/recording.schema.json`, `../Api/midi.schema.json` and
+`../RECORDING_PROGRESS.md` for contracts and qualification limits.
+
 `RecoveryIntegration.inc` connects the ten-second timer, native browser, footer
 and `recovery.*` APIs to immutable document-owner capture and a serial disk worker.
 Manual plugin state is overlaid on copied project bytes without consuming live
@@ -10,7 +21,9 @@ late writes from repainting stale status; close drains outstanding work.
 `RecoveryWindow.hpp` retains selected copy identity and native keyboard ownership.
 The default store keeps the legacy `org.resonance.tracker` identifier. Qualification
 uses explicitly enabled private stores. See `../RECOVERY_PROGRESS.md` and
-`../Api/recovery.schema.json`; live recording/take editing remains unimplemented.
+`../Api/recovery.schema.json`. Snapshots now copy live takes without modifying
+capture; restore hydrates a fresh stopped take. Ordinary Save/Open protect an
+unfinished take until explicit Finish or Discard.
 
 The workspace now exposes a persistent lower editor tab strip, dock collapse,
 named layout manager and storage, and categorized multi-word command search.
@@ -25,7 +38,8 @@ remaining workspace parity gaps.
 Native Audio settings now selects an output endpoint and preferred buffer period
 through independent guarded session APIs. Driver-supported periods and buffer
 capacity are reported separately from preferences. See
-`../AUDIO_SETTINGS_PROGRESS.md`; timestamps/MIDI/recording remain in progress.
+`../AUDIO_SETTINGS_PROGRESS.md`; physical MIDI timing/hotplug remains a separate
+qualification gate from the implemented timestamp and recording workflow.
 
 The current sample-library/browser, independent preview, filename families and
 captured multi-sample import review are covered in `../SAMPLE_LIBRARY_PROGRESS.md`.
@@ -304,7 +318,8 @@ The sample editor draws bounded live voice cursors from shared atomic telemetry;
 overlapping voices and sample loops use actual positions. Stopped transport
 publishes `audioActive:false` and no `voicePositions`. Envelope cursors, the
 audition piano and pattern/dock musical typing are implemented in the reports
-linked above. Browser preview and MIDI recording remain open work.
+linked above. Independent browser preview and MIDI recording are implemented;
+their respective reports retain hardware and cross-platform qualification limits.
 
 `--vst3-test-cache <absolute path>` selects an isolated registry for inspection,
 offline-hosted or audio qualification mode. It does not scan automatically.

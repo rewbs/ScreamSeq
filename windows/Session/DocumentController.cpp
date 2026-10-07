@@ -87,7 +87,7 @@ void DocumentController::loop() {
     // only the worker owns it, so large vector/map deletion never lands there.
     std::erase_if(retired_,[](const auto &old){return old.use_count()==1;});
     {std::unique_lock lock(mutex_);wake_.wait_for(lock,std::chrono::milliseconds(50),[&]{return closing_ || !jobs_.empty();});
-      if(jobs_.empty() && closing_) {lock.unlock();playback_.reset();plugins_.reset();assets_.reset();document_.reset();project_=Project::ProjectState{};retired_.clear();view_.reset();return;}
+      if(jobs_.empty() && closing_) {lock.unlock();recording_.reset();playback_.reset();plugins_.reset();assets_.reset();document_.reset();project_=Project::ProjectState{};retired_.clear();view_.reset();return;}
       if(jobs_.empty()) continue;
       job=std::move(jobs_.front());jobs_.pop_front();}
     job();
@@ -118,6 +118,9 @@ void DocumentController::installCandidate(Project::OpenedProject candidate,std::
   if(!valid) throw Api::ApiError(-32602,"Document has no allocated pattern");
   // Every fallible view conversion/allocation precedes playback or ownership changes.
   auto next=buildView(*candidate.document,candidate.state,generation_+1);
+  auto recording=hydrateRecording(*candidate.document,candidate.state,next->session.revision);
+  next->recording=recordingSummary(recording.get(),next->session.revision);
+  next->session.document["hasRecoveryTake"]=bool(recording);
   auto assets=std::make_unique<AssetOperations>(*candidate.document,[this]{onMain(stop_);},
     [this](const Tracker::Document &imported){validateAssetCandidate(imported);});
   std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters;
@@ -131,6 +134,7 @@ void DocumentController::installCandidate(Project::OpenedProject candidate,std::
   document_.swap(candidate.document);std::swap(project_,candidate.state);++generation_;
   assets_.swap(assets);
   plugins_.swap(plugins);
+  recording_.swap(recording);
   install(std::move(next));
 }
 const Tracker::SignalCommand *PatternGraphView::at(uint64_t pattern,unsigned row,uint64_t target,unsigned column) const {
@@ -237,6 +241,8 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     {"sequence",song.Order.GetCurrentSequenceIndex()},{"sequences",sequences},{"tempo",song.Order().GetDefaultTempo().ToDouble()},{"speed",song.Order().GetDefaultSpeed()},
     {"nativeSummary",{{"preciseNotes",native.preciseNotes.size()},{"signalDefinitions",native.signal.library.size()},{"envelopeTemplates",native.envelopeBank.size()}}},
     {"canUndo",document.canUndo()},{"canRedo",document.canRedo()},{"canUndoPlugins",same&&plugins_&&plugins_->canUndo()},{"canRedoPlugins",same&&plugins_&&plugins_->canRedo()},{"openPluginEditors",same&&plugins_?plugins_->openEditorCount():0},{"hasRecoveryTake",project.preserved.contains("recoveryTake")},{"issues",project.issues}};
+  next->recording=recordingSummary(same?recording_.get():nullptr,result.revision);
+  result.document["hasRecoveryTake"]=same?bool(recording_):project.preserved.contains("recoveryTake");
   {
     std::lock_guard lock(mutex_);
     bool changed=!view_ || view_->session.documentId!=result.documentId;
@@ -254,6 +260,7 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     else if(j.is_array()) for(const auto &v:j) self(self,v);
   };
   jsonBytes(jsonBytes,result.document);jsonBytes(jsonBytes,next->commands);
+  charge(8192); // Bounded take summary can change without rebuilding music caches.
   for(const auto &[i,info]:next->samples) {charge(128);jsonBytes(jsonBytes,info);}
   for(const auto &name:next->noteNames) charge((name.size()+1)*sizeof(wchar_t));
   charge((next->path.native().size()+1)*sizeof(wchar_t));
@@ -333,6 +340,14 @@ PlaybackFeedback DocumentController::playbackFeedback() {
 }
 Json DocumentController::operation(const std::string &method,Json params) {
   if(publicationPending_) publish();
+  if(method.starts_with("recording.")) {
+    try{return recordingOperation(method,params);}
+    catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+    catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
+    catch(const Json::exception &e){throw Api::ApiError(-32602,e.what());}
+  }
+  if(recording_&&(method=="document.save"||method=="document.open"))
+    throw Api::ApiError(-32602,"Finish or discard the recording take before saving or opening another song");
   // Browser preferences are independent of the song. Do not flush vendor
   // editors, require a document revision, or allocate musical history here.
   if(method=="plugin.library.get"||method=="plugin.library.set")return plugins_->invokeLibrary(method,params);
@@ -459,6 +474,7 @@ std::future<Json> DocumentController::invoke(std::string method,Json params) {
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
 }
 #include "RecoveryOperations.inc"
+#include "RecordingOperations.inc"
 std::future<HostedProjectPlayback *> DocumentController::prepare(unsigned rate,Json settings,bool loop,bool offline,bool audition) {
   auto task=std::make_shared<std::packaged_task<HostedProjectPlayback *()>>([this,rate,settings,loop,offline,audition]{
     Tracker::PlaybackRegion region;region.pattern=settings.value("pattern",UINT32_MAX);region.startRow=settings.value("startRow",0u);

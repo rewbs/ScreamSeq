@@ -154,6 +154,13 @@ class SessionAdapter {
         {"commands","tracker, parameter-set, parameter-slide, pitch-set, pitch-slide, note-cut. Use pattern.commands for source-format IDs and two-character displayCode."},
         {"timing","65536 units per row; tracker commands require row boundaries. Bindings use stable plugin instance and parameter IDs."},
         {"transforms","pattern.transform uses shared selection/channel/note-track/pattern/song transforms; field effect includes all FX columns. Precise notes remain independent."}};
+      const auto extraReads=host_->additionalDocumentReads();
+      if(std::find(extraReads.begin(),extraReads.end(),"recording.get")!=extraReads.end())
+        result["recording"]={{"schema","windows/Api/recording.schema.json"},{"maxCaptureEvents",1024},{"maxTakeEvents",65536},
+          {"hostClock","QPC converted to 100 ns units; timestamps are decimal uint64 strings"},
+          {"timing","65536 units per row; zero quantization retains exact timing. Positive latencyMS places input earlier."},
+          {"history","Start/capture/stop/discard do not change musical revision. A stopped compatible take commits in one document Undo. Failed commits retain the take."},
+          {"recovery","Autosave copies a live take without stopping it; restored takes are stopped, with fresh IDs and preserved compatibility."}};
     }
     if(host_) {
       for(const auto &m:host_->independentReads())result["reads"].push_back(m);
@@ -163,7 +170,12 @@ class SessionAdapter {
       if(std::find(independent.begin(),independent.end(),"recovery.status")!=independent.end())
         result["recovery"]={{"schema","windows/Api/recovery.schema.json"},{"intervalSeconds",10},{"generations",10},
           {"restore","Opaque listed ID; protects the current unsaved song, then opens an unsaved document with a new identity."},
-          {"recording","Imported native recording takes are preserved; Windows live recording controls remain unavailable."}};
+          {"recording","Live and imported unfinished takes are preserved. Restored takes are stopped and remain reviewable; incompatibility prevents silent commit."}};
+      if(std::find(independent.begin(),independent.end(),"midi.settings.get")!=independent.end())
+        result["midi"]={{"schema","windows/Api/midi.schema.json"},{"input","WinMM device-interface IDs; empty source disconnects. Discovery and connection run on a control worker."},
+          {"timestampPrecision","Driver milliseconds anchored to the advertised QPC 100 ns clock, with reported anchor uncertainty."},
+          {"overflow","Bounded callback queue; loss quarantines pending input, releases held audition notes and retains a stopped take for review."},
+          {"settings","Independent expectedMidiRevision; settings affect the next take, without changing the pinned target of a retained take."}};
     }
     return result;
   }

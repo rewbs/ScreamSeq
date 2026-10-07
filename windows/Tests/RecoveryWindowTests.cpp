@@ -1,23 +1,18 @@
 #include "../App/RecoveryWindow.hpp"
+#include "PrivateGuiTest.hpp"
 #include <iostream>
 
 namespace {
 using Json=ScreamSeq::Api::Json;
 void require(bool value,const char *message){if(!value)throw std::runtime_error(message);}
 template<typename Action>void rejected(Action action,const char *message){try{action();}catch(const std::exception &){return;}throw std::runtime_error(message);}
-struct Desktop {
-  HDESK original=GetThreadDesktop(GetCurrentThreadId()),owned{};
-  HWND foreground=GetForegroundWindow();DWORD clipboard=GetClipboardSequenceNumber();
-  Desktop(){const auto name=L"ScreamSeqRecoveryTest-"+std::to_wstring(GetCurrentProcessId());owned=CreateDesktopW(name.c_str(),nullptr,nullptr,0,GENERIC_ALL,nullptr);require(owned&&SetThreadDesktop(owned),"Create private recovery desktop");}
-  ~Desktop(){SetThreadDesktop(original);if(owned)CloseDesktop(owned);}
-  void check(){require(SetThreadDesktop(original),"Restore original test desktop");require(GetForegroundWindow()==foreground,"Recovery tests changed the user's foreground window");require(GetClipboardSequenceNumber()==clipboard,"Recovery tests changed the user's clipboard");}
-};
 struct Owner {
   HWND window{},edit{};
   Owner(){WNDCLASSW kind{};kind.lpfnWndProc=DefWindowProcW;kind.hInstance=GetModuleHandleW(nullptr);kind.lpszClassName=L"ScreamSeq.Recovery.TestOwner";RegisterClassW(&kind);
-    window=CreateWindowExW(0,kind.lpszClassName,L"Recovery test owner",WS_OVERLAPPEDWINDOW|WS_VISIBLE,0,0,1100,800,nullptr,nullptr,kind.hInstance,nullptr);require(window,"Create recovery test owner");
-    edit=CreateWindowExW(0,L"EDIT",L"Other retained draft",WS_CHILD|WS_VISIBLE|WS_TABSTOP,10,10,220,26,window,nullptr,kind.hInstance,nullptr);require(edit,"Create unrelated focus target");}
-  ~Owner(){DestroyWindow(window);}
+    window=CreateWindowExW(0,kind.lpszClassName,L"Recovery test owner",WS_OVERLAPPEDWINDOW|WS_VISIBLE,0,0,1100,800,nullptr,nullptr,kind.hInstance,nullptr);require(window,"Create recovery test owner");ScreamSeq::Tests::ownGuiWindow(window);
+    edit=CreateWindowExW(0,L"EDIT",L"Other retained draft",WS_CHILD|WS_VISIBLE|WS_TABSTOP,10,10,220,26,window,nullptr,kind.hInstance,nullptr);require(edit,"Create unrelated focus target");ScreamSeq::Tests::ownGuiWindow(edit);}
+  ~Owner(){if(window)DestroyWindow(window);}
+  void close(){const auto parent=window,child=edit;require(DestroyWindow(parent),"Destroy owned test owner");window=edit=nullptr;require(!IsWindow(parent)&&!IsWindow(child),"Owned test windows survived destruction");}
 };
 Json status(){return {{"enabled",true},{"intervalSeconds",10},{"generations",10},{"lastSavedAt",nullptr},{"lastCopy",nullptr},{"error",nullptr},{"saving",false}};}
 Json copy(const std::string &id,const std::string &title,const Json &source=nullptr,bool recording=false){return {{"id",id},{"document","session"},{"savedAt","2026-10-07T12:34:56Z"},{"title",title},{"source",source},{"hasRecording",recording}};}
@@ -26,7 +21,7 @@ struct Browser {
   unsigned reloads=0,saves=0;std::vector<std::string> restores;
   std::function<void()> onReload,onSave;std::function<void(const std::string &)> onRestore;
   ScreamSeq::RecoveryWindow tool;
-  explicit Browser(HWND owner):tool(owner,[this]{++reloads;if(onReload)onReload();},[this]{++saves;if(onSave)onSave();},[this](std::string id){restores.push_back(id);if(onRestore)onRestore(id);}){}
+  explicit Browser(HWND owner):tool(owner,[this]{++reloads;if(onReload)onReload();},[this]{++saves;if(onSave)onSave();},[this](std::string id){restores.push_back(id);if(onRestore)onRestore(id);}){ScreamSeq::Tests::ownGuiWindow(tool.window());}
   HWND control(int id)const{const auto h=GetDlgItem(tool.window(),id);require(h,"Recovery control missing");return h;}
   void click(int id){SendMessageW(tool.window(),WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),reinterpret_cast<LPARAM>(control(id)));}
   void select(int row){ListView_SetItemState(control(7001),-1,0,LVIS_SELECTED|LVIS_FOCUSED);if(row>=0)ListView_SetItemState(control(7001),row,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);}
@@ -96,4 +91,4 @@ void boundsAndColumns(Owner &owner){
   std::cout<<"Recovery browser minimum 650 x 430 DIPs checked at "<<dpi<<" DPI\n";
 }
 }
-int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);Desktop desktop;{Owner owner;selectionAndDetails(owner);requestsAndFocus(owner);boundsAndColumns(owner);}desktop.check();std::cout<<"PASS recovery browser: retained identity/focus, guarded asynchronous callbacks, keyboard, native columns and bounds\n";return 0;}catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}
+int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqRecoveryTest",[]{HWND parent{},edit{};{Owner owner;parent=owner.window;edit=owner.edit;selectionAndDetails(owner);requestsAndFocus(owner);boundsAndColumns(owner);owner.close();}require(!IsWindow(parent)&&!IsWindow(edit),"Destroy owned recovery test windows");});std::cout<<"PASS recovery browser: retained identity/focus, guarded asynchronous callbacks, keyboard, native columns and bounds\n";return 0;}catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}

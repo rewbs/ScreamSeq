@@ -17,6 +17,7 @@
     }
     void panicAudition() {
         typedNotes.clear();
+        midiNotes.clear();
         for(auto &voice:auditionVoices)++voice;
         pendingAuditionCount=0;if(auditionPreparing)++stopGeneration;
         if(renderer)renderer->panic();

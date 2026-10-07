@@ -170,7 +170,7 @@
         if(preserve&&ScreamSeq::NativeToolWindow::belongsToTool(focus)&&workspaceFocusVisible(focus)){workspaceState.focus=panel;SetFocus(focus);}
     }
     bool focusedEditingCommand(int id) {
-        if(id==togglePlaybackCommand){if(device.running()&&!auditionOnly)stop();else play();return true;}
+        if(id==togglePlaybackCommand){if(device.running()&&!auditionOnly)stopAndFinishRecording();else play();return true;}
         if(id==redoAlternateCommand){command(redoCommand);return true;}
         if(id==nextPanelCommand){
             if(!trackerWorkspaceVisible())focusVisibleWorkspaceCanvas();

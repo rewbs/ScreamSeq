@@ -119,6 +119,7 @@ OpenedProject openNativeProjectBytes(std::span<const std::byte> bytes) {
 		const auto &take=root.at("recoveryTake");need(take.is_object(),"Invalid recovery take");
 		(void)flag(take.at("compatible"));
 		for(const auto *key:{"missingTime","exhaustedVoices","overflow"}) (void)integer(take.at(key),UINT32_MAX);
+		if(take.contains("inputError")) (void)text(take.at("inputError"),512);
 		for(const auto &event:array(take.at("events"),Tracker::maximumPreciseNotes)) {
 			need(event.is_object(),"Invalid recovery event");
 			for(const auto *key:{"pattern","track"}) {
@@ -130,7 +131,7 @@ OpenedProject openNativeProjectBytes(std::span<const std::byte> bytes) {
 			auto note=integer(event.at("note"),255),velocity=integer(event.at("velocity"),127);
 			need((note>=1 && note<=120 || note==254 || note==255) && velocity>0,"Invalid recovered note or velocity");
 		}
-		result.state.issues.push_back("Recovery take retained for review; recording commit is not yet available");
+		result.state.issues.push_back("Recovered recording take retained for stopped review");
 		result.state.recoveryOrigin=RecoveryOrigin{result.document->revision,unsigned(result.document->song().Order.GetCurrentSequenceIndex())};
 	}
 	result.state.preserved=std::move(root);

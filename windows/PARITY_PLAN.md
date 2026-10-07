@@ -1,12 +1,37 @@
 # Windows / Mac parity plan
 
-Current recovery checkpoint (2026-10-07): ten-second immutable autosave, ten
+Current recording checkpoint (2026-10-07): timestamped WinMM input, correlated
+WASAPI presentation history, worker-owned precise-note takes and a retained
+native MIDI/recording window are implemented. The six guarded `recording.*`
+methods share commit preparation with Mac; one Undo, native persistence,
+copy-only live recovery and stopped imported-take review are connected.
+
+Candidate 5 passes **359/359 application tests** in 875.469 seconds, with no
+failures or skips and strict outer isolation; **15/15 focused cases** in 16.046
+seconds; and **40/40 native tests** in 18.41 seconds. Eight source-matched views
+pass native bounds and original-resolution review at 192 DPI. Final full-run
+evidence is `bin/windows-recording-final-rerun2-app-tests.log`, `-isolation.log`
+and `-exe-sha256.txt`. See [recording evidence](RECORDING_PROGRESS.md) for the exact
+application hash, retained failed runs and diagnostic distinctions. The test-only
+GUI-worker boundary removes post-GUI desktop migration; historical resource
+causes remain unattributed. This qualifies the functional and scoped visual
+checkpoint, not full Windows/Mac parity or every release gate.
+
+Checkpoint location: `bin/windows-checkpoints/recording-20261007/`; the package
+manifest is the authority for packaging completion.
+
+Next implementation checkpoint: [native arrangement and timing](ARRANGEMENT_PLAN.md).
+Connect existing guarded order/pattern/sequence and tempo/groove APIs to retained
+tools; keep the larger annotation/matrix and independent-docking extensions explicit.
+
+Previous recovery checkpoint (2026-10-07): ten-second immutable autosave, ten
 generations per session, a retained native browser and guarded recovery APIs are
 implemented. Restore protects current work before replacement and opens a pathless
 dirty document; snapshots preserve manual plugin state and imported unfinished
 takes. See [recovery evidence](RECOVERY_PROGRESS.md) for final build identity,
-qualification, retained failures and visual limits. Live recording/take editing
-is the next substantial slice; see [recording plan](RECORDING_PLAN.md).
+qualification, retained failures and visual limits. Its then-next recording
+slice is implemented above; the original [recording plan](RECORDING_PLAN.md)
+is retained as a historical audit and qualification checklist.
 The final recovery build passes 345 application tests, 14 focused recovery cases
 and a supplemental vendor-input case with strict isolation. The diagnostic native
 suite passes 38/38; the original unexplained 37/38 desktop-teardown failure is
@@ -29,7 +54,7 @@ final-build isolation qualification remains unresolved. Its 19 reviewed
 renderer/native-control views at large, compact and minimum client sizes pass
 their own isolation checks, which do not qualify the failed test run. The report
 records the distinct candidate hashes and both isolation-failure traces. Those
-historical failures remain preserved. Recording, independent dock groups,
+historical failures remain preserved. Independent dock groups,
 remaining editor menus and the cross-platform qualification gates below remain open.
 
 Current UI work (2026-10-07): the workspace has direct lower-editor tabs,
@@ -42,7 +67,7 @@ The current docking checkpoint adds retained automation/instrument docking, comp
 pages, floating/redocking and local keyboard routing. Wide windows can show the
 graph beside the selected editor; smaller windows retain each editor behind tabs.
 See [docking evidence](WORKSPACE_DOCKING_PROGRESS.md) for qualification and limits.
-Arbitrary independent dock groups, recording and the cross-platform
+Arbitrary independent dock groups and the cross-platform
 qualification gates below remain open.
 
 Native context menus now connect pattern, sample, graph, instrument and detailed
@@ -56,7 +81,7 @@ candidate-specific tests and visual limits.
 The sample UI retains independent raw loop drafts and paste preview signatures
 bound to document, sample identity, revision and clipboard ID. Unrelated edits
 cannot silently rebase those drafts. Completing these interactions does not
-replace recording, accessibility or cross-platform qualification.
+replace accessibility or cross-platform qualification.
 
 ## Upstream integration checkpoint — 2026-09-21
 
@@ -124,58 +149,34 @@ follows `SampleLibraryIntegration.swift`: separate library revisions,
 bounded background indexing/search, folder tags, preview, and the existing
 atomic `sample.importMany` / `instrument.importMultisample` transactions.
 
-## Next: timestamped MIDI and recording
+## Current: timestamped MIDI and recording qualification
 
-The current Mac source has output selection/64–512-frame preferences in
-`mac/App/main.swift`, CoreMIDI input, shared `NoteRecording` transactions, and
-application-owned autosave/recovery. Windows now has application-owned recovery
-and preserves imported recovery-take data. Shared recording primitives compile,
-but Windows has no integrated timestamped input or inspectable/committable live
-take. The audio callback does not yet publish host-time mappings to the shared
-recording clock. [The recording plan](RECORDING_PLAN.md) records the current
-source audit, ownership boundaries and required tests.
+Windows now supplies correlated presentation timestamps to the shared renderer,
+advances origins through callbacks larger than 4,096 frames, and retains clock
+history independently of renderer lifetime. WinMM source discovery/connection
+runs off-thread, using opaque device-interface IDs and a bounded generation-aware
+queue. Driver millisecond precision and anchor uncertainty are reported honestly;
+invalid/startup clocks do not substitute the edit cursor.
 
-1. Explicit endpoint selection and truthful negotiated periods are now implemented
-   and tested (`AUDIO_SETTINGS_PROGRESS.md`), without changing system defaults.
-   Next publish correlated
-   audio presentation time, not the UI's callback arrival time. The shared
-   renderer resets its frame offset on every `render`; Windows' hosted renderer
-   splits at 4,096 frames, so timestamp origins must advance for every slice.
-   Validate stream restart/discontinuity and buffer/latency accounting.
-2. Native MIDI input must retain driver timestamps, use bounded callback queues,
-   report overflow and release held voices on disconnect/overflow. WinMM timestamps
-   are milliseconds from `midiInStart`; WASAPI's correlated QPC values use 100 ns
-   units. Explicitly convert to one advertised host clock and qualify its
-   precision; do not label millisecond hardware timing sample-accurate. Discover
-   opaque [device-interface identities](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/obtaining-a-device-interface-name)
-   off-thread; don't reconnect to an unrelated device when WinMM ordinals change.
-3. Integrate the existing `recording.start/capture/get/stop/commit/discard`
-   contract and shared `NoteRecording`. Preserve takes across stale edits; validate
-   whole capture batches, use actual presentation-clock history, keep replies
-   bounded, and commit in one document Undo. Save/Open protect unfinished takes.
-4. Extend the implemented immutable recovery workflow to snapshot live takes
-   without mutating them and hydrate imported/restored takes into stopped worker
-   state. Preserve compatibility provenance; incompatible takes must not silently
-   become committable. Commit/discard must consume the retained take so later
-   saves cannot resurrect it. Keep native format 6 / metadata 17 and shared
-   musical semantics, with one document Undo for commit.
+The six `recording.*` methods and native retained window support stable captured
+targets, atomic batches, explicit loss review, one-Undo commit and exact native
+persistence. API Stop stops capture without commit; native Stop attempts Finish
+once and leaves losses or stale takes for review. Autosave closes notes only in a
+copy, while explicit Restore drains/stops capture before protective replacement.
+Imported takes hydrate stopped with fresh IDs and preserved compatibility.
+The shared commit helper is used by both frontends. Container 6 / metadata 17 is
+unchanged; the optional loss-reason recovery field is supported by current source
+on both platforms and requires reciprocal Mac qualification.
 
-Clock contracts were checked against Microsoft's
-[IAudioClock::GetPosition](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclock-getposition)
-and [MIM_DATA](https://learn.microsoft.com/en-us/windows/win32/multimedia/mim-data).
-Hardware timing, hotplug and reciprocal Mac recovery remain qualification gates.
-
-The 2026-09-22 read-only WinMM inventory found no MIDI input devices. Enumeration
-itself was slow, reinforcing the requirement to keep discovery off the UI thread.
-Physical MIDI timing/hotplug therefore remains external qualification; bounded
-callback injection and real audio-clock/API capture can still be tested locally.
-For the clock, count the initial primed silence in submitted stream frames and
-derive the next presentation origin from correlated device position/frequency
-and QPC, using 100 ns host units. Startup zero positions and inaccurate readings
-must not fabricate clock mappings. Underruns, clock regression and stream restart
-need explicit validity handling; keep source-frame mapping independent of plugin
-latency maintenance. Tests must include a callback larger than 4,096 frames and
-delayed timestamp lookup, with equivalent PCM at different callback sizes.
+The final full application suite passes 359/359, with the 15/15 focused suite and
+40/40 native suite also passing. Retain the three historical native migration
+failures alongside the replacement-harness pass. See
+[recording evidence](RECORDING_PROGRESS.md) for exact candidate-specific results;
+[the original recording plan](RECORDING_PLAN.md) remains a historical checklist.
+Hardware MIDI timing/hotplug and real sample/plugin performance capture,
+reciprocal Mac reopen, independent dock groups, accessibility and the broader
+release gates below remain open. The existing short silent WASAPI and injected
+callback tests do not establish those results.
 
 ## What changed upstream and how it changes the work
 
@@ -188,7 +189,7 @@ delayed timestamp lookup, with equivalent PCM at different callback sizes.
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields, sample waveform markers and native instrument-envelope markers integrated. See `INSTRUMENT_ENVELOPE_PROGRESS.md`. | Audition piano, detailed waveform markers and preview releases are implemented in `AUDITION_PROGRESS.md`; broader vendor release-tail qualification remains. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
 | Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, program/port controls, modeless instrument aliases/MIDI channels, sound presets, library organization, explicit VST3 location repair and native graph/mixer connections integrated; live parameters reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. See `PLUGIN_ALIASES_PROGRESS.md`, `PLUGIN_PRESETS_PROGRESS.md`, `PLUGIN_LIBRARY_PROGRESS.md`, `PLUGIN_PATH_PROGRESS.md` and `SONG_ROUTING_PROGRESS.md`. | Live opaque-state replacement (including Surge's first-open zoom state) and broader missing-plugin recovery. |
-| Mac context menus, docking, focus, recovery and visual refinements | Retained automation/instrument docking, compact pages, named layouts, five native context-menu surfaces, configurable application shortcuts and native autosave/recovery are implemented; see the workspace and recovery reports above. | Other editor menu surfaces, independent dock groups, live recording/take recovery and actual foreground comparison at multiple scales remain open. |
+| Mac context menus, docking, focus, recovery and visual refinements | Retained automation/instrument docking, compact pages, named layouts, five native context-menu surfaces, configurable shortcuts, native autosave/recovery and timestamped MIDI/take review are implemented; see the workspace, recovery and recording reports above. | Hardware MIDI and reciprocal Mac qualification, other editor menu surfaces, independent dock groups, accessibility and actual foreground comparison at multiple scales remain open. |
 
 ## Execution order and completion gates
 
@@ -276,11 +277,11 @@ preserve concurrent edit guards.
 4. **Recording and workspace.** Native sample zoom/drawing/crossfade, processing,
    snapping and clipboard controls are implemented in `SAMPLE_DETAIL_PROGRESS.md`;
    their current qualification is recorded there. Native sample/instrument audition
-   and detailed voice markers are implemented in `AUDITION_PROGRESS.md`. Complete
-   device selection, MIDI input
-   and mapping, precise recording/recovery, floating
-   and persisted docks, accessibility, configurable keys and command palette
-   parity. Keep cursor, selection, focus, pins and playback independent.
+   and detailed voice markers are implemented in `AUDITION_PROGRESS.md`. Device
+   selection, timestamped MIDI/takes and recovery, retained floating/docked editors,
+   named layouts and configurable command keys are now integrated. Complete their
+   remaining qualification, independent dock groups, accessibility and remaining
+   editor-menu parity. Keep cursor, selection, focus, pins and playback independent.
    Pattern/dock typing and main-workspace Live keys are implemented in
    `MUSICAL_TYPING_PROGRESS.md`; broader floating-tool keyboard behavior remains.
    Native sample settings, batch import, captured replacement and creation of a

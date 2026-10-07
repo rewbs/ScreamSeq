@@ -35,6 +35,8 @@
 #include "../Project/RecoveryStore.hpp"
 #include "RecoveryWriter.hpp"
 #include "RecoveryWindow.hpp"
+#include "../Audio/MidiInput.hpp"
+#include "MidiRecordingWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -56,7 +58,8 @@
 namespace {
 constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
-    deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548;
+    deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
+    midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552;
 constexpr int dockAutomationCommand=530,dockInstrumentCommand=531,editorTrackerTab=532,
     editorAutomationTab=533,editorInstrumentTab=534,editorFloatCommand=535,editorHideCommand=536,
     editorPinCommand=537,editorCursorCommand=538,editorReturnCommand=539;
@@ -222,6 +225,9 @@ public:
         result.transport["audioActive"]=device.running();result.transport["audition"]=device.running()&&auditionOnly;result.transport["auditionDropped"]=auditionDropped;result.transport["playbackEpoch"]=stopGeneration;
         result.transport["presentation"]={{"frames",cpuDraw.size()},{"idleWaits",idleWaits}};
         result.transport["faultDetails"]=preparedPlayback?preparedPlayback->failureDiagnostics():Json(nullptr);
+        const auto clock=device.clockStatus();
+        result.transport["recordingClock"]={{"valid",clock.valid},{"generation",clock.generation},{"lastHostTime",std::to_string(clock.lastHostTime)},
+            {"discontinuities",clock.discontinuities},{"hostTicksPerSecond",ScreamSeq::hostTicksPerSecond}};
         auto &positions=result.transport["voicePositions"]=Json::array();
         if(device.running() && renderer) for(const auto &v:renderer->voicePositions())
             positions.push_back({{"channel",v.channel},{"sample",v.sample},{"instrument",v.instrument},
@@ -290,6 +296,7 @@ public:
             {"sampleEditor",sampleEditorSnapshot()},{"sampleLibrary",sampleLibrarySnapshot()},
             {"audioSettings",audioSettingsSnapshot()},
             {"recovery",recoveryWindow?recoveryWindow->snapshot():Json{{"visible",false}}},
+            {"recording",view->recording},{"midi",midiSettingsSnapshot()},{"midiWindow",midiWindow?midiWindow->snapshot():Json{{"visible",false}}},
             {"graphEditor",graphEditorSnapshot()},
             {"graphCurve",graphCurveSnapshot()},
             {"formulaWorkbench",formulaWorkbench?formulaWorkbench->snapshot():Json{{"visible",false}}},
@@ -413,18 +420,19 @@ public:
     void refreshDocument() {
         auto next=controller->view();if(next==view) return;
         auto oldPosition=position();
-        auto previous=view->session.documentId;view=std::move(next);documentId=view->session.documentId;
+        auto previous=view->session.documentId;const auto previousTake=view->recording.value("take",std::string());view=std::move(next);documentId=view->session.documentId;
+        if(previousTake!=view->recording.value("take",std::string()))discardPendingMidi();
         if(!view->patterns.contains(patternIndex)) patternIndex=view->patterns.begin()->first;
         row=std::min(row,patternRows()-1);channel=std::min(channel,view->channels-1);
         column=std::min(column,2u+2u*view->effectColumns.at(channel));
         anchorRow=std::min(anchorRow,patternRows()-1);anchorChannel=std::min(anchorChannel,view->channels-1);
-        if(previous!=documentId) {releaseTypedNotes();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
+        if(previous!=documentId) {releaseTypedNotes();resetMidiDocument();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
         else if(oldPosition!=position()) ++contextRevision;
-        revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();
+        revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();updateRecordingWindow();
     }
     bool supportsDocumentOperations() const override {return true;}
-    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::EnvelopeOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
-    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.push_back("recording.get");for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::EnvelopeOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     Json documentOperation(const std::string &method,const Json &params) override {
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
         if(busy||recoveryRestoring) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
@@ -456,18 +464,20 @@ public:
         cpuDraw.reserve(120000);submitIntervals.reserve(120000);updateInspector();
         status=input.empty() ? L"Ready / select a pattern cell or a sample" : L"Project opened";
     }
-	~Application() { api.reset();shutdownRecovery();sampleBrowser.reset();++samplePreviewGeneration;samplePreview.stop();sampleDecoder.reset();sampleLibrary.reset();device.close();palette.reset();if(controlFont)DeleteObject(controlFont); }
-	static void renderAudio(void *context, float *samples, uint32_t frames) noexcept {
+	~Application() { api.reset();shutdownMidi();shutdownRecovery();sampleBrowser.reset();++samplePreviewGeneration;samplePreview.stop();sampleDecoder.reset();sampleLibrary.reset();device.close();palette.reset();if(controlFont)DeleteObject(controlFont); }
+	static void renderAudio(void *context, float *samples, uint32_t frames,const ScreamSeq::RenderTime &time) noexcept {
 		auto &self = *static_cast<Application *>(context);
-		self.preparedPlayback->render(samples, frames);
+		self.preparedPlayback->render(samples, frames,time);
+        if(!frames)return;
         if(self.silentOutput) {std::fill_n(samples,size_t(frames)*2,0.0f);return;}
 		// Demo monitor attenuation is explicit; never touches endpoint/master volume.
 		for(size_t i = 0; i < size_t(frames) * 2; ++i) samples[i] *= 0.1f;
 	}
     #include "Audition.inc"
     #include "MusicalTyping.inc"
+    #include "RecordingIntegration.inc"
 	void play() { play(Json::object()); }
-    void play(const Json &settings) override {startPlayback(settings,false);}
+    void play(const Json &settings) override {startPlayback(settings,false);startRecordingIfArmed();}
     void startPlayback(const Json &settings,bool audition) {
         frameRequested=true;
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
@@ -480,7 +490,7 @@ public:
         // The old prepared chain is disposed on the worker. Drop UI readers
         // only after the device has joined, before pumping messages in await().
         preparedPlayback=nullptr;renderer=nullptr;
-		if(!device.open(renderAudio, this, audioOptions)) {
+		if(!device.openTimed(renderAudio, this, audioOptions)) {
 			lastAudio = device.stats(); throw ScreamSeq::Api::ApiError(-32003,"Audio endpoint unavailable / HRESULT " + std::to_string(lastAudio.lastError));
 		}
 		try {
@@ -496,7 +506,15 @@ public:
 	}
     void stop() override {
         frameRequested=true;
+        if(controller&&view&&view->recording.value("capturing",false)&&!recordingFinishing&&!midiClosing&&!recoveryRestoring) {
+            if(!busy&&!midiBusy&&!midiServicing) {
+                const auto target=recordingTarget();
+                try{MidiTransaction boundary(*this);boundary.capture();if(matchesRecording(target))documentOperation("recording.stop",{{"expectedRevision",view->session.revision},{"take",target.take}});}
+                catch(const std::exception &e){recordingError=e.what();recordingStopRequested=target;}
+            }else recordingStopRequested=recordingTarget();
+        }
         typedNotes.clear();
+        midiNotes.clear();
         ++stopGeneration;pendingAuditionCount=0;auditionOnly=false;
 		device.stop(); lastAudio = device.stats();
 		status = L"Stopped / Play starts at the song beginning / cursor remains independent";
@@ -640,7 +658,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             app->recoveryCloseRequested=false;if(!app->protectUnsaved())return 0;break;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
         case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
-        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==5)app->graphCurveTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();return 0;
+        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==5)app->graphCurveTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
+        case WM_DEVICECHANGE: app->midiRescanRequested=!app->midiSource.empty();return 0;
 		case WM_DPICHANGED: {
 			auto rect = reinterpret_cast<RECT *>(lp);
 			SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE); return 0;
@@ -707,7 +726,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		int argc = 0; auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 		if(!argv) throw std::runtime_error("Cannot parse command line");
 		std::vector<std::wstring> args(argv, argv + argc); LocalFree(argv);
-        bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false, audioTestAllowStop=false;
+        bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false, audioTestAllowStop=false,midiTestInput=false;
         unsigned auditionSample=0,auditionInstrument=0,recoveryTestWriteDelay=0;
 		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride,libraryOverride,sampleLibraryOverride,recoveryOverride;
 		for(size_t i = 1; i < args.size(); ++i) {
@@ -731,12 +750,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             else if(args[i]==L"--plugin-test-library" && i+1<args.size()) libraryOverride=args[++i];
             else if(args[i]==L"--sample-test-library" && i+1<args.size()) sampleLibraryOverride=args[++i];
             else if(args[i]==L"--recovery-test-directory" && i+1<args.size()) recoveryOverride=args[++i];
+            else if(args[i]==L"--midi-test-input")midiTestInput=true;
             else if(args[i]==L"--recovery-test-write-delay-ms" && i+1<args.size()) {size_t end=0;const auto value=std::stoul(args[++i],&end);if(end!=args[i].size()||value>2000)throw std::runtime_error("Invalid private recovery write delay");recoveryTestWriteDelay=unsigned(value);}
 			else throw std::runtime_error("Unknown/incomplete command-line argument");
 		}
 		if(seconds < 0 || seconds > 1800 || !std::isfinite(seconds)) throw std::runtime_error("Invalid test duration");
         if(!recoveryOverride.empty()&&(!automation||!(inspection||audioTest)||offline||hostedOffline||!recoveryOverride.is_absolute()))throw std::runtime_error("An absolute private recovery directory requires an automated inspection or audio qualification session");
         if(recoveryTestWriteDelay&&(recoveryOverride.empty()||!inspection))throw std::runtime_error("A recovery write delay requires a private inspection recovery directory");
+        if(midiTestInput&&(!automation||!(inspection||audioTest)||offline||hostedOffline))throw std::runtime_error("Private MIDI injection requires an automated inspection or audio qualification session");
         if(!pluginCache.empty()) {
             if(!(inspection || audioTest || hostedOffline) || !pluginCache.is_absolute()) throw std::runtime_error("An absolute private VST3 test cache requires inspection or audio qualification mode");
             Tracker::WindowsVST3::configure(utf8Path(std::filesystem::absolute(args[0]).parent_path()/L"ScreamSeqVST3Scanner.exe"),utf8Path(pluginCache));
@@ -802,6 +823,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             app.loadWorkspaceShortcuts(path);
         }
         app.updateTitle();
+        app.configureMidi(midiTestInput);
 		if(automation) app.api = std::make_unique<ScreamSeq::ApiDispatch>(window, app);
 		ShowWindow(window, SW_SHOWNOACTIVATE);
         if(!inspection&&!audioTest&&!automation)app.reloadRecoveryBrowser(true);
@@ -825,12 +847,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             app.drainViews();
             app.samplePreview.service();
             app.serviceRecovery();
+            app.serviceMidi();
 			if(result == WAIT_FAILED) throw std::runtime_error("Frame wait failed");
 			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) app.draw();
 			if(seconds && (ScreamSeq::ticks() - start) / app.frequency >= seconds) break;
             if(audioTest && !audioTestAllowStop && !app.device.running()) throw std::runtime_error("Audio device stopped during test");
 		}
 		app.api.reset();
+		app.shutdownMidi();
 		app.shutdownRecovery();
 		app.stop();
 		app.report(report, (ScreamSeq::ticks() - start) / app.frequency);

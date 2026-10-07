@@ -17,7 +17,18 @@ from client import Client, ApiError, TransportError
 ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
 
 
+def stable_workspace(state):
+    """Compare workspace state while retaining every field except the read clock."""
+    midi = state['midi']
+    timestamp = midi['hostTime']
+    if not isinstance(timestamp, str) or not timestamp.isascii() or not timestamp.isdecimal():
+        raise AssertionError('workspace.midi.hostTime must be a decimal QPC timestamp')
+    return {**state, 'midi': {**midi, 'hostTime': '<read clock>'}}
+
+
 class WorkspaceTests(unittest.TestCase):
+    maxDiff = None
+
     def setUp(self):
         exe = Path(os.environ.get('SCREAMSEQ_TEST_EXE', ROOT / 'bin/windows-arm64/Release/ScreamSeq.exe'))
         self.process = subprocess.Popen([str(exe), '--inspection', '--automation', '--seconds', '60'])
@@ -249,7 +260,7 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaises(ApiError) as invalid:
             self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'hide', 'pinned': 1})
         self.assertEqual(invalid.exception.code, -32602)
-        self.assertEqual(self.client.call('workspace.get')['data'], state)
+        self.assertEqual(stable_workspace(self.client.call('workspace.get')['data']), stable_workspace(state))
 
     def test_describe_advertises_method_specific_revision_guards(self):
         description = self.client.call('api.describe')['data']
@@ -281,7 +292,7 @@ class WorkspaceTests(unittest.TestCase):
                     with self.assertRaises(ApiError) as invalid:
                         self.client.call(method, {**fields, token: tokens[token]})
                     self.assertEqual(invalid.exception.code, -32602)
-                    self.assertEqual(self.client.call('workspace.get')['data'], before)
+                    self.assertEqual(stable_workspace(self.client.call('workspace.get')['data']), stable_workspace(before))
         self.assertEqual(self.client.call('context.get'), context)
         self.assertFalse(self.client.call('transport.get')['data']['playing'])
 
@@ -298,13 +309,13 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaises(ApiError) as invalid:
                 self.client.call('workspace.panel', {'panel': 'notes', 'placement': placement})
             self.assertEqual(invalid.exception.code, -32602)
-            self.assertEqual(self.client.call('workspace.get')['data'], before)
+            self.assertEqual(stable_workspace(self.client.call('workspace.get')['data']), stable_workspace(before))
         for layout in ('Not a layout', 'Float everything'):
             before = self.client.call('workspace.get')['data']
             with self.assertRaises(ApiError) as invalid:
                 self.client.call('workspace.layout', {'name': layout})
             self.assertEqual(invalid.exception.code, -32602)
-            self.assertEqual(self.client.call('workspace.get')['data'], before)
+            self.assertEqual(stable_workspace(self.client.call('workspace.get')['data']), stable_workspace(before))
 
     def assert_wheel_steps(self, steps):
         self.resize_client(1057, 719)
@@ -445,7 +456,7 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaises(ApiError) as invalid:
                 self.client.call('workspace.panel', request)
             self.assertEqual(invalid.exception.code, -32602)
-            self.assertEqual(self.client.call('workspace.get')['data'], state)
+            self.assertEqual(stable_workspace(self.client.call('workspace.get')['data']), stable_workspace(state))
         self.assertEqual(self.client.call('document.get')['revision'], original)
         self.assertFalse(self.client.call('document.get')['data']['canUndo'])
 

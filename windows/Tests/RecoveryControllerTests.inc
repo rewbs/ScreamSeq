@@ -95,9 +95,14 @@ void recoveryControllerTests(const std::filesystem::path &directory) {
   auto retained=recoveryCapture(c);
   need(retained->hasRecording && retained->needsProtection && c.view()->session.document.at("hasRecoveryTake")==true,"preserved take missing from recovery eligibility");
   need(*retained->bytes==*opaqueBytes,"recovery changed PCM/opaque metadata/plugin/take bytes");
-  invoke(c,"document.save",{{"path",output.generic_string()},{"overwrite",true}});
-  need(!c.view()->dirty && recoveryCapture(c)->hasRecording && recoveryCapture(c)->needsProtection,"saved preserved take must remain eligible for protection");
-  need(Project::readProjectBytes(output)==*opaqueBytes,"saving recovered project changed its native contents");
+  bool unfinishedRejected=false;const auto retainedView=c.view();
+  try{invoke(c,"document.save",{{"path",output.generic_string()},{"overwrite",true}});}catch(const Api::ApiError &e){unfinishedRejected=e.code==-32602;}
+  need(unfinishedRejected&&c.view()==retainedView&&recoveryCapture(c)->hasRecording,"normal Save must guard the hydrated unfinished take");
+  // The project codec still preserves imported opaque take fields exactly;
+  // document Save now requires explicit Finish/Discard before reaching it.
+  auto preservedProject=Project::openNativeProjectBytes(*opaqueBytes);
+  Project::saveNativeProject(*preservedProject.document,preservedProject.state,output,true);
+  need(Project::readProjectBytes(output)==*opaqueBytes,"project codec changed preserved recovery contents");
 
   // Reject oversized immutable-view candidates before stopping the old song.
   auto large=Tracker::Document::demo();large->transaction([](auto &song){Tracker::Document::resizeChannels(song,64);
@@ -197,7 +202,7 @@ void recoveryManualEditorTests(const std::filesystem::path &scanner,const std::f
   const auto overlaid=recoveryCapture(c);need(!Project::decodePlist(*overlaid->bytes).at("recoveryTake").at("compatible").get<bool>(),"changed copy retained compatible take");
   need(c.view()==takeBefore && Project::decodePlist(*takeBase->bytes).at("recoveryTake").at("compatible").get<bool>(),"overlay changed captured take provenance");
   bool lateRejected=false;const auto beforeLateStops=stops;
-  try{recoveryWait(c,c.recover(baseline->bytes,takeBefore->session.revision,true,takeBase->fingerprint));}catch(const Api::ApiError &e){lateRejected=e.code==-32001;}
+  try{recoveryWait(c,c.recover(baseline->bytes,takeBefore->session.revision,true,takeBase->guardFingerprint));}catch(const Api::ApiError &e){lateRejected=e.code==-32001;}
   need(lateRejected && c.view()==takeBefore && stops==beforeLateStops,"restore lost manual edit made after protective snapshot");
   Tracker::WindowsVST3::pluginMainCall([&]{need(takeGesture(baselineValue)>0,"return manual baseline rejected");});
   need(*recoveryCapture(c)->bytes==*takeBase->bytes,"recovery overlay permanently changed source take compatibility");

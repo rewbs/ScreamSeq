@@ -1,6 +1,7 @@
 #pragma once
 #include "windows/Project/NativeProject.hpp"
 #include "editor/hosted/HostedAudio.hpp"
+#include "windows/Audio/PresentationClock.hpp"
 namespace ScreamSeq {
 using Json=nlohmann::json;
 // Decode persisted project records without loading a vendor or changing them.
@@ -20,6 +21,8 @@ class HostedProjectPlayback final {
   bool offline_=false;
   std::unique_ptr<Tracker::PluginChain> chain_;
   std::unique_ptr<Tracker::Renderer> renderer_; // Dies before its borrowed chain.
+  std::shared_ptr<RecordingTimeline> timeline_;
+  std::uint32_t rate_=0;
 public:
   HostedProjectPlayback(Tracker::Document &,const Project::ProjectState &,uint32_t rate,
     HostedPlaybackSettings settings={},bool offline=false);
@@ -33,6 +36,9 @@ public:
   // Same bounded processing sequence for offline qualification and WASAPI.
   // Preparation and destruction remain on a stopped control owner.
   bool render(float *stereo,uint32_t frames) noexcept;
+  bool render(float *stereo,uint32_t frames,const RenderTime &) noexcept;
+  std::shared_ptr<const RecordingTimeline> recordingTimeline() const noexcept {return timeline_;}
+  std::shared_ptr<const Tracker::RecordingClock> recordingClock() const noexcept {return timeline_->clock;}
   bool failed() const noexcept;
   Json failureDiagnostics() const; // Control owner; no vendor calls.
 };

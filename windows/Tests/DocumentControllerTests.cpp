@@ -320,8 +320,10 @@ void graphPatternViewTests() {
   std::cout<<"PASS graph lane projection, exact offsets, immutable reuse, rename Undo and precommit cache budget\n";
 }
 #include "RecoveryControllerTests.inc"
+#include "RecordingControllerTests.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--recording") {recordingControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--recovery") {recoveryControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==5 && std::string(argv[1])=="--recovery-manual") {recoveryManualEditorTests(std::filesystem::u8path(argv[2]),std::filesystem::u8path(argv[3]),std::filesystem::u8path(argv[4]));return 0;}
     if(argc==2 && std::string(argv[1])=="--graph-pattern-view") {graphPatternViewTests();return 0;}

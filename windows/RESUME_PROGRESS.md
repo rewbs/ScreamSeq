@@ -1,11 +1,36 @@
 # Windows continuation
 
-Latest parity pass (2026-10-07): `RECOVERY_PROGRESS.md` records ten-second
+Latest recording checkpoint (2026-10-07): timestamped WinMM input, correlated
+WASAPI presentation history and worker-owned precise-note takes are connected to
+a retained native MIDI/recording window. Shared one-Undo commit, native persistence,
+copy-only live recovery and stopped imported-take review are implemented;
+Save/Open/close guard unfinished takes.
+
+Qualified ARM64 candidate 5 SHA256:
+`DEAA2252608550EBD6B309A8426AF68862093465B7BD1DE05BC1C0F2F1FD98AF`.
+The final full application suite passes **359/359** in **875.469 seconds**, no
+failures or skips, with strict outer isolation (`bin/windows-recording-final-rerun2-app-tests.log`,
+`-isolation.log`, `-exe-sha256.txt`). Focused cases pass **15/15** in 16.046 seconds;
+native tests pass **40/40** in 18.41 seconds. Eight source-matched rendering/native
+control views pass review at 192 DPI. See [RECORDING_PROGRESS.md](RECORDING_PROGRESS.md)
+for exact logs, scoped visual limits and retained failed-run chronology, including
+the unreproduced Stop interleaving and unattributed historical desktop resources.
+
+Checkpoint location: `bin/windows-checkpoints/recording-20261007/`; the package
+manifest is the authority for packaging completion. Physical MIDI, reciprocal Mac
+runtime, foreground/multiple-scale review, accessibility and independent dock
+groups remain open; this functional checkpoint does not complete the parity goal.
+
+Next implementation checkpoint: [Arrange orders and Tempo and groove](ARRANGEMENT_PLAN.md).
+The plan specifies existing guarded API semantics, stable order-occurrence
+selection, retained drafts, proposed snapshot additions and qualification gates.
+
+Previous recovery pass (2026-10-07): `RECOVERY_PROGRESS.md` records ten-second
 immutable autosave, ten retained generations per session, a native recovery
 browser and revision-guarded recovery APIs. Restore protects current unsaved work,
 validates before replacement and opens a pathless dirty document. Manual plugin
 state and imported unfinished takes survive snapshots without modifying the live
-song. Real recording/take editing remains a separate gap.
+song. Its historical recording/take gap is addressed by the current slice above.
 
 The final candidate passes **345/345 application tests** in 890.030 seconds,
 **14/14 focused recovery cases** and a separate **1/1 vendor-input regression**,
@@ -15,8 +40,8 @@ preserved, with no production fix claimed. Eight final renderer/native-control
 views are reviewed at 192 DPI. See the recovery report for exact executable
 identity, logs, historical failures and visual limits. The committed package is
 `bin/windows-checkpoints/recovery-20261007/`.
-The next substantial slice is timestamped MIDI and native recording, documented
-in `RECORDING_PLAN.md`. Full Mac parity remains active.
+Its original next-step plan is retained in `RECORDING_PLAN.md`; current recording
+implementation and remaining qualification are in `RECORDING_PROGRESS.md`.
 
 Previous sample UI pass (2026-10-07): `SAMPLE_WORKFLOWS_PROGRESS.md` records retained
 Drawing, Process, Loops, Paste and Snap pages, independent normal/sustain drafts

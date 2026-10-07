@@ -44,6 +44,20 @@ struct CallbackState {
   std::atomic<std::uint64_t> frames{0};
   std::atomic<bool> badBuffer{false};
 };
+struct TimedState {
+  std::atomic<std::uint64_t> valid{0},invalid{0},stops{0},generation{0},origin{0};
+  std::atomic<bool> bad{false};
+};
+void timedSilence(void *context,float *output,std::uint32_t frames,const ScreamSeq::RenderTime &time) noexcept {
+  auto &state=*static_cast<TimedState *>(context);
+  if(time.stopped){if(frames||time.valid||!time.hostTime)state.bad=true;state.stops.fetch_add(1);return;}
+  if(!frames||!output){state.bad=true;return;}
+  for(std::uint32_t i=0;i<frames*2;++i)output[i]=0;
+  if(!time.valid){state.invalid.fetch_add(1);return;}
+  const auto oldGeneration=state.generation.exchange(time.generation),oldOrigin=state.origin.exchange(time.hostTime);
+  if(!time.sampleRate||!time.generation||!time.hostTime||(oldGeneration==time.generation&&time.hostTime<oldOrigin))state.bad=true;
+  state.valid.fetch_add(1);
+}
 void silence(void* context, float* output, std::uint32_t frames) noexcept {
   auto& state = *static_cast<CallbackState*>(context);
   if (!output || !frames) { state.badBuffer.store(true); return; }
@@ -79,6 +93,7 @@ int main(int argc, char** argv) {
   device.stop(); device.close(); device.close();
   ok &= require(!device.start(), "start without open fails");
   ok &= require(!device.open(nullptr, nullptr), "null callback fails");
+  ok &= require(!device.openTimed(nullptr,nullptr),"null timed callback fails");
   CallbackState invalid;
   ok &= require(!device.open(silence,&invalid,{L"",65537}),"out-of-range requested period fails before opening hardware");
   ok &= require(!device.open(silence,&invalid,{std::wstring(L"a\0b",3),128}),"embedded null endpoint rejected");
@@ -138,6 +153,24 @@ int main(int argc, char** argv) {
   device.close();
   ok &= require(device.sampleRate() == 0 && device.periodFrames() == 0, "close clears negotiated format");
   ok &= require(device.endpointId().empty(),"close clears endpoint identity");
+  {
+    ScreamSeq::WasapiDevice timed;TimedState time;
+    ok &= require(timed.openTimed(timedSilence,&time,{resolved,0}),"timed silent endpoint opens");
+    std::uint64_t previousGeneration=timed.clockStatus().generation;
+    for(int cycle=0;cycle<std::min(cycles,3)&&ok;++cycle){
+      const auto before=time.valid.load();ok &= require(timed.start(),"timed stream starts");
+      std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+      timed.stop();const auto clock=timed.clockStatus();
+      ok &= require(!clock.valid&&clock.generation>previousGeneration,"Stop clears validity and restart changes generation");
+      ok &= require(time.valid.load()>before,"real IAudioClock yielded valid presentation origins");
+      ok &= require(time.stops.load()==std::uint64_t(cycle+1)&&!time.bad.load(),"each timed stream ends with one safe zero-frame Stop notification");
+      previousGeneration=clock.generation;
+    }
+    std::printf("timed_valid=%llu timed_unmapped=%llu timed_stops=%llu generation=%llu discontinuities=%llu\n",
+      static_cast<unsigned long long>(time.valid.load()),static_cast<unsigned long long>(time.invalid.load()),
+      static_cast<unsigned long long>(time.stops.load()),static_cast<unsigned long long>(timed.clockStatus().generation),
+      static_cast<unsigned long long>(timed.clockStatus().discontinuities));
+  }
   for(unsigned preferred:{64u,128u,256u,512u}) {
     ScreamSeq::WasapiDevice selected;
     ok &= require(selected.open(silence,&state,{resolved,preferred}),"explicit output and preferred period opens");

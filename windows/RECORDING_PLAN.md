@@ -1,8 +1,24 @@
 # Windows live recording implementation plan
 
-Read-only source audit, 2026-10-07. This is a continuation plan, not a completion claim.
+Historical pre-implementation source audit, 2026-10-07. The Windows recording
+slice below is implemented and its functional checkpoint is qualified. Current
+behavior, exact build identity, retained failures and remaining gates are recorded
+in [RECORDING_PROGRESS.md](RECORDING_PROGRESS.md).
 
-## Current boundary
+Candidate 5 passes **359/359 application tests** in 875.469 seconds and **15/15
+focused cases** in 16.046 seconds, both with strict outer isolation, plus **40/40
+native tests** in 18.41 seconds. Eight source-matched 192-DPI rendering views pass.
+Final application evidence is `bin/windows-recording-final-rerun2-app-tests.log`,
+`-isolation.log` and `-exe-sha256.txt`. The prior failed runs and diagnostic
+attributions remain in the progress report; passing corrections do not erase them.
+Checkpoint location: `bin/windows-checkpoints/recording-20261007/`; the package
+manifest is the authority for packaging completion.
+
+This original audit remains planning history and a checklist, not a description
+of current missing code. Physical MIDI, reciprocal Mac runtime and broader
+visual/accessibility/realtime gates remain open.
+
+## Original boundary before implementation
 
 Windows recovery is implemented: private immutable snapshots, atomic disk generations,
 guarded APIs, startup/browser restore, unsaved recovery and source preservation.

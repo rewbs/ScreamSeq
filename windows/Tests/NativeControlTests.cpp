@@ -1,4 +1,5 @@
 #include "../App/NativeControls.hpp"
+#include "PrivateGuiTest.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -26,22 +27,36 @@ struct Bitmap {
     std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char *>(&file),sizeof(file));out.write(reinterpret_cast<const char *>(&info),sizeof(info));out.write(static_cast<const char *>(pixels),width*height*4);require(bool(out),"Write selector evidence");
   }
 };
-// Never switch the user's input desktop. Even a manual CTest run stays isolated.
-struct Desktop {
-  HDESK original=GetThreadDesktop(GetCurrentThreadId()),owned{};
-  HWND foreground=GetForegroundWindow();DWORD clipboard=GetClipboardSequenceNumber();
-  Desktop(){const auto name=L"ScreamSeqControlTest-"+std::to_wstring(GetCurrentProcessId());owned=CreateDesktopW(name.c_str(),nullptr,nullptr,0,GENERIC_ALL,nullptr);require(owned&&SetThreadDesktop(owned),"Create private control desktop");}
-  ~Desktop(){SetThreadDesktop(original);CloseDesktop(owned);}
-  void check(){require(SetThreadDesktop(original),"Restore thread desktop");require(GetClipboardSequenceNumber()==clipboard,"Clipboard changed");require(GetForegroundWindow()==foreground,"Input foreground changed");}
-};
+void privateGuiFailureChecks(){
+  auto expectedFailure=[](auto body,const std::string &expected){
+    bool rejected=false;
+    try{ScreamSeq::Tests::runPrivateGui(L"ScreamSeqGuiFailureCheck",body);}
+    catch(const std::exception &error){rejected=true;require(error.what()==expected,"GUI failure self-check hid another cleanup/isolation failure");}
+    require(rejected,"Private GUI harness accepted a deliberate fixture failure");
+  };
+  expectedFailure([]{
+    struct Owned{HWND window{};~Owned(){if(window)DestroyWindow(window);}} owner;
+    owner.window=CreateWindowExW(0,L"STATIC",L"Throwing fixture",WS_OVERLAPPED,0,0,40,40,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    require(owner.window,"Create throwing fixture window");ScreamSeq::Tests::ownGuiWindow(owner.window);
+    throw std::runtime_error("Deliberate fixture failure");
+  },"Fixture: Deliberate fixture failure\n");
+  HWND leaked{};
+  expectedFailure([&]{
+    leaked=CreateWindowExW(0,L"STATIC",L"Deliberate owned leak",WS_OVERLAPPED,0,0,40,40,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    require(leaked,"Create deliberate fixture leak");ScreamSeq::Tests::ownGuiWindow(leaked);
+  },"Fixture cleanup: Private GUI fixture left owned windows alive before thread exit\n");
+  require(!IsWindow(leaked),"Worker exit did not release the deliberately leaked fixture after reporting failure");
+  std::cout<<"Private GUI failure guards: throwing body preserved; owned leak rejected before thread exit\n";
+}
+
 }
 int main(int argc,char **argv){
   try {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    Desktop desktop;
+    ScreamSeq::Tests::runPrivateGui(L"ScreamSeqControlTest",[&]{
     WNDCLASSW klass{};klass.lpfnWndProc=parentProc;klass.hInstance=GetModuleHandleW(nullptr);klass.lpszClassName=L"ScreamSeq.ControlTest";RegisterClassW(&klass);
-    auto parent=CreateWindowW(klass.lpszClassName,L"Owned control tests",WS_OVERLAPPEDWINDOW,0,0,700,420,nullptr,nullptr,klass.hInstance,nullptr);require(parent,"Create parent");
-    auto combo=CreateWindowW(L"COMBOBOX",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_VSCROLL,0,0,1,1,parent,reinterpret_cast<HMENU>(100),klass.hInstance,nullptr);require(combo,"Create combo");
+    auto parent=CreateWindowW(klass.lpszClassName,L"Owned control tests",WS_OVERLAPPEDWINDOW,0,0,700,420,nullptr,nullptr,klass.hInstance,nullptr);require(parent,"Create parent");ScreamSeq::Tests::ownGuiWindow(parent);
+    auto combo=CreateWindowW(L"COMBOBOX",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_VSCROLL,0,0,1,1,parent,reinterpret_cast<HMENU>(100),klass.hInstance,nullptr);require(combo,"Create combo");ScreamSeq::Tests::ownGuiWindow(combo);
     using namespace ScreamSeq::NativeControls;
     install(combo,true);require(state(combo),"Install retained selector");
     const auto dpi=GetDpiForWindow(combo);auto font=CreateFontW(-MulDiv(12,dpi,96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
@@ -68,8 +83,8 @@ int main(int argc,char **argv){
     const auto before=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
     for(int i=0;i<200;++i){InvalidateRect(combo,nullptr,FALSE);UpdateWindow(combo);}
     require(GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS)==before,"Paint leaks GDI resources");
-    DestroyWindow(parent);DeleteObject(font);desktop.check();
+    require(DestroyWindow(parent)&&!IsWindow(parent)&&!IsWindow(combo),"Destroy owned control windows");DeleteObject(font);
     std::cout<<"PASS retained layout, native selection/popup, flat normal/focused/disabled/empty surfaces, 200 paints without GDI leaks; DPI "<<dpi<<"; high contrast "<<contrast<<"\n";
-    return 0;
+    });privateGuiFailureChecks();return 0;
   }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
 }

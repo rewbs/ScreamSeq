@@ -36,24 +36,9 @@
           require(!_recording->capturing,"Stop the take before committing it");
           require([_recordingRevision isEqual:self.automationRevision],"Song changed during recording; the take is retained in recording.get for review and manual placement");
           const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false,replace=p[@"replaceRows"]?boolean(p[@"replaceRows"]):false;
-          auto native=_document->native();std::set<std::tuple<uint64_t,uint64_t,uint32_t>> rows;
-          for(const auto &event:_recording->events)rows.emplace(event.pattern,event.track,event.position/performanceUnitsPerRow);
-          if(replace)std::erase_if(native.preciseNotes,[&](const auto &n){return rows.contains({n.pattern,n.track,n.position/performanceUnitsPerRow});});
-          std::map<std::tuple<uint64_t,uint32_t,uint64_t,bool>,PreciseNote> merged;
-          for(const auto &n:native.preciseNotes)merged[{n.pattern,n.position,n.track,n.note<128}]=n;
-          for(const auto &n:_recording->events)merged[{n.pattern,n.position,n.track,n.note<128}]=n;
-          native.preciseNotes.clear();for(const auto &[key,n]:merged)native.preciseNotes.push_back(n);
-          std::vector<Edit> edits;
-          if(replace)for(const auto &[pattern,track,row]:rows) {
-            const auto p=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &v){return v.second.id==pattern;});
-            const auto c=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &v){return v.second.id==track;});
-            require(p!=native.patterns.end()&&c!=native.tracks.end(),"Recorded pattern or channel disappeared");
-            auto cell=_document->cell(p->first,row,c->first);cell.note=cell.instrument=0;if(cell.volumeCommand==VOLCMD_VOLUME)cell.volumeCommand=cell.volume=0;
-            edits.push_back({p->first,uint16_t(row),c->first,{},cell});
-          }
-          native.validate(song);_document->validateEdits(edits);
-          const bool changed=native!=_document->native()||std::any_of(edits.begin(),edits.end(),[&](const auto &e){return _document->cell(e.pattern,e.row,e.channel)!=e.after;});
-          if(!dry){if(changed){_audio->stop();_document->editNative(std::move(native),edits);}_recording.reset();_recordingID=nil;_recordingRevision=nil;}
+          auto prepared=prepareNoteRecordingCommit(*_document,_recording->events,replace);
+          const bool changed=prepared.changed;
+          if(!dry){if(changed){_audio->stop();_document->editNative(std::move(prepared.native),prepared.edits);}_recording.reset();_recordingID=nil;_recordingRevision=nil;}
           result=@{@"dryRun":@(dry),@"wouldChange":@(changed)};
         }
       }
@@ -62,5 +47,6 @@
         if(_recording&&[method isEqual:@"recording.get"])for(const auto &n:_recording->events)[events addObject:@{@"patternID":nativeID(n.pattern),@"track":nativeID(n.track),@"position":@(n.position),@"note":@(n.note),@"instrument":@(n.instrument),@"velocity":@(n.velocity)}];
         result=@{@"take":_recordingID?:@"",@"capturing":@(_recording&&_recording->capturing),@"baseRevision":_recordingRevision?:@"",@"events":events,@"eventCount":@(_recording?_recording->events.size():0),
           @"missingTime":@(_recording?_recording->missingTime:0),@"exhaustedVoices":@(_recording?_recording->exhaustedVoices:0),@"overflow":@(_recording?_recording->overflow:0),
+          @"inputError":_recording?@(_recording->inputError.c_str()):@"",
           @"hostTime":[NSString stringWithFormat:@"%llu",(unsigned long long)mach_absolute_time()]};
       }

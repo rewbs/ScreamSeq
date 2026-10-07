@@ -26,11 +26,17 @@ int main(){@autoreleasepool{try{
   root[@"recoveryTake"][@"events"]=@[
     @{@"pattern":pattern,@"track":track,@"position":@1234,@"note":@61,@"instrument":@1,@"velocity":@93},
     @{@"pattern":pattern,@"track":track,@"position":@9000,@"note":@255,@"instrument":@0,@"velocity":@127}];
+  root[@"recoveryTake"][@"inputError"]=@"Input queue overflow; retained for explicit review";
   auto write=[&]{NSData *data=[NSPropertyListSerialization dataWithPropertyList:root format:NSPropertyListBinaryFormat_v1_0 options:0 error:&error];check([data writeToFile:path options:NSDataWritingAtomic error:&error],"Write recovery fixture");};write();
   TrackerSession *recovered=[TrackerSession new];
   check([recovered openPath:path error:&error]&&!recovered.recordingActive&&recovered.recordingTakeID!=nil,"Recovery restores a stopped take");
   auto take=call(recovered,@"recording.get",@{});
   check([take[@"events"] count]==2&&[take[@"baseRevision"] isEqual:recovered.automationRevision],"Recovered take retains exact events and compatible song identity");
+  check([take[@"inputError"] isEqual:root[@"recoveryTake"][@"inputError"]],"Recovered take retains the input-loss review reason");
+  NSString *retainedPath=[directory stringByAppendingPathComponent:@"retained-loss.screamseq"];
+  check([recovered saveRecoveryPath:retainedPath error:&error],"Stopped loss take can be protected again");
+  NSDictionary *retainedRoot=[NSPropertyListSerialization propertyListWithData:[NSData dataWithContentsOfFile:retainedPath] options:0 format:nil error:&error];
+  check([retainedRoot[@"recoveryTake"][@"inputError"] isEqual:take[@"inputError"]],"Native recovery roundtrip cleared the loss review reason");
   call(recovered,@"recording.commit",@{@"take":recovered.recordingTakeID,@"replaceRows":@YES},true);
   auto notes=call(recovered,@"pattern.notes.get",@{@"pattern":@0});
   check([notes[@"events"] count]==2&&[notes[@"events"][0][@"position"] intValue]==1234,"Recovered take commits fractional positions");

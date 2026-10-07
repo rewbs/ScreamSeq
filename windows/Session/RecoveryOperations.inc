@@ -4,22 +4,35 @@ std::shared_ptr<const RecoverySnapshot> DocumentController::recoverySnapshot() {
       // Do not publish a pending view or flush editors here. Capturing must not
       // alter the document, saved baselines, Undo, manual gestures or playback.
       auto copiedProject=project_;
+      if(recording_)overlayRecording(copiedProject,*recording_);
       const bool editorChanged=plugins_->overlayRecoveryState(copiedProject);
       auto bytes=std::make_shared<const std::vector<std::byte>>(Project::serializeNativeProject(*document_,copiedProject));
       if(bytes->size()>Project::maximumProjectBytes)throw Api::ApiError(-32602,"Recovery project exceeds the 600 MiB limit");
-      ::mpt::crypto::hash::SHA256 hash;
-      hash.process(::mpt::const_byte_span(bytes->data(),bytes->size()));
-      const auto digest=hash.result();std::string fingerprint;fingerprint.reserve(64);
-      constexpr char hex[]="0123456789abcdef";
-      for(auto b:digest){const auto value=std::to_integer<unsigned>(b);fingerprint+=hex[value>>4];fingerprint+=hex[value&15];}
+      const auto fingerprint=[](std::span<const std::byte> bytes,const std::string &extra={}) {
+        ::mpt::crypto::hash::SHA256 hash;hash.process(::mpt::const_byte_span(bytes.data(),bytes.size()));
+        if(!extra.empty())hash.process(::mpt::const_byte_span(reinterpret_cast<const std::byte *>(extra.data()),extra.size()));
+        const auto digest=hash.result();std::string result;result.reserve(64);constexpr char hex[]="0123456789abcdef";
+        for(auto b:digest){const auto value=std::to_integer<unsigned>(b);result+=hex[value>>4];result+=hex[value&15];}return result;
+      };
       auto result=std::make_shared<RecoverySnapshot>();
-      result->bytes=std::move(bytes);result->revision=capturedRevision;result->fingerprint=std::move(fingerprint);
+      result->bytes=std::move(bytes);result->revision=capturedRevision;result->fingerprint=fingerprint(*result->bytes);
+      result->guardFingerprint=result->fingerprint;
+      if(recording_) {
+        // Saved duration advances while a key is held. Guard the actual live
+        // state independently so elapsed disk time alone cannot stale restore.
+        overlayRecording(copiedProject,*recording_,false);
+        const auto canonical=Project::serializeNativeProject(*document_,copiedProject);
+        const auto takeState=Json{{"take",recording_->id},{"capturing",recording_->notes.capturing},
+          {"start",std::to_string(recording_->startTimestamp)},{"last",std::to_string(recording_->lastTimestamp)},
+          {"generation",std::to_string(recording_->clockGeneration)},{"inputError",recording_->notes.inputError}}.dump();
+        result->guardFingerprint=fingerprint(canonical,takeState);
+      }
       const auto &song=document_->song();
       result->title=::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.GetCharsetInternal(),song.GetTitle());
       if(!project_.path.empty())result->source=project_.path;
       result->hasRecording=copiedProject.preserved.contains("recoveryTake");
       result->hasOpenEditors=plugins_->openEditorCount()!=0;
-      result->needsProtection=editorChanged || result->hasRecording || project_.recoveredUnsaved ||
+      result->needsProtection=editorChanged || bool(recording_) || result->hasRecording || project_.recoveredUnsaved ||
         document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision;
       return std::shared_ptr<const RecoverySnapshot>(std::move(result));
 }
@@ -51,11 +64,11 @@ std::future<std::shared_ptr<const DocumentView>> DocumentController::recover(
         // Vendor gestures can change manual opaque state without advancing the
         // song revision while the protective copy is written. Recheck after
         // candidate preparation, immediately before stopping/replacing music.
-        if(!expectedFingerprint.empty() && recoverySnapshot()->fingerprint!=expectedFingerprint)
+        if(!expectedFingerprint.empty() && recoverySnapshot()->guardFingerprint!=expectedFingerprint)
           throw Api::ApiError(-32001,"Manual plugin state changed before recovery restore; capture current work again");
         if(!discard) {
           auto copiedProject=project_;
-          if(project_.recoveredUnsaved || document_->revision!=project_.savedRevision ||
+          if(recording_ || project_.recoveredUnsaved || document_->revision!=project_.savedRevision ||
             project_.pluginRevision!=project_.savedPluginRevision || project_.preserved.contains("recoveryTake") ||
             plugins_->overlayRecoveryState(copiedProject))
             throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before recovering");

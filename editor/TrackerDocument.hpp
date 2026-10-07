@@ -260,7 +260,7 @@ class Renderer
 	bool regionStarted_ = false;
 	uint32_t regionLastRow_ = UINT32_MAX;
 	std::unique_ptr<PreciseNoteRuntime> preciseNotes_;
-	std::unique_ptr<RecordingClock> recordingClock_ = std::make_unique<RecordingClock>();
+	std::shared_ptr<RecordingClock> recordingClock_ = std::make_shared<RecordingClock>();
 	uint64_t renderHostTime_ = 0;
 	double hostTicksPerSample_ = 0;
 	uint32_t renderOffset_ = 0;
@@ -290,6 +290,7 @@ public:
 	void preparePreciseNotes(const NativeSong &native) { preciseNotes_=std::make_unique<PreciseNoteRuntime>(native); native.prepareEffects(*song_); }
 	void recordingTime(uint64_t hostTime,double ticksPerSample) noexcept { renderHostTime_=hostTime;hostTicksPerSample_=ticksPerSample; }
 	const RecordingClock &recordingClock() const { return *recordingClock_; }
+	std::shared_ptr<const RecordingClock> recordingClockSnapshot() const noexcept { return recordingClock_; }
 	bool enqueue(const std::vector<Edit> &edits);
 	bool preview(PreviewNote) noexcept;
 	void panic() noexcept { panicEpoch_.fetch_add(1, std::memory_order_release); }

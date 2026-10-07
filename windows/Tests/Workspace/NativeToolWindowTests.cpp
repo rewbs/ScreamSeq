@@ -1,41 +1,20 @@
 #include "../../App/NativeToolWindow.hpp"
+#include "../PrivateGuiTest.hpp"
 #include <iostream>
 
 namespace {
 void require(bool value,const char *message){if(!value)throw std::runtime_error(message);}
 template<typename Action>void rejected(Action action,const char *message){try{action();}catch(const std::exception &){return;}throw std::runtime_error(message);}
-struct Desktop {
-  HDESK original=GetThreadDesktop(GetCurrentThreadId()),owned{};
-  HWND foreground=GetForegroundWindow();DWORD clipboard=GetClipboardSequenceNumber();
-  Desktop(){const auto name=L"ScreamSeqDockTest-"+std::to_wstring(GetCurrentProcessId());owned=CreateDesktopW(name.c_str(),nullptr,nullptr,0,GENERIC_ALL,nullptr);require(owned&&SetThreadDesktop(owned),"Create private dock desktop");}
-  ~Desktop(){SetThreadDesktop(original);CloseDesktop(owned);}
-  static std::string narrow(const wchar_t *value){const auto count=WideCharToMultiByte(CP_UTF8,0,value,-1,nullptr,0,nullptr,nullptr);std::string result(size_t(std::max(1,count)),0);if(count)WideCharToMultiByte(CP_UTF8,0,value,-1,result.data(),count,nullptr,nullptr);result.resize(size_t(std::max(1,count)-1));return result;}
-  static std::string name(HDESK desktop){wchar_t value[256]{};DWORD bytes=0;if(!GetUserObjectInformationW(desktop,UOI_NAME,value,sizeof(value),&bytes))return "<unavailable:"+std::to_string(GetLastError())+">";return narrow(value);}
-  static BOOL CALLBACK remainingWindow(HWND window,LPARAM){
-    wchar_t kind[256]{};GetClassNameW(window,kind,256);DWORD process=0;const auto thread=GetWindowThreadProcessId(window,&process);
-    std::cerr<<"  Remaining HWND="<<window<<" class="<<narrow(kind)<<" thread="<<thread<<" process="<<process<<" parent="<<GetParent(window)<<" owner="<<GetWindow(window,GW_OWNER)<<" visible="<<IsWindowVisible(window)<<" enabled="<<IsWindowEnabled(window)<<'\n';return TRUE;
-  }
-  void check(){
-    SetLastError(ERROR_SUCCESS);
-    if(!SetThreadDesktop(original)){
-      const auto error=GetLastError();wchar_t message[512]{};FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS,nullptr,error,0,message,512,nullptr);
-      std::cerr<<"Restore test desktop failed: Win32 "<<error<<" ("<<narrow(message)<<") current="<<name(GetThreadDesktop(GetCurrentThreadId()))<<" original="<<name(original)<<" owned="<<name(owned)<<" thread="<<GetCurrentThreadId()<<'\n';
-      EnumThreadWindows(GetCurrentThreadId(),remainingWindow,0);
-      for(HWND window=FindWindowExW(HWND_MESSAGE,nullptr,nullptr,nullptr);window;window=FindWindowExW(HWND_MESSAGE,window,nullptr,nullptr))if(GetWindowThreadProcessId(window,nullptr)==GetCurrentThreadId())remainingWindow(window,0);
-      throw std::runtime_error("Restore test desktop");
-    }
-    require(GetForegroundWindow()==foreground,"Dock test changed foreground");require(GetClipboardSequenceNumber()==clipboard,"Dock test changed clipboard");
-  }
-};
 struct Window {
   HWND value{};
-  Window(const wchar_t *kind,HWND parent=nullptr){value=CreateWindowExW(0,kind,L"Dock test",parent?WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN:WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,0,0,1100,800,parent,nullptr,GetModuleHandleW(nullptr),nullptr);require(value,"Create dock test host");}
+  Window(const wchar_t *kind,HWND parent=nullptr){value=CreateWindowExW(0,kind,L"Dock test",parent?WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN:WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,0,0,1100,800,parent,nullptr,GetModuleHandleW(nullptr),nullptr);require(value,"Create dock test host");ScreamSeq::Tests::ownGuiWindow(value);}
   ~Window(){if(value)DestroyWindow(value);}
+  void close(){const auto window=value;require(DestroyWindow(window),"Destroy dock test host");value=nullptr;require(!IsWindow(window),"Dock test host survived destruction");}
 };
 class Tool final:public ScreamSeq::NativeToolWindow {
 public:
   unsigned localKeys=0,deactivations=0,layouts=0;
-  explicit Tool(HWND owner):NativeToolWindow(owner){minimumWidth_=300;minimumHeight_=220;create(L"ScreamSeq.DockTest.Tool",L"Retained editor",640,420);edit(1,L"Captured draft",128);button(2,L"Apply");combo(3);SendMessageW(controls_.at(3),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"First"));SendMessageW(controls_.at(3),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Second"));SendMessageW(controls_.at(3),CB_SETCURSEL,1,0);finish();}
+  explicit Tool(HWND owner):NativeToolWindow(owner){minimumWidth_=300;minimumHeight_=220;create(L"ScreamSeq.DockTest.Tool",L"Retained editor",640,420);edit(1,L"Captured draft",128);button(2,L"Apply");combo(3);SendMessageW(controls_.at(3),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"First"));SendMessageW(controls_.at(3),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Second"));SendMessageW(controls_.at(3),CB_SETCURSEL,1,0);finish();ScreamSeq::Tests::ownGuiWindow(window());}
   HWND control(int id)const{return controls_.at(id);}
   void minimumClient(int width,int height){minimumClientWidth_=width;minimumClientHeight_=height;}
   void layout()override{++layouts;const auto [w,h]=size();place(1,8,8,std::max(1.f,w-16),24);place(2,8,40,90,24);place(3,106,40,150,160);}
@@ -121,9 +100,9 @@ void retainedDock(HWND main,HWND host){
 }
 int main(){
   try{
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);Desktop desktop;
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqDockTest",[]{
     WNDCLASSW type{};type.lpfnWndProc=DefWindowProcW;type.hInstance=GetModuleHandleW(nullptr);type.lpszClassName=L"ScreamSeq.DockTest.Host";RegisterClassW(&type);
-    {Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);}
-    desktop.check();std::cout<<"Native tool docking: retained HWNDs, focus, keyboard, ownership and bounds passed\n";return 0;
+    HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);host.close();main.close();}
+    require(!IsWindow(mainWindow)&&!IsWindow(hostWindow),"Destroy owned dock test hosts");});std::cout<<"Native tool docking: retained HWNDs, focus, keyboard, ownership and bounds passed\n";return 0;
   }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
 }

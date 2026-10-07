@@ -1,6 +1,27 @@
 #include "NoteRecording.hpp"
 #include <set>
 namespace Tracker {
+NoteRecordingCommit prepareNoteRecordingCommit(const Document &document,std::span<const PreciseNote> events,bool replaceRows) {
+  NoteRecordingCommit result{document.native(),{},false};
+  std::set<std::tuple<uint64_t,uint64_t,uint32_t>> rows;
+  for(const auto &event:events)rows.emplace(event.pattern,event.track,event.position/performanceUnitsPerRow);
+  if(replaceRows)std::erase_if(result.native.preciseNotes,[&](const auto &n){return rows.contains({n.pattern,n.track,n.position/performanceUnitsPerRow});});
+  std::map<std::tuple<uint64_t,uint32_t,uint64_t,bool>,PreciseNote> merged;
+  for(const auto &n:result.native.preciseNotes)merged[{n.pattern,n.position,n.track,n.note<128}]=n;
+  for(const auto &n:events)merged[{n.pattern,n.position,n.track,n.note<128}]=n;
+  result.native.preciseNotes.clear();for(const auto &[key,n]:merged)result.native.preciseNotes.push_back(n);
+  if(replaceRows)for(const auto &[pattern,track,row]:rows) {
+    const auto p=std::find_if(result.native.patterns.begin(),result.native.patterns.end(),[&](const auto &v){return v.second.id==pattern;});
+    const auto c=std::find_if(result.native.tracks.begin(),result.native.tracks.end(),[&](const auto &v){return v.second.id==track;});
+    if(p==result.native.patterns.end()||c==result.native.tracks.end())throw std::invalid_argument("Recorded pattern or channel disappeared");
+    auto cell=document.cell(p->first,row,c->first);cell.note=cell.instrument=0;
+    if(cell.volumeCommand==OpenMPT::VOLCMD_VOLUME)cell.volumeCommand=cell.volume=0;
+    result.edits.push_back({p->first,uint16_t(row),c->first,{},cell});
+  }
+  result.native.validate(document.song());document.validateEdits(result.edits);
+  result.changed=result.native!=document.native()||std::any_of(result.edits.begin(),result.edits.end(),[&](const auto &e){return document.cell(e.pattern,e.row,e.channel)!=e.after;});
+  return result;
+}
 NoteRecording::NoteRecording(const NativeSong &native,const OpenMPT::CSoundFile &song,std::vector<uint16_t> channels,uint16_t instrument,uint32_t quantum)
  :channels_(std::move(channels)),instrument_(instrument),sequence_(song.Order.GetCurrentSequenceIndex()),quantum_(quantum) {
   std::set<uint16_t> unique(channels_.begin(),channels_.end());

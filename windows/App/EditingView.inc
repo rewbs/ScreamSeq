@@ -185,6 +185,7 @@
     }
     bool saveFile(bool saveAs=false) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(!protectRecordingTake())return false;
         documentOperation("flushPluginEditors",{{"force",true}});
         auto revision=view->session.revision;auto path=view->path;
         auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),towlower);
@@ -194,6 +195,7 @@
         status=L"Native project saved atomically";return true;
     }
     bool protectUnsaved() {
+        if(!protectRecordingTake())return false;
         documentOperation("flushPluginEditors",{{"force",true}});
         if(!view->dirty) return true;
         auto revision=view->session.revision;

@@ -47,6 +47,7 @@
 		place(paletteCommand,402,12,154,26);
         place(instrumentEnvelopeCommand,564,12,126,26);
         place(audioSettingsCommand,698,12,110,26);
+        place(midiRecordingCommand,816,12,60,26);
 		place(composeCommand,174,52,80,26);place(patternCommand,258,52,106,26);place(soundCommand,368,52,108,26);
         place(layoutsCommand,480,52,80,26);
         place(mixerCommand,564,52,76,26);
@@ -129,6 +130,7 @@
             {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},{liveKeysCommand,L"Live keys"},{sampleBrowseCommand,L"Browse samples…"},
             {audioSettingsCommand,L"Audio settings…"},
             {recoveryCommand,L"Recovery copies"},
+            {midiRecordingCommand,L"MIDI…"},
             {layoutsCommand,L"Layouts…"},{dockNotes,L"Notes"},{dockSamples,L"Samples"},{dockEffects,L"Pattern FX"},
             {editorTrackerTab,L"Tracker"},{editorAutomationTab,L"Automation"},{editorInstrumentTab,L"Instrument"},{editorFloatCommand,L"Float"},{editorHideCommand,L"Hide"},{editorPinCommand,L"Pinned"},{editorCursorCommand,L"Cursor"},{editorReturnCommand,L"Return"},
             {dockPlugins,L"Plugins"},{dockMixer,L"Mixer"},{dockGraph,L"Graph"},{dockToggle,L"Collapse dock"},
@@ -184,6 +186,10 @@
             else if(id==sampleBrowseCommand){openSampleBrowser();return;}
             else if(id==audioSettingsCommand){openAudioSettings();return;}
             else if(id==recoveryCommand){openRecoveryBrowser();return;}
+            else if(id==midiRecordingCommand){openMidiRecording();return;}
+            else if(id==midiArmCommand){toggleMidiArm();return;}
+            else if(id==recordingFinishCommand){if(hasRecordingTake())finishRecordingTake(view->recording.at("take"));else openMidiRecording();return;}
+            else if(id==recordingDiscardCommand){if(hasRecordingTake())discardRecordingTake(view->recording.at("take"));return;}
             else if(id==auditionCommand){openAudition();return;}
             else if(id==instrumentEnvelopeCommand){openInstrumentEnvelope();return;}
             else if(id==instrumentImportCommand){openInstrumentEnvelope();instrumentEnvelopeWindow->importInstrument();return;}
@@ -215,7 +221,7 @@
                 }
             }
 			else if(id==playCommand) play();
-			else if(id==stopCommand) stop();
+			else if(id==stopCommand) stopAndFinishRecording();
 			else if(id==followCommand) { auto n=position();n["following"]=!follow;navigate(n); }
 			else if(id==composeCommand || id==patternCommand || id==soundCommand) workspace("workspace.layout",{{"name",id==composeCommand ? "Compose" : id==patternCommand ? "Pattern focus" : "Sound design"}});
 			else if(id==notesCommand || id==samplesCommand) {workspaceState.show(id==notesCommand ? "notes" : "samples",position(),cursorSample(),true);if(id==notesCommand)openNoteEditor();}
@@ -355,6 +361,7 @@
         horizontalScroll=std::clamp(horizontalScroll+float(delta)*fxWidth/WHEEL_DELTA,0.0f,std::max(0.0f,channelStart(view->channels)-available));
     }
 	bool controlActive(int id) const {
+        if(id==midiRecordingCommand)return midiArmed||hasRecordingTake();
         if(id==editorTrackerTab)return hasWorkspaceDock()&&trackerWorkspaceVisible();
         if(id==editorAutomationTab||id==editorInstrumentTab)return hasWorkspaceDock()&&(sideWorkspaceDock()||!dockTrackerSelected)&&activeWorkspaceEditor==(id==editorAutomationTab?"automation":"instruments");
         if(id>=dockNotes&&id<=dockGraph)return lowerEditorName()==std::array<const char *,6>{"notes","samples","effects","plugins","mixer","graph"}[size_t(id-dockNotes)];
