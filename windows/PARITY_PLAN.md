@@ -10,18 +10,32 @@ The current docking checkpoint adds retained automation/instrument docking, comp
 pages, floating/redocking and local keyboard routing. Wide windows can show the
 graph beside the selected editor; smaller windows retain each editor behind tabs.
 See [docking evidence](WORKSPACE_DOCKING_PROGRESS.md) for qualification and limits.
-Arbitrary independent dock groups, recovery, recording, configurable shortcuts
-and the cross-platform qualification gates below remain open.
+Arbitrary independent dock groups, recovery, recording and the cross-platform
+qualification gates below remain open.
 
-The next bounded workspace tasks are native context menus and configurable
-shortcuts. Context menus should reuse the existing guarded pattern, sample,
-graph and instrument actions, preserve a selection when invoked within it, and
-revalidate captured targets after the native menu loop. Native text controls
-retain their own editing menus. Shortcut configuration needs stable command
-identities, conflict/prefix validation, atomic preference storage and one shared
-resolver across the main window and retained tools, with editor/text handling
-and musical note release taking priority. These are source-audited gaps, not
-implemented features in the docking checkpoint.
+Native context menus now connect pattern, sample, graph, instrument and detailed
+sample workflows to the existing guarded actions. The command palette supports
+custom keys, sequences, Clear, Reset and saved-preference reload. Main-window and
+retained-editor dispatch share the binding model, preserving native text input,
+local editor commands and note release. See
+[command and menu evidence](WORKSPACE_COMMANDS_PROGRESS.md) for exact scope,
+candidate-specific tests and visual limits.
+
+The next sample-editor gaps are independent normal/sustain numeric loop bounds
+with joint preview/Apply, paste preview, loop snapping and automatic selection
+snap. These must reuse the shared sample operations and one Undo transaction.
+Other editor surfaces still need context-menu coverage, and independent dock
+groups remain unfinished. Completing these interactions does not replace the
+recovery, recording, accessibility and cross-platform qualification gates.
+
+The current sample backend already supports joint `sample.loops.set` previews
+and one-step Undo, complete paste options and dry-run reports, and selection or
+loop-boundary snapping. The UI must retain separate raw loop/paste drafts and
+preview signatures bound to document, sample ID, revision and clipboard ID.
+`SampleDetailWindow::mutate` currently clears all edited fields after unrelated
+operations; it must not erase or silently rebase these independent drafts.
+Use the Mac sample loop/clipboard/snap editors as the interaction reference and
+qualify joint Apply/Undo/save-reopen, stale drafts and minimum-size layouts.
 
 ## Upstream integration checkpoint — 2026-09-21
 
@@ -147,7 +161,7 @@ delayed timestamp lookup, with equivalent PCM at different callback sizes.
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields, sample waveform markers and native instrument-envelope markers integrated. See `INSTRUMENT_ENVELOPE_PROGRESS.md`. | Audition piano, detailed waveform markers and preview releases are implemented in `AUDITION_PROGRESS.md`; broader vendor release-tail qualification remains. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
 | Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, program/port controls, modeless instrument aliases/MIDI channels, sound presets, library organization, explicit VST3 location repair and native graph/mixer connections integrated; live parameters reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. See `PLUGIN_ALIASES_PROGRESS.md`, `PLUGIN_PRESETS_PROGRESS.md`, `PLUGIN_LIBRARY_PROGRESS.md`, `PLUGIN_PATH_PROGRESS.md` and `SONG_ROUTING_PROGRESS.md`. | Live opaque-state replacement (including Surge's first-open zoom state) and broader missing-plugin recovery. |
-| Mac context menus, docking, focus, recovery and visual refinements | Reviewed; Windows retains its native implementation. | Implement the equivalent interactions and visual hierarchy in Windows, then compare actual windows at multiple scales. |
+| Mac context menus, docking, focus, recovery and visual refinements | Retained automation/instrument docking, compact pages, named layouts, five native context-menu surfaces and configurable application shortcuts are implemented; see the workspace reports above. | Other editor menu surfaces, independent dock groups, recovery and actual foreground comparison at multiple scales remain open. |
 
 ## Execution order and completion gates
 

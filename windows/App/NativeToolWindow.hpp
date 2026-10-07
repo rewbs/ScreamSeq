@@ -10,6 +10,8 @@
 #include <system_error>
 
 namespace ScreamSeq {
+inline constexpr wchar_t workspaceShortcutProperty[]=L"ScreamSeq.WorkspaceShortcutHandler";
+using WorkspaceShortcutHandler=std::function<bool(WPARAM,bool,bool)>;
 // Modeless native editor shell. Repaint is requested by edits and window events;
 // a hidden or unchanged tool has no running presentation timer.
 class NativeToolWindow {
@@ -20,6 +22,12 @@ class NativeToolWindow {
   LONG_PTR floatingExStyle_=WS_EX_TOOLWINDOW;
   bool relocating_=false,notifyingPlacement_=false;
   std::function<bool(WPARAM,bool)> workspaceKeys_;
+  std::function<void()> workspaceDockAction_;
+  bool workspaceShortcut(WPARAM key,bool repeat,bool prefixOnly) {
+    for(auto host=owner_;host;host=GetParent(host))
+      if(auto handler=reinterpret_cast<WorkspaceShortcutHandler *>(GetPropW(host,workspaceShortcutProperty)))return (*handler)(key,repeat,prefixOnly);
+    return false;
+  }
   std::function<void()> placementChanged_;
   static void windowLong(HWND window,int index,LONG_PTR value) {
     SetLastError(ERROR_SUCCESS);
@@ -118,7 +126,16 @@ protected:
   std::function<bool(WPARAM)> musicalRelease_;
   std::function<void()> musicalDeactivate_;
   void releaseMusicalInput(){if(musicalDeactivate_)musicalDeactivate_();deactivate();}
-  void handledKey(HWND control,WPARAM key,bool ctrl){handledCharacterWindow_=control;handledCharacter_=0;if(key==VK_RETURN||key==VK_TAB||key==VK_SPACE||key==VK_ESCAPE)handledCharacter_=key;else if(ctrl&&key>='A'&&key<='Z')handledCharacter_=key-'A'+1;}
+  static WPARAM translatedCharacter(WPARAM key,LPARAM message) {
+    BYTE keyboard[256]{};wchar_t characters[8]{};
+    if(!GetKeyboardState(keyboard))return 0;
+    const auto layout=GetKeyboardLayout(0);
+    auto scan=UINT((message>>16)&0xff);if(!scan)scan=MapVirtualKeyExW(UINT(key),MAPVK_VK_TO_VSC,layout);
+    // Match TranslateMessage's shifted/OEM character without changing the
+    // keyboard's dead-key state (flag 4, supported by our Windows 10 target).
+    return ToUnicodeEx(UINT(key),scan,keyboard,characters,8,4,layout)>0?WPARAM(characters[0]):0;
+  }
+  void handledKey(HWND control,WPARAM character){handledCharacterWindow_=control;handledCharacter_=character;}
   static std::wstring wide(const std::string &s){int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0);std::wstring out(n,0);MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),out.data(),n);return out;}
   static std::string utf8(const std::wstring &s){int n=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0,nullptr,nullptr);if(!n&&!s.empty())throw std::runtime_error("Invalid text");std::string out(n,0);WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,s.data(),int(s.size()),out.data(),n,nullptr,nullptr);return out;}
   HWND add(int id,const wchar_t *kind,const wchar_t *text,DWORD style){auto h=CreateWindowExW(_wcsicmp(kind,L"EDIT")==0?WS_EX_CLIENTEDGE:0,kind,text,WS_CHILD|(_wcsicmp(kind,L"STATIC")?WS_TABSTOP:0)|style,0,0,1,1,window_,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);if(!h)throw std::runtime_error("Cannot create editor control");controls_[id]=h;NativeControls::install(h,GetPropW(owner_,NativeControls::inspectionProperty)!=nullptr);SetWindowSubclass(h,childProc,1,reinterpret_cast<DWORD_PTR>(this));return h;}
@@ -142,6 +159,9 @@ protected:
   virtual void action(int,unsigned)=0;
   virtual bool key(WPARAM,bool,bool){return false;}
   virtual bool keyUp(WPARAM){return false;}
+  virtual bool contextMenu(HWND,POINT){return false;}
+  bool hasWorkspaceDockAction()const{return bool(workspaceDockAction_);}
+  void toggleWorkspaceDock(){if(workspaceDockAction_)workspaceDockAction_();}
   virtual void deactivate(){}
   virtual void mouse(UINT,float,float,WPARAM){}
   virtual bool wheel(UINT,float,float,WPARAM){return false;}
@@ -156,28 +176,35 @@ protected:
     if(m==WM_KILLFOCUS&&!self.relocating_&&!self.owns(reinterpret_cast<HWND>(w)))self.releaseMusicalInput();
     // TranslateMessage may have queued a character before keyDown consumed an
     // editor command. Do not insert that Enter/Tab/Space into the text as well.
-    if(m==WM_CHAR&&self.handledCharacterWindow_==h){const auto expected=self.handledCharacter_;self.handledCharacter_=0;self.handledCharacterWindow_=nullptr;if(expected&&(w==expected||(expected==VK_RETURN&&w=='\n')))return 0;}
-    if(m==WM_KEYDOWN||m==WM_SYSKEYDOWN)try{
+    if((m==WM_CHAR||m==WM_SYSCHAR)&&self.handledCharacterWindow_==h){const auto expected=self.handledCharacter_;self.handledCharacter_=0;self.handledCharacterWindow_=nullptr;if(expected&&(w==expected||(expected==VK_RETURN&&w=='\n')))return 0;}
+    if(m==WM_KEYDOWN||m==WM_SYSKEYDOWN){
+      // Capture before dispatch: a command may open a dialog, move focus, or
+      // release modifiers while its already-translated character is queued.
+      const auto character=translatedCharacter(w,l);
+      try{
       self.handledCharacter_=0;self.handledCharacterWindow_=nullptr;
       // An open selector owns navigation/Enter/Escape. In particular, Escape
       // must dismiss its popup before an editor shortcut can close the tool.
       auto control=NativeControls::state(h);
       if(control&&control->combo&&SendMessageW(h,CB_GETDROPPEDSTATE,0,0)){
         if(w==VK_TAB)SendMessageW(h,CB_SHOWDROPDOWN,FALSE,0);
-        else {if(w==VK_RETURN||w==VK_ESCAPE)self.handledKey(h,w,false);return DefSubclassProc(h,m,w,l);}
+        else {if(w==VK_RETURN||w==VK_ESCAPE)self.handledKey(h,character);return DefSubclassProc(h,m,w,l);}
       }
       const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,shift=(GetKeyState(VK_SHIFT)&0x8000)!=0;
       const bool repeat=(l&(1LL<<30))!=0;
-      bool handled=(self.musicalKey_&&self.musicalKey_(h,w,repeat))||self.key(w,ctrl,shift);
+      bool handled=self.workspaceShortcut(w,repeat,true)||(self.musicalKey_&&self.musicalKey_(h,w,repeat))||self.key(w,ctrl,shift);
       if(!handled&&self.workspaceKeys_)handled=self.workspaceKeys_(w,repeat);
+      if(!handled)handled=self.workspaceShortcut(w,repeat,false);
       if(!handled&&w==VK_TAB){auto next=GetNextDlgTabItem(self.window_,h,shift);if(next)SetFocus(next);handled=true;}
-      if(handled){self.handledKey(h,w,ctrl);return 0;}
-    }catch(const std::exception &e){self.handledKey(h,w,(GetKeyState(VK_CONTROL)&0x8000)!=0);self.error(e);return 0;}
+      if(handled){self.handledKey(h,character);return 0;}
+      }catch(const std::exception &e){self.handledKey(h,character);self.error(e);return 0;}
+    }
     return DefSubclassProc(h,m,w,l);
   }
   static LRESULT CALLBACK proc(HWND h,UINT m,WPARAM w,LPARAM l){auto self=reinterpret_cast<NativeToolWindow *>(GetWindowLongPtrW(h,GWLP_USERDATA));if(m==WM_NCCREATE){self=static_cast<NativeToolWindow *>(reinterpret_cast<CREATESTRUCTW *>(l)->lpCreateParams);self->window_=h;SetWindowLongPtrW(h,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}if(!self)return DefWindowProcW(h,m,w,l);
     try{switch(m){
       case WM_CLOSE:self->hide();return 0;
+      case WM_CONTEXTMENU:self->workspaceShortcut(VK_ESCAPE,false,true);if(self->contextMenu(reinterpret_cast<HWND>(w),POINT{GET_X_LPARAM(l),GET_Y_LPARAM(l)}))return 0;break;
       case WM_ACTIVATE:if(LOWORD(w)==WA_INACTIVE&&!self->relocating_)self->releaseMusicalInput();break;
       case WM_KILLFOCUS:if(!self->relocating_&&!self->owns(reinterpret_cast<HWND>(w)))self->releaseMusicalInput();break;
       case WM_NCDESTROY:RemovePropW(h,toolProperty_);self->window_=nullptr;self->ready_=false;self->dockParent_=nullptr;break;
@@ -194,7 +221,7 @@ protected:
       case WM_DRAWITEM:self->drawControl(*reinterpret_cast<DRAWITEMSTRUCT *>(l));return TRUE;
       case WM_MEASUREITEM:reinterpret_cast<MEASUREITEMSTRUCT *>(l)->itemHeight=unsigned(22*GetDpiForWindow(h)/96);return TRUE;
       case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:SetTextColor(reinterpret_cast<HDC>(w),RGB(218,232,241));SetBkColor(reinterpret_cast<HDC>(w),RGB(24,34,45));SetDCBrushColor(reinterpret_cast<HDC>(w),RGB(24,34,45));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
-      case WM_KEYDOWN:case WM_SYSKEYDOWN:if((self->musicalKey_&&self->musicalKey_(GetFocus(),w,(l&(1LL<<30))!=0))||self->key(w,(GetKeyState(VK_CONTROL)&0x8000)!=0,(GetKeyState(VK_SHIFT)&0x8000)!=0)||(self->workspaceKeys_&&self->workspaceKeys_(w,(l&(1LL<<30))!=0)))return 0;break;
+      case WM_KEYDOWN:case WM_SYSKEYDOWN:if(self->workspaceShortcut(w,(l&(1LL<<30))!=0,true)||(self->musicalKey_&&self->musicalKey_(GetFocus(),w,(l&(1LL<<30))!=0))||self->key(w,(GetKeyState(VK_CONTROL)&0x8000)!=0,(GetKeyState(VK_SHIFT)&0x8000)!=0)||(self->workspaceKeys_&&self->workspaceKeys_(w,(l&(1LL<<30))!=0))||self->workspaceShortcut(w,(l&(1LL<<30))!=0,false))return 0;break;
       case WM_KEYUP:case WM_SYSKEYUP:if((self->musicalRelease_&&self->musicalRelease_(w))||self->keyUp(w))return 0;break;
       case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT p{GET_X_LPARAM(l),GET_Y_LPARAM(l)};ScreenToClient(h,&p);const float scale=96.0f/GetDpiForWindow(h);if(self->wheel(m,p.x*scale,p.y*scale,w))return 0;break;}
       case WM_LBUTTONDBLCLK:case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_MOUSEMOVE:case WM_CAPTURECHANGED:{const float scale=96.0f/GetDpiForWindow(h);self->mouse(m,GET_X_LPARAM(l)*scale,GET_Y_LPARAM(l)*scale,w);self->requestPaint();return 0;}
@@ -224,6 +251,7 @@ public:
       throw std::system_error(GetLastError(),std::system_category(),"Size docked tool");
   }
   void workspaceKeys(std::function<bool(WPARAM,bool)> keys){workspaceKeys_=std::move(keys);}
+  void workspaceDockAction(std::function<void()> action){workspaceDockAction_=std::move(action);}
   void placementChanged(std::function<void()> changed){placementChanged_=std::move(changed);}
   void musicalTyping(std::function<bool(HWND,WPARAM,bool)> key,std::function<bool(WPARAM)> release,std::function<void()> deactivate){musicalKey_=std::move(key);musicalRelease_=std::move(release);musicalDeactivate_=std::move(deactivate);}
   void show(){const bool changed=!shown();ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|(docked()?SWP_NOACTIVATE:0));requestPaint();if(changed)notifyPlacement();}

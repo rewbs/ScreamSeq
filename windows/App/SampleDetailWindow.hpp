@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "NativeContextMenu.hpp"
 #include "SampleFileDialog.hpp"
 #include "editor/TrackerDocument.hpp"
 
@@ -29,7 +30,7 @@ private:
   std::vector<double> playbackFrames_;
   unsigned waveStart_=0,waveEnd_=0,anchor_=0,lastFrame_=0;double lastValue_=0;
   int channel_=0;unsigned bins_=0;uint64_t generation_=0;
-  bool setting_=false,pending_=false,fields_=false,drawing_=false,dragging_=false,selecting_=false,priorPoint_=false;
+  bool setting_=false,pending_=false,fields_=false,drawing_=false,dragging_=false,selecting_=false,priorPoint_=false,contextOpen_=false;
   float layoutWidth_=-1,layoutHeight_=-1;UINT layoutDpi_=0;bool layoutPending_=false;
   Region selectionBefore_;WorkspaceRect canvas_;
   void require(bool condition,const char *why)const{if(!condition)throw std::runtime_error(why);}
@@ -139,6 +140,31 @@ private:
     if(key==VK_HOME){action(fit,BN_CLICKED);return true;}if(key==VK_ADD||key==VK_OEM_PLUS){zoom(2);return true;}if(key==VK_SUBTRACT||key==VK_OEM_MINUS){zoom(.5);return true;}
     if(key==VK_LEFT||key==VK_RIGHT){if(ctrl)pan(key==VK_LEFT?-1:1);else{const int64_t step=shift?1:std::max(1u,(region_.end-region_.start)/100);if(shift)region_.last=unsigned(std::clamp(int64_t(region_.last)+(key==VK_LEFT?-step:step),int64_t(region_.first),int64_t(region_.frames)));else region_.first=region_.last=unsigned(std::clamp(int64_t(region_.first)+(key==VK_LEFT?-step:step),int64_t(0),int64_t(region_.frames)));syncFields();}return true;}
     if(key==VK_DELETE){clipboard(erase);return true;}return false;
+  }
+  bool contextMenu(HWND source,POINT screen)override{
+    for(auto child=source;child&&child!=window_;child=GetParent(child)){wchar_t type[32]{};GetClassNameW(child,type,32);if(!_wcsicmp(type,L"EDIT")||!_wcsicmp(type,L"COMBOBOX")||!_wcsicmp(type,L"LISTBOX"))return false;}
+    if(contextOpen_||pending_||dragging_||selecting_)return true;
+    if(screen.x==-1&&screen.y==-1){const auto scale=GetDpiForWindow(window_)/96.f;screen={LONG(std::lround((canvas_.x+canvas_.w*.5f)*scale)),LONG(std::lround((canvas_.y+canvas_.h*.5f)*scale))};ClientToScreen(window_,&screen);}
+    const bool fresh=current()&&!id_.empty(),cleanView=!draft(),audio=fresh&&stroke_.empty()&&!settingsDraft();
+    const bool hasRange=region_.first<region_.last,hasAudio=region_.frames>0;
+    const bool crossReady=info_.value(choice(crossLoop)==1?"sustainLoop":"loop",false);
+    auto item=[&](int id,const wchar_t *label,bool enabled=true,bool checked=false){return NativeContextMenu::Item{id,label,enabled&&IsWindowEnabled(controls_.at(id))!=FALSE,checked};};
+    using Item=NativeContextMenu::Item;
+    std::vector<Item> menu{{0,L"Sample "+std::to_wstring(slot_)+L" · "+wide(info_.value("name",std::string{}))},{0,L"Frames "+std::to_wstring(region_.first)+L"–"+std::to_wstring(region_.last)+L" · "+wide(channelName())}};
+    menu.push_back({0,L"View and selection",true,false,{item(fit,L"Fit sample\tHome",fresh&&cleanView&&hasAudio),item(zoomSelection,L"Zoom selection",fresh&&cleanView&&hasAudio),item(zoomIn,L"Zoom in\t+",fresh&&cleanView&&hasAudio),item(zoomOut,L"Zoom out\t-",fresh&&cleanView&&hasAudio),item(panLeft,L"Pan left\tCtrl+Left",fresh&&cleanView&&hasAudio),item(panRight,L"Pan right\tCtrl+Right",fresh&&cleanView&&hasAudio),{0,L""},item(setRange,L"Set selection from fields",fresh&&stroke_.empty()),item(all,L"Select all\tCtrl+A",fresh&&cleanView),item(snapRange,L"Snap selection",audio)}});
+    menu.push_back({0,L"Drawing",true,false,{item(drawMode,L"Draw mode",fresh,drawing_),item(stagePoint,L"Stage point from fields",fresh&&!settingsDraft()),item(applyDraw,L"Apply drawing\tCtrl+Enter",fresh&&!stroke_.empty()&&!settingsDraft()),item(discardDraw,L"Discard drawing",!stroke_.empty()||edited_.contains(pointFrame)||edited_.contains(pointValue)||edited_.contains(interpolation))}});
+    menu.push_back({0,L"Process audio",true,false,{{0,field(operation)},item(previewProcess,L"Preview process",audio&&hasRange),item(applyProcess,L"Apply process",audio&&hasRange)}});
+    menu.push_back({0,L"Clipboard",true,false,{item(copy,L"Copy selection\tCtrl+C",audio&&hasRange),item(cut,L"Cut selection\tCtrl+X",audio&&hasRange),item(erase,L"Delete selection\tDelete",audio&&hasRange),item(copyNew,L"Copy to new sample",audio&&hasRange),{0,L""},item(paste,L"Paste\tCtrl+V",audio)}});
+    menu.push_back({0,L"Loops",true,false,{item(normalLoop,L"Use selection for normal loop",audio&&hasRange),item(sustainLoop,L"Use selection for sustain loop",audio&&hasRange),item(disableNormal,L"Disable normal loop",audio&&info_.value("loop",false)),item(disableSustain,L"Disable sustain loop",audio&&info_.value("sustainLoop",false))}});
+    menu.push_back({0,L"Loop crossfade",true,false,{{0,field(crossLoop)},item(previewCross,L"Preview crossfade",audio&&crossReady),item(applyCross,L"Apply crossfade",audio&&crossReady)}});
+    menu.push_back({0,L"Sample settings",true,false,{item(applySettings,L"Apply settings",fresh&&stroke_.empty()&&settingsDraft()),item(discardSettings,L"Discard settings draft",settingsDraft()),{0,L""},item(replaceSample,L"Replace captured sample…",fresh&&!draft()),item(createInstrument,L"Create instrument",fresh&&!draft())}});
+    menu.push_back({0,L""});menu.push_back(item(undo,L"Undo\tCtrl+Z",fresh&&!draft()));menu.push_back(item(redo,L"Redo\tCtrl+Y",fresh&&!draft()));
+    menu.push_back(item(audition,L"Audition captured sample…",fresh));menu.push_back(item(reload,L"Reload\tCtrl+R"));menu.push_back(item(fromCursor,L"From cursor"));menu.push_back(item(close,L"Hide editor"));
+    const auto before=context_(false);const auto document=captured_.document,revision=captured_.revision,identity=id_;const auto slot=slot_;const auto generation=generation_;const auto region=region_;const auto channel=channel_;const bool drawing=drawing_;
+    releaseMusicalInput();contextOpen_=true;struct Guard{bool &value;~Guard(){value=false;}}guard{contextOpen_};
+    const int command=NativeContextMenu::show(window_,screen,menu);if(!command)return true;
+    const auto after=context_(false);require(visible()&&!pending_&&!dragging_&&!selecting_&&before.document==after.document&&before.revision==after.revision&&document==captured_.document&&revision==captured_.revision&&identity==id_&&slot==slot_&&generation==generation_&&channel==channel_&&drawing==drawing_&&region.first==region_.first&&region.last==region_.last&&region.start==region_.start&&region.end==region_.end&&region.frames==region_.frames,"Song, sample or draft changed while the menu was open / action cancelled");
+    action(command,BN_CLICKED);layout();requestPaint();return true;
   }
   void action(int id,unsigned notification)override{
     if(setting_)return;if(notification==EN_CHANGE){edited_.insert(id);fields_=true;++generation_;report_=Json::object();return;}if(pending_)return;

@@ -1,6 +1,23 @@
 # Windows continuation
 
-Latest UI gap pass (2026-10-07): `WORKSPACE_DOCKING_PROGRESS.md` records retained
+Latest UI gap pass (2026-10-07): `WORKSPACE_COMMANDS_PROGRESS.md` records native
+context menus for pattern, sample, graph, instrument and detailed sample editors,
+plus a 99-command palette with configurable shortcuts/sequences, atomic saved
+preferences, Clear/Reset and Reload. Native text and local editor input retain
+priority; captured menu targets reject stale actions. Full Mac parity remains
+active. The next sample UI work is joint loop editing, paste preview and snapping;
+the current shared APIs already support those operations.
+
+The command checkpoint's full baseline passes **324/324 application tests** with
+no failures or skips. Final palette-only conflict feedback passes **9/9 focused
+app tests** and **35/35 native CTests**. The report distinguishes the full-run
+and final-build hashes and records the earlier regressions and their fixes.
+The preserved ARM64 package is
+`bin/windows-checkpoints/workspace-commands-20261007/`.
+
+## Previous checkpoints
+
+The preceding UI pass (2026-10-07): `WORKSPACE_DOCKING_PROGRESS.md` records retained
 automation/instrument docking, responsive workspace tabs and compact editor
 pages. `WORKSPACE_LAYOUTS_PROGRESS.md` covers the persistent lower editor tabs,
 named layout manager, command-palette search/focus improvements and visual
@@ -14,8 +31,6 @@ compositions are reviewed; foreground and sustained presentation gates remain
 open. The report distinguishes the full-run and final-build fingerprints.
 The preserved ARM64 package is
 `bin/windows-checkpoints/workspace-docking-20261007/`.
-
-## Previous checkpoints
 
 Latest user-directed refinement: `FLAT_CONTROLS_PROGRESS.md` removes unrelated
 control redraws during cursor movement and gives native selectors a flat style.

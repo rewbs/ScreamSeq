@@ -108,7 +108,7 @@
         layoutGraphControls(place);
         layoutGraphCurveControls(place);
         layoutWorkspaceEditors(place);
-		ScreamSeq::NativeControls::text(controls.at(followCommand),follow ? L"Follow on [F]" : L"Detached [F]");
+        refreshShortcutControlLabels();
         ScreamSeq::NativeControls::text(controls.at(liveKeysCommand),liveKeyboard?L"LIVE KEYS ON":L"Live keys");
 		ScreamSeq::NativeControls::text(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
         for(int id:{liveKeysCommand,composeCommand,patternCommand,soundCommand,notesCommand,samplesCommand,dockNotes,dockSamples,dockEffects,dockPlugins,dockMixer,dockGraph})
@@ -156,73 +156,13 @@
         installGraphCurveControls();
         if(inspection)SetPropW(window,ScreamSeq::NativeControls::inspectionProperty,reinterpret_cast<HANDLE>(1));
         for(auto [id,h]:controls)ScreamSeq::NativeControls::install(h,inspection);
-		std::vector<ScreamSeq::WorkspaceCommand> commands={
-            {layoutsCommand,L"Workspace / Manage saved layouts",L"Ctrl+Alt+W"},
-            {dockAutomationCommand,L"Workspace / Dock automation beside the tracker",L"Ctrl+Alt+D in editor"},
-            {dockInstrumentCommand,L"Workspace / Dock instrument beside the tracker",L"Ctrl+Alt+D in editor"},
-            {saveLayoutCommand,L"Workspace / Save custom layout",L""},{restoreLayoutCommand,L"Workspace / Restore custom layout",L""},
-            {dockToggle,L"Workspace / Toggle lower dock",L"Ctrl+J"},
-            {liveKeysCommand,L"Keyboard / Toggle live musical typing",L"Ctrl+Alt+L"},
-            {graphCommand,L"Graph / Open reusable routing and modulation canvas",L""},
-            {mixerCommand,L"Mix / Open mixer controls and routing",L""},
-            {mixerRouting,L"Mix / Song routing overview, inserts, sends and sidechains",L""},
-            {graphCommandsCommand,L"Pattern / Graph command editor",L"Enter on a graph lane"},
-            {graphLanesFocus,L"Pattern / Focus graph command lanes",L"F6 from pattern"},
-            {parameterAutomationCommand,L"Automation / Pattern parameter curves and tools",L""},
-            {absoluteAutomationCommand,L"Automation / Absolute song parameter lane",L""},
-            {sampleDetailCommand,L"Sample / Detailed waveform, drawing and crossfade",L""},
-            {sampleBrowseCommand,L"Sample / Browse library, preview and import sample families",L""},
-            {audioSettingsCommand,L"Audio / Output device and buffer settings",L""},
-            {auditionCommand,L"Playback / Sample and instrument audition",L""},
-            {instrumentEnvelopeCommand,L"Instrument / Envelopes, settings and sample keymap",L""},
-            {effectsCommand,L"Pattern / Inspect FX and parameter bindings",L"Enter on an FX cell"},
-            {patternPasteMix,L"Pattern / Mix paste into empty fields",L"Ctrl+Shift+V"},
-            {patternPasteMerge,L"Pattern / Merge nonempty clipboard fields",L""},
-            {patternReverse,L"Pattern / Reverse selected rows and all FX columns",L""},
-            {patternRotate,L"Pattern / Rotate selected rows down",L""},
-            {patternExpand,L"Pattern / Expand selection 2x (preserve data)",L""},
-            {patternShrink,L"Pattern / Shrink selection 2x (preserve data)",L""},
-            {patternInsertRows,L"Pattern / Insert row at cursor",L"Insert"},
-            {patternDeleteRows,L"Pattern / Delete row at cursor (Undo available)",L""},
-            {patternTransposeUp,L"Pattern / Transpose selected notes up a semitone",L""},
-            {patternTransposeDown,L"Pattern / Transpose selected notes down a semitone",L""},
-            {pluginsCommand,L"Inspect / Plugin rack",L""},{pluginUndo,L"Plugins / Undo",L""},{pluginRedo,L"Plugins / Redo",L""},
-            {curveReference,L"Automation / Formula reference",L""},{curveExpand,L"Automation / Expand selected graph formula",L""},
-            {pluginRescan,L"Plugins / Rescan installed VST3 modules",L""},{pluginEditor,L"Plugins / Open selected native editor",L""},
-            {pluginNewInstrument,L"Plugins / Create trigger for selected instrument",L""},
-            {pluginAliases,L"Plugins / Assigned tracker instruments and MIDI channels",L""},
-            {pluginPage,L"Plugins / Choose parameters, factory programs, ports, assignments or presets",L""},
-            {pluginSavePreset,L"Plugins / Save sound preset",L""},{pluginLoadPreset,L"Plugins / Load sound preset",L""},
-            {pluginBrowse,L"Plugins / Browse library, favorites and categories",L""},
-            {pluginReconnect,L"Plugins / Reconnect a Windows VST3 location",L""},{graphReconnect,L"Graph / Reconnect the selected Windows VST3 node",L""},
-            {openCommand,L"File / Open project or module",L"Ctrl+O"},{saveCommand,L"File / Save native project",L"Ctrl+S"},
-            {saveAsCommand,L"File / Save As",L"Ctrl+Shift+S"},{undoCommand,L"Edit / Undo",L"Ctrl+Z"},{redoCommand,L"Edit / Redo",L"Ctrl+Y"},
-            {copyCommand,L"Pattern / Copy rectangular cells",L"Ctrl+C"},{pasteCommand,L"Pattern / Paste rectangular cells",L"Ctrl+V"},{clearCommand,L"Pattern / Clear selection",L"Delete"},
-            {sampleImportCommand,L"Sample / Import audio files",L"Ctrl+I"},
-            {sampleImportRawCommand,L"Sample / Import audio files as samples",L""},
-            {sampleImportInstrumentsCommand,L"Sample / Import audio files as mapped instruments",L""},
-            {instrumentImportCommand,L"Instrument / Import ITI, XI, PAT or SFZ",L""},
-            {sampleAllCommand,L"Sample / Select all",L"Ctrl+A in samples"},
-            {sampleReverseCommand,L"Sample / Reverse selection",L""},{sampleNormalizeCommand,L"Sample / Normalize selection",L""},
-            {sampleFadeInCommand,L"Sample / Fade in",L""},{sampleFadeOutCommand,L"Sample / Fade out",L""},
-            {sampleTrimCommand,L"Sample / Trim to selection",L""},{sampleLoopCommand,L"Sample / Set normal loop to selection",L"L in samples"},
-            {sampleSustainSetCommand,L"Sample / Set sustain loop to selection",L"Shift+L in samples"},
-            {sampleLoopToggleCommand,L"Sample / Enable or disable normal loop",L""},{sampleLoopModeCommand,L"Sample / Cycle normal loop direction",L""},
-            {sampleSustainToggleCommand,L"Sample / Enable or disable sustain loop",L""},{sampleSustainModeCommand,L"Sample / Cycle sustain loop direction",L""},
-            {sampleCopyCommand,L"Sample / Copy selection",L"Ctrl+C in samples"},{samplePasteCommand,L"Sample / Paste at selection start",L"Ctrl+V in samples"},
-            {sampleCutCommand,L"Sample / Cut selection",L"Ctrl+X in samples"},{sampleClearCommand,L"Sample / Delete selection",L"Delete in samples"},
-			{composeCommand,L"Workspace / Compose",L"Ctrl+1"},{patternCommand,L"Workspace / Pattern focus",L"Ctrl+2"},
-			{soundCommand,L"Workspace / Sound design",L"Ctrl+3"},{notesCommand,L"Inspect / Note inspector",L"Enter"},
-			{samplesCommand,L"Inspect / Sample & loops",L""},{pinCommand,L"Panel / Toggle pin",L"Ctrl+P"},
-			{cursorCommand,L"Panel / Follow editing cursor",L"Ctrl+Home"},{returnCommand,L"Panel / Return to opening position",L"Alt+Left"},
-			{focusPatternCommand,L"Focus / Pattern",L"Esc (also stops)"},{nextPanelCommand,L"Focus / Next panel",L"F6"},
-			{followCommand,L"Playback / Toggle follow",L"F"},{playCommand,L"Playback / Play demo",L"Space"},{stopCommand,L"Playback / Stop",L"Esc"},
-			{widerCommand,L"Layout / Widen inspector",L"Ctrl+Alt+Left"},{narrowerCommand,L"Layout / Narrow inspector",L"Ctrl+Alt+Right"},
-			{tallerCommand,L"Layout / Enlarge lower dock",L"Ctrl+Alt+Up"},{shorterCommand,L"Layout / Reduce lower dock",L"Ctrl+Alt+Down"}};
-		palette=std::make_unique<ScreamSeq::CommandPalette>(window,std::move(commands),[this](int id){command(id);});layoutControls();
+		configureWorkspaceCommands();
+		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runWorkspaceShortcut(id);});connectPaletteShortcuts();layoutControls();
 	}
 	void command(int id) {
 		try {
+            if(focusedEditingCommand(id))return;
+            if(id==reloadShortcutsCommand){if(!workspaceShortcuts->reload())throw std::runtime_error(workspaceShortcuts->diagnostic());workspaceShortcutChanged();status=L"Saved shortcuts reloaded";return;}
             if((id==dockAutomationCommand||id==dockInstrumentCommand||id==editorAutomationTab||id==editorInstrumentTab)&&deferView(id))return;
             if(workspaceEditorCommand(id))return;
             if(id==layoutsCommand){openLayoutWindow();return;}
@@ -243,7 +183,7 @@
             else if(id==auditionCommand){openAudition();return;}
             else if(id==instrumentEnvelopeCommand){openInstrumentEnvelope();return;}
             else if(id==instrumentImportCommand){openInstrumentEnvelope();instrumentEnvelopeWindow->importInstrument();return;}
-            else if(id==liveKeysCommand){liveKeyboard=!liveKeyboard;if(!liveKeyboard)releaseTypedNotes();status=liveKeyboard?L"Live keys / selected sound plays across workspace panels / Ctrl+Alt+L releases":L"Keyboard follows focus / pattern entry and sample audition";}
+            else if(id==liveKeysCommand){liveKeyboard=!liveKeyboard;if(!liveKeyboard)releaseTypedNotes();status=liveKeyboard?L"Live keys / selected sound plays across workspace panels":L"Keyboard follows focus / pattern entry and sample audition";}
             else if(id==soundChooser)selectTypingSound();
             else if(id==graphLanesFocus){if(!view->graphPattern->lanes.empty()){workspaceState.focus="graphLanes";revealGraphLane();}else{openGraphCommands();return;}}
             else if(id==openCommand) openFile();
@@ -299,9 +239,7 @@
 	bool key(WPARAM key,bool repeat=false) {
         frameRequested=true;
 		const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,alt=(GetKeyState(VK_MENU)&0x8000)!=0,shift=(GetKeyState(VK_SHIFT)&0x8000)!=0;
-        if(ctrl&&!alt&&key=='K'){if(!repeat)command(paletteCommand);return true;}
-        if(ctrl&&alt&&key=='W'){if(!repeat)command(layoutsCommand);return true;}
-        if(ctrl&&alt&&key=='L'){if(!repeat)command(liveKeysCommand);return true;}
+        if(workspaceShortcutKey(key,repeat,true))return true;
         if(workspaceMusicalKey(key,repeat))return true;
         if(GetFocus()!=window && IsChild(window,GetFocus())) {
             if(key==VK_TAB) {auto next=GetNextDlgTabItem(window,GetFocus(),shift);if(next) SetFocus(next);return true;}
@@ -326,31 +264,16 @@
             if(curveKey(key,ctrl,alt,shift)||graphKey(key,ctrl,alt,shift)||graphLaneKey(key,ctrl,alt,shift))return true;
             if(mixerKey(key))return true;
         }
-        if(key==VK_F6&&!trackerWorkspaceVisible()){focusVisibleWorkspaceCanvas();return true;}
-        if(key==VK_F6) { command(workspaceState.focus=="pattern"&&!view->graphPattern->lanes.empty()?graphLanesFocus:nextPanelCommand);return true; }
-        if(textOwnsKeyboard() && key!=VK_ESCAPE) return false;
-        if(ctrl && key=='I') {command(sampleImportCommand);return true;}
-        if(ctrl && key=='O') {command(openCommand);return true;}
-        if(ctrl && key=='S') {command(shift ? saveAsCommand : saveCommand);return true;}
-        if(ctrl && (key=='Z' || key=='Y')) {command(key=='Y' || shift ? redoCommand : undoCommand);return true;}
-        if(ctrl && trackerWorkspaceVisible() && workspaceState.focus=="pattern" && (key=='C' || key=='V')) {command(key=='C' ? copyCommand : shift ? patternPasteMix : pasteCommand);return true;}
-        if(ctrl&&!alt&&key=='J'){command(dockToggle);return true;}
-		if(ctrl && key>='1' && key<='3') { command(key=='1' ? composeCommand : key=='2' ? patternCommand : soundCommand);return true; }
-		if(ctrl && alt && key>=VK_LEFT && key<=VK_DOWN) { command(key==VK_LEFT ? widerCommand : key==VK_RIGHT ? narrowerCommand : key==VK_UP ? tallerCommand : shorterCommand);return true; }
-		if(ctrl && key=='P') { command(pinCommand);return true; }
-		if(ctrl && key==VK_HOME) { command(cursorCommand);return true; }
-		if(alt && key==VK_LEFT) { command(returnCommand);return true; }
 		if(key==VK_ESCAPE && dragging==4) {sampleRange()=sampleDragBefore;dragging=0;ReleaseCapture();refreshSampleFields();return true;}
 		if(key==VK_ESCAPE && dragging) { workspaceState.rightWidth=dragRight;workspaceState.lowerHeight=dragLower;dragging=0;ReleaseCapture();layoutControls();return true; }
-		if(key==VK_ESCAPE) {if(!effectPrefix.empty()){effectPrefix.clear();status=L"Effect prefix cancelled";return true;}if(pluginDraft){pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;} stop();command(focusPatternCommand);return true; }
-		if(!ctrl && !alt && key==VK_SPACE) { if(!repeat){if(device.running()&&!auditionOnly) stop();else command(playCommand);}return true; }
-		if(!ctrl && !alt && key=='F' && (column==0 || workspaceState.focus!="pattern")) { command(followCommand);return true; }
+		if(key==VK_ESCAPE) {if(!effectPrefix.empty()){effectPrefix.clear();status=L"Effect prefix cancelled";return true;}if(pluginDraft){pluginDraft=false;pluginDetailsRevision.clear();pluginTimer();return true;}}
+        if(workspaceShortcutKey(key,repeat))return true;
+        if(textOwnsKeyboard() && key!=VK_ESCAPE) return false;
         // Persistent sidebar and toolbar controls remain usable in editor-tab
         // mode, but their keys must not edit the covered tracker or sample pane.
         if(!trackerWorkspaceVisible()){if(GetFocus()==window){focusVisibleWorkspaceCanvas();return true;}return false;}
         if(workspaceState.focus=="samples") {
-            if(ctrl && (key=='A'||key=='C'||key=='V'||key=='X')) {command(key=='A'?sampleAllCommand:key=='C'?sampleCopyCommand:key=='V'?samplePasteCommand:sampleCutCommand);return true;}
-            if(!ctrl && !alt && (key=='L'||key==VK_DELETE)) {command(key=='L'?(shift?sampleSustainSetCommand:sampleLoopCommand):sampleClearCommand);return true;}
+            if(!ctrl && !alt && key=='L') {command(shift?sampleSustainSetCommand:sampleLoopCommand);return true;}
             if(!ctrl && !alt && key==VK_TAB) {SetFocus(controls.at(sampleStartField));return true;}
             if(!ctrl && !alt && (key==VK_LEFT||key==VK_RIGHT||key==VK_HOME||key==VK_END)) {
                 auto &r=sampleRange();const unsigned step=shift ? 1u : std::max(1u,r.frames/256);
@@ -363,7 +286,6 @@
 		if(ctrl || alt) return false;
 		if(key==VK_RETURN) { command(workspaceState.focus=="pattern"&&column>=3?effectsCommand:notesCommand);return true; }
 		if(workspaceState.focus!="pattern") return false;
-        if(key==VK_DELETE) {command(clearCommand);return true;}
         if(key==VK_INSERT) {command(patternInsertRows);return true;}
 		auto n=position();unsigned r=row,c=channel,col=column;
 		const unsigned rows=patternRows(),channels=view->channels;

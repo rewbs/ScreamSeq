@@ -13,7 +13,8 @@
 			s.line(818,9,818,35,0x3b4655);
 			s.uiText(wide(view->session.document.at("title").get<std::string>()),826,7,width-838);
 			const auto transport=playing ? L"PLAY  P"+std::to_wstring(playback.pattern)+L"  R"+std::to_wstring(playback.row) : auditionOnly && device.running() ? std::wstring(L"AUDITION") : std::wstring(L"STOPPED");
-			s.uiText(inspection ? L"Inspection / audio hardware disabled" : silentOutput ? L"Silent hardware qualification / DSP active" : transport+L"  /  Space: play or stop",826,25,width-838,playing ? accent : muted);
+			const auto playKeys=workspaceShortcutLabel(togglePlaybackCommand);
+			s.uiText(inspection ? L"Inspection / audio hardware disabled" : silentOutput ? L"Silent hardware qualification / DSP active" : transport+(playKeys.empty()?L"":L"  /  "+playKeys+L": play or stop"),826,25,width-838,playing ? accent : muted);
 		}
 		s.fill(0,44,164,height-44,0x1a202a);
 		s.line(163,44,163,height,0x303b49);

@@ -1,6 +1,7 @@
 // Isolated native message tests; no global input, clipboard writes or audio.
 #include "../App/CommandPalette.hpp"
 #include <iostream>
+#include <map>
 #include <stdexcept>
 
 namespace {
@@ -37,6 +38,25 @@ void ctrlKey(HWND control,WPARAM code) {
   BYTE original[256]{},modified[256]{};GetKeyboardState(original);std::copy(std::begin(original),std::end(original),std::begin(modified));
   modified[VK_CONTROL]|=0x80;SetKeyboardState(modified);key(control,code);SendMessageW(control,WM_CHAR,code-'A'+1,0);SetKeyboardState(original);
 }
+void modifiedKey(HWND control,WPARAM code,bool ctrl,bool alt,bool shift=false,LPARAM flags=0) {
+  BYTE original[256]{},modified[256]{};GetKeyboardState(original);std::copy(std::begin(original),std::end(original),std::begin(modified));
+  for(const auto key:{VK_CONTROL,VK_MENU,VK_SHIFT,VK_LWIN,VK_RWIN,VK_RMENU})modified[key]&=0x7f;
+  if(ctrl)modified[VK_CONTROL]|=0x80;if(alt)modified[VK_MENU]|=0x80;if(shift)modified[VK_SHIFT]|=0x80;
+  SetKeyboardState(modified);SendMessageW(control,alt?WM_SYSKEYDOWN:WM_KEYDOWN,code,flags);
+  SendMessageW(control,alt?WM_SYSCHAR:WM_CHAR,code,flags);SetKeyboardState(original);
+}
+bool hasText(HWND parent,const wchar_t *value) {
+  for(auto h=GetWindow(parent,GW_CHILD);h;h=GetWindow(h,GW_HWNDNEXT))if(text(h).find(value)!=std::wstring::npos)return true;
+  return false;
+}
+void checkBounds(HWND popup) {
+  RECT client{};GetClientRect(popup,&client);std::vector<RECT> controls;
+  for(auto control=GetWindow(popup,GW_CHILD);control;control=GetWindow(control,GW_HWNDNEXT))if(IsWindowVisible(control)) {
+    RECT r{};GetWindowRect(control,&r);MapWindowPoints(nullptr,popup,reinterpret_cast<POINT *>(&r),2);
+    require(r.left>=0&&r.top>=0&&r.right<=client.right&&r.bottom<=client.bottom,"Palette control escaped minimum window bounds");
+    for(const auto &other:controls){RECT overlap{};require(!IntersectRect(&overlap,&r,&other),"Palette visible controls overlap");}controls.push_back(r);
+  }
+}
 void runTests() {
   const auto instance=GetModuleHandleW(nullptr);WNDCLASSW wc{};wc.hInstance=instance;wc.lpfnWndProc=DefWindowProcW;wc.lpszClassName=L"ScreamSeqPaletteTestOwner";RegisterClassW(&wc);
   HWND owner=CreateWindowExW(0,wc.lpszClassName,L"Palette tests",WS_OVERLAPPEDWINDOW|WS_VISIBLE,0,0,1000,700,nullptr,nullptr,instance,nullptr);
@@ -61,7 +81,7 @@ void runTests() {
       {13,L"Workspace / Pattern focus",L"Ctrl+2"},
       {14,L"Workspace / Sound design",L"Ctrl+3"},
       {15,L"No category command",L""},
-      {16,L"Pattern / Focus graph command lanes",L"F6 from pattern"}};
+      {16,L"Pattern / Focus graph command lanes",L"F6 from pattern",L"F6 from pattern"}};
     ScreamSeq::CommandPalette palette(owner,commands,[&](int id){executed=id;++executions;});palette.show();
     const HWND popup=GetAncestor(GetFocus(),GA_ROOT),search=GetDlgItem(popup,101),results=GetDlgItem(popup,102),run=GetDlgItem(popup,103);
     require(popup!=owner&&search&&results&&run,"Palette native controls were not created");
@@ -119,11 +139,69 @@ void runTests() {
 
     MINMAXINFO limits{};SendMessageW(popup,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&limits));
     SetWindowPos(popup,nullptr,0,0,limits.ptMinTrackSize.x,limits.ptMinTrackSize.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
-    RECT client{};GetClientRect(popup,&client);
-    for(auto control:{search,results,run}) {
-      RECT r{};GetWindowRect(control,&r);MapWindowPoints(nullptr,popup,reinterpret_cast<POINT *>(&r),2);
-      require(r.left>=0&&r.top>=0&&r.right<=client.right&&r.bottom<=client.bottom,"Palette control escaped minimum window bounds");
-    }
+    checkBounds(popup);
+
+    std::map<int,std::vector<std::string>> bindings;
+    bindings[2]={"ctrl+s"};bindings[3]={"ctrl+shift+s"};bindings[7]={"space"};
+    const auto defaults=bindings;int writes=0,resets=0;bool rejectWrite=false;
+    palette.configureShortcuts([&](int id){return bindings[id];},[&](int id,const std::vector<std::string> &keys){
+      if(rejectWrite)throw std::runtime_error("Shortcut conflict with another command");
+      bindings[id]=keys;++writes;
+    },[&](int id){if(rejectWrite)throw std::runtime_error("Cannot save shortcut preferences");const auto at=defaults.find(id);bindings[id]=at==defaults.end()?std::vector<std::string>{}:at->second;++resets;});
+    const HWND set=GetDlgItem(popup,104),sequence=GetDlgItem(popup,105),clear=GetDlgItem(popup,106),reset=GetDlgItem(popup,107);
+    require(set&&sequence&&clear&&reset&&IsWindowVisible(set),"Shortcut editing controls were not revealed");
+    SetWindowTextW(search,L"open reusable");
+    SendMessageW(set,BM_CLICK,0,0);require(GetFocus()==set&&!IsWindowEnabled(run),"Shortcut recording did not own focus or disable Run");
+    modifiedKey(set,'G',false,false);
+    require(writes==0&&text(search)==L"open reusable"&&hasText(popup,L"first key needs Ctrl or Alt"),"Unmodified capture changed preferences or query");
+    modifiedKey(set,'G',true,true);
+    require(writes==1&&bindings[6]==std::vector<std::string>{"ctrl+alt+g"},"Single shortcut was not normalized and saved once");
+    require(text(search)==L"open reusable"&&IsWindowVisible(popup)&&GetFocus()==set&&item(results,0).find(L"Ctrl+Alt+G")!=std::wstring::npos,"Successful assignment lost query, focus, selection or effective hint");
+
+    SendMessageW(sequence,BM_CLICK,0,0);modifiedKey(sequence,'J',true,true);
+    modifiedKey(sequence,'J',true,true,false,LPARAM(1)<<30);
+    key(sequence,VK_RETURN);require(writes==1&&hasText(popup,L"Add a second key"),"One stroke or key repeat committed a sequence");
+    modifiedKey(sequence,'A',false,false);modifiedKey(sequence,'B',false,false);modifiedKey(sequence,'C',false,false);modifiedKey(sequence,'D',false,false);
+    require(writes==1&&hasText(popup,L"Four keys recorded"),"Uncommitted or excessive sequence mutated preferences");
+    key(sequence,VK_RETURN);SendMessageW(sequence,WM_CHAR,VK_RETURN,0);
+    require(writes==2&&bindings[6]==std::vector<std::string>({"ctrl+alt+j","a","b","c"}),"Four-stroke sequence saved incorrect keys");
+    require(item(results,0).find(L"Ctrl+Alt+J → A → B → C")!=std::wstring::npos&&text(search)==L"open reusable","Sequence label or search retention failed");
+    SendMessageW(sequence,BM_CLICK,0,0);modifiedKey(sequence,'Q',true,true);key(sequence,VK_ESCAPE);SendMessageW(sequence,WM_CHAR,VK_ESCAPE,0);
+    require(writes==2&&IsWindowVisible(popup)&&IsWindowEnabled(run),"Escape saved a partial sequence or dismissed the palette");
+
+    rejectWrite=true;SendMessageW(set,BM_CLICK,0,0);modifiedKey(set,'Q',true,true);
+    require(writes==2&&hasText(popup,L"Shortcut conflict")&&text(search)==L"open reusable"&&!IsWindowEnabled(run),"Failed assignment hid the error or changed state");
+    rejectWrite=false;modifiedKey(set,'U',true,true);
+    require(writes==3&&bindings[6]==std::vector<std::string>{"ctrl+alt+u"},"Retry appended to a failed single-stroke assignment");
+    SendMessageW(clear,BM_CLICK,0,0);require(writes==4&&bindings[6].empty()&&item(results,0)==L"Graph / Open reusable routing and modulation canvas","Clear did not remove the effective sequence");
+
+    SetWindowTextW(search,L"save native");SendMessageW(clear,BM_CLICK,0,0);
+    require(bindings[2].empty()&&item(results,0)==L"File / Save native project","Clearing a default revived its old displayed shortcut");
+    SendMessageW(reset,BM_CLICK,0,0);require(resets==1&&bindings[2]==std::vector<std::string>{"ctrl+s"}&&item(results,0).find(L"Ctrl+S")!=std::wstring::npos,"Reset did not refresh the default shortcut");
+    rejectWrite=true;SendMessageW(reset,BM_CLICK,0,0);
+    require(resets==1&&hasText(popup,L"Cannot save shortcut preferences")&&text(search)==L"save native","Failed reset changed state or lost query");rejectWrite=false;
+    SetWindowTextW(search,L"ctrl+s");SendMessageW(clear,BM_CLICK,0,0);
+    require(text(search)==L"ctrl+s"&&item(results,int(SendMessageW(results,LB_GETCURSEL,0,0)))==L"File / Save native project","Rebinding from a shortcut query hid the command being edited");
+    SetWindowTextW(search,L"save");SetWindowTextW(search,L"ctrl+s");
+    // Ctrl+Shift+S still contains the substring Ctrl+S; the cleared Save row
+    // is retained only until the query changes, independently of row ranking.
+    require(SendMessageW(results,LB_GETCOUNT,0,0)==1&&item(results,0).find(L"File / Save As")==0,"Retained edited row leaked into subsequent searches");
+
+    SetWindowTextW(search,L"sample");key(search,VK_DOWN);const auto beforeRefresh=item(results,int(SendMessageW(results,LB_GETCURSEL,0,0)));
+    bindings[6]={"ctrl+alt+h","m"};palette.refreshShortcuts();
+    require(text(search)==L"sample"&&item(results,int(SendMessageW(results,LB_GETCURSEL,0,0)))==beforeRefresh,"External shortcut refresh changed selection or query");
+    SetWindowTextW(search,L"ctrl+alt+h");require(SendMessageW(results,LB_GETCOUNT,0,0)==1&&item(results,0).find(L"Graph / Open reusable")==0,"Dynamic shortcut refresh did not update the search index");
+    SetWindowTextW(search,L"ctrl+alt+g");require(SendMessageW(results,LB_GETCOUNT,0,0)==0,"Rebound shortcut remained in search results");
+    require(!IsWindowEnabled(set)&&!IsWindowEnabled(sequence)&&!IsWindowEnabled(clear)&&!IsWindowEnabled(reset),"Empty results retained configurable command actions");
+    SetWindowTextW(search,L"focus graph command");require(item(results,0).find(L"F6 from pattern")!=std::wstring::npos,"Intrinsic contextual hint disappeared with an empty global shortcut");
+    SetFocus(run);key(run,VK_TAB);require(GetFocus()==set,"Keyboard navigation did not reach shortcut actions");
+    key(set,VK_TAB);require(GetFocus()==sequence,"Keyboard navigation did not reach sequence action");
+    key(sequence,VK_TAB);require(GetFocus()==clear,"Keyboard navigation did not reach Clear action");
+    key(clear,VK_TAB);require(GetFocus()==reset,"Keyboard navigation did not reach Reset action");
+    key(reset,VK_TAB);require(GetFocus()==search,"Keyboard navigation did not return from shortcut actions to search");
+
+    SendMessageW(popup,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&limits));
+    SetWindowPos(popup,nullptr,0,0,limits.ptMinTrackSize.x,limits.ptMinTrackSize.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);checkBounds(popup);
     key(search,VK_ESCAPE);SendMessageW(search,WM_CHAR,VK_ESCAPE,0);
     require(GetFocus()==origin&&!IsWindowVisible(popup),"Escape did not restore original focus");
     palette.show();ShowWindow(origin,SW_HIDE);key(search,VK_ESCAPE);

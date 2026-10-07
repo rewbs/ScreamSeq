@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ScreamSeq Windows workspace requests",
-  "description": "Workspace presentation and inspected context only; no song revision, musical Undo or playback stop. These methods accept neither expectedRevision nor expectedContext. Editor placement retains existing native fields and drafts. Inspection mode stores named layouts in memory only.",
+  "description": "Workspace presentation, inspected context and application shortcut preferences only; no song revision, musical Undo or playback stop. These methods accept neither expectedRevision nor expectedContext. Editor placement retains existing native fields and drafts. Inspection and audio qualification modes store named layouts and shortcuts in memory only.",
   "type": "object",
   "properties": {
     "jsonrpc": {"const": "2.0"},
     "id": {"type": "string", "minLength": 1, "maxLength": 80},
-    "method": {"enum": ["workspace.get", "workspace.panel", "workspace.layout"]},
+    "method": {"enum": ["workspace.get", "workspace.panel", "workspace.layout", "workspace.commands.get", "workspace.shortcut.set"]},
     "params": {"type": "object"}
   },
   "required": ["jsonrpc", "id", "method", "params"],
@@ -14,9 +14,25 @@
   "oneOf": [
     {"properties": {"method": {"const": "workspace.get"}, "params": {"maxProperties": 0}}},
     {"properties": {"method": {"const": "workspace.panel"}, "params": {"oneOf": [{"$ref": "#/$defs/inspectorPanel"}, {"$ref": "#/$defs/editorPanel"}]}}},
-    {"properties": {"method": {"const": "workspace.layout"}, "params": {"$ref": "#/$defs/layout"}}}
+    {"properties": {"method": {"const": "workspace.layout"}, "params": {"$ref": "#/$defs/layout"}}},
+    {"properties": {"method": {"const": "workspace.commands.get"}, "params": {"maxProperties": 0}}},
+    {"properties": {"method": {"const": "workspace.shortcut.set"}, "params": {"$ref": "#/$defs/shortcut"}}}
   ],
   "$defs": {
+    "shortcut": {
+      "type": "object",
+      "description": "Assign or clear one application command binding. The complete candidate must be valid and free of duplicate or prefix conflicts before publication. Unknown fields, unknown IDs, repeated modifiers and invalid keys reject atomically. Returns data.command and canonical data.keys; changed remains false because it describes song history, not preference changes.",
+      "properties": {
+        "command": {"type": "string", "minLength": 1, "maxLength": 1024, "description": "Opaque ID from workspace.commands.get, currently windows.command.<integer>. IDs are Windows-specific; do not derive them from menu labels or share them with macOS."},
+        "keys": {
+          "type": "array", "maxItems": 4,
+          "description": "Zero strokes clears the global binding; one binds a shortcut; two to four form a sequence. A nonempty custom sequence must start with Ctrl or Alt, except that the exact defaults array for this command restores its trusted default including unmodified bindings. Escape cannot be a continuation. Local editor/text input still has first refusal. Canonical output is lowercase with ctrl+, alt+, shift+ in that order. Sequences expire after 1500 ms or a context/focus change.",
+          "items": {"type": "string", "minLength": 1, "maxLength": 64, "description": "Case-insensitive optional Ctrl/Alt/Shift modifiers and one printable ASCII key other than +, or a named key: space, tab, return, escape, backspace, delete, insert, home, end, left, right, up, down, pageup, pagedown, plus, f1 through f24. Aliases enter, esc, pgup and pgdn normalize to canonical names. Modifier names cannot repeat. Windows-reserved Ctrl+Alt+Delete, Ctrl+Escape, Alt+Tab and Alt+Escape also reject with extra modifiers, in any sequence position."}
+        }
+      },
+      "required": ["command", "keys"],
+      "additionalProperties": false
+    },
     "inspectorPanel": {
       "type": "object",
       "description": "Read-only contextual notes/sample inspector. Placement alone does not request focus. These panels support right/hide only.",

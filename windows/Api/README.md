@@ -353,11 +353,77 @@ musician's desktop; native message/API checks and visual presentation evidence
 remain separate. The compact editor suites are `test_parameter_compact_ui` and
 `test_instrument_compact_ui`; baseline workspace/layout suites remain relevant.
 
+### Commands, shortcuts and context menus
+
+`workspace.commands.get` accepts `{}` and returns `data.commands`. Each entry
+contains `id`, `name`, active `keys`, `defaults`, `customized`, and `contextHint`.
+Treat IDs such as `windows.command.<integer>` as opaque Windows IDs obtained from
+the current catalog. `contextHint` describes intrinsic local behavior such as
+Enter on an FX cell; it is not another configurable global binding.
+
+`workspace.shortcut.set` accepts exactly `command` (a catalog ID) and `keys`
+(an array of zero to four strings). An empty array clears a binding. One stroke
+sets a shortcut; two to four form a sequence, for example `["ctrl+alt+g", "r"]`.
+The first custom stroke needs Ctrl or Alt to preserve note entry. Sending the
+exact `defaults` array for that same command restores its trusted default,
+including built-in unmodified bindings such as Space or F6. Canonical
+strings are lowercase, with modifiers in `ctrl+alt+shift+` order, followed by
+printable ASCII or a named Windows key such as `space`, `return`, `left`, or
+`f6`. Printable keys use the active keyboard layout's unshifted identity plus
+explicit modifiers: a shifted semicolon is `shift+;`, not `:`. The palette
+recorder uses the same mapping as dispatch. Use `plus` for the plus key. See the
+[workspace schema](workspace.schema.json) for names and aliases. Invalid keys,
+duplicate modifiers, unknown IDs and any duplicate or prefix conflict reject
+the complete change. Escape cannot continue a sequence. Windows-reserved
+Ctrl+Alt+Delete, Ctrl+Escape, Alt+Tab and Alt+Escape combinations (also with extra
+modifiers) reject in every position. A prefix expires after 1.5 seconds and
+cancels on Escape, a mismatch, unmappable text input such as AltGr, or a
+document, selection, focus or active-window change.
+
+Both methods use the usual document result envelope. They require neither
+`expectedRevision` nor `expectedContext`, and reject those extra fields.
+Setting returns `data.command` and canonical `data.keys`; `changed:false`
+describes unchanged song history even when the preference changes.
+The operation leaves playback running (`playbackStopped:false`). Successful writes use
+the adapter's existing request-ID replay. `workspace.get.shortcuts` reports
+only the current sequence `pending` and `hint` presentation state.
+
+Open **Commands** with its default Ctrl+K binding to search, select a command,
+then **Set shortcut**, **Set sequence**, **Clear**, or **Reset default**.
+Sequence recording accepts two to four strokes; Enter saves and Escape cancels.
+Native text editing, open selectors, editor-local commands and musical note
+releases retain priority. Custom global bindings do not replace those local
+workflows. Normal sessions atomically save overrides in
+`%LOCALAPPDATA%/org.resonance.tracker/workspace-shortcuts-v1.json`; inspection
+and audio qualification keep them in memory. An absent file is not created by
+reading it. Invalid or concurrently changed storage rejects publication and
+retains live bindings; it does not alter song data. Use the palette's
+**Workspace / Reload saved shortcuts** command to load the current preference
+file before retrying a rejected write. This is a separate explicit action;
+failed writes never overwrite another session's preferences.
+
+Native context menus are available on the pattern grid, lower sample waveform,
+graph canvas/nodes/wires, instrument envelope editor, and detailed sample
+editor. They expose existing actions with current enabled/check states. The
+instrument menu includes point editing, tools/bank, Apply and dock/float; sample
+detail groups selection/view, drawing, processing, private clipboard, loops,
+crossfade and settings. Native text fields retain their standard editing menus.
+Main workspace menu shortcut labels reflect the current global bindings;
+clearing a binding removes its hint. Keyboard context requests on an unsupported
+or hidden canvas do not fall back to a different musical target.
+Each application menu captures its musical target and rechecks document,
+revision, selection and relevant draft state after the native modal loop.
+Cancellation performs no musical operation; a changed target rejects the
+chosen action. Existing shared API, Undo and native persistence paths perform
+musical edits. See [command workflow progress](../WORKSPACE_COMMANDS_PROGRESS.md)
+for current qualification and remaining scope.
+
 ## Wire and security
 
 The base adapter catalog includes `api.describe`, `document.get`, `pattern.get`,
 `context.get`, `transport.get`, `transport.play`, `transport.stop`, `context.set`,
-`workspace.get`, `workspace.panel` and `workspace.layout`. Attached document hosts
+`workspace.get`, `workspace.panel`, `workspace.layout`, `workspace.commands.get`
+and `workspace.shortcut.set`. Attached document hosts
 can enable additional operations; use the live catalog, not a hard-coded superset.
 Unsupported methods return `-32601`. The adapter uses the existing
 string-ID JSON-RPC envelope, revision guard (-32001), parameter errors (-32602),

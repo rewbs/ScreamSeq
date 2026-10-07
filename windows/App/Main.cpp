@@ -11,6 +11,9 @@
 #include "WorkspaceLayouts.hpp"
 #include "WorkspaceLayoutWindow.hpp"
 #include "CommandPalette.hpp"
+#include "NativeContextMenu.hpp"
+#include "WorkspaceShortcuts.hpp"
+#include "WorkspaceShortcutKey.hpp"
 #include "PatternClipboard.hpp"
 #include "GraphCanvas.hpp"
 #include "AutomationCanvas.hpp"
@@ -49,6 +52,8 @@
 
 namespace {
 constexpr UINT deferredViewsMessage=WM_APP+42;
+constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
+    deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547;
 constexpr int dockAutomationCommand=530,dockInstrumentCommand=531,editorTrackerTab=532,
     editorAutomationTab=533,editorInstrumentTab=534,editorFloatCommand=535,editorHideCommand=536,
     editorPinCommand=537,editorCursorCommand=538,editorReturnCommand=539;
@@ -294,6 +299,8 @@ public:
             {"parameterAutomation",parameterAutomationWindow?parameterAutomationWindow->snapshot():Json{{"visible",false}}},
             {"instrumentEnvelope",instrumentEnvelopeWindow?instrumentEnvelopeWindow->snapshot():Json{{"visible",false}}},
             {"absoluteAutomation",absoluteAutomationWindow?absoluteAutomationWindow->snapshot():Json{{"visible",false}}},
+            {"contextMenu",workspaceContextMenuSnapshot()},
+            {"shortcuts",{{"pending",workspaceShortcuts&&workspaceShortcuts->pending()},{"hint",workspaceShortcuts?workspaceShortcuts->hint():std::string()}}},
             {"sampleDetail",sampleDetailWindow?sampleDetailWindow->snapshot():Json{{"visible",false}}},
             {"audition",auditionWindow?auditionWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
@@ -311,6 +318,8 @@ public:
 	Json workspace(const std::string &method,const Json &p) override {
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
 		if(method=="workspace.get") { require(p.empty(),"workspace.get accepts no parameters"); return workspaceSnapshot(); }
+        if(method=="workspace.commands.get"){require(p.empty(),"workspace.commands.get accepts no parameters");return workspaceCommandSnapshot();}
+        if(method=="workspace.shortcut.set")return setWorkspaceShortcut(p);
 		if(method=="workspace.panel"&&p.contains("panel")&&p["panel"].is_string()&&isWorkspaceEditor(p["panel"].get<std::string>())){workspaceEditorRequest(p);return workspaceSnapshot();}
 		if(method=="workspace.layout") {
 			require(p.contains("name") && p["name"].is_string(),"Supply a workspace layout name");
@@ -484,10 +493,13 @@ public:
         typedNotes.clear();
         ++stopGeneration;pendingAuditionCount=0;auditionOnly=false;
 		device.stop(); lastAudio = device.stats();
-		status = L"Stopped / Space: play from song start / cursor remains independent";
+		status = L"Stopped / Play starts at the song beginning / cursor remains independent";
 	}
     #include "WorkspaceLayouts.inc"
     #include "WorkspaceDocking.inc"
+    #include "WorkspaceCommands.inc"
+    #include "WorkspaceShortcutDispatch.inc"
+    #include "WorkspaceContextMenus.inc"
     #include "DeferredViews.inc"
 	#include "WorkspaceView.inc"
     #include "EditingView.inc"
@@ -617,7 +629,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         case deferredViewsMessage: app->drainViews();return 0;
 		case WM_CLOSE: if(app->busy||app->libraryWaits) {app->stop();++app->samplePreviewGeneration;app->samplePreview.stop();return 0;} if(!app->protectUnsaved()) return 0;break;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
-        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==5)app->graphCurveTimer();return 0;
+        case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
+        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==5)app->graphCurveTimer();if(wp==8)app->shortcutTimer();return 0;
 		case WM_DPICHANGED: {
 			auto rect = reinterpret_cast<RECT *>(lp);
 			SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE); return 0;
@@ -762,6 +775,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         const BOOL darkFrame=TRUE;DwmSetWindowAttribute(window,DWMWA_USE_IMMERSIVE_DARK_MODE,&darkFrame,sizeof(darkFrame));
 		app.surface = std::make_unique<ScreamSeq::RenderSurface>(window);
 		app.installControls();
+        if(!inspection&&!audioTest){
+            PWSTR local{};ScreamSeq::check(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local),"Find shortcut preferences directory");
+            std::filesystem::path path;try{path=std::filesystem::path(local)/L"org.resonance.tracker"/L"workspace-shortcuts-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
+            app.loadWorkspaceShortcuts(path);
+        }
         app.updateTitle();
 		if(automation) app.api = std::make_unique<ScreamSeq::ApiDispatch>(window, app);
 		ShowWindow(window, SW_SHOWNOACTIVATE);

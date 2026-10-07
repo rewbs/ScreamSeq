@@ -54,17 +54,14 @@
     }
     bool editorWorkspaceKey(const std::string &id,WPARAM key,bool repeat) {
         const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,alt=(GetKeyState(VK_MENU)&0x8000)!=0;
-        if(ctrl&&!alt&&key=='K'){if(!repeat)command(paletteCommand);return true;}
-        if(ctrl&&alt&&key=='W'){if(!repeat)command(layoutsCommand);return true;}
         if(ctrl&&alt&&key=='D'){if(!repeat)workspaceEditorRequest({{"panel",id},{"placement",workspaceEditorWindow(id)->docked()?"float":"right"},{"focus",true}});return true;}
-        if(ctrl&&alt&&key=='L'){if(!repeat){const auto focus=GetFocus();command(liveKeysCommand);if(workspaceEditorWindow(id)->owns(focus)&&workspaceFocusVisible(focus))SetFocus(focus);}return true;}
-        if(!ctrl&&!alt&&key==VK_SPACE&&GetFocus()==workspaceEditorWindow(id)->window()){if(!repeat){if(device.running()&&!auditionOnly)stop();else play();}return true;}
         return false;
     }
     void configureWorkspaceEditor(const std::string &id) {
         auto &p=workspaceEditors[workspaceEditorIndex(id)];auto *tool=workspaceEditorWindow(id);if(!tool||p.configured)return;
         p.configured=true;
         tool->workspaceKeys([this,id](WPARAM key,bool repeat){return editorWorkspaceKey(id,key,repeat);});
+        tool->workspaceDockAction([this,id]{workspaceEditorRequest({{"panel",id},{"placement",workspaceEditorWindow(id)->docked()?"float":"right"},{"focus",true}});});
         tool->placementChanged([this,id]{
             if(changingEditorPlacement)return;
             auto &state=workspaceEditors[workspaceEditorIndex(id)];auto *editor=workspaceEditorWindow(id);

@@ -20,7 +20,7 @@
     }
     static bool typingTextControl(HWND focus) {
         wchar_t name[64]{};GetClassNameW(focus,name,64);
-        return _wcsicmp(name,L"Edit")==0||_wcsicmp(name,L"ComboBox")==0||_wcsicmp(name,L"ListBox")==0;
+        return _wcsicmp(name,L"Edit")==0||_wcsnicmp(name,L"RichEdit",8)==0||_wcsicmp(name,L"ComboBox")==0||_wcsicmp(name,L"ListBox")==0;
     }
     const Json &typingCatalog(bool sample)const{return view->session.document.at(sample?"samples":"instruments");}
     bool typingTargetExists(const TypedNote &held)const {
@@ -97,7 +97,6 @@
         const auto owner=tool.window();
         tool.musicalTyping([this,owner,target=std::move(target)](HWND focus,WPARAM key,bool repeat){
             if(GetKeyState(VK_CONTROL)&0x8000||GetKeyState(VK_MENU)&0x8000||typingTextControl(focus))return false;
-            if(key==VK_SPACE){if(!repeat){if(device.running()&&!auditionOnly)stop();else play();}return true;}
             const auto offset=musicalOffset(key);if(offset<0)return false;
             if(repeat||typedNotes.contains(key))return true;
             const auto t=target();

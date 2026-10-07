@@ -1,4 +1,10 @@
-# Windows parity / acceptance matrix
+# Historical Windows bootstrap acceptance matrix
+
+This matrix records the initial demo-player bootstrap. Its pending rows and
+test counts are historical, not the current implementation status. Continue
+from [the current parity plan](PARITY_PLAN.md), [latest checkpoints](RESUME_PROGRESS.md)
+and [native menus and shortcuts](WORKSPACE_COMMANDS_PROGRESS.md). Full Mac parity
+remains unfinished; each current report states its own qualification limits.
 
 **Workspace continuation:** `WORKSPACE_CHECKPOINT.md` is the latest scope and
 evidence; `HANDOFF.md` retains the earlier bootstrap history. The Mac visual pack

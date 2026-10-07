@@ -1,5 +1,6 @@
 #pragma once
 #include "EnvelopeBankWindow.hpp"
+#include "NativeContextMenu.hpp"
 #include "SampleFileDialog.hpp"
 #include "editor/TrackerDocument.hpp"
 
@@ -18,7 +19,8 @@ private:
     name,volume,pan,fade,nna,dct,dna,mapFrom,mapTo,mapSample,mapStage,apply,reload,fromCursor,close,audition,importFile,keymap,
     heading=4500,targetLabel,nodeLabel,tickLabel,valueLabel,loopStartLabel,loopEndLabel,sustainStartLabel,sustainEndLabel,releaseLabel,
     rangeLabel,toolLabel0,toolLabel1,toolLabel2,toolLabel3,toolLabel4,nameLabel,volumeLabel,panLabel,fadeLabel,nnaLabel,dctLabel,dnaLabel,mapLabel,statusLabel,keymapLabel,
-    pageEnvelope=4600,pagePoints,pageTools,pageProperties,pageKeymap};
+    pageEnvelope=4600,pagePoints,pageTools,pageProperties,pageKeymap,
+    contextAdd=4700,contextEdit,contextDelete,contextDock};
   static constexpr std::array<const char *,3> kinds={"volume","pan","pitch"};
   static constexpr std::array<const char *,9> operations={"flip-time","flip-values","shift","scale","ramp","sine","humanize","paste","insert"};
   static constexpr std::array<const char *,5> markerKeys={"loopStart","loopEnd","sustainPoint","sustainEnd","releaseNode"};
@@ -27,7 +29,7 @@ private:
   Json envelope_=Json::object(),properties_=Json::object(),mapping_=Json::array(),clipboard_;
   bool setting_=false,pending_=false,envelopeDirty_=false,propertiesDirty_=false,mappingDirty_=false,mappingFields_=false,pointFields_=false,markerFields_=false,dragging_=false;
   int selectedKey_=-1,page_=0;bool compact_=false,canvasVisible_=true,toolFieldsDirty_=false;
-  HWND pendingFocus_{};
+  HWND pendingFocus_{};bool contextOpen_=false;
   static constexpr std::array<const char *,5> pages={"envelope","points","tools","properties","keymap"};
   uint64_t generation_=0;Json dragBefore_;bool dragDirty_=false;int dragSelection_=-1;
   AutomationCanvas canvas_;std::vector<double> playbackTicks_;std::unique_ptr<EnvelopeBankWindow> bank_;
@@ -104,6 +106,55 @@ private:
     Json shape;const auto span=points().empty()?49u*256:points().back()[0].get<unsigned>()*256+1;if(!points().empty()){Json items=Json::array(),markers=Json::array();for(const auto &p:points())items.push_back({{"position",p[0].get<unsigned>()*256},{"value",p[1].get<double>()/64},{"curve","linear"}});for(const auto *key:markerKeys){const auto marker=envelope_.at(key).get<unsigned>();markers.push_back(marker==255?UINT32_MAX:points().at(marker)[0].get<unsigned>()*256);}unsigned flags=0;for(size_t i=0;i<5;++i)if(envelope_.at(std::array<const char *,5>{"enabled","loop","sustain","carry","filter"}[i]).get<bool>())flags|=1u<<i;shape={{"span",span},{"rowsPerBeat",4},{"points",items},{"instrument",true},{"flags",flags},{"markers",markers}};}
     bank_=std::make_unique<EnvelopeBankWindow>(window_,Json{{"kind",kinds[size_t(kind_)]},{"instrument",identity_}},shape,captured_.document,captured_.revision,L"Instrument "+std::to_wstring(index_)+L" · "+wide(kinds[size_t(kind_)]),std::move(request),[this]{const auto c=context_();return std::pair(c.document,c.revision);},std::move(source));bank_->show();}
   void selectPage(int page){if(page_==page)return;const auto previous=page_;page_=page;InvalidateRect(controls_.at(pageEnvelope+previous),nullptr,FALSE);InvalidateRect(controls_.at(pageEnvelope+page_),nullptr,FALSE);}
+  bool contextMenu(HWND source,POINT screen)override{
+    // Text and selectors keep their own native editing/navigation menus.
+    for(auto child=source;child&&child!=window_;child=GetParent(child)){wchar_t type[32]{};GetClassNameW(child,type,32);if(!_wcsicmp(type,L"EDIT")||!_wcsicmp(type,L"COMBOBOX")||!_wcsicmp(type,L"LISTBOX"))return false;}
+    if(contextOpen_||pending_||dragging_)return true;
+    const bool keyboard=screen.x==-1&&screen.y==-1;POINT local=screen;
+    const float scale=GetDpiForWindow(window_)/96.f;const auto r=canvas_.viewport;
+    if(keyboard){
+      const auto anchor=canvasVisible_?(selected_>=0&&size_t(selected_)<canvas_.handles.size()?canvas_.handles[size_t(selected_)]:AutomationCanvas::Point{r.x+r.w*.5f,r.y+r.h*.5f}):AutomationCanvas::Point{24,24};
+      local={LONG(std::lround(anchor.x*scale)),LONG(std::lround(anchor.y*scale))};screen=local;ClientToScreen(window_,&screen);
+    }else ScreenToClient(window_,&local);
+    const float x=local.x/scale,y=local.y/scale;const WorkspaceRect hitBounds{r.x-7,r.y-7,r.w+14,r.h+14};
+    const bool onCanvas=canvasVisible_&&hitBounds.contains(x,y);const int hit=onCanvas?canvas_.hit(x,y):selected_;
+    const int at=points().empty()?0:int(std::clamp(std::round(canvas_.position(x)/256),0.,65535.));
+    const int amount=int(std::clamp(std::lround(canvas_.value(y)*64),0l,64l));
+    const bool fresh=current(),edit=fresh&&editable(),rawPoints=pointFields_||markerFields_,hasPoint=hit>=0&&size_t(hit)<points().size();
+    const bool freeTick=std::none_of(points().begin(),points().end(),[&](const auto &p){return p[0]==at;});
+    using Item=NativeContextMenu::Item;
+    std::vector<Item> menu{{0,identity_.empty()?L"Instrument and envelopes":L"Instrument "+std::to_wstring(index_)+L" · "+wide(properties_.value("name",std::string{}))+L" · "+wide(kinds[size_t(kind_)])}};
+    if(onCanvas||keyboard){
+      menu.push_back({contextAdd,L"Add point here",edit&&!rawPoints&&onCanvas&&freeTick&&points().size()<envelope_.value("maxPoints",size_t(0))});
+      menu.push_back({contextEdit,L"Edit point fields…",edit&&!rawPoints&&hasPoint});
+      menu.push_back({contextDelete,L"Delete point",edit&&!rawPoints&&hasPoint});
+    }
+    menu.push_back({setPoint,L"Set point fields",edit&&pointFields_&&!markerFields_});
+    menu.push_back({0,L""});menu.push_back({fit,L"Fit envelope\tHome",canvasVisible_&&!points().empty()});
+    menu.push_back({pageTools,L"Envelope tools…",!identity_.empty()});
+    menu.push_back({bank,L"Envelope bank…",edit&&!rawPoints&&!propertiesDirty_&&!mappingDirty_&&!mappingFields_});
+    std::vector<Item> envelope;
+    for(auto [id,title,key]:std::initializer_list<std::tuple<int,const wchar_t *,const char *>>{{enabled,L"Enabled","enabled"},{sustain,L"Sustain","sustain"},{loop,L"Loop","loop"},{carry,L"Carry","carry"},{filter,L"Filter","filter"}})
+      envelope.push_back({id,title,edit&&(id!=filter||kind_==2)&&(!points().empty()||id==carry||id==filter),envelope_.value(key,false)});
+    envelope.push_back({0,L""});envelope.push_back({adsr,L"ADSR preset",edit&&!rawPoints});envelope.push_back({clear,L"Clear points",edit&&!rawPoints&&!points().empty()});
+    menu.push_back({0,L"Envelope",true,false,std::move(envelope)});
+    menu.push_back({0,L"Instrument",true,false,{{pageProperties,L"Properties…"},{pageKeymap,L"Sample keymap…",!identity_.empty()},{0,L""},{newInstrument,L"New from sample",fresh&&!retainedDraft()},{importFile,L"Import instrument…",fresh&&!retainedDraft()}}});
+    menu.push_back({0,L""});menu.push_back({apply,L"Apply instrument\tCtrl+Enter",fresh&&!identity_.empty()&&!rawPoints&&!mappingFields_});
+    menu.push_back({reload,L"Reload\tCtrl+R"});menu.push_back({fromCursor,L"From cursor"});menu.push_back({audition,L"Audition…",fresh&&!identity_.empty()});
+    if(hasWorkspaceDockAction()){menu.push_back({0,L""});menu.push_back({contextDock,docked()?L"Float editor":L"Dock beside tracker"});}
+    menu.push_back({close,L"Hide editor"});
+    const auto before=context_();const auto document=captured_.document,revision=captured_.revision,identity=identity_;
+    const auto generation=generation_;const auto tools=toolSignature();const int kind=kind_,selected=selected_,page=page_,selectedKey=selectedKey_;const bool wasDocked=docked();
+    releaseMusicalInput();contextOpen_=true;struct Guard{bool &value;~Guard(){value=false;}}guard{contextOpen_};
+    const int command=NativeContextMenu::show(window_,screen,menu);if(!command)return true;
+    const auto after=context_();require(visible()&&!pending_&&!dragging_&&before.document==after.document&&before.revision==after.revision&&document==captured_.document&&revision==captured_.revision&&identity==identity_&&kind==kind_&&generation==generation_&&tools==toolSignature()&&selected==selected_&&selectedKey==selectedKey_&&page==page_&&wasDocked==docked(),"Song, target or draft changed while the menu was open / action cancelled");
+    if(command==contextDock){toggleWorkspaceDock();return true;}
+    if(command==contextAdd){selected_=-1;setting_=true;set(tick,at);set(value,amount);setting_=false;setPointFields();SetFocus(window_);}
+    else if(command==contextEdit||command==contextDelete){selected_=hit;showPoint();if(command==contextDelete){removePoint();SetFocus(window_);}else{if(compact_)selectPage(pagePoints-pageEnvelope);layout();SetFocus(controls_.at(tick));}}
+    else if(command>=pageEnvelope&&command<=pageKeymap){selectPage(command-pageEnvelope);layout();SetFocus(controls_.at(compact_?command:command==pageTools?tool:command==pageKeymap?keymap:name));}
+    else action(command,BN_CLICKED);
+    layout();requestPaint();return true;
+  }
   void action(int id,unsigned notification)override{
     if(setting_)return;if(id>=pageEnvelope&&id<=pageKeymap&&notification==BN_CLICKED){if(dragging_)cancelDrag();selectPage(id-pageEnvelope);layout();requestPaint();return;}if(id==audition){require(current(),"Instrument changed / Reload before audition");audition_(index_,identity_,captured_.document,captured_.revision);return;}if(id==close){if(dragging_)cancelDrag();hide();return;}
     if(notification==EN_CHANGE){if(id==tick||id==value){pointFields_=true;++generation_;}else if(id>=loopStart&&id<=release){markerFields_=true;++generation_;}else if(id>=name&&id<=fade){propertiesDirty_=true;++generation_;}else if(id==mapFrom||id==mapTo){mappingFields_=true;++generation_;}else if(id==rangeStart||id==rangeEnd||(id>=toolValue0&&id<=toolValue4)){toolFieldsDirty_=true;++generation_;}return;}if(pending_)return;
