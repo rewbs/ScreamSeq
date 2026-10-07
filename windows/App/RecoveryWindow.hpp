@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "NativeReportList.hpp"
 #include <array>
 #include <set>
 
@@ -157,16 +158,13 @@ private:
       const auto query=std::wstring_view(find.lvfi.psz);const auto start=size_t(std::max(0,find.iStart));
       for(size_t i=0;i<entries_.size();++i){const auto row=(start+i)%entries_.size();const auto &title=entries_[row].title;if(title.size()>=query.size()&&CompareStringOrdinal(title.data(),int(query.size()),query.data(),int(query.size()),TRUE)==CSTR_EQUAL)return LRESULT(row);}return -1;
     }
-    if(header->code==NM_CUSTOMDRAW){
-      auto &draw=*reinterpret_cast<NMLVCUSTOMDRAW *>(header);
-      if(draw.nmcd.dwDrawStage==CDDS_PREPAINT)return CDRF_NOTIFYITEMDRAW;
-      if(draw.nmcd.dwDrawStage==CDDS_ITEMPREPAINT){const bool contrast=NativeControls::highContrast();draw.clrText=contrast?GetSysColor(COLOR_WINDOWTEXT):RGB(218,232,241);draw.clrTextBk=contrast?GetSysColor(COLOR_WINDOW):RGB(24,34,45);return CDRF_DODEFAULT;}
-    }
+    if(header->code==NM_CUSTOMDRAW)return NativeReportList::customDraw(*reinterpret_cast<NMLVCUSTOMDRAW *>(header),[this](size_t row,unsigned column){return row<entries_.size()&&column<entries_[row].cells.size()?std::wstring_view(entries_[row].cells[column]):std::wstring_view();});
     return 0;
   }
   static LRESULT CALLBACK notifications(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data){
     auto &self=*reinterpret_cast<RecoveryWindow *>(data);
     if(m==WM_NCDESTROY)RemoveWindowSubclass(h,notifications,id);
+    if(self.ready_&&NativeReportList::themeMessage(m))NativeReportList::refresh(self.controls_.at(copies));
     if(m==WM_NOTIFY&&self.ready_)try{return self.notify(reinterpret_cast<NMHDR *>(l));}catch(const std::exception &error){self.error(error);return 0;}
     return DefSubclassProc(h,m,w,l);
   }
@@ -180,16 +178,7 @@ private:
           const auto &changed=*reinterpret_cast<NMHEADERW *>(header);
           if(changed.iItem>=0&&changed.iItem<3&&changed.pitem&&(changed.pitem->mask&HDI_WIDTH))self.columnWidths_[size_t(changed.iItem)]=changed.pitem->cxy*96.f/GetDpiForWindow(h);
         }
-        if(header->code==NM_CUSTOMDRAW&&!NativeControls::highContrast()){
-          const auto &draw=*reinterpret_cast<NMCUSTOMDRAW *>(header);
-          if(draw.dwDrawStage==CDDS_PREPAINT)return CDRF_NOTIFYITEMDRAW;
-          if(draw.dwDrawStage==CDDS_ITEMPREPAINT){
-            NativeControls::fill(draw.hdc,draw.rc,RGB(35,49,63));SetBkMode(draw.hdc,TRANSPARENT);SetTextColor(draw.hdc,RGB(169,196,207));SelectObject(draw.hdc,self.font_);
-            static constexpr const wchar_t *labels[]={L"Saved",L"Song",L"Original file"};auto rect=draw.rc;const auto pad=MulDiv(7,GetDpiForWindow(h),96);rect.left+=pad;rect.right-=pad;
-            if(draw.dwItemSpec<3)DrawTextW(draw.hdc,labels[draw.dwItemSpec],-1,&rect,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|DT_NOPREFIX);
-            return CDRF_SKIPDEFAULT;
-          }
-        }
+        if(header->code==NM_CUSTOMDRAW)return NativeReportList::headerDraw(*reinterpret_cast<NMCUSTOMDRAW *>(header));
       }
     }
     return DefSubclassProc(h,m,w,l);
@@ -205,7 +194,7 @@ public:
     // Classic report drawing honors the application's surface colors. Native
     // list/header hit testing, accessibility and column resizing remain intact.
     if(const auto theme=LoadLibraryW(L"uxtheme.dll")){using Theme=HRESULT(WINAPI *)(HWND,LPCWSTR,LPCWSTR);if(const auto setTheme=reinterpret_cast<Theme>(GetProcAddress(theme,"SetWindowTheme")))setTheme(list,L"",L"");FreeLibrary(theme);}
-    const bool contrast=NativeControls::highContrast();ListView_SetBkColor(list,contrast?GetSysColor(COLOR_WINDOW):RGB(24,34,45));ListView_SetTextBkColor(list,contrast?GetSysColor(COLOR_WINDOW):RGB(24,34,45));ListView_SetTextColor(list,contrast?GetSysColor(COLOR_WINDOWTEXT):RGB(218,232,241));
+    NativeReportList::install(list);
     int index=0;for(const auto *name:{L"Saved",L"Song",L"Original file"}){LVCOLUMNW column{};column.mask=LVCF_TEXT|LVCF_WIDTH;column.pszText=const_cast<wchar_t *>(name);column.cx=100;ListView_InsertColumn(list,index++,&column);}
     add(titleDetail,L"EDIT",L"",ES_READONLY|ES_AUTOHSCROLL);add(sourceDetail,L"EDIT",L"",ES_READONLY|ES_AUTOHSCROLL);
     for(const auto [id,value]:std::initializer_list<std::pair<int,const wchar_t *>>{{reload,L"Reload"},{save,L"Save recovery copy"},{restore,L"Restore selected"},{close,L"Close"}})button(id,value);
