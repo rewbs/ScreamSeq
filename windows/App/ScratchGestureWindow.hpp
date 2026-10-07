@@ -126,7 +126,7 @@ private:
     require(!draft(),"Finish or Reload the retained draft first");
     if(id==clone){const auto result=call("scratch.gestures.clone",{{"id",state_.id()}},true);load(false,result.at("id"));return;}
     if(id==removePhrase){call("scratch.gestures.remove",{{"id",state_.id()}},true);state_.load(Json::object());load();return;}
-    if(id==use){const auto target=destination();call("pattern.effect.set",target.use(state_.id()),true);target_=resolve_(target);bank_=call("scratch.gestures.get",Json::object()).at("gestures");fillPhrases();status(L"SK placed at the captured cell · pattern values remain editable inline");return;}
+    if(id==use){const auto target=destination();call("pattern.effect.set",target.use(state_.id()),true);target_=resolve_(target);bank_=call("scratch.gestures.get",Json::object()).at("gestures");fillPhrases();layout();status(L"SK placed at the captured cell · pattern values remain editable inline");return;}
     if(id==unique){const auto target=destination();require(target.gesture()==state_.id(),"The captured SK must use the selected phrase before Make unique");makeUnique(target);return;}
   }
   void makeUnique(const ScratchPatternTarget &target){
@@ -195,7 +195,7 @@ private:
     EnableWindow(controls_.at(pointValue),enabled);EnableWindow(controls_.at(pointPosition),enabled&&(!chosen||(state_.points(state_.lane)[size_t(selected)].at("position")!=0&&state_.points(state_.lane)[size_t(selected)].at("position")!=65536)));
     EnableWindow(controls_.at(unique),enabled&&!draft()&&target_&&target_->gesture()==state_.id());
     EnableWindow(controls_.at(phrase),!pending_&&!draft());EnableWindow(controls_.at(newPhrase),!pending_&&!draft());
-    if(!state_.empty()){unsigned uses=0;for(const auto &p:bank_)if(p.at("id")==state_.id())uses=p.value("uses",0u);set(linkLabel,L"Song phrase "+std::to_wstring(state_.id())+L" · "+std::to_wstring(uses)+L" linked SK uses · changes update every use");}else set(linkLabel,L"Choose New phrase to create paired Motion and Fader envelopes.");
+    if(!state_.empty()){unsigned uses=0;for(const auto &p:bank_)if(p.at("id")==state_.id())uses=p.value("uses",0u);set(linkLabel,L"Song phrase "+std::to_wstring(state_.id())+L" · "+std::to_wstring(uses)+(uses==1?L" linked SK use":L" linked SK uses")+L" · changes update every use");}else set(linkLabel,L"Choose New phrase to create paired Motion and Fader envelopes.");
     set(pointLabel,state_.lane?L"Fader point · Insert adds · Tab selects · arrows move · Shift gives fine steps · Delete removes interior points":L"Motion point · Insert adds · Tab selects · arrows move · Shift gives fine steps · Delete removes interior points");
     set(targetLabel,target_?L"Pattern "+std::to_wstring(target_->pattern)+L" · row "+std::to_wstring(target_->row)+L" · channel "+std::to_wstring(target_->channel+1)+L" · FX "+std::to_wstring(target_->column+1):L"No captured FX cell");
     for(unsigned i=0;i<2;++i)canvases_[i].rebuild(state_.points(i),values_[i]);

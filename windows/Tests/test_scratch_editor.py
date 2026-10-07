@@ -106,7 +106,7 @@ class ScratchEditorTests(unittest.TestCase):
         self.assertEqual(self.command_at()['parameters']['gesture'], phrase)
         linkage = ctypes.create_unicode_buffer(512)
         self.desktop.send(self.child(3202), 0xD, len(linkage), ctypes.addressof(linkage))
-        self.assertIn('1 linked SK uses', linkage.value)
+        self.assertIn(' · 1 linked SK use · ', linkage.value)
         # Cursor navigation does not redirect a later Use or Make unique.
         self.navigate(row=9, channel=2, column=3)
         self.select_point(0)
