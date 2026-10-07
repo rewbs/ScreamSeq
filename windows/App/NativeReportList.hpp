@@ -82,7 +82,17 @@ template<typename Cell> LRESULT customDraw(NMLVCUSTOMDRAW &draw,Cell cell){
 }
 inline LRESULT headerDraw(NMCUSTOMDRAW &draw){
   if(NativeControls::highContrast())return CDRF_DODEFAULT;
-  if(draw.dwDrawStage==CDDS_PREPAINT)return CDRF_NOTIFYITEMDRAW;
+  if(draw.dwDrawStage==CDDS_PREPAINT)return CDRF_NOTIFYITEMDRAW|CDRF_NOTIFYPOSTPAINT;
+  if(draw.dwDrawStage==CDDS_POSTPAINT){
+    const auto header=draw.hdr.hwndFrom;const SavedDC saved(draw.hdc);if(!saved.saved)return CDRF_DODEFAULT;
+    RECT client{};if(!GetClientRect(header,&client))return CDRF_DODEFAULT;
+    // The native header paints unused space separately from its items. Preserve
+    // every item's actual geometry while coloring the uncovered client area.
+    for(int column=0;column<Header_GetItemCount(header);++column){
+      RECT item{};if(Header_GetItemRect(header,column,&item))ExcludeClipRect(draw.hdc,item.left,item.top,item.right,item.bottom);
+    }
+    NativeControls::fill(draw.hdc,client,palette(false).header);return CDRF_DODEFAULT;
+  }
   if(draw.dwDrawStage!=CDDS_ITEMPREPAINT)return CDRF_DODEFAULT;
   const auto header=draw.hdr.hwndFrom;const SavedDC saved(draw.hdc);if(!saved.saved)return CDRF_DODEFAULT;
   IntersectClipRect(draw.hdc,draw.rc.left,draw.rc.top,draw.rc.right,draw.rc.bottom);
