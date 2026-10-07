@@ -673,9 +673,10 @@ int Document::addPattern(int rows, bool duplicate, int source)
 		if(!s.Patterns.Insert(index, rows)) throw std::runtime_error("Could not allocate pattern.");
 		if(duplicate && s.Patterns.IsValidPat(source))
 		{
-			auto &from = s.Patterns[source];
-			for(int r = 0; r < std::min(rows, int(from.GetNumRows())); ++r)
-				for(int c = 0; c < s.GetNumChannels(); ++c) *s.Patterns[index].GetpModCommand(r, c) = *from.GetpModCommand(r, c);
+			// Same-song assignment preserves imported timing exactly; SetTempoSwing
+			// would normalize the source's already-normalized groove a second time.
+			s.Patterns[index] = s.Patterns[source];
+			if(s.Patterns[index].GetNumRows() != rows && !s.Patterns[index].Resize(ROWINDEX(rows))) throw std::runtime_error("Could not resize duplicate pattern.");
 			auto entity = native.patterns.at(source);
 			entity.id = native.makeEntity().id;
 			native.clonePatternAutomation(native.patterns.at(source).id, entity.id);

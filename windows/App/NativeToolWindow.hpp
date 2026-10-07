@@ -125,6 +125,21 @@ protected:
   std::function<bool(HWND,WPARAM,bool)> musicalKey_;
   std::function<bool(WPARAM)> musicalRelease_;
   std::function<void()> musicalDeactivate_;
+  // Opt-in first-open placement for floating forms. Keep the native minimum
+  // size and the user's later placement; only move into the owner's work area.
+  void clampToOwnerWorkArea() {
+    MONITORINFO monitor{sizeof(monitor)};
+    if(!GetMonitorInfoW(MonitorFromWindow(owner_,MONITOR_DEFAULTTONEAREST),&monitor))return;
+    for(unsigned pass=0;pass<2;++pass){
+      RECT bounds{};if(!GetWindowRect(window_,&bounds))return;
+      const auto &work=monitor.rcWork;
+      const auto x=std::clamp(bounds.left,work.left,std::max(work.left,work.right-(bounds.right-bounds.left)));
+      const auto y=std::clamp(bounds.top,work.top,std::max(work.top,work.bottom-(bounds.bottom-bounds.top)));
+      if(x==bounds.left&&y==bounds.top)return;
+      SetWindowPos(window_,nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+      // A move between monitors may deliver WM_DPICHANGED and resize the form.
+    }
+  }
   void releaseMusicalInput(){if(musicalDeactivate_)musicalDeactivate_();deactivate();}
   static WPARAM translatedCharacter(WPARAM key,LPARAM message) {
     BYTE keyboard[256]{};wchar_t characters[8]{};

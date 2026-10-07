@@ -216,19 +216,22 @@
         if(listedCatalog!=view->catalogRevision) {
             refreshTypingSounds();
             const auto sampleSelection=SendMessageW(controls.at(sampleCommandBase),LB_GETCURSEL,0,0);
-            const auto orderSelection=SendMessageW(controls.at(orderChooser),CB_GETCURSEL,0,0);
             for(int id:{patternChooser,orderChooser,sampleCommandBase}) SendMessageW(controls.at(id),id==sampleCommandBase ? LB_RESETCONTENT : CB_RESETCONTENT,0,0);
             for(const auto &[i,sample]:view->samples) {
                 auto label=std::to_wstring(i)+L"  "+wide(sample.at("name").get<std::string>());
                 auto n=SendMessageW(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));SendMessageW(controls.at(sampleCommandBase),LB_SETITEMDATA,n,i);
             }
             for(const auto &[i,p]:view->patterns) {auto label=L"Pattern "+std::to_wstring(i);auto n=SendMessageW(controls.at(patternChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));SendMessageW(controls.at(patternChooser),CB_SETITEMDATA,n,i);}
-            unsigned order=0;for(const auto &p:view->session.document.at("orders")) {auto label=std::to_wstring(order++)+L" : P"+std::to_wstring(p.get<unsigned>());SendMessageW(controls.at(orderChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+            listedOrderIDs.clear();unsigned order=0;for(const auto &p:view->session.document.at("orders")) {
+                const auto index=p.get<unsigned>();const auto label=std::to_wstring(order)+L" : "+(index==65535?std::wstring(L"End"):index==65534?std::wstring(L"Skip"):L"P"+std::to_wstring(index)+(view->patterns.contains(index)?L"":L" (missing)"));
+                SendMessageW(controls.at(orderChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));listedOrderIDs.push_back(view->session.document.at("orderMetadata").at(order++).at("id"));
+            }
             if(sampleSelection!=LB_ERR) SendMessageW(controls.at(sampleCommandBase),LB_SETCURSEL,sampleSelection,0);
-            if(order) SendMessageW(controls.at(orderChooser),CB_SETCURSEL,orderSelection>=0 && size_t(orderSelection)<order ? orderSelection : 0,0);
             listedCatalog=view->catalogRevision;
         }
         unsigned selected=0;for(auto &[p,v]:view->patterns) {if(p==patternIndex) break;++selected;}ScreamSeq::NativeControls::select(controls.at(patternChooser),selected);
+        const auto occurrence=std::find(listedOrderIDs.begin(),listedOrderIDs.end(),selectedOrderID);
+        ScreamSeq::NativeControls::select(controls.at(orderChooser),occurrence==listedOrderIDs.end()?-1:std::distance(listedOrderIDs.begin(),occurrence));
         ScreamSeq::NativeControls::select(controls.at(octaveChooser),octave);ScreamSeq::NativeControls::select(controls.at(stepChooser),editStep);
         ScreamSeq::NativeControls::select(controls.at(effectColumnChooser),view->effectColumns.at(channel)-1);
     }

@@ -6,6 +6,31 @@ query the running instance's `api.describe` for its current method catalog. Do n
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
 
+`document.get` includes stable current-sequence order identities in
+`orderMetadata: [{id: "n…"}]`, aligned with every untrimmed entry in `orders`,
+including End (`65535`), Skip (`65534`) and entries after End. Each existing
+`sequences` entry also has a stable `id`. Use these identities to retain an
+occurrence when repeated patterns are moved; numeric order indexes remain the
+arguments to revision-guarded `order.edit` and `transport.play`.
+`formatLimits` reports `patternRowsMin`, `patternRowsMax`, `patternsMax`,
+`ordersMax`, `patternsRemaining` and `ordersRemaining` from the actual module
+specifications. Pattern capacity includes reusable holes; order capacity counts
+the complete untrimmed sequence used by create/insert validation.
+
+The native Arrange and Tempo and groove windows use existing `pattern.create`,
+`order.edit`, `sequence.select` and `document.timing.get` / `.set` operations.
+Their read-only workspace snapshots are `arrangementWindow` and
+`songTimingWindow`; `arrangementSelection` contains the selected occurrence
+`id`, current `order` index and `sequenceID`, independently of cursor/playhead.
+Timing Preview uses `dryRun:true`. Creation/timing drafts retain their original
+revision and require explicit Reload after another edit or sequence change.
+Changing timing creates one document Undo and stops playback; preview and no-op
+leave playback and history intact. Existing pattern timing overrides remain in
+force. Pattern duplication preserves exact source pattern timing overrides and
+engine name/color alongside native musical metadata; changing its requested row
+count truncates or extends cells while retaining those properties. These tools
+do not add section annotation or arrangement-matrix methods.
+
 Application recovery uses the Mac-compatible `recovery.status`, `recovery.list`,
 `recovery.save` and `recovery.restore` contracts, also described in
 [`recovery.schema.json`](recovery.schema.json). `context.get.data.autosave` has
@@ -33,8 +58,9 @@ Inspection/audio qualification never accesses that real recovery store. Explicit
 audio-test mode enables private fixture storage. The optional
 `--recovery-test-write-delay-ms 0..2000` is restricted to inspection with that
 private directory, to exercise concurrent editing and ordered Save cleanup.
-Windows preserves imported unfinished recording takes and their compatibility
-metadata; live recording/finish-take UI and API remain a separate parity gap.
+Windows preserves unfinished recording takes and their compatibility metadata;
+live MIDI input, take review and Finish/Discard are described in
+[`../RECORDING_PROGRESS.md`](../RECORDING_PROGRESS.md).
 Unapplied graph recipe editor drafts retain their explicit Apply semantics.
 
 Windows output selection is available through `audio.devices.get`,

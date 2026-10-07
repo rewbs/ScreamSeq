@@ -7,6 +7,7 @@
 #undef small
 #endif
 #include <iostream>
+#include <cmath>
 #include <stdexcept>
 using namespace Tracker;
 using ScreamSeq::DocumentOperations;
@@ -115,6 +116,7 @@ void commandCatalogAndFormatLimits() {
       for(size_t i=0;i<source.size();++i) {
         const auto &c=source[i];
         const Json expected={{"command",c.command},{"parameterMask",c.mask},{"parameterValue",c.value},
+          {"displayCode",c.command==0 ? ".." : c.mask ? c.label.substr(0,2) : "0"+c.label.substr(0,1)},
           {"suggestedParameter",c.suggested},{"label",c.label},{"name",c.name},
           {"family",c.family},{"description",c.description},{"minimum",c.minimum},{"maximum",c.maximum}};
         CHECK(actual[i]==expected);
@@ -174,7 +176,69 @@ void documentPatch() {
   f.api.invoke("document.patch",{{"title",boundary}});
   rejected(f,"document.patch",{{"title",boundary+"🎵"}});
 }
+void duplicateTiming() {
+  auto original=Document::demo();
+  original->transaction([](CSoundFile &song) {
+    song.m_nTempoMode=TempoMode::Modern; song.Order().SetDefaultTempo(TEMPO(143.25));
+    auto &pattern=song.Patterns[0]; CHECK(pattern.SetSignature(16,64));
+    TempoSwing groove; groove.assign(16,TempoSwing::Unity/4); groove[0]=TempoSwing::Unity*4;
+    pattern.SetTempoSwing(groove); pattern.SetName("Imported phrase"); pattern.SetColor(0x123456);
+  });
+  const auto &source=original->song().Patterns[0];
+  CHECK(source.GetTempoSwing()[0]>TempoSwing::Unity*4);
+  auto normalized=source.GetTempoSwing(); normalized.Normalize();
+  CHECK(normalized!=source.GetTempoSwing()); // Copying via SetTempoSwing would alter this valid imported groove.
+  const auto bytes=original->snapshotData();
+  for(const int rows:{32,64,96}) {
+    Document doc(bytes); doc.restoreNative(original->native());
+    DocumentOperations api(doc,[]{},[](const auto &){});
+    const auto before=doc.snapshotData(); const auto revision=doc.revision;
+    const auto duplicate=api.invoke("pattern.create",{{"rows",rows},{"source",0}}).at("pattern").get<int>();
+    auto check=[&](const Document &current) {
+      const auto &copy=current.song().Patterns[duplicate];
+      CHECK(copy.GetNumRows()==rows); CHECK(copy.GetOverrideSignature()==source.GetOverrideSignature());
+      CHECK(copy.GetRowsPerBeat()==source.GetRowsPerBeat()); CHECK(copy.GetRowsPerMeasure()==source.GetRowsPerMeasure());
+      CHECK(copy.GetTempoSwing()==source.GetTempoSwing()); CHECK(copy.GetName()==source.GetName()); CHECK(copy.GetColor()==source.GetColor());
+      CHECK(current.song().Patterns[0]==source); CHECK(current.song().Patterns[0].GetName()==source.GetName());
+      for(int row=0;row<rows;++row)for(int channel=0;channel<current.song().GetNumChannels();++channel)
+        CHECK(current.cell(duplicate,row,channel)==(row<64 ? original->cell(0,row,channel) : Cell{}));
+    };
+    check(doc); CHECK(doc.revision==revision+1);
+    api.invoke("history.undo",{{"domain","document"}});
+    CHECK(doc.snapshotData()==before); CHECK(!doc.song().Patterns.IsValidPat(duplicate));
+    api.invoke("history.redo",{{"domain","document"}}); check(doc);
+    Document restored(doc.snapshotData()); restored.restoreNative(doc.native()); check(restored);
+
+    // Compare audible, bounded pattern playback at two callback sizes. Half a
+    // second includes multiple note onsets even with this deliberately extreme groove.
+    const auto playback=doc.snapshotData();
+    for(const uint32_t block:{128u,511u}) {
+      constexpr uint32_t rate=48000,frames=24000;
+      auto render=[&](uint32_t pattern) {
+        PlaybackRegion region{pattern,0,32,0,false};
+        Renderer renderer(playback,rate,0,false,{},0,region);
+        std::vector<float> pcm(size_t(frames)*2);
+        for(uint32_t offset=0;offset<frames;) {
+          const auto count=std::min(block,frames-offset);
+          CHECK(renderer.render(pcm.data()+size_t(offset)*2,count)==count); offset+=count;
+        }
+        CHECK(!renderer.faulted()); return pcm;
+      };
+      const auto sourcePCM=render(0),copyPCM=render(uint32_t(duplicate));
+      CHECK(sourcePCM==copyPCM);
+      float peak=0;for(const auto value:sourcePCM) { CHECK(std::isfinite(value));peak=std::max(peak,std::abs(value)); }
+      CHECK(peak>0.01f);
+      std::cout<<"Duplicate timing PCM rows="<<rows<<" sampleRate="<<rate<<" buffer="<<block<<" frames="<<frames<<" exactEqual=true peak="<<peak<<" maxDifference=0\n";
+    }
+    const auto empty=api.invoke("pattern.create",{{"rows",16}}).at("pattern").get<int>();
+    const auto &plain=doc.song().Patterns[empty];
+    CHECK(!plain.GetOverrideSignature()); CHECK(plain.GetTempoSwing().empty()); CHECK(plain.GetName().empty());
+    Document defaults; CHECK(plain.GetColor()==defaults.song().Patterns[0].GetColor());
+    for(int row=0;row<16;++row)for(int channel=0;channel<doc.song().GetNumChannels();++channel)CHECK(doc.cell(empty,row,channel)==Cell{});
+  }
+}
 void patternCreate() {
+  duplicateTiming();
   Fixture f;
   f.api.invoke("pattern.apply",patch(3,61));
   f.doc->annotate([](NativeSong &n){n.patterns.at(0).annotation="Original phrase";});

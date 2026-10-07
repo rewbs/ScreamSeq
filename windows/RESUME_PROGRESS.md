@@ -1,6 +1,31 @@
 # Windows continuation
 
-Latest recording checkpoint (2026-10-07): timestamped WinMM input, correlated
+Latest arrangement/timing checkpoint (2026-10-07): native Arrange orders
+and Tempo and groove tools are connected to the shared guarded worker. Stable
+occurrence selection, sequence switching, pattern creation/duplication, explicit
+selected-order playback and normalized timing preview are implemented. Drafts,
+focus and scroll survive refreshes and rejected requests. See
+[ARRANGEMENT_PROGRESS.md](ARRANGEMENT_PROGRESS.md) for exact scope and evidence.
+Candidate 6 passes **367/367 application tests** in **898.856 seconds** with
+strict outer isolation, **8/8 focused cases**, **42/42 native CTests** and a
+separate **11/11 document-operation groups** with six exact offline PCM
+comparisons. Fifteen source-matched 192-DPI views pass review. The shared
+Duplicate operation now preserves exact pattern timing, engine name/color and
+native musical metadata, including resized duplicates and native persistence.
+SHA256: `83E06DAB17094A66B79C4D971C536CBC4A7BFE879BAB2D15ACF6302D38C13EB3`.
+Checkpoint: `bin/windows-checkpoints/arrangement-20261007/`; its manifest is the
+authority for packaging completion. The report retains earlier production,
+fixture and foreground-isolation failures without relabeling them as passes.
+
+The next implementation scope is [sections and annotations](ANNOTATION_PLAN.md):
+per-occurrence sections, shared pattern details, section navigation, guarded
+annotation APIs and native persistence. The arrangement matrix and independent
+dock groups remain later UI work, with source-backed plans in
+[MATRIX_PLAN.md](MATRIX_PLAN.md) and
+[INDEPENDENT_DOCKING_PLAN.md](INDEPENDENT_DOCKING_PLAN.md).
+The Windows/Mac parity goal stays open.
+
+Previous recording checkpoint (2026-10-07): timestamped WinMM input, correlated
 WASAPI presentation history and worker-owned precise-note takes are connected to
 a retained native MIDI/recording window. Shared one-Undo commit, native persistence,
 copy-only live recovery and stopped imported-take review are implemented;
@@ -21,9 +46,8 @@ manifest is the authority for packaging completion. Physical MIDI, reciprocal Ma
 runtime, foreground/multiple-scale review, accessibility and independent dock
 groups remain open; this functional checkpoint does not complete the parity goal.
 
-Next implementation checkpoint: [Arrange orders and Tempo and groove](ARRANGEMENT_PLAN.md).
-The plan specifies existing guarded API semantics, stable order-occurrence
-selection, retained drafts, proposed snapshot additions and qualification gates.
+Its original next-step [arrangement plan](ARRANGEMENT_PLAN.md) remains a
+historical source audit. Current implementation and qualification are above.
 
 Previous recovery pass (2026-10-07): `RECOVERY_PROGRESS.md` records ten-second
 immutable autosave, ten retained generations per session, a native recovery

@@ -37,6 +37,8 @@
 #include "RecoveryWindow.hpp"
 #include "../Audio/MidiInput.hpp"
 #include "MidiRecordingWindow.hpp"
+#include "ArrangementWindow.hpp"
+#include "SongTimingWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -59,7 +61,8 @@ namespace {
 constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
-    midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552;
+    midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
+    arrangementCommand=553,songTimingCommand=554,newPatternCommand=555,duplicatePatternCommand=556;
 constexpr int dockAutomationCommand=530,dockInstrumentCommand=531,editorTrackerTab=532,
     editorAutomationTab=533,editorInstrumentTab=534,editorFloatCommand=535,editorHideCommand=536,
     editorPinCommand=537,editorCursorCommand=538,editorReturnCommand=539;
@@ -297,6 +300,9 @@ public:
             {"audioSettings",audioSettingsSnapshot()},
             {"recovery",recoveryWindow?recoveryWindow->snapshot():Json{{"visible",false}}},
             {"recording",view->recording},{"midi",midiSettingsSnapshot()},{"midiWindow",midiWindow?midiWindow->snapshot():Json{{"visible",false}}},
+            {"arrangementSelection",arrangementSelection()},
+            {"arrangementWindow",arrangementWindow?arrangementWindow->snapshot():Json{{"visible",false}}},
+            {"songTimingWindow",songTimingWindow?songTimingWindow->snapshot():Json{{"visible",false}}},
             {"graphEditor",graphEditorSnapshot()},
             {"graphCurve",graphCurveSnapshot()},
             {"formulaWorkbench",formulaWorkbench?formulaWorkbench->snapshot():Json{{"visible",false}}},
@@ -395,8 +401,8 @@ public:
     uint64_t stopGeneration=0;
     template<class T> T await(std::future<T> future) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy");
-        busy=true;updateTitle();
-        struct Guard {Application &app;~Guard(){app.busy=false;app.updateTitle();}} guard{*this};
+        busy=true;updateTitle();updateSongTools();
+        struct Guard {Application &app;~Guard(){app.busy=false;app.updateTitle();app.updateSongTools();}} guard{*this};
         std::exception_ptr presentationError;
         while(future.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready) {
             controller->service();
@@ -428,7 +434,7 @@ public:
         anchorRow=std::min(anchorRow,patternRows()-1);anchorChannel=std::min(anchorChannel,view->channels-1);
         if(previous!=documentId) {releaseTypedNotes();resetMidiDocument();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
         else if(oldPosition!=position()) ++contextRevision;
-        revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();updateRecordingWindow();
+        resolveArrangementSelection();revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();updateRecordingWindow();updateSongTools();
     }
     bool supportsDocumentOperations() const override {return true;}
     std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.push_back("recording.get");for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::EnvelopeOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
@@ -460,7 +466,7 @@ public:
                 stop();status=L"Plugin edit committed; playback stopped because live queue was full or unavailable";
             }
         },std::move(playback),std::move(catalogue),std::move(library));
-        view=controller->view();documentId=view->session.documentId;patternIndex=view->patterns.begin()->first;
+        view=controller->view();documentId=view->session.documentId;patternIndex=view->patterns.begin()->first;resolveArrangementSelection();
         cpuDraw.reserve(120000);submitIntervals.reserve(120000);updateInspector();
         status=input.empty() ? L"Ready / select a pattern cell or a sample" : L"Project opened";
     }
@@ -476,6 +482,7 @@ public:
     #include "Audition.inc"
     #include "MusicalTyping.inc"
     #include "RecordingIntegration.inc"
+    #include "SongTools.inc"
 	void play() { play(Json::object()); }
     void play(const Json &settings) override {startPlayback(settings,false);startRecordingIfArmed();}
     void startPlayback(const Json &settings,bool audition) {

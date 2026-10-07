@@ -1,4 +1,9 @@
-# Windows arrangement and timing — next checkpoint
+# Windows arrangement and timing — preimplementation plan
+
+Implementation now exists in the native tools and workspace integration. See
+[ARRANGEMENT_PROGRESS.md](ARRANGEMENT_PROGRESS.md) for current qualification.
+The audit below records the earlier source boundary and planned acceptance
+criteria; its "not implemented" descriptions are historical.
 
 Source audit and proposed implementation boundary, 2026-10-07. This is the next
 UI checkpoint after [recording](RECORDING_PROGRESS.md), not a claim that these

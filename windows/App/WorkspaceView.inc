@@ -48,6 +48,7 @@
         place(instrumentEnvelopeCommand,564,12,126,26);
         place(audioSettingsCommand,698,12,110,26);
         place(midiRecordingCommand,816,12,60,26);
+        place(arrangementCommand,10,50,82,24);place(songTimingCommand,96,50,60,24);
 		place(composeCommand,174,52,80,26);place(patternCommand,258,52,106,26);place(soundCommand,368,52,108,26);
         place(layoutsCommand,480,52,80,26);
         place(mixerCommand,564,52,76,26);
@@ -131,6 +132,7 @@
             {audioSettingsCommand,L"Audio settings…"},
             {recoveryCommand,L"Recovery copies"},
             {midiRecordingCommand,L"MIDI…"},
+            {arrangementCommand,L"Arrange…"},{songTimingCommand,L"Timing…"},
             {layoutsCommand,L"Layouts…"},{dockNotes,L"Notes"},{dockSamples,L"Samples"},{dockEffects,L"Pattern FX"},
             {editorTrackerTab,L"Tracker"},{editorAutomationTab,L"Automation"},{editorInstrumentTab,L"Instrument"},{editorFloatCommand,L"Float"},{editorHideCommand,L"Hide"},{editorPinCommand,L"Pinned"},{editorCursorCommand,L"Cursor"},{editorReturnCommand,L"Return"},
             {dockPlugins,L"Plugins"},{dockMixer,L"Mixer"},{dockGraph,L"Graph"},{dockToggle,L"Collapse dock"},
@@ -187,6 +189,8 @@
             else if(id==audioSettingsCommand){openAudioSettings();return;}
             else if(id==recoveryCommand){openRecoveryBrowser();return;}
             else if(id==midiRecordingCommand){openMidiRecording();return;}
+            else if(id==arrangementCommand||id==newPatternCommand||id==duplicatePatternCommand){openArrangement(id==newPatternCommand?"new":id==duplicatePatternCommand?"duplicate":"arrange");return;}
+            else if(id==songTimingCommand){openSongTiming();return;}
             else if(id==midiArmCommand){toggleMidiArm();return;}
             else if(id==recordingFinishCommand){if(hasRecordingTake())finishRecordingTake(view->recording.at("take"));else openMidiRecording();return;}
             else if(id==recordingDiscardCommand){if(hasRecordingTake())discardRecordingTake(view->recording.at("take"));return;}
@@ -216,8 +220,8 @@
             else if(id==patternChooser || id==orderChooser) {
                 auto chosen=SendMessageW(controls.at(id),CB_GETCURSEL,0,0);
                 if(chosen!=CB_ERR) {
-                    unsigned p=id==patternChooser ? unsigned(SendMessageW(controls.at(id),CB_GETITEMDATA,chosen,0)) : view->session.document.at("orders").at(size_t(chosen)).get<unsigned>();
-                    if(view->patterns.contains(p)) {auto n=position();n["pattern"]=p;n["row"]=std::min(row,view->pattern(p).rows-1);n["following"]=false;navigate(n);}
+                    if(id==orderChooser){if(size_t(chosen)<listedOrderIDs.size())selectArrangementOrder(listedOrderIDs[size_t(chosen)]);}
+                    else {const auto p=unsigned(SendMessageW(controls.at(id),CB_GETITEMDATA,chosen,0));if(view->patterns.contains(p)) {auto n=position();n["pattern"]=p;n["row"]=std::min(row,view->pattern(p).rows-1);n["following"]=false;navigate(n);}}
                 }
             }
 			else if(id==playCommand) play();

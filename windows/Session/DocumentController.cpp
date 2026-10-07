@@ -38,6 +38,14 @@ size_t graphViewBytes(const Tracker::NativeSong &native){
   for(const auto &bus:native.mixer.buses)if(auto lane=native.signal.lanes.find(bus.id);lane!=native.signal.lanes.end())bytes+=lane->second*(sizeof(PatternGraphLane)+bus.name.size()+32);
   return bytes;
 }
+Json orderIdentity(const Tracker::NativeEntity &entry) {return {{"id","n"+std::to_string(entry.id)}};}
+template<typename Charge> void chargeJsonView(const Json &j,const Charge &charge) {
+  charge(128);
+  if(j.is_string()) charge(j.get_ref<const std::string&>().size()+1);
+  else if(j.is_binary()) charge(j.get_binary().size());
+  else if(j.is_object()) for(auto i=j.begin();i!=j.end();++i) {charge(i.key().size()+1);chargeJsonView(i.value(),charge);}
+  else if(j.is_array()) for(const auto &v:j) chargeJsonView(v,charge);
+}
 }
 Tracker::Cell DocumentView::cell(unsigned p,unsigned r,unsigned c) const {
   auto it=patterns.find(p);
@@ -182,7 +190,7 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   next->dirty=project.recoveredUnsaved || document.revision!=project.savedRevision || project.pluginRevision!=project.savedPluginRevision;next->hosted=Project::requiresHostedPlayback(document,project);
   next->hasOpenEditors=same&&plugins_&&plugins_->openEditorCount()!=0;
   auto &result=next->session;result.documentId=identity_+":"+std::to_string(generation);result.revision=result.documentId+":"+std::to_string(document.revision)+":"+std::to_string(song.Order.GetCurrentSequenceIndex())+":"+std::to_string(project.pluginRevision);
-  Json patterns=Json::array(),orders=Json::array(),samples=Json::array(),instruments=Json::array(),plugins=Json::array(),sequences=Json::array();
+  Json patterns=Json::array(),orders=Json::array(),orderMetadata=Json::array(),samples=Json::array(),instruments=Json::array(),plugins=Json::array(),sequences=Json::array();
   for(unsigned n=0;n<256;++n) next->noteNames[n]=::OpenMPT::mpt::ToWide(song.GetNoteName(uint8_t(n)));
   DocumentOperations operations(document);next->commands=operations.invoke("pattern.commands",Json::object());
   for(const auto &effect:next->commands.at("effect"))if(effect.at("parameterMask")!=0)next->effectMasks.at(effect.at("command").get<unsigned>())=effect.at("parameterMask").get<uint8_t>();
@@ -212,7 +220,8 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     next->patterns[p]=std::move(pv);
   }
   for(auto p:song.Order()) orders.push_back(p);
-  for(unsigned i=0;i<song.Order.GetNumSequences();++i) sequences.push_back({{"index",i},{"name",::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.Order(i).GetName())}});
+  for(const auto &entry:native.sequences.at(song.Order.GetCurrentSequenceIndex()).orders) orderMetadata.push_back(orderIdentity(entry));
+  for(unsigned i=0;i<song.Order.GetNumSequences();++i) sequences.push_back({{"index",i},{"name",::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.Order(i).GetName())},{"id","n"+std::to_string(native.sequences.at(i).info.id)}});
   for(unsigned i=1;i<=song.GetNumSamples();++i) {
     auto info=operations.invoke("sample.get",{{"sample",i}});
     info["id"]="n"+std::to_string(native.samples.at(uint16_t(i)).id);samples.push_back(info);next->samples[i]=info;
@@ -237,8 +246,10 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   }
   std::string format=spec.fileExtension;std::transform(format.begin(),format.end(),format.begin(),[](unsigned char c){return char(std::toupper(c));});
   result.document={{"title",::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.GetCharsetInternal(),song.GetTitle())},{"format",format},
-    {"channels",next->channels},{"effectColumns",next->effectColumns},{"orders",orders},{"patterns",patterns},{"samples",samples},{"instruments",instruments},{"nativePlugins",plugins},{"editable",document.editable()},
+    {"channels",next->channels},{"effectColumns",next->effectColumns},{"orders",orders},{"orderMetadata",orderMetadata},{"patterns",patterns},{"samples",samples},{"instruments",instruments},{"nativePlugins",plugins},{"editable",document.editable()},
     {"sequence",song.Order.GetCurrentSequenceIndex()},{"sequences",sequences},{"tempo",song.Order().GetDefaultTempo().ToDouble()},{"speed",song.Order().GetDefaultSpeed()},
+    {"formatLimits",{{"patternRowsMin",spec.patternRowsMin},{"patternRowsMax",spec.patternRowsMax},{"patternsMax",spec.patternsMax},{"ordersMax",spec.ordersMax},
+      {"patternsRemaining",song.Patterns.GetRemainingCapacity()},{"ordersRemaining",song.Order().size()<spec.ordersMax ? size_t(spec.ordersMax)-song.Order().size() : 0}}},
     {"nativeSummary",{{"preciseNotes",native.preciseNotes.size()},{"signalDefinitions",native.signal.library.size()},{"envelopeTemplates",native.envelopeBank.size()}}},
     {"canUndo",document.canUndo()},{"canRedo",document.canRedo()},{"canUndoPlugins",same&&plugins_&&plugins_->canUndo()},{"canRedoPlugins",same&&plugins_&&plugins_->canRedo()},{"openPluginEditors",same&&plugins_?plugins_->openEditorCount():0},{"hasRecoveryTake",project.preserved.contains("recoveryTake")},{"issues",project.issues}};
   next->recording=recordingSummary(same?recording_.get():nullptr,result.revision);
@@ -246,22 +257,15 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   {
     std::lock_guard lock(mutex_);
     bool changed=!view_ || view_->session.documentId!=result.documentId;
-    if(view_) for(const auto *key:{"patterns","samples","instruments","orders","nativePlugins"}) changed|=view_->session.document.at(key)!=result.document.at(key);
+    if(view_) for(const auto *key:{"patterns","samples","instruments","orders","orderMetadata","sequence","sequences","formatLimits","nativePlugins"}) changed|=view_->session.document.at(key)!=result.document.at(key);
     next->catalogRevision=(view_ ? view_->catalogRevision : 0)+(changed ? 1 : 0);
 
   }
   // Conservative aggregate accounting includes all duplicate JSON catalogs,
   // maps, strings and wave/pattern payloads, even when shared with an older view.
-  auto jsonBytes=[&](auto &&self,const Json &j)->void {
-    charge(128);
-    if(j.is_string()) charge(j.get_ref<const std::string&>().size()+1);
-    else if(j.is_binary()) charge(j.get_binary().size());
-    else if(j.is_object()) for(auto i=j.begin();i!=j.end();++i) {charge(i.key().size()+1);self(self,i.value());}
-    else if(j.is_array()) for(const auto &v:j) self(self,v);
-  };
-  jsonBytes(jsonBytes,result.document);jsonBytes(jsonBytes,next->commands);
+  chargeJsonView(result.document,charge);chargeJsonView(next->commands,charge);
   charge(8192); // Bounded take summary can change without rebuilding music caches.
-  for(const auto &[i,info]:next->samples) {charge(128);jsonBytes(jsonBytes,info);}
+  for(const auto &[i,info]:next->samples) {charge(128);chargeJsonView(info,charge);}
   for(const auto &name:next->noteNames) charge((name.size()+1)*sizeof(wchar_t));
   charge((next->path.native().size()+1)*sizeof(wchar_t));
   next->cacheBytes=bytes;
@@ -295,7 +299,20 @@ void DocumentController::preflightGrowth(const std::string &method,const Json &p
   }
   if(method=="sequence.select") {
     const auto sequence=bounded("sequence");
-    if(sequence<document_->song().Order.GetNumSequences()) added=document_->song().Order(sequence).size()*128+8192;
+    const auto selected=document_->song().Order.GetCurrentSequenceIndex();
+    if(sequence<document_->song().Order.GetNumSequences() && sequence!=selected) {
+      // A sequence can have far more order identities than the current one.
+      // Use the publication accounting before stopping playback or selecting it;
+      // numeric tempo/speed/sequence/remaining-capacity fields have fixed cost.
+      auto catalogBytes=[&](unsigned index) {
+        size_t bytes=256; // orders and orderMetadata array containers.
+        auto charge=[&](size_t n){if(n>maxCacheBytes_ || bytes>maxCacheBytes_-n) throw Api::ApiError(-32602,"Edit needs more document view cache headroom");bytes+=n;};
+        for(const auto &entry:document_->native().sequences.at(index).orders) {charge(128);chargeJsonView(orderIdentity(entry),charge);}
+        return bytes;
+      };
+      const auto before=catalogBytes(selected),after=catalogBytes(unsigned(sequence));
+      added=after>before ? after-before : 0;
+    }
   }
   if(method=="document.patch") {
     added=8192;

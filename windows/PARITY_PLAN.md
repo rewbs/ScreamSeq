@@ -1,6 +1,20 @@
 # Windows / Mac parity plan
 
-Current recording checkpoint (2026-10-07): timestamped WinMM input, correlated
+Current arrangement/timing checkpoint (2026-10-07): retained native order
+and tempo/groove tools expose guarded arrangement edits, stable order-occurrence
+selection, sequence selection, new/duplicate patterns and timing preview/Apply.
+Candidate 6 passes **367/367 application tests** with strict outer isolation,
+**8/8 focused cases**, **42/42 native tests**, a separate **11/11
+document-operation groups** and six exact offline PCM comparisons. Fifteen
+source-matched 192-DPI views pass review. Shared duplication also preserves exact
+pattern-specific timing and metadata. See [arrangement evidence](ARRANGEMENT_PROGRESS.md)
+for executable identity, logs and earlier failures. Checkpoint destination:
+`bin/windows-checkpoints/arrangement-20261007/`; its manifest confirms packaging.
+Next is
+[sections and annotations](ANNOTATION_PLAN.md), followed by the arrangement
+matrix and independent dock groups. Full Windows/Mac parity remains the goal.
+
+Previous recording checkpoint (2026-10-07): timestamped WinMM input, correlated
 WASAPI presentation history, worker-owned precise-note takes and a retained
 native MIDI/recording window are implemented. The six guarded `recording.*`
 methods share commit preparation with Mac; one Undo, native persistence,
@@ -20,9 +34,8 @@ checkpoint, not full Windows/Mac parity or every release gate.
 Checkpoint location: `bin/windows-checkpoints/recording-20261007/`; the package
 manifest is the authority for packaging completion.
 
-Next implementation checkpoint: [native arrangement and timing](ARRANGEMENT_PLAN.md).
-Connect existing guarded order/pattern/sequence and tempo/groove APIs to retained
-tools; keep the larger annotation/matrix and independent-docking extensions explicit.
+Its [arrangement and timing plan](ARRANGEMENT_PLAN.md) is retained as a historical
+audit; current implementation and remaining qualification are above.
 
 Previous recovery checkpoint (2026-10-07): ten-second immutable autosave, ten
 generations per session, a retained native browser and guarded recovery APIs are
