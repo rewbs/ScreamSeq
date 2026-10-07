@@ -1,4 +1,29 @@
-# Windows / Mac parity plan — 2026-09-21 upstream integration
+# Windows / Mac parity plan
+
+Current UI work (2026-10-07): the workspace has direct lower-editor tabs,
+collapse/reopen, named saved arrangements and a retained layout manager. Command
+search now ranks relevant titles, supports unordered words and restores field
+focus. Toolbar collisions and compact inspector clipping are corrected. See
+[workspace evidence](WORKSPACE_LAYOUTS_PROGRESS.md) for exact qualification.
+
+The current docking checkpoint adds retained automation/instrument docking, compact editor
+pages, floating/redocking and local keyboard routing. Wide windows can show the
+graph beside the selected editor; smaller windows retain each editor behind tabs.
+See [docking evidence](WORKSPACE_DOCKING_PROGRESS.md) for qualification and limits.
+Arbitrary independent dock groups, recovery, recording, configurable shortcuts
+and the cross-platform qualification gates below remain open.
+
+The next bounded workspace tasks are native context menus and configurable
+shortcuts. Context menus should reuse the existing guarded pattern, sample,
+graph and instrument actions, preserve a selection when invoked within it, and
+revalidate captured targets after the native menu loop. Native text controls
+retain their own editing menus. Shortcut configuration needs stable command
+identities, conflict/prefix validation, atomic preference storage and one shared
+resolver across the main window and retained tools, with editor/text handling
+and musical note release taking priority. These are source-audited gaps, not
+implemented features in the docking checkpoint.
+
+## Upstream integration checkpoint — 2026-09-21
 
 Baseline: upstream `bcfe0f8a7`, following `c486a0642`. The remote has no `main`;
 its default branch is `codex/screamseq`. Local Windows work was preserved in

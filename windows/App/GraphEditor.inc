@@ -12,7 +12,7 @@
     ScreamSeq::GraphCanvas::Socket graphDragSocket;
     bool graphDragDirty=false;std::string graphDragNode;
     std::wstring graphStatus=L"Create a reusable graph or select one from the library";
-    bool graphEditorVisible() const {return graphEditorOpen&&workspaceState.layout!="Pattern focus";}
+    bool graphEditorVisible() const {return trackerWorkspaceVisible()&&workspaceState.lowerVisible&&graphEditorOpen&&workspaceState.layout!="Pattern focus";}
     Json *graphSelectedNode(){if(graphDraft.contains("nodes"))for(auto &n:graphDraft["nodes"])if(n.at("id")==graphNode)return &n;return nullptr;}
     ScreamSeq::WorkspaceRect graphCanvasRect() const {const auto r=sampleEditorRect();return {r.x+6,r.y+69,std::max(1.0f,r.w-274),std::max(1.0f,r.h-99)};}
     void rebuildGraphCanvas(){graphCanvas.viewport=graphCanvasRect();graphCanvas.rebuild(graphDraft,graphExposedNode,graphExposedParameter);frameRequested=true;}
@@ -68,7 +68,9 @@
     template<class Place>void layoutGraphControls(Place place){
         const auto r=sampleEditorRect();const bool show=graphEditorVisible();const float x=r.x+r.w-256;const bool chosen=!graphID.empty();
         std::set<int> placed;auto showControl=[&](int id,float a,float b,float w,float h,bool visible){placed.insert(id);place(id,a,b,w,h,visible);};
-        showControl(graphCommand,744,52,76,26,true);
+        // The Graph dock tab is the persistent entry point. This legacy toolbar
+        // HWND must stay hidden so it cannot cover Live keys.
+        showControl(graphCommand,744,52,76,26,false);
         showControl(graphLibrary,r.x+6,r.y+5,std::max(80.0f,r.w-524),230,show);float a=x-260;
         showControl(graphNew,a,r.y+5,44,25,show&&graphPageIndex!=5);showControl(graphFit,a+48,r.y+5,42,25,show&&graphPageIndex!=5);showControl(graphApply,a+94,r.y+5,65,25,show&&graphPageIndex!=5);showControl(graphReload,a+163,r.y+5,85,25,show&&graphPageIndex!=5);
         showControl(graphKind,r.x+6,r.y+36,112,210,show&&graphPageIndex!=5);showControl(graphAddSource,r.x+122,r.y+36,78,25,show&&graphPageIndex!=5);
@@ -92,7 +94,7 @@
     bool graphControlCommand(int id){
         if(id<graphCommand||id>graphReconnect)return false;if(busy||graphPending||dragging>=6)throw ScreamSeq::Api::ApiError(-32002,"Graph editor is busy");workspaceState.focus="graph";
         if(id==graphReconnect){graphRequireCurrent();openPluginPath({{"graph",graphID},{"node",graphNode}});return true;}
-        if(id==graphCommand){graphEditorOpen=true;mixerEditorOpen=false;workspaceState.layout="Compose";refreshGraph();layoutControls();graphCanvas.fit(graphDraft);rebuildGraphCanvas();SetFocus(window);return true;}
+        if(id==graphCommand){const bool firstOpen=graphDocument!=documentId;graphEditorOpen=true;mixerEditorOpen=false;workspaceState.layout="Compose";refreshGraph();layoutControls();if(firstOpen)graphCanvas.fit(graphDraft);rebuildGraphCanvas();SetFocus(window);return true;}
         if(id==graphReload){graphDirty=graphFieldDirty=false;++graphGeneration;refreshGraph(true);return true;}
         if(id==graphFit){graphCanvas.fit(graphDraft);rebuildGraphCanvas();return true;}
         if(id==graphPage||id==graphProperty||id==graphNodePicker||id==graphWire||id==graphParameter){if(graphFieldDirty){if(id==graphPage)SendMessageW(controls.at(id),CB_SETCURSEL,graphPageIndex,0);if(id==graphProperty)SendMessageW(controls.at(id),CB_SETCURSEL,graphPropertyIndex,0);if(id==graphNodePicker)graphFillNodes(id,graphNode);if(id==graphWire)SendMessageW(controls.at(id),CB_SETCURSEL,graphWireIndex+1,0);if(id==graphParameter&&graphPluginData.contains("parameters"))for(size_t i=0;i<graphPluginData.at("parameters").size();++i)if(graphPluginData.at("parameters")[i].at("id")==graphExposedParameter)SendMessageW(controls.at(id),CB_SETCURSEL,i,0);throw std::runtime_error("Set or reload the field draft before changing selection");}if(id==graphPage){graphPageIndex=int(SendMessageW(controls.at(id),CB_GETCURSEL,0,0));graphWireIndex=-1;}if(id==graphProperty)graphPropertyIndex=int(SendMessageW(controls.at(id),CB_GETCURSEL,0,0));if(id==graphNodePicker){graphNode=graphChosenNode(id);graphPluginData=Json::object();}if(id==graphWire){graphWireIndex=int(SendMessageW(controls.at(id),CB_GETCURSEL,0,0))-1;graphWireModulation=graphPageIndex==2;}if(id==graphParameter){graphParameterSelected();return true;}loadGraphFields();rebuildGraphCanvas();return true;}

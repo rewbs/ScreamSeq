@@ -171,7 +171,29 @@ class AuditionTests(unittest.TestCase):
 
     def plugin_instrument(self,class_id):
         descriptor=next(p for p in self.read('plugin.discover',format='VST3') if p['classID']==class_id)
-        self.write('plugin.add',descriptor=descriptor)
+        before=self.doc();rack=before['data']['nativePlugins']
+        try:
+            self.client.call('plugin.add',dict(expectedRevision=before['revision'],descriptor=descriptor))
+        except ApiError as error:
+            if error.code != -32003 or str(error) != 'Request began but reply timed out; outcome uncertain, inspect before retry':
+                raise
+            # A cold vendor load can outlive the server's response deadline.
+            # Its worker still owns the original request: never send another
+            # add. Recover only after observing its exact, committed append.
+            deadline=time.monotonic()+30
+            while time.monotonic()<deadline:
+                if not self.read('workspace.get')['documentBusy']:
+                    after=self.doc()['data']['nativePlugins']
+                    appended=after[-1] if len(after)==len(rack)+1 else {}
+                    existing={p['instanceID'] for p in rack}
+                    if (after[:-1]==rack and appended.get('classID')==class_id
+                            and appended.get('format')=='VST3'
+                            and appended.get('instanceID') and appended['instanceID'] not in existing):
+                        break
+                    raise
+                time.sleep(.025)
+            else:
+                raise
         plugin=self.doc()['data']['nativePlugins'][-1]['instanceID']
         index=self.write('instrument.create',empty=True)['instrument']
         self.write('plugin.instruments.set',plugin=plugin,assignments=[dict(instrument=index,channel=3)])
@@ -180,6 +202,27 @@ class AuditionTests(unittest.TestCase):
             self.assertEqual(len(changes),6)
             self.write('plugin.parameters.set',slot=0,values=changes)
         return index
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'),'private VST3 provider fixture')
+    def test_plugin_fixture_recovers_committed_timeout_without_duplicate(self):
+        original=self.client.call;adds=0
+        def timed_out_reply(method,*args,**kwargs):
+            nonlocal adds
+            result=original(method,*args,**kwargs)
+            if method=='plugin.add':
+                adds+=1
+                # Keep the real committed plugin but lose its successful reply,
+                # matching the server's uncertain-outcome contract.
+                raise ApiError(dict(code=-32003,message='Request began but reply timed out; outcome uncertain, inspect before retry'))
+            return result
+        self.client.call=timed_out_reply
+        try:
+            instrument=self.plugin_instrument('5245534F4E414E43494E535452550001')
+        finally:
+            self.client.call=original
+        rack=self.doc()['data']['nativePlugins']
+        self.assertEqual(adds,1);self.assertEqual(len(rack),1)
+        self.assertEqual(rack[0]['instrumentAssignments'],[dict(instrument=instrument,channel=3)])
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'),'private VST3 provider fixture')
     def test_vst3_provider_instrument_audition_pcm(self):

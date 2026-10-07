@@ -8,6 +8,8 @@
 #include "RenderSurface.hpp"
 #include "ApiDispatch.hpp"
 #include "WorkspaceState.hpp"
+#include "WorkspaceLayouts.hpp"
+#include "WorkspaceLayoutWindow.hpp"
 #include "CommandPalette.hpp"
 #include "PatternClipboard.hpp"
 #include "GraphCanvas.hpp"
@@ -47,6 +49,11 @@
 
 namespace {
 constexpr UINT deferredViewsMessage=WM_APP+42;
+constexpr int dockAutomationCommand=530,dockInstrumentCommand=531,editorTrackerTab=532,
+    editorAutomationTab=533,editorInstrumentTab=534,editorFloatCommand=535,editorHideCommand=536,
+    editorPinCommand=537,editorCursorCommand=538,editorReturnCommand=539;
+constexpr int layoutsCommand=513, saveLayoutCommand=514, restoreLayoutCommand=515,
+    dockNotes=520,dockSamples=521,dockEffects=522,dockPlugins=523,dockMixer=524,dockGraph=525,dockToggle=526;
 constexpr int playCommand=101, stopCommand=102, followCommand=103, composeCommand=104,
 	patternCommand=105, soundCommand=106, notesCommand=107, samplesCommand=108,
 	pinCommand=109, cursorCommand=110, returnCommand=111, paletteCommand=112,
@@ -237,6 +244,7 @@ public:
     }
 	void updateInspector() {
 		if(workspaceState.visible()) workspaceState.capture(workspaceState.active,position(),cursorSample());
+		followWorkspaceEditors();
 	}
 	Json workspaceSnapshot() {
 		Json pins=Json::object(), targets=Json::object(), inspectionData=Json::object(), origins=Json::object(), locations=Json::object();
@@ -246,17 +254,29 @@ public:
 			inspectionData[id]=p.target; inspectionData[id]["sample"]=p.sample;
 			targets[id]=p.opened ? "P"+std::to_string(p.target.value("pattern",0u))+" / R"+std::to_string(p.target.value("row",0u))+" / CH"+std::to_string(p.target.value("channel",0u)+1) : "Not opened";
 		}
-		Json visible=Json::array(); if(workspaceState.visible()) visible.push_back(workspaceState.active);
+		Json visible=Json::array(); if(workspaceState.visible()&&trackerWorkspaceVisible()) visible.push_back(workspaceState.active);
+        std::string focus=workspaceState.focus;
+        for(const auto *id:{"automation","instruments"}) {
+            const auto &p=workspaceEditors[workspaceEditorIndex(id)];auto *tool=workspaceEditorWindow(id);
+            pins[id]=p.pinned;origins[id]=p.origin;locations[id]=p.location;
+            const auto data=id==std::string("automation")?(parameterAutomationWindow?parameterAutomationWindow->snapshot():Json::object()):(instrumentEnvelopeWindow?instrumentEnvelopeWindow->snapshot():Json::object());
+            inspectionData[id]=data;
+            targets[id]=data.empty()?"Not opened":id==std::string("automation")?"Pattern "+std::to_string(data.value("pattern",0u)):"Instrument "+std::to_string(data.value("index",0u));
+            if(tool&&tool->visible())visible.push_back(id);
+            if(tool&&tool->owns(GetFocus()))focus=id;
+        }
 		auto g=geometry();
 		auto rect=[](const ScreamSeq::WorkspaceRect &r)->Json {return {{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}};};
-		return {{"geometry",{{"pattern",rect(g.pattern)},{"inspector",rect(g.inspector)},
+		return {{"geometry",{{"pattern",rect(g.pattern)},{"inspector",rect(g.inspector)},{"lowerTabs",rect(g.lowerTabs)},
 			{"verticalDivider",rect(g.verticalDivider)},{"horizontalDivider",rect(g.horizontalDivider)}}},
 			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},
-			{"panels",{"notes","samples"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
-			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",workspaceState.focus},
+			{"panels",{"notes","samples","automation","instruments"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
+			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",focus},{"editorDock",workspaceDockSnapshot()},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
 			{"locations",locations},{"liveKeyboard",liveKeyboard},{"musicalTyping",typingSnapshot()},
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
+            {"savedLayouts",savedLayouts.list()},{"layoutStorageStatus",savedLayouts.diagnostic()},
+            {"lowerVisible",workspaceState.lowerVisible},{"lowerEditor",lowerEditorName()},
             {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"pendingViewCommands",deferredViews.size()+(drainingViews?1u:0u)},{"status",utf8Path(status)},
             {"sampleEditor",sampleEditorSnapshot()},{"sampleLibrary",sampleLibrarySnapshot()},
             {"audioSettings",audioSettingsSnapshot()},
@@ -286,18 +306,30 @@ public:
             {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
                 {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
                 {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
-            {"unavailable",{"floatingPanels","savedLayouts"}}};
+            {"unavailable",{"arbitraryPanelDocking","simultaneousLowerDocks"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
 		if(method=="workspace.get") { require(p.empty(),"workspace.get accepts no parameters"); return workspaceSnapshot(); }
+		if(method=="workspace.panel"&&p.contains("panel")&&p["panel"].is_string()&&isWorkspaceEditor(p["panel"].get<std::string>())){workspaceEditorRequest(p);return workspaceSnapshot();}
 		if(method=="workspace.layout") {
-			require(p.size()==1 && p.contains("name") && p["name"].is_string(),"Supply a workspace layout name");
+			require(p.contains("name") && p["name"].is_string(),"Supply a workspace layout name");
+			for(auto it=p.begin();it!=p.end();++it)require(it.key()=="name"||it.key()=="savedName","Unknown workspace layout field");
 			auto name=p["name"].get<std::string>();
-			require(name=="Compose" || name=="Pattern focus" || name=="Sound design","Available layouts: Compose, Pattern focus, Sound design; saved layouts pending");
-			workspaceState.layout=name;
-			if(name=="Pattern focus") workspaceState.focus="pattern";
-			else workspaceState.show(name=="Compose" ? "notes" : "samples",position(),cursorSample(),false);
+			const bool custom=name=="Save custom"||name=="Restore custom"||name=="Delete custom";
+			require(custom||name=="Reload saved"||name=="Compose" || name=="Pattern focus" || name=="Sound design","Choose Compose, Pattern focus, Sound design or a custom layout action");
+            require(!p.contains("savedName")||(custom&&p["savedName"].is_string()),"savedName is only valid for a custom layout action");
+            if(name=="Reload saved") {if(!savedLayouts.reload())throw std::runtime_error(savedLayouts.diagnostic());}
+            else if(custom) {
+                const auto saved=p.value("savedName",std::string("Custom"));ScreamSeq::WorkspaceLayouts::validateName(saved);
+                if(name=="Save custom"){savedLayouts.save(saved,layoutConfiguration());status=L"Workspace layout saved / "+wide(saved);}
+                else if(name=="Delete custom"){require(savedLayouts.get(saved)!=nullptr,"Saved layout not found");savedLayouts.remove(saved);status=L"Workspace layout deleted / "+wide(saved);}
+                else {const auto value=savedLayouts.get(saved);require(value!=nullptr,"Saved layout not found");const Json configuration=*value;restoreLayoutConfiguration(configuration);status=L"Workspace layout restored / "+wide(saved);}
+            } else {
+                workspaceState.layout=name;workspaceState.lowerVisible=true;
+                if(name=="Pattern focus") {workspaceState.focus="pattern";SetFocus(window);}
+                else workspaceState.show(name=="Compose" ? "notes" : "samples",position(),cursorSample(),false);
+            }
 		} else {
 			for(auto it=p.begin();it!=p.end();++it) require(it.key()=="panel" || it.key()=="placement" || it.key()=="pinned" || it.key()=="focus" || it.key()=="follow" || it.key()=="return","Unknown workspace parameter");
 			require(p.contains("panel") && p["panel"].is_string(),"Supply a panel ID");
@@ -350,7 +382,7 @@ public:
             MSG message{};
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
                 if(message.message==WM_QUIT) {PostQuitMessage(int(message.wParam));break;}
-                if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
+                if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && !ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd) && handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
                 if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&releaseAuditionKey(message.wParam))continue;
                 TranslateMessage(&message);DispatchMessageW(&message);
             }
@@ -454,6 +486,8 @@ public:
 		device.stop(); lastAudio = device.stats();
 		status = L"Stopped / Space: play from song start / cursor remains independent";
 	}
+    #include "WorkspaceLayouts.inc"
+    #include "WorkspaceDocking.inc"
     #include "DeferredViews.inc"
 	#include "WorkspaceView.inc"
     #include "EditingView.inc"
@@ -469,7 +503,10 @@ public:
     void openInstrumentEnvelope(){
         if(!instrumentEnvelopeWindow)instrumentEnvelopeWindow=std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();});
         connectTyping(*instrumentEnvelopeWindow,[this]{return instrumentEnvelopeWindow->musicalTarget();});
-        instrumentEnvelopeWindow->openAt();
+        configureWorkspaceEditor("instruments");
+        if(!workspaceEditors[1].origin.empty()&&workspaceEditors[1].pinned){instrumentEnvelopeWindow->show();SetFocus(instrumentEnvelopeWindow->window());}
+        else instrumentEnvelopeWindow->openAt();
+        finishWorkspaceEditorOpen("instruments");
     }
     std::unique_ptr<ScreamSeq::AuditionWindow> auditionWindow;
     void openAudition(bool sample=true,unsigned slot=0,std::string identity={},std::string document={},std::string revision={}){
@@ -503,7 +540,10 @@ public:
         std::string plugin=std::move(requestedPlugin);auto parameter=requestedParameter;
         if(plugin.empty()){if(workspaceState.focus=="pattern"&&column>=3){const auto command=view->effect(patternIndex,row,channel,(column-3)/2);if(command&&(command->kind==Tracker::PatternCommandKind::ParameterSet||command->kind==Tracker::PatternCommandKind::ParameterSlide)){const auto &binding=view->nativePattern->performance.bindings.at(command->binding);plugin=binding.plugin;parameter=binding.parameter;}}
         else if(!selectedPlugin.empty()){plugin=selectedPlugin;parameter=selectedParameter;}}
-        parameterAutomationWindow->openAt(plugin,parameter);
+        configureWorkspaceEditor("automation");
+        if(!workspaceEditors[0].origin.empty()&&workspaceEditors[0].pinned){parameterAutomationWindow->show();SetFocus(parameterAutomationWindow->window());}
+        else parameterAutomationWindow->openAt(plugin,parameter);
+        finishWorkspaceEditorOpen("automation");
     }
 	#include "WorkspaceDraw.inc"
 	void draw() {
@@ -585,7 +625,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		case WM_SIZE: if(app->window)app->ensureCursorVisible();app->layoutControls();return 0;
 		case WM_GETMINMAXINFO: {
 			auto limits=reinterpret_cast<MINMAXINFO *>(lp);float scale=GetDpiForWindow(window)/96.0f;
-			limits->ptMinTrackSize={LONG(900*scale),LONG(620*scale)};return 0;
+			limits->ptMinTrackSize={LONG(900*scale),LONG((app->hasWorkspaceDock()?710:620)*scale)};return 0;
 		}
 		case WM_DRAWITEM: app->drawButton(*reinterpret_cast<DRAWITEMSTRUCT *>(lp));return TRUE;
         case WM_MEASUREITEM: reinterpret_cast<MEASUREITEMSTRUCT *>(lp)->itemHeight=unsigned(22*GetDpiForWindow(window)/96);return TRUE;
@@ -623,7 +663,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         case WM_ACTIVATEAPP:if(!wp)app->releaseTypedNotes();break;
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
-        case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->graphLaneClick(x,y,true))app->noteMouseDown(x,y,true);return 0;}
+        case WM_LBUTTONDBLCLK:{if(!app->trackerWorkspaceVisible())return 0;const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->graphLaneClick(x,y,true))app->noteMouseDown(x,y,true);return 0;}
 		case WM_LBUTTONUP: app->graphMouseUp(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));app->noteMouseUp();app->dragging=0;ReleaseCapture();return 0;
 		case WM_CAPTURECHANGED:if(app->dragging>=6)app->graphCancelDrag();app->noteMouseUp();app->dragging=0;return 0;
 		case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT at{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};ScreenToClient(window,&at);const float scale=96.0f/GetDpiForWindow(window);if(app->curveWheel(at.x*scale,at.y*scale,GET_WHEEL_DELTA_WPARAM(wp),message==WM_MOUSEHWHEEL,(GET_KEYSTATE_WPARAM(wp)&MK_CONTROL)!=0))return 0;if(message==WM_MOUSEHWHEEL)app->scrollHorizontal(GET_WHEEL_DELTA_WPARAM(wp));else if(GET_KEYSTATE_WPARAM(wp)&MK_SHIFT)app->scrollHorizontal(-GET_WHEEL_DELTA_WPARAM(wp));else app->scroll(GET_WHEEL_DELTA_WPARAM(wp));return 0;}
@@ -697,6 +737,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             try{library=std::filesystem::path(local)/L"org.resonance.tracker"/L"plugin-library-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
         }
 		Application app(projectPath,inspection,std::move(catalogue),std::move(library));app.silentOutput=silentOutput;
+        if(!inspection&&!audioTest){
+            PWSTR local{};ScreamSeq::check(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local),"Find workspace directory");
+            std::filesystem::path path;try{path=std::filesystem::path(local)/L"org.resonance.tracker"/L"workspace-layouts-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
+            if(!app.savedLayouts.load(path))app.status=wide(app.savedLayouts.diagnostic());
+        }
         app.allowSamplePreview=!inspection&&!audioTest;
         if(!sampleLibraryOverride.empty()){
             if(!(inspection||audioTest)||!sampleLibraryOverride.is_absolute())throw std::runtime_error("An absolute private sample library requires inspection or audio qualification mode");
@@ -732,7 +777,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			MSG message{};
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }
-				if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && app.handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
+				if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && !ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd) && app.handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
 				if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&app.releaseAuditionKey(message.wParam))continue;
 				TranslateMessage(&message); DispatchMessageW(&message);
 			}

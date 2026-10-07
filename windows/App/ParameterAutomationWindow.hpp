@@ -1,6 +1,7 @@
 #pragma once
 #include "EnvelopeBankWindow.hpp"
 #include <cwctype>
+#include <set>
 
 namespace ScreamSeq {
 class ParameterAutomationWindow final : public NativeToolWindow {
@@ -10,7 +11,8 @@ public:
 private:
   using Request=std::function<Json(const std::string &,const Json &)>;
   enum : int {pattern=4201,plugin,search,parameters,kind,snap,pointRow,pointValue,formula,setPoint,deletePoint,rampUp,rampDown,enabled,apply,verify,remove,reload,fromCursor,bank,expand,reference,lastTouched,openRack,fit,zoomOut,zoomIn,panLeft,panRight,tool,rangeStart,rangeEnd,toolValue0,toolValue1,toolValue2,toolValue3,copyRange,previewTool,close,
-    absolute=4240,heading=4300,targetLabel,rowLabel,valueLabel,formulaLabel,rangeLabel,toolLabel0,toolLabel1,toolLabel2,toolLabel3,statusLabel};
+    absolute=4240,pageTarget,pageCurve,pageFormula,pageTools,
+    heading=4300,targetLabel,rowLabel,valueLabel,formulaLabel,rangeLabel,toolLabel0,toolLabel1,toolLabel2,toolLabel3,statusLabel,pageHelp};
   static constexpr std::array<const char *,9> curves={"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse","scripted"};
   static constexpr std::array<const char *,9> operations={"flip-time","flip-values","shift","scale","ramp","sine","humanize","paste","insert"};
   Request request_;std::function<Cursor()> context_;std::function<void(const std::string &,uint32_t)> inspect_;
@@ -19,10 +21,25 @@ private:
   Json lanes_=Json::array(),plugins_=Json::array(),catalog_=Json::array(),points_=Json::array(),values_=Json::array(),clip_;
   std::vector<size_t> filtered_;unsigned rows_=64,rowsPerBeat_=4,snap_=256;int selected_=-1,kind_=1,tool_=0;
   bool setting_=false,pending_=false,dirty_=false,pointFields_=false,enabled_=true,previewNeeded_=false,dragging_=false,dragDirty_=false;
+  // Compact pages move the same native controls; drafts, selections and raw
+  // field text are never reconstructed when changing pages or window size.
+  bool compact_=false,canvasVisible_=true,toolFieldsDirty_=false;
+  int compactPage_=1;
+  HWND pendingFocus_{};
   uint64_t generation_=0;Json dragBefore_;int dragSelection_=-1;
   AutomationCanvas canvas_;
   std::unique_ptr<EnvelopeBankWindow> bank_;
   std::unique_ptr<FormulaWorkbenchWindow> workbench_,reference_;
+  void focusPage(){
+    HWND target=controls_.at(parameters);
+    if(compact_)target=compactPage_==0?controls_.at(parameters):compactPage_==1?window_:compactPage_==2?controls_.at(formula):controls_.at(tool);
+    if(!IsWindowVisible(target)||!IsWindowEnabled(target))target=compact_?controls_.at(pageTarget+compactPage_):window_;
+    SetFocus(target);requestPaint();
+  }
+  void choosePage(int page,bool focus=true){
+    if(dragging_){dragging_=false;ReleaseCapture();schedule();}
+    compactPage_=std::clamp(page,0,3);layout();if(focus)focusPage();requestPaint();
+  }
   int selection(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
   void choose(int id,int index){SendMessageW(controls_.at(id),CB_SETCURSEL,index,0);}
   void require(bool value,const char *message)const{if(!value)throw std::runtime_error(message);}
@@ -81,7 +98,7 @@ private:
       if(!samePattern){canvas_.fit(rows_);selectedPosition.reset();setting_=true;set(rangeStart,L"0");set(rangeEnd,std::to_wstring(rows_));setting_=false;}else if(canvas_.end>rows_*256)canvas_.fit(rows_);
       parameter_.reset();if(!catalog_.empty()){auto p=std::find_if(catalog_.begin(),catalog_.end(),[&](const auto &v){return wantedID&&v.at("id")==*wantedID;});if(p==catalog_.end())p=catalog_.begin();selectParameter(p->at("id"),selectedPosition);}
       else {points_=values_=Json::array();laneID_.clear();selected_=-1;dirty_=pointFields_=false;++generation_;set(targetLabel,L"No available parameter");showPoint();rebuild();}
-      choices();pending_=false;status(!catalogueError.empty()?catalogueError:catalog_.empty()?L"Add a plugin in the rack, then reload to choose its parameter":L"Click or drag points / Apply saves; the pattern cursor remains independent");
+      choices();pending_=false;if(!samePattern)toolFieldsDirty_=false;status(!catalogueError.empty()?catalogueError:catalog_.empty()?L"Add a plugin in the rack, then reload to choose its parameter":L"Click or drag points / Apply saves; the pattern cursor remains independent");
     }catch(...){pending_=false;layout();throw;}layout();
   }
   void replacePoint(Json point){
@@ -125,7 +142,7 @@ private:
     const auto token=generation_;const auto signature=toolSignature();pending_=true;layout();try{auto result=request_(copy?"automation.pattern.copy":"automation.pattern.transform",p);pending_=false;requireCurrent();require(generation_==token&&signature==toolSignature(),"Curve or tool settings changed / preview discarded");
       if(copy){clip_=std::move(result);status(L"Range copied inside this editor / choose Paste or Insert paste");}
       else if(result.at("wouldChange").get<bool>()){points_=result.at("after");selected_=-1;changed();showPoint();status(L"Tool preview · "+std::to_wstring(result.at("clippedValues").get<unsigned>())+L" values clipped / Apply saves; Reload discards");}
-      else status(L"The tool leaves this envelope unchanged");
+      else status(L"The tool leaves this envelope unchanged");toolFieldsDirty_=false;
     }catch(...){pending_=false;layout();throw;}layout();
   }
   void toolFields(){
@@ -153,22 +170,24 @@ private:
   void touch(){require(!draft(),"Apply or Reload the current curve draft first");const auto data=request_("automation.target.get",Json::object());const auto &target=data.at("target");require(!target.is_null()&&target.value("available",false),"Touch a parameter in the rack or a plugin editor first");load(true,target.at("plugin"),target.at("parameter").get<uint32_t>());}
   void action(int id,unsigned notification)override{
     if(setting_)return;if(id==close){if(dragging_)cancelDrag();hide();return;}
-    if(notification==EN_CHANGE){if(id==search){filter();return;}if(id==pointRow||id==pointValue||id==formula){pointFields_=true;++generation_;status(L"Point fields pending / Set point before Apply");}return;}
+    if(id>=pageTarget&&id<=pageTools&&notification==BN_CLICKED){choosePage(id-pageTarget);return;}
+    if(notification==EN_CHANGE){if(id==search){filter();return;}if(id==pointRow||id==pointValue||id==formula){pointFields_=true;++generation_;status(L"Point fields pending / Set point before Apply");}else if(id==rangeStart||id==rangeEnd||(id>=toolValue0&&id<=toolValue3)){toolFieldsDirty_=true;++generation_;}return;}
     if(pending_)return;
     if(notification==CBN_SELCHANGE){
-      if(id==kind){kind_=std::clamp(selection(kind),0,8);pointFields_=true;++generation_;return;}if(id==snap){snap_=std::array<unsigned,4>{256,128,64,1}.at(size_t(std::max(0,selection(snap))));return;}
+      if(id==kind){kind_=std::clamp(selection(kind),0,8);pointFields_=true;++generation_;layout();return;}if(id==snap){snap_=std::array<unsigned,4>{256,128,64,1}.at(size_t(std::max(0,selection(snap))));return;}
       if(id==tool){tool_=std::clamp(selection(tool),0,8);toolFields();return;}
       if(id==pattern||id==plugin){if(draft()){choices();throw std::runtime_error("Apply or Reload the curve draft before changing target");}const auto index=selection(id);if(index<0)return;
         try{if(id==pattern)load(false,{},parameter_,captured_.patterns.at(size_t(index)).at("index").get<unsigned>());else load(false,plugins_.at(size_t(index)).at("instanceID"),std::nullopt);}catch(...){choices();throw;}return;}
     }
     if(id==parameters&&notification==LBN_SELCHANGE){const auto index=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);if(draft()){filter();throw std::runtime_error("Apply or Reload the curve draft before changing parameter");}if(index>=0&&size_t(index)<filtered_.size()){selectParameter(catalog_.at(filtered_[size_t(index)]).at("id"));filter();}return;}
+    if(id==parameters&&notification==LBN_DBLCLK&&compact_&&parameter_){choosePage(1);return;}
     if(notification!=BN_CLICKED)return;
-    if(id==reload)load(false);else if(id==fromCursor)load(true);else if(id==lastTouched)touch();else if(id==bank)openBank();else if(id==expand)openFormula();
+    if(id==reload||id==fromCursor){load(id==fromCursor);toolFieldsDirty_=false;}else if(id==lastTouched)touch();else if(id==bank)openBank();else if(id==expand)openFormula();
     else if(id==reference){if(!reference_)reference_=std::make_unique<FormulaWorkbenchWindow>(window_,L"Envelope formula reference","",Json::object(),-1,request_);reference_->show();}
     else if(id==openRack){requireCurrent();require(parameter_.has_value(),"Choose a parameter");inspect_(pluginID_,*parameter_);}
     else if(id==absolute){requireCurrent();require(parameter_.has_value(),"Choose a parameter");absolute_(pluginID_,*parameter_);}
     else if(id==setPoint)setPointFields();else if(id==apply||id==verify||id==remove)commit(id==verify,id==remove);
-    else if(id==copyRange||id==previewTool)transform(id==copyRange);
+    else if(id==copyRange||id==previewTool){transform(id==copyRange);if(id==previewTool&&compact_)choosePage(1);}
     else if(id==enabled){enabled_=!enabled_;changed();}
     else if(id==deletePoint){require(!pointFields_,"Set or discard the point fields first");if(selected_>=0){points_.erase(points_.begin()+selected_);selected_=points_.empty()?-1:std::min(selected_,int(points_.size()-1));changed();showPoint();}}
     else if(id==rampUp||id==rampDown){require(parameter_&&!pointFields_,"Choose a parameter and set pending point fields first");points_=Json::array({{{"position",0},{"value",id==rampDown?1:0},{"curve",curves[size_t(kind_)]}},{{"position",rows_*256-1},{"value",id==rampDown?0:1},{"curve",curves[size_t(kind_)]}}});if(kind_==8)for(auto &p:points_)p["formula"]="mix(start,end,t)";selected_=0;changed();showPoint();}
@@ -177,6 +196,7 @@ private:
   void cancelDrag(){if(!dragging_)return;dragging_=false;points_=dragBefore_;dirty_=dragDirty_;selected_=dragSelection_;++generation_;values_=Json::array();schedule();showPoint();rebuild();ReleaseCapture();}
   void mouse(UINT message,float x,float y,WPARAM)override{
     if(message==WM_CAPTURECHANGED){cancelDrag();return;}if(message==WM_LBUTTONUP){dragging_=false;ReleaseCapture();schedule();return;}
+    if(!canvasVisible_)return;
     if(message==WM_LBUTTONDOWN&&canvas_.viewport.contains(x,y)&&parameter_&&!pending_&&!pointFields_){SetFocus(window_);dragBefore_=points_;dragDirty_=dirty_;dragSelection_=selected_;selected_=canvas_.hit(x,y);
       if(selected_<0){auto position=uint32_t(std::clamp(std::round(canvas_.position(x)/snap_)*snap_,0.0,double(rows_)*256-1));for(size_t i=0;i<points_.size();++i)if(points_[i].at("position")==position)selected_=int(i);
         if(selected_<0){Json p={{"position",position},{"value",canvas_.value(y)},{"curve",curves[size_t(kind_)]}};if(kind_==8)p["formula"]="mix(start,end,t)";replacePoint(std::move(p));}}
@@ -184,15 +204,16 @@ private:
     if(message==WM_MOUSEMOVE&&dragging_&&selected_>=0){auto p=points_[size_t(selected_)];const auto position=uint32_t(std::clamp(std::round(canvas_.position(x)/snap_)*snap_,0.0,double(rows_)*256-1));for(size_t i=0;i<points_.size();++i)if(int(i)!=selected_&&points_[i].at("position")==position)return;p["position"]=position;p["value"]=canvas_.value(y);replacePoint(std::move(p));}
   }
   bool wheel(UINT message,float x,float y,WPARAM w)override{
-    if(!canvas_.viewport.contains(x,y)||dragging_)return false;const double delta=GET_WHEEL_DELTA_WPARAM(w)/120.0;const bool ctrl=GET_KEYSTATE_WPARAM(w)&MK_CONTROL,shift=GET_KEYSTATE_WPARAM(w)&MK_SHIFT;
+    if(!canvasVisible_||!canvas_.viewport.contains(x,y)||dragging_)return false;const double delta=GET_WHEEL_DELTA_WPARAM(w)/120.0;const bool ctrl=GET_KEYSTATE_WPARAM(w)&MK_CONTROL,shift=GET_KEYSTATE_WPARAM(w)&MK_SHIFT;
     if(ctrl){if(shift)canvas_.zoomValues(std::pow(1.25,delta));else canvas_.zoom(std::pow(1.25,delta),rows_);}else if(shift)canvas_.panValues(delta*(canvas_.valueHigh-canvas_.valueLow)*.1);else canvas_.pan((message==WM_MOUSEHWHEEL?1:-1)*delta*(canvas_.end-canvas_.start)*.1,rows_);schedule();rebuild();return true;
   }
   bool key(WPARAM k,bool ctrl,bool shift)override{
     if(k==VK_ESCAPE){if(dragging_)cancelDrag();else if(pointFields_){++generation_;showPoint();}else hide();return true;}
-    if(k==VK_F6){SetFocus(GetFocus()==window_?controls_.at(parameters):window_);requestPaint();return true;}
+    if(compact_&&ctrl&&(k==VK_PRIOR||k==VK_NEXT)){choosePage((compactPage_+(k==VK_PRIOR?3:1))%4);return true;}
+    if(k==VK_F6){if(compact_){if(canvasVisible_&&IsWindowEnabled(controls_.at(pointRow)))SetFocus(GetFocus()==window_?controls_.at(pointRow):window_);else focusPage();}else SetFocus(GetFocus()==window_?controls_.at(parameters):window_);requestPaint();return true;}
     if(ctrl&&k=='R'){action(reload,BN_CLICKED);return true;}if(ctrl&&k==VK_RETURN){action(apply,BN_CLICKED);return true;}
     if(k==VK_RETURN){const auto id=GetDlgCtrlID(GetFocus());if(id==pointRow||id==pointValue||id==formula){action(setPoint,BN_CLICKED);return true;}wchar_t klass[32]{};GetClassNameW(GetFocus(),klass,32);if(_wcsicmp(klass,L"Button")==0){action(id,BN_CLICKED);return true;}}
-    if(GetFocus()!=window_||pending_)return false;
+    if(GetFocus()!=window_||pending_||!canvasVisible_)return false;
     if(ctrl&&(k==VK_LEFT||k==VK_RIGHT)){action(k==VK_LEFT?panLeft:panRight,BN_CLICKED);return true;}if(ctrl)return false;
     if(k==VK_HOME){action(fit,BN_CLICKED);return true;}if(k==VK_OEM_PLUS||k==VK_ADD||k==VK_OEM_MINUS||k==VK_SUBTRACT){action(k==VK_OEM_PLUS||k==VK_ADD?zoomIn:zoomOut,BN_CLICKED);return true;}
     if(k==VK_DELETE){action(deletePoint,BN_CLICKED);return true;}if(pointFields_)return false;
@@ -200,24 +221,96 @@ private:
     if(selected_>=0&&(k==VK_LEFT||k==VK_RIGHT||k==VK_UP||k==VK_DOWN)){auto p=points_[size_t(selected_)];if(k==VK_LEFT||k==VK_RIGHT)p["position"]=uint32_t(std::clamp(p.at("position").get<double>()+(k==VK_LEFT?-1:1)*(shift?1.0:double(snap_)),0.0,double(rows_)*256-1));else p["value"]=std::clamp(p.at("value").get<double>()+(k==VK_UP?1:-1)*(shift?.001:.01),0.0,1.0);replacePoint(std::move(p));return true;}return false;
   }
   void timer(UINT_PTR id)override{if(id!=3)return;KillTimer(window_,3);if(!visible())return;if(pending_||dragging_){SetTimer(window_,3,120,nullptr);return;}if(previewNeeded_)previewNow();}
+  void drawControl(const DRAWITEMSTRUCT &d)override{
+    if(d.CtlType!=ODT_BUTTON||d.CtlID<pageTarget||d.CtlID>pageTools){NativeToolWindow::drawControl(d);return;}
+    NativeControls::recordDraw(d.hwndItem);const auto saved=SaveDC(d.hDC);
+    const bool selected=int(d.CtlID)-pageTarget==compactPage_,contrast=NativeControls::highContrast();
+    NativeControls::fill(d.hDC,d.rcItem,contrast?GetSysColor(selected?COLOR_HIGHLIGHT:COLOR_WINDOW):selected?RGB(38,69,75):RGB(35,49,63));
+    SetBkMode(d.hDC,TRANSPARENT);SelectObject(d.hDC,font_);
+    SetTextColor(d.hDC,contrast?GetSysColor(selected?COLOR_HIGHLIGHTTEXT:COLOR_WINDOWTEXT):selected?RGB(164,240,221):RGB(218,232,241));
+    RECT label=d.rcItem;label.left+=5;label.right-=5;
+    static constexpr std::array<const wchar_t *,4> names={L"Target",L"Curve",L"Formula",L"Tools"};
+    DrawTextW(d.hDC,names[size_t(d.CtlID-pageTarget)],-1,&label,DT_SINGLELINE|DT_VCENTER|DT_CENTER|DT_NOPREFIX);
+    if(selected){RECT edge=d.rcItem;edge.top=edge.bottom-std::max(1,MulDiv(2,GetDpiForWindow(window_),96));NativeControls::fill(d.hDC,edge,contrast?GetSysColor(COLOR_HIGHLIGHTTEXT):RGB(114,216,191));}
+    if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){RECT r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}RestoreDC(d.hDC,saved);
+  }
   void layout()override{
-    const auto [w,h]=size();place(heading,18,14,w-36,24);place(pattern,18,48,214,220);place(plugin,246,48,w-694,260);place(lastTouched,w-438,48,138,26);place(bank,w-292,48,134,26);place(openRack,w-150,48,132,26);
-    place(search,18,90,214,26);place(parameters,18,126,214,std::max(120.f,h-354));place(targetLabel,260,84,w-280,23);
-    place(absolute,18,h-220,214,26);EnableWindow(controls_.at(absolute),!pending_&&parameter_.has_value());
-    place(kind,260,112,214,230);place(snap,482,112,104,220);place(enabled,594,112,104,26);
-    float x=706;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{panLeft,32.f},{zoomOut,32.f},{fit,40.f},{zoomIn,32.f},{panRight,32.f}}){place(id,x,112,width,26);x+=width+4;}
-    canvas_.viewport={260,170,w-280,std::max(100.f,h-468)};rebuild();
-    const auto py=h-226;place(rowLabel,260,py-18,110,18);place(pointRow,260,py,92,26);place(valueLabel,360,py-18,100,18);place(pointValue,360,py,92,26);place(setPoint,460,py,98,26);place(deletePoint,566,py,98,26);place(rampUp,672,py,96,26);place(rampDown,776,py,104,26);
-    place(formulaLabel,260,h-288,56,20,kind_==8);place(formula,320,h-292,w-548,26,kind_==8);place(expand,w-220,h-292,94,26,kind_==8);place(reference,w-118,h-292,98,26);
-    place(rangeLabel,18,h-184,122,20);place(rangeStart,142,h-188,82,26);place(rangeEnd,232,h-188,82,26);place(tool,328,h-188,182,230);place(copyRange,518,h-188,122,26);place(previewTool,648,h-188,140,26);
-    const int valueCount=std::array<int,9>{0,0,1,2,2,4,3,1,1}.at(size_t(tool_));for(int i=0;i<4;++i){place(toolLabel0+i,18+194.f*i,h-150,180,20,i<valueCount);place(toolValue0+i,18+194.f*i,h-128,180,26,i<valueCount);}
-    x=18;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{apply,100.f},{verify,94.f},{remove,118.f},{reload,118.f},{fromCursor,124.f}}){place(id,x,h-66,width,28);x+=width+8;}place(close,w-118,h-66,100,28);place(statusLabel,18,h-30,w-36,24);
+    // Preserve the former 1040x760 outer-window layout after nonclient chrome;
+    // use pages when the available client area becomes materially smaller.
+    const auto [w,h]=size();const auto previousFocus=GetFocus();compact_=w<1000||h<700;std::set<int> shown;
+    auto put=[&](int id,float x,float y,float width,float height,bool show=true){if(show)shown.insert(id);place(id,x,y,width,height,show);};
+    const int valueCount=std::array<int,9>{0,0,1,2,2,4,3,1,1}.at(size_t(tool_));
+    if(compact_){
+      const float left=10,inner=std::max(1.f,w-20),gap=6,half=(inner-gap)/2,third=(inner-2*gap)/3,quarter=(inner-3*gap)/4;
+      const float contentBottom=h-116;
+      put(heading,left,8,inner,24);
+      for(int i=0;i<4;++i)put(pageTarget+i,left+i*(quarter+gap),38,quarter,28);
+      put(targetLabel,left,74,inner,32);
+      // Common actions remain reachable even when raw point/formula fields are
+      // staged on another page. Each page only changes control geometry.
+      for(int i=0;i<3;++i){put(std::array<int,3>{apply,verify,remove}[size_t(i)],left+i*(third+gap),h-108,third,28);put(std::array<int,3>{reload,fromCursor,close}[size_t(i)],left+i*(third+gap),h-74,third,28);}
+      put(statusLabel,left,h-40,inner,36);
+      canvasVisible_=compactPage_==1;canvas_.viewport={};
+      if(compactPage_==0){
+        put(pattern,left,114,half,230);put(plugin,left+half+gap,114,half,260);
+        put(search,left,148,inner,26);put(parameters,left,182,inner,std::max(60.f,contentBottom-216));
+        put(lastTouched,left,contentBottom-28,third,26);put(openRack,left+third+gap,contentBottom-28,third,26);put(absolute,left+2*(third+gap),contentBottom-28,third,26);
+      }else if(compactPage_==1){
+        put(kind,left,114,inner-204,230);put(snap,w-204,114,94,220);put(enabled,w-104,114,94,26);
+        float x=left;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{panLeft,32.f},{zoomOut,32.f},{fit,40.f},{zoomIn,32.f},{panRight,32.f}}){put(id,x,148,width,26);x+=width+4;}
+        put(bank,w-156,148,146,26);
+        canvas_.viewport={left,196,inner,std::max(64.f,contentBottom-280)};
+        put(rowLabel,left,contentBottom-76,quarter,18);put(valueLabel,left+quarter+gap,contentBottom-76,quarter,18);
+        for(int i=0;i<4;++i)put(std::array<int,4>{pointRow,pointValue,setPoint,deletePoint}[size_t(i)],left+i*(quarter+gap),contentBottom-58,quarter,26);
+        put(rampUp,left,contentBottom-26,half,26);put(rampDown,left+half+gap,contentBottom-26,half,26);
+      }else if(compactPage_==2){
+        put(kind,left,114,inner-204,230);put(snap,w-204,114,94,220);put(enabled,w-104,114,94,26);
+        put(formulaLabel,left,154,inner,18);put(formula,left,176,inner,26);
+        put(expand,left,210,half,28);put(reference,left+half+gap,210,half,28);
+        put(rowLabel,left,248,quarter,18);put(valueLabel,left+quarter+gap,248,quarter,18);
+        for(int i=0;i<4;++i)put(std::array<int,4>{pointRow,pointValue,setPoint,deletePoint}[size_t(i)],left+i*(quarter+gap),266,quarter,26);
+        put(bank,left,306,inner,28);
+        set(pageHelp,kind_==8?L"Expand opens the formula workbench. Set point stages these fields; Apply saves the curve.":L"Choose Scripted on the Curve page to edit this point's formula. The reference is available for every curve.");
+        put(pageHelp,left,346,inner,std::max(34.f,contentBottom-346));
+      }else{
+        const float rangeWidth=(inner-112)/2;
+        put(rangeLabel,left,114,100,24);put(rangeStart,116,114,rangeWidth,26);put(rangeEnd,122+rangeWidth,114,rangeWidth,26);
+        put(tool,left,148,inner,230);put(kind,left,182,inner-110,230);put(snap,w-114,182,104,220);
+        for(int i=0;i<4;++i){const float x=left+(i%2)*(half+gap),y=218+(i/2)*52.f;put(toolLabel0+i,x,y,half,18,i<valueCount);put(toolValue0+i,x,y+18,half,26,i<valueCount);}
+        put(copyRange,left,324,half,28);put(previewTool,left+half+gap,324,half,28);
+        put(bank,left,358,half,26);put(reference,left+half+gap,358,half,26);
+      }
+    }else{
+      canvasVisible_=true;
+      put(heading,18,14,w-36,24);put(pattern,18,48,214,220);put(plugin,246,48,w-694,260);put(lastTouched,w-438,48,138,26);put(bank,w-292,48,134,26);put(openRack,w-150,48,132,26);
+      put(search,18,90,214,26);put(parameters,18,126,214,std::max(120.f,h-354));put(targetLabel,260,84,w-280,23);put(absolute,18,h-220,214,26);
+      put(kind,260,112,214,230);put(snap,482,112,104,220);put(enabled,594,112,104,26);
+      float x=706;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{panLeft,32.f},{zoomOut,32.f},{fit,40.f},{zoomIn,32.f},{panRight,32.f}}){put(id,x,112,width,26);x+=width+4;}
+      canvas_.viewport={260,170,w-280,std::max(100.f,h-468)};
+      const auto py=h-226;put(rowLabel,260,py-18,92,18);put(pointRow,260,py,92,26);put(valueLabel,360,py-18,92,18);put(pointValue,360,py,92,26);put(setPoint,460,py,98,26);put(deletePoint,566,py,98,26);put(rampUp,672,py,96,26);put(rampDown,776,py,104,26);
+      put(formulaLabel,260,h-288,56,20,kind_==8);put(formula,320,h-292,w-548,26,kind_==8);put(expand,w-220,h-292,94,26,kind_==8);put(reference,w-118,h-292,98,26);
+      put(rangeLabel,18,h-184,122,20);put(rangeStart,142,h-188,82,26);put(rangeEnd,232,h-188,82,26);put(tool,328,h-188,182,230);put(copyRange,518,h-188,122,26);put(previewTool,648,h-188,140,26);
+      for(int i=0;i<4;++i){put(toolLabel0+i,18+194.f*i,h-150,180,20,i<valueCount);put(toolValue0+i,18+194.f*i,h-128,180,26,i<valueCount);}
+      x=18;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{apply,100.f},{verify,94.f},{remove,118.f},{reload,118.f},{fromCursor,124.f}}){put(id,x,h-66,width,28);x+=width+8;}put(close,w-118,h-66,100,28);put(statusLabel,18,h-30,w-36,24);
+    }
+    if(dragging_&&!canvasVisible_){dragging_=false;ReleaseCapture();schedule();}
+    for(auto [id,control]:controls_)if(!shown.contains(id))NativeControls::show(control,false);
+    rebuild();EnableWindow(controls_.at(absolute),!pending_&&parameter_.has_value());
     set(enabled,enabled_?L"Enabled":L"Disabled");for(auto [id,control]:controls_)if(id>=pattern&&id<=close)EnableWindow(control,!pending_||id==close||id==search);
     for(int id:{kind,snap,pointRow,pointValue,formula,setPoint,deletePoint,rampUp,rampDown,enabled,apply,verify,bank,expand,openRack})EnableWindow(controls_.at(id),!pending_&&parameter_.has_value());
+    for(int id:{formula,expand})EnableWindow(controls_.at(id),!pending_&&parameter_.has_value()&&kind_==8);
     for(int id:{remove,copyRange,previewTool})EnableWindow(controls_.at(id),!pending_&&!laneID_.empty());
+    for(int id=pageTarget;id<=pageTools;++id)NativeControls::active(controls_.at(id),compact_&&id-pageTarget==compactPage_);
+    // Disabling a focused native control during an API preview clears Win32
+    // focus. Restore it once ready unless the user chose another focus target.
+    if(pending_&&previousFocus&&IsChild(window_,previousFocus)&&!GetFocus())pendingFocus_=previousFocus;
+    if(!pending_&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
+    // Move focus only if reflow hides its original field. Ordinary refreshes
+    // preserve the focused field's selection and insertion point.
+    if(previousFocus&&IsChild(window_,previousFocus)&&!IsWindowVisible(previousFocus)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))focusPage();
   }
   void paint(RenderSurface &s)override{
-    const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);const auto r=canvas_.viewport;s.fill(r.x,r.y,r.w,r.h,0x101923);s.clip(r.x,r.y,r.w,r.h);
+    const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);if(!canvasVisible_)return;const auto r=canvas_.viewport;s.fill(r.x,r.y,r.w,r.h,0x101923);s.clip(r.x,r.y,r.w,r.h);
     for(int i=0;i<=4;++i){const auto y=r.y+i*r.h/4;s.line(r.x,y,r.x+r.w,y,0x2a3947);}
     const auto step=std::max(256.0,rowsPerBeat_*256.0*std::ceil((canvas_.end-canvas_.start)/(rowsPerBeat_*256)/16));
     for(double p=std::ceil(canvas_.start/step)*step;p<=canvas_.end;p+=step){const auto x=canvas_.screen(p,0).x;s.line(x,r.y,x,r.y+r.h,0x2a3947);}
@@ -227,7 +320,8 @@ private:
   }
 public:
   ParameterAutomationWindow(HWND owner,Request request,std::function<Cursor()> context,std::function<void(const std::string &,uint32_t)> inspect,std::function<void(const std::string &,uint32_t)> absoluteEditor):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)),absolute_(std::move(absoluteEditor)){
-    minimumWidth_=1040;minimumHeight_=760;create(L"ScreamSeq.ParameterAutomation",L"Pattern parameter automation",1240,850);
+    minimumClientWidth_=440;minimumClientHeight_=500;create(L"ScreamSeq.ParameterAutomation",L"Pattern parameter automation",1240,850);
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{pageTarget,L"Target"},{pageCurve,L"Curve"},{pageFormula,L"Formula"},{pageTools,L"Tools"}})button(id,name);
     for(int id:{pattern,plugin,kind,snap,tool})combo(id);for(int id:{search,pointRow,pointValue,formula,rangeStart,rangeEnd,toolValue0,toolValue1,toolValue2,toolValue3})edit(id,L"",id==formula?2048:id==search?128:32);
     add(parameters,L"LISTBOX",L"Automation parameters",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL);
     button(absolute,L"Song automation…");
@@ -236,12 +330,18 @@ public:
     for(auto name:{L"Flip time",L"Flip values",L"Shift",L"Scale",L"Ramp",L"Sine",L"Humanize",L"Paste",L"Insert paste"})SendMessageW(controls_.at(tool),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(tool,0);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{setPoint,L"Set point"},{deletePoint,L"Delete point"},{rampUp,L"Ramp up"},{rampDown,L"Ramp down"},{enabled,L"Enabled"},{apply,L"Apply curve"},{verify,L"Verify"},{remove,L"Remove lane"},{reload,L"Reload"},{fromCursor,L"From cursor"},{bank,L"Envelope bank…"},{expand,L"Expand…"},{reference,L"Reference"},{lastTouched,L"Use last touched"},{openRack,L"Show in rack"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{panLeft,L"‹"},{panRight,L"›"},{copyRange,L"Copy range"},{previewTool,L"Preview tool"},{close,L"Close"}})button(id,name);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Pattern parameter automation"},{targetLabel,L"Choose a plugin parameter"},{rowLabel,L"Row / 1⁄256"},{valueLabel,L"Value / %"},{formulaLabel,L"Formula"},{rangeLabel,L"Range / rows"},{statusLabel,L""}})label(id,name);
-    for(int id=toolLabel0;id<=toolLabel3;++id)label(id,L"");set(rangeStart,L"0");set(rangeEnd,L"64");finish();
+    for(int id=toolLabel0;id<=toolLabel3;++id)label(id,L"");label(pageHelp,L"");setting_=true;set(rangeStart,L"0");set(rangeEnd,L"64");setting_=false;finish();
   }
-  void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||draft()||(bank_&&bank_->retainedDraft())||(workbench_&&workbench_->retainedDraft());show();if(!retain)load(true,std::move(plugin),parameter);if(previewNeeded_)SetTimer(window_,3,120,nullptr);SetFocus(controls_.at(parameters));}
+  bool retainedDraft()const{return pending_||dragging_||draft()||toolFieldsDirty_||(bank_&&bank_->retainedDraft())||(workbench_&&workbench_->retainedDraft());}
+  bool followCursor(){
+    if(retainedDraft())return false;const auto now=context_();
+    if(now.document==captured_.document&&now.pattern==captured_.pattern&&now.revision==captured_.revision)return true;
+    load(true);return true;
+  }
+  void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||retainedDraft();show();if(!retain){load(true,std::move(plugin),parameter);if(compact_&&!parameter_){compactPage_=0;layout();}}if(previewNeeded_)SetTimer(window_,3,120,nullptr);focusPage();}
   Json snapshot()const{
     Json handles=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});const auto r=canvas_.viewport;
-    return {{"visible",visible()},{"document",captured_.document},{"expectedRevision",captured_.revision},{"pattern",captured_.pattern},{"patternID",patternID_},{"plugin",pluginID_},{"parameter",parameter_?Json(*parameter_):Json()},{"lane",laneID_},{"dirty",dirty_},{"fieldDraft",pointFields_},{"pending",pending_},{"stale",!current()},{"enabled",enabled_},{"points",points_},{"selectedPoint",selected_},{"parameterCount",catalog_.size()},{"filteredCount",filtered_.size()},{"start",canvas_.start},{"end",canvas_.end},{"valueLow",canvas_.valueLow},{"valueHigh",canvas_.valueHigh},{"previewSamples",canvas_.curve.size()},{"handles",handles},{"canvas",{r.x,r.y,r.w,r.h}},{"status",utf8(status_)},{"envelopeBank",bank_?bank_->snapshot():Json{{"visible",false}}},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}}};
+    return {{"visible",visible()},{"compact",compact_},{"page",std::array<const char *,4>{"target","curve","formula","tools"}[size_t(compactPage_)]},{"canvasVisible",canvasVisible_},{"toolFieldDraft",toolFieldsDirty_},{"retainedDraft",retainedDraft()},{"document",captured_.document},{"expectedRevision",captured_.revision},{"pattern",captured_.pattern},{"patternID",patternID_},{"plugin",pluginID_},{"parameter",parameter_?Json(*parameter_):Json()},{"lane",laneID_},{"dirty",dirty_},{"fieldDraft",pointFields_},{"pending",pending_},{"stale",!current()},{"enabled",enabled_},{"points",points_},{"selectedPoint",selected_},{"parameterCount",catalog_.size()},{"filteredCount",filtered_.size()},{"start",canvas_.start},{"end",canvas_.end},{"valueLow",canvas_.valueLow},{"valueHigh",canvas_.valueHigh},{"previewSamples",canvas_.curve.size()},{"handles",handles},{"canvas",{r.x,r.y,r.w,r.h}},{"status",utf8(status_)},{"envelopeBank",bank_?bank_->snapshot():Json{{"visible",false}}},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}}};
   }
 };
 }

@@ -51,7 +51,7 @@
         pluginInstruments=std::make_unique<ScreamSeq::PluginInstrumentsWindow>(window,selectedPlugin,[this](const auto &method,const auto &params){return documentOperation(method,params);},[this]{return std::pair(documentId,view->session.revision);});pluginInstruments->show();
     }
     std::wstring pluginDetailStatus=L"Select a plugin to edit its parameters";
-    bool pluginEditorVisible() const {return !graphEditorVisible()&&!mixerEditorVisible()&&workspaceState.layout!="Pattern focus" && !sampleEditorVisible() && !effectEditorVisible() && !noteEditorVisible();}
+    bool pluginEditorVisible() const {return trackerWorkspaceVisible()&&workspaceState.lowerVisible&&!graphEditorVisible()&&!mixerEditorVisible()&&workspaceState.layout!="Pattern focus" && !sampleEditorVisible() && !effectEditorVisible() && !noteEditorVisible();}
     int selectedPluginSlot() const {
         const auto &rack=view->session.document.at("nativePlugins");
         for(size_t i=0;i<rack.size();++i) if(rack[i].at("instanceID")==selectedPlugin) return int(i);
@@ -175,7 +175,7 @@
     }
     template<class Place> void layoutPluginControls(const Place &place) {
         syncPluginRack();const auto r=sampleEditorRect();const bool show=pluginEditorVisible();const auto x=r.x+230,y=r.y;
-        place(pluginsCommand,480,52,80,26);place(pluginUndo,r.x+r.w-160,y+4,74,24,show);place(pluginRedo,r.x+r.w-82,y+4,74,24,show);
+        place(pluginsCommand,0,0,1,1,false);place(pluginUndo,r.x+r.w-160,y+4,74,24,show);place(pluginRedo,r.x+r.w-82,y+4,74,24,show);
         place(pluginPage,x,y+4,std::min(180.0f,r.w-406),230,show);
         place(pluginLibrary,r.x+8,y+35,r.w-254,250,show);place(pluginBrowse,r.x+r.w-240,y+35,78,24,show);place(pluginAdd,r.x+r.w-154,y+35,64,24,show);place(pluginRescan,r.x+r.w-86,y+35,78,24,show);
         place(pluginList,r.x+8,y+67,210,std::max(24.0f,r.h-75),show);

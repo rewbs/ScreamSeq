@@ -15,7 +15,7 @@
         });
         songRoutingWindow->show();
     }
-    bool mixerEditorVisible() const {return !graphEditorVisible()&&mixerEditorOpen&&workspaceState.layout!="Pattern focus";}
+    bool mixerEditorVisible() const {return trackerWorkspaceVisible()&&workspaceState.lowerVisible&&!graphEditorVisible()&&mixerEditorOpen&&workspaceState.layout!="Pattern focus";}
     void installMixerControls() {
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{mixerCommand,L"Mixer"},{mixerEnable,L"Enable mixer"},{mixerAdd,L"Add group"},
             {mixerRemove,L"Remove"},{mixerReload,L"Reload"},{mixerApply,L"Apply"},{mixerMute,L"Mute off"},{mixerSolo,L"Solo off"},{mixerRouting,L"Routing…"}})

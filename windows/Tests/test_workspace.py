@@ -213,14 +213,14 @@ class WorkspaceTests(unittest.TestCase):
         context = self.client.call('context.get')
         self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'hide'})
         state = self.client.call('workspace.get')['data']
-        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'hide'})
+        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'hide', 'automation': 'hide', 'instruments': 'hide'})
         self.assertEqual((state['right'], state['focus'], state['visible']), ('notes', 'notes', ['notes']))
         for name in ('Pattern focus', 'Compose'):
             self.client.call('workspace.layout', {'name': name})
             self.assertEqual(self.client.call('workspace.get')['data']['locations']['samples'], 'hide')
         self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'right'})
         state = self.client.call('workspace.get')['data']
-        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right'})
+        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide'})
         self.assertEqual(state['right'], 'notes')
         for field in ('pins', 'inspection', 'returnPoints'):
             self.assertEqual(state[field], before[field])
@@ -231,11 +231,11 @@ class WorkspaceTests(unittest.TestCase):
         self.client.call('workspace.panel', {'panel': 'notes', 'placement': 'hide'})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('samples', 'pattern', ['samples']))
-        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'right'})
+        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide'})
         self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'hide'})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('', 'pattern', []))
-        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'hide'})
+        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'hide', 'automation': 'hide', 'instruments': 'hide'})
         self.client.call('workspace.panel', {'panel': 'notes', 'placement': 'right'})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('notes', 'pattern', ['notes']))
@@ -244,7 +244,7 @@ class WorkspaceTests(unittest.TestCase):
         self.client.call('workspace.panel', {'panel': 'samples', 'focus': True})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('samples', 'samples', ['samples']))
-        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right'})
+        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide'})
         # Complete validation must precede placement changes.
         with self.assertRaises(ApiError) as invalid:
             self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'hide', 'pinned': 1})
@@ -288,15 +288,18 @@ class WorkspaceTests(unittest.TestCase):
     def test_describe_advertises_only_the_supported_workspace_subset(self):
         description = self.client.call('api.describe')['data']
         self.assertEqual(description.get('workspaceSubset'), {
-            'panels': ['notes', 'samples'], 'placements': ['right', 'hide'],
-            'layouts': ['Compose', 'Pattern focus', 'Sound design']})
+            'panels': ['notes', 'samples', 'automation', 'instruments'], 'placements': ['right', 'hide'],
+            'editorPlacements': {'automation': ['right', 'float', 'hide'], 'instruments': ['right', 'float', 'hide']},
+            'layouts': ['Compose', 'Pattern focus', 'Sound design', 'Save custom', 'Restore custom', 'Delete custom', 'Reload saved'],
+            'namedLayouts': {'optionalField': 'savedName', 'default': 'Custom', 'maximum': 24, 'nameCharacters': 64},
+            'schema': 'windows/Api/workspace.schema.json'})
         for placement in ('bottom', 'secondary', 'float'):
             before = self.client.call('workspace.get')['data']
             with self.assertRaises(ApiError) as invalid:
                 self.client.call('workspace.panel', {'panel': 'notes', 'placement': placement})
             self.assertEqual(invalid.exception.code, -32602)
             self.assertEqual(self.client.call('workspace.get')['data'], before)
-        for layout in ('Save custom', 'Restore custom'):
+        for layout in ('Not a layout', 'Float everything'):
             before = self.client.call('workspace.get')['data']
             with self.assertRaises(ApiError) as invalid:
                 self.client.call('workspace.layout', {'name': layout})

@@ -223,9 +223,10 @@ partially mutate on validation failure.
 `context.set` uses the existing shared schema fields `expectedRevision`,
 `expectedContext`, and at least one of `pattern`, `row`, `channel`, `column`,
 `following`. Read both tokens from one `context.get`. Booleans are not integers;
-validate the complete request before moving. Current Windows columns are 0–4
-(note, sample/instrument, volume, effect, parameter). Extra effect lanes are not
-implemented. Changing pattern defaults Follow off. A no-op retains the context
+validate the complete request before moving. Columns 0–2 are note,
+sample/instrument and volume. Effect lane `n` uses command/value columns
+`3+2*n` and `4+2*n`; the channel's visible effect count bounds navigation.
+Changing pattern defaults Follow off. A no-op retains the context
 token. Navigation/selection never change song revision, Undo or transport.
 `following` is the canonical Mac field; `follow` remains a read-only legacy alias.
 Selection bounds are inclusive, matching Mac, and are part of the context token.
@@ -252,47 +253,105 @@ or target changes discard those requests; returning focus to the pattern cancels
 them. Edits are never replayed by this queue. See `../DEFERRED_VIEWS_PROGRESS.md`
 and `../Tests/README.md` for qualification and the isolated suite runner.
 
-`workspace.get` reports retained `notes`/`samples` panels, `locations`, `right`, `visible`,
-`pins`, `targets`, `focus`, and `focusLayout`. Windows extensions include `layout`,
-structured `inspection`, `returnPoints`, DIP `geometry`, `dpi`, and `viewport`.
-These are actual GUI state, not a second musical model.
+`workspace.get` reports four panel IDs: `notes`, `samples`, `automation`, and
+`instruments`. `locations`, `visible`, `pins`, `targets`, structured `inspection`,
+`returnPoints`, and `focus` describe the retained GUI state. The legacy `right`
+field identifies only the selected notes/sample inspector. `layout`,
+`focusLayout`, DIP `geometry`, `dpi`, and `viewport` remain presentation state.
+The automation and instrument entries in `inspection` contain the same editor
+snapshots exposed as `parameterAutomation` and `instrumentEnvelope`.
 
-`workspace.panel` accepts the existing schema: `panel`, `pinned`, `focus`,
-`follow`, `return`, `placement`. Only `notes`/`samples` and `right`/`hide`
-placement are supported; other placements/panels reject atomically with -32602.
-Placement alone does not select a different panel or steal focus; `focus:true`
-explicitly selects and opens it. Each panel retains its own `right`/`hide`
-location, including inactive panels. Hiding the selected panel selects the other
-only if it is placed at `right`, and returns hidden-panel focus to the pattern.
-If both panels are hidden, `right` is `""` and `visible` is empty. Presets/open
-actions can reopen their selected panel without resetting the other's location.
-`pinned:false` immediately resumes following the current edit cursor without
-replacing the original return point. `follow:true` is the Cursor action: unpin
-and inspect the edit cursor. Return
-moves to that panel's original opening position with playback-follow off, then
-focuses the pattern. Hidden/tabbed panels keep independent targets and pins.
-Read-only inspectors follow cursor changes without taking focus; there are no
-editable drafts yet. Workspace operations, like Mac, do not require song/context
-tokens; supplying either token rejects as an unknown parameter. They cannot
-edit music. Agent focus requests change in-app focus only.
+`workspace.panel` accepts `panel`, `pinned`, `focus`, `follow`, `return`, and
+`placement`; flags must be booleans. Notes/sample inspectors accept `right` and
+`hide`. Pattern automation and instrument/envelope editors also accept `float`.
+Unknown fields, panels and placements reject with `-32602`; a document operation
+in progress rejects editor placement requests with `-32002`. See the
+[workspace request schema](workspace.schema.json). Workspace operations require
+neither song nor context tokens; supplying either rejects as an unknown field.
+They do not edit music, create musical Undo or change the audio device route.
+
+Notes/sample placement alone does not request keyboard focus. `focus:true`
+selects and opens the inspector. Each retains its own location; hiding the
+selected inspector selects the other only if it is placed at `right`. If both
+are hidden, `right` is `""`; separate editors can still appear in `visible`.
+`pinned:false` immediately resumes cursor inspection, and `follow:true` performs
+the same unpin-and-inspect action. Their original return points remain intact.
+
+Automation/instrument editors start hidden, prefer floating placement, and are
+pinned by default to retain their captured target. `placement:"right"` opens
+and selects that editor in the shared dock. `placement:"float"` restores its
+floating window; `placement:"hide"` keeps its native fields and drafts.
+`focus:true` opens/selects and focuses the editor, using its last non-hidden
+placement when necessary. Placement without focus retains the previous valid,
+visible focus where possible. Close hides the same retained editor.
+
+For these editors, `pinned:false` or `follow:true` requests a guarded refresh
+from the cursor. Pending operations, raw fields, staged edits, dragging and
+retained bank/formula drafts can defer the refresh. The request still unpins;
+it does not discard the draft or silently retarget an Apply. Automatic follow
+only visits visible, unpinned editors while document work is idle and keyboard
+focus is outside that editor. Native Reload/From cursor remain explicit refresh
+actions. `return:true` selects/focuses the tracker at the editor's original
+opening position with playback-follow off. Its stable pattern identity survives
+reordering; a replaced document or removed pattern rejects the return. Return
+takes precedence over `focus:true` in a combined request.
+
+`workspace.get.editorDock` reports `mode` (`none`, `side`, or `tabs`), `active`
+editor, `trackerVisible`, and a DIP `rect`. At a main-window client width of at
+least 1424 DIP, one active editor occupies a 460-DIP right dock beside the
+tracker and its lower editor. Narrower windows use Tracker/Automation/Instrument
+tabs in the main body. Both editors can retain `location:"right"` while only
+the selected editor is visible. A dock ensures at least 666 DIP of workspace
+client height, providing a 500-DIP editor. **Pattern focus** temporarily hides
+the dock while preserving placements. A floated editor remains independent.
+
+The existing **Automation…** and **Instrument…** actions open the retained
+editors in their preferred placement, initially floating. The command palette's
+**Dock automation beside the tracker** and **Dock instrument beside the tracker**
+actions select the dock. Ctrl+Alt+D inside either editor toggles dock/float.
+The workspace header exposes Tracker, Automation, Instrument, Float, Hide,
+Pinned/Following, Cursor and Return actions.
 
 `api.describe.revisionGuards` advertises required tokens per write method:
 `transport.play`/`transport.stop` require `expectedRevision`, `context.set`
 requires both `expectedRevision` and `expectedContext`, and workspace writes
-accept neither. `api.describe.workspaceSubset` lists the supported panels,
-placements and presets rather than advertising arbitrary Mac docking/layouts.
+accept neither. `api.describe.workspaceSubset` lists panels, inspector
+`placements`, per-editor `editorPlacements`, and supported presets.
 
-`workspace.layout` supports **Compose**, **Pattern focus**, **Sound design**.
-Save/Restore custom, arbitrary docking and floating explicitly reject rather
-than succeeding as no-ops. Layout sizes and panel state are session-local.
-Keyboard and native button actions call the same host operations. API calls do
-not raise the process or change the system audio route.
+`workspace.layout` supports **Compose**, **Pattern focus**, **Sound design**,
+**Save custom** and **Restore custom**, matching the shared names. Windows also
+supports **Delete custom** and **Reload saved**. Custom actions accept optional
+`savedName` (default `Custom`): 1–64 Unicode characters, no controls or surrounding
+whitespace, up to 24 case-sensitive names. See [workspace schema](workspace.schema.json).
+`workspace.get.savedLayouts` lists names; `lowerEditor`, `lowerVisible`, and
+`geometry.lowerTabs` describe the retained lower dock. The **Layouts…** manager
+and Ctrl+Alt+W expose the same operations; Ctrl+J collapses/reopens the dock.
 
-Reproduce with `SCREAMSEQ_TEST_EXE` set to the separate QA executable:
-`python -B windows/Tests/test_workspace.py -v`. Tests exercise real HWND buttons,
-command-palette text/Enter, drag selection, divider resize, pins/return, strict
-validation and stale guards through the actual per-process pipe. Mouse-message
-tests are DPI-aware; computer-use inspection is a separate visual check.
+Layouts save inspector visibility, dock sizes, the base preset, active lower
+editor, automation/instrument locations, active dock editor and Tracker-tab
+selection. Restoring keeps current pins, inspected targets, return points, draft
+text and song cursor; it never restores old musical targets or adds song Undo.
+Older saved configurations without editor placement leave current editor
+placements unchanged. Unopened editors are initialized if the saved arrangement
+requires them; already-created editors retain their instances.
+The lower tab strip stays available while collapsed. A normal app stores layouts
+in LocalAppData/org.resonance.tracker/workspace-layouts-v1.json; inspection and
+audio qualification keep them in memory. Saves replace atomically. A concurrent
+file edit rejects with -32001; **Refresh saved** / **Reload saved** reloads the
+catalogue before retry. Invalid storage does not prevent startup.
+
+Only automation and instrument/envelope editors support the new dock/float
+placement. Arbitrary panel docking, multiple independent dock groups, and
+simultaneous lower editors remain unavailable. See
+[`WORKSPACE_DOCKING_PROGRESS.md`](../WORKSPACE_DOCKING_PROGRESS.md) for the
+implementation scope and qualification status.
+
+Use `SCREAMSEQ_TEST_EXE` pointing to a separate QA executable and run
+`windows/Tests/run_isolated.py --log <absolute-log-path> --test test_workspace_docking`
+with the configured Python runtime. The isolated runner protects the active
+musician's desktop; native message/API checks and visual presentation evidence
+remain separate. The compact editor suites are `test_parameter_compact_ui` and
+`test_instrument_compact_ui`; baseline workspace/layout suites remain relevant.
 
 ## Wire and security
 

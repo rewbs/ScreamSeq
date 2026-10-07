@@ -128,8 +128,11 @@ class SessionAdapter {
       {"revisionGuards",{{"transport.play",{"expectedRevision"}},{"transport.stop",{"expectedRevision"}},
         {"context.set",{"expectedRevision","expectedContext"}},
         {"workspace.panel",Json::array()},{"workspace.layout",Json::array()}}},
-      {"workspaceSubset",{{"panels",{"notes","samples"}},{"placements",{"right","hide"}},
-        {"layouts",{"Compose","Pattern focus","Sound design"}}}},
+      {"workspaceSubset",{{"panels",{"notes","samples","automation","instruments"}},{"placements",{"right","hide"}},
+        {"editorPlacements",{{"automation",{"right","float","hide"}},{"instruments",{"right","float","hide"}}}},
+        {"layouts",{"Compose","Pattern focus","Sound design","Save custom","Restore custom","Delete custom","Reload saved"}},
+        {"namedLayouts",{{"optionalField","savedName"},{"default","Custom"},{"maximum",24},{"nameCharacters",64}}},
+        {"schema","windows/Api/workspace.schema.json"}}},
       {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. Workspace operations accept neither revision token; unsupported parameters reject."}};
     if(host_ && host_->supportsDocumentOperations()) {
       for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);

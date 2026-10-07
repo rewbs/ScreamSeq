@@ -47,7 +47,7 @@
             controller->service();MSG message{};
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){
                 if(message.message==WM_QUIT){PostQuitMessage(int(message.wParam));break;}
-                if((message.message==WM_KEYDOWN||message.message==WM_SYSKEYDOWN)&&IsChild(window,message.hwnd)&&handleKey(message.wParam,(message.lParam&(1LL<<30))!=0))continue;
+                if((message.message==WM_KEYDOWN||message.message==WM_SYSKEYDOWN)&&IsChild(window,message.hwnd)&&!ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd)&&handleKey(message.wParam,(message.lParam&(1LL<<30))!=0))continue;
                 if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&releaseAuditionKey(message.wParam))continue;
                 TranslateMessage(&message);DispatchMessageW(&message);
             }

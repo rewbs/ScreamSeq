@@ -1,4 +1,21 @@
-# Windows continuation — 2026-09-21
+# Windows continuation
+
+Latest UI gap pass (2026-10-07): `WORKSPACE_DOCKING_PROGRESS.md` records retained
+automation/instrument docking, responsive workspace tabs and compact editor
+pages. `WORKSPACE_LAYOUTS_PROGRESS.md` covers the persistent lower editor tabs,
+named layout manager, command-palette search/focus improvements and visual
+corrections. The separate build is `bin/windows-ui-parity/`. Current verification
+and remaining limitations are in those reports. Full Mac parity remains active.
+
+Qualification: the docking baseline passed all 298 application tests and 34
+native CTests. The final build, including focus corrections and visual copy,
+passed all 49 affected UI tests with no skips. Its 24 renderer/native-control
+compositions are reviewed; foreground and sustained presentation gates remain
+open. The report distinguishes the full-run and final-build fingerprints.
+The preserved ARM64 package is
+`bin/windows-checkpoints/workspace-docking-20261007/`.
+
+## Previous checkpoints
 
 Latest user-directed refinement: `FLAT_CONTROLS_PROGRESS.md` removes unrelated
 control redraws during cursor movement and gives native selectors a flat style.

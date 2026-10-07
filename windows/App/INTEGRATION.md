@@ -1,5 +1,15 @@
 # Windows document-worker application integration
 
+The workspace now exposes a persistent lower editor tab strip, dock collapse,
+named layout manager and storage, and categorized multi-word command search.
+Layouts preserve current editor drafts, pins and targets, with guarded atomic
+preference writes outside document history. See `../WORKSPACE_LAYOUTS_PROGRESS.md`
+for the first checkpoint. Automation and instrument/envelope editors now retain
+their HWNDs, controls and drafts across a shared right dock, responsive workspace
+tabs and floating windows. Compact pages keep their workflows usable at 440×500
+DIP. `../WORKSPACE_DOCKING_PROGRESS.md` records the current qualification and
+remaining workspace parity gaps.
+
 Native Audio settings now selects an output endpoint and preferred buffer period
 through independent guarded session APIs. Driver-supported periods and buffer
 capacity are reported separately from preferences. See

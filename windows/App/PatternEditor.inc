@@ -7,7 +7,7 @@
     std::vector<size_t> visibleEffectChoices;
     int effectSelected=-1;
     std::wstring effectEditorStatus=L"Enter on an FX cell to edit";
-    bool effectEditorVisible() const {return !graphEditorVisible()&&!mixerEditorVisible()&&effectEditorOpen&&workspaceState.layout!="Pattern focus"&&!sampleEditorVisible();}
+    bool effectEditorVisible() const {return trackerWorkspaceVisible()&&workspaceState.lowerVisible&&!graphEditorVisible()&&!mixerEditorVisible()&&effectEditorOpen&&workspaceState.layout!="Pattern focus"&&!sampleEditorVisible();}
     ScreamSeq::WorkspaceRect effectEditorRect() const {const auto g=geometry();return {g.graph.x,g.graph.y,g.automation.x+g.automation.w-g.graph.x,g.graph.h};}
     std::wstring effectField(int id) const {
         const auto h=controls.at(id);const int count=GetWindowTextLengthW(h);std::wstring value(size_t(count)+1,0);
@@ -144,7 +144,7 @@
     }
     template<class Place> void layoutEffectControls(Place place) {
         const auto r=effectEditorRect();const bool show=effectEditorVisible();
-        const auto pattern=geometry().pattern;place(effectsCommand,pattern.x+pattern.w-172,pattern.y+3,84,24);
+        const auto pattern=geometry().pattern;place(effectsCommand,pattern.x+pattern.w-254,pattern.y+3,78,24);
         place(effectReload,r.x+r.w-152,r.y+4,82,24,show);place(effectApply,r.x+r.w-64,r.y+4,58,24,show);
         const float x=r.x+12,w=r.w-24;
         place(effectSearch,x,r.y+47,std::min(170.0f,w*.26f),25,show);
