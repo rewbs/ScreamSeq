@@ -1,6 +1,20 @@
 # Windows / Mac parity plan
 
-Current sections/annotations checkpoint (2026-10-07): Arrange now has named
+Current visual-consistency checkpoint (2026-10-07): the pattern header fits its
+available width, and Arrangement, Recovery and MIDI lists share restrained
+active/inactive selections, visible keyboard focus, dark complete headers and
+correct Unicode column clipping. Retained native interactions and drafts remain
+intact. The final candidate passes **42/42 native tests**, **46/46 focused app
+cases** with strict isolation, and review of **14 source-matched 192-DPI views**.
+See [visual-consistency evidence](UI_CONSISTENCY_PROGRESS.md), including prior
+failures and the explicit limits of this presentation-only pass. Checkpoint:
+`bin/windows-checkpoints/ui-consistency-20261007/`; its manifest confirms packaging.
+
+Next are the [arrangement matrix](MATRIX_PLAN.md) and
+[independent dock groups](INDEPENDENT_DOCKING_PLAN.md).
+Full Windows/Mac parity remains the goal.
+
+Previous sections/annotations checkpoint (2026-10-07): Arrange now has named
 order-occurrence sections, Previous/Next section navigation, and retained Section
 and Pattern details pages. Independent drafts preserve raw Unicode names/notes
 through navigation, hiding and stale revisions. Guarded annotation APIs, native
@@ -12,11 +26,6 @@ source-matched 192-DPI views pass review. See
 [annotation evidence](ANNOTATION_PROGRESS.md) for executable identity and retained
 earlier failures. Checkpoint destination: `bin/windows-checkpoints/annotations-20261007/`;
 its manifest confirms packaging.
-
-Next is a compact-header and native-selection appearance pass, followed by the
-[arrangement matrix](MATRIX_PLAN.md) and
-[independent dock groups](INDEPENDENT_DOCKING_PLAN.md).
-Full Windows/Mac parity remains the goal.
 
 Previous arrangement/timing checkpoint (2026-10-07): retained native order
 and tempo/groove tools expose guarded arrangement edits, stable order-occurrence

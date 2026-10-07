@@ -1,6 +1,29 @@
 # Windows continuation
 
-Latest sections/annotations checkpoint (2026-10-07): native Arrange has named
+Latest visual-consistency checkpoint (2026-10-07): measured compact pattern
+headers and consistent retained native report drawing are implemented. Active
+and inactive selection, keyboard focus, column clipping/scrolling and complete
+dark headers work across Arrangement, Recovery and MIDI recording. Final SHA256:
+`C018127596FE6A4B07C806F80B832E9D296137A275EDCF71AD42207D08C23B1E`.
+Native run 3 passes **42/42** in **29.94 seconds**; focused app run 2 passes
+**46/46** in **60.950 seconds**, strict outer exit **0**. Fourteen final views
+pass review at 192 DPI. See [UI_CONSISTENCY_PROGRESS.md](UI_CONSISTENCY_PROGRESS.md)
+for retained failures and qualification limits. Checkpoint destination:
+`bin/windows-checkpoints/ui-consistency-20261007/`; its manifest confirms packaging.
+The prior full 373-case run belongs to the annotation baseline, not this build.
+
+The [arrangement matrix](MATRIX_PLAN.md) and
+[independent dock groups](INDEPENDENT_DOCKING_PLAN.md) remain next.
+The Windows/Mac parity goal stays open.
+
+Shared matrix copy/density and API/UI drafts are in the attached managed
+worktree `arrangement-matrix-core`, with the annotation baseline integrated.
+They are excluded from this visual checkpoint. The native-aware copy prepares
+and validates a complete prospective document, and the matrix summary counts
+precise notes and native FX. Adapters, UI integration and their qualification
+remain in progress. Preserve the worktree's draft backup/stash until verified.
+
+Previous sections/annotations checkpoint (2026-10-07): native Arrange has named
 order-occurrence sections, strict Previous/Next section navigation and retained
 Section and Pattern details pages. Independent captured targets and draft
 generations preserve unfinished Unicode text across selection/page changes,
@@ -19,18 +42,6 @@ failures or skips, with strict outer isolation. Checkpoint destination:
 `bin/windows-checkpoints/annotations-20261007/`; its manifest confirms packaging.
 See [ANNOTATION_PROGRESS.md](ANNOTATION_PROGRESS.md) for exact evidence and
 retained earlier production, test-fixture and build outcomes.
-
-Next is compact-header and native-selection visual consistency, followed by the
-[arrangement matrix](MATRIX_PLAN.md) and
-[independent dock groups](INDEPENDENT_DOCKING_PLAN.md).
-The Windows/Mac parity goal stays open.
-
-Drafts for the next visual-consistency and shared matrix-copy scopes are in the
-attached managed worktree `arrangement-matrix-core`. They are not included in
-this annotation checkpoint or qualified by its tests. Integrate and qualify the
-Windows visual files separately before completing the matrix adapters/UI. The
-shared matrix draft still needs build wiring, tests and both adapters using its
-native-aware `changed()` result and prospective-view admission callback.
 
 Previous arrangement/timing checkpoint (2026-10-07): native Arrange orders
 and Tempo and groove tools are connected to the shared guarded worker. Stable
