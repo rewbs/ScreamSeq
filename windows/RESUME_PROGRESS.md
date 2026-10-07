@@ -1,6 +1,28 @@
 # Windows continuation
 
-Latest visual-consistency checkpoint (2026-10-07): measured compact pattern
+Latest arrangement-matrix checkpoint (2026-10-07): native order-by-track pages,
+native-aware density, exact occurrence Open and captured Copy/Paste are connected.
+Shared complete-copy preparation handles precise notes and unified FX, preserves
+exact independent clones, and rejects capacity before changing playback/history.
+Final application SHA256:
+`0944532EC88D6C2B3D63185E974258A410C28D4F084543BF5CA402846F4E9C10`.
+Full application run 2 passes **385/385** in **894.919 seconds**, no failures or
+skips, strict outer exit **0**. Focused cases pass **11/11**, native **44/44**,
+shared **9/9**, controller **3/3**, and separate Editing **15/15** with six exact
+nonzero PCM comparisons. Fifteen final source-matched views pass review at
+192 DPI. See [MATRIX_PROGRESS.md](MATRIX_PROGRESS.md) for identities, prior
+outcomes and qualification limits. Checkpoint destination:
+`bin/windows-checkpoints/arrangement-matrix-20261007/`; its manifest confirms
+completed packaging.
+
+The next implementation is [independent dock regions](INDEPENDENT_DOCKING_PLAN.md).
+The attached `independent-dock-regions` worktree contains source drafts for pure
+region geometry/preferences and shorter retained instrument/automation layouts.
+They are not built or qualified and are excluded from this matrix checkpoint.
+Preserve the old matrix draft backup/stash until separately reconciled.
+The Windows/Mac parity goal stays open.
+
+Previous visual-consistency checkpoint (2026-10-07): measured compact pattern
 headers and consistent retained native report drawing are implemented. Active
 and inactive selection, keyboard focus, column clipping/scrolling and complete
 dark headers work across Arrangement, Recovery and MIDI recording. Final SHA256:
@@ -11,17 +33,6 @@ pass review at 192 DPI. See [UI_CONSISTENCY_PROGRESS.md](UI_CONSISTENCY_PROGRESS
 for retained failures and qualification limits. Checkpoint destination:
 `bin/windows-checkpoints/ui-consistency-20261007/`; its manifest confirms packaging.
 The prior full 373-case run belongs to the annotation baseline, not this build.
-
-The [arrangement matrix](MATRIX_PLAN.md) and
-[independent dock groups](INDEPENDENT_DOCKING_PLAN.md) remain next.
-The Windows/Mac parity goal stays open.
-
-Shared matrix copy/density and API/UI drafts are in the attached managed
-worktree `arrangement-matrix-core`, with the annotation baseline integrated.
-They are excluded from this visual checkpoint. The native-aware copy prepares
-and validates a complete prospective document, and the matrix summary counts
-precise notes and native FX. Adapters, UI integration and their qualification
-remain in progress. Preserve the worktree's draft backup/stash until verified.
 
 Previous sections/annotations checkpoint (2026-10-07): native Arrange has named
 order-occurrence sections, strict Previous/Next section navigation and retained

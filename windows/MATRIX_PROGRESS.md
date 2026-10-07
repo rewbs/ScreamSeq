@@ -1,7 +1,10 @@
 # Windows arrangement matrix
 
-Implementation and qualification, 2026-10-07. Qualification is in progress;
-this report does not declare a packaged checkpoint or full Windows/Mac parity.
+Implementation and qualification, 2026-10-07. The ARM64 arrangement-matrix
+checkpoint passes its functional and scoped visual gates. Full Windows/Mac
+parity remains open. Checkpoint destination:
+`bin/windows-checkpoints/arrangement-matrix-20261007/`; its manifest is the
+authority for completed packaging and the exact included source revision.
 
 ## Implemented behavior
 
@@ -50,7 +53,9 @@ matching adapters/schema and tests, but Mac runtime has not been exercised here.
 ## Candidate identity and measured evidence
 
 The isolated worktree is `arrangement-matrix-core`; the separate ARM64 build is
-`bin/windows-matrix-core`. The candidate-3 source snapshot is rooted at
+`bin/windows-matrix-core`. Implementation commit is
+`986281c0da096473fd80fd30615b4e3e01dffeeb`; subsequent changes are qualification
+documentation only. The candidate-3 source snapshot is rooted at
 `062f9d2de77830b2bc70285224e385dbcdd1d9d0` plus the retained matrix diff. A subsequent
 label-only UI correction puts selected/copied order and track identity before
 long optional names. Current candidate-4 application SHA256:
@@ -67,11 +72,13 @@ application. Final controller SHA256:
 | Evidence | Result | Retained log |
 | --- | --- | --- |
 | Shared copy/density/renderer, candidate 2 | 9/9 groups | `bin/windows-matrix-core-tests-2.log` |
-| Complete native suite, candidate 3 | 44/44, 32.18 seconds | `bin/windows-matrix-native-3.log` |
-| Actual app API and HWND matrix cases | 11/11, 11.802 seconds; strict outer exit 0 | `bin/windows-matrix-focused-1-app-tests.log`, `-isolation.log` |
+| Complete native suite, candidate 4 | 44/44, 30.43 seconds | `bin/windows-matrix-native-4.log` |
+| Complete actual-app suite, candidate 4 | 385/385, 894.919 seconds; no failures or skips; strict outer exit 0 | `bin/windows-matrix-full-2-app-tests.log`, `-isolation.log`, `-exe-sha256.txt` |
+| Actual app API and HWND matrix cases, candidate 4 | 11/11, 11.689 seconds; strict outer exit 0 | `bin/windows-matrix-focused-2-app-tests.log`, `-isolation.log` |
 | Corrected controller matrix admission/history | 3/3 groups | `bin/windows-matrix-controller-4.log` |
 | Separate document Editing suite | 15/15 groups, six exact nonzero PCM comparisons | `bin/windows-matrix-editing-tests-2.log` |
 | Candidate-4 matrix HWND fixture | 6/6 groups, including long-name identity visibility at 192 DPI | `bin/windows-matrix-label-native-4.log` |
+| Source-matched visual review, candidate 4 | 15/15 views at 192 DPI; geometry, interaction and isolation checks pass | `bin/ui-capture/evidence-matrix-candidate4-final/capture-evidence.json` |
 
 Shared rendered comparisons use native-only notes, extra FX and an independently
 cloned target at 48 kHz, 24,000 stereo frames, and 128/511-frame buffers. Source and
@@ -88,10 +95,30 @@ a changed Paste stops playback through the existing musical publication path.
 
 The separate Editing comparisons cover 32/64/96-row native pattern duplicates,
 each at 128/511-frame buffers, 48 kHz and 24,000 frames: peak 0.190726 and maximum
-difference 0. Full application and source-matched visual evidence are still
-pending. Packaging and primary-checkout integration are also pending.
+difference 0. The complete application run uses the same final candidate-4
+executable; its recorded SHA256 matches the application above. Final packaging
+checks that source, binaries, suite inputs and logs agree, and retains both final
+evidence and the earlier outcomes below.
+
+The visual fixture has 130 order occurrences, 25 tracks, repeated patterns,
+Skip/Stop slots, long Unicode names/sections, native-only notes and FX, and unequal
+pattern lengths. Reviewed views cover default/minimum sizes, active/inactive
+selection, horizontal scroll, track/order pages, final partial pages, valid/stale
+copies, sequence changes, independent native Paste and clipping rejection/Apply.
+Selected and copied order/track identity stays visible before optional long names.
+
+These are source-matched native renderings from a separate instrumented executable,
+not foreground screenshots of the packaged executable. All 229 production source
+dependencies match; 21 linked production inputs remain unchanged across capture,
+and the capture's five helper dependencies are recorded. Scratch executable SHA256
+is `C992C94FB8C791683903C82D7F6F898B6D8F652C16E237A006A7C2EF2C9D0F59`.
+The separate actual-app tests above exercise the production executable itself.
 
 ## Retained earlier outcomes
+
+Candidate 3 passed 44/44 native tests in 32.18 seconds and 11/11 focused app tests
+in 11.802 seconds with strict outer exit 0. Those logs and binaries remain
+separate from the final label-corrected candidate's evidence.
 
 The first shared fixture passed 6/9 groups. Two fixtures used `CMD_VOLUME`, which
 the MPT format rejects, and the audio fixture omitted explicit precise-note

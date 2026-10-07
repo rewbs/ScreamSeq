@@ -1,10 +1,11 @@
 # Windows arrangement matrix
 
-Source audit and implementation plan, 2026-10-07. The retained order/timing and
-[sections and annotations](ANNOTATION_PLAN.md) checkpoints are complete. The
-isolated matrix draft now addresses the shared gaps below and adds reciprocal
-Mac/Windows API adapters. This note is not runtime qualification; build, native
-and actual-app evidence must be recorded for the final integrated source.
+Source audit and implementation plan, 2026-10-07, retained as a scope record.
+The shared gaps below and reciprocal Mac/Windows API adapters are implemented.
+The Windows candidate passes the complete 385-case app suite, 44 native tests,
+focused/shared/controller/Editing gates and fifteen source-matched views.
+See [implementation and qualification](MATRIX_PROGRESS.md) for final identities,
+retained earlier outcomes and limits. Mac runtime remains unqualified here.
 
 ## Existing behavior and shared boundaries
 
