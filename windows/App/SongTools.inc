@@ -1,6 +1,7 @@
     // Order occurrence selection belongs to the workspace, independently of the
     // pattern cursor and playback position. Numeric order slots can move.
     std::unique_ptr<ScreamSeq::ArrangementWindow> arrangementWindow;
+    std::unique_ptr<ScreamSeq::ArrangementMatrixWindow> arrangementMatrixWindow;
     std::unique_ptr<ScreamSeq::SongTimingWindow> songTimingWindow;
     std::string arrangementDocument,arrangementSequenceID,selectedOrderID;
     size_t selectedOrderOrdinal=0;
@@ -35,6 +36,11 @@
         return {{"documentId",documentId},{"revision",view->session.revision},{"document",view->session.document},
             {"selectedOrderID",selectedOrderID},{"busy",busy||recoveryRestoring}};
     }
+    Json arrangementMatrixState()const {
+        auto state=arrangementState();state["selectedTrackID"]="";
+        for(const auto &track:view->session.document.at("tracks"))if(track.at("index")==channel){state["selectedTrackID"]=track.at("id");break;}
+        return state;
+    }
     Json songTimingContext()const {
         const auto &doc=view->session.document;std::string name;
         for(const auto &sequence:doc.at("sequences"))if(sequence.at("index")==doc.at("sequence")){name=sequence.at("name");break;}
@@ -44,6 +50,7 @@
     void updateSongTools() {
         if(!view)return;
         if(arrangementWindow)arrangementWindow->update(arrangementState());
+        if(arrangementMatrixWindow)arrangementMatrixWindow->update(arrangementMatrixState());
         if(songTimingWindow)songTimingWindow->update(songTimingContext());
     }
     void returnToSongPattern() {
@@ -112,10 +119,30 @@
                 const auto order=orderForIdentity(id);
                 if(order<0||!view->patterns.contains(view->session.document.at("orders").at(size_t(order)).get<unsigned>()))throw std::runtime_error("Select an order containing a playable pattern.");
                 play({{"order",order}});
-            },[this]{returnToSongPattern();}});
+            },[this]{returnToSongPattern();},[this]{openArrangementMatrix();}});
         std::string source;
         for(const auto &pattern:view->session.document.at("patterns"))if(pattern.at("index")==patternIndex){source=pattern.at("id");break;}
         arrangementWindow->open(arrangementState(),mode,source);
+    }
+    void openArrangementMatrix() {
+        releaseTypedNotes();resolveArrangementSelection();
+        if(!arrangementMatrixWindow)arrangementMatrixWindow=std::make_unique<ScreamSeq::ArrangementMatrixWindow>(window,ScreamSeq::ArrangementMatrixWindow::Callbacks{
+            [this](std::string method,Json params){
+                if(method!="arrangement.matrix"&&method!="arrangement.copyBlock")throw std::runtime_error("Unsupported matrix operation");
+                const auto result=documentOperation(method,params);
+                return Json{{"state",arrangementMatrixState()},{"result",result}};
+            },[this](std::string orderID,std::string trackID){
+                if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"The document is busy. Open a block when the operation completes.");
+                const auto binding=arrangementMatrixWindow->snapshot();
+                if(binding.at("documentId")!=documentId||binding.at("revision")!=view->session.revision||!binding.at("fresh").get<bool>())throw std::runtime_error("The matrix changed. Refresh before opening a block.");
+                const auto order=orderForIdentity(orderID);int targetChannel=-1;
+                for(const auto &track:view->session.document.at("tracks"))if(track.at("id")==trackID){targetChannel=track.at("index").get<int>();break;}
+                if(order<0||targetChannel<0||unsigned(targetChannel)>=view->channels)throw std::runtime_error("That order or track no longer exists.");
+                const auto pattern=view->session.document.at("orders").at(size_t(order)).get<unsigned>();
+                if(!view->patterns.contains(pattern))throw std::runtime_error("Stop and Skip orders contain no block to open.");
+                selectArrangementOrder(orderID,false);auto next=position();next["pattern"]=pattern;next["row"]=0;next["channel"]=targetChannel;next["column"]=0;next["following"]=false;navigate(next);returnToSongPattern();
+            },[this]{returnToSongPattern();}});
+        arrangementMatrixWindow->open(arrangementMatrixState());
     }
     void openSongTiming() {
         releaseTypedNotes();

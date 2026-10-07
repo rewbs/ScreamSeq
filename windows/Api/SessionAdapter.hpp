@@ -135,11 +135,15 @@ class SessionAdapter {
         {"schema","windows/Api/workspace.schema.json"}}},
       {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. Workspace operations accept neither revision token; unsupported parameters reject."}};
     if(host_ && host_->supportsDocumentOperations()) {
-      for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","arrangement.get","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
-      for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.open","pattern.notes.set","document.timing.set","song.annotate"}) {
+      for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","arrangement.get","arrangement.matrix","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
+      for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.open","pattern.notes.set","document.timing.set","song.annotate","arrangement.copyBlock"}) {
         result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
       }
       result["musicalEditing"]=true;
+      result["arrangementMatrix"]={{"maximumOrders",128},{"maximumChannels",32},{"defaultOrders",64},{"defaultChannels",16},{"densityBins",16},
+        {"density","events = occupied tracker cells + precise on/off events + native FX records; notes = pitched tracker cells + precise onsets. trackerEvents, preciseEvents and nativeFxEvents expose the stored layers separately; counts and bins are uint32."},
+        {"copy","Whole channel blocks in the current sequence, including precise notes and every FX column. makeUnique preserves exact destination pattern timing and unrelated native lanes/links. Explicit clip copies the overlapping span and excludes events at its end."},
+        {"preview","dryRun validates the complete candidate without consuming IDs/history. wouldChange includes native-only edits; changedCells counts six-field cell edits only. Changed Apply creates one Undo and stops playback; no-op preserves playback and Redo."}};
       for(const auto &m:host_->additionalDocumentReads()) if(std::find(result["reads"].begin(),result["reads"].end(),m)==result["reads"].end())result["reads"].push_back(m);
       for(const auto &m:host_->additionalDocumentWrites()) {
         if(std::find(result["writes"].begin(),result["writes"].end(),m)==result["writes"].end())result["writes"].push_back(m);result["revisionGuards"][m]={m=="plugin.library.set"?"expectedLibraryRevision":"expectedRevision"};
@@ -259,8 +263,8 @@ public:
     const auto separateWrites=host_?host_->independentWrites():std::vector<std::string>{};
     const bool independentRead=std::find(separateReads.begin(),separateReads.end(),method)!=separateReads.end();
     const bool independentWrite=std::find(separateWrites.begin(),separateWrites.end(),method)!=separateWrites.end();
-    const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="document.timing.get" || method=="arrangement.get" || method=="automation.formula.reference" || method=="automation.formula.preview");
-    const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set" || method=="song.annotate");
+    const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="document.timing.get" || method=="arrangement.get" || method=="arrangement.matrix" || method=="automation.formula.reference" || method=="automation.formula.preview");
+    const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set" || method=="song.annotate" || method=="arrangement.copyBlock");
     const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || method=="context.set" || (workspace && method!="workspace.get" && method!="workspace.commands.get");
     if(!write && !independentRead && !docRead && !workspace && method!="api.describe" && method!="document.get" && method!="context.get" && method!="pattern.get" && method!="transport.get")
       return errorResponse(q["id"],-32601,"Unknown method; call api.describe");

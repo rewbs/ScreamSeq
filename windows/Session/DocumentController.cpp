@@ -425,7 +425,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     const double sample=params.at("sample").get<double>();
     if(sample>=1 && sample<=65535 && std::floor(sample)==sample) changedSamples_.insert(unsigned(sample));
   }
-  scanPatterns_=method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create";
+  scanPatterns_=method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="arrangement.copyBlock";
   if(write && method!="document.open") preflightGrowth(method,params);
   Json result;
   if(method=="document.save" || method=="document.open") {

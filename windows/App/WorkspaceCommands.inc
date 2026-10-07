@@ -17,6 +17,7 @@
             {sampleBrowseCommand,L"Sample / Browse library, preview and import sample families",L""},
             {audioSettingsCommand,L"Audio / Output device and buffer settings",L""},
             {arrangementCommand,L"Song / Arrange pattern orders",L""},
+            {arrangementMatrixCommand,L"Song / Arrangement matrix and block copy",L""},
             {songTimingCommand,L"Song / Tempo, meter and groove",L""},
             {newPatternCommand,L"Pattern / New pattern and append order",L""},
             {duplicatePatternCommand,L"Pattern / Duplicate pattern and append order",L""},
