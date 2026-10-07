@@ -7,8 +7,8 @@ using namespace Tracker;
 using namespace OpenMPT;
 #include "GraphRealtimeAudit.hpp"
 static void check(bool okay,const char *why){if(!okay)throw std::runtime_error(why);}
-static std::vector<float> render(Document &doc,uint32_t rate,uint32_t block){
-  Renderer renderer(doc.serialize(),rate);PluginChain chain({},rate,true);chain.attachInstruments(renderer,&doc.native());chain.attachMusicalAutomation(renderer,doc.native());
+static std::vector<float> render(Document &doc,uint32_t rate,uint32_t block,const std::vector<PluginState> &plugins={}){
+  Renderer renderer(doc.serialize(),rate);PluginChain chain(plugins,rate,true);chain.attachInstruments(renderer,&doc.native());chain.attachMusicalAutomation(renderer,doc.native());
   std::vector<float> audio(rate*2);bool ended=false;
   for(uint32_t pos=0;pos<rate;pos+=block){auto count=std::min(block,rate-pos);tracker_audit_begin();chain.syncTransport(renderer);
     if(!ended&&renderer.render(audio.data()+pos*2,count)<count){chain.endNotes();ended=true;}
@@ -74,7 +74,23 @@ static void previewRouting() {
     doc->annotate([&](NativeSong &n){n=before;});
   }
 }
+static void portTrimRouting(){
+  auto doc=Document::demo();doc->annotate([](NativeSong &n){n.ensureMixer();SignalDefinition d;d.id=n.makeEntity().id;d.number=1;d.name="Unity stage";const auto in=n.makeEntity().id,out=n.makeEntity().id;d.nodes={{in,SignalNodeKind::Input,"In"},{out,SignalNodeKind::Output,"Out"}};d.audio={{in,out}};n.signal.library.push_back(d);n.signal.assignments.push_back({n.masterID,d.id,1,1});});const auto baseline=render(*doc,48000,127);const auto original=doc->native();const auto master="n"+std::to_string(original.masterID);
+  auto checkGain=[&](const std::string &owner,double input,double output,double expected,bool modulated=false){doc->annotate([&](NativeSong &n){n=original;auto &t=n.signal.trims[owner];t.gains={{"i:0",input},{"o:0",output}};
+      if(modulated){SignalSongSource source;source.node.id=n.makeEntity().id;source.node.kind=SignalNodeKind::Amount;source.node.name="Trim motion";source.amount=.5;n.signal.songSources.push_back(source);t.modulation["o:0"]={{source.node.id,0,-12}};}
+    });const auto audio=render(*doc,48000,4096);const auto delta=difference(audio,baseline,expected);if(delta>=4e-6)std::cerr<<"Trim owner "<<owner<<" in="<<input<<" out="<<output<<" mod="<<modulated<<" difference="<<delta<<"\n";check(delta<4e-6,"Saved song bus/stage trims or song source did not reach rendered PCM");};
+  checkGain(master,6,-6,1);checkGain(master,0,-6,std::pow(10.,-6./20));checkGain("stage:"+master,0,-6,std::pow(10.,-6./20));checkGain("stage:"+master,0,0,std::pow(10.,-6./20),true);
+  PluginState rack; rack.instanceID="trim-rack";rack.descriptor.format="Built-in";rack.descriptor.classID="resonance.gainer.v1";rack.descriptor.name="Gainer";
+  doc->annotate([&](NativeSong &n){n=original;n.signal.trims["plugin:trim-rack"].gains["o:0"]=-6;});check(difference(render(*doc,48000,127,{rack}),baseline,std::pow(10.,-6./20))<4e-6,"Saved rack trim did not reach PCM");
+  doc->annotate([&](NativeSong &n){n=original;});Renderer renderer(doc->serialize(),48000);PluginChain chain({},48000,true);chain.attachInstruments(renderer,&doc->native());chain.attachMusicalAutomation(renderer,doc->native());std::vector<float> audio(48000*2);
+  auto next=original;next.signal.trims[master].gains["o:0"]=-6;std::unique_ptr<GraphControlPlan> controls;
+  for(uint32_t at=0;at<48000;){if(at==12000){controls=chain.prepareGraphControls(next);check(bool(controls),"Live bus trim did not prepare a control publication");check(chain.publishGraphControls(std::move(controls)),"Live bus trim publication failed");}
+    auto count=std::min(512u,48000-at);if(at<12000)count=std::min(count,12000-at);uint64_t a,f,l;tracker_audit_begin();chain.beginRenderBlock();chain.syncTransport(renderer);renderer.render(audio.data()+at*2,count);const auto okay=chain.process(audio.data()+at*2,count);tracker_audit_end(&a,&f,&l);check(okay&&!renderer.faulted()&&a+f+l==0,"Live trim adoption violated realtime safety");at+=count;
+  }
+  for(size_t i=13000*2;i<audio.size();++i)check(std::abs(audio[i]-baseline[i]*std::pow(10.,-6./20))<4e-6,"Live trim did not remain active after smoothing");
+}
 int main(){@autoreleasepool{try{
+  portTrimRouting();
   previewRouting();
   auto notes=Document::demo();notes->transaction([](CSoundFile &song){song.Order().SetDefaultSpeed(1);song.Order().SetDefaultTempoInt(125);for(auto &p:song.Patterns)if(p.IsValid())for(ROWINDEX row=0;row<p.GetNumRows();++row){auto &cell=*p.GetpModCommand(row,0);cell={};cell.note=61;cell.instr=1;}});
   Renderer noteRenderer(notes->serialize(),48000);std::array<float,1000> noteAudio{};noteRenderer.render(noteAudio.data(),500);const auto firstOnset=noteRenderer.song().m_PlayState.Chn[0].nativeNoteGeneration;noteRenderer.render(noteAudio.data(),500);

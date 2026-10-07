@@ -30,7 +30,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   }
   func reload(){operationFailure=nil;shownFields=[:];pendingMoves=[:];hasDraft=false;load()}
 
-  var hasDraft:Bool {get{fieldDraft || rackControls.rangeEditing || pluginControls.parametersView.rangeEditing || envelopeEditor.hasDraft || canvas.isEditing || canvas.hasPendingNudge || busControls.editing || visualControls.dirty} set{fieldDraft=newValue}}
+  var hasDraft:Bool {get{fieldDraft || trimControls.hasDraft || rackControls.rangeEditing || pluginControls.parametersView.rangeEditing || envelopeEditor.hasDraft || canvas.isEditing || canvas.hasPendingNudge || busControls.editing || visualControls.dirty} set{fieldDraft=newValue}}
   func controlTextDidChange(_ notification:Notification){if notification.object as AnyObject? === nodeSearch {changeNodeFilter()}else{hasDraft=true}}
   let canvas=SignalCanvas(frame:NSRect(x:0,y:0,width:1000,height:600)), scroll=NSScrollView()
   let library=NSPopUpButton(),filter=NSPopUpButton(),source=NSPopUpButton(),destination=NSPopUpButton(),connection=NSPopUpButton()
@@ -66,6 +66,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   var definition:[String:Any]?{definitions.first{$0["id"] as? String==graphID}}
   var nodes:[[String:Any]]{definition?["nodes"] as? [[String:Any]] ?? []}
   var selectedNode:[String:Any]?{graphID==nil ? songSource(selectedID):nodes.first{$0["id"] as? String==selectedID}}
+  let trimControls=GraphTrimControls()
   let inspector=NSView(), inspectorScroll=verticalScrollView()
   let breadcrumbs=NSStackView(), scopeLabel=Theme.label("",size:10,color:Theme.muted)
   let addMenu=GraphAddMenu(),targetMenu=GraphAddMenu()
@@ -258,8 +259,10 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     connectionSection=stack(.vertical,[stack(.horizontal,[connectionHeading,NSView(),ActionButton("New…"){[weak self] in self?.newConnection()}]),stack(.horizontal,[connectButton,updateConnectionButton,removeConnectionButton]),connection,connectionHint,openConnectionOwnerButton,noteControls,connectionForm],spacing:7)
     connectionSection.stretchAcrossAxis()
     stageExplanation.font = .systemFont(ofSize:11);stageExplanation.textColor=Theme.muted;stageExplanation.preferredMaxLayoutWidth=246;stageExplanation.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-    nodeSection=stack(.vertical,[detail,stageExplanation,pluginControls,rackControls,name,
+    nodeSection=stack(.vertical,[detail,stageExplanation,pluginControls,rackControls,name,trimControls,
       useDetector,busControls,busSection,sourceSection],spacing:7)
+    trimControls.read={[weak self] p,done in self?.onRequest?("graph.trim.get",p,done)}
+    trimControls.edit={[weak self] p in self?.mutate("graph.trim.set",p)}
     nodeSection.stretchAcrossAxis()
     let help=Theme.label("Sockets add cables and mix audio into inputs; selected wire handles reroute only that cable. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert, or choose Move insert chain…. Hollow sockets enable automatically.",size:11,color:Theme.muted)
     help.lineBreakMode = .byWordWrapping;help.maximumNumberOfLines=0;help.preferredMaxLayoutWidth=246
@@ -486,6 +489,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     let context=object,libraryTarget="\(projectionDocument)/library/\(graphID ?? "")"
     defer {fieldDraft=hasUncommittedFields}
     defer {if changedObject{layoutSubtreeIfNeeded();inspectorScroll.contentView.scroll(to:.zero);inspectorScroll.reflectScrolledClipView(inspectorScroll.contentView)}}
+    trimControls.context(graph:graphID,node:canvas.selectedEdge==nil ? selectedID:nil,revision:revision)
     inspectParameterProvenance()
     visualControls.isHidden=selectedVisualRegion==nil;visualControls.context(selectedVisualRegion)
     nodeSection.isHidden=canvas.selectedEdge != nil || selectedID == nil || selectedVisualRegion != nil || selectedProvenance != nil
@@ -567,7 +571,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     operationFailure=nil;status.stringValue="Applying graph change…"
     var p=params
     if ["graph.node.add","graph.song.source.add"].contains(method),let processingGroupID{p["parent"]=processingGroupID}
-    p["expectedRevision"]=revision
+    if p["expectedRevision"] == nil {p["expectedRevision"]=revision}
     startMutation(method,p,document:projectionDocument,context:viewContext,after:after)
   }
   private func startMutation(_ method:String,_ params:[String:Any],document:String,context:[String],attempt:Int=0,

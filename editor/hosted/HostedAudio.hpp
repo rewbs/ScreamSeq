@@ -1,3 +1,4 @@
+#include "GraphStageTrims.hpp"
 #pragma once
 #include "PluginTypes.hpp"
 #include "PluginBackend.hpp"
@@ -91,6 +92,11 @@ struct GraphControlPlan {
   // Keeping the wrapper alive also makes skipped queue generations safe.
   std::shared_ptr<SongGroupRuntime> songGroups;
   std::vector<std::pair<uint64_t,bool>> songGroupBypasses;
+  struct BusTrim {MixerRuntime *runtime;size_t bus;const AudioPortTrims *spec;};
+  std::vector<BusTrim> busTrims;
+  AudioPortTrims neutralTrims;
+  std::vector<std::pair<NativePlugin *,const AudioPortTrims *>> portTrims;
+  std::vector<std::pair<GraphStageTrims *,const AudioPortTrims *>> stageTrims;
   struct Latency {std::shared_ptr<NativePlugin> plugin;std::shared_ptr<void> state;size_t bytes=0;};
   std::vector<Latency> latencies;
   std::shared_ptr<const HostedSampleBindings> sampleBindings;
@@ -158,6 +164,12 @@ class NativePlugin {
   PluginTransport transport_;
   double rate_ = 48000;
   ProcessorBypass bypassControl_;
+  AudioPortTrims neutralPortTrims_;
+  const AudioPortTrims *requestedPortTrims_=&neutralPortTrims_;
+  AudioTrimRuntime portTrims_;
+  std::array<std::unique_ptr<PluginAudioStorage>,64> trimmedInputs_;
+  uint64_t trimFrame_=0;
+  bool trimsStarted_=false;
   std::unique_ptr<PluginBackend> backend_;
   std::unique_ptr<NativeEffect> builtin_;
   // Stable scheduling facade; only the audio owner changes its render vendor.
@@ -229,14 +241,17 @@ public:
   NativePlugin(const NativePlugin &) = delete;
   bool process(float *interleaved, uint32_t frames, uint64_t position,
                std::span<const PluginAudioInput> inputs = {},const PluginSongModulation * = nullptr,std::span<const PluginParameterSamples> = {}) noexcept;
+  void portTrims(const AudioPortTrims &spec) noexcept; // Snapshot remains control-owned.
+  void trimSourceReader(AudioTrimSourceReader read,void *context) noexcept {portTrims_.sourceReader(read,context);}
   void bypass(bool value) noexcept {bypassControl_.set(value);}
   bool bypassed() const noexcept {return bypassControl_.requested();}
   size_t bypassStorageBytes() const noexcept{return bypassControl_.storageBytes();}
   size_t preparedStorageBytes() const noexcept {
-    size_t bytes=sizeof(NativePlugin)+bypassStorageBytes()+outputDelay_.capacity()*sizeof(float)+baselines_.capacity()*sizeof(Baseline);
+    size_t bytes=sizeof(NativePlugin)+portTrims_.bytes()+bypassStorageBytes()+outputDelay_.capacity()*sizeof(float)+baselines_.capacity()*sizeof(Baseline);
     if(backend_)bytes+=backend_->preparedStorageBytes();
     if(autoDetectorBuffer_)bytes+=sizeof(*autoDetectorBuffer_);
     if(initialMusicalEvents_)bytes+=sizeof(*initialMusicalEvents_);if(musicalMIDI_)bytes+=sizeof(*musicalMIDI_);
+    for(const auto &bus:trimmedInputs_)if(bus)bytes+=sizeof(*bus);
     for(const auto &bus:auxiliaryOutputBuffers_)if(bus)bytes+=sizeof(*bus);
     return bytes;
   }
@@ -456,6 +471,7 @@ class PluginChain {
     size_t graphIndex=0;
     std::vector<uint32_t> outputs;
     const PluginSongModulation *modulation=nullptr; // Set immediately before shared RenderOnce evaluation.
+    std::shared_ptr<GraphStageTrims> trims;
     bool sourceAwake=false; // Audio owner; retain release tails after last cable.
     bool process(float *,uint32_t,uint64_t,std::span<const PluginAudioInput>) noexcept;
     const float *output(uint32_t) const noexcept;
@@ -481,7 +497,10 @@ class PluginChain {
     struct SongControls;
     std::shared_ptr<SongControls> song;
     std::shared_ptr<SongGroupRuntime> groups;
-    SignalGraph songSpec; // Producer snapshot; only song sources/links are populated.
+    SignalGraph songSpec; // Producer snapshot of song sources, links and port trims.
+    AudioPortTrims neutralTrims;
+    std::vector<std::pair<NativePlugin *,const AudioPortTrims *>> portTrims;
+  std::vector<std::pair<GraphStageTrims *,const AudioPortTrims *>> stageTrims;
     std::shared_ptr<MusicalPlan> musical; // Retained by subsequent routing plans.
     bool publishMusical=false;
     uint64_t musicalSourceRevision=0;
@@ -502,7 +521,7 @@ class PluginChain {
   };
   void prepareObservations(const MixerTransition::Plan &,HostedMixerPlan &);
   void prepareRouteObservations(const MixerTransition::Plan &,HostedMixerPlan &,std::vector<SignalPortIdentity> &);
-  std::shared_ptr<HostedMixerPlan::SongControls> prepareSongControls(const NativeSong &,MixerTransition::Plan &,const HostedMixerPlan &);
+  std::shared_ptr<HostedMixerPlan::SongControls> prepareSongControls(const NativeSong &,MixerTransition::Plan &,HostedMixerPlan &);
   void prepareSongGroups(const NativeSong &,MixerTransition::Plan &,HostedMixerPlan &);
   HostedMixerPlan::SongControls *activeSongControls_=nullptr; // Current audio plan owns lifetime.
   HostedMixerPlan *activeHostedMixer_=nullptr;

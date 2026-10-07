@@ -50,9 +50,25 @@ std::vector<SignalGroupDryRoute> resolvedSignalGroupDryRoutes(const SignalDefini
   return resolve(group.dryRoutes,boundary.inputs,boundary.outputs,required);
 }
 void remapSignalGroupDryRoutes(SignalDefinition &definition,const std::map<uint64_t,uint64_t> &mapping){
+  std::map<std::string,std::string> keys;
+  for(const auto &e:definition.audio)if(mapping.contains(e.source)&&mapping.contains(e.target)){
+    keys[audioTrimKey(SignalGroupInput{e.source,e.target,e.output,e.input})]=audioTrimKey(SignalGroupInput{mapping.at(e.source),mapping.at(e.target),e.output,e.input});
+    keys[audioTrimKey(SignalGroupOutput{e.source,e.output})]=audioTrimKey(SignalGroupOutput{mapping.at(e.source),e.output});
+  }
+  auto sources=[&](AudioPortTrims &trims){for(auto &[key,edges]:trims.modulation){std::erase_if(edges,[&](auto &edge){if(!mapping.contains(edge.source))return true;edge.source=mapping.at(edge.source);return false;});}std::erase_if(trims.modulation,[](const auto &p){return p.second.empty();});};
+  for(auto &n:definition.nodes)sources(n.trims);
+  for(auto &g:definition.groups){sources(g.trims);AudioPortTrims next;
+    for(const auto &[key,value]:g.trims.gains)if(keys.contains(key))next.gains[keys.at(key)]=value;
+    for(const auto &[a,b]:g.trims.links)if(keys.contains(a)&&keys.contains(b))next.links[keys.at(a)]=keys.at(b);
+    for(const auto &[key,value]:g.trims.modulation)if(keys.contains(key))next.modulation[keys.at(key)]=value;
+    g.trims=std::move(next);
+  }
   for(auto &g:definition.groups)for(auto &r:g.dryRoutes){if(r.input.source){r.input.source=mapping.at(r.input.source);r.input.target=mapping.at(r.input.target);}r.output.node=mapping.at(r.output.node);}
 }
 void pruneSignalGroupDryRoutes(SignalDefinition &definition){
+  auto sources=[&](AudioPortTrims &trims){for(auto &[key,edges]:trims.modulation)std::erase_if(edges,[&](const auto &edge){return std::none_of(definition.nodes.begin(),definition.nodes.end(),[&](const auto &n){return n.id==edge.source;});});std::erase_if(trims.modulation,[](const auto &p){return p.second.empty();});};
+  for(auto &n:definition.nodes)sources(n.trims);for(auto &g:definition.groups)sources(g.trims);
+
   for(auto &g:definition.groups){const auto boundary=signalGroupBoundary(definition,g.id);
     std::erase_if(g.dryRoutes,[&](const auto &r){return std::find(boundary.outputs.begin(),boundary.outputs.end(),r.output)==boundary.outputs.end();});
     if(boundary.inputs.empty())for(auto &r:g.dryRoutes)r.input={};

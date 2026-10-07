@@ -38,6 +38,7 @@ SignalRuntime::SignalRuntime(SignalDefinition d,SignalPlan p,double rate,std::sp
   for(size_t i=0;i<nodes_.size();++i)if(definition_.nodes[i].kind==SignalNodeKind::Plugin){for(auto p:definition_.nodes[i].plugin.inputs)port(nodes_[i].inputs,p);for(auto p:definition_.nodes[i].plugin.outputs)port(nodes_[i].outputs,p);}
   for(size_t i=0;i<definition_.audio.size();++i){const auto &e=plan_.edges[i];auto &spec=definition_.audio[i];
     edges_.push_back({&spec,port(nodes_[e.source].outputs,spec.output),port(nodes_[e.target].inputs,spec.input),std::vector<float>(size_t(e.delay)*2),0});}
+  for(size_t i=0;i<nodes_.size();++i){auto &n=nodes_[i];std::vector<std::string> keys;for(const auto &p:n.inputs)keys.push_back(audioTrimPort(false,p->index));for(const auto &p:n.outputs)keys.push_back(audioTrimPort(true,p->index));n.trims=AudioTrimRuntime(std::move(keys),definition_.nodes[i].trims,rate);}
   for(auto &n:nodes_)for(auto &p:n.inputs)if(p->index)n.auxiliary.push_back({p->index,p->samples.data()});
   for(const auto &p:nodes_[plan_.output].inputs)port(result_,p->index);
   if(!definition_.groups.empty())groups_=std::make_unique<SignalGroupRuntime>(definition_,plan_,rate);
@@ -53,13 +54,14 @@ SignalRuntime::SignalRuntime(SignalDefinition d,SignalPlan p,double rate,std::sp
   }
   for(size_t i=0;i<definition_.nodes.size();++i)nodeIndex_.emplace_back(definition_.nodes[i].id,i);
   for(size_t i=0;i<definition_.audio.size();++i){const auto &e=definition_.audio[i];edgeIndex_.emplace_back(EdgeIdentity{e.source,e.output,e.target,e.input},i);}
-  std::sort(nodeIndex_.begin(),nodeIndex_.end());std::sort(edgeIndex_.begin(),edgeIndex_.end());preparedBytes_=measureStorage();
+  std::sort(nodeIndex_.begin(),nodeIndex_.end());std::sort(edgeIndex_.begin(),edgeIndex_.end());for(auto &n:nodes_)n.trims.sourceReader(readTrimSource,this);if(groups_)groups_->trimSourceReader(readTrimSource,this);
+  hasTrimModulation_=std::any_of(definition_.nodes.begin(),definition_.nodes.end(),[](const auto &n){return !n.trims.modulation.empty();})||std::any_of(definition_.groups.begin(),definition_.groups.end(),[](const auto &g){return !g.trims.modulation.empty();});preparedBytes_=measureStorage();
 }
 bool SignalRuntime::sameLayout(const SignalDefinition &next) const noexcept {
   if(next.nodes.size()!=definition_.nodes.size()||next.audio.size()!=definition_.audio.size()||next.modulation.size()!=definition_.modulation.size())return false;
   if(next.groups.size()!=definition_.groups.size())return false;
-  for(size_t i=0;i<next.groups.size();++i){const auto &a=next.groups[i],&b=definition_.groups[i];if(a.id!=b.id||a.parent!=b.parent||a.nodes!=b.nodes||a.dryRoutes!=b.dryRoutes)return false;}
-  for(size_t i=0;i<next.nodes.size();++i)if(next.nodes[i].id!=definition_.nodes[i].id||next.nodes[i].kind!=definition_.nodes[i].kind)return false;
+  for(size_t i=0;i<next.groups.size();++i){const auto &a=next.groups[i],&b=definition_.groups[i];if(a.id!=b.id||a.parent!=b.parent||a.nodes!=b.nodes||a.dryRoutes!=b.dryRoutes||a.trims.modulation!=b.trims.modulation)return false;}
+  for(size_t i=0;i<next.nodes.size();++i)if(next.nodes[i].id!=definition_.nodes[i].id||next.nodes[i].kind!=definition_.nodes[i].kind||next.nodes[i].trims.modulation!=definition_.nodes[i].trims.modulation)return false;
   for(size_t i=0;i<next.audio.size();++i){const auto &a=next.audio[i],&b=definition_.audio[i];if(std::tie(a.source,a.output,a.target,a.input)!=std::tie(b.source,b.output,b.target,b.input))return false;}
   for(size_t i=0;i<next.modulation.size();++i){const auto &a=next.modulation[i],&b=definition_.modulation[i];if(std::tie(a.source,a.target,a.parameter,a.enabled)!=std::tie(b.source,b.target,b.parameter,b.enabled))return false;}
   return true;
@@ -78,7 +80,7 @@ void SignalRuntime::inheritState(SignalRuntime &previous) noexcept {
   for(const auto &[id,index]:nodeIndex_){const auto found=std::lower_bound(previous.nodeIndex_.begin(),previous.nodeIndex_.end(),std::pair{id,size_t(0)});
     if(found!=previous.nodeIndex_.end()&&found->first==id&&definition_.nodes[index].kind==previous.definition_.nodes[found->second].kind){
       auto &node=nodes_[index];const auto &old=previous.nodes_[found->second];
-      node.envelope=old.envelope;node.noteGate=old.noteGate;node.pendingNoteEvent=old.pendingNoteEvent;
+      node.trims.inherit(old.trims);node.envelope=old.envelope;node.noteGate=old.noteGate;node.pendingNoteEvent=old.pendingNoteEvent;
     }
   }
   for(const auto &[identity,index]:edgeIndex_){const auto found=std::lower_bound(previous.edgeIndex_.begin(),previous.edgeIndex_.end(),std::pair{identity,size_t(0)});
@@ -94,7 +96,7 @@ void SignalRuntime::updateLatencyPlan(SignalPlan plan) {
     std::vector<float>(size_t(plan.edges[i].delay) * 2,0).swap(edges_[i].delay); edges_[i].cursor = 0;
   }
   plan_ = std::move(plan);
-  if(groups_){auto next=std::make_unique<SignalGroupRuntime>(definition_,plan_,sampleRate_);next->inheritState(*groups_);groups_=std::move(next);}
+  if(groups_){auto next=std::make_unique<SignalGroupRuntime>(definition_,plan_,sampleRate_);next->inheritState(*groups_);groups_=std::move(next);groups_->trimSourceReader(readTrimSource,this);}
   preparedBytes_=measureStorage();
 }
 void SignalRuntime::parameterBase(uint64_t node,uint32_t parameter,double value) noexcept {
@@ -162,8 +164,8 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
   const double beatsPerFrame=clock.playing?clock.tempo/(60*sampleRate_):0;
   // Dense source values are only consumed by parameter targets. Without any
   // targets the audio block can be larger than the fixed 32-sample scratch.
-  const bool discrete=(!targets_.empty()&&bool(groups_))||std::any_of(targets_.begin(),targets_.end(),[&](const auto &t){return controls_->modulation[t.sources.front().second].quantized;});
-  for(uint32_t offset=0;offset<frames;){auto count=std::min<uint32_t>(targets_.empty()?maximumFrames:uint32_t(quantum-(position+offset)%quantum),frames-offset);
+  const bool discrete=hasTrimModulation_||(!targets_.empty()&&bool(groups_))||std::any_of(targets_.begin(),targets_.end(),[&](const auto &t){return controls_->modulation[t.sources.front().second].quantized;});
+  for(uint32_t offset=0;offset<frames;){auto count=std::min<uint32_t>((targets_.empty()&&!hasTrimModulation_)?maximumFrames:uint32_t(quantum-(position+offset)%quantum),frames-offset);
     // Stop at point boundaries so step curves never become short ramps.
     if(clock.playing&&clock.unitsPerFrame>0)for(size_t i=0;i<nodes_.size();++i)if(controls_->nodes[i].kind==SignalNodeKind::Automation){
       if(const auto *lane=envelope(i,clock.pattern)){
@@ -174,10 +176,13 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
       }
     }
     for(auto &n:nodes_)for(auto &p:n.inputs)std::fill_n(p->samples.data(),count*2,0.f);
-    if(groups_)groups_->begin(*controls_,count);
+    trimPosition_=position+offset;trimFrames_=count;
+    if(groups_)groups_->begin(*controls_,count,position+offset);
     for(size_t index:plan_.order){auto &n=nodes_[index];const auto &spec=controls_->nodes[index];
       // Every edge is evaluated exactly once, when its destination is ready.
       for(size_t e=0;e<edges_.size();++e)if(plan_.edges[e].target==index){auto *capture=observer_?observationScratch_->data():nullptr;edges_[e].add(count,capture,groups_.get(),e);if(observer_)observer_->route(uint32_t(e),capture,count,position+offset,edges_[e].spec->gain);}
+      n.trims.begin(spec.trims,position+offset);
+      for(size_t p=0;p<n.inputs.size();++p)n.trims.apply(p,n.inputs[p]->samples.data(),count,position+offset);
       auto *in=lookup(n.inputs,0)->samples.data();auto *out=lookup(n.outputs,0)->samples.data();
       if(observer_&&(spec.kind==SignalNodeKind::Plugin||spec.kind==SignalNodeKind::Output||spec.kind==SignalNodeKind::Follower))for(const auto &p:n.inputs)observer_->audio(spec.id,false,p->index,p->samples.data(),count,position+offset);
       if(spec.kind==SignalNodeKind::Input){for(auto &p:n.outputs){const float *from=nullptr;if(!p->index)from=main;else for(const auto &external:inputs)if(external.bus==p->index)from=external.samples;
@@ -211,6 +216,7 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
           n.envelope=target+coefficient*(n.envelope-target);if(f==0)n.first=n.envelope;if(discrete)n.sampled[f]=n.envelope;}
         n.last=n.envelope;
       } else {n.first=sampledSource(index,position+offset,clock.beat+offset*beatsPerFrame,clock.position+offset*clock.unitsPerFrame,beatsPerFrame,clock);n.last=sampledSource(index,position+offset+count-1,clock.beat+(offset+count-1)*beatsPerFrame,clock.position+(offset+count-1)*clock.unitsPerFrame,beatsPerFrame,clock);if(discrete)for(uint32_t f=0;f<count;++f)n.sampled[f]=sampledSource(index,position+offset+f,clock.beat+(offset+f)*beatsPerFrame,clock.position+(offset+f)*clock.unitsPerFrame,beatsPerFrame,clock);}
+      for(size_t p=0;p<n.outputs.size();++p)n.trims.apply(n.inputs.size()+p,n.outputs[p]->samples.data(),count,position+offset);
       if(groups_)groups_->capture(index,count,this,[](void *context,size_t node,uint32_t port)noexcept->const float *{auto *runtime=static_cast<SignalRuntime *>(context);const auto *p=lookup(runtime->nodes_[node].outputs,port);return p?p->samples.data():nullptr;});
       if(observer_){
         if(spec.kind==SignalNodeKind::Input||spec.kind==SignalNodeKind::Plugin)for(const auto &p:n.outputs)observer_->audio(spec.id,true,p->index,p->samples.data(),count,position+offset);
@@ -220,12 +226,16 @@ bool SignalRuntime::render(float *main,uint32_t frames,uint64_t position,SignalC
         }
       }
     }
+    for(const auto &n:nodes_)if(!n.trims.valid())return false;if(groups_&&!groups_->trimsValid())return false;
     offset+=count;
   }
   std::copy_n(lookup(result_,0)->samples.data(),frames*2,main);return true;
 }
+bool SignalRuntime::readTrimSource(void *context,uint64_t id,uint64_t frame,double &value,bool &enabled) noexcept {
+  auto &r=*static_cast<SignalRuntime *>(context);if(frame<r.trimPosition_||frame-r.trimPosition_>=r.trimFrames_)return false;for(size_t i=0;i<r.controls_->nodes.size();++i)if(r.controls_->nodes[i].id==id){enabled=!r.controls_->nodes[i].muted;value=r.nodes_[i].sampled[size_t(frame-r.trimPosition_)];return true;}return false;
+}
 size_t SignalRuntime::measureStorage() const noexcept {
-  size_t bytes=definition_.bytes()+result_.size()*sizeof(Port)+nodes_.capacity()*sizeof(Node)+targets_.capacity()*sizeof(ModulationTarget)+nodeIndex_.capacity()*sizeof(nodeIndex_[0])+edgeIndex_.capacity()*sizeof(edgeIndex_[0]);for(const auto &t:targets_)bytes+=t.sources.capacity()*sizeof(t.sources[0]);for(const auto &n:nodes_)bytes+=(n.inputs.size()+n.outputs.size())*sizeof(Port);for(const auto &e:edges_)bytes+=e.delay.capacity()*sizeof(float);if(observer_)bytes+=observer_->storageBytes();if(observationScratch_)bytes+=sizeof(*observationScratch_);if(groups_)bytes+=groups_->storageBytes();return bytes;
+  size_t bytes=definition_.bytes()+result_.size()*sizeof(Port)+nodes_.capacity()*sizeof(Node)+targets_.capacity()*sizeof(ModulationTarget)+nodeIndex_.capacity()*sizeof(nodeIndex_[0])+edgeIndex_.capacity()*sizeof(edgeIndex_[0]);for(const auto &t:targets_)bytes+=t.sources.capacity()*sizeof(t.sources[0]);for(const auto &n:nodes_)bytes+=n.trims.bytes()+(n.inputs.size()+n.outputs.size())*sizeof(Port);for(const auto &e:edges_)bytes+=e.delay.capacity()*sizeof(float);if(observer_)bytes+=observer_->storageBytes();if(observationScratch_)bytes+=sizeof(*observationScratch_);if(groups_)bytes+=groups_->storageBytes();return bytes;
 }
 const float *SignalRuntime::output(uint32_t bus) const noexcept {auto p=lookup(result_,bus);return p?p->samples.data():nullptr;}
 } // namespace Tracker

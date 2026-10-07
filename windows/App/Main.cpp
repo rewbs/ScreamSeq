@@ -20,6 +20,7 @@
 #include "PluginPathWindow.hpp"
 #include "SongRoutingWindow.hpp"
 #include "GraphCommandsWindow.hpp"
+#include "GraphTrimsWindow.hpp"
 #include "ParameterAutomationWindow.hpp"
 #include "InstrumentEnvelopeWindow.hpp"
 #include "AbsoluteAutomationWindow.hpp"
@@ -91,7 +92,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     curveApply=486,curveReload=487,curveSetPoint=488,curveDelete=489,curveRamp=490,curveClear=491,
     curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497,curveExpand=498,curveReference=499,
     graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511,audioSettingsCommand=512,scratchGesturesCommand=513,
-    sampleRecordCommand=514,patternRenderSampleCommand=515,patternRenderInstrumentCommand=516,patternRenderOptionsCommand=517;
+    sampleRecordCommand=514,patternRenderSampleCommand=515,patternRenderInstrumentCommand=516,patternRenderOptionsCommand=517,graphTrimsCommand=518;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);

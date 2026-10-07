@@ -117,7 +117,7 @@ class SessionAdapter {
       {"writes",{"transport.play","transport.stop","context.set","workspace.panel","workspace.layout"}},{"maxPatternCells",4096},
       {"coordinates","Patterns, rows, channels and orders are zero-based. Samples and instruments are one-based; zero means none."},
       {"noteEncoding","0=empty; 1=C-0, 49=C-4, 61=C-5. Special notes and format command IDs follow document.get."},
-      {"platform","windows"},{"musicalEditing",false},{"fullApiParity",false},
+      {"audioPortTrims","graph.trim.get/set use stable port keys, -48..48 dB gains, inverse input/output links and dB source modulation. Recipe or song nodes, buses, stages and group boundaries; dryRun, revision guards and unified Undo. Audio followers are not trim sources."},{"platform","windows"},{"musicalEditing",false},{"fullApiParity",false},
       {"writeReplayCache",{{"maxEntries",maxCacheEntries},{"maxSerializedBytes",maxCacheBytes},
         {"retainedEntries",cache_.size()},{"retainedSerializedBytes",cacheBytes_},
         {"accounting","compact UTF-8 JSON request plus response; excludes newlines; not heap usage"},

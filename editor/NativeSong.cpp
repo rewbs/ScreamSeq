@@ -78,6 +78,9 @@ void NativeSong::removeSongSources(const std::vector<uint64_t> &sources) {
   for(auto id:sources)if(!removed.insert(id).second||std::none_of(signal.songSources.begin(),signal.songSources.end(),[&](const auto &s){return s.node.id==id;}))throw std::invalid_argument("Select distinct existing modulation sources");
   std::erase_if(signal.songSources,[&](const auto &s){return removed.contains(s.node.id);});
   std::erase_if(signal.songModulation,[&](const auto &e){return removed.contains(e.source);});
+  auto prune=[&](AudioPortTrims &trims){for(auto &[key,edges]:trims.modulation)std::erase_if(edges,[&](const auto &e){return removed.contains(e.source);});std::erase_if(trims.modulation,[](const auto &p){return p.second.empty();});};
+  for(auto &[key,trims]:signal.trims)prune(trims);for(auto &g:signal.groups)prune(g.trims);for(auto &s:signal.songSources)prune(s.node.trims);
+
   std::erase_if(envelopeLinks,[&](const auto &link){return link.target.kind==EnvelopeTargetKind::Graph&&removed.contains(link.target.owner);});
   std::set<std::string> keys;for(auto id:removed){auto key="source:n"+std::to_string(id);keys.insert(key);signal.layout.erase(key);removeSignalPresentationNode(signal.presentation,key);}
   std::vector<std::string> remaining;for(const auto &g:signal.groups)for(const auto &key:g.nodes)if(!keys.contains(key))remaining.push_back(key);

@@ -17,6 +17,7 @@
 #include "editor/ParameterProvenance.hpp"
 #include "editor/ParameterBaseline.hpp"
 #include "editor/GraphEditing.hpp"
+#include "editor/GraphTrims.hpp"
 #include "editor/GraphClipboard.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/PluginNoteSources.hpp"

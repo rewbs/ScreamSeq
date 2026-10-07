@@ -36,6 +36,9 @@ struct SignalGroupBoundary {
 struct SignalSongGroupBoundary {
   std::vector<SignalRouteIdentity> inputs,outputs;
 };
+inline std::string audioTrimKey(const SignalGroupInput &p){return "i:"+std::to_string(p.source)+"/"+std::to_string(p.output)+"/"+std::to_string(p.target)+"/"+std::to_string(p.input);}
+inline std::string audioTrimKey(const SignalGroupOutput &p){return "o:"+std::to_string(p.node)+"/"+std::to_string(p.port);}
+inline std::string audioTrimKey(const SignalRouteIdentity &p,bool output){auto part=[](const std::string &s){return std::to_string(s.size())+":"+s;};return std::string(output?"o:":"i:")+part(p.kind)+part(p.source)+part(p.target)+part(p.plugin)+part(p.tap)+"/"+std::to_string(p.input)+"/"+std::to_string(p.output);}
 std::set<uint64_t> signalGroupMembers(const SignalDefinition &,uint64_t group);
 SignalGroupBoundary signalGroupBoundary(const SignalDefinition &,uint64_t group);
 // Empty mappings infer a unique boundary, or silence when no audio enters.

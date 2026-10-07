@@ -10,6 +10,7 @@ namespace Tracker {
 struct PluginChain::HostedMixerPlan::SongControls {
   std::unique_ptr<SongModulationRuntime> runtime;
   std::vector<PluginSongModulation> processors;
+  std::vector<AudioTrimRuntime> followerTrims;
   struct Tap {size_t source,bus=SIZE_MAX,processor=SIZE_MAX;uint32_t output=0;};
   std::vector<Tap> taps;
   struct Notes {
@@ -23,10 +24,18 @@ struct PluginChain::HostedMixerPlan::SongControls {
   std::array<uint8_t,128> controllers{};
   SignalClock clock;
   std::array<float,8192> groupFollower{};
+  static bool readTrim(void *context,uint64_t id,uint64_t frame,double &value,bool &enabled) noexcept {
+    auto &self=*static_cast<SongControls *>(context);for(size_t i=0;i<self.runtime->sourceCount();++i)if(self.runtime->source(i).node.id==id){enabled=!self.runtime->source(i).node.muted;return self.runtime->contribution(i,frame,value);}return false;
+  }
+
 };
 
 std::shared_ptr<PluginChain::HostedMixerPlan::SongControls> PluginChain::prepareSongControls(
-    const NativeSong &native,MixerTransition::Plan &plan,const HostedMixerPlan &hosted) {
+    const NativeSong &native,MixerTransition::Plan &plan,HostedMixerPlan &hosted) {
+  // Routing candidates copy the retained host plan. Rebuild all borrowed trim
+  // bindings against this candidate; none may keep a predecessor's snapshot
+  // or a processor removed from the new rack/copy set.
+  hosted.portTrims.clear();hosted.stageTrims.clear();
   auto result=std::make_shared<HostedMixerPlan::SongControls>();
   auto graph=native.signal;
   std::vector<SongModulationParameter> parameters;
@@ -74,6 +83,18 @@ std::shared_ptr<PluginChain::HostedMixerPlan::SongControls> PluginChain::prepare
     }
   }
   result->runtime=std::make_unique<SongModulationRuntime>(graph,parameters,sampleRate_);
+  hosted.songSpec.trims=native.signal.trims;
+  for(const auto &entry:hosted.rack){const auto t=hosted.songSpec.trims.find("plugin:"+entry->baseline.instanceID);hosted.portTrims.emplace_back(entry->plugin.get(),t==hosted.songSpec.trims.end()?&hosted.neutralTrims:&t->second);}
+  for(size_t i=0;i<hosted.processors.size();++i){auto &processor=hosted.processors[i]->processor();if(!processor.graph)continue;
+    const auto bus=std::find_if(plan.runtime->graph().buses.begin(),plan.runtime->graph().buses.end(),[&](const auto &b){return signalBusIdentity(b.id)==plan.catalog[i].instance;});
+    if(bus==plan.runtime->graph().buses.end())throw std::logic_error("Missing graph-stage trim owner");const auto key="stage:n"+std::to_string(bus->id);
+    const auto found=hosted.songSpec.trims.find(key);const auto *spec=found==hosted.songSpec.trims.end()?&hosted.neutralTrims:&found->second;
+    if(!processor.trims)processor.trims=std::make_shared<GraphStageTrims>(key,plan.catalog[i].activeInputs,plan.catalog[i].activeOutputs,sampleRate_,*spec);
+    hosted.stageTrims.emplace_back(processor.trims.get(),spec);plan.processorStorage+=processor.trims->bytes();
+  }
+  plan.runtime->trimSourceReader(HostedMixerPlan::SongControls::readTrim,result.get());
+
+  for(size_t i=0;i<result->runtime->sourceCount();++i){result->followerTrims.emplace_back(std::vector<std::string>{"i:0"},result->runtime->source(i).node.trims,sampleRate_);result->followerTrims.back().sourceReader(HostedMixerPlan::SongControls::readTrim,result.get());plan.processorStorage+=result->followerTrims.back().bytes();}
   result->processors.resize(plan.catalog.size());
   for(size_t index=0;index<result->runtime->targets().size();++index){const auto &target=result->runtime->targets()[index];const auto slot=processor(target.plugin);
     const auto entry=std::find_if(hosted.rack.begin(),hosted.rack.end(),[&](const auto &p){return p->baseline.instanceID==target.plugin;});
@@ -86,6 +107,7 @@ std::shared_ptr<PluginChain::HostedMixerPlan::SongControls> PluginChain::prepare
       plan.dependencies.push_back({tap.bus,tap.processor,slot});
     }
   }
+  plan.processorStorage+=hosted.stageTrims.capacity()*sizeof(hosted.stageTrims[0])+hosted.portTrims.capacity()*sizeof(hosted.portTrims[0])+hosted.neutralTrims.bytes();
   plan.processorStorage+=sizeof(*result)+result->runtime->storageBytes()+result->taps.capacity()*sizeof(result->taps[0]);
   for(const auto &p:result->processors)plan.processorStorage+=sizeof(p)+p.targets.capacity()*sizeof(PluginSongModulation::Target);
   for(const auto &n:result->notes)plan.processorStorage+=sizeof(n)+n.members.capacity()/8+n.voices.capacity()*sizeof(n.voices[0]);
@@ -96,6 +118,7 @@ void PluginChain::prepareSongGroups(const NativeSong &native,MixerTransition::Pl
   hosted.groups.reset();if(native.signal.groups.empty())return;
   hosted.groups=std::make_shared<SongGroupRuntime>(native.signal,plan.runtime->graph(),plan.runtime->plan(),plan.catalog,sampleRate_);
   hosted.groups->runtime(plan.runtime.get());
+  hosted.groups->trimSourceReader(HostedMixerPlan::SongControls::readTrim,hosted.song.get());
   // The compiled timing vertices already order each exact ingress capture
   // before its egress; treating a processor input as its output would invent
   // feedback in valid crossed dry maps.
@@ -114,7 +137,7 @@ void PluginChain::HostedMixerPlan::adopt(void *opaque,void *previous) noexcept {
   if(next.sampleBindings)next.owner->adoptSampleBindings(*next.sampleBindings);
   if(next.instrumentBindings)next.owner->adoptInstrumentBindings(*next.instrumentBindings);
   if(next.noteRouting)next.owner->adoptNoteRouting(*next.noteRouting);
-  if(previous && next.song){const auto &old=*static_cast<HostedMixerPlan *>(previous);if(old.song){next.song->runtime->inheritState(*old.song->runtime);next.song->controllers=old.song->controllers;
+  if(previous && next.song){const auto &old=*static_cast<HostedMixerPlan *>(previous);if(old.song){next.song->runtime->inheritState(*old.song->runtime);next.song->controllers=old.song->controllers;for(size_t i=0;i<next.song->runtime->sourceCount();++i)for(size_t j=0;j<old.song->runtime->sourceCount();++j)if(next.song->runtime->source(i).node.id==old.song->runtime->source(j).node.id)next.song->followerTrims[i].inherit(old.song->followerTrims[j]);
     for(auto &scope:next.song->notes)for(const auto &prior:old.song->notes)if(next.song->runtime->source(scope.source).node.id==old.song->runtime->source(prior.source).node.id)
       {size_t index=0;for(auto &watch:scope.voices){while(index<prior.voices.size() && prior.voices[index].index<watch.index)++index;if(index<prior.voices.size() && prior.voices[index].index==watch.index)watch.generation=prior.voices[index].generation;}}
   }}
@@ -135,6 +158,8 @@ void PluginChain::HostedMixerPlan::begin(void *opaque,uint32_t frames,uint64_t p
 void PluginChain::beginSongControls(HostedMixerPlan &hosted,uint32_t frames,uint64_t position,bool current) noexcept {
   if(current){activeHostedMixer_=&hosted;activeSongControls_=hosted.song.get();}
   if(!hosted.song)return;auto &song=*hosted.song;song.clock=songClock_;
+  for(const auto &entry:hosted.rack)entry->plugin->trimSourceReader(HostedMixerPlan::SongControls::readTrim,&song);
+  for(const auto &[trim,spec]:hosted.stageTrims)trim->reader(HostedMixerPlan::SongControls::readTrim,&song);
   for(auto &processor:song.processors){processor.clock=song.clock;processor.frame=position;}
   for(uint32_t cc=0;cc<128;++cc){const auto value=songControllers_[cc].load(std::memory_order_relaxed);if(song.controllers[cc]!=value){song.controllers[cc]=value;song.runtime->controller(cc,value/127.);}}
   if(musicalSong_)for(auto &scope:song.notes){bool gate=false,retrigger=false;const auto &state=musicalSong_->m_PlayState;
@@ -161,9 +186,10 @@ void PluginChain::songFollower(HostedMixerPlan &hosted,size_t bus,size_t process
     // A validated tap can have silent PCM while an instrument sleeps, or
     // while a retained transition source supplies no samples. Silence still
     // advances the follower envelope; it is not an unavailable endpoint.
-    if(hosted.groups||!samples){
+    if(hosted.groups||!samples||!song.runtime->source(tap.source).node.trims.empty()){
       if(samples)std::copy_n(samples,frames*2,song.groupFollower.data());else std::fill_n(song.groupFollower.data(),frames*2,0.f);
       if(hosted.groups){hosted.groups->follower(tap.source,song.groupFollower.data(),frames,position);if(hosted.groups->failed())failed_=true;}
+      auto &trim=song.followerTrims[tap.source];trim.begin(song.runtime->source(tap.source).node.trims,position);trim.apply(0,song.groupFollower.data(),frames,position);if(!trim.valid())failed_=true;
       input=song.groupFollower.data();
     }
     if(!song.runtime->renderSource(tap.source,frames,position,song.clock,input))failed_=true;

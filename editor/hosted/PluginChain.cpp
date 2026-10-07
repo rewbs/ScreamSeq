@@ -258,7 +258,10 @@ std::unique_ptr<GraphControlPlan> PluginChain::prepareGraphControls(const Native
   if(!copyHandoff&&!sameSignalControlLayout(layout(priorSignal),layout(next.signal)))return nullptr;
   if(!graphControlPlans_.available())throw std::runtime_error("Graph parameter updates are pending; retry the edit");
   auto plan=std::make_unique<GraphControlPlan>();
-  plan->signal=next.signal;plan->sourceRevision=graphControlRevision_;plan->activityBase=activity_->processors.size();
+  plan->signal=next.signal;for(const auto &entry:rack_){const auto t=plan->signal.trims.find("plugin:"+entry->baseline.instanceID);plan->portTrims.emplace_back(entry->plugin.get(),t==plan->signal.trims.end()?&plan->neutralTrims:&t->second);}
+  if(mixerTransition_){const auto &hosted=*static_cast<HostedMixerPlan *>(mixerTransition_->controlPlan().processors.get());for(const auto &p:hosted.processors)if(auto *trims=p->processor().trims.get()){const auto t=plan->signal.trims.find(trims->owner);plan->stageTrims.emplace_back(trims,t==plan->signal.trims.end()?&plan->neutralTrims:&t->second);}}
+  if(mixerTransition_){auto *runtime=mixerTransition_->controlPlan().runtime.get();for(size_t bus=0;bus<runtime->graph().buses.size();++bus){const auto t=plan->signal.trims.find("n"+std::to_string(runtime->graph().buses[bus].id));plan->busTrims.push_back({runtime,bus,t==plan->signal.trims.end()?&plan->neutralTrims:&t->second});}}
+  plan->sourceRevision=graphControlRevision_;plan->activityBase=activity_->processors.size();
   if(!copyHandoff&&!next.signal.groups.empty()){
     if(!mixerTransition_)return nullptr;
     const auto &hosted=*static_cast<const HostedMixerPlan *>(mixerTransition_->controlPlan().processors.get());
@@ -284,6 +287,9 @@ std::unique_ptr<GraphControlPlan> PluginChain::prepareGraphControls(const Native
     if(snapshot.signalCopies)copyStorage(signalGraph_.get(),snapshot.signalCopies);
     if(snapshot.sampleCopies)copyStorage(sampleSignalGraph_.get(),snapshot.sampleCopies);
     for(const auto &copy:snapshot.copyOwners)account(*copy);
+    budget(snapshot.busTrims.capacity()*sizeof(snapshot.busTrims[0]));
+    budget(snapshot.stageTrims.capacity()*sizeof(snapshot.stageTrims[0]));
+    budget(snapshot.portTrims.capacity()*sizeof(snapshot.portTrims[0]));
     budget(snapshot.songGroupBypasses.capacity()*sizeof(snapshot.songGroupBypasses[0]));
     if(snapshot.songGroups&&songGroups.insert(snapshot.songGroups.get()).second)budget(snapshot.songGroups->storageBytes());
     // Initial endpoints are already included in NativeSignalGraph::storageBytes.
@@ -409,7 +415,10 @@ bool PluginChain::publishGraphControls(std::unique_ptr<GraphControlPlan> plan) {
   commitGraphControls(*published);return true;
 }
 void PluginChain::adoptGraphControls(const GraphControlPlan &plan,uint64_t frame) noexcept {
-    if(plan.songGroups)plan.songGroups->bypass(plan.songGroupBypasses);
+    for(const auto &t:plan.busTrims)t.runtime->portTrims(t.bus,*t.spec,frame);
+    for(const auto &[plugin,trims]:plan.portTrims)plugin->portTrims(*trims);
+    for(const auto &[stage,trims]:plan.stageTrims)stage->controls(*trims);
+    if(plan.songGroups){plan.songGroups->bypass(plan.songGroupBypasses);plan.songGroups->trims(plan.signal);}
     for(const auto &latency:plan.latencies)latency.plugin->adoptLatency(*static_cast<NativePlugin::LatencyUpdate *>(latency.state.get()));
     if(plan.instrumentBindings)adoptInstrumentBindings(*plan.instrumentBindings);
     if(plan.noteRouting)adoptNoteRouting(*plan.noteRouting);
@@ -446,6 +455,8 @@ void PluginChain::HostedMixerPlan::activateAudio(void *opaque,void *previous,uin
     if(controls.signalCopies)owner.signalGraph_->activateCopies(*static_cast<NativeSignalGraph::CopySet *>(controls.signalCopies.get()));
     if(controls.sampleCopies)owner.sampleSignalGraph_->activateCopies(*static_cast<NativeSignalGraph::CopySet *>(controls.sampleCopies.get()));
   }
+  for(const auto &[plugin,trims]:hosted.portTrims)plugin->portTrims(*trims);
+  for(const auto &[stage,trims]:hosted.stageTrims)stage->controls(*trims);
 }
 void PluginChain::applyPending() noexcept {
   if(parameterBlockOpen_)return;
@@ -695,7 +706,7 @@ std::unique_ptr<MixerTransition::Plan> PluginChain::prepareMixerRouting(const Na
       const auto target=std::find_if(native.mixer.buses.begin(),native.mixer.buses.end(),[&](const auto &bus){return signalBusIdentity(bus.id)==retained[i].instance;});if(target==native.mixer.buses.end())throw std::logic_error("Prepared graph bus identity is missing");const auto index=signalGraph_->copyIndex(copies,target->id);
       const auto ports=signalGraph_->copyOutputs(copies,index);const std::vector<uint32_t> outputs(ports.begin(),ports.end());
       std::shared_ptr<RenderOnce<MixerProcessor>> processor;
-      if(found!=previous.catalog.end()){auto candidate=static_cast<HostedMixerPlan *>(previous.processors.get())->processors[size_t(found-previous.catalog.begin())];const auto &state=candidate->processor();if(state.graphIndex==index&&state.outputs==outputs)processor=std::move(candidate);}
+      if(found!=previous.catalog.end()){auto candidate=static_cast<HostedMixerPlan *>(previous.processors.get())->processors[size_t(found-previous.catalog.begin())];const auto &state=candidate->processor();if(state.graphIndex==index&&state.outputs==outputs&&(!state.trims||state.trims->inputMask==retained[i].activeInputs))processor=std::move(candidate);}
       if(!processor){auto state=std::make_shared<MixerProcessor>();state->graph=signalGraph_;state->graphIndex=index;state->outputs=outputs;processor=std::make_shared<RenderOnce<MixerProcessor>>(std::move(state));}
       processors.push_back(std::move(processor));observed.push_back({});
     }
@@ -949,10 +960,13 @@ const float *PluginChain::captureMixerBus(size_t bus,const float *left,const flo
 }
 bool PluginChain::MixerProcessor::process(float *buffer,uint32_t frames,uint64_t position,std::span<const PluginAudioInput> inputs) noexcept {
   if(plugin)return plugin->process(buffer,frames,position,inputs,modulation);
-  return graph && graph->process(graphIndex,buffer,frames,position,inputs);
+  if(!graph)return false;
+  const auto supplied=trims?trims->begin(buffer,frames,position,inputs):inputs;
+  if(!graph->process(graphIndex,buffer,frames,position,supplied))return false;
+  if(trims){for(auto port:outputs)trims->output(port,graph->output(graphIndex,port),frames,position);return trims->finish(buffer,frames,position);}return true;
 }
 const float *PluginChain::MixerProcessor::output(uint32_t port) const noexcept {
-  return plugin?plugin->auxiliaryOutput(port):graph?graph->output(graphIndex,port):nullptr;
+  return plugin?plugin->auxiliaryOutput(port):trims?trims->output(port):graph?graph->output(graphIndex,port):nullptr;
 }
 bool PluginChain::HostedMixerPlan::process(void *context,MixerRuntime &mixer,size_t processor,float *buffer,uint32_t frames,uint64_t position) noexcept {
     auto &hosted=*static_cast<HostedMixerPlan *>(context);auto &chain=*hosted.owner;

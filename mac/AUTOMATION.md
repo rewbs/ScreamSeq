@@ -2445,3 +2445,50 @@ On macOS, `document.get` includes `loadWarnings: string[]`, `loadSourcePath: str
 ## Sample recording and resampling
 
 See [Recording samples and instruments](../doc/SCREAMSEQ_SAMPLING.md) for `sample.recording.devices/get/start/stop/commit/discard` and `sample.renderSelection`, with request examples, bounds, source isolation, permission and take ownership. Both append paths create a sample and optional instrument in one shared Undo transaction. Stopped microphone takes survive failed commits; capture never changes system audio defaults or enables input monitoring.
+
+## Audio port trims
+
+`graph.trim.get {graph, node}` returns available audio ports (`key`, `name`,
+`output`, `gainDB`, `linkTo`, `modulation`) and eligible control `sources`.
+Use `graph:null` for song owners: `plugin:<instanceID>`, `stage:n<busID>`, or
+`n<bus/groupID>`; a song follower input uses `source:n<sourceID>`. A graph
+stage must have an assigned or pattern-command graph. For reusable graphs, pass the graph ID and a node/group ID.
+Port keys are stable identities returned by the read; group keys describe an
+exact boundary, not its displayed position.
+
+`graph.trim.set {graph, node, port, gainDB?, linkTo?, modulation?,
+expectedRevision, dryRun?}` is one atomic, undoable edit. Gains default to 0 dB
+and range from −48 to +48 dB. `linkTo` pairs an input and output one-to-one;
+`null` unlinks. Linking keeps both current values. Subsequent gain changes move
+the other value by the opposite dB amount, preserving their sum. An edit that
+would put either value outside the range rejects unchanged. There is no preset
+for a historical mix mode and no automatic loudness matching.
+
+`modulation` replaces that port's contribution list with
+`[{source:"n…", minimumDB:0, maximumDB:12}]`; `[]` removes it. Automation curves,
+LFOs, MIDI, random, note envelope and amount sources use the existing graph
+source system. Each contribution maps 0..1 to its dB endpoints (−96..+96 dB).
+The sum is added to the manual trim and subtracted from its linked counterpart;
+limits clamp the pair together. Muted sources contribute nothing. Audio
+followers are not eligible trim sources in this implementation.
+
+Trims wrap the main and auxiliary ports of processors, graph stages and group
+boundaries. Input trim follows incoming summation; output trim precedes fan-out.
+Bus input trim is before inserts, bus output trim before the fader and all
+sends. Group trims remain outside group bypass; node/plugin trims remain outside
+plugin bypass. Manual changes ramp in dB over 5 ms. A linked linear path with
+zero latency keeps its gain during that ramp; processor latency can temporarily
+offset the two ramps, and compression/distortion can change loudness.
+Native projects store these settings; older metadata without trims defaults to
+unity. Module export does not preserve native trim controls.
+
+On macOS, select a graph node and use **Port trims** in its inspector. On Windows,
+open **Graph / Audio port trims** from the command palette. Both native editors
+include port choice, dB value, inverse link and a single modulation source/range;
+the API supports multiple additive sources. Use the existing automation editor
+to edit a chosen automation source's pattern curves.
+
+Recipe group extraction remaps boundary trim identities. Exporting a song group
+with boundary trims or song-scoped trim modulation currently rejects explicitly;
+keep it in the song, or clear those settings before converting it to a recipe.
+Independent rack-processor trims are copied during export.

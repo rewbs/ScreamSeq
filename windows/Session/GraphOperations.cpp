@@ -4,6 +4,7 @@
 #include "windows/Project/NativeMetadata.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/GraphEditing.hpp"
+#include "editor/GraphTrims.hpp"
 #include "editor/GraphClipboard.hpp"
 #include <cmath>
 #include <set>
@@ -65,6 +66,8 @@ void strictSongSource(Json &source) {
     keys(e,{"pattern","enabled","points"});field(e,"points");strictPoints(e["points"]);
   }}
 }
+std::vector<AudioTrimModulation> decodeTrimEdges(const Json &v){std::vector<AudioTrimModulation> edges;for(const auto &e:array(v,256)){keys(e,{"source","minimumDB","maximumDB"});edges.push_back({identity(field(e,"source")),number(field(e,"minimumDB"),-96,96),number(field(e,"maximumDB"),-96,96)});}return edges;}
+void strictTrims(const Json &v){keys(v,{"gains","links","modulation"});if(v.contains("gains"))for(const auto &g:array(v.at("gains"),512)){keys(g,{"port","gainDB"});text(field(g,"port"),2048);number(field(g,"gainDB"),-48,48);}if(v.contains("links"))for(const auto &l:array(v.at("links"),256)){keys(l,{"input","output"});text(field(l,"input"),2048);text(field(l,"output"),2048);}if(v.contains("modulation"))for(const auto &m:array(v.at("modulation"),256)){keys(m,{"port","sources"});text(field(m,"port"),2048);decodeTrimEdges(field(m,"sources"));}}
 void strictRecipe(Json &v) {
   keys(v,{"format","name","path","classID","type","subtype","manufacturer","state","inputs","outputs","parameters","bypass","audioLayout"});
   if(v.contains("parameters")){array(v["parameters"],4096);for(auto &p:v["parameters"]){keys(p,{"id","value"});integral(p,"id");}}
@@ -80,13 +83,15 @@ void strictDefinition(Json &d) {
   keys(d,{"id","number","name","nodes","audio","modulation","groups","presentation"}); if(d.contains("presentation"))presentationKeys(d.at("presentation")); integral(d,"number",1,999);
   array(field(d,"nodes"),64);
   for(auto &n:d["nodes"]) {
-    keys(n,{"id","kind","name","x","y","plugin","rate","phase","attack","release","controller","envelopes","muted"});
+    keys(n,{"id","kind","name","x","y","plugin","rate","phase","attack","release","controller","envelopes","muted","trims"});
+    if(n.contains("trims"))strictTrims(n.at("trims"));
     integral(n,"controller",0,127);
     if(n.contains("plugin")) strictRecipe(n["plugin"]);
     if(n.contains("envelopes")) { array(n["envelopes"],1024); for(auto &e:n["envelopes"]) { keys(e,{"pattern","enabled","points"}); field(e,"points"); strictPoints(e["points"]); } }
   }
   if(d.contains("groups")) for(auto &g:array(d["groups"],64)) {
-    keys(g,{"id","parent","name","x","y","nodes","bypass","dryRoutes"}); array(field(g,"nodes"),64);
+    keys(g,{"id","parent","name","x","y","nodes","bypass","dryRoutes","trims"}); array(field(g,"nodes"),64);
+    if(g.contains("trims"))strictTrims(g.at("trims"));
     if(g.contains("bypass"))boolean(g.at("bypass"));
     if(g.contains("dryRoutes"))for(auto &r:array(g["dryRoutes"],256)){keys(r,{"input","output"});const auto &in=field(r,"input");if(!in.is_null()&&in!=""){keys(in,{"source","target","input","output"});}keys(field(r,"output"),{"node","port"});}
   }
@@ -133,8 +138,8 @@ bool pluginInstrument(const std::vector<GraphRackRecord> &rack,uint16_t index) {
 }
 GraphOperations::GraphOperations(Tracker::Document &d,std::function<void()> stop,GraphHostHooks host)
   : document_(d),stopPlayback_(std::move(stop)),host_(std::move(host)) {}
-std::vector<std::string> GraphOperations::reads() { return {"graph.note.activity","graph.get","graph.selection.copy","graph.group.boundary","graph.automation.get","graph.provenance.get"}; }
-std::vector<std::string> GraphOperations::writes() { return {"graph.audio.connection.set","graph.note.connect","graph.note.update","graph.note.disconnect","graph.note.restoreAssignment","graph.create","graph.clone","graph.makeIndependent","graph.selection.paste","graph.selection.cut","graph.selection.duplicate","graph.source.mute","graph.group.bypass","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.automation.set","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set"}; }
+std::vector<std::string> GraphOperations::reads() { return {"graph.trim.get","graph.note.activity","graph.get","graph.selection.copy","graph.group.boundary","graph.automation.get","graph.provenance.get"}; }
+std::vector<std::string> GraphOperations::writes() { return {"graph.trim.set","graph.audio.connection.set","graph.note.connect","graph.note.update","graph.note.disconnect","graph.note.restoreAssignment","graph.create","graph.clone","graph.makeIndependent","graph.selection.paste","graph.selection.cut","graph.selection.duplicate","graph.source.mute","graph.group.bypass","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.automation.set","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set"}; }
 Json GraphOperations::invoke(const std::string &method,const Json &p) {
   using namespace Tracker;
   try {
@@ -169,6 +174,7 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
     }
 #include "GraphProvenanceOperations.inc"
 #include "GroupBypassOperations.inc"
+#include "GraphTrimOperations.inc"
     if(method=="graph.selection.copy") {
       keys(p,{"graph","nodes"});const auto graphID=identity(field(p,"graph"));const auto &library=document_.native().signal.library;
       const auto d=std::find_if(library.begin(),library.end(),[&](const auto &v){return v.id==graphID;});require(d!=library.end(),"Subgraph no longer exists");
@@ -203,6 +209,7 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
 #include "GraphPresentationOperations.inc"
 #include "NoteRoutingOperations.inc"
 #include "GroupBypassWriteOperations.inc"
+#include "GraphTrimWriteOperations.inc"
 #include "StageConnectionOperations.inc"
     if(method=="graph.selection.cut") {
       keys(p,{"graph","nodes","dryRun"});affected=identity(field(p,"graph"));std::vector<uint64_t> ids;for(const auto &v:array(field(p,"nodes"),128))ids.push_back(identity(v));clipboardFragment=Project::encodeSignalDefinitionMetadata(cutSignalSelection(next,affected,ids));

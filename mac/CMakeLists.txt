@@ -871,3 +871,12 @@ add_executable(windows-scratch-editor-state-tests
 target_include_directories(windows-scratch-editor-state-tests PRIVATE "${ROOT}/include/nlohmann-json/include")
 target_link_libraries(windows-scratch-editor-state-tests PRIVATE TrackerEditor)
 add_test(NAME windows-scratch-editor-state COMMAND windows-scratch-editor-state-tests)
+
+add_executable(audio-port-trim-tests "${ROOT}/editor/Tests/AudioPortTrimTests.cpp")
+target_link_libraries(audio-port-trim-tests PRIVATE TrackerMac)
+if(TRACKER_SANITIZER)
+  target_compile_definitions(audio-port-trim-tests PRIVATE TRACKER_SANITIZER)
+else()
+  target_link_libraries(audio-port-trim-tests PRIVATE RealtimeAudit)
+endif()
+add_test(NAME audio-port-trim COMMAND audio-port-trim-tests)

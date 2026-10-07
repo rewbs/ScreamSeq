@@ -42,6 +42,7 @@
 #include "NoteActivityAPI.inc"
 #include "GraphProvenanceAPI.inc"
 #include "GroupBypassReadAPI.inc"
+#include "GraphTrimReadAPI.inc"
     } else if ([method isEqual:@"graph.get"]) {
       allowed(@[@"includeState",@"includeImplicitMixer"]);NSMutableDictionary *data=[encodeSignalGraph(_document->native().signal,!p[@"includeState"]||boolean(p[@"includeState"])) mutableCopy];
 
@@ -85,6 +86,7 @@
 #include "GraphPresentationAPI.inc"
 #include "NoteRoutingAPI.inc"
 #include "GroupBypassAPI.inc"
+#include "GraphTrimWriteAPI.inc"
       if([method isEqual:@"graph.audio.connection.set"]) {
         allowed(@[@"source",@"target",@"output",@"input",@"gainDB",@"enabled",@"replace",@"dryRun"]);ensureMixer();auto value=decodeSignalStageCable(p);std::optional<SignalStageConnection> old;
         if(p[@"replace"]){auto r=object(p[@"replace"]);keys(r,@[@"source",@"target",@"output",@"input"]);old=decodeSignalStageCable(r);}

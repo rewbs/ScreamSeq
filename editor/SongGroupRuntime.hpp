@@ -29,8 +29,10 @@ private:
     std::array<float,4096> weights{};
     std::set<std::string> members,plugins;
     std::set<uint64_t> sources;
+    AudioPortTrims initialTrims;
+    AudioTrimRuntime trims;
   };
-  struct Capture {size_t route=0;uint64_t position=UINT64_MAX;uint32_t frames=0;std::array<float,8192> samples{};};
+  struct Capture {size_t route=0,group=0;uint64_t position=UINT64_MAX;uint32_t frames=0;std::array<float,8192> samples{};};
   struct Mapping {
     size_t group=0,input=SIZE_MAX,output=0;
     SignalSongGroupDryRoute identity;
@@ -41,6 +43,8 @@ private:
   std::vector<std::unique_ptr<Capture>> captures_;
   std::vector<std::unique_ptr<Mapping>> mappings_;
   std::vector<std::vector<size_t>> transforms_;
+  std::vector<std::vector<std::pair<size_t,size_t>>> trimInputs_,trimOutputs_;
+  const SignalGraph *trimControls_=nullptr;
   uint32_t fadeFrames_=1,frames_=0;uint64_t position_=0;
   bool failed_=false;
   const MixerRuntime *runtime_=nullptr;
@@ -55,6 +59,8 @@ public:
   // Prepared dependencies are added before validating the final execution DAG.
   std::vector<MixerTransition::Dependency> dependencies() const;
   void bypass(const std::vector<std::pair<uint64_t,bool>> &) noexcept;
+  void trimSourceReader(AudioTrimSourceReader reader,void *context) noexcept {for(auto &g:groups_)g.trims.sourceReader(reader,context);}
+  void trims(const SignalGraph &controls) noexcept {trimControls_=&controls;}
   void begin(uint32_t frames,uint64_t position) noexcept;
   void route(MixerRuntime::RouteKind,size_t,float *,uint32_t,uint64_t) noexcept;
   void follower(size_t source,float *,uint32_t,uint64_t) noexcept;

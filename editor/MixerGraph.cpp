@@ -115,7 +115,7 @@ void detachMixerInsert(MixerGraph &graph,const std::vector<std::string> &effectR
 size_t MixerGraph::bytes() const {
   size_t result = sizeof(*this);
   for (const auto &bus : buses) {
-    result += sizeof(bus) + bus.name.size() + bus.sends.size() * sizeof(MixerSend);
+    result += bus.portTrims.bytes()+sizeof(bus) + bus.name.size() + bus.sends.size() * sizeof(MixerSend);
     for (const auto &insert : bus.inserts) result += sizeof(insert) + insert.size();
   }
   for (const auto &source : instruments) result += sizeof(source) + source.plugin.size();

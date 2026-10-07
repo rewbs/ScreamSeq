@@ -5,6 +5,7 @@
 #include <string>
 #include <span>
 #include <vector>
+#include "AudioPortTrim.hpp"
 
 namespace Tracker {
 enum class MixerBusKind : uint8_t { Track, Group, Return, Master };
@@ -24,6 +25,7 @@ struct MixerBus {
   std::vector<std::string> inserts; // Stable plugin instance IDs in processing order.
   std::vector<MixerSend> sends;
   double prePan = 0; // Stereo balance before inserts; pan is after inserts/fader.
+  AudioPortTrims portTrims; // Prepared from SignalGraph; not a second saved value.
   bool operator==(const MixerBus &) const = default;
 };
 struct MixerInstrumentOutput {

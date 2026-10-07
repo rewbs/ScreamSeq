@@ -16,6 +16,7 @@ class SignalGroupRuntime {
     uint64_t id=0;size_t index=0,depth=0;
     double wet=1,from=1,to=1;uint32_t elapsed=0;
     std::array<float,4096> weights{};
+    AudioTrimRuntime trims;
   };
   struct Mapping {
     uint64_t groupID=0;size_t group=0,source=SIZE_MAX,input=SIZE_MAX,output=0;
@@ -29,12 +30,16 @@ class SignalGroupRuntime {
   std::vector<std::unique_ptr<Mapping>> mappings_;
   std::vector<std::vector<std::pair<size_t,size_t>>> audio_;
   std::vector<std::vector<size_t>> modulation_;
+  std::vector<std::vector<std::pair<size_t,size_t>>> trimInputs_,trimOutputs_;
+  uint64_t position_=0;
 public:
   using Source=const float *(*)(void *,size_t,uint32_t) noexcept;
   SignalGroupRuntime(const SignalDefinition &,const SignalPlan &,double sampleRate);
-  void begin(const SignalDefinition &,uint32_t frames) noexcept;
+  void trimSourceReader(AudioTrimSourceReader reader,void *context) noexcept {for(auto &g:groups_)g.trims.sourceReader(reader,context);}
+  bool trimsValid() const noexcept {for(const auto &g:groups_)if(!g.trims.valid())return false;return true;}
+  void begin(const SignalDefinition &,uint32_t frames,uint64_t position=0) noexcept;
   void capture(size_t node,uint32_t frames,void *,Source) noexcept;
-  float audio(size_t edge,float value,uint32_t sample) const noexcept;
+  float audio(size_t edge,float value,uint32_t sample,size_t captureGroup=SIZE_MAX) const noexcept;
   double modulation(size_t edge,uint32_t frame) const noexcept;
   bool affectsModulation(size_t edge) const noexcept;
   void inheritState(SignalGroupRuntime &) noexcept;

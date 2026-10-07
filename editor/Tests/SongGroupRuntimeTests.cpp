@@ -2,6 +2,7 @@
 #include "editor/SongModulation.hpp"
 #include <cmath>
 #include <iostream>
+#include <limits>
 #ifdef TRACKER_SANITIZER
 static void tracker_audit_begin(){}static void tracker_audit_end(uint64_t *a,uint64_t *f,uint64_t *l){*a=*f=*l=0;}
 #else
@@ -9,11 +10,12 @@ extern "C" void tracker_audit_begin();extern "C" void tracker_audit_end(uint64_t
 #endif
 using namespace Tracker;
 static void check(bool okay,const char *why){if(!okay)throw std::runtime_error(why);}
-static std::vector<float> render(uint32_t rate,uint32_t block,bool inner,bool outer) {
+static std::vector<float> render(uint32_t rate,uint32_t block,bool inner,bool outer,bool trimmed=false) {
   MixerGraph graph;graph.buses={{1,10,MixerBusKind::Track,"Track"},{2,10,MixerBusKind::Track,"Other"},{10,0,MixerBusKind::Master,"Main"}};graph.buses[0].inserts={"a","b","c"};
   const std::vector<MixerProcessorInfo> catalog{{"a",2,0},{"b",3,0},{"c",5,0}};const auto plan=compileMixer(graph,{1,2},catalog,rate);
   SignalGraph signal;SignalSongGroup first;first.id=100;first.parent=101;first.name="Inner";first.nodes={"plugin:a","plugin:b"};first.bypass=inner;
   SignalSongGroup second;second.id=101;second.name="Outer";second.nodes={"plugin:c"};second.bypass=outer;signal.groups={first,second};
+  if(trimmed){graph.buses[0].portTrims.gains={{"i:0",6},{"o:0",-6}};for(auto &g:signal.groups){const auto boundary=signalSongGroupBoundary(signal,graph,{"a","b","c"},g.id);check(boundary.inputs.size()==1&&boundary.outputs.size()==1,"Trim fixture requires a unique boundary");const auto in=audioTrimKey(boundary.inputs[0],false),out=audioTrimKey(boundary.outputs[0],true);g.trims.links[in]=out;g.trims.set(in,g.id==100?6:-12);}}
   auto groups=std::make_unique<SongGroupRuntime>(signal,graph,plan,catalog,rate);auto runtime=std::make_unique<MixerRuntime>(graph,plan,rate);
   groups->runtime(runtime.get());runtime->routeTransform([](void *p,MixerRuntime::RouteKind k,size_t i,float *audio,uint32_t n,uint64_t at)noexcept{static_cast<SongGroupRuntime *>(p)->route(k,i,audio,n,at);},groups.get());
   struct State {std::array<std::vector<float>,3> rings;std::array<size_t,3> cursors{};std::array<uint64_t,3> through{};bool failed=false;} state;
@@ -27,7 +29,9 @@ static std::vector<float> render(uint32_t rate,uint32_t block,bool inner,bool ou
     runtime->complete();tracker_audit_end(&a,&f,&l);check(!runtime->failed()&&!groups->failed()&&!state.failed&&a+f+l==0,"Song group wrapper violated realtime safety or route order");at+=count;
   }
   for(uint32_t frame=0;frame<6000;++frame){const float source=frame<10?0.f:float(.1+.02*std::sin((frame-10)*.003));const float expected=frame<10?0:source*(outer?1.f:inner?5.f:30.f)+.03f;
-    check(std::abs(output[frame*2]-expected)<4e-7,"Nested group dry boundary is not independently latency aligned");}
+    // Reciprocal dB trims add float multiplications; bound their rounding error.
+    const double tolerance=trimmed?16*std::numeric_limits<float>::epsilon()*std::max(1.f,std::abs(expected)):4e-7;
+    check(std::abs(output[frame*2]-expected)<tolerance,"Nested group dry boundary is not independently latency aligned");}
   check(state.through==std::array<uint64_t,3>{6000,6000,6000},"A bypassed group stopped its members");return output;
 }
 static void controlBoundary() {
@@ -59,4 +63,4 @@ static std::vector<float> lateIngress(uint32_t rate,uint32_t block,bool bypass) 
   for(uint32_t i=0;i<6000;++i){const auto expected=i<14?0.f:float(.03*std::sin((i-14)*.01))*(bypass?1:2)+float(.02*std::cos((i-14)*.007))*(bypass?1:3);check(std::abs(result[i*2]-expected)<1e-7,"Late/crossed group mapping differs from independently delayed wet/dry samples");}
   return result;
 }
-int main(){try{for(auto rate:{44100u,48000u,96000u})for(bool bypass:{false,true}){const auto expected=lateIngress(rate,17,bypass);check(expected==lateIngress(rate,128,bypass)&&expected==lateIngress(rate,4096,bypass),"Late dry-map timing depends on callback partition");}for(auto rate:{44100u,48000u,96000u})for(bool inner:{false,true})for(bool outer:{false,true}){const auto expected=render(rate,17,inner,outer);check(expected==render(rate,128,inner,outer)&&expected==render(rate,4096,inner,outer),"Song group boundaries depend on callback partition");}controlBoundary();std::cout<<"PASS song group boundary bypass, nested dry alignment, internal clocks and modulation isolation, partition and realtime audit\n";}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}return 0;}
+int main(){try{for(bool inner:{false,true})for(bool outer:{false,true})render(48000,128,inner,outer,true);for(auto rate:{44100u,48000u,96000u})for(bool bypass:{false,true}){const auto expected=lateIngress(rate,17,bypass);check(expected==lateIngress(rate,128,bypass)&&expected==lateIngress(rate,4096,bypass),"Late dry-map timing depends on callback partition");}for(auto rate:{44100u,48000u,96000u})for(bool inner:{false,true})for(bool outer:{false,true}){const auto expected=render(rate,17,inner,outer);check(expected==render(rate,128,inner,outer)&&expected==render(rate,4096,inner,outer),"Song group boundaries depend on callback partition");}controlBoundary();std::cout<<"PASS song group boundary bypass, nested dry alignment, internal clocks and modulation isolation, partition and realtime audit\n";}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}return 0;}

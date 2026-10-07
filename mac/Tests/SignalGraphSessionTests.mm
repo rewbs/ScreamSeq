@@ -6,10 +6,12 @@
 using namespace Tracker;
 static void check(bool b,const char *message){if(!b)throw std::runtime_error(message);}
 
+#include "GraphTrimSessionChecks.inc"
 #include "GraphEditingSessionChecks.inc"
 #include "GraphStageSessionChecks.inc"
 #include "SignalTelemetrySessionChecks.inc"
 int main(){@autoreleasepool{try{
+  graphTrimSessionChecks();
   signalTelemetryProjectionChecks();
   TrackerSession *session=[TrackerSession new];NSError *error=nil;
   check([[session signalTelemetry] isEqual:[session songSignalTelemetry]],"Stopped root projection must retain the full telemetry envelope and empty-port semantics");

@@ -14,6 +14,7 @@ bool audioSource(SignalNodeKind k) { return k == SignalNodeKind::Input || k == S
 bool audioTarget(SignalNodeKind k) { return k == SignalNodeKind::Output || k == SignalNodeKind::Plugin || k == SignalNodeKind::Follower; }
 bool modSource(SignalNodeKind k) { return k >= SignalNodeKind::LFO && k <= SignalNodeKind::Automation; }
 void validateSourceSettings(const SignalNode &n) {
+  n.trims.validate();
   require(!n.muted || modSource(n.kind),"Only modulation sources can be muted");
   require(text(n.name,1024) && finite(n.x,-100000,100000) && finite(n.y,-100000,100000),"Invalid graph node label or position");
   require(finite(n.rate,.0001,1024) && finite(n.phase,0,1) && finite(n.attack,.00001,60) && finite(n.release,.00001,60) && n.controller<=127,"Invalid modulation source settings");
@@ -34,6 +35,7 @@ void validateGroups(const SignalDefinition &d) {
   for(const auto &node:d.nodes)nodes.emplace(node.id,node.kind);
   std::set<uint64_t> owned;
   for(const auto &group:d.groups) {
+    group.trims.validate();
     require(group.id && group.id!=d.id && !nodes.contains(group.id) && groups.emplace(group.id,&group).second,"Invalid or duplicate processing group identity");
     require(text(group.name,256)&&finite(group.x,-100000,100000)&&finite(group.y,-100000,100000),"Invalid processing group label or position");
     for(auto id:group.nodes) {
@@ -42,6 +44,7 @@ void validateGroups(const SignalDefinition &d) {
     }
   }
   for(const auto &group:d.groups) {
+    group.trims.validate();
     require(!group.parent||groups.contains(group.parent),"Processing group parent does not exist");
     std::set<uint64_t> ancestors{group.id};auto parent=group.parent;
     while(parent) {
@@ -57,6 +60,7 @@ void validateSongSignalGroups(const SignalGraph &graph) {
   std::map<uint64_t,const SignalSongGroup *> groups;
   std::set<std::string> owned;
   for(const auto &g:graph.groups) {
+    g.trims.validate();
     require(g.id&&groups.emplace(g.id,&g).second,"Invalid or duplicate song processing group identity");
     require(text(g.name,256)&&finite(g.x,0,100000)&&finite(g.y,0,100000),"Invalid song processing group label or position");
     require(g.nodes.size()<=240,"Too many group members");
@@ -68,6 +72,7 @@ void validateSongSignalGroups(const SignalGraph &graph) {
     }
   }
   for(const auto &g:graph.groups) {
+    g.trims.validate();
     std::set<uint64_t> seen{g.id};auto parent=g.parent;
     while(parent){require(groups.contains(parent)&&seen.insert(parent).second,"Song processing group parent is missing or cyclic");parent=groups.at(parent)->parent;}
     require(!g.nodes.empty()||std::any_of(graph.groups.begin(),graph.groups.end(),[&](const auto &c){return c.parent==g.id;}),"Empty processing groups must be ungrouped");
@@ -133,6 +138,7 @@ SignalDefinition extractSongSignalGroup(const SignalGraph &graph,const MixerGrap
     const std::vector<std::pair<std::string,GraphPluginRecipe>> &effects,const std::function<uint64_t()> &allocate) {
   validateSongSignalGroups(graph);const auto descendants=songGroupDescendants(graph,groupID);
   const auto &group=*std::find_if(graph.groups.begin(),graph.groups.end(),[&](const auto &g){return g.id==groupID;});
+  for(const auto &g:graph.groups)if(descendants.contains(g.id))require(g.trims.empty(),"Export of song-group boundary trims is not lossless; keep this group in the song or reset its boundary trims before exporting");
   std::set<std::string> selected;
   for(const auto &g:graph.groups)if(descendants.contains(g.id))for(const auto &key:g.nodes) {
     require(key.starts_with("plugin:"),"This group contains song modulation sources; export its audio processors separately until source scopes can be mapped into a reusable recipe");
@@ -158,6 +164,7 @@ SignalDefinition extractSongSignalGroup(const SignalGraph &graph,const MixerGrap
   std::map<std::string,uint64_t> ids;uint64_t previous=input;uint32_t inputPort=1,outputPort=1;
   for(size_t i=0;i<chain.size();++i){const auto &key=chain[i];const auto recipe=std::find_if(effects.begin(),effects.end(),[&](const auto &p){return p.first==key;});require(recipe!=effects.end(),"A grouped rack effect is unavailable");
     SignalNode node;node.id=allocate();node.kind=SignalNodeKind::Plugin;node.name=recipe->second.name;node.plugin=recipe->second;node.x=280+i*235;node.y=100;ids[key]=node.id;
+    if(const auto trim=graph.trims.find("plugin:"+key);trim!=graph.trims.end()){require(trim->second.modulation.empty(),"Song trim source scopes cannot be exported into a reusable recipe");node.trims=trim->second;}
     result.audio.push_back({previous,node.id});previous=node.id;
     // The rack host also activates auxiliary buses from routing, independently
     // of the saved recipe. Preserve those capabilities in the exported copy.
@@ -212,16 +219,17 @@ SignalDefinition extractSongSignalGroup(const SignalGraph &graph,const MixerGrap
 }
 size_t SignalDefinition::bytes() const {
   size_t n = presentation.bytes() + sizeof(*this) + name.size() + audio.size()*sizeof(SignalAudioEdge) + modulation.size()*sizeof(SignalModulation);
-  for(const auto &v:nodes) n += sizeof(v)+v.name.size()+v.plugin.format.size()+v.plugin.name.size()+v.plugin.path.size()+v.plugin.classID.size()+v.plugin.audioLayout.size()+v.plugin.state.size()+v.plugin.parameters.size()*(sizeof(std::pair<const uint32_t,double>)+3*sizeof(void *))+(v.plugin.inputs.size()+v.plugin.outputs.size())*sizeof(uint32_t);
+  for(const auto &v:nodes) n += v.trims.bytes()+sizeof(v)+v.name.size()+v.plugin.format.size()+v.plugin.name.size()+v.plugin.path.size()+v.plugin.classID.size()+v.plugin.audioLayout.size()+v.plugin.state.size()+v.plugin.parameters.size()*(sizeof(std::pair<const uint32_t,double>)+3*sizeof(void *))+(v.plugin.inputs.size()+v.plugin.outputs.size())*sizeof(uint32_t);
   for(const auto &node:nodes)for(const auto &lane:node.envelopes){n+=sizeof(lane)+lane.points.size()*sizeof(AutomationPoint);for(const auto &point:lane.points)n+=point.formula.bytes();}
-  for(const auto &group:groups)n+=sizeof(group)+group.name.size()+group.nodes.size()*sizeof(uint64_t)+group.dryRoutes.size()*sizeof(SignalGroupDryRoute);
+  for(const auto &group:groups)n+=group.trims.bytes()+sizeof(group)+group.name.size()+group.nodes.size()*sizeof(uint64_t)+group.dryRoutes.size()*sizeof(SignalGroupDryRoute);
   return n;
 }
 size_t SignalGraph::bytes() const {
   size_t n = noteRouting.bytes() + presentation.bytes() + sizeof(*this)+inputs.size()*sizeof(SignalInputRoute)+outputs.size()*sizeof(SignalOutputRoute)+(assignments.size()+instrumentAssignments.size())*sizeof(SignalAssignment)+commands.size()*sizeof(SignalCommand)+lanes.size()*sizeof(std::pair<uint64_t,uint8_t>);
   for(const auto &[key,position]:layout)n+=key.size()+sizeof(position);
+  for(const auto &[key,t]:trims)n+=key.capacity()+t.bytes();for(const auto &g:groups)n+=g.trims.bytes();
   for(const auto &d:library)n += d.bytes();
-  for(const auto &s:songSources){n+=sizeof(s)+s.node.name.size()+s.audioPlugin.size();
+  for(const auto &s:songSources){n+=s.node.trims.bytes()+sizeof(s)+s.node.name.size()+s.audioPlugin.size();
     for(const auto &lane:s.node.envelopes){n+=sizeof(lane)+lane.points.size()*sizeof(AutomationPoint);for(const auto &point:lane.points)n+=point.formula.bytes();}}
   for(const auto &m:songModulation)n+=sizeof(m)+m.plugin.size();
   for(const auto &r:stageConnections)n+=sizeof(r)+r.source.plugin.size()+r.target.plugin.size();
@@ -277,6 +285,15 @@ SignalPlan compileSignal(const SignalDefinition &d, const std::vector<SignalProc
     auto key=std::pair{e.target,e.parameter};require(!bases.contains(key)||bases.at(key)==e.base,"Modulation connections to a parameter must share one base value");bases[key]=e.base;
     if(e.enabled){require(!quantization.contains(key)||quantization.at(key)==e.quantized,"Enabled modulation sources must share the target quantization mode");quantization[key]=e.quantized;dependencies[b].insert(a);}
   }
+  auto trimDependencies=[&](const AudioPortTrims &trims,const std::vector<uint64_t> &targets){
+    for(const auto &[port,edges]:trims.modulation)for(const auto &edge:edges){
+      require(indices.contains(edge.source),"Trim modulation source no longer exists");
+      const auto source=indices.at(edge.source);require(modSource(d.nodes[source].kind)&&d.nodes[source].kind!=SignalNodeKind::Follower,"Trim modulation requires a control source other than an audio follower");
+      for(auto target:targets)if(target!=edge.source)dependencies[indices.at(target)].insert(source);
+    }
+  };
+  for(const auto &node:d.nodes)trimDependencies(node.trims,{node.id});
+  for(const auto &group:d.groups){std::vector<uint64_t> members;for(const auto &n:d.nodes)if(audioSource(n.kind)||audioTarget(n.kind))members.push_back(n.id);trimDependencies(group.trims,members);}
   // Group dry routes add only scheduling dependencies, never summed wet audio.
   // The gain/PDC capture belongs to the boundary wrapper, not these audio edges.
   std::vector<SignalGroupDryRoute> groupDry;
@@ -496,7 +513,7 @@ SignalDefinition extractSignalGroup(const SignalDefinition &definition,uint64_t 
   double right=300;
   for(auto n:definition.nodes)if(members.contains(n.id)){n.x=n.x-found->x+280;n.y=n.y-found->y+80;right=std::max(right,n.x+240);copy.nodes.push_back(std::move(n));}
   copy.nodes.push_back({output,SignalNodeKind::Output,"Output",right,80});
-  const bool retainBoundary=found->bypass||!found->dryRoutes.empty();
+  const bool retainBoundary=found->bypass||!found->dryRoutes.empty()||!found->trims.empty();
   for(auto g:definition.groups)if(groups.contains(g.id)&&(g.id!=id||retainBoundary)){if(g.id==id||(!retainBoundary&&g.parent==id))g.parent=0;g.x=g.x-found->x+280;g.y=g.y-found->y+80;copy.groups.push_back(std::move(g));}
   // Distinct incoming cables remain distinct buses; never sum sources or
   // discard their gains implicitly. Shared outgoing taps share an output bus.
@@ -507,6 +524,10 @@ SignalDefinition extractSignalGroup(const SignalDefinition &definition,uint64_t 
     else if(!a&&b){require(nextInput<64,"This boundary needs more than 64 audio inputs");const SignalGroupInput old{e.source,e.target,e.output,e.input};e.source=input;e.output=nextInput++;inputMappings.push_back({old,{e.source,e.target,e.output,e.input}});copy.audio.push_back(e);}
     else if(a&&!b){const auto key=std::pair{e.source,e.output};if(!outputs.contains(key)){require(outputs.size()<64,"This boundary needs more than 64 audio outputs");const auto port=uint32_t(outputs.size());outputs.emplace(key,port);copy.audio.push_back({e.source,output,e.output,port,1});}}
   }
+  for(auto &g:copy.groups){std::map<std::string,std::string> keys;for(const auto &[from,to]:inputMappings)keys[audioTrimKey(from)]=audioTrimKey(to);
+    auto key=[&](const std::string &k){auto p=keys.find(k);return p==keys.end()?k:p->second;};AudioPortTrims remapped;
+    for(const auto &[k,v]:g.trims.gains)remapped.gains[key(k)]=v;for(const auto &[a,b]:g.trims.links)remapped.links[key(a)]=key(b);for(const auto &[k,v]:g.trims.modulation)remapped.modulation[key(k)]=v;g.trims=std::move(remapped);
+  }
   for(auto &g:copy.groups)for(auto &r:g.dryRoutes)if(r.input.source&&!members.contains(r.input.source)){const auto mapped=std::find_if(inputMappings.begin(),inputMappings.end(),[&](const auto &v){return v.first==r.input;});require(mapped!=inputMappings.end(),"Exported group dry input is unavailable");r.input=mapped->second;}
   for(const auto &e:definition.modulation){const bool a=members.contains(e.source),b=members.contains(e.target);
     require(a==b,"Include both modulation sources and their targets before saving this group to the library");
@@ -516,14 +537,15 @@ SignalDefinition extractSignalGroup(const SignalDefinition &definition,uint64_t 
   compileSignal(copy);return copy;
 }
 namespace {
-template<class Groups> bool sameProcessingGroups(const Groups &a,const Groups &b){if(a.size()!=b.size())return false;for(size_t i=0;i<a.size();++i)if(a[i].id!=b[i].id||a[i].parent!=b[i].parent||a[i].nodes!=b[i].nodes||a[i].bypass!=b[i].bypass||a[i].dryRoutes!=b[i].dryRoutes)return false;return true;}
+template<class Groups> bool sameProcessingGroups(const Groups &a,const Groups &b){if(a.size()!=b.size())return false;for(size_t i=0;i<a.size();++i)if(a[i].id!=b[i].id||a[i].parent!=b[i].parent||a[i].nodes!=b[i].nodes||a[i].bypass!=b[i].bypass||a[i].dryRoutes!=b[i].dryRoutes||a[i].trims!=b[i].trims)return false;return true;}
 }
 bool sameSignalProcessing(const SignalGraph &a,const SignalGraph &b) {
   if(!sameProcessingGroups(a.groups,b.groups))return false;
+  if(a.trims!=b.trims)return false;
   if(a.noteRouting!=b.noteRouting)return false;
   if(a.songModulation!=b.songModulation || a.songSources.size()!=b.songSources.size())return false;
   for(size_t i=0;i<a.songSources.size();++i){const auto &x=a.songSources[i],&y=b.songSources[i];const auto &n=x.node,&m=y.node;
-    if(n.id!=m.id||n.kind!=m.kind||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes||n.muted!=m.muted||x.audioBus!=y.audioBus||x.audioStage!=y.audioStage||x.audioPlugin!=y.audioPlugin||x.output!=y.output||x.preFader!=y.preFader||x.noteTarget!=y.noteTarget||x.noteInstrument!=y.noteInstrument||x.amount!=y.amount)return false;
+    if(n.id!=m.id||n.kind!=m.kind||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes||n.trims!=m.trims||n.muted!=m.muted||x.audioBus!=y.audioBus||x.audioStage!=y.audioStage||x.audioPlugin!=y.audioPlugin||x.output!=y.output||x.preFader!=y.preFader||x.noteTarget!=y.noteTarget||x.noteInstrument!=y.noteInstrument||x.amount!=y.amount)return false;
   }
   if(a.stageConnections!=b.stageConnections||a.instrumentAssignments!=b.instrumentAssignments||a.inputs!=b.inputs||a.outputs!=b.outputs||a.assignments!=b.assignments||a.commands!=b.commands)return false;
   std::set<uint64_t> used;
@@ -537,7 +559,7 @@ bool sameSignalProcessing(const SignalGraph &a,const SignalGraph &b) {
     const auto &x=*xi,&y=*yi;
     if(!sameProcessingGroups(x.groups,y.groups)||x.id!=y.id||x.audio!=y.audio||x.modulation!=y.modulation||x.nodes.size()!=y.nodes.size())return false;
     for(size_t j=0;j<x.nodes.size();++j){const auto &n=x.nodes[j],&m=y.nodes[j];
-      if(n.id!=m.id||n.kind!=m.kind||n.plugin!=m.plugin||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes||n.muted!=m.muted)return false;
+      if(n.id!=m.id||n.kind!=m.kind||n.plugin!=m.plugin||n.rate!=m.rate||n.phase!=m.phase||n.attack!=m.attack||n.release!=m.release||n.controller!=m.controller||n.envelopes!=m.envelopes||n.trims!=m.trims||n.muted!=m.muted)return false;
     }
   }
   return true;
@@ -550,6 +572,7 @@ bool sameSignalParameterLayout(SignalGraph a,SignalGraph b) {
   return sameSignalProcessing(a,b);
 }
 bool sameSignalControlLayout(SignalGraph a,SignalGraph b) {
+  for(auto *g:{&a,&b}){g->trims.clear();for(auto &group:g->groups)group.trims={};for(auto &d:g->library){for(auto &n:d.nodes)n.trims={};for(auto &group:d.groups)group.trims={};}}
   a.noteRouting={};b.noteRouting={};for(auto *g:{&a,&b}){for(auto &group:g->groups)group.bypass=false;for(auto &d:g->library)for(auto &group:d.groups)group.bypass=false;} // Immutable event plans adopt without replacing audio processors.
   for(auto *graph:{&a,&b}){
     for(auto &s:graph->songSources){auto &n=s.node;n.rate=1;n.phase=0;n.attack=.01;n.release=.1;n.controller=1;n.envelopes.clear();n.muted=false;s.amount=1;}
@@ -609,6 +632,7 @@ void removeSignalStageConnection(SignalGraph &g,const SignalStageConnection &r){
   std::erase_if(g.presentation.cables,[&](const auto &c){return !c.modulation&&c.source==signalStageEndpointKey(r.source)&&c.target==signalStageEndpointKey(r.target)&&c.output==r.output&&c.input==r.input;});
 }
 MixerGraph signalRoutingGraph(MixerGraph mixer,const SignalGraph &signal){
+  for(auto &bus:mixer.buses){const auto t=signal.trims.find("n"+std::to_string(bus.id));if(t!=signal.trims.end())bus.portTrims=t->second;}
   std::set<uint64_t> targets;for(const auto &a:signal.assignments)targets.insert(a.target);for(const auto &c:signal.commands)if(c.kind==SignalCommandKind::Row||c.kind==SignalCommandKind::Start)targets.insert(c.target);
   for(auto &bus:mixer.buses)if(targets.contains(bus.id))bus.inserts.insert(bus.inserts.begin(),signalBusIdentity(bus.id));
   for(const auto &r:signal.inputs)mixer.sidechains.push_back({r.source,signalBusIdentity(r.target),r.input,r.gainDB,r.preFader,true});
@@ -618,6 +642,7 @@ MixerGraph signalRoutingGraph(MixerGraph mixer,const SignalGraph &signal){
 }
 void SignalGraph::validate(const std::vector<uint64_t> &targets,const std::map<uint64_t,uint32_t> &patterns,const std::vector<uint64_t> &instruments) const {
   validateSongSignalGroups(*this);
+  require(trims.size()<=512,"Too many audio trim owners");for(const auto &[key,t]:trims){require(text(key,256)&&!key.empty(),"Invalid audio trim owner");t.validate();}
   require(library.size()<=128 && commands.size()<=65536 && bytes()<=16*1024*1024,"Graph library exceeds document limits");
   presentation.validate();for(const auto &d:library)d.presentation.validate();
   require(layout.size()<=8192,"Too many saved graph positions");for(const auto &[key,p]:layout)require(!key.empty()&&text(key,256)&&finite(p[0],0,100000)&&finite(p[1],0,100000),"Invalid saved graph position");
@@ -643,6 +668,11 @@ void SignalGraph::validate(const std::vector<uint64_t> &targets,const std::map<u
     require(!(s.noteTarget&&s.noteInstrument)&&(!s.noteTarget||target(s.noteTarget))&&(!s.noteInstrument||std::find(instruments.begin(),instruments.end(),s.noteInstrument)!=instruments.end()),"Choose one existing note channel or instrument");
     for(const auto &lane:n.envelopes){require(patterns.contains(lane.pattern),"Song modulation envelope references an unknown pattern");for(const auto &point:lane.points)require(uint64_t(point.position)<uint64_t(patterns.at(lane.pattern))*256,"Song modulation point is outside its pattern");}
   }
+  auto validateTrimSources=[&](const AudioPortTrims &trims){for(const auto &[port,edges]:trims.modulation)for(const auto &edge:edges){
+    const auto source=std::find_if(songSources.begin(),songSources.end(),[&](const auto &s){return s.node.id==edge.source;});
+    require(source!=songSources.end()&&source->node.kind!=SignalNodeKind::Follower,"Trim modulation requires an existing control source other than an audio follower");
+  }};
+  for(const auto &[node,trim]:trims)validateTrimSources(trim);for(const auto &g:groups)validateTrimSources(g.trims);for(const auto &s:songSources)validateTrimSources(s.node.trims);
   std::set<std::tuple<uint64_t,std::string,uint32_t>> songEdges;
   std::map<std::pair<std::string,uint32_t>,bool> quantization;
   for(const auto &m:songModulation){

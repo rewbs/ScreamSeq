@@ -58,22 +58,27 @@ SongGroupRuntime::SongGroupRuntime(const SignalGraph &signal,const MixerGraph &s
     else if(source.audioBus){const auto bus=std::find_if(graph.buses.begin(),graph.buses.end(),[&](const auto &b){return b.id==source.audioBus;});if(bus==graph.buses.end())continue;route.bus=size_t(bus-graph.buses.begin());route.identity.source=busID(route.bus);route.arrival=plan.nodes[route.bus].outputLatency;route.preFader=source.preFader;}
     else continue;routes_.push_back(std::move(route));
   }
+  trimInputs_.resize(routes_.size());trimOutputs_.resize(routes_.size());
   transforms_.resize(routes_.size());std::vector<std::string> rack;for(const auto &p:catalog)if(!p.instrument&&graphBus(size_t(&p-catalog.data()))==SIZE_MAX)rack.push_back(p.instance);
   auto resolveRoute=[&](const SignalRouteIdentity &identity){const auto found=std::find_if(routes_.begin(),routes_.end(),[&](const auto &r){return r.identity==identity;});return found==routes_.end()?SIZE_MAX:size_t(found-routes_.begin());};
   size_t budget=0;
   for(const auto &spec:signal.groups){Group group;group.id=spec.id;group.bypass=spec.bypass;group.wet=group.from=group.to=spec.bypass?0:1;group.elapsed=fadeFrames_;
     const auto members=songSignalGroupNodes(signal,spec.id);group.members.insert(members.begin(),members.end());for(const auto &member:members)if(member.starts_with("plugin:"))group.plugins.insert(member.substr(7));for(const auto &source:signal.songSources)if(group.members.contains("source:n"+std::to_string(source.node.id)))group.sources.insert(source.node.id);
     for(auto parent=spec.parent;parent;){++group.depth;const auto found=std::find_if(signal.groups.begin(),signal.groups.end(),[&](const auto &g){return g.id==parent;});if(found==signal.groups.end())break;parent=found->parent;}
-    const auto g=groups_.size();groups_.push_back(std::move(group));
+    const auto g=groups_.size();std::vector<std::string> keys;const auto boundary=signalSongGroupBoundary(signal,graph,rack,spec.id);
+    for(const auto &p:boundary.inputs){const auto key=keys.size();keys.push_back(audioTrimKey(p,false));const auto r=resolveRoute(p);if(r!=SIZE_MAX)trimInputs_[r].emplace_back(g,key);}
+    for(const auto &p:boundary.outputs){const auto key=keys.size();keys.push_back(audioTrimKey(p,true));const auto r=resolveRoute(p);if(r!=SIZE_MAX)trimOutputs_[r].emplace_back(g,key);}
+    group.initialTrims=spec.trims;group.trims=AudioTrimRuntime(std::move(keys),spec.trims,rate);groups_.push_back(std::move(group));
     for(const auto &route:resolvedSongGroupDryRoutes(signal,graph,rack,spec.id,spec.bypass)){auto mapping=std::make_unique<Mapping>();mapping->group=g;mapping->identity=route;mapping->output=resolveRoute(route.output);if(mapping->output==SIZE_MAX)continue;
-      if(!route.input.kind.empty()&&resolveRoute(route.input)!=SIZE_MAX){const auto index=resolveRoute(route.input);auto capture=std::find_if(captures_.begin(),captures_.end(),[&](const auto &c){return c->route==index;});
-        if(capture==captures_.end()){budget+=sizeof(Capture);if(budget>64*1024*1024)throw std::invalid_argument("Song-group boundary capture exceeds its 64 MB budget");auto next=std::make_unique<Capture>();next->route=index;captures_.push_back(std::move(next));mapping->input=captures_.size()-1;}else mapping->input=size_t(capture-captures_.begin());
+      if(!route.input.kind.empty()&&resolveRoute(route.input)!=SIZE_MAX){const auto index=resolveRoute(route.input);auto capture=std::find_if(captures_.begin(),captures_.end(),[&](const auto &c){return c->route==index&&c->group==g;});
+        if(capture==captures_.end()){budget+=sizeof(Capture);if(budget>64*1024*1024)throw std::invalid_argument("Song-group boundary capture exceeds its 64 MB budget");auto next=std::make_unique<Capture>();next->route=index;next->group=g;captures_.push_back(std::move(next));mapping->input=captures_.size()-1;}else mapping->input=size_t(capture-captures_.begin());
         if(routes_[mapping->output].arrival<routes_[index].arrival+routes_[mapping->output].postDelay)throw std::invalid_argument("Group dry mapping output precedes the selected ingress latency");
         const auto postDelay=size_t(routes_[mapping->output].postDelay)*2;const auto delay=size_t(routes_[mapping->output].arrival-routes_[index].arrival)*2-postDelay;budget+=(delay+postDelay)*sizeof(float);if(budget>64*1024*1024)throw std::invalid_argument("Song-group dry alignment exceeds its 64 MB budget");mapping->delay.resize(delay);mapping->postDelay.resize(postDelay);
       }
       transforms_[mapping->output].push_back(mappings_.size());mappings_.push_back(std::move(mapping));
     }
   }
+  for(auto &edges:trimOutputs_)std::stable_sort(edges.begin(),edges.end(),[&](const auto &a,const auto &b){return groups_[a.first].depth>groups_[b.first].depth;});
   for(auto &route:transforms_)std::stable_sort(route.begin(),route.end(),[&](auto a,auto b){return groups_[mappings_[a]->group].depth>groups_[mappings_[b]->group].depth;});
 }
 void SongGroupRuntime::refreshLatency(const MixerPlan &plan,const std::vector<MixerProcessorInfo> &catalog) {
@@ -100,6 +105,7 @@ void SongGroupRuntime::refreshLatency(const MixerPlan &plan,const std::vector<Mi
   // addresses this same object and keeps its source/group membership and fade.
   routes_.swap(routes);for(size_t i=0;i<mappings_.size();++i){auto &mapping=*mappings_[i];mapping.delay.swap(buffers[i].main);mapping.postDelay.swap(buffers[i].post);mapping.cursor=mapping.postCursor=0;}
   for(auto &capture:captures_){capture->position=UINT64_MAX;capture->frames=0;}
+  for(auto &edges:trimOutputs_)std::stable_sort(edges.begin(),edges.end(),[&](const auto &a,const auto &b){return groups_[a.first].depth>groups_[b.first].depth;});
 }
 std::vector<MixerTransition::Dependency> SongGroupRuntime::dependencies() const {
   std::vector<MixerTransition::Dependency> result;
@@ -115,12 +121,13 @@ void SongGroupRuntime::bypass(const std::vector<std::pair<uint64_t,bool>> &value
 void SongGroupRuntime::begin(uint32_t frames,uint64_t position) noexcept {
   frames_=frames;position_=position;
   if(!frames||frames>4096){failed_=true;return;}
-  for(auto &group:groups_){const auto target=group.bypass?0.:1.;if(target!=group.to){group.from=group.wet;group.to=target;group.elapsed=0;}
+  for(auto &group:groups_){const AudioPortTrims *spec=&group.initialTrims;if(trimControls_)for(const auto &g:trimControls_->groups)if(g.id==group.id){spec=&g.trims;break;}group.trims.begin(*spec,position);const auto target=group.bypass?0.:1.;if(target!=group.to){group.from=group.wet;group.to=target;group.elapsed=0;}
     for(uint32_t i=0;i<frames;++i){group.weights[i]=float(group.wet);if(group.elapsed<fadeFrames_)++group.elapsed;const double t=double(group.elapsed)/fadeFrames_;group.wet=group.from+(group.to-group.from)*t*t*(3-2*t);}}
 }
 void SongGroupRuntime::transform(size_t index,float *samples,uint32_t frames,uint64_t position) noexcept {
   if(frames!=frames_||position!=position_||!samples){failed_=true;return;}
-  for(const auto m:transforms_[index]){auto &mapping=*mappings_[m];const auto &group=groups_[mapping.group];const Capture *input=mapping.input==SIZE_MAX?nullptr:captures_[mapping.input].get();
+  for(const auto &[owner,port]:trimOutputs_[index]){
+  for(const auto m:transforms_[index]){if(mappings_[m]->group!=owner)continue;auto &mapping=*mappings_[m];const auto &group=groups_[mapping.group];const Capture *input=mapping.input==SIZE_MAX?nullptr:captures_[mapping.input].get();
     if(input&&(input->position!=position||input->frames!=frames)){failed_=true;return;}
     for(uint32_t frame=0;frame<frames;++frame){float dry[2]{};
       for(uint32_t channel=0;channel<2;++channel){const auto i=frame*2+channel;dry[channel]=input?input->samples[i]:0.f;if(!mapping.delay.empty()){std::swap(dry[channel],mapping.delay[mapping.cursor]);if(++mapping.cursor==mapping.delay.size())mapping.cursor=0;}}
@@ -129,7 +136,16 @@ void SongGroupRuntime::transform(size_t index,float *samples,uint32_t frames,uin
       const auto wet=group.weights[frame];if(wet!=1)for(uint32_t channel=0;channel<2;++channel){const auto i=frame*2+channel;samples[i]=wet==0?dry[channel]:dry[channel]+(samples[i]-dry[channel])*wet;}
     }
   }
-  for(auto &capture:captures_)if(capture->route==index){std::copy_n(samples,frames*2,capture->samples.data());capture->position=position;capture->frames=frames;}
+  groups_[owner].trims.apply(port,samples,frames,position);
+  }
+  // Each dry ingress includes its own and ancestor trims, never a child's
+  // drive. Several nested groups can share this exact incoming route.
+  for(auto &capture:captures_)if(capture->route==index){std::copy_n(samples,frames*2,capture->samples.data());
+    for(const auto &[owner,port]:trimInputs_[index])if(groups_[owner].depth<=groups_[capture->group].depth)groups_[owner].trims.apply(port,capture->samples.data(),frames,position);
+    capture->position=position;capture->frames=frames;
+  }
+  for(const auto &[owner,port]:trimInputs_[index])groups_[owner].trims.apply(port,samples,frames,position);
+  for(const auto &g:groups_)if(!g.trims.valid())failed_=true;
 }
 void SongGroupRuntime::route(MixerRuntime::RouteKind kind,size_t index,float *samples,uint32_t frames,uint64_t position) noexcept {
   for(size_t i=0;i<routes_.size();++i)if(!routes_[i].follower&&routes_[i].kind==kind&&routes_[i].index==index){transform(i,samples,frames,position);return;}
@@ -142,11 +158,12 @@ double SongGroupRuntime::modulation(uint64_t source,const std::string &target,ui
   for(const auto &group:groups_)if(group.sources.contains(source)&&!group.plugins.contains(target))amount*=group.weights[size_t(frame-position_)];return amount;
 }
 void SongGroupRuntime::inheritState(SongGroupRuntime &old) noexcept {
-  for(auto &group:groups_)for(const auto &prior:old.groups_)if(group.id==prior.id){group.wet=prior.wet;group.from=prior.from;group.to=prior.to;group.elapsed=prior.elapsed;break;}
+  for(auto &group:groups_)for(const auto &prior:old.groups_)if(group.id==prior.id){group.trims.inherit(prior.trims);group.wet=prior.wet;group.from=prior.from;group.to=prior.to;group.elapsed=prior.elapsed;break;}
   for(auto &m:mappings_)for(auto &prior:old.mappings_)if(groups_[m->group].id==old.groups_[prior->group].id&&m->identity==prior->identity&&m->delay.size()==prior->delay.size()&&m->postDelay.size()==prior->postDelay.size()){m->delay.swap(prior->delay);std::swap(m->cursor,prior->cursor);m->postDelay.swap(prior->postDelay);std::swap(m->postCursor,prior->postCursor);break;}
 }
 size_t SongGroupRuntime::storageBytes() const noexcept {
   size_t result=sizeof(*this)+routes_.capacity()*sizeof(Route)+groups_.capacity()*sizeof(Group)+captures_.capacity()*sizeof(captures_[0])+captures_.size()*sizeof(Capture)+mappings_.capacity()*sizeof(mappings_[0])+transforms_.capacity()*sizeof(transforms_[0]);
+  for(const auto &g:groups_)result+=g.trims.bytes()+g.initialTrims.bytes();for(const auto *v:{&trimInputs_,&trimOutputs_}){result+=v->capacity()*sizeof((*v)[0]);for(const auto &e:*v)result+=e.capacity()*sizeof(e[0]);}
   for(const auto &r:routes_)result+=r.identity.kind.capacity()+r.identity.source.capacity()+r.identity.target.capacity()+r.identity.plugin.capacity()+r.identity.tap.capacity();
   for(const auto &g:groups_){result+=g.sources.size()*(sizeof(uint64_t)+4*sizeof(void *));for(const auto &member:g.members)result+=sizeof(std::string)+member.capacity()+4*sizeof(void *);for(const auto &plugin:g.plugins)result+=sizeof(std::string)+plugin.capacity()+4*sizeof(void *);}
   for(const auto &m:mappings_){result+=sizeof(*m)+(m->delay.capacity()+m->postDelay.capacity())*sizeof(float);for(const auto *id:{&m->identity.input,&m->identity.output})result+=id->kind.capacity()+id->source.capacity()+id->target.capacity()+id->plugin.capacity()+id->tap.capacity();}for(const auto &t:transforms_)result+=t.capacity()*sizeof(size_t);return result;

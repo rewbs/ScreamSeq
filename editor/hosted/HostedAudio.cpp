@@ -45,6 +45,8 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
     if (sidechain) buses_.push_back({1,2,"Detector sidechain",true,!auxiliaryInputs_.empty(),true,1,0,2});
     validatePluginAudioLayout(state.audioLayout,buses_);audioLayout_=pluginAudioLayoutSignature(buses_);
     bypassControl_.prepare(rate,uint32_t(std::llround(latency_*rate)),false,state.bypass);
+    for(const auto &bus:buses_)if(bus.input&&bus.index&&bus.supported)trimmedInputs_[bus.index]=std::make_unique<PluginAudioStorage>();
+    {std::vector<std::string> keys;for(uint32_t i=0;i<128;++i)keys.push_back(audioTrimPort(i>=64,i%64));portTrims_=AudioTrimRuntime(std::move(keys),neutralPortTrims_,rate);}
     prepareBaselines();
     return;
   }
@@ -56,9 +58,13 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
   const auto initialLatency=latency_.load(std::memory_order_relaxed);
   if(!std::isfinite(initialLatency)||initialLatency<0||initialLatency>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
   bypassControl_.prepare(rate,uint32_t(std::llround(latency_*rate)),isInstrument(),state.bypass);
+  for(const auto &bus:buses_)if(bus.input&&bus.index&&bus.supported)trimmedInputs_[bus.index]=std::make_unique<PluginAudioStorage>();
+  {std::vector<std::string> keys;for(uint32_t i=0;i<128;++i)keys.push_back(audioTrimPort(i>=64,i%64));portTrims_=AudioTrimRuntime(std::move(keys),neutralPortTrims_,rate);}
   prepareBaselines();
 }
 NativePlugin::~NativePlugin() = default;
+void NativePlugin::portTrims(const AudioPortTrims &spec) noexcept {requestedPortTrims_=&spec;if(!trimsStarted_)portTrims_.initial(spec);}
+
 bool NativePlugin::latencyChangePending() const noexcept {const auto *p=publishedVendor();return p->backend_ && p->backend_->latencyChangePending();}
 std::shared_ptr<NativePlugin::LatencyUpdate> NativePlugin::prepareLatency() {
   if(!presetSettled_.load(std::memory_order_acquire))throw std::runtime_error("A preset is still fading; retry latency preparation");
@@ -86,7 +92,7 @@ void NativePlugin::refreshLatency() {
 bool NativePlugin::processVendorBlock(float *buffer, uint32_t frames, uint64_t position, uint32_t offset,const NativePlugin &host) noexcept {
   if (builtin_) {
     const float *detector=host.inputSources_[1]?host.inputSources_[1]+offset*2:nullptr;
-    if(host.autoDetectorSource_&&builtin_->value(9)==2){for(uint32_t i=0;i<frames*2;++i)(*autoDetectorBuffer_)[i]=(detector?detector[i]:0)+host.autoDetectorSource_[offset*2+i];detector=autoDetectorBuffer_->data();}
+    if(host.autoDetectorSource_&&builtin_->value(9)==2){for(uint32_t i=0;i<frames*2;++i)(*autoDetectorBuffer_)[i]=(detector?detector[i]:0)+host.autoDetectorSource_[offset*2+i]*host.portTrims_.gain(1,host.trimFrame_+offset+i/2);detector=autoDetectorBuffer_->data();}
     return builtin_->process(buffer,frames,detector);
   }
   if (!backend_->process(buffer, frames, position, host.inputSources_.data(), offset, host.transport_)) return false;

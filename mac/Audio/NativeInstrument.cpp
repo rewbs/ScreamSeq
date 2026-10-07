@@ -373,7 +373,7 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
   // integer summation path for bit-exact upstream/sample-export playback.
   // Materialization belongs to the playback copy, never the document.
   std::optional<NativeSong> implicit;
-  const bool needsRouting=native&&(!native->signal.noteRouting.empty()||!native->mixer.detached.empty()||!native->mixer.detachedChains.empty()||!native->signal.assignments.empty()||!native->signal.instrumentAssignments.empty()||!native->signal.commands.empty()||!native->signal.songSources.empty()||!native->signal.songModulation.empty());
+  const bool needsRouting=native&&(!native->signal.trims.empty()||!native->signal.noteRouting.empty()||!native->mixer.detached.empty()||!native->mixer.detachedChains.empty()||!native->signal.assignments.empty()||!native->signal.instrumentAssignments.empty()||!native->signal.commands.empty()||!native->signal.songSources.empty()||!native->signal.songModulation.empty());
   if(needsRouting && !native->mixer.active()){implicit=*native;implicit->ensureMixer();native=&*implicit;}
   auto &song = renderer.song();
   for(size_t index=1;index<originalInstruments_.size()&&index<=song.GetNumInstruments();++index)if(auto *instrument=song.Instruments[index]){
@@ -423,6 +423,7 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
     const auto bypassBytes=bypassStorageBytes();
     if(bypassBytes>256u*1024u*1024u)throw std::invalid_argument("Plugin bypass audio storage exceeds 256 MB");
     preparedSignal_=native->signal;
+    for(const auto &entry:rack_){const auto t=preparedSignal_.trims.find("plugin:"+entry->baseline.instanceID);if(t!=preparedSignal_.trims.end())entry->plugin->portTrims(t->second);}
     signalGraph_=std::make_shared<NativeSignalGraph>(*native,sampleRate_,offline_,std::span<const SignalSampleSource>{},256*1024*1024-bypassBytes,256,activity_.get(),observation_.get());
     signalGraph_->compile(graph,processors);
     if(sampleCopies){
@@ -480,6 +481,8 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
     for(const auto &entry:hosted->rack)prepared->processorStorage+=entry->plugin->musicalMIDIStorageBytes();
     musicalSong_=&song;songPatternIDs_.clear();for(const auto &[index,pattern]:native->patterns)songPatternIDs_.emplace_back(index,pattern.id);
     hosted->song=prepareSongControls(*native,*prepared,*hosted);
+    for(const auto &[plugin,trims]:hosted->portTrims)plugin->portTrims(*trims);
+    for(const auto &[stage,trims]:hosted->stageTrims)stage->controls(*trims);
     prepareSongGroups(*native,*prepared,*hosted);
     hosted->songSpec.songSources=native->signal.songSources;hosted->songSpec.songModulation=native->signal.songModulation;
     prepared->processorStorage+=hosted->songSpec.bytes();

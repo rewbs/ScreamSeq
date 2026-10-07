@@ -1,0 +1,7 @@
+      if([method isEqual:@"graph.trim.set"]) {
+        allowed(@[@"graph",@"node",@"port",@"gainDB",@"linkTo",@"modulation",@"dryRun"]);require(p[@"graph"]!=nil,"Specify a graph or null");require(p[@"gainDB"]||p[@"linkTo"]||p[@"modulation"],"Supply a trim gain or link");
+        affected=p[@"graph"]==NSNull.null?0:decodeNativeID(p[@"graph"]);
+        std::vector<AudioTrimOwnerInfo> rack;for(size_t slot=0;slot<_plugins.size();++slot){AudioTrimOwnerInfo owner;owner.node="plugin:"+_plugins[slot].instanceID;owner.instrument=_plugins[slot].descriptor.instrument;for(const auto &b:_audio->pluginBuses(slot))if(b.supported)owner.ports.push_back({audioTrimPort(!b.input,b.index),b.name,!b.input});rack.push_back(std::move(owner));}
+        try{auto access=graphTrimAccess(next,affected,string(p[@"node"],256).UTF8String,rack);std::optional<double> gain;if(p[@"gainDB"])gain=number(p[@"gainDB"],-48,48);std::optional<std::string> link;if(p[@"linkTo"])link=p[@"linkTo"]==NSNull.null?std::string{}:std::string(string(p[@"linkTo"],2048).UTF8String);std::optional<std::vector<AudioTrimModulation>> modulation;if(p[@"modulation"])modulation=decodeTrimModulation(p[@"modulation"]);editGraphTrim(access,string(p[@"port"],2048).UTF8String,gain,link,modulation);std::erase_if(graph.trims,[](const auto &v){return v.second.empty();});}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+        if(next.signal==_document->native().signal&&!_document->native().mixer.active())next.mixer=_document->native().mixer;
+      } else

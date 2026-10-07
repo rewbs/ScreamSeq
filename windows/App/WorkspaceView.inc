@@ -151,6 +151,7 @@
             {graphCommand,L"Graph / Open reusable routing and modulation canvas",L""},
             {mixerCommand,L"Mix / Open mixer controls and routing",L""},
             {mixerRouting,L"Mix / Song routing overview, inserts, sends and sidechains",L""},
+            {graphTrimsCommand,L"Graph / Audio port trims",L""},
             {graphCommandsCommand,L"Pattern / Graph command editor",L"Enter on a graph lane"},
             {graphLanesFocus,L"Pattern / Focus graph command lanes",L"F6 from pattern"},
             {parameterAutomationCommand,L"Automation / Pattern parameter curves and tools",L""},
@@ -219,6 +220,7 @@
             if(deferView(id))return;
             if(id==notesCommand||id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==soundCommand){mixerEditorOpen=false;graphEditorOpen=false;}
             if(graphCurveCommand(id) || graphControlCommand(id) || mixerControlCommand(id) || noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
+            else if(id==graphTrimsCommand){openGraphTrims();return;}
             else if(id==scratchGesturesCommand){openScratchGestures();return;}
             else if(id==graphCommandsCommand){openGraphCommands(workspaceState.focus=="graphLanes");return;}
             else if(id==parameterAutomationCommand){openParameterAutomation();return;}

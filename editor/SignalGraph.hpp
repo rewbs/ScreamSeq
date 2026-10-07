@@ -14,6 +14,7 @@
 #include "GraphPresentation.hpp"
 #include "SignalGroupBypass.hpp"
 #include "MusicalAutomation.hpp"
+#include "AudioPortTrim.hpp"
 
 namespace Tracker {
 // Graph recipes belong to the document, never to a mutable rack slot. Each use
@@ -61,6 +62,7 @@ struct SignalNode {
   std::vector<SignalPatternEnvelope> envelopes;
   // Suppress every outgoing contribution while clocks, gates and history advance.
   bool muted = false;
+  AudioPortTrims trims;
   bool operator==(const SignalNode &) const = default;
 };
 struct SignalAudioEdge {
@@ -89,6 +91,7 @@ struct SignalGroup {
   std::vector<uint64_t> nodes;
   bool bypass=false;
   std::vector<SignalGroupDryRoute> dryRoutes;
+  AudioPortTrims trims;
   bool operator==(const SignalGroup &) const = default;
 };
 struct SignalDefinition {
@@ -153,6 +156,7 @@ struct SignalSongGroup {
   std::vector<std::string> nodes; // canonical "plugin:<instance ID>" or "source:n<ID>" keys
   bool bypass=false;
   std::vector<SignalSongGroupDryRoute> dryRoutes;
+  AudioPortTrims trims;
   bool operator==(const SignalSongGroup &) const = default;
 };
 // Song-level controls target existing rack instances; they never turn a rack
@@ -183,6 +187,7 @@ struct SignalSongModulation {
   bool operator==(const SignalSongModulation &) const = default;
 };
 struct SignalGraph {
+  std::map<std::string,AudioPortTrims> trims; // Stable song node keys.
   NoteRouting noteRouting;
   std::vector<SignalDefinition> library;
   std::vector<SignalAssignment> assignments;
@@ -198,7 +203,7 @@ struct SignalGraph {
   std::vector<SignalSongModulation> songModulation;
   SignalPresentation presentation;
   bool operator==(const SignalGraph &) const = default;
-  bool empty() const { return noteRouting.empty() && library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty() && stageConnections.empty() && groups.empty() && songSources.empty() && songModulation.empty() && presentation.empty(); }
+  bool empty() const { return trims.empty() && noteRouting.empty() && library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty() && stageConnections.empty() && groups.empty() && songSources.empty() && songModulation.empty() && presentation.empty(); }
   size_t bytes() const;
   // Callers supply stable song identities, not slot numbers.
   void validate(const std::vector<uint64_t> &targets,

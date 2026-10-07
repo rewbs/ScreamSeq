@@ -35,6 +35,7 @@ class SignalRuntime {
     double envelope = 0, first = 0, last = 0, attackCoefficient = 0, releaseCoefficient = 0;
     std::array<double,quantum> sampled{};
     SignalNoteGate noteGate;
+    AudioTrimRuntime trims;
     bool pendingNoteEvent=false;
   };
   struct Edge {
@@ -57,6 +58,9 @@ class SignalRuntime {
   std::shared_ptr<SignalRuntimeObserver> observer_;
   std::unique_ptr<std::array<float,maximumFrames*2>> observationScratch_;
   std::unique_ptr<SignalGroupRuntime> groups_;
+  uint64_t trimPosition_=0;uint32_t trimFrames_=0;
+  bool hasTrimModulation_=false;
+  static bool readTrimSource(void *,uint64_t,uint64_t,double &,bool &) noexcept;
   size_t measureStorage() const noexcept;
   struct ModulationTarget { size_t node = 0; uint32_t parameter = 0; double base = 0; std::vector<std::pair<size_t,size_t>> sources; double step=0; std::array<double,quantum> sampled{}; };
   std::vector<ModulationTarget> targets_;

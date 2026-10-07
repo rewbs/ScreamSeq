@@ -19,6 +19,18 @@ struct Fixture {
   unsigned stops=0;
   GraphOperations api{*doc,[this]{++stops;}};
 };
+void portTrimOperations(){
+  Fixture f;const auto graph=f.api.invoke("graph.create",Json::object()).at("graph");const auto node=f.api.invoke("graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",{{"format","Built-in"},{"classID","resonance.gainer.v1"}}}}).at("node");
+  Json target{{"graph",graph},{"node",node}},edit=target;edit.update({{"port","i:0"},{"gainDB",-9},{"linkTo","o:0"}});
+  auto dry=edit;dry["dryRun"]=true;auto before=f.doc->native();f.api.invoke("graph.trim.set",dry);CHECK(before==f.doc->native());
+  f.api.invoke("graph.trim.set",edit);auto paired=f.api.invoke("graph.trim.get",target);CHECK(paired["ports"][0]["gainDB"]==-9&&paired["ports"][1]["gainDB"]==9);
+  auto revision=f.doc->revision;f.api.invoke("graph.trim.set",edit);CHECK(f.doc->revision==revision);
+  auto bad=edit;bad["gainDB"]=true;bool rejected=false;try{f.api.invoke("graph.trim.set",bad);}catch(const std::exception &){rejected=true;}CHECK(rejected&&f.doc->revision==revision);
+  auto state=f.doc->native();f.doc->undo();CHECK(f.doc->native()==before);f.doc->redo();CHECK(f.doc->native()==state);
+  const auto source=f.api.invoke("graph.node.add",{{"graph",graph},{"kind","automation"}}).at("node");edit.erase("gainDB");edit.erase("linkTo");edit["modulation"]=Json::array({{{"source",source},{"minimumDB",0},{"maximumDB",12}}});f.api.invoke("graph.trim.set",edit);
+  const auto encoded=ScreamSeq::Project::encodeNativeMetadata(f.doc->native());CHECK(ScreamSeq::Project::decodeNativeMetadata(encoded)==f.doc->native());
+  auto read=f.api.invoke("graph.trim.get",target);CHECK(read["sources"].size()==1&&read["ports"][0]["modulation"].size()==1);
+}
 void stableImplicitMaster() {
   Fixture f;const auto before=f.doc->native();const auto master="n"+std::to_string(before.masterID);
   auto read=[&] {const auto result=f.api.invoke("graph.get",{{"includeImplicitMixer",true}});CHECK(result.at("mixer").at("buses").back().at("id")==master);return result;};
@@ -625,9 +637,9 @@ void callbackOrderingAndUnrelatedData() {
   CHECK(f.doc->native().tracks==expected.tracks); CHECK(f.doc->native().patterns==expected.patterns);
   CHECK(f.doc->native().columnMutes==expected.columnMutes); CHECK(f.doc->cell(0,2,1)==cells);
   const auto reads=GraphOperations::reads(),writes=GraphOperations::writes();
-  CHECK((std::set<std::string>(reads.begin(),reads.end())==std::set<std::string>{"graph.note.activity","graph.get","graph.selection.copy","graph.group.boundary","graph.automation.get","graph.provenance.get"}));
-  CHECK((std::set<std::string>(writes.begin(),writes.end())==std::set<std::string>{"graph.audio.connection.set","graph.note.connect","graph.note.update","graph.note.disconnect","graph.note.restoreAssignment","graph.makeIndependent","graph.selection.paste","graph.selection.cut","graph.selection.duplicate","graph.source.mute","graph.group.bypass","graph.create","graph.clone","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set","graph.automation.set"}));
-  CHECK(reads.size()==6); CHECK(writes.size()==40);
+  CHECK((std::set<std::string>(reads.begin(),reads.end())==std::set<std::string>{"graph.trim.get","graph.note.activity","graph.get","graph.selection.copy","graph.group.boundary","graph.automation.get","graph.provenance.get"}));
+  CHECK((std::set<std::string>(writes.begin(),writes.end())==std::set<std::string>{"graph.trim.set","graph.audio.connection.set","graph.note.connect","graph.note.update","graph.note.disconnect","graph.note.restoreAssignment","graph.makeIndependent","graph.selection.paste","graph.selection.cut","graph.selection.duplicate","graph.source.mute","graph.group.bypass","graph.create","graph.clone","graph.song.source.add","graph.song.source.update","graph.song.source.remove","graph.song.modulation.set","graph.song.modulation.remove","graph.song.group.create","graph.song.group.update","graph.song.group.remove","graph.song.group.export","graph.group.create","graph.group.update","graph.group.remove","graph.group.export","graph.update","graph.remove","graph.node.add","graph.node.remove","graph.nodes.insert","graph.nodes.detach","graph.assign","graph.instrument.assign","graph.routes.set","graph.connections.remove","graph.layout.set","graph.presentation.set","graph.commands.set","graph.automation.set"}));
+  CHECK(reads.size()==7); CHECK(writes.size()==41);
 }
 #include "FanConnectionOperationsTests.inc"
 #include "StageConnectionOperationsTests.inc"
@@ -638,7 +650,7 @@ int main(int argc,char **argv) {
   try {
     if(argc==2&&std::string(argv[1])=="--catalog") { std::cout<<Json{{"reads",GraphOperations::reads()},{"writes",GraphOperations::writes()}}.dump(2)<<'\n'; return 0; }
     const std::vector<std::pair<const char *,void(*)()>> tests={
-      {"audioFanConnections",audioFanConnections},{"stageConnectionOperations",stageConnectionOperations},{"noteRoutingOperations",noteRoutingOperations},{"graphEditingOperations",graphEditingOperations},{"groupBypassOperations",groupBypassOperations},{"groupDryMapDetachment",groupDryMapDetachment},
+      {"portTrimOperations",portTrimOperations},{"audioFanConnections",audioFanConnections},{"stageConnectionOperations",stageConnectionOperations},{"noteRoutingOperations",noteRoutingOperations},{"graphEditingOperations",graphEditingOperations},{"groupBypassOperations",groupBypassOperations},{"groupDryMapDetachment",groupDryMapDetachment},
       {"graphProvenance",graphProvenance},{"graphPresentation",graphPresentation},{"songModulationSources",songModulationSources},{"songAutomationAndBanks",songAutomationAndBanks},{"stableImplicitMaster",stableImplicitMaster},{"songCableCuts",songCableCuts},
       {"createReadHistory",createReadHistory},{"nodesAndCloning",nodesAndCloning},{"automationAndBanks",automationAndBanks},
       {"assignmentsRoutesLayoutCommands",assignmentsRoutesLayoutCommands},{"hostHooks",hostHooks},

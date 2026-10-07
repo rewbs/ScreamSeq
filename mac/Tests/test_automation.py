@@ -200,6 +200,32 @@ def detach_insert(client):
     print("PASS detach socket: one stable processor, healed main path, saved layout, scalar state, no-op, dry-run, strict/stale rejection and unified Undo")
 
 
+def audio_port_trims(client):
+    def write(method, **params):
+        params["expectedRevision"] = client.call("document.get")["revision"]
+        return client.call(method, params)
+    graph = write("graph.create", name="Socket trim fixture")["data"]["graph"]
+    node = write("graph.node.add", graph=graph, kind="plugin", plugin={"format":"Built-in", "classID":"resonance.gainer.v1"})["data"]["node"]
+    target = {"graph":graph, "node":node}
+    initial = client.call("graph.trim.get", target)
+    edit = dict(target, port="i:0", gainDB=-12, linkTo="o:0")
+    assert not write("graph.trim.set", **edit, dryRun=True)["changed"]
+    paired = write("graph.trim.set", **edit)
+    ports = client.call("graph.trim.get", target)["data"]["ports"]
+    assert [p["gainDB"] for p in ports] == [-12, 12]
+    assert not write("graph.trim.set", **edit)["changed"]
+    expect_error(-32001, lambda:client.call("graph.trim.set",dict(edit,expectedRevision=initial["revision"])))
+    expect_error(-32602, lambda:write("graph.trim.set",**dict(edit,gainDB=True)))
+    assert client.call("graph.trim.get",target)["revision"] == paired["revision"]
+    write("history.undo")
+    assert client.call("graph.trim.get",target)["data"] == initial["data"]
+    write("history.redo")
+    source=write("graph.node.add",graph=graph,kind="automation",name="Trim drive")["data"]["node"]
+    write("graph.trim.set",**target,port="i:0",modulation=[{"source":source,"minimumDB":0,"maximumDB":6}])
+    assert client.call("graph.trim.get",target)["data"]["ports"][0]["modulation"][0]["source"] == source
+    print("PASS port trims socket: inverse links, dry run, no-op, strict/stale rejection, Undo/Redo and source modulation")
+
+
 def processing_groups(client):
     def write(method, **params):
         return client.call(method, {"expectedRevision": client.call("document.get")["revision"], **params})
@@ -2274,6 +2300,7 @@ def main():
                 plugin_bypass(client)
                 detach_insert(client)
                 parameter_activity(client)
+                audio_port_trims(client)
                 processing_groups(client)
                 song_processing_groups(client)
                 song_modulation(client)

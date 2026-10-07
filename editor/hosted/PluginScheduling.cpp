@@ -34,13 +34,18 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
     if(p.overlaid && !active && !effectiveParameter(p.id,baselineAt(p.id,position),position,p.source))return false;
     p.overlaid=active;
   }
+  trimFrame_=position;trimsStarted_=true;
+  portTrims_.begin(*requestedPortTrims_,position);
+  portTrims_.apply(0,buffer,frames,position);
   bypassControl_.begin(buffer,frames);
   inputSources_.fill(nullptr);autoDetectorSource_=nullptr;
   for (const auto &input : inputs) {
     if (!input.bus || input.bus >= 64 || !input.samples || inputSources_[input.bus] ||
         !(preparedInputs_&(uint64_t(1)<<input.bus))) return false;
     if(input.autoFallback){if(input.bus!=1||!autoDetectorBuffer_)return false;autoDetectorSource_=input.autoFallback;}
-    inputSources_[input.bus] = input.samples;
+    auto *trimmed=trimmedInputs_[input.bus].get();if(!trimmed)return false;
+    std::copy_n(input.samples,frames*2,trimmed->interleaved.data());portTrims_.apply(input.bus,trimmed->interleaved.data(),frames,position);
+    inputSources_[input.bus] = trimmed->interleaved.data();
   }
   if (musicalCount_) std::sort(musicalEvents_->begin(), musicalEvents_->begin() + musicalCount_, [](const auto &a, const auto &b) {
     return a.frame != b.frame ? a.frame < b.frame : a.id != b.id ? a.id < b.id : a.sequence < b.sequence;
@@ -153,6 +158,10 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
       std::swap(buffer[n], outputDelay_[outputDelayPosition_]);
       outputDelayPosition_ = (outputDelayPosition_ + 1) % outputDelay_.size();
     }
+  portTrims_.apply(64,buffer,frames,position);
+  for(uint32_t bus=1;bus<64;++bus)if(auxiliaryOutputBuffers_[bus])portTrims_.apply(64+bus,auxiliaryOutputBuffers_[bus]->interleaved.data(),frames,position);
+  if(!portTrims_.valid())return false;
+  trimFrame_=position+frames;
   renderedThrough_ = position + frames;
   if(activity_)activity_->held(activityProcessor_,renderedThrough_-1,activityAudible_&&!bypassed());
   return true;

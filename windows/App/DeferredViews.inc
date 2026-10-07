@@ -8,7 +8,7 @@
         switch(id){
         case notesCommand:case samplesCommand:case pluginsCommand:case pluginBrowse:
         case effectsCommand:case mixerCommand:case mixerRouting:case graphCommand:
-        case curveBank:case curveReference:case graphCommandsCommand:
+        case curveBank:case curveReference:case graphCommandsCommand:case graphTrimsCommand:
         case parameterAutomationCommand:case absoluteAutomationCommand:
         case sampleDetailCommand:case sampleBrowseCommand:case sampleRecordCommand:case patternRenderOptionsCommand:case audioSettingsCommand:case instrumentEnvelopeCommand:case auditionCommand:case scratchGesturesCommand:return true;
         default:return false;

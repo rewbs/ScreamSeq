@@ -44,6 +44,8 @@ private:
   struct Node {
     std::array<float, maximumFrames * 2> input{}, work{};
     Delay direct;
+    AudioTrimRuntime trims;
+    const AudioPortTrims *trimSpec=nullptr;
     Values current, target, rampStart;
     uint32_t ramp = 0;
     size_t processor = 0;
@@ -111,6 +113,8 @@ public:
   bool activateHistory(bool audioStopped=false) noexcept;
   size_t historyStorageBytes() const noexcept;
   size_t storageBytes() const noexcept; // Prepared host-owned audio/control storage.
+  void trimSourceReader(AudioTrimSourceReader reader,void *context) noexcept {for(auto &n:nodes_)n->trims.sourceReader(reader,context);}
+  void portTrims(size_t bus,const AudioPortTrims &spec,uint64_t frame) noexcept {if(bus<nodes_.size()){nodes_[bus]->trimSpec=&spec;nodes_[bus]->trims.begin(spec,frame);}}
   bool controls(const std::vector<MixerControls> &) noexcept; // Single control-thread producer.
   bool canQueueControls() const noexcept {return write_.load(std::memory_order_relaxed)-read_.load(std::memory_order_acquire)<controls_.size();}
   void begin(uint32_t frames, uint64_t position) noexcept;
@@ -130,7 +134,7 @@ public:
   const float *busOutput(size_t bus) const noexcept {return bus<nodes_.size()?nodes_[bus]->work.data():nullptr;}
   const float *masterOutput() const noexcept {return graph_.masterOutputDisconnected?masterSilence_.data():busOutput(plan_.master);}
   const float *busPreFader(size_t bus) const noexcept {return bus<nodes_.size() && nodes_[bus]->stage==3?nodes_[bus]->input.data():nullptr;}
-  void dryBusGain(size_t bus,bool pre,uint32_t frame,float &left,float &right) const noexcept;
+  void dryBusGain(size_t bus,bool pre,uint32_t frame,float &left,float &right,bool outputTrim=true) const noexcept;
   void dryRouteGain(RouteKind,size_t,uint32_t frame,float &left,float &right) const noexcept;
   void complete() noexcept;
   uint64_t through() const { return through_; }
