@@ -98,6 +98,33 @@ int main(){try{
   auto disconnected=beforeMulti;disconnected.modulation.clear();const auto disconnectedBefore=disconnected;
   rejects([&]{detachSignalNodes(disconnected,{plugin,secondPlugin,lfo},false,SignalHealPath{0,3});});CHECK(disconnected==disconnectedBefore);
   auto deleteMulti=beforeMulti;detachSignalNodes(deleteMulti,{plugin,secondPlugin,lfo},true,SignalHealPath{0,2});CHECK(deleteMulti.nodes.size()==2&&deleteMulti.modulation.empty()&&deleteMulti.audio.size()==1&&deleteMulti.audio[0].input==1);
+  {
+    // A chosen branch can disappear from nested, explicitly mapped groups.
+    // Keep the other branch and its dry choice rather than rejecting the edit
+    // because the old map still mentions the removed outgoing boundary.
+    auto dry=d;dry.nodes.push_back(extra);dry.groups[1].nodes.push_back(secondPlugin);
+    dry.audio={{input,plugin,0,0,.5},{input,secondPlugin,0,0,.4},
+      {plugin,output,0,0,.3},{secondPlugin,output,0,0,.8},{plugin,secondPlugin,0,0,.25}};
+    for(auto &g:dry.groups){g.bypass=true;g.dryRoutes={{{input,plugin,0,0},{plugin,0}},{{input,secondPlugin,0,0},{secondPlugin,0}}};}
+    compileSignal(dry);const auto original=dry;
+    detachSignalNodes(dry,{plugin,secondPlugin},false,SignalHealPath{0,2});
+    CHECK(dry.nodes==original.nodes&&dry.modulation==original.modulation);
+    CHECK(dry.audio.size()==4&&dry.audio[0]==original.audio[1]&&dry.audio[1]==original.audio[3]&&dry.audio[2]==original.audio[4]);
+    CHECK((dry.audio[3]==SignalAudioEdge{input,output,0,0,.15}));
+    for(size_t i=0;i<dry.groups.size();++i){CHECK(dry.groups[i].bypass&&dry.groups[i].nodes==original.groups[i].nodes);CHECK(dry.groups[i].dryRoutes==std::vector<SignalGroupDryRoute>{original.groups[i].dryRoutes[1]});}
+    auto stale=original;stale.groups[1].dryRoutes[0].output.node=UINT64_MAX;const auto beforeStale=stale;
+    rejects([&]{detachSignalNodes(stale,{plugin,secondPlugin},false,SignalHealPath{0,2});});CHECK(stale==beforeStale);
+    auto ambiguous=original;ambiguous.groups[1].dryRoutes[1].input=ambiguous.groups[1].dryRoutes[0].input;const auto beforeAmbiguous=ambiguous;
+    rejects([&]{detachSignalNodes(ambiguous,{plugin,secondPlugin},false,SignalHealPath{0,2});});CHECK(ambiguous==beforeAmbiguous);
+    auto newBoundary=original;newBoundary.audio={{input,secondPlugin},{secondPlugin,plugin},{plugin,output}};
+    for(auto &g:newBoundary.groups)g.dryRoutes={{{input,secondPlugin,0,0},{plugin,0}}};
+    compileSignal(newBoundary);const auto beforeBoundary=newBoundary;
+    rejects([&]{detachSignalNodes(newBoundary,{plugin},false,SignalHealPath{1,2});});CHECK(newBoundary==beforeBoundary);
+    auto silent=original;silent.audio={{input,plugin},{plugin,output},{secondPlugin,output},{plugin,secondPlugin}};
+    for(auto &g:silent.groups)g.dryRoutes={{{input,plugin,0,0},{plugin,0}},{{input,plugin,0,0},{secondPlugin,0}}};
+    detachSignalNodes(silent,{plugin,secondPlugin},false,SignalHealPath{0,1});
+    for(const auto &g:silent.groups)CHECK((g.dryRoutes==std::vector<SignalGroupDryRoute>{{{}, {secondPlugin,0}}}));
+  }
   // A mixed cable cut is one staged model operation. An invalid later cable
   // must not partially remove either the event route or the audio route.
   auto notes=doc.native();const auto noteID=notes.makeEntity().id,otherID=notes.makeEntity().id;

@@ -638,7 +638,7 @@ int main(int argc,char **argv) {
   try {
     if(argc==2&&std::string(argv[1])=="--catalog") { std::cout<<Json{{"reads",GraphOperations::reads()},{"writes",GraphOperations::writes()}}.dump(2)<<'\n'; return 0; }
     const std::vector<std::pair<const char *,void(*)()>> tests={
-      {"audioFanConnections",audioFanConnections},{"stageConnectionOperations",stageConnectionOperations},{"noteRoutingOperations",noteRoutingOperations},{"graphEditingOperations",graphEditingOperations},{"groupBypassOperations",groupBypassOperations},
+      {"audioFanConnections",audioFanConnections},{"stageConnectionOperations",stageConnectionOperations},{"noteRoutingOperations",noteRoutingOperations},{"graphEditingOperations",graphEditingOperations},{"groupBypassOperations",groupBypassOperations},{"groupDryMapDetachment",groupDryMapDetachment},
       {"graphProvenance",graphProvenance},{"graphPresentation",graphPresentation},{"songModulationSources",songModulationSources},{"songAutomationAndBanks",songAutomationAndBanks},{"stableImplicitMaster",stableImplicitMaster},{"songCableCuts",songCableCuts},
       {"createReadHistory",createReadHistory},{"nodesAndCloning",nodesAndCloning},{"automationAndBanks",automationAndBanks},
       {"assignmentsRoutesLayoutCommands",assignmentsRoutesLayoutCommands},{"hostHooks",hostHooks},
