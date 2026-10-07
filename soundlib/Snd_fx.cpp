@@ -16,6 +16,9 @@
 
 #include "stdafx.h"
 #include "Sndfile.h"
+#ifdef OPENMPT_EDITOR_CORE
+#include "NativeNoteEffects.h"
+#endif
 #include "MIDIMacroParser.h"
 #include "mod_specifications.h"
 #ifdef MODPLUG_TRACKER
@@ -99,6 +102,10 @@ public:
 
 	void Reset()
 	{
+#if defined(OPENMPT_EDITOR_CORE)
+		state->nativeTempo = {};
+		state->nativeClockActive = false;
+#endif
 		if(state->m_midiMacroEvaluationResults)
 			state->m_midiMacroEvaluationResults.emplace();
 		elapsedTime = 0.0;
@@ -1142,7 +1149,10 @@ std::vector<GetLengthType> CSoundFile::GetLength(enmGetLengthResetMode adjustMod
 		}
 
 		const uint32 tickDuration = GetTickDuration(playState);
-		const uint32 rowDuration = tickDuration * numTicks;
+		uint32 rowDuration = tickDuration * numTicks;
+#if defined(OPENMPT_EDITOR_CORE)
+		if(nativeTimingRow) rowDuration = nativeTimingRow(nativeTimingContext, playState, rowDuration);
+#endif
 		memory.elapsedTime += static_cast<double>(rowDuration) / static_cast<double>(m_MixerSettings.gdwMixingFreq);
 		playState.m_lTotalSampleCount += rowDuration;
 		const ROWINDEX rowsPerBeat = playState.m_nCurrentRowsPerBeat ? playState.m_nCurrentRowsPerBeat : DEFAULT_ROWS_PER_BEAT;
@@ -2104,7 +2114,7 @@ void CSoundFile::NoteChange(ModChannel &chn, int note, bool bPorta, bool bResetE
 		chn.nNote = static_cast<ModCommand::NOTE>(note);
 	}
 #ifdef OPENMPT_EDITOR_CORE
-	if(!bPorta) ++chn.nativeNoteGeneration;
+	if(!bPorta) { ++chn.nativeNoteGeneration; chn.nativeSamplePitch = {}; chn.nativePatternVoice = {}; chn.nativeScratchFilter = {}; }
 #endif
 	chn.m_CalculateFreq = true;
 	chn.isPaused = false;
@@ -2196,6 +2206,9 @@ void CSoundFile::NoteChange(ModChannel &chn, int note, bool bPorta, bool bResetE
 		{
 #ifdef OPENMPT_EDITOR_CORE
 			chn.nativeReverseLoop.Reset();
+			// Legacy portamento can restart an exhausted sample without clearing bPorta.
+			chn.nativeSamplePitch = {};
+			chn.nativePatternVoice = {};
 #endif
 			chn.pModSample = pSmp;
 			chn.nLength = pSmp->nLength;
@@ -2774,6 +2787,13 @@ void CSoundFile::PrepareNativeRow(PlayState &state, CHANNELINDEX channel) const
 	const auto found = nativePatternEffects.find({state.m_nPattern, state.m_nRow, channel});
 	chn.nativeExtraEffects = found == nativePatternEffects.end() ? std::array<ModCommand, 7>{} : found->second;
 	chn.nativeArpeggio = chn.nativeTremor = false;
+ chn.nativeHasDelayedNote = nativeDelayedPatternRows.contains({state.m_nPattern,state.m_nRow,channel}) && chn.rowCommand.IsNote();
+ if(chn.nativeHasDelayedNote) {
+  chn.nativeDelayedNote=chn.rowCommand;
+  chn.rowCommand.note=NOTE_NONE;chn.rowCommand.instr=0;
+  chn.rowCommand.volcmd=VOLCMD_NONE;chn.rowCommand.vol=0;
+  if(NativeNoteEffectSupported(chn.rowCommand.command,chn.rowCommand.param)||chn.rowCommand.IsTonePortamento()){chn.rowCommand.command=CMD_NONE;chn.rowCommand.param=0;}
+ }
 }
 
 // Execute the first tick of a note-local command at the precise onset. The
@@ -2828,6 +2848,179 @@ void CSoundFile::ApplyNativeNoteEffect(CHANNELINDEX channel, uint8 effect, uint8
 }
 #endif
 
+void CSoundFile::ProcessVolumeColumn(CHANNELINDEX nChn, ModCommand::VOLCMD &volcmd, ModCommand::VOL &vol, ModCommand::COMMAND &cmd, uint32 param, uint32 nStartTick, bool triggerNote)
+{
+	auto &chn = m_PlayState.Chn[nChn];
+	bool doVolumeColumn = m_PlayState.m_nTickCount >= nStartTick;
+	// FT2 compatibility: If there's a note delay, volume column effects are NOT executed
+	// on the first tick and, if there's an instrument number, on the delayed tick.
+	// Test case: VolColDelay.xm, PortaDelay.xm
+	if(m_playBehaviour[kFT2VolColDelay] && nStartTick != 0)
+	{
+		doVolumeColumn = m_PlayState.m_nTickCount != 0 && (m_PlayState.m_nTickCount != nStartTick || (chn.rowCommand.instr == 0 && volcmd != VOLCMD_TONEPORTAMENTO));
+	}
+
+	// IT compatibility: Various mind-boggling behaviours when combining volume colum and effect column portamentos
+	// The most crucial thing here is to initialize effect memory in the exact right order.
+	// Test cases: DoubleSlide.it, DoubleSlideCompatGxx.it
+	if(m_playBehaviour[kITDoublePortamentoSlides] && chn.isFirstTick)
+	{
+		const bool effectColumnTonePorta = (cmd == CMD_TONEPORTAMENTO || cmd == CMD_TONEPORTAVOL);
+		if(effectColumnTonePorta)
+			InitTonePortamento(chn, static_cast<uint16>(cmd == CMD_TONEPORTAVOL ? 0 : param));
+		if(volcmd == VOLCMD_TONEPORTAMENTO)
+			InitTonePortamento(chn, GetVolCmdTonePorta(chn.rowCommand, nStartTick).first);
+
+		if(vol && (volcmd == VOLCMD_PORTAUP || volcmd == VOLCMD_PORTADOWN))
+		{
+			chn.nOldPortaUp = chn.nOldPortaDown = vol << 2;
+			if(!effectColumnTonePorta && TonePortamentoSharesEffectMemory())
+				chn.portamentoSlide = vol << 2;
+		}
+		if(param && (cmd == CMD_PORTAMENTOUP || cmd == CMD_PORTAMENTODOWN))
+		{
+			chn.nOldPortaUp = chn.nOldPortaDown = static_cast<uint8>(param);
+			if(TonePortamentoSharesEffectMemory())
+				chn.portamentoSlide = static_cast<uint16>(param);
+		}
+	}
+
+	if(volcmd > VOLCMD_PANNING && doVolumeColumn)
+	{
+		if(volcmd == VOLCMD_TONEPORTAMENTO)
+		{
+			const auto [porta, clearEffectCommand] = GetVolCmdTonePorta(chn.rowCommand, nStartTick);
+			if(clearEffectCommand)
+				cmd = CMD_NONE;
+
+			TonePortamento(nChn, porta);
+		} else
+		{
+			// FT2 Compatibility: FT2 ignores some volume commands with parameter = 0.
+			if(m_playBehaviour[kFT2VolColMemory] && vol == 0)
+			{
+				switch(volcmd)
+				{
+				case VOLCMD_VOLUME:
+				case VOLCMD_PANNING:
+				case VOLCMD_VIBRATODEPTH:
+					break;
+				case VOLCMD_PANSLIDELEFT:
+					// FT2 Compatibility: Pan slide left with zero parameter causes panning to be set to full left on every non-row tick.
+					// Test case: PanSlideZero.xm
+					if(!m_PlayState.m_flags[SONG_FIRSTTICK])
+					{
+						chn.nPan = 0;
+					}
+					[[fallthrough]];
+				default:
+					// no memory here.
+					volcmd = VOLCMD_NONE;
+				}
+			} else if(!m_playBehaviour[kITVolColMemory] && volcmd != VOLCMD_PLAYCONTROL)
+			{
+				// IT Compatibility: Effects in the volume column don't have an unified memory.
+				// Test case: VolColMemory.it
+				if(vol) chn.nOldVolParam = vol; else vol = chn.nOldVolParam;
+			}
+
+			switch(volcmd)
+			{
+			case VOLCMD_VOLSLIDEUP:
+			case VOLCMD_VOLSLIDEDOWN:
+				// IT Compatibility: Volume column volume slides have their own memory
+				// Test case: VolColMemory.it
+				if(vol == 0 && m_playBehaviour[kITVolColMemory])
+				{
+					vol = chn.nOldVolParam;
+					if(vol == 0)
+						break;
+				} else
+				{
+					chn.nOldVolParam = vol;
+				}
+				// IT Compatibility: Volume column volume slides must not propagate their memory to the regular effect column
+				// Test case: VolColNoSlideMemoryPropagation.it
+				VolumeSlide(chn, static_cast<ModCommand::PARAM>(volcmd == VOLCMD_VOLSLIDEUP ? (vol << 4) : vol), m_playBehaviour[kITVolColNoSlidePropagation]);
+				break;
+
+			case VOLCMD_FINEVOLUP:
+				// IT Compatibility: Fine volume slides in the volume column are only executed on the first tick, not on multiples of the first tick in case of pattern delay
+				// Test case: FineVolColSlide.it
+				if(m_PlayState.m_nTickCount == nStartTick || !m_playBehaviour[kITVolColMemory])
+				{
+					// IT Compatibility: Volume column volume slides have their own memory
+					// Test case: VolColMemory.it
+					FineVolumeUp(chn, vol, m_playBehaviour[kITVolColMemory]);
+				}
+				break;
+
+			case VOLCMD_FINEVOLDOWN:
+				// IT Compatibility: Fine volume slides in the volume column are only executed on the first tick, not on multiples of the first tick in case of pattern delay
+				// Test case: FineVolColSlide.it
+				if(m_PlayState.m_nTickCount == nStartTick || !m_playBehaviour[kITVolColMemory])
+				{
+					// IT Compatibility: Volume column volume slides have their own memory
+					// Test case: VolColMemory.it
+					FineVolumeDown(chn, vol, m_playBehaviour[kITVolColMemory]);
+				}
+				break;
+
+			case VOLCMD_VIBRATOSPEED:
+				// FT2 does not automatically enable vibrato with the "set vibrato speed" command
+				if(m_playBehaviour[kFT2VolColVibrato])
+					chn.nVibratoSpeed = vol & 0x0F;
+				else
+					Vibrato(chn, vol << 4);
+				break;
+
+			case VOLCMD_VIBRATODEPTH:
+				Vibrato(chn, vol);
+				break;
+
+			case VOLCMD_PANSLIDELEFT:
+				PanningSlide(chn, vol, !m_playBehaviour[kFT2VolColMemory]);
+				break;
+
+			case VOLCMD_PANSLIDERIGHT:
+				PanningSlide(chn, static_cast<ModCommand::PARAM>(vol << 4), !m_playBehaviour[kFT2VolColMemory]);
+				break;
+
+			case VOLCMD_PORTAUP:
+				// IT compatibility (one of the first testcases - link effect memory)
+				PortamentoUp(nChn, static_cast<ModCommand::PARAM>(vol << 2), m_playBehaviour[kITVolColFinePortamento]);
+				break;
+
+			case VOLCMD_PORTADOWN:
+				// IT compatibility (one of the first testcases - link effect memory)
+				PortamentoDown(nChn, static_cast<ModCommand::PARAM>(vol << 2), m_playBehaviour[kITVolColFinePortamento]);
+				break;
+
+			case VOLCMD_OFFSET:
+				if(triggerNote && chn.pModSample && !chn.pModSample->uFlags[CHN_ADLIB] && vol <= std::size(chn.pModSample->cues))
+				{
+					SmpLength offset;
+					if(vol == 0)
+						offset = chn.oldOffset;
+					else
+						offset = chn.oldOffset = chn.pModSample->cues[vol - 1];
+					SampleOffset(chn, offset);
+				}
+				break;
+
+			case VOLCMD_PLAYCONTROL:
+				if(chn.isFirstTick)
+					chn.PlayControl(vol);
+				break;
+
+			default:
+				break;
+			}
+		}
+	}
+
+}
+
 bool CSoundFile::ProcessEffects()
 {
 	m_PlayState.m_breakRow = ROWINDEX_INVALID;    // Is changed if a break to row command is encountered
@@ -2843,6 +3036,10 @@ bool CSoundFile::ProcessEffects()
 		std::array<ModCommand, 8> effects{};
 		effects[0] = sourceRow;
 		for(size_t i = 0; i < chn.nativeExtraEffects.size(); ++i) effects[i + 1] = chn.nativeExtraEffects[i];
+		// A delayed row's note-local effects travel with its onset. Global timing
+		// and flow commands still run on the ordinary tracker clock.
+		if(chn.nativeHasDelayedNote) for(auto &effect : effects)
+			if(NativeNoteEffectSupported(effect.command, effect.param) || effect.IsTonePortamento()) effect.command = CMD_NONE;
 		const uint8 noteColumn = NativeNoteColumn(chn);
 		if(sourceRow.IsPcNote()) effects[0].Clear();
 		const bool multipleEffects = std::any_of(effects.begin() + 1, effects.end(), [](const auto &e) { return e.command != CMD_NONE; });
@@ -3452,174 +3649,7 @@ bool CSoundFile::ProcessEffects()
 			so... hxx = (hx | (oldhxx & 0xf0))  ???
 			TODO is this done correctly?
 		*/
-		bool doVolumeColumn = m_PlayState.m_nTickCount >= nStartTick;
-		// FT2 compatibility: If there's a note delay, volume column effects are NOT executed
-		// on the first tick and, if there's an instrument number, on the delayed tick.
-		// Test case: VolColDelay.xm, PortaDelay.xm
-		if(m_playBehaviour[kFT2VolColDelay] && nStartTick != 0)
-		{
-			doVolumeColumn = m_PlayState.m_nTickCount != 0 && (m_PlayState.m_nTickCount != nStartTick || (chn.rowCommand.instr == 0 && volcmd != VOLCMD_TONEPORTAMENTO));
-		}
-
-		// IT compatibility: Various mind-boggling behaviours when combining volume colum and effect column portamentos
-		// The most crucial thing here is to initialize effect memory in the exact right order.
-		// Test cases: DoubleSlide.it, DoubleSlideCompatGxx.it
-		if(m_playBehaviour[kITDoublePortamentoSlides] && chn.isFirstTick)
-		{
-			const bool effectColumnTonePorta = (cmd == CMD_TONEPORTAMENTO || cmd == CMD_TONEPORTAVOL);
-			if(effectColumnTonePorta)
-				InitTonePortamento(chn, static_cast<uint16>(cmd == CMD_TONEPORTAVOL ? 0 : param));
-			if(volcmd == VOLCMD_TONEPORTAMENTO)
-				InitTonePortamento(chn, GetVolCmdTonePorta(chn.rowCommand, nStartTick).first);
-
-			if(vol && (volcmd == VOLCMD_PORTAUP || volcmd == VOLCMD_PORTADOWN))
-			{
-				chn.nOldPortaUp = chn.nOldPortaDown = vol << 2;
-				if(!effectColumnTonePorta && TonePortamentoSharesEffectMemory())
-					chn.portamentoSlide = vol << 2;
-			}
-			if(param && (cmd == CMD_PORTAMENTOUP || cmd == CMD_PORTAMENTODOWN))
-			{
-				chn.nOldPortaUp = chn.nOldPortaDown = static_cast<uint8>(param);
-				if(TonePortamentoSharesEffectMemory())
-					chn.portamentoSlide = static_cast<uint16>(param);
-			}
-		}
-
-		if(volcmd > VOLCMD_PANNING && doVolumeColumn)
-		{
-			if(volcmd == VOLCMD_TONEPORTAMENTO)
-			{
-				const auto [porta, clearEffectCommand] = GetVolCmdTonePorta(chn.rowCommand, nStartTick);
-				if(clearEffectCommand)
-					cmd = CMD_NONE;
-
-				TonePortamento(nChn, porta);
-			} else
-			{
-				// FT2 Compatibility: FT2 ignores some volume commands with parameter = 0.
-				if(m_playBehaviour[kFT2VolColMemory] && vol == 0)
-				{
-					switch(volcmd)
-					{
-					case VOLCMD_VOLUME:
-					case VOLCMD_PANNING:
-					case VOLCMD_VIBRATODEPTH:
-						break;
-					case VOLCMD_PANSLIDELEFT:
-						// FT2 Compatibility: Pan slide left with zero parameter causes panning to be set to full left on every non-row tick.
-						// Test case: PanSlideZero.xm
-						if(!m_PlayState.m_flags[SONG_FIRSTTICK])
-						{
-							chn.nPan = 0;
-						}
-						[[fallthrough]];
-					default:
-						// no memory here.
-						volcmd = VOLCMD_NONE;
-					}
-				} else if(!m_playBehaviour[kITVolColMemory] && volcmd != VOLCMD_PLAYCONTROL)
-				{
-					// IT Compatibility: Effects in the volume column don't have an unified memory.
-					// Test case: VolColMemory.it
-					if(vol) chn.nOldVolParam = vol; else vol = chn.nOldVolParam;
-				}
-
-				switch(volcmd)
-				{
-				case VOLCMD_VOLSLIDEUP:
-				case VOLCMD_VOLSLIDEDOWN:
-					// IT Compatibility: Volume column volume slides have their own memory
-					// Test case: VolColMemory.it
-					if(vol == 0 && m_playBehaviour[kITVolColMemory])
-					{
-						vol = chn.nOldVolParam;
-						if(vol == 0)
-							break;
-					} else
-					{
-						chn.nOldVolParam = vol;
-					}
-					// IT Compatibility: Volume column volume slides must not propagate their memory to the regular effect column
-					// Test case: VolColNoSlideMemoryPropagation.it
-					VolumeSlide(chn, static_cast<ModCommand::PARAM>(volcmd == VOLCMD_VOLSLIDEUP ? (vol << 4) : vol), m_playBehaviour[kITVolColNoSlidePropagation]);
-					break;
-
-				case VOLCMD_FINEVOLUP:
-					// IT Compatibility: Fine volume slides in the volume column are only executed on the first tick, not on multiples of the first tick in case of pattern delay
-					// Test case: FineVolColSlide.it
-					if(m_PlayState.m_nTickCount == nStartTick || !m_playBehaviour[kITVolColMemory])
-					{
-						// IT Compatibility: Volume column volume slides have their own memory
-						// Test case: VolColMemory.it
-						FineVolumeUp(chn, vol, m_playBehaviour[kITVolColMemory]);
-					}
-					break;
-
-				case VOLCMD_FINEVOLDOWN:
-					// IT Compatibility: Fine volume slides in the volume column are only executed on the first tick, not on multiples of the first tick in case of pattern delay
-					// Test case: FineVolColSlide.it
-					if(m_PlayState.m_nTickCount == nStartTick || !m_playBehaviour[kITVolColMemory])
-					{
-						// IT Compatibility: Volume column volume slides have their own memory
-						// Test case: VolColMemory.it
-						FineVolumeDown(chn, vol, m_playBehaviour[kITVolColMemory]);
-					}
-					break;
-
-				case VOLCMD_VIBRATOSPEED:
-					// FT2 does not automatically enable vibrato with the "set vibrato speed" command
-					if(m_playBehaviour[kFT2VolColVibrato])
-						chn.nVibratoSpeed = vol & 0x0F;
-					else
-						Vibrato(chn, vol << 4);
-					break;
-
-				case VOLCMD_VIBRATODEPTH:
-					Vibrato(chn, vol);
-					break;
-
-				case VOLCMD_PANSLIDELEFT:
-					PanningSlide(chn, vol, !m_playBehaviour[kFT2VolColMemory]);
-					break;
-
-				case VOLCMD_PANSLIDERIGHT:
-					PanningSlide(chn, static_cast<ModCommand::PARAM>(vol << 4), !m_playBehaviour[kFT2VolColMemory]);
-					break;
-
-				case VOLCMD_PORTAUP:
-					// IT compatibility (one of the first testcases - link effect memory)
-					PortamentoUp(nChn, static_cast<ModCommand::PARAM>(vol << 2), m_playBehaviour[kITVolColFinePortamento]);
-					break;
-
-				case VOLCMD_PORTADOWN:
-					// IT compatibility (one of the first testcases - link effect memory)
-					PortamentoDown(nChn, static_cast<ModCommand::PARAM>(vol << 2), m_playBehaviour[kITVolColFinePortamento]);
-					break;
-
-				case VOLCMD_OFFSET:
-					if(triggerNote && chn.pModSample && !chn.pModSample->uFlags[CHN_ADLIB] && vol <= std::size(chn.pModSample->cues))
-					{
-						SmpLength offset;
-						if(vol == 0)
-							offset = chn.oldOffset;
-						else
-							offset = chn.oldOffset = chn.pModSample->cues[vol - 1];
-						SampleOffset(chn, offset);
-					}
-					break;
-
-				case VOLCMD_PLAYCONTROL:
-					if(chn.isFirstTick)
-						chn.PlayControl(vol);
-					break;
-
-				default:
-					break;
-				}
-			}
-		}
-
+		ProcessVolumeColumn(nChn, volcmd, vol, cmd, param, nStartTick, triggerNote);
 
 #ifdef OPENMPT_EDITOR_CORE
 		// Effects run left to right. The row's note and volume column ran exactly once.
@@ -6261,6 +6291,12 @@ void CSoundFile::RetrigNote(CHANNELINDEX nChn, int param, int offset)
 		// Test cases: retrig.it, RetrigSlide.s3m
 		const bool itS3Mstyle = m_playBehaviour[kITRetrigger] || (GetType() == MOD_TYPE_S3M && chn.nLength && !oplRealRetrig);
 		NoteChange(chn, note, itS3Mstyle, resetEnv, false, nChn);
+#ifdef OPENMPT_EDITOR_CORE
+		// Retrigger restarts a sample even where tracker compatibility passes
+		// the portamento flag to retain its ordinary period/effect memory.
+		chn.nativeSamplePitch = {};
+			chn.nativePatternVoice = {};
+#endif
 		if(!chn.rowCommand.instr)
 			chn.prevNoteOffset = oldPrevNoteOffset;
 		// XM compatibility: Prevent NoteChange from resetting the fade flag in case an instrument number + note-off is present.
@@ -6499,6 +6535,10 @@ void CSoundFile::KeyOff(ModChannel &chn) const
 
 		if (pIns->VolEnv.nReleaseNode != ENV_RELEASE_NODE_UNSET && chn.VolEnv.nEnvValueAtReleaseJump == NOT_YET_RELEASED)
 		{
+#ifdef OPENMPT_EDITOR_CORE
+   auto &cursor=chn.nativePatternVoice.envelopes[0];
+   if(cursor.active){const double value=NativePatternEnvelopeValue(pIns->VolEnv,cursor.position)*cursor.releaseScale;const double target=pIns->VolEnv[pIns->VolEnv.nReleaseNode].value/64.;cursor.position=pIns->VolEnv[pIns->VolEnv.nReleaseNode].tick;cursor.releaseScale=target>0?value/target:0;}
+#endif
 			chn.VolEnv.nEnvValueAtReleaseJump = mpt::saturate_cast<int16>(pIns->VolEnv.GetValueFromPosition(chn.VolEnv.nEnvPosition, 256));
 			chn.VolEnv.nEnvPosition = pIns->VolEnv[pIns->VolEnv.nReleaseNode].tick;
 		}

@@ -193,18 +193,23 @@ int main() {
         NSMutableDictionary *native = [root[@"native"] mutableCopy];
         native[@"patterns"] = @[]; bad[@"native"] = native; write(bad);
         revision = session.automationRevision;
-        check(![session openPath:path error:&error] && [revision isEqual:session.automationRevision], "Reject malformed metadata without replacing current song");
+        check([session openPath:path error:&error] && [[session snapshot:0][@"loadWarnings"] count]>0 && [[session snapshot:0][@"requiresSaveAs"] boolValue], "Malformed optional identities recover the embedded song with warnings");
+        auto corrupt=[root mutableCopy];corrupt[@"module"]=[@"invalid required snapshot" dataUsingEncoding:NSUTF8StringEncoding];write(corrupt);revision=session.automationRevision;NSData *accepted=session.serializedData;
+        check(![session openPath:path error:&error] && [revision isEqual:session.automationRevision] && [accepted isEqual:session.serializedData], "Corrupt required snapshot rejects atomically without replacing current song");
         check([root[@"version"] isEqual:@6], "Current native project is version 6");
         for(int old=1;old<6;++old) {
           auto oldRoot=[root mutableCopy];oldRoot[@"version"]=@(old);write(oldRoot);
           revision=session.automationRevision;
-          check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Old native project versions are rejected without changing the current song");
+          check([session openPath:path error:&error]&&[[session snapshot:0][@"loadWarnings"] count]>0&&[[session snapshot:0][@"requiresSaveAs"] boolValue],"Historical container versions recover known content with warnings and Save As protection");
+          check([readMaster() isEqual:reservedMaster],"Historical container recovery preserves stable Master identity");
         }
         for(int old=1;old<17;++old) {
           auto oldRoot=[root mutableCopy];auto metadata=[root[@"native"] mutableCopy];metadata[@"version"]=@(old);oldRoot[@"native"]=metadata;write(oldRoot);
           revision=session.automationRevision;
-          check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Historical native metadata is rejected atomically");
+          check([session openPath:path error:&error]&&[[session snapshot:0][@"loadWarnings"] count]>0&&[[session snapshot:0][@"requiresSaveAs"] boolValue],"Historical native metadata versions recover known fields with explicit warnings");
+          check([readMaster() isEqual:reservedMaster],"Historical native metadata recovery preserves stable Master identity");
         }
+        write(root);check([session openPath:path error:&error],"Restore current fixture after historical recovery checks");
         call(@"mixer.enable", @{}, true);
         check([readMaster() isEqual:reservedMaster],"First routing edit materializes the same Master shown in the implicit view");
         NSString *busID = call(@"mixer.get", @{})[@"buses"][0][@"id"];
@@ -220,7 +225,9 @@ int main() {
         check([compatible[@"native"][@"masterID"] isEqual:reservedMaster],"Current native metadata stores the reserved Master explicitly");
         auto conflicting=[compatible mutableCopy];auto conflictingNative=[compatible[@"native"] mutableCopy];
         conflictingNative[@"masterID"]=busID;conflicting[@"native"]=conflictingNative;write(conflicting);revision=session.automationRevision;
-        check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Conflicting saved Master identity is rejected atomically");
+        NSData *conflictingBytes=[NSData dataWithContentsOfFile:path];
+        check([session openPath:path error:&error]&&[[session snapshot:0][@"loadWarnings"] count]>0&&[[session snapshot:0][@"requiresSaveAs"] boolValue],"Conflicting optional Master identity recovers the embedded song with warnings");
+        check([[session snapshot:0][@"cells"] isEqual:before[@"cells"]]&&! [session savePath:path error:&error]&&[[NSData dataWithContentsOfFile:path] isEqual:conflictingBytes],"Identity recovery preserves required song cells and every original source byte");
         auto currentWithoutField=[compatible mutableCopy];auto missingNative=[compatible[@"native"] mutableCopy];
         [missingNative removeObjectForKey:@"masterID"];currentWithoutField[@"native"]=missingNative;write(currentWithoutField);
         check([session openPath:path error:&error]&&[readMaster() isEqual:reservedMaster],"Current metadata without the optional field derives the existing Master identity");
@@ -235,10 +242,14 @@ int main() {
         check([session savePath:path error:&error]&&[session openPath:path error:&error],"Song-level control metadata saves and reopens");
         auto controlsAfter=call(@"graph.get",@{});check([controlsBefore[@"songSources"] isEqual:controlsAfter[@"songSources"]]&&[controlsBefore[@"songModulation"] isEqual:controlsAfter[@"songModulation"]],"Song-level controls retain stable IDs, ranges and explicit quantization through persistence");
         auto duplicate=[controlsGraph mutableCopy];duplicate[@"songSources"]=@[controlsGraph[@"songSources"][0],controlsGraph[@"songSources"][0]];controlsNative[@"signalGraph"]=duplicate;songControls[@"native"]=controlsNative;write(songControls);revision=session.automationRevision;
-        check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Duplicate song control identities reject without replacing the document");
+        NSData *duplicateBytes=[NSData dataWithContentsOfFile:path];
+        check([session openPath:path error:&error]&&[[session snapshot:0][@"loadWarnings"] count]>0&&[[session snapshot:0][@"requiresSaveAs"] boolValue],"Duplicate optional song control identities recover with explicit warnings");
+        check([call(@"graph.get",@{})[@"songSources"] count]==0&&[call(@"graph.get",@{})[@"songModulation"] count]==0,"Invalid dependent source section is omitted as a whole");
+        check([[session snapshot:0][@"cells"] isEqual:before[@"cells"]]&&[readMaster() isEqual:reservedMaster],"Skipping malformed sources preserves independent song cells and mixer identity");
+        check(![session savePath:path error:&error]&&[[NSData dataWithContentsOfFile:path] isEqual:duplicateBytes],"Malformed optional source metadata remains protected from overwrite");
       }
       [[NSFileManager defaultManager] removeItemAtPath:folder error:nil];
-      std::cout << "PASS native song identities, metadata, order/section history, no-op/invalid atomicity, all five module formats, current project roundtrip, historical version rejection and loss prevention\n";
+      std::cout << "PASS native song identities, metadata, order/section history, no-op/invalid atomicity, all five module formats, current project roundtrip, historical recovery warnings and loss prevention\n";
       return 0;
     } catch (const std::exception &error) {
       std::cerr << "FAIL " << error.what() << '\n'; return 1;

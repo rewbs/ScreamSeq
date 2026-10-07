@@ -1,5 +1,6 @@
 #pragma once
 #include "WorkspaceState.hpp"
+#include "GraphCableEdits.hpp"
 #include <set>
 #include <cfloat>
 namespace ScreamSeq {
@@ -35,6 +36,8 @@ struct GraphCanvas {
     auto socket=[&](const Api::Json &id,bool out,bool mod,uint32_t port)->const Socket *{for(const auto &s:sockets)if(s.node==id.get_ref<const std::string &>()&&s.output==out&&s.modulation==mod&&s.port==port)return &s;return nullptr;};
     for(bool mod:{false,true}){const auto &edges=definition.at(mod?"modulation":"audio");for(size_t i=0;i<edges.size();++i){const auto &e=edges[i];auto a=socket(e.at("source"),true,mod,mod?0:e.value("output",0u)),b=socket(e.at("target"),false,mod,mod?e.at("parameter").get<uint32_t>():e.value("input",0u));if(!a||!b)continue;Wire w;w.modulation=mod;w.index=i;w.points=curve(a->at,b->at);float left=w.points[0].x,right=left,top=w.points[0].y,bottom=top;for(auto p:w.points){left=std::min(left,p.x);right=std::max(right,p.x);top=std::min(top,p.y);bottom=std::max(bottom,p.y);}w.bounds={left-7,top-7,right-left+14,bottom-top+14};wires.push_back(std::move(w));}}
   }
+  const Wire *selectedWire(int index,bool modulation) const {for(const auto &w:wires)if(int(w.index)==index&&w.modulation==modulation)return &w;return nullptr;}
+  int handleAt(float x,float y,int index,bool modulation) const {if(const auto *w=selectedWire(index,modulation))for(int side=0;side<2;++side){const auto p=w->points[side?28:4];if(std::hypot(x-p.x,y-p.y)<=7)return side;}return -1;}
   int socketAt(float x,float y) const {for(size_t i=0;i<sockets.size();++i){const auto &p=sockets[i].at;if(std::hypot(x-p.x,y-p.y)<=7)return int(i);}return -1;}
   int nodeAt(float x,float y) const {for(size_t i=nodes.size();i>0;--i)if(nodes[i-1].rect.contains(x,y))return int(i-1);return -1;}
   static float distance(Point p,Point a,Point b){const auto dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;const auto t=length?std::clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/length,0.0f,1.0f):0;return std::hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);}

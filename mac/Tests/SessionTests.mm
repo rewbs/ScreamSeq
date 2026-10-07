@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
       require([reopened openPath:[folder stringByAppendingPathComponent:@"bypassed.resonance"] error:&error] && [[reopened snapshot:0][@"nativePlugins"][0][@"bypass"] boolValue], "bypass survives project recall");
       require([reopened removePlugin:0 error:&error], "remove effect");
       require([[reopened snapshot:0][@"nativePlugins"] count] == 0, "empty graph after removal");
-      // Reject malformed project properties before replacing the existing document.
+      // Recover the embedded song and independent valid sections; protect malformed originals.
       NSData *projectData = [NSData dataWithContentsOfFile:path];
       NSDictionary *project = [NSPropertyListSerialization propertyListWithData:projectData
                                                                         options:0
@@ -82,15 +82,24 @@ int main(int argc, char **argv) {
         NSMutableDictionary *bad = [project mutableCopy];
         NSMutableDictionary *effect = [project[@"plugins"][0] mutableCopy];
         effect[@"bypass"] = badBypass;
-        bad[@"plugins"] = @[ effect ];
-        require(![reopened openPath:writeProject(bad, @"bad.resonance") error:&error], "reject malformed effect state");
-        require([[reopened snapshot:0][@"nativePlugins"] count] == 0, "failed open retains document");
+        bad[@"plugins"] = @[ effect, project[@"plugins"][0] ];
+        NSString *badPath=writeProject(bad, @"bad.resonance");NSData *badBytes=[NSData dataWithContentsOfFile:badPath];
+        require([reopened openPath:badPath error:&error], "recover song while skipping malformed effect state");
+        require([[reopened snapshot:0][@"nativePlugins"] count] == 1 && [[reopened snapshot:0][@"nativePlugins"][0][@"instanceID"] isEqual:project[@"plugins"][0][@"instanceID"]] && [[reopened snapshot:0][@"cells"] isEqual:before[@"cells"]], "bad optional effect is skipped while its valid sibling and required module cells remain intact");
+        require([[reopened snapshot:0][@"loadWarnings"] count]>0&&[[reopened snapshot:0][@"requiresSaveAs"] boolValue], "skipped effect warns and protects the source");
+        require(![reopened savePath:badPath error:&error]&&[[NSData dataWithContentsOfFile:badPath] isEqual:badBytes], "malformed effect recovery preserves original bytes");
       }
       for (NSArray *badPoint in
            @[ @[ @0, @0, @(NAN), @0 ], @[ @7, @0, @1, @0 ], @[ @0, @0, @1, @(-1) ], @[ @0.5, @0, @1, @0 ] ]) {
         NSMutableDictionary *bad = [project mutableCopy];
-        bad[@"automation"] = @[ badPoint ];
-        require(![reopened openPath:writeProject(bad, @"bad.resonance") error:&error], "reject malformed automation");
+        NSArray *goodPoint=@[@0,@(identifier),@(value),@48000];
+        bad[@"automation"] = @[ badPoint, goodPoint ];
+        NSString *badPath=writeProject(bad, @"bad.resonance");NSData *badBytes=[NSData dataWithContentsOfFile:badPath];
+        require([reopened openPath:badPath error:&error], "recover valid plugin and song while skipping malformed automation");
+        NSDictionary *accepted=[NSPropertyListSerialization propertyListWithData:reopened.serializedData options:0 format:nil error:nil];
+        require([accepted[@"automation"] count]==1&&[accepted[@"automation"][0][0] isEqual:@0]&&[accepted[@"automation"][0][1] isEqual:@(identifier)]&&[accepted[@"automation"][0][3] isEqual:@48000]&&[accepted[@"automation"][0][2] floatValue]==float(value)&&[[reopened snapshot:0][@"nativePlugins"] count]==1&&[[reopened snapshot:0][@"cells"] isEqual:before[@"cells"]], "invalid automation does not discard its valid sibling, plugin or required module cells");
+        require([[reopened snapshot:0][@"loadWarnings"] count]>0&&[[reopened snapshot:0][@"requiresSaveAs"] boolValue], "skipped automation warns and protects the source");
+        require(![reopened savePath:badPath error:&error]&&[[NSData dataWithContentsOfFile:badPath] isEqual:badBytes], "malformed automation recovery preserves original bytes");
       }
       NSString *renamedProject = [folder stringByAppendingPathComponent:@"Roundtrip.screamseq"];
       require([reopened openPath:writeProject(project, @"renamed.screamseq") error:&error] && [reopened savePath:renamedProject error:&error] && [reopened openPath:renamedProject error:&error], "ScreamSeq extension loads and saves the existing native container without losing plugins");

@@ -327,15 +327,23 @@ NativeSong prepareEffectTransform(const Document &doc,const std::vector<PatternR
       else if(t.operation=="rotate")target=(row+int(t.amount)%region.rows+region.rows)%region.rows;
       else if(t.operation=="insertRows")target+=int(t.amount);
       else if(t.operation=="deleteRows")target-=int(t.amount);
-      else if(t.operation=="expand"){target*=int(t.amount);c.duration*=uint32_t(t.amount);}
+      else if(t.operation=="expand"){target*=int(t.amount);c.duration*=uint32_t(t.amount);c.durationBeats*=t.amount;if(c.kind==PatternCommandKind::Native && c.native==NativePatternOp::Scratch)c.arguments[1]*=t.amount;}
       else if(t.operation=="shrink"){
         if(row%int(t.amount)){if(!t.allowDataLoss)throw std::invalid_argument("Shrink would discard FX columns; allow data loss explicitly");continue;}
-        target/=int(t.amount);if(c.duration)c.duration=std::max(1u,c.duration/uint32_t(t.amount));
+        target/=int(t.amount);if(c.duration)c.duration=std::max(1u,c.duration/uint32_t(t.amount));if(c.durationBeats)c.durationBeats=std::max(1.0/performanceUnitsPerRow,c.durationBeats/t.amount);
+        if(c.kind==PatternCommandKind::Native && c.native==NativePatternOp::Scratch)c.arguments[1]=std::max(1.0/performanceUnitsPerRow,c.arguments[1]/t.amount);
       }
       if(target<0||target>=region.rows){if(!t.allowDataLoss)throw std::invalid_argument("This row edit would discard FX columns; allow data loss explicitly");continue;}
       c.position=uint32_t(region.firstRow+target)*performanceUnitsPerRow+fraction;
       const auto end=uint32_t(doc.song().Patterns[region.pattern].GetNumRows())*performanceUnitsPerRow;
       if(c.duration>end-c.position){if(!t.allowDataLoss)throw std::invalid_argument("This row edit would move an FX slide beyond the pattern");c.duration=end-c.position;}
+      if(isNudge(c.kind) || (c.kind==PatternCommandKind::Native && c.native==NativePatternOp::Scratch)){
+        const auto &p=doc.song().Patterns[region.pattern];const auto &s=doc.song();
+        const auto rowsPerBeat=std::max(1u,p.GetOverrideSignature()?unsigned(p.GetRowsPerBeat()):s.m_nDefaultRowsPerBeat?unsigned(s.m_nDefaultRowsPerBeat):4u);
+        const double remaining=double(end-c.position)/(performanceUnitsPerRow*double(rowsPerBeat));
+        auto &duration=isNudge(c.kind)?c.durationBeats:c.arguments[1];
+        if(duration>remaining){if(!t.allowDataLoss)throw std::invalid_argument("This row edit would move a scratch or nudge beyond the pattern");if(remaining<1.0/performanceUnitsPerRow)continue;duration=remaining;}
+      }
       commands.push_back(c);
     }
     next.performance.commands=std::move(commands);

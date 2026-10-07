@@ -7,6 +7,7 @@
 #include "editor/NoteRecording.hpp"
 #include "soundlib/ModInstrument.h"
 #include <iostream>
+#include <dlfcn.h>
 using namespace Tracker;using namespace OpenMPT;
 std::vector<PluginDescriptor> registerFixtureAUs();
 #ifdef TRACKER_SANITIZER
@@ -335,9 +336,13 @@ static void cutAndInstrumentAPITest(const PluginDescriptor &descriptor) {
   check([project[@"native"][@"version"] intValue]==17,"NC uses current metadata 17");
   project[@"native"][@"version"]=@15;
   [[NSPropertyListSerialization dataWithPropertyList:project format:NSPropertyListBinaryFormat_v1_0 options:0 error:&error] writeToFile:path atomically:YES];
-  check(![session openPath:path error:&error],"An NC command cannot masquerade as older metadata");
+  NSData *historicalBytes=[NSData dataWithContentsOfFile:path];
+  check([session openPath:path error:&error]&&[[session snapshot:0][@"loadWarnings"] count]>0&&[[session snapshot:0][@"requiresSaveAs"] boolValue],"Historical metadata recovers known NC commands with explicit warnings");
+  check([expected isEqual:call(@"pattern.performance.get",@{@"pattern":@0})[@"data"]]&&[info isEqual:call(@"instrument.get",@{@"instrument":index})[@"data"]],"Historical recovery preserves precise NC timing and plugin trigger instrument");
+  check(![session savePath:path error:&error]&&[[NSData dataWithContentsOfFile:path] isEqual:historicalBytes],"Historical NC source remains byte-identical and protected");
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
 }
+#include "NativeRepeatChecks.inc"
 int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Local fixture required");const auto vst=NativePlugin::discoverVST3(argv[1]),au=registerFixtureAUs();
   for(const auto &descriptor:{vst[1],au[1]})for(uint32_t rate:{44100u,48000u,96000u}) {
@@ -379,6 +384,9 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
     check(std::any_of(reference.begin()+start*2,reference.begin()+(start+100)*2,[](float v){return std::abs(v)>.001;}),"Sample starts immediately at the precise event");
     for(auto block:{17u,128u,4096u})check(render(block)==reference,"Precise sample audio is callback independent");
   }
+  void *fixtureBundle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW);
+  check(fixtureBundle,"Open repeat velocity fixture");auto velocityMode=reinterpret_cast<void(*)(bool)>(dlsym(fixtureBundle,"ResonanceFixtureVelocityMode"));check(velocityMode,"Fixture velocity PCM mode");
+  velocityMode(true);setFixtureAUVelocityMode(true);nativeRepeatTest(vst[1]);nativeRepeatTest(au[1]);velocityMode(false);setFixtureAUVelocityMode(false);
   cutCommandTest(vst[1]);cutCommandTest(au[1]);cutAndInstrumentAPITest(vst[1]);
   voiceIsolationTest();forwardJumpTest();recordingTest();apiTest();offsetWorkflowTest();beatAndEffectTest();std::cout<<"PASS sample/AU/VST3 precise note timing, same-row releases, repeat, tempo/groove, callback partitions, timestamp capture, realtime audit, beat offsets, per-hit effects and project recall\n";return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}}

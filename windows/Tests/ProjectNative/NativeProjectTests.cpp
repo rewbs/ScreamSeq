@@ -42,7 +42,23 @@ int main(int argc,char **argv) {
 			auto bytes=ScreamSeq::Project::encodePlist(damaged);ScreamSeq::Project::writeProjectFile(bad,bytes,true);
 			bool caught=false;try {(void)ScreamSeq::Project::openNativeProject(bad);} catch(const std::exception &) {caught=true;}check(caught,message);
 		};
-		reject([](auto &r){r["native"]["preciseNotes"][0]["position"]=4294967295u;},"snapshot-relative native bounds reject before publish");
+        auto recover=[&](auto mutate,const char *message){
+          auto damaged=good;mutate(damaged);auto file=dir/L"recoverable.screamseq";
+          const auto original=ScreamSeq::Project::encodePlist(damaged);ScreamSeq::Project::writeProjectFile(file,original,true);
+          auto recovered=ScreamSeq::Project::openNativeProject(file);
+          check(recovered.state.requiresSaveAs&&!recovered.state.loadWarnings.empty(),message);
+          bool blocked=false;try{ScreamSeq::Project::saveNativeProject(*recovered.document,recovered.state,file,true);}catch(const std::exception &){blocked=true;}
+          check(blocked&&ScreamSeq::Project::readProjectBytes(file)==original,"recovered source cannot be overwritten");
+          const auto alias=dir/L"protected-alias.screamseq";std::error_code ec;std::filesystem::remove(alias,ec);std::filesystem::create_hard_link(file,alias,ec);
+          check(!ec,"source alias test creation");blocked=false;try{ScreamSeq::Project::validateProjectSaveDestination(recovered.state,alias);}catch(const std::exception &){blocked=true;}
+          check(blocked,"source hardlink alias cannot bypass protection");std::filesystem::remove(alias);
+          const auto destination=dir/L"recovered-copy.screamseq";ScreamSeq::Project::saveNativeProject(*recovered.document,recovered.state,destination,true);
+          check(!recovered.state.requiresSaveAs&&ScreamSeq::Project::readProjectBytes(file)==original,"saving new copy clears protection without altering original");
+          auto reopened=ScreamSeq::Project::openNativeProject(destination);check(reopened.document->native()==recovered.document->native()&&!reopened.state.requiresSaveAs,"canonical recovered copy reopens without new recovery");
+          return recovered;
+        };
+        auto partial=recover([](auto &r){r["native"]["preciseNotes"][0]["position"]=4294967295u;},"invalid precise note recovers independent entries");
+        check(partial.document->native().preciseNotes.size()+1==initialNative.preciseNotes.size(),"valid precise notes survive malformed sibling");
         // Mac retains missing plugin targets for explicit recovery. Removing a
         // rack entry must never redirect its lane to another plugin or lose it.
         auto unresolved=good;unresolved["native"]["automation"][0]["plugin"]="missing-instance";
@@ -50,11 +66,12 @@ int main(int argc,char **argv) {
         ScreamSeq::Project::writeProjectFile(unresolvedPath,ScreamSeq::Project::encodePlist(unresolved),true);
         auto missing=ScreamSeq::Project::openNativeProject(unresolvedPath);
         check(missing.document->native().automation[0].plugin=="missing-instance","missing rack target remains unresolved");
-		reject([](auto &r){r["plugins"][0]["state"]=nlohmann::json::binary(std::vector<uint8_t>(8),uint64_t(ScreamSeq::Project::OpaqueType::Date));},"opaque date cannot become plugin data");
-		reject([](auto &r){r["sequence"]=255;},"missing selected sequence rejects");
-		reject([](auto &r){r["version"]=7;},"future container rejected");
-        for(unsigned version=1;version<6;++version) reject([&](auto &r){r["version"]=version;},"historical native container rejected");
-		reject([](auto &r){r["plugins"].push_back(r["plugins"][0]);},"duplicate stable plugin identity rejected");
+		recover([](auto &r){r["plugins"][0]["state"]=nlohmann::json::binary(std::vector<uint8_t>(8),uint64_t(ScreamSeq::Project::OpaqueType::Date));},"opaque date plugin state omitted with warning");
+		recover([](auto &r){r["sequence"]=255;},"missing selected sequence defaults with warning");
+		recover([](auto &r){r["version"]=7;},"future container recovered with warning");
+        for(unsigned version=1;version<6;++version) recover([&](auto &r){r["version"]=version;},"historical container recovered with warning");
+		recover([](auto &r){r["plugins"].push_back(r["plugins"][0]);},"duplicate plugin record omitted with warning");
+        reject([](auto &r){r["module"]=nlohmann::json::binary({1,2,3});},"unreadable core snapshot must still fail");
 		bool caught=false;auto savedState=loaded.state.preserved;auto savedPath=loaded.state.path;
 		try {ScreamSeq::Project::saveNativeProject(doc,loaded.state,copy,false);} catch(const std::exception &) {caught=true;}
 		check(caught && loaded.state.preserved==savedState && loaded.state.path==savedPath,"failed save leaves project baseline and path intact");

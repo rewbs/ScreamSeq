@@ -13,12 +13,13 @@ public:
 private:
   using Request=std::function<Json(const std::string &,const Json &)>;
   using Audition=std::function<void(unsigned,const std::string &,const std::string &,const std::string &)>;Audition audition_;
+  std::function<void()> record_;
   enum:int {sample=4801,fromCursor,reload,undo,redo,close,fit,zoomIn,zoomOut,zoomSelection,panLeft,panRight,channels,drawMode,
     rangeStart,rangeEnd,setRange,all,viewStart,viewEnd,setView,pointFrame,pointValue,stagePoint,applyDraw,discardDraw,interpolation,
     operation,fadeCurve,amount,exponent,previewProcess,applyProcess,crossLoop,crossMode,crossCurve,crossFrames,previewCross,applyCross,
     snapMode,snapDirection,snapSize,snapRange,normalLoop,sustainLoop,disableNormal,disableSustain,loopDirection,
     copy,cut,erase,pasteMode,paste,copyNew,audition,
-    sampleName,sampleRate,sampleVolume,samplePan,applySettings,discardSettings,replaceSample,createInstrument,
+    sampleName,sampleRate,sampleVolume,samplePan,applySettings,discardSettings,replaceSample,createInstrument,recordSample,
     heading=4900,targetLabel,rangeLabel,viewLabel,pointLabel,processLabel,crossLabel,snapLabel,loopsLabel,clipboardLabel,statusLabel,helpLabel,
     nameLabel,rateLabel,volumeLabel,panLabel};
   struct Region {unsigned first=0,last=0,start=0,end=0,frames=0;};
@@ -147,6 +148,7 @@ private:
     if(notification!=BN_CLICKED)return;
     if(id==applySettings){saveSettings();return;}if(id==discardSettings){syncSettings();++generation_;status(L"Sample settings draft discarded / saved audio unchanged");return;}
     if(id==replaceSample){replaceFromFile();return;}
+    if(id==recordSample){if(record_)record_();return;}
     if(id==createInstrument){require(!draft(),"Apply or Reload the captured draft before creating an instrument");mutate("instrument.create",{{"sample",slot_}});status(L"Created instrument "+std::to_wstring(report_.at("instrument").get<unsigned>())+L" from the captured sample / one Undo");return;}
     if(id==audition){requireCurrent();audition_(slot_,id_,captured_.document,captured_.revision);return;}
     if(id==close){hide();return;}if(id==fromCursor){load(true);return;}if(id==reload){load(false);return;}
@@ -174,7 +176,7 @@ private:
     place(targetLabel,14,44,w-28,23);
     const auto properties=w-700;place(nameLabel,14,76,36,22);place(sampleName,54,72,w-764,26);place(rateLabel,properties,76,56,22);place(sampleRate,properties+60,72,86,26);place(volumeLabel,properties+156,76,48,22);place(sampleVolume,properties+206,72,44,26);place(panLabel,properties+260,76,28,22);place(samplePan,properties+292,72,56,26);place(applySettings,properties+358,72,128,26);place(discardSettings,properties+494,72,74,26);place(replaceSample,properties+578,72,108,26);
     float x=14;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{fit,58.f},{zoomIn,50.f},{zoomOut,50.f},{zoomSelection,124.f},{panLeft,66.f},{panRight,66.f},{channels,116.f},{drawMode,90.f},{audition,124.f},{createInstrument,148.f}}){place(id,x,110,width,id==channels?180:28);x+=width+6;}
-    place(viewLabel,14,150,58,20);place(viewStart,74,146,94,26);place(viewEnd,176,146,94,26);place(setView,278,146,88,26);place(helpLabel,380,148,w-394,24);
+    place(viewLabel,14,150,58,20);place(viewStart,74,146,94,26);place(viewEnd,176,146,94,26);place(setView,278,146,88,26);place(helpLabel,380,148,w-536,24);place(recordSample,w-148,146,134,26,bool(record_));
     const auto y=h-388;place(rangeLabel,14,y,74,25);place(rangeStart,90,y,94,26);place(rangeEnd,192,y,94,26);place(setRange,294,y,88,26);place(all,390,y,60,26);place(clipboardLabel,470,y,64,24);place(copy,536,y,58,26);place(cut,600,y,52,26);place(erase,658,y,64,26);place(pasteMode,728,y,110,180);place(paste,844,y,68,26);place(copyNew,918,y,w-932,26);
     place(pointLabel,14,y+40,74,25);place(pointFrame,90,y+40,94,26);place(pointValue,192,y+40,94,26);place(stagePoint,294,y+40,100,26);place(interpolation,400,y+40,116,180);place(applyDraw,524,y+40,132,26);place(discardDraw,664,y+40,130,26);
     place(processLabel,14,y+86,82,25);place(operation,98,y+82,156,250);place(fadeCurve,262,y+82,128,180);place(amount,398,y+82,92,26);place(exponent,498,y+82,76,26);place(previewProcess,584,y+82,118,26);place(applyProcess,710,y+82,122,26);
@@ -197,13 +199,14 @@ private:
     s.uiText(L"Process amount: gain / target dB, or odd smoothing window. Fade exponent applies to exponential/logarithmic curves.",14,h-144,w-28,0x9bacbc);
   }
 public:
-  SampleDetailWindow(HWND owner,Request request,std::function<Context(bool)> context,Audition auditionCallback):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),audition_(std::move(auditionCallback)){
+  SampleDetailWindow(HWND owner,Request request,std::function<Context(bool)> context,Audition auditionCallback,std::function<void()> recordCallback={}):NativeToolWindow(owner),audition_(std::move(auditionCallback)),record_(std::move(recordCallback)),request_(std::move(request)),context_(std::move(context)){
     minimumWidth_=1080;minimumHeight_=790;create(L"ScreamSeq.SampleDetail",L"Sample detail",1180,880);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"SAMPLE DETAIL"},{targetLabel,L""},{rangeLabel,L"Selection"},{viewLabel,L"Visible"},{pointLabel,L"Frame / ±1"},{processLabel,L"Process"},{crossLabel,L"Crossfade"},{snapLabel,L"Snap range"},{loopsLabel,L"Set loop"},{clipboardLabel,L"Clipboard"},{statusLabel,L""},{helpLabel,L"Ctrl+wheel zoom · wheel pan · F6 canvas/fields · Escape cancels gesture"}})label(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{fromCursor,L"From cursor"},{reload,L"Reload"},{undo,L"Undo"},{redo,L"Redo"},{close,L"Close"},{fit,L"Fit"},{zoomIn,L"+"},{zoomOut,L"−"},{zoomSelection,L"Zoom selection"},{panLeft,L"← Pan"},{panRight,L"Pan →"},{drawMode,L"Draw off"},{setRange,L"Set range"},{all,L"All"},{setView,L"Set view"},{stagePoint,L"Stage point"},{applyDraw,L"Apply drawing"},{discardDraw,L"Discard drawing"},{previewProcess,L"Preview process"},{applyProcess,L"Apply process"},{previewCross,L"Preview fade"},{applyCross,L"Apply fade"},{snapRange,L"Snap selection"},{normalLoop,L"Normal selection"},{sustainLoop,L"Sustain selection"},{disableNormal,L"Disable normal"},{disableSustain,L"Disable sustain"},{copy,L"Copy"},{cut,L"Cut"},{erase,L"Delete"},{paste,L"Paste"},{copyNew,L"To new"},{audition,L"Audition…"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{rangeStart,L"0"},{rangeEnd,L"0"},{viewStart,L"0"},{viewEnd,L"0"},{pointFrame,L"0"},{pointValue,L"0"},{amount,L"0"},{exponent,L"3"},{crossFrames,L"64"},{snapSize,L"2048"}})edit(id,text,24);
     label(nameLabel,L"Name");label(rateLabel,L"C-5 Hz");label(volumeLabel,L"Volume");label(panLabel,L"Pan");edit(sampleName,L"",200);edit(sampleRate,L"48000",12);edit(sampleVolume,L"64",12);edit(samplePan,L"128",12);
     button(applySettings,L"Apply settings");button(discardSettings,L"Discard");button(replaceSample,L"Replace…");button(createInstrument,L"Create instrument");
+    button(recordSample,L"Record sample…");
     combo(sample);auto options=[&](int id,std::initializer_list<const wchar_t *> values){combo(id);for(auto text:values)SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));choose(id,0);};
     options(channels,{L"Both channels",L"Left",L"Right"});options(interpolation,{L"Linear draw",L"Step draw"});options(operation,{L"Reverse",L"Normalize",L"Gain",L"Fade in",L"Fade out",L"Invert",L"Remove DC",L"Smooth",L"Trim",L"Silence",L"Swap channels",L"Copy left",L"Copy right",L"Stereo average"});options(fadeCurve,{L"Linear fade",L"Smooth",L"Exponential",L"Logarithmic"});options(crossLoop,{L"Normal loop",L"Sustain loop"});options(crossMode,{L"Preserve duration",L"Overlap"});options(crossCurve,{L"Linear",L"Equal power"});options(snapMode,{L"Zero crossing",L"Grid"});options(snapDirection,{L"Nearest",L"Before",L"After"});options(loopDirection,{L"Forward",L"Ping pong",L"Reverse"});options(pasteMode,{L"Insert",L"Overwrite",L"Mix",L"Replace"});finish();
   }

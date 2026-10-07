@@ -61,6 +61,21 @@ extension InterfaceTests {
     try require(editor.signalReadings.primaryPort("n13",output:true)?.peak==0.8,"Selecting a different copy updates readings immediately without a document mutation")
     editor.graphID=nil;editor.applyCopyObservation()
     try require(editor.signalReadings.ports.isEmpty && editor.copyObservation.isHidden,"Recipe ports do not leak into song-node aggregate readings")
+    // A root-only bridge poll deliberately contains no recipe catalogue.
+    // Re-entering a recipe must retain its saved exact selection until the
+    // complete recipe poll arrives, never borrow another copy in the meantime.
+    var rootPort=port("n100",0.45);rootPort.removeValue(forKey:"copy")
+    rootPort["key"]="root/out/0";rootPort["node"]="n100"
+    editor.showSignals(["active":true,"ports":[rootPort]])
+    try require(editor.signalReadings.primaryPort("n100",output:true)?.peak==0.45 && editor.copyObservation.isHidden,"Root-only telemetry retains aggregate measurements without a copy picker")
+    editor.graphID="n10";editor.applyCopyObservation()
+    try require(editor.copyObservation.selected=="n10/n101/ordinary//inspector" && editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("unavailable"),"Returning from a root-only poll must retain the saved selected copy while full telemetry is pending")
+    editor.showSignals(["active":true,"ports":[rootPort,port("n100",0.2)]])
+    try require(editor.signalReadings.ports.isEmpty && editor.copyObservation.selected=="n10/n101/ordinary//inspector","A retired saved copy cannot silently fall back when another full copy is available")
+    editor.showSignals(["active":true,"ports":[rootPort,port("n100",0.2),port("n101",0.8)]])
+    try require(editor.copyObservation.copies.count==2 && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.8,"The first complete recipe poll restores its full menu and exact selected reading")
+    editor.graphID=nil;editor.showSignals(["active":true,"ports":[rootPort]])
+    try require(editor.signalReadings.ports.count==1 && editor.copyObservation.isHidden,"Returning to root discards recipe readings without retaining another copy as an aggregate")
     // Opening a particular shared use is an explicit observation-context choice.
     let song:[String:Any]=["library":[["id":"n10","name":"Shared","nodes":[["id":"n12","kind":"input"],["id":"n13","kind":"output"]],"audio":[]]],"assignments":[["target":"n100","graph":"n10"],["target":"n101","graph":"n10"]],"mixer":["buses":[["id":"n100","kind":"track","name":"Track 5","output":"n102"],["id":"n101","kind":"track","name":"Track 6","output":"n102"],["id":"n102","kind":"master","name":"Master"]]]]
     editor.update(song);editor.showSignals(["active":true,"ports":[port("n100",0.2),port("n101",0.8)]])
@@ -121,10 +136,12 @@ extension InterfaceTests {
     try require(editor.signalReadings.primaryPort("n13",output:true)?.peak==0.2,"Passive instrument telemetry preserves a subsequent explicit observation choice")
     editor.navigate(graph:nil);editor.openSongNode("instrument-graph:n80:n101")
     try require(editor.copyObservation.selected=="n10//instrument/n80/1" && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.6,"Opening an individual instrument processing card observes that exact channel copy")
-    editor.navigate(graph:nil);editor.showSignals(["active":true,"ports":[ordinary,first]]);editor.openSongNode("instrument-graph:n80:n101")
-    try require(editor.signalReadings.ports.isEmpty,"A pending individual instrument copy does not borrow a different channel's signal")
+    editor.navigate(graph:nil);editor.showSignals(["active":true,"ports":[]]);editor.openSongNode("instrument-graph:n80:n101")
+    try require(editor.copyObservation.selected==nil && editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("Instrument copy unavailable"),"Root-only telemetry leaves an explicitly entered instrument channel pending until its actual copy is prepared")
+    editor.showSignals(["active":true,"ports":[ordinary,first]])
+    try require(editor.copyObservation.selected==nil && editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("Instrument copy unavailable"),"A pending individual instrument copy does not borrow a different channel's signal")
     editor.showSignals(["active":true,"ports":[ordinary,first,second]])
-    try require(editor.signalReadings.primaryPort("n13",output:true)?.peak==0.6,"An instrument card's exact channel observation resolves when its telemetry arrives")
+    try require(editor.copyObservation.selected=="n10//instrument/n80/1" && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.6,"An instrument card's exact captured channel observation resolves when its telemetry arrives")
     editor.onRequest=nil
   }
 }

@@ -17,6 +17,8 @@
 #import <AppKit/AppKit.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <map>
@@ -32,6 +34,21 @@ namespace {
 void require(tresult value, const char *message) {
   if (value != kResultOk)
     throw std::runtime_error(message);
+}
+bool editorSize(const ViewRect &rect, NSSize &size) {
+  const int64_t width=int64_t(rect.right)-rect.left,height=int64_t(rect.bottom)-rect.top;
+  if(width<1||height<1||width>8192||height>8192)return false;
+  size=NSMakeSize(width,height);return true;
+}
+void traceEditorGeometry(const std::string &name,const char *phase,tresult result,const ViewRect &rect,NSView *parent) {
+  if(!std::getenv("SCREAMSEQ_PLUGIN_EDITOR_GEOMETRY"))return;
+  const auto frame=parent.frame,bounds=parent.bounds;
+  std::fprintf(stderr,"VST3 editor [%s] %s result=%d rect=(%d,%d,%d,%d) parent=(%.1f,%.1f,%.1f,%.1f) bounds=(%.1f,%.1f,%.1f,%.1f) children=%lu\n",
+    name.c_str(),phase,int(result),int(rect.left),int(rect.top),int(rect.right),int(rect.bottom),
+    frame.origin.x,frame.origin.y,frame.size.width,frame.size.height,bounds.origin.x,bounds.origin.y,bounds.size.width,bounds.size.height,(unsigned long)parent.subviews.count);
+  for(NSView *child in parent.subviews){const auto f=child.frame,b=child.bounds;
+    std::fprintf(stderr,"  child %s frame=(%.1f,%.1f,%.1f,%.1f) bounds=(%.1f,%.1f,%.1f,%.1f) flipped=%d\n",NSStringFromClass(child.class).UTF8String,
+      f.origin.x,f.origin.y,f.size.width,f.size.height,b.origin.x,b.origin.y,b.size.width,b.size.height,int([child isFlipped]));}
 }
 bool same(const TUID a, const FUID &b) {
   return FUnknownPrivate::iidEqual(a, b);
@@ -350,6 +367,10 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   NSWindow *window = nil;
   NSView *container = nil;
   RSPluginWindowDelegate *windowDelegate = nil;
+  bool editorSized = false;
+  bool editorClosing = false;
+  uint64_t editorAcceptedResize = 0;
+  ViewRect editorRect;
   bool separateController = false, initialized = false, controllerInitialized = false, active = false,
        processing = false, offline = false;
   double rate = 48000;
@@ -469,11 +490,33 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     return kResultOk;
   }
   tresult PLUGIN_API resizeView(IPlugView *v, ViewRect *rect) override {
-    if (v != view || !rect || rect->getWidth() < 1 || rect->getHeight() < 1 || rect->getWidth() > 8192 ||
-        rect->getHeight() > 8192)
-      return kInvalidArgument;
-    [window setContentSize:NSMakeSize(rect->getWidth(), rect->getHeight())];
-    return view->onSize(rect);
+    if(!rect)return kInvalidArgument;
+    // Widen before subtracting untrusted vendor coordinates. NSView sizes are
+    // logical points, and our owned parent always starts at (0,0).
+    const int64_t width=int64_t(rect->right)-rect->left,height=int64_t(rect->bottom)-rect->top;
+    if(width<1||height<1||width>8192||height>8192)return kInvalidArgument;
+    tresult result=kInvalidArgument;
+    pluginMainCall([&]{
+      if(v!=view||!window||editorClosing)return;
+      ViewRect normalized{0,0,int32(width),int32(height)};
+      if(editorSized&&editorRect.right==width&&editorRect.bottom==height){result=kResultOk;return;}
+      const auto previousRect=editorRect;
+      const auto previousSize=window.contentView.frame.size;
+      const bool previouslySized=editorSized;
+      const auto acceptedBefore=editorAcceptedResize;
+      RSResizePluginEditorWindow(window,NSMakeSize(width,height));
+      // Expose this in-flight size to stop onSize -> resizeView recursion, but
+      // only retain it if the vendor accepts. A nested accepted resize wins.
+      editorRect=normalized;editorSized=true;
+      result=view->onSize(&normalized);
+      if(result==kResultOk)++editorAcceptedResize;
+      else if(editorAcceptedResize==acceptedBefore){
+        editorRect=previousRect;editorSized=previouslySized;
+        RSResizePluginEditorWindow(window,previousSize);
+      }
+      traceEditorGeometry(descriptor.name,"resizeView/onSize",result,normalized,container);
+    });
+    return result;
   }
   ~Impl() {
     close();
@@ -504,6 +547,8 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     }
   }
   void close() {
+    if(editorClosing)return;
+    editorClosing=true;
     window.delegate = nil;
     windowDelegate.onClose = nil;
     windowDelegate = nil;
@@ -517,6 +562,9 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     [window close];
     window = nil;
     container = nil;
+    editorSized = false;
+    editorAcceptedResize = 0;
+    editorClosing = false;
   }
   void create(const PluginState &state, double sr, bool isOffline) {
     descriptor = state.descriptor;
@@ -969,31 +1017,46 @@ void VST3Plugin::showEditor() {
       s.view = nullptr;
       throw std::runtime_error("This VST3 has no macOS custom interface.");
     }
-    ViewRect rect{0, 0, 640, 480};
-    s.view->getSize(&rect);
-    if (rect.getWidth() < 1 || rect.getHeight() < 1 || rect.getWidth() > 8192 || rect.getHeight() > 8192) {
-      s.view->release();
-      s.view = nullptr;
-      throw std::runtime_error("Invalid VST3 editor dimensions");
-    }
-    s.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, rect.getWidth(), rect.getHeight())
-                                           styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
-                                             backing:NSBackingStoreBuffered
-                                               defer:NO];
-    s.window.releasedWhenClosed = NO;
+    ViewRect rect{};
+    const auto sizeResult=s.view->getSize(&rect);
+    traceEditorGeometry(s.descriptor.name,"before attached/getSize",sizeResult,rect,nil);
+    // Some editors cannot report a size until attached; others populate the
+    // rectangle but return false. Only the dimensions determine whether it is
+    // usable. An unavailable initial size must not prevent native attachment.
+    NSSize initialSize=NSMakeSize(640,480);
+    editorSize(rect,initialSize);
+    s.window=RSCreatePluginEditorWindow(initialSize,@(s.descriptor.name.c_str()));
     s.windowDelegate = [RSPluginWindowDelegate new];
     s.windowDelegate.onClose = ^{
       s.close();
     };
     s.window.delegate = s.windowDelegate;
-    s.window.title = @(s.descriptor.name.c_str());
     s.container = s.window.contentView;
     s.view->setFrame(&s);
-    if (s.view->attached((__bridge void *)s.container, kPlatformTypeNSView) != kResultOk) {
+    const auto attachResult=s.view->attached((__bridge void *)s.container,kPlatformTypeNSView);
+    traceEditorGeometry(s.descriptor.name,"attached",attachResult,s.editorSized?s.editorRect:rect,s.container);
+    if (attachResult != kResultOk) {
       s.close();
       throw std::runtime_error("Cannot attach VST3 custom interface");
     }
-    s.view->onSize(&rect);
+    // attached() may call resizeView synchronously. Its accepted size wins;
+    // replaying the earlier getSize rectangle clips/offsets the plugin view.
+    ViewRect attachedRect{};
+    const auto attachedSizeResult=s.view->getSize(&attachedRect);
+    traceEditorGeometry(s.descriptor.name,"after attached/getSize",attachedSizeResult,attachedRect,s.container);
+    if(!s.editorSized){
+      NSSize size=initialSize;
+      if(!editorSize(attachedRect,size)&&s.container.subviews.count==1){
+        const auto nativeSize=s.container.subviews[0].frame.size;
+        if(RSValidPluginEditorSize(nativeSize))size=nativeSize;
+      }
+      ViewRect normalized{0,0,int32(size.width),int32(size.height)};
+      // A non-resizable editor may implement onSize as a no-op/false result.
+      // Keep its successfully attached native view available in that case.
+      if(s.resizeView(s.view,&normalized)!=kResultOk)
+        RSResizePluginEditorWindow(s.window,size);
+    }
+    traceEditorGeometry(s.descriptor.name,"ready",kResultOk,s.editorRect,s.container);
     [s.window center];
     [s.window makeKeyAndOrderFront:nil];
   });

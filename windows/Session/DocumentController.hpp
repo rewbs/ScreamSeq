@@ -1,6 +1,7 @@
 #pragma once
 #include "DocumentOperations.hpp"
 #include "AssetOperations.hpp"
+#include "SampleRecordingOperations.hpp"
 #include "HostedProject.hpp"
 #include "PluginOperations.hpp"
 #include "PatternOperations.hpp"
@@ -34,6 +35,7 @@ struct PatternGraphView {
 };
 struct NativePatternView {
   Tracker::PatternPerformance performance;
+  Tracker::ScratchGestureLibrary scratchGestures;
   std::vector<Tracker::PreciseNote> preciseNotes;
   std::vector<PatternEffectView> effects;
   std::vector<PatternNoteView> notes;
@@ -55,6 +57,7 @@ struct DocumentView {
   std::shared_ptr<const NativePatternView> nativePattern;
   std::shared_ptr<const PatternGraphView> graphPattern;
   std::vector<uint8_t> effectColumns;
+  std::map<unsigned,unsigned> patternRowsPerBeat;
   size_t nativePatternBytes=0;
   std::filesystem::path path;
   bool dirty=false, hosted=false;
@@ -73,6 +76,7 @@ struct DocumentView {
 class DocumentController {
   std::unique_ptr<Tracker::Document> document_;
   std::unique_ptr<AssetOperations> assets_;
+  std::unique_ptr<SampleRecordingOperations> recording_;
   std::unique_ptr<PluginOperations> plugins_;
   std::unique_ptr<HostedProjectPlayback> playback_;
   Project::ProjectState project_;
@@ -103,6 +107,7 @@ class DocumentController {
   std::shared_ptr<DocumentView> buildView(Tracker::Document &document,const Project::ProjectState &project,uint64_t generation);
   void install(std::shared_ptr<const DocumentView> next);
   void publish();
+  void publishCommitted();
   void preflightGrowth(const std::string &method,const Json &params);
   void validateAssetCandidate(const Tracker::Document &candidate) const;
   void validateGraphViewGrowth(const Tracker::NativeSong &candidate) const;

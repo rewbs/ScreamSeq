@@ -2,6 +2,7 @@
 #include "windows/Api/SessionAdapter.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/InstrumentEnvelopeTools.hpp"
+#include "editor/Sampling.hpp"
 #include "soundlib/mod_specifications.h"
 #include <cmath>
 #include <cstring>
@@ -154,6 +155,15 @@ Json processReport(int sample,bool dry,const SampleProcessResult &r) {
 }
 AssetOperations::AssetOperations(Tracker::Document &d,std::function<void()> stop,std::function<void(const Tracker::Document &)> validate):
   document_(d),stopPlayback_(std::move(stop)),validateImport_(std::move(validate)) {}
+Json AssetOperations::appendCapturedAudio(std::span<const float> pcm,uint32_t rate,uint32_t channels,const std::string &name,bool instrument,bool dry) {
+  require(owner_==std::this_thread::get_id(),"Sample import requires its document worker");require(document_.editable(),"This document is read-only");
+  PreparedAssetImport prepared(document_);
+  const auto imported=Tracker::importRecordedAudio(prepared.candidate(),pcm,rate,channels,name,instrument,false);
+  if(validateImport_)validateImport_(prepared.candidate());
+  Json result={{"sample",imported.sample},{"instrument",imported.instrument},{"frames",imported.frames},{"sampleRate",imported.sampleRate},
+    {"channels",imported.channels},{"clipped",imported.clippedValues},{"clippedValues",imported.clippedValues},{"convertsToInstruments",imported.convertsToInstruments},{"dryRun",dry}};
+  if(!dry){if(stopPlayback_)stopPlayback_();prepared.commit();}return result;
+}
 Json AssetOperations::clipboardInfo() const {
   if(!clipboard_)return {{"available",false}};
   const auto &c=*clipboard_;return {{"available",true},{"clipboardId",clipboardId_},{"frames",c.pcm().frames},

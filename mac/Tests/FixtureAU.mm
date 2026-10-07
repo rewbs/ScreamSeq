@@ -16,6 +16,8 @@ void setFixtureAUHiddenGain(float value){fixtureAUHiddenGain=value;}
 uint64_t fixtureAUCreatedCount(){return fixtureAUCreated;}
 void setFixtureAUPitchMode(bool enabled){fixtureAUPitchMode=enabled;}
 void setFixtureAUChannelWeights(bool enabled) { fixtureAUChannelWeights.store(enabled); }
+static bool fixtureAUVelocityMode=false;
+void setFixtureAUVelocityMode(bool enabled){fixtureAUVelocityMode=enabled;}
 namespace {
 struct FixtureAU {
   AudioComponentPlugInInterface interface{}; // Must be first for the AU C interface.
@@ -24,7 +26,7 @@ struct FixtureAU {
   const bool instrumentInputs=fixtureAUInstrumentInputs;
   UInt32 audioChannels(UInt32 bus)const{return wideBuses?(bus?3:5):(bus%2?1:2);}
   std::array<uint16_t, 16 * 128> notes{};
-  float gain = .5f,hiddenGain=fixtureAUHiddenGain;
+  float gain = .5f,hiddenGain=fixtureAUHiddenGain,lastVelocity=1;
   std::array<uint16_t,16> pitchWheels{};
   std::array<AURenderCallbackStruct, 2> callbacks{};
   std::array<AudioStreamBasicDescription, 2> inputs{};
@@ -126,7 +128,7 @@ struct FixtureAU {
     auto &s = *static_cast<FixtureAU *>(self);
     if((status&0xf0)==0xe0)s.pitchWheels[status&15]=(note&127)+((velocity&127)<<7);
     auto &count = s.notes[(status & 15) * 128 + (note & 127)];
-    if ((status & 0xf0) == 0x90 && velocity) ++count;
+    if ((status & 0xf0) == 0x90 && velocity){++count;s.lastVelocity=float(velocity&127)/127;}
     if ((status & 0xf0) == 0x80 || ((status & 0xf0) == 0x90 && !velocity)) { if(count) --count; }
     if ((status & 0xf0) == 0xb0 && (note == 120 || note == 123)) std::fill_n(s.notes.begin() + (status & 15) * 128, 128, 0);
     return noErr;
@@ -156,7 +158,7 @@ struct FixtureAU {
       bool active = false; for (size_t note = 0; note < 128; ++note) active |= s.notes[channel * 128 + note] != 0;
       any |= active; if(active) activeChannels += float(channel + 1) / 16;
     }
-    const float weight = (fixtureAUChannelWeights.load(std::memory_order_relaxed) ? activeChannels : 1) * (fixtureAUPitchMode ? 1+(int(s.pitchWheels[0])-8192)/8192.f : 1);
+    const float weight = (fixtureAUVelocityMode?s.lastVelocity:1) * (fixtureAUChannelWeights.load(std::memory_order_relaxed) ? activeChannels : 1) * (fixtureAUPitchMode ? 1+(int(s.pitchWheels[0])-8192)/8192.f : 1);
     for (UInt32 channel = 0; channel < out->mNumberBuffers; ++channel) {
       auto &dest = out->mBuffers[channel]; if (!dest.mData || dest.mDataByteSize < frames * 4) return kAudioUnitErr_TooManyFramesToProcess;
       for (UInt32 i = 0; i < frames; ++i) {

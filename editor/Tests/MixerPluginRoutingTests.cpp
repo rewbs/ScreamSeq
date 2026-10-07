@@ -34,4 +34,65 @@ static void scheduledSource(uint32_t rate,uint32_t block) {
   }
   check(state->through==std::array<uint64_t,2>{10000,10000},"Scheduled instrument or upstream effect stopped advancing");
 }
-int main(){try{for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u})scheduledSource(rate,block);for(auto rate:{44100u,48000u,96000u})for(bool cut:{false,true}){const auto expected=render(rate,17,cut);check(expected==render(rate,128,cut)&&expected==render(rate,4096,cut),"Processor-DAG output depends on callback partition");}auto bad=graph();bad.pluginConnections.push_back({"d",0,"a",0,0,false});bool rejected=false;try{compileMixer(bad,{1,2},catalog(),48000);}catch(const std::invalid_argument&){rejected=true;}check(rejected,"Disabled direct cable must not conceal a processor feedback cycle");std::cout<<"PASS direct processor routing, interleaved buses, exact cuts, independent PDC, disabled-cycle rejection and realtime audit\n";}catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 1;}return 0;}
+
+// Independent two-source/two-destination matrix. Every source output fans out,
+// and each destination sums two main cables plus two auxiliary cables. Distinct
+// vendor delays require PDC before either sum; clocks detect duplicate renders.
+static std::vector<float> manyToMany(uint32_t rate,uint32_t block) {
+  MixerGraph g;
+  g.buses={{1,0,MixerBusKind::Track,"Source A"},{2,0,MixerBusKind::Track,"Source B"},
+    {3,5,MixerBusKind::Return,"Destination C"},{4,5,MixerBusKind::Return,"Destination D"},{5,0,MixerBusKind::Master,"Main"}};
+  for(size_t i=0;i<4;++i)g.buses[i].inserts={std::string(1,char('a'+i))};
+  auto add=[&](const char *from,uint32_t output,const char *to,uint32_t input,double gain){g.pluginConnections.push_back({from,output,to,input,20*std::log10(gain),true});};
+  add("a",0,"c",0,1);add("b",0,"c",0,.5);add("a",1,"c",1,2);add("b",1,"c",1,1);
+  add("a",0,"d",0,.25);add("b",0,"d",0,1);add("a",1,"d",1,1);add("b",1,"d",1,.5);
+  std::vector<MixerProcessorInfo> info{{"a",2,0,false,false,2,3,1},{"b",7,0,false,false,2,3,1},
+    {"c",3,0,false,false,1,1,3},{"d",5,0,false,false,1,1,3}};
+  struct MatrixRack {
+    std::array<std::vector<float>,4> delay;
+    std::array<size_t,4> cursor{};
+    std::array<uint64_t,4> through{},calls{};
+    std::array<float,8192> aux{};
+    bool valid=true;
+    MatrixRack(){for(size_t i=0;i<4;++i)delay[i].resize(std::array{2,7,3,5}[i]*2);}
+    static bool process(void *opaque,MixerRuntime &runtime,size_t slot,float *pcm,uint32_t count,uint64_t frame)noexcept {
+      auto &self=*static_cast<MatrixRack *>(opaque);self.valid&=self.through[slot]==frame;
+      self.through[slot]=frame+count;++self.calls[slot];
+      const auto inputs=runtime.inputs(slot);const float *side=nullptr;
+      for(const auto &input:inputs)if(input.bus==1)side=input.samples;
+      if(slot>=2)self.valid&=side!=nullptr;
+      for(uint32_t i=0;i<count*2;++i){
+        float value=slot<2?pcm[i]*float(slot+2):(pcm[i]+(side?side[i]:0)*float(slot==2?4:-2))*float(slot==2?5:7);
+        std::swap(value,self.delay[slot][self.cursor[slot]]);
+        if(++self.cursor[slot]==self.delay[slot].size())self.cursor[slot]=0;
+        pcm[i]=value;if(slot<2)self.aux[i]=value*.25f;
+      }
+      if(slot<2)runtime.instrument(slot,1,self.aux.data());
+      return self.valid;
+    }
+  };
+  auto state=std::make_shared<MatrixRack>();auto plan=std::make_unique<MixerTransition::Plan>();plan->catalog=info;
+  plan->runtime=std::make_unique<MixerRuntime>(g,compileMixer(g,{1,2},info,rate),rate);
+  check(plan->runtime->plan().latency==12&&plan->runtime->plan().pluginConnections.size()==8,"All eight many-to-many main/aux contributions must survive compilation with aligned latency");
+  plan->processors=state;plan->process=MatrixRack::process;
+  MixerTransition transition(std::move(plan),{1,2,3,4,5},{1,2},rate);
+  std::array<std::array<float,4096>,4> audio{};
+  std::array<MixerTransition::DirectInput,5> inputs{{{audio[0].data(),audio[1].data()},{audio[2].data(),audio[3].data()},{},{},{}}};
+  auto source=[](uint32_t frame,unsigned channel,unsigned source){return float((source?.02:.03)*std::sin((frame+7*channel)*(source?.011:.005)+channel*.7+source));};
+  std::vector<float> result(5000*2);uint64_t chunks=0;
+  for(uint32_t frame=0;frame<5000;){const auto count=std::min(block,5000-frame);
+    for(uint32_t i=0;i<count;++i)for(unsigned channel=0;channel<2;++channel){audio[channel][i]=source(frame+i,channel,0);audio[channel+2][i]=source(frame+i,channel,1);}
+    uint64_t allocations,frees,locks;tracker_audit_begin();const bool begun=transition.begin(count,frame);const auto *out=begun?transition.render(inputs):nullptr;
+    if(out)std::copy_n(out,count*2,result.data()+frame*2);tracker_audit_end(&allocations,&frees,&locks);
+    check(out&&!transition.failed()&&state->valid&&allocations+frees+locks==0,"Many-to-many matrix must allocate/free/lock nothing and advance each processor once");
+    frame+=count;++chunks;
+  }
+  for(uint32_t frame=0;frame<5000;++frame)for(unsigned channel=0;channel<2;++channel){
+    // C=5*((2A+1.5B)+4*(A+.75B)); D=7*((.5A+3B)-2*(.5A+.375B)).
+    const double expected=frame<12?0:26.5*source(frame-12,channel,0)+38.25*source(frame-12,channel,1);
+    check(std::abs(result[frame*2+channel]-expected)<5e-7,"Many-to-many main/aux sums differ from independent stereo PCM arithmetic");
+  }
+  for(size_t p=0;p<4;++p)check(state->through[p]==5000&&state->calls[p]==chunks,"Output fan-out must duplicate PCM without processing a vendor more than once per chunk");
+  return result;
+}
+int main(){try{for(auto rate:{44100u,48000u,96000u}){const auto reference=manyToMany(rate,1);for(auto block:{17u,128u,4096u})check(reference==manyToMany(rate,block),"Many-to-many matrix changed with callback partition");}for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u})scheduledSource(rate,block);for(auto rate:{44100u,48000u,96000u})for(bool cut:{false,true}){const auto expected=render(rate,17,cut);check(expected==render(rate,128,cut)&&expected==render(rate,4096,cut),"Processor-DAG output depends on callback partition");}auto bad=graph();bad.pluginConnections.push_back({"d",0,"a",0,0,false});bool rejected=false;try{compileMixer(bad,{1,2},catalog(),48000);}catch(const std::invalid_argument&){rejected=true;}check(rejected,"Disabled direct cable must not conceal a processor feedback cycle");std::cout<<"PASS many-to-many main/aux matrix with single vendor advancement, direct processor routing, interleaved buses, exact cuts, independent PDC, disabled-cycle rejection and realtime audit\n";}catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 1;}return 0;}

@@ -1,6 +1,16 @@
 import AppKit
 extension InterfaceTests {
   static func workspaceChecks() throws {
+    let buttonTrace=QualificationButtonDrawTrace(capacity:2)
+    let tracedButton=ActionButton("Add hit"){},tracePanel=WorkspacePanel(id:"notes",title:"Notes",view:NSView())
+    tracePanel.content.addSubview(tracedButton);tracedButton.frame=NSRect(x:4,y:6,width:80,height:24)
+    buttonTrace.record(tracedButton,start:1,end:1.001);tracedButton.isEnabled=false
+    buttonTrace.record(tracedButton,start:2,end:2.003);tracedButton.title=String(repeating:"x",count:300)
+    buttonTrace.record(tracedButton,start:3,end:3.002)
+    let draws=buttonTrace.snapshot()
+    try require(draws.count==2 && buttonTrace.overwritten==1 && draws[0].sequence==1 && draws[0].title=="Add hit" && !draws[0].enabled && draws[0].context=="notes" && draws[0].frame==tracedButton.frame && draws[0].identity==draws[1].identity && draws[1].title.count==128,
+      "Opt-in button diagnostics retain bounded ordered identity, title, state and panel attribution")
+    buttonTrace.reset();try require(buttonTrace.snapshot().isEmpty && buttonTrace.overwritten==0,"Button timing resets at the measured workload boundary")
     let draftName=NSTextField(string:"Saved"),draftVolume=NSTextField(string:"64")
     let draft=AssetFieldDraft(["name":draftName,"volume":draftVolume]);draft.begin(index:1)()
     draftName.stringValue="Unsaved title";let restore=draft.begin(index:1);draftName.stringValue="Saved";draftVolume.stringValue="32";restore()
@@ -75,8 +85,123 @@ extension InterfaceTests {
     graphCatalog.collect()
     try require(graphCatalog.entries.filter{$0.id==GraphCommand.bypass.id}.count==1,"One graph command stays one configurable entry when exposed by multiple menus")
     try assetApplyChecks()
+    try qualificationDisplayChecks()
+    try workspaceWindowPersistenceChecks()
     try layoutRestoreChecks()
     print("PASS connected workspace: retained panels/pins, focus layout, placement, saved layout, compact automation, changed-field asset apply, restored dividers")
+  }
+  static func qualificationDisplayChecks() throws {
+    let implicit=try QualificationDisplay.requestedID(["app"])
+    let explicit=try QualificationDisplay.requestedID(["app","--ui-test-screen","3"])
+    try require(implicit==nil,"Ordinary qualification keeps the existing display selection")
+    try require(explicit==3,"Explicit qualification display IDs are parsed exactly")
+    for args in [["app","--ui-test-screen"],["app","--ui-test-screen","0"],["app","--ui-test-screen","-1"],
+      ["app","--ui-test-screen","not-a-display"],["app","--ui-test-screen","4294967296"],
+      ["app","--ui-test-screen","1","--ui-test-screen","3"]] {
+      do {_=try QualificationDisplay.requestedID(args);throw InterfaceFailure(message:"Invalid display option was accepted")}
+      catch is QualificationDisplay.Failure {} // The failure must identify setup, not silently choose another display.
+    }
+    let visible=NSRect(x:-1920,y:30,width:1920,height:1170),size=NSSize(width:1360,height:872)
+    let frame=try QualificationDisplay.centeredFrame(size:size,visibleFrame:visible)
+    try require(frame.size==size && visible.contains(frame) && frame.midX==visible.midX && frame.midY==visible.midY,
+      "Explicit display placement preserves workload size and centers correctly on a negative-origin monitor")
+    do {_=try QualificationDisplay.centeredFrame(size:NSSize(width:2000,height:900),visibleFrame:visible);throw InterfaceFailure(message:"Oversized display workload was silently resized")}
+    catch is QualificationDisplay.Failure {}
+    do {_=try QualificationDisplay.select(3,screens:[],fallback:nil);throw InterfaceFailure(message:"Missing display silently fell back")}
+    catch is QualificationDisplay.Failure {}
+    if let screen=NSScreen.screens.first,let id=QualificationDisplay.id(screen) {
+      let selected=try QualificationDisplay.select(id,screens:NSScreen.screens,fallback:nil)
+      try require(selected === screen,"Qualification selects the requested connected display without changing its mode")
+    }
+    let args=["app","--ui-test-screen","3","song.screamseq"]
+    try require(AppLaunchArguments.documentPath(args,exists:{_ in true})=="song.screamseq" && AppLaunchArguments.isOptionValue("3",arguments:args),
+      "Qualification display IDs are never opened as document arguments or AppKit file events")
+  }
+  static func applicationEncodingTraceChecks() throws {
+    try require(!QualificationApplicationEncodeTrace.isEnabled(arguments:["app"]) &&
+      !QualificationApplicationEncodeTrace.isEnabled(arguments:["app","--ui-test"]) &&
+      !QualificationApplicationEncodeTrace.isEnabled(arguments:["app","--ui-test-window-state-trace"]) &&
+      QualificationApplicationEncodeTrace.isEnabled(arguments:["app","--ui-test-window-state-trace","--ui-test"]),
+      "Application encoding instrumentation requires both explicit qualification flags")
+    var forwards=0,clockReads=0
+    QualificationApplicationEncodeTrace.measure(.sync,trace:nil,clock:{clockReads+=1;return 0}){forwards+=1}
+    try require(forwards==1 && clockReads==0,"Disabled application tracing forwards once without consulting its clock")
+    let trace=QualificationApplicationEncodeTrace(capacity:2)
+    var order=[String](),now=10.0
+    QualificationApplicationEncodeTrace.measure(.backgroundQueueSynchronous,trace:trace,clock:{clockReads+=1;return now}) {
+      forwards+=1;order.append("outer start");now=11
+      QualificationApplicationEncodeTrace.measure(.sync,trace:trace,clock:{clockReads+=1;return now}) {
+        forwards+=1;order.append("inner");now=12
+      }
+      order.append("outer end");now=13
+    }
+    let nested=trace.snapshot()
+    try require(forwards==3 && clockReads==2 && order==["outer start","inner","outer end"] &&
+      nested.count==1 && nested[0].kind == .backgroundQueueSynchronous && nested[0].start==10 && nested[0].end==13,
+      "Both overload paths forward once while a nested synchronous encode produces one complete outer span")
+    for index in 0..<2 {
+      now=20+Double(index)*10
+      QualificationApplicationEncodeTrace.measure(.sync,trace:trace,clock:{now}){forwards+=1;now+=2}
+    }
+    let bounded=trace.snapshot()
+    try require(forwards==5 && bounded.map(\.sequence)==[1,2] && trace.overwritten==1 &&
+      bounded[0].start==20 && bounded[0].end==22 && bounded[1].start==30 && bounded[1].end==32,
+      "Application encoding evidence retains a bounded chronological ring with an explicit dropped count")
+    trace.reset()
+    try require(trace.snapshot().isEmpty && trace.overwritten==0,"Measurement reset clears prior application encoding evidence")
+    QualificationApplicationEncodeTrace.measure(.sync,trace:trace,clock:{now}){forwards+=1;trace.reset();now+=1}
+    try require(trace.snapshot().isEmpty && trace.overwritten==0,
+      "A reset during reentrant encoding cannot append a span from the preceding measurement")
+    QualificationApplicationEncodeTrace.measure(.sync,trace:trace,clock:{now}){forwards+=1;now+=1}
+    try require(forwards==7 && trace.snapshot().count==1 && trace.snapshot()[0].sequence==0 &&
+      trace.snapshot()[0].start==33 && trace.snapshot()[0].end==34,
+      "The nesting guard unwinds after reset and the next encoding forwards and records normally")
+    // These checks exercise the observer around test closures, never invoke
+    // AppKit's encoding hooks directly or manufacture a second NSApplication.
+  }
+  static func workspaceWindowPersistenceChecks() throws {
+    try applicationEncodingTraceChecks()
+    let name="ScreamSeq-Frame-Test-"+UUID().uuidString
+    let style:NSWindow.StyleMask=[.titled,.closable,.resizable]
+    let first=UIWorkTrace.window(contentRect:NSRect(x:80,y:90,width:620,height:480),styleMask:style,backing:.buffered,defer:false)
+    first.isReleasedWhenClosed=false
+    let second=UIWorkTrace.window(contentRect:NSRect(x:140,y:160,width:400,height:300),styleMask:style,backing:.buffered,defer:false)
+    second.isReleasedWhenClosed=false
+    let normal=NSWindow(contentRect:NSRect(x:140,y:160,width:400,height:300),styleMask:style,backing:.buffered,defer:false)
+    normal.isReleasedWhenClosed=false
+    defer{first.setFrameAutosaveName("");second.setFrameAutosaveName("");first.close();second.close();normal.close();NSWindow.removeFrame(usingName:name)}
+    try require(first.isRestorable==normal.isRestorable && second.isRestorable==normal.isRestorable,
+      "Workspace windows preserve AppKit's normal restoration eligibility")
+    try require(first.setFrameAutosaveName(name),"Workspace frame autosave has an independent name")
+    let saved=first.frame;first.saveFrame(usingName:name);first.setFrameAutosaveName("")
+    // AppKit can remap a saved rectangle to the active display. Compare with
+    // its normal restoration path, rather than assuming unchanged coordinates.
+    let normalLoaded=normal.setFrameUsingName(name),registered=second.setFrameAutosaveName(name)
+    let frameDetails="saved=\(saved), restored=\(second.frame), normal=\(normal.frame), registered=\(registered), normalLoaded=\(normalLoaded), name=\(second.frameAutosaveName), stored=\(UserDefaults.standard.string(forKey:"NSWindow Frame "+name) ?? "missing"), screens=\(NSScreen.screens.map{[$0.frame,$0.visibleFrame]}), restoredScreen=\(String(describing:second.screen?.frame))"
+    try require(normalLoaded && registered && second.frame==normal.frame && second.frame.size==saved.size,
+      "Workspace frame autosave matches normal AppKit frame restoration and preserves size: "+frameDetails)
+    let windowTrace=QualificationWindowEncodeTrace(capacity:2)
+    windowTrace.record(first,start:1,end:1.02);windowTrace.record(second,start:2,end:2.01);windowTrace.record(first,start:3,end:3.04)
+    let encodes=windowTrace.snapshot()
+    try require(encodes.count==2 && windowTrace.overwritten==1 && encodes[0].sequence==1 && encodes[0].windowNumber==second.windowNumber && encodes[1].windowNumber==first.windowNumber && encodes[1].restorable==first.isRestorable && encodes[1].start==3,
+      "Window encoding diagnostics retain bounded ordered per-window identity and policy")
+    windowTrace.reset();try require(windowTrace.snapshot().isEmpty && windowTrace.overwritten==0,"Window encoding trace resets at the measurement boundary")
+    // Layout data is also explicitly serialized, independently of window coding.
+    let original=DockWorkspace(patternView:NSView()),restored=DockWorkspace(patternView:NSView())
+    for dock in [original,restored] {
+      dock.frame=NSRect(x:0,y:0,width:1200,height:850)
+      dock.register(WorkspacePanel(id:"persistence-notes",title:"Notes",view:NSView()),location:"right")
+      dock.register(WorkspacePanel(id:"persistence-automation",title:"Automation",view:NSView()),location:"bottom")
+    }
+    first.contentView=original;second.contentView=restored
+    original.panels["persistence-notes"]?.pinned=true
+    original.place("persistence-automation",at:"secondary",select:false)
+    original.setFocusLayout(true)
+    let data=try PropertyListSerialization.data(fromPropertyList:original.state,format:.binary,options:0)
+    let state=try PropertyListSerialization.propertyList(from:data,format:nil) as! [String:Any]
+    restored.restore(state)
+    try require(restored.locations==original.locations && restored.focusLayout && restored.panels["persistence-notes"]?.pinned==true,
+      "Explicit workspace layout survives serialization and recreation without AppKit state archives")
   }
   static func assetApplyChecks() throws {
     let sample=SampleEditor(frame:NSRect(x:0,y:0,width:729,height:1400))

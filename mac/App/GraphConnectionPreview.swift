@@ -64,7 +64,12 @@ extension SignalGraphEditor {
       guard let a=portChoice(first),let b=portChoice(second)else{return "That note socket no longer exists"}
       return portPairUnavailable(a,b)
     }
-    guard graphID != nil else{return nil} // Song ownership/mixer transitions remain host-authoritative.
+    guard graphID != nil else{
+      // Explain typed socket and single-analysis-tap limits without guessing
+      // mixer cycles. Shared preparation remains authoritative for the DAG.
+      guard replacing==nil,let a=portChoice(first),let b=portChoice(second)else{return nil}
+      return portPairUnavailable(a,b)
+    }
     let a=canonicalPort(first.output ? first:second),b=canonicalPort(first.output ? second:first)
     let original=replacing.flatMap{definitionEdgeIndices.indices.contains($0) ? definitionEdgeIndices[$0]:nil}
     if replacing != nil && original==nil{return "That connection changed; select its current endpoints again"}

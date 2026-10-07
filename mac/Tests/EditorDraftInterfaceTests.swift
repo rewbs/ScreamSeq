@@ -24,6 +24,7 @@ extension InterfaceTests {
   private static func wait(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
 
   static func editorDraftChecks() throws {
+    try assetCatalogueChecks()
     try textHistoryChecks()
     try popupIdentityChecks()
     try mixerDraftChecks()
@@ -33,6 +34,61 @@ extension InterfaceTests {
     try pluginDraftChecks()
     try envelopeBankDraftChecks()
     print("PASS editor drafts: popups resolve stable IDs, reloads keep drafts, busy edits retry, Tab leaves canvases")
+  }
+  static func assetCatalogueChecks() throws {
+    var model=PatternModel(["format":"MPTM","samples":[["index":1,"id":"s1","name":"Kick"],["index":2,"id":"s2","name":"Snare"]]])
+    func token(_ input:Int,_ panel:String="instruments")->String {
+      WorkspaceAssetContext.token(panel:panel,model:model,row:0,channel:0,input:input)
+    }
+    let sampleMode=token(1)
+    try require(sampleMode != token(2),"An input-instrument change on the same empty row changes the followed asset")
+    model.revisionToken="unrelated:99"
+    try require(token(1)==sampleMode,"Unrelated song revisions do not invalidate the asset-follow token")
+    model.instruments=[["index":1,"id":"i1","name":"Lead"],["index":2,"id":"i2","name":"Bass"]]
+    try require(token(1) != sampleMode,"Converting a sample song to instruments refreshes a same-slot inspector")
+    let instrument=token(1)
+    model.instruments[0]["id"]="replacement"
+    try require(token(1) != instrument,"Replacing an instrument at the same numeric slot refreshes its stable target")
+    model.cells[1]=1
+    try require(token(1)==token(2),"A real instrument on the cursor row takes precedence over the input instrument")
+    let noteBefore=token(1),sampleBefore=token(1,"samples")
+    model.cells[0]=49
+    try require(token(1)==noteBefore && token(1,"samples") != sampleBefore,"Only a mapped-sample inspector follows the row's changed note within one instrument")
+
+    let sample=SampleEditor(frame:.zero);sample.index=2
+    sample.update(["name":"Snare","frames":100,"rate":44100,"volume":64,"pan":128],samples:model.samples,revision:"a")
+    sample.name.stringValue="My pending snare";sample.waveform.selection=4...12
+    let originalSampleItem=sample.picker.item(at:0)
+    sample.updateCatalogue(model.samples)
+    try require(sample.picker.item(at:0)===originalSampleItem,"An unchanged sample catalogue retains native menu item identities")
+    model.samples[1]["name"]="New snare name";model.samples.append(["index":3,"id":"s3","name":"Hat"])
+    sample.updateCatalogue(model.samples)
+    try require(sample.index==2 && sample.picker.selectedTag()==2 && sample.picker.titleOfSelectedItem=="02  New snare name" && sample.name.stringValue=="My pending snare" && sample.hasDraft && sample.waveform.selection==4...12,"Updating sample choices preserves the selected/pinned target, draft and waveform selection")
+
+    let editor=InstrumentEditor(frame:.zero);editor.index=2
+    let pinned=WorkspacePanel(id:"instruments",title:"Instruments",view:editor);pinned.pinned=true
+    editor.update(["name":"Bass","envelopes":[["points":[[0,64],[12,0]],"enabled":true]]],model:model)
+    editor.name.stringValue="Pending bass";editor.mapSample.selectItem(withTag:2)
+    let originalInstrumentItem=editor.picker.item(at:0),originalMapItem=editor.mapSample.item(at:0)
+    editor.updateCatalogue(model)
+    try require(editor.picker.item(at:0)===originalInstrumentItem && editor.mapSample.item(at:0)===originalMapItem,"Unrelated refreshes do not rebuild instrument or keymap catalogues")
+    model.instruments[1]["name"]="Published bass";model.instruments.append(["index":3,"id":"i3","name":"Synth"])
+    model.samples[1]["name"]="Published snare"
+    model.nativePlugins=[["name":"Fixture synth","instrumentAssignments":[["instrument":2]]]]
+    editor.updateCatalogue(model)
+    try require(pinned.pinned && editor.index==2 && editor.picker.selectedTag()==2 && editor.picker.titleOfSelectedItem=="2  Published bass" && editor.name.stringValue=="Pending bass" && editor.hasDraft && editor.mapSample.selectedTag()==2 && editor.envelope.points==[[0,64],[12,0]] && editor.pluginSummary.stringValue=="Plugin: Fixture synth","Catalogue-only updates refresh names and ownership without changing a pinned target, envelope, sample-map choice or draft")
+    pinned.target.stringValue="Instrument 1"
+    WorkspaceAssetContext.updateCaption(pinned,index:editor.index,hasDraft:editor.hasDraft)
+    try require(pinned.target.stringValue=="Draft held · Instrument 2" && pinned.pinned && editor.name.stringValue=="Pending bass","A completed asset read captions the actual pinned editor and retains its draft")
+    editor.index=1;editor.update(["name":"Lead"],model:model)
+    WorkspaceAssetContext.updateCaption(pinned,index:editor.index,hasDraft:editor.hasDraft)
+    try require(pinned.target.stringValue=="Instrument 1" && pinned.pinned,"Explicit picker selection updates a pinned caption without enabling cursor following")
+    editor.index=2;editor.update(["name":"Bass"],model:model);editor.name.stringValue="Pending bass"
+    let samplePanel=WorkspacePanel(id:"samples",title:"Samples",view:sample)
+    WorkspaceAssetContext.updateCaption(samplePanel,index:sample.index,hasDraft:sample.hasDraft)
+    try require(samplePanel.target.stringValue=="Draft held · Sample 2" && sample.waveform.selection==4...12,"Sample captions also identify the loaded asset without resetting waveform selection or drafts")
+    model.instruments.removeAll{$0["index"] as? Int==2};editor.updateCatalogue(model)
+    try require(editor.index==2 && editor.picker.selectedItem==nil && editor.name.stringValue=="Pending bass","A removed slot does not silently select another instrument or destroy its pending draft")
   }
 
   static func textHistoryChecks() throws {

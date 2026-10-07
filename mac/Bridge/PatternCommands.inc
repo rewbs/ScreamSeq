@@ -14,6 +14,7 @@ NSDictionary *patternCommandCatalog(MODTYPE type) {
             @"family": @(c.family.c_str()), @"description": @(c.description.c_str()), @"minimum": @(c.minimum), @"maximum": @(c.maximum)}];
         catalog[volume ? @"volume" : @"effect"] = [items copy];
       }
+      catalog[@"native"]=nativePatternCatalog();
       all[@(uint32_t(format))] = [catalog copy];
     }
     catalogs = [all copy];

@@ -16,6 +16,7 @@ paths.update(root / name.decode() for name in changed.split(b"\0") if name)
 # Editor-only core extensions may still be untracked in a development checkout.
 paths.add(root / "soundlib/NativeReverseLoop.h")
 paths.add(root / "soundlib/NativeNoteEffects.h")
+paths.add(root / "soundlib/NativePatternVoice.h")
 hashes = {
     str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
     for p in sorted(paths) if p.is_file()

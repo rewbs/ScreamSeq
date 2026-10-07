@@ -41,9 +41,20 @@ editing, pattern and song automation, envelope reuse and the formula workbench.
 Document and plugin edits share chronological Undo/Redo. Detailed behavior and
 individual feature reports are linked from [application integration](App/INTEGRATION.md).
 
-Native projects use `.screamseq`, container 6 / metadata 17. Historical native
-versions are rejected; module import remains supported. Projects preserve plugin
-identity and opaque state across platforms. AU processors cannot run on Windows,
+**Record a sample…** opens WASAPI input capture. Choose a device and mono channel
+or contiguous stereo pair, then **Record**, **Stop** and **Keep take** to add a
+sample or instrument in one Undo step. The Windows recorder currently uses a
+60-second limit; the API permits up to five minutes within its frame-capacity
+bound. Pattern selection commands render directly to a sample or instrument;
+**Render options…** adds a custom name, tail length and validation preview. See
+[recording samples](../doc/SCREAMSEQ_SAMPLING.md) for the shared behavior and limits.
+
+Native projects use `.screamseq`, container 6 / metadata 17. Incompatible native
+files load validated known data best effort, with warnings for conversions or
+skipped content. Recovery that converts or loses data requires Save As to
+protect the source; a readable embedded song is still required. Module import
+remains supported. Projects preserve plugin identity and opaque state across
+platforms. AU processors cannot run on Windows,
 and missing plugins reject playback preparation instead of silently changing the
 sound. See [project persistence](Project/README.md) and [plugin hosting](Plugins/README.md).
 

@@ -14,6 +14,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSDictionary *)snapshot:(NSInteger)pattern;
 - (NSDictionary *)telemetry;
 - (NSDictionary *)signalTelemetry;
+// Root graph UI only; same reading semantics, excluding individual-copy ports.
+// Call under the same session ownership guard as signalTelemetry.
+- (NSDictionary *)songSignalTelemetry;
 - (NSDictionary *)routingTelemetry;
 - (NSDictionary *)listenTelemetry;
 - (NSArray<NSDictionary *> *)mixerMeters;
@@ -126,6 +129,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSDictionary *> *)midiEvents;
 @property(nonatomic, readonly) BOOL recordingActive;
 @property(nonatomic, readonly, nullable) NSString *recordingTakeID;
+@property(nonatomic, readonly, nullable) NSString *sampleRecordingTakeID;
 - (BOOL)prepareAudition:(NSError **)error;
 - (BOOL)note:(NSInteger)note instrument:(NSInteger)instrument velocity:(NSInteger)velocity on:(BOOL)on;
 - (BOOL)note:(NSInteger)note instrument:(NSInteger)instrument velocity:(NSInteger)velocity on:(BOOL)on channel:(NSInteger)channel;

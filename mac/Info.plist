@@ -53,6 +53,8 @@
 	<string>14.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record microphone or audio-interface input into a new sample or instrument when you press Record.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Based on OpenMPT © 1997–2026 its contributors. Independent native derivative.</string>
 	<key>NSPrincipalClass</key>

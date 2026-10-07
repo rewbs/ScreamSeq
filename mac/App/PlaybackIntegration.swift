@@ -2,17 +2,22 @@ import AppKit
 
 extension AppController {
   func focusedView(_ event: NSEvent) -> NSView? {
-    (event.window ?? NSApp.keyWindow)?.firstResponder as? NSView
+    KeyboardSettings.focusWindow(for: event, keyWindow: NSApp.keyWindow)?.firstResponder as? NSView
   }
   func handlePlaybackKey(_ event: NSEvent) -> Bool {
     guard NSApp.isActive, event.type == .keyDown,
       event.keyCode == 49 || event.keyCode == KeyboardSettings.transportKey,
       commandPalette.window?.isKeyWindow != true else { return false }
+    KeyboardSettings.traceInput("transport.key.consider",event:event)
     // Space belongs to an open dialog or sheet (file lists, buttons), not the transport.
-    let target = event.window ?? NSApp.keyWindow
+    let target = KeyboardSettings.focusWindow(for: event, keyWindow: NSApp.keyWindow)
     guard NSApp.modalWindow == nil, window.attachedSheet == nil, target?.attachedSheet == nil, target?.sheetParent == nil else { return false }
     let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
     guard !modifiers.contains(.command), !modifiers.contains(.option) else { return false }
+    if KeyboardSettings.menuFocus.ownsUnmodifiedKey(event) {
+      KeyboardSettings.traceInput("transport.key.menu-owned",event:event)
+      return false
+    }
     let focus = focusedView(event)
     if event.keyCode==36,let grid=focus as? PatternView,grid.column==1 {return false}
     if focus is FormulaCodeView, modifiers == [.control], event.keyCode == 49 { return false }
@@ -25,6 +30,7 @@ extension AppController {
       if event.keyCode == 36 && !(focus is PatternView) { return false }
     }
     guard !event.isARepeat else { return true }
+    KeyboardSettings.traceInput("transport.key.dispatch",event:event,detail:modifiers.isEmpty ? "toggle":"bounded=\(modifiers.contains(.control)) cursor=\(modifiers.contains(.shift))")
     if modifiers.isEmpty { togglePlayback() }
     else { startPlayback(fromCursor: modifiers.contains(.shift), bounded: modifiers.contains(.control)) }
     return true

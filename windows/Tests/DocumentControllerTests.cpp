@@ -205,6 +205,40 @@ void patternPerformanceTests(const std::filesystem::path &directory) {
   const auto path=directory/"pattern-performance.screamseq";
   invoke(c,"document.save",{{"path",path.generic_string()}});invoke(c,"document.open",{{"path",path.generic_string()}});
   need(c.view()->effect(0,0,0,7)->effect==speed&&c.view()->effectColumns[0]==8,"Reopen lost grid performance cache");
+  const auto beforeNative=call(c,"pattern.effects.get",{{"pattern",0}});
+  Json nativeCommand={{"kind","native"},{"native","vibrato"},{"parameters",{{"depth",.123456789012345},{"rate",2.3456789012345},{"rateMode","beat"},{"shape","triangle"},{"phase",.125},{"reset",true}}},{"offset",1234},{"duration",70001}};
+  Json nativeEdit={{"pattern",0},{"row",3},{"channel",1},{"column",0},{"command",nativeCommand}};
+  auto preview=nativeEdit;preview["dryRun"]=true;invoke(c,"pattern.effect.set",preview);need(call(c,"pattern.effects.get",{{"pattern",0}})==beforeNative,"Native dry run changed commands");
+  invoke(c,"pattern.effect.set",nativeEdit);const auto nativeAccepted=call(c,"pattern.effects.get",{{"pattern",0}});const auto nativeView=c.view();
+  invoke(c,"pattern.effect.set",nativeEdit);need(c.view()==nativeView,"Native no-op created a revision/view");
+  for(const auto &parameters:std::vector<Json>{{{"depth",true}},{{"shape",0}},{{"rateMode","unknown"}},{{"reset",1}},{{"typo",1}}}){
+    auto bad=nativeEdit;bad["command"]["parameters"]=parameters;bool rejected=false;
+    try{invoke(c,"pattern.effect.set",bad);}catch(const Api::ApiError &e){rejected=e.code==-32602;}
+    need(rejected&&call(c,"pattern.effects.get",{{"pattern",0}})==nativeAccepted,"Native parameter rejection changed commands or returned the wrong error");
+  }
+  invoke(c,"history.undo",{{"domain","document"}});need(call(c,"pattern.effects.get",{{"pattern",0}})==beforeNative,"Native Undo changed unrelated FX");
+  invoke(c,"history.redo",{{"domain","document"}});need(call(c,"pattern.effects.get",{{"pattern",0}})==nativeAccepted,"Native Redo lost precision");
+  const auto nativePath=directory/"native-pattern.screamseq";invoke(c,"document.save",{{"path",nativePath.generic_string()}});invoke(c,"document.open",{{"path",nativePath.generic_string()}});
+  need(call(c,"pattern.effects.get",{{"pattern",0}})==nativeAccepted,"Native project lost parameter payloads");
+  const auto nativeClipboard=parsePatternClipboard(patternClipboardText(*c.view(),0,3,3,1,1));
+  need(nativeClipboard.at("effects").at(0).at("native")=="vibrato"&&nativeClipboard.at("effects").at(0).at("parameters").at("depth")==.123456789012345,"Native clipboard lost exact parameter fields");
+  const auto beforeNudge=call(c,"pattern.effects.get",{{"pattern",0}});
+  Json nudgeEdit={{"pattern",0},{"row",4},{"channel",1},{"column",0},{"command",{{"kind","nudge-forward"},{"value",.75},{"durationBeats",.123456789012345},{"offset",12345}}}};
+  invoke(c,"pattern.effect.set",nudgeEdit);const auto acceptedNudge=call(c,"pattern.effects.get",{{"pattern",0}});auto nudgeView=c.view();
+  need(nudgeView->effect(0,4,1,0)->duration==0&&nudgeView->effect(0,4,1,0)->durationBeats==.123456789012345,"NF duration must retain exact beats without row conversion");
+  invoke(c,"pattern.effect.set",nudgeEdit);need(c.view()==nudgeView,"Beat nudge no-op created history");
+  for(const auto &invalid:std::vector<Json>{{{"kind","nudge-forward"},{"value",.75},{"duration",65536}},{{"kind","nudge-forward"},{"value",.75},{"durationBeats",0}},{{"kind","nudge-forward"},{"value",.75},{"durationBeats",true}},{{"kind","nudge-forward"},{"value",.75},{"durationBeats",65536}},{{"kind","pitch-set"},{"value",0},{"durationBeats",0}}}){
+    auto bad=nudgeEdit;bad["command"]=invalid;bool rejected=false;try{invoke(c,"pattern.effect.set",bad);}catch(const Api::ApiError &e){rejected=e.code==-32602;}
+    need(rejected&&call(c,"pattern.effects.get",{{"pattern",0}})==acceptedNudge,"Invalid or legacy nudge duration partially changed the document");
+  }
+  invoke(c,"history.undo",{{"domain","document"}});need(call(c,"pattern.effects.get",{{"pattern",0}})==beforeNudge,"Beat nudge Undo changed unrelated FX");
+  invoke(c,"history.redo",{{"domain","document"}});need(call(c,"pattern.effects.get",{{"pattern",0}})==acceptedNudge,"Beat nudge Redo lost precision");
+  auto nudgeClipboard=parsePatternClipboard(patternClipboardText(*c.view(),0,4,4,1,1));
+  need(nudgeClipboard.at("effects")[0].at("durationBeats")==.123456789012345&&!nudgeClipboard.at("effects")[0].contains("duration"),"Clipboard exposes only beat duration for nudges");
+  nudgeClipboard["pattern"]=0;nudgeClipboard["startRow"]=8;nudgeClipboard["startChannel"]=2;invoke(c,"pattern.paste",nudgeClipboard);
+  need(c.view()->effect(0,8,2,0)->durationBeats==.123456789012345,"Pasting a nudge must preserve beat duration");
+  const auto savedNudges=call(c,"pattern.effects.get",{{"pattern",0}});const auto nudgePath=directory/"beat-nudges.screamseq";
+  invoke(c,"document.save",{{"path",nudgePath.generic_string()}});invoke(c,"document.open",{{"path",nudgePath.generic_string()}});need(call(c,"pattern.effects.get",{{"pattern",0}})==savedNudges,"Native reopen lost nudge beat duration");
   // A valid but large note list must be rejected before music or transport is
   // changed if its immutable view cannot fit the configured aggregate budget.
   DocumentController limited({},"pattern-budget",[&]{++stops;},[](const auto &){},{},2u*1024u*1024u);
@@ -244,6 +278,19 @@ void patternClipboardTests(const std::filesystem::path &directory) {
   need(snapshot->notesAt(0,10,2).empty(),"Note cache mutated an older view");
   const auto path=directory/"pattern2-worker.screamseq";invoke(c,"document.save",{{"path",path.generic_string()}});
   invoke(c,"document.open",{{"path",path.generic_string()}});need(c.view()->notesAt(0,10,2).size()==2&&c.view()->effect(0,10,2,7)->position==10*65536+16384,"Native reopen lost clipboard FX or precise-note indexes");
+  invoke(c,"scratch.gestures.set",{{"preset","chirp"}});
+  invoke(c,"pattern.effect.set",{{"pattern",0},{"row",20},{"channel",1},{"column",0},{"command",{{"kind","native"},{"native","scratch"},{"parameters",{{"gesture",1}}}}}});
+  const auto scratchView=c.view();auto scratchPayload=parsePatternClipboard(patternClipboardText(*scratchView,0,20,20,1,1));
+  need(scratchPayload.at("scratchGestures").size()==1&&scratchPayload.at("scratchGestures")[0]["name"]=="Chirp","Scratch clipboard omitted its used phrase");
+  invoke(c,"scratch.gestures.set",{{"id",1},{"name","Source renamed"}});need(scratchView->nativePattern->scratchGestures.at(1).name=="Chirp","Scratch library update mutated an immutable clipboard view");
+  DocumentController target({},"scratch-clipboard",[]{},[](const auto &){});invoke(target,"scratch.gestures.set",{{"id",1},{"preset","baby"}});
+  scratchPayload["pattern"]=0;scratchPayload["startRow"]=5;scratchPayload["startChannel"]=0;
+  invoke(target,"pattern.paste",scratchPayload);
+  need(target.view()->nativePattern->scratchGestures.at(1).name=="Baby"&&target.view()->nativePattern->scratchGestures.at(2).name=="Chirp"&&target.view()->effect(0,5,0,0)->arguments[0]==2,"Cross-song scratch paste retargeted a colliding gesture slot");
+  invoke(target,"history.undo",{{"domain","document"}});need(target.view()->nativePattern->scratchGestures.size()==1&&!target.view()->effect(0,5,0,0),"Paste Undo retained a cloned phrase or scratch command");
+  invoke(target,"history.redo",{{"domain","document"}});const auto scratchPath=directory/"scratch-clipboard-worker.screamseq";
+  invoke(target,"document.save",{{"path",scratchPath.generic_string()}});invoke(target,"document.open",{{"path",scratchPath.generic_string()}});
+  need(target.view()->effect(0,5,0,0)->arguments[0]==2&&target.view()->nativePattern->scratchGestures.at(2).name=="Chirp","Scratch clipboard native reopen lost slot remapping");
   std::cout<<"PASS Mac Pattern 2 text, CRLF, stable bindings, legacy hex, malformed/oversized rejection, sparse note boundaries and native reopen\n";
 }
 
@@ -502,8 +549,10 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
   need(plugin(3)==duplicateID&&graph()==duplicateGraph,"Duplicate did not persist");
   std::cout<<"PASS chronological aliases, targeted/grouped plugin add/remove, dry-run/stale/stop/postcommit rejection, cache guard, interleaved edits, recorded-lane remapping, redo forks and persistence\n";
 }
+#include "SamplingOperationsChecks.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--sampling") {samplingOperationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--live-rack-publication") {liveRackPublicationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--live-graph-publication") {liveGraphPublicationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--live-recorded-publication") {liveRecordedAutomationTests(std::filesystem::u8path(argv[2]));return 0;}

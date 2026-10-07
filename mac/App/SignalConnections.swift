@@ -121,6 +121,15 @@ extension SignalGraphEditor {
     let sourcePort=realPort(a,rawOutput,output:true,modulation:false),targetPort=realPort(b,rawInput,output:false,modulation:false)
     let a=sourcePort.node,b=targetPort.node,output=Int(sourcePort.number),input=Int(targetPort.number)
     let action=songConnections[index],from=songNodeBus[a] ?? a,to=songNodeBus[b] ?? b
+    let kind=action["kind"] as? String ?? ""
+    if ["output","send","plugin-output","graph-output"].contains(kind) {
+      guard input==0,songNodePlugin[b]==nil,songNodeGraph[b]==nil,stageTarget(b)==nil,buses.contains(where:{$0["id"] as? String==to}) else {
+        status.stringValue="This cable targets a bus Main input. Add a separate socket connection for a processor or auxiliary input.";return
+      }
+    }
+    if ["output","send"].contains(kind),!validateBusInputSource(a,port:output){return}
+    if kind=="graph-output",stageTarget(a)==nil{status.stringValue="This cable starts at a combined graph output. Add a separate connection for another source type.";return}
+    if kind=="graph-input",stageTarget(b)==nil{status.stringValue="This cable targets a combined graph input. Add a separate connection for another target type.";return}
     if ["graph-input","plugin-input"].contains(action["kind"] as? String ?? ""),!validateBusInputSource(a,port:output){return}
     switch action["kind"] as? String {
     case "output":

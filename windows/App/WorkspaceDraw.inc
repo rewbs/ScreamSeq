@@ -22,9 +22,10 @@
 		for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
 			float x=r.x+gutter+channelStart(c)-horizontalScroll;
 			s.text(L"CH "+std::to_wstring(c+1),x,r.y+29,fxStart-4,muted);
-            for(unsigned fx=0;fx<view->effectColumns.at(c);++fx)
-                s.text(L"FX "+std::to_wstring(fx+1),x+fxStart+fx*fxWidth,r.y+29,fxWidth-4,muted);
-			s.line(x-3,r.y+gridHeader,x-3,r.y+r.h,0x263140);
+            for(unsigned fx=0;fx<view->effectColumns.at(c);++fx){const float start=effectColumnStart(c,fx);const auto &layout=effectColumnLayout(c,fx);
+                s.text(L"F"+std::to_wstring(fx+1),x+start,r.y+29,20,muted);const auto &fields=gridCommandFields(view->effect(patternIndex,row,c,fx));
+                for(size_t i=0;i<fields.size();++i)s.uiText(wide(fields[i].at("name").get<std::string>()),x+start+layout.start(i),r.y+29,layout.widths[i],muted);
+            }
 		}
 		s.unclip();
 		for(unsigned line=0;line<visibleRows() && firstRow+line<rows;++line) {
@@ -50,12 +51,26 @@
                     const auto command=view->effect(patternIndex,rr,c,fx);
                     const auto [code,value]=effectText(command);
                     const auto color=command?0xb7a5e8:0x49596a;
-                    s.text(rr==row&&c==channel&&column==3+2*fx&&!effectPrefix.empty()?wide(effectPrefix)+L"_":code,x+fieldStart(3+2*fx),y,17,color);
-                    s.text(value,x+fieldStart(4+2*fx),y,58,color);
+                    const auto start=effectColumnStart(c,fx);const auto &layout=effectColumnLayout(c,fx);
+                    s.text(rr==row&&c==channel&&column==3+2*fx&&!effectPrefix.empty()?wide(effectPrefix)+L"_":code,x+start,y,17,color);
+                    const auto &fields=gridCommandFields(command);const auto payload=command?ScreamSeq::PatternFields::command(*command):Json::object();
+                    for(size_t i=0;i<layout.widths.size();++i){const auto text=command&&i<fields.size()?wide(ScreamSeq::PatternFields::text(payload,fields[i],view->patternRowsPerBeat.at(patternIndex),effectRows,true)):L"....";
+                        s.text(text,x+start+layout.start(i),y,layout.widths[i],i<fields.size()?color:0x354353);}
+
                 }
 			}
 			s.unclip();
 		}
+		// Channel boundaries stay visible through beat, playhead and selection
+		// fills. Subtle FX dividers remain visually subordinate to the rails.
+		s.clip(r.x+gutter,r.y+gridHeader-23,r.w-gutter,r.h-gridHeader+23);
+		for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
+			const float x=r.x+gutter+channelStart(c)-horizontalScroll;
+			s.fill(x-4,r.y+gridHeader-23,2,r.h-gridHeader+23,0x647588);
+			for(unsigned fx=1;fx<view->effectColumns.at(c);++fx)
+				s.line(x+effectColumnStart(c,fx)-4,r.y+gridHeader,x+effectColumnStart(c,fx)-4,r.y+r.h,0x303b49);
+		}
+		s.unclip();
 		s.unclip();s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="pattern" ? 0x56858b : 0x303b49);
         drawGraphLanes(playback);
 		if(workspaceState.visible()) {

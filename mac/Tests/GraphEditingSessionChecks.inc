@@ -1,4 +1,47 @@
+static void graphManyToManySessionChecks() {
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;
+  auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;auto result=[session automationMethod:method params:p error:&error];if(!result)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);return result[@"data"];};
+  auto read=[&](){return call(@"graph.get",@{@"includeImplicitMixer":@YES});};
+  auto initial=read();NSString *first=initial[@"mixer"][@"buses"][0][@"id"],*second=initial[@"mixer"][@"buses"][1][@"id"];
+  NSString *left=call(@"mixer.bus.add",@{@"kind":@"return",@"name":@"Fan-out left"},true)[@"bus"];
+  NSString *right=call(@"mixer.bus.add",@{@"kind":@"return",@"name":@"Fan-out right"},true)[@"bus"];
+  NSMutableArray<NSString *> *ids=[NSMutableArray array];
+  for(NSString *name in @[@"Source A",@"Source B",@"Destination C",@"Destination D"]){
+    const bool source=ids.count<2;
+    call(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"name":name,@"classID":source?@"resonance.gainer.v1":@"resonance.compressor.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0},@"detached":@YES},true);
+    [ids addObject:[read()[@"plugins"] lastObject][@"id"]];
+  }
+  auto unconnected=read();check([unconnected[@"mixer"][@"detached"] count]==4,"New unconnected effects must start detached");
+  call(@"mixer.sidechains.set",@{@"plugin":ids[0],@"input":@0,@"sources":@[@{@"source":first,@"gainDB":@0}]},true);
+  call(@"mixer.sidechains.set",@{@"plugin":ids[1],@"input":@0,@"sources":@[@{@"source":second,@"gainDB":@0}]},true);
+  check([read()[@"mixer"][@"detachedChains"] count]==2,"Fresh input cables must prepare loose effect owners without moving inserts");
+  for(NSString *plugin in @[ids[0],ids[1]])call(@"mixer.plugin.route",@{@"plugin":plugin,@"output":@0,@"targets":@[left,right]},true);
+  check([read()[@"mixer"][@"instruments"] count]==4,"Each effect output must retain both explicit bus destinations");
+  auto beforeMatrix=read();NSUInteger count=0;
+  for(NSString *source in @[ids[0],ids[1]])for(NSString *target in @[ids[2],ids[3]])for(NSNumber *input in @[@0,@1]){
+    call(@"mixer.plugin.connection.set",@{@"source":source,@"output":@0,@"target":target,@"input":input},true);
+    check([read()[@"mixer"][@"pluginConnections"] count]==++count,"Adding a fresh main or auxiliary cable must preserve all previous cables");
+  }
+  auto matrix=read();check([matrix[@"mixer"][@"sidechains"] isEqual:beforeMatrix[@"mixer"][@"sidechains"]]&&[matrix[@"mixer"][@"instruments"] isEqual:beforeMatrix[@"mixer"][@"instruments"]],"Direct fan-in must preserve bus-input feeds and output fan-out");
+  NSString *revision=session.automationRevision;
+  NSDictionary *last=@{@"source":ids[1],@"output":@0,@"target":ids[3],@"input":@1};
+  call(@"mixer.plugin.connection.set",last,true);check([revision isEqual:session.automationRevision],"Repeating an existing cable must be a no-op");
+  NSDictionary *cut=@{@"kind":@"plugin-connection",@"source":ids[0],@"output":@0,@"target":ids[2],@"input":@0};
+  call(@"graph.connections.remove",@{@"connections":@[cut]},true);auto removed=read();check([removed[@"mixer"][@"pluginConnections"] count]==7,"Cut must remove only the selected cable from a summed input");
+  call(@"history.undo",@{},true);check([read() isEqual:matrix],"One Undo must restore exactly the chosen cable");
+  call(@"history.redo",@{},true);check([read() isEqual:removed],"Redo must preserve all sibling fan-in and fan-out cables");call(@"history.undo",@{},true);
+  revision=session.automationRevision;
+  check(![session automationMethod:@"mixer.plugin.connection.set" params:@{@"source":ids[2],@"output":@0,@"target":ids[0],@"input":@0,@"expectedRevision":revision} error:&error]&&[read() isEqual:matrix]&&[revision isEqual:session.automationRevision],"A feedback cable must reject atomically without removing valid fan-in/out");
+  auto sends=@[@{@"target":left,@"gainDB":@0},@{@"target":right,@"gainDB":@0}];
+  call(@"mixer.sends.set",@{@"bus":first,@"sends":sends},true);call(@"mixer.sends.set",@{@"bus":second,@"sends":sends},true);
+  auto buses=read()[@"mixer"][@"buses"];for(NSUInteger i=0;i<2;++i)check([buses[i][@"sends"] count]==2&&[buses[i][@"output"] isEqual:initial[@"mixer"][@"buses"][i][@"output"]],"Unity send fan-out preserves each existing main output");
+  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
+  auto expected=read();check([session savePath:path error:&error]&&[session openPath:path error:&error]&&[expected isEqual:read()],"Complete many-to-many routing must survive native persistence");
+  [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+}
+
 static void graphEditingSessionChecks() {
+  graphManyToManySessionChecks();
   TrackerSession *s=[TrackerSession new];NSError *error=nil;
   auto api=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=s.automationRevision;auto r=[s automationMethod:method params:p error:&error];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);return r;};
   auto snapshot=[&](){return api(@"graph.get",@{@"includeImplicitMixer":@YES})[@"data"];};

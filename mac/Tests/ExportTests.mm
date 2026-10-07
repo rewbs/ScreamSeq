@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <exception>
+#include <pthread.h>
 using namespace Tracker;
 static void require(bool value, const char *message) {
   if (!value)
@@ -32,6 +34,32 @@ static std::vector<float> wave(const std::filesystem::path &path) {
     require(std::isfinite(sample), "finite exported audio");
   return output;
 }
+static void smallStackExport(const std::vector<std::byte> &module, const std::vector<PluginState> &plugins,
+                             const std::filesystem::path &path) {
+  struct Job {
+    const std::vector<std::byte> &module;
+    const std::vector<PluginState> &plugins;
+    std::string path;
+    std::exception_ptr failure;
+  } job{module, plugins, path.string(), {}};
+  pthread_attr_t attributes;
+  require(pthread_attr_init(&attributes) == 0, "Initialize bounded worker attributes");
+  const int sized = pthread_attr_setstacksize(&attributes, 512 * 1024);
+  if(sized) { pthread_attr_destroy(&attributes); require(false, "Set 512 KiB export worker stack"); }
+  pthread_t thread;
+  const int started = pthread_create(&thread, &attributes, [](void *context) -> void * {
+    auto &job = *static_cast<Job *>(context);
+    @autoreleasepool {
+      try { exportProjectAudio(job.module, job.plugins, {}, job.path); }
+      catch(...) { job.failure = std::current_exception(); }
+    }
+    return nullptr;
+  }, &job);
+  pthread_attr_destroy(&attributes);
+  require(started == 0, "Start bounded export worker");
+  require(pthread_join(thread, nullptr) == 0, "Join bounded export worker");
+  if(job.failure) std::rethrow_exception(job.failure);
+}
 int main() {
   try {
     const auto directory = std::filesystem::temp_directory_path() / "resonance-tests";
@@ -40,6 +68,16 @@ int main() {
     const auto module = document->serialize();
     exportProjectAudio(module, {}, {}, (directory / "dry.wav").string());
     auto dry = wave(directory / "dry.wav");
+    const auto workerPath = directory / "small-stack-dry.wav";
+    smallStackExport(module, {}, workerPath);
+    require(wave(workerPath) == dry, "512 KiB worker export matches main-thread dry PCM exactly");
+    PluginState gain; gain.descriptor.format = "Built-in"; gain.descriptor.classID = "resonance.gainer.v1";
+    gain.instanceID = "small-stack-export";
+    const auto hostedPath = directory / "small-stack-hosted.wav", hostedReference = directory / "hosted-reference.wav";
+    exportProjectAudio(module, {gain}, {}, hostedReference.string());
+    smallStackExport(module, {gain}, hostedPath);
+    require(wave(hostedPath) == wave(hostedReference), "512 KiB worker export matches hosted processing exactly");
+    std::filesystem::remove(workerPath); std::filesystem::remove(hostedPath); std::filesystem::remove(hostedReference);
     Renderer reference(module, 48000);
     std::array<float, 1024> buffer{};
     size_t offset = 0;
@@ -97,7 +135,7 @@ int main() {
     std::ifstream retained(destination);
     std::string contents((std::istreambuf_iterator<char>(retained)), {});
     require(rejected && contents == "keep existing audio", "failed export retains original destination");
-    std::cout << "PASS dry WAV fidelity, exact export duration, latency, tail and failed-export preservation\n";
+    std::cout << "PASS 512 KiB worker export, dry WAV fidelity, exact export duration, latency, tail and failed-export preservation\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << "FAIL: " << error.what() << '\n';

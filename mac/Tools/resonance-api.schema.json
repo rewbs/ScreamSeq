@@ -325,7 +325,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Atomic typed rack\u2194outer graph-stage auxiliary contribution. A stage is the combined row/persistent/ordinary bus stage, not one selected copy. Its auxiliary inputs feed every prepared copy; outputs sum audible wet/tail contributions. Input/output zero belongs to the main serial path and cannot address a stage. Omitted gain/enabled preserve the replaced connection."
+      "description": "Atomic typed rack↔outer graph-stage auxiliary contribution. A stage is the combined row/persistent/ordinary bus stage, not one selected copy. Its auxiliary inputs feed every prepared copy; outputs sum audible wet/tail contributions. Input/output zero belongs to the main serial path and cannot address a stage. Omitted gain/enabled preserve the replaced connection."
     },
     {
       "type": "object",
@@ -819,7 +819,7 @@
       "description": "Load a validated portable plugin preset into a shared recipe in one Undo. Preserve audio ports, routing, bypass and modulation ranges; update all target manual modulation baselines from the loaded preset. All uses update together through prepared publication."
     },
     {
-      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument\u2019s implicit cable.",
+      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument’s implicit cable.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -1031,7 +1031,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Restore an instrument\u2019s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
+      "description": "Restore an instrument’s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -1477,7 +1477,7 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 65535,
-              "description": "Final order position for move, preserving the entry\u2019s section metadata."
+              "description": "Final order position for move, preserving the entry’s section metadata."
             }
           },
           "required": [
@@ -7661,7 +7661,8 @@
                   "duration": {
                     "type": "integer",
                     "minimum": 0,
-                    "maximum": 4294967295
+                    "maximum": 4294967295,
+                    "description": "Row-unit duration (65536 units/row) for slides/native operations. NF/NR use durationBeats and must omit duration or set it to zero."
                   },
                   "column": {
                     "type": "integer",
@@ -7677,7 +7678,8 @@
                       "note-cut",
                       "tracker",
                       "nudge-forward",
-                      "nudge-reverse"
+                      "nudge-reverse",
+                      "native"
                     ]
                   },
                   "binding": {
@@ -7706,6 +7708,44 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 255
+                  },
+                  "native": {
+                    "type": "string",
+                    "enum": [
+                      "gain-set",
+                      "gain-slide",
+                      "pan-set",
+                      "pan-slide",
+                      "pitch-relative",
+                      "tone-portamento",
+                      "vibrato",
+                      "tremolo",
+                      "panbrello",
+                      "arpeggio",
+                      "tremor",
+                      "retrigger",
+                      "note-release",
+                      "note-delay",
+                      "sample-offset",
+                      "sample-direction",
+                      "envelope-position",
+                      "envelope-enable",
+                      "tempo-set",
+                      "tempo-slide",
+                      "row-length",
+                      "scratch",
+                      "scratch-stop"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object"
+                  },
+                  "durationBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 65536,
+                    "default": 1,
+                    "description": "NF/NR only: push and recovery duration in beats. Row display is a view conversion; old row-unit nudge durations are rejected."
                   }
                 },
                 "required": [
@@ -7837,8 +7877,7 @@
                     },
                     "then": {
                       "required": [
-                        "value",
-                        "duration"
+                        "value"
                       ],
                       "properties": {
                         "value": {
@@ -7846,14 +7885,53 @@
                           "maximum": 1
                         },
                         "duration": {
-                          "minimum": 1
+                          "const": 0
                         },
                         "binding": {
                           "const": 0
                         },
                         "pitchRange": {
                           "const": 2
+                        },
+                        "durationBeats": {
+                          "minimum": 1.52587890625e-05,
+                          "maximum": 65536
                         }
+                      }
+                    },
+                    "else": {
+                      "not": {
+                        "required": [
+                          "durationBeats"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "native"
+                        }
+                      }
+                    },
+                    "then": {
+                      "$ref": "#/$defs/nativePatternCommand"
+                    },
+                    "else": {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "native"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "parameters"
+                            ]
+                          }
+                        ]
                       }
                     }
                   }
@@ -7945,6 +8023,14 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "scratchGestures": {
+              "type": "array",
+              "maxItems": 255,
+              "items": {
+                "$ref": "#/$defs/scratchGesture"
+              },
+              "description": "Required phrase definitions for copied SK effects; remapped without replacing target-song phrases."
             }
           },
           "required": [
@@ -9131,7 +9217,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1\u201363 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
+      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1–63 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -12232,7 +12318,8 @@
                   "duration": {
                     "type": "integer",
                     "minimum": 0,
-                    "maximum": 4294967295
+                    "maximum": 4294967295,
+                    "description": "Row-unit duration (65536 units/row) for slides/native operations. NF/NR use durationBeats and must omit duration or set it to zero."
                   },
                   "column": {
                     "type": "integer",
@@ -12248,7 +12335,8 @@
                       "note-cut",
                       "tracker",
                       "nudge-forward",
-                      "nudge-reverse"
+                      "nudge-reverse",
+                      "native"
                     ]
                   },
                   "binding": {
@@ -12277,6 +12365,44 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 255
+                  },
+                  "native": {
+                    "type": "string",
+                    "enum": [
+                      "gain-set",
+                      "gain-slide",
+                      "pan-set",
+                      "pan-slide",
+                      "pitch-relative",
+                      "tone-portamento",
+                      "vibrato",
+                      "tremolo",
+                      "panbrello",
+                      "arpeggio",
+                      "tremor",
+                      "retrigger",
+                      "note-release",
+                      "note-delay",
+                      "sample-offset",
+                      "sample-direction",
+                      "envelope-position",
+                      "envelope-enable",
+                      "tempo-set",
+                      "tempo-slide",
+                      "row-length",
+                      "scratch",
+                      "scratch-stop"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object"
+                  },
+                  "durationBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 65536,
+                    "default": 1,
+                    "description": "NF/NR only: push and recovery duration in beats. Row display is a view conversion; old row-unit nudge durations are rejected."
                   }
                 },
                 "required": [
@@ -12408,8 +12534,7 @@
                     },
                     "then": {
                       "required": [
-                        "value",
-                        "duration"
+                        "value"
                       ],
                       "properties": {
                         "value": {
@@ -12417,14 +12542,53 @@
                           "maximum": 1
                         },
                         "duration": {
-                          "minimum": 1
+                          "const": 0
                         },
                         "binding": {
                           "const": 0
                         },
                         "pitchRange": {
                           "const": 2
+                        },
+                        "durationBeats": {
+                          "minimum": 1.52587890625e-05,
+                          "maximum": 65536
                         }
+                      }
+                    },
+                    "else": {
+                      "not": {
+                        "required": [
+                          "durationBeats"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "native"
+                        }
+                      }
+                    },
+                    "then": {
+                      "$ref": "#/$defs/nativePatternCommand"
+                    },
+                    "else": {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "native"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "parameters"
+                            ]
+                          }
+                        ]
                       }
                     }
                   }
@@ -13193,7 +13357,7 @@
       "x-application-only": true
     },
     {
-      "description": "Atomically append 1\u2013128 sample files, optionally creating instruments; one document Undo. Every file is decoded before commit.",
+      "description": "Atomically append 1–128 sample files, optionally creating instruments; one document Undo. Every file is decoded before commit.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -14267,7 +14431,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Allocate a node. Effects require exactly one rack slot or independent plugin recipe. Optional insertAfter splices an effect into the node\u2019s single main audio connection atomically."
+      "description": "Allocate a node. Effects require exactly one rack slot or independent plugin recipe. Optional insertAfter splices an effect into the node’s single main audio connection atomically."
     },
     {
       "type": "object",
@@ -15564,13 +15728,44 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 16777216
+            },
+            "scratchBeats": {
+              "type": "number",
+              "minimum": 1.1920928955078125e-07,
+              "maximum": 256,
+              "description": "Use the scratch phrase evaluator with this per-cycle duration, rows 257, span 65537 and endpoints 0/65536."
             }
           },
           "required": [
             "points",
             "rows"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "scratchBeats"
+                ]
+              },
+              "then": {
+                "required": [
+                  "span"
+                ],
+                "properties": {
+                  "rows": {
+                    "const": 257
+                  },
+                  "span": {
+                    "const": 65537
+                  },
+                  "points": {
+                    "$ref": "#/$defs/scratchCurve"
+                  }
+                }
+              }
+            }
+          ]
         }
       },
       "required": [
@@ -17211,7 +17406,8 @@
                   "duration": {
                     "type": "integer",
                     "minimum": 0,
-                    "maximum": 4294967295
+                    "maximum": 4294967295,
+                    "description": "Row-unit duration (65536 units/row) for slides/native operations. NF/NR use durationBeats and must omit duration or set it to zero."
                   },
                   "column": {
                     "type": "integer",
@@ -17227,7 +17423,8 @@
                       "note-cut",
                       "tracker",
                       "nudge-forward",
-                      "nudge-reverse"
+                      "nudge-reverse",
+                      "native"
                     ]
                   },
                   "binding": {
@@ -17256,6 +17453,44 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 255
+                  },
+                  "native": {
+                    "type": "string",
+                    "enum": [
+                      "gain-set",
+                      "gain-slide",
+                      "pan-set",
+                      "pan-slide",
+                      "pitch-relative",
+                      "tone-portamento",
+                      "vibrato",
+                      "tremolo",
+                      "panbrello",
+                      "arpeggio",
+                      "tremor",
+                      "retrigger",
+                      "note-release",
+                      "note-delay",
+                      "sample-offset",
+                      "sample-direction",
+                      "envelope-position",
+                      "envelope-enable",
+                      "tempo-set",
+                      "tempo-slide",
+                      "row-length",
+                      "scratch",
+                      "scratch-stop"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object"
+                  },
+                  "durationBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 65536,
+                    "default": 1,
+                    "description": "NF/NR only: push and recovery duration in beats. Row display is a view conversion; old row-unit nudge durations are rejected."
                   }
                 },
                 "required": [
@@ -17387,8 +17622,7 @@
                     },
                     "then": {
                       "required": [
-                        "value",
-                        "duration"
+                        "value"
                       ],
                       "properties": {
                         "value": {
@@ -17396,14 +17630,53 @@
                           "maximum": 1
                         },
                         "duration": {
-                          "minimum": 1
+                          "const": 0
                         },
                         "binding": {
                           "const": 0
                         },
                         "pitchRange": {
                           "const": 2
+                        },
+                        "durationBeats": {
+                          "minimum": 1.52587890625e-05,
+                          "maximum": 65536
                         }
+                      }
+                    },
+                    "else": {
+                      "not": {
+                        "required": [
+                          "durationBeats"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "native"
+                        }
+                      }
+                    },
+                    "then": {
+                      "$ref": "#/$defs/nativePatternCommand"
+                    },
+                    "else": {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "native"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "parameters"
+                            ]
+                          }
+                        ]
                       }
                     }
                   }
@@ -17484,7 +17757,8 @@
                     "duration": {
                       "type": "integer",
                       "minimum": 0,
-                      "maximum": 4294967295
+                      "maximum": 4294967295,
+                      "description": "Row-unit duration (65536 units/row) for slides/native operations. NF/NR use durationBeats and must omit duration or set it to zero."
                     },
                     "kind": {
                       "enum": [
@@ -17495,7 +17769,8 @@
                         "note-cut",
                         "tracker",
                         "nudge-forward",
-                        "nudge-reverse"
+                        "nudge-reverse",
+                        "native"
                       ]
                     },
                     "binding": {
@@ -17529,6 +17804,44 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 65535
+                    },
+                    "native": {
+                      "type": "string",
+                      "enum": [
+                        "gain-set",
+                        "gain-slide",
+                        "pan-set",
+                        "pan-slide",
+                        "pitch-relative",
+                        "tone-portamento",
+                        "vibrato",
+                        "tremolo",
+                        "panbrello",
+                        "arpeggio",
+                        "tremor",
+                        "retrigger",
+                        "note-release",
+                        "note-delay",
+                        "sample-offset",
+                        "sample-direction",
+                        "envelope-position",
+                        "envelope-enable",
+                        "tempo-set",
+                        "tempo-slide",
+                        "row-length",
+                        "scratch",
+                        "scratch-stop"
+                      ]
+                    },
+                    "parameters": {
+                      "type": "object"
+                    },
+                    "durationBeats": {
+                      "type": "number",
+                      "minimum": 1.52587890625e-05,
+                      "maximum": 65536,
+                      "default": 1,
+                      "description": "NF/NR only: push and recovery duration in beats. Row display is a view conversion; old row-unit nudge durations are rejected."
                     }
                   },
                   "required": [
@@ -17657,8 +17970,7 @@
                       },
                       "then": {
                         "required": [
-                          "value",
-                          "duration"
+                          "value"
                         ],
                         "properties": {
                           "value": {
@@ -17666,14 +17978,53 @@
                             "maximum": 1
                           },
                           "duration": {
-                            "minimum": 1
+                            "const": 0
                           },
                           "binding": {
                             "const": 0
                           },
                           "pitchRange": {
                             "const": 2
+                          },
+                          "durationBeats": {
+                            "minimum": 1.52587890625e-05,
+                            "maximum": 65536
                           }
+                        }
+                      },
+                      "else": {
+                        "not": {
+                          "required": [
+                            "durationBeats"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "kind": {
+                            "const": "native"
+                          }
+                        }
+                      },
+                      "then": {
+                        "$ref": "#/$defs/nativePatternCommand"
+                      },
+                      "else": {
+                        "not": {
+                          "anyOf": [
+                            {
+                              "required": [
+                                "native"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "parameters"
+                              ]
+                            }
+                          ]
                         }
                       }
                     }
@@ -20244,6 +20595,12 @@
             },
             "dryRun": {
               "type": "boolean"
+            },
+            "parent": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32,
+              "description": "Existing song processing group. Source, optional edge and membership share one Undo; omitted creates at song root."
             }
           },
           "required": [
@@ -20260,7 +20617,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Allocate a song-level control source, optionally connect to a stable rack parameter at zero depth, in one Undo. No processor is replaced."
+      "description": "Allocate a song-level control source, optionally connect to a stable rack parameter at zero depth and add to a processing group, in one Undo. No processor is replaced."
     },
     {
       "type": "object",
@@ -21106,7 +21463,7 @@
       "description": "Bypass a real processing boundary while its contents keep running. A unique input/output dry path is inferred; ambiguous boundaries require an explicit dryRoutes map covering each outgoing boundary. graph:null selects a song group. One Undo; no per-member bypass substitution."
     },
     {
-      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1\u201363 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
+      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1–63 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -21122,7 +21479,7 @@
         },
         "params": {
           "type": "object",
-          "description": "Atomic direct plugin output to effect input upsert or exact endpoint replacement. Fan-in/out preserves serial ownership; input 0 sums into Main. Supported logical bus/channel slices only. Instrument audio-input destinations currently reject without mutation. Disabled routes remain cycle-validated.",
+          "description": "Atomic direct plugin output to effect input upsert or exact endpoint replacement. Fan-in/out preserves serial ownership; input 0 sums into Main. Supported logical bus/channel slices only. Plugin instruments with supported physical audio inputs accept these routes and process after their audio dependencies. Disabled routes remain cycle-validated.",
           "properties": {
             "expectedRevision": {
               "type": "string"
@@ -21197,6 +21554,589 @@
             "output",
             "target",
             "input"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "scratch.gestures.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "scratch.gestures.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "Nonempty UTF-8 name, at most 256 bytes."
+            },
+            "motion": {
+              "$ref": "#/$defs/scratchCurve"
+            },
+            "fader": {
+              "$ref": "#/$defs/scratchCurve"
+            },
+            "preset": {
+              "enum": [
+                "baby",
+                "chirp",
+                "transform",
+                "one-click-flare",
+                "two-click-flare",
+                "crab",
+                "scribble"
+              ]
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expectedRevision"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "not": {
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "then": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "preset"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name",
+                      "motion",
+                      "fader"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "scratch.gestures.remove"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "scratch.gestures.clone"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "target": {
+              "type": "object",
+              "description": "Optional SK cell currently referencing id; clone and reassignment form one Undo step.",
+              "properties": {
+                "pattern": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "row": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "channel": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 126
+                },
+                "column": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 7
+                }
+              },
+              "required": [
+                "pattern",
+                "row",
+                "channel",
+                "column"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "id",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.devices"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "take": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.start"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "device": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 512
+            },
+            "firstChannel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "channels": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2
+            },
+            "maxSeconds": {
+              "type": "number",
+              "minimum": 0.001,
+              "maximum": 300
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.stop"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "take": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "take"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.discard"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "take": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "take"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.commit"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "take": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "createInstrument": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "take",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.renderSelection"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "firstRow": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "lastRow": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "firstChannel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "lastChannel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "createInstrument": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "tailSeconds": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 60
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "pattern",
+            "firstRow",
+            "lastRow",
+            "firstChannel",
+            "lastChannel",
+            "expectedRevision"
           ],
           "additionalProperties": false
         }
@@ -22003,6 +22943,1111 @@
             ],
             "additionalProperties": false
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "nativePatternCommand": {
+      "type": "object",
+      "required": [
+        "native",
+        "parameters"
+      ],
+      "properties": {
+        "native": {
+          "enum": [
+            "gain-set",
+            "gain-slide",
+            "pan-set",
+            "pan-slide",
+            "pitch-relative",
+            "tone-portamento",
+            "vibrato",
+            "tremolo",
+            "panbrello",
+            "arpeggio",
+            "tremor",
+            "retrigger",
+            "note-release",
+            "note-delay",
+            "sample-offset",
+            "sample-direction",
+            "envelope-position",
+            "envelope-enable",
+            "tempo-set",
+            "tempo-slide",
+            "row-length",
+            "scratch",
+            "scratch-stop"
+          ]
+        },
+        "parameters": {
+          "type": "object"
+        },
+        "binding": {
+          "const": 0
+        },
+        "value": {
+          "const": 0
+        },
+        "pitchRange": {
+          "const": 2
+        },
+        "effect": {
+          "const": 0
+        },
+        "parameter": {
+          "const": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "gain-set"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "gain": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4,
+                    "default": 1
+                  },
+                  "scope": {
+                    "enum": [
+                      "voice",
+                      "channel",
+                      "song"
+                    ],
+                    "default": "voice"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "gain-slide"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "gain": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4,
+                    "default": 1
+                  },
+                  "scope": {
+                    "enum": [
+                      "voice",
+                      "channel",
+                      "song"
+                    ],
+                    "default": "voice"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "duration"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "pan-set"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "pan": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "pan-slide"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "pan": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "duration"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "pitch-relative"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "semitones": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "tone-portamento"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 120,
+                    "default": 49
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "duration"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "vibrato"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 96,
+                    "default": 0
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000,
+                    "default": 1
+                  },
+                  "rateMode": {
+                    "enum": [
+                      "beat",
+                      "hz"
+                    ],
+                    "default": "beat"
+                  },
+                  "shape": {
+                    "enum": [
+                      "sine",
+                      "triangle",
+                      "saw",
+                      "square",
+                      "random"
+                    ],
+                    "default": "sine"
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  },
+                  "reset": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "tremolo"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000,
+                    "default": 1
+                  },
+                  "rateMode": {
+                    "enum": [
+                      "beat",
+                      "hz"
+                    ],
+                    "default": "beat"
+                  },
+                  "shape": {
+                    "enum": [
+                      "sine",
+                      "triangle",
+                      "saw",
+                      "square",
+                      "random"
+                    ],
+                    "default": "sine"
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  },
+                  "reset": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "panbrello"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000,
+                    "default": 1
+                  },
+                  "rateMode": {
+                    "enum": [
+                      "beat",
+                      "hz"
+                    ],
+                    "default": "beat"
+                  },
+                  "shape": {
+                    "enum": [
+                      "sine",
+                      "triangle",
+                      "saw",
+                      "square",
+                      "random"
+                    ],
+                    "default": "sine"
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  },
+                  "reset": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "arpeggio"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "offset1": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96,
+                    "default": 4
+                  },
+                  "offset2": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96,
+                    "default": 7
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000,
+                    "default": 1
+                  },
+                  "rateMode": {
+                    "enum": [
+                      "beat",
+                      "hz"
+                    ],
+                    "default": "beat"
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "tremor"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "onBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 0.25
+                  },
+                  "offBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 0.25
+                  },
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 1
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "retrigger"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "intervalBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 0.25
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65536,
+                    "default": 1
+                  },
+                  "volumeFactor": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4,
+                    "default": 1
+                  },
+                  "volumeStep": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "note-release"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "note-delay"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "sample-offset"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4294967295,
+                    "default": 0
+                  },
+                  "mode": {
+                    "enum": [
+                      "frames",
+                      "normalized",
+                      "cue"
+                    ],
+                    "default": "frames"
+                  }
+                },
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "required": [
+                        "mode"
+                      ],
+                      "properties": {
+                        "mode": {
+                          "const": "normalized"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "value": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "default": 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "required": [
+                        "mode"
+                      ],
+                      "properties": {
+                        "mode": {
+                          "const": "cue"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "value": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9,
+                          "default": 0
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "sample-direction"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "direction": {
+                    "enum": [
+                      "forward",
+                      "reverse"
+                    ],
+                    "default": "forward"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "envelope-position"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "envelope": {
+                    "enum": [
+                      "volume",
+                      "pan",
+                      "pitch",
+                      "all"
+                    ],
+                    "default": "volume"
+                  },
+                  "position": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 65536,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "envelope-enable"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "envelope": {
+                    "enum": [
+                      "volume",
+                      "pan",
+                      "pitch"
+                    ],
+                    "default": "volume"
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "tempo-set"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "bpm": {
+                    "type": "number",
+                    "minimum": 32,
+                    "maximum": 512,
+                    "default": 125
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "tempo-slide"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "bpm": {
+                    "type": "number",
+                    "minimum": 32,
+                    "maximum": 512,
+                    "default": 125
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "duration"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "row-length"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "beats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 0.25
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              },
+              "position": {
+                "multipleOf": 65536
+              },
+              "offset": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "scratch"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "gesture": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 255,
+                    "default": 1
+                  },
+                  "beats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 1
+                  },
+                  "travelMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "default": 200
+                  },
+                  "repeats": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 128,
+                    "default": 1
+                  },
+                  "reverse": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "scratch-stop"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "scratchCurve": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "required": [
+          "position",
+          "value"
+        ],
+        "properties": {
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65536
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "curve": {
+            "enum": [
+              "step",
+              "linear",
+              "smooth",
+              "exponential",
+              "logarithmic",
+              "step-next",
+              "exponential-reverse",
+              "logarithmic-reverse",
+              "scripted"
+            ]
+          },
+          "formula": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "curve": {
+                  "const": "scripted"
+                }
+              },
+              "required": [
+                "curve"
+              ]
+            },
+            "then": {
+              "required": [
+                "formula"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "formula"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "description": "Strictly increasing positions with endpoints 0 and 65536. Scripted points require a valid bounded formula.",
+      "prefixItems": [
+        {
+          "properties": {
+            "position": {
+              "const": 0
+            }
+          }
+        }
+      ],
+      "contains": {
+        "properties": {
+          "position": {
+            "const": 65536
+          }
+        },
+        "required": [
+          "position"
+        ]
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "scratchGesture": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "motion",
+        "fader"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Nonempty UTF-8 name, at most 256 bytes."
+        },
+        "motion": {
+          "$ref": "#/$defs/scratchCurve"
+        },
+        "fader": {
+          "$ref": "#/$defs/scratchCurve"
         }
       },
       "additionalProperties": false

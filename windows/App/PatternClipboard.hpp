@@ -1,6 +1,8 @@
 #pragma once
 #include "../Session/DocumentController.hpp"
 #include "editor/PatternTools.hpp"
+#include "windows/Project/NativePatternJSON.hpp"
+#include "windows/Project/ScratchGestureJSON.hpp"
 #include <sstream>
 
 namespace ScreamSeq {
@@ -19,21 +21,23 @@ inline std::string patternClipboardText(const DocumentView &view,unsigned patter
     for(unsigned row=firstRow;row<=lastRow;++row)for(unsigned channel=firstChannel;channel<=lastChannel;++channel) {
         const auto c=view.cell(pattern,row,channel);cells.push_back({c.note,c.instrument,c.volumeCommand,c.volume,c.effect,c.parameter});
     }
-    const std::array<const char *,8> names={"parameter-set","parameter-slide","pitch-set","pitch-slide","note-cut","tracker","nudge-forward","nudge-reverse"};
-    std::set<uint16_t> used;
+    std::set<uint16_t> used,scratchUsed;
     for(const auto &entry:view.nativePattern->effects) {
         const auto &c=entry.command;const auto row=c.position/Tracker::performanceUnitsPerRow;
         if(entry.pattern!=pattern||entry.channel<firstChannel||entry.channel>lastChannel||row<firstRow||row>lastRow)continue;
         effects.push_back({{"channel",entry.channel-firstChannel},{"position",c.position-firstRow*Tracker::performanceUnitsPerRow},
-            {"duration",c.duration},{"column",c.column},{"kind",names.at(unsigned(c.kind))},{"binding",c.binding},{"value",c.value},
+            {"duration",c.duration},{"column",c.column},{"kind",Tracker::patternCommandKindName(c.kind)},{"binding",c.binding},{"value",c.value},
             {"pitchRange",c.pitchRange},{"effect",c.effect},{"parameter",c.parameter}});
+        PatternJSON::append(effects.back(),c);
         if(c.binding)used.insert(c.binding);
+        if(c.kind==Tracker::PatternCommandKind::Native&&c.native==Tracker::NativePatternOp::Scratch)scratchUsed.insert(uint16_t(c.arguments[0]));
     }
     for(const auto id:used) {
         const auto &b=view.nativePattern->performance.bindings.at(id);
         bindings.push_back({{"id",id},{"plugin",b.plugin},{"parameter",b.parameter},{"name",b.name}});
     }
-    Json payload={{"rows",rows},{"channels",channels},{"cells",std::move(cells)},{"effects",std::move(effects)},{"bindings",std::move(bindings)}};
+    Json gestures=Json::array();for(const auto id:scratchUsed){auto entry=ScratchJSON::gesture(view.nativePattern->scratchGestures.at(id));entry["id"]=id;gestures.push_back(std::move(entry));}
+    Json payload={{"rows",rows},{"channels",channels},{"cells",std::move(cells)},{"effects",std::move(effects)},{"bindings",std::move(bindings)},{"scratchGestures",std::move(gestures)}};
     auto result=std::string(patternClipboardPrefix)+payload.dump();
     if(result.size()>maximumPatternClipboardBytes)throw std::runtime_error("Pattern clipboard exceeds 16 MiB");
     return result;
@@ -47,7 +51,7 @@ inline Json parsePatternClipboard(std::string_view text) {
     if(prefix) {
         auto payload=Json::parse(text.substr(prefix));
         if(!payload.is_object())throw std::runtime_error("Invalid pattern clipboard object");
-        const std::set<std::string> keys={"rows","channels","cells","effects","bindings"};
+        const std::set<std::string> keys={"rows","channels","cells","effects","bindings","scratchGestures"};
         for(auto i=payload.begin();i!=payload.end();++i)if(!keys.contains(i.key()))throw std::runtime_error("Invalid pattern clipboard field");
         return payload;
     }

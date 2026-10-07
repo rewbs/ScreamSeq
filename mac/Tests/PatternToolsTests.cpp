@@ -202,9 +202,51 @@ void preciseClipboard() {
   auto clean=doc.native();preparePreciseNotePaste(doc,clean,{0,2,1,2,1},{},PatternAll,"overwrite",false);check(clean.preciseNotes.size()==1,"Empty source clears destination precise hits");
   clear.fields=PatternEffect;check(prepareEffectTransform(doc,regions,clear).preciseNotes==next.preciseNotes,"Effect-only clear preserves precise notes");
 }
+void cursorFieldAndChannelDelete() {
+  Document doc(MOD_TYPE_MPT,4);
+  const uint32_t unit=performanceUnitsPerRow;
+  for(int row : {2,3,63})for(int channel : {1,2})put(doc,row,channel,{uint8_t(49+row%12),uint8_t(channel+1),VOLCMD_VOLUME,32,CMD_VIBRATO,0x47});
+  doc.annotate([&](NativeSong &n) {
+    const auto pattern=n.patterns.at(0).id,track=n.tracks.at(1).id,other=n.tracks.at(2).id;
+    n.preciseNotes={{pattern,track,2*unit+100,2,61,100},{pattern,track,3*unit+8192,2,64,90},{pattern,other,3*unit+8192,3,65,90}};
+    for(auto target : {track,other}) {
+      n.performance.columns[target]=8;
+      for(uint8_t column=1;column<8;++column) {
+        PatternCommand command;command.pattern=pattern;command.track=target;command.position=3*unit+4096;command.column=column;
+        command.kind=PatternCommandKind::NudgeForward;command.value=.75;command.durationBeats=.125;
+        n.performance.commands.push_back(command);
+      }
+      n.signal.lanes[target]=1;n.signal.commands.push_back({pattern,target,0,3*unit+31,0,SignalCommandKind::Clear});
+    }
+    n.automation.push_back({n.makeEntity().id,pattern,"unresolved-fixture",7,true,{{3*256,.5,AutomationCurve::Linear}}});
+  });
+  const auto before=doc.native();const auto cell=doc.cell(0,2,1);
+  PatternTransform clear;clear.operation="clear";clear.fields=PatternNote;
+  auto next=prepareEffectTransform(doc,{{0,2,1,1,1}},clear);
+  check(next.preciseNotes.size()==2&&next.performance==before.performance&&next.signal==before.signal&&next.automation==before.automation,
+    "Cursor note clear removes only that row's precise notes, retaining all FX, graph lanes and automation");
+  doc.editNative(next,preparePatternTransform(doc,{{0,2,1,1,1}},clear));
+  auto cleared=cell;cleared.note=0;
+  check(doc.cell(0,2,1)==cleared&&doc.cell(0,2,2).note!=0,"Cursor note clear retains instrument, volume, effect and neighbouring channel");
+  doc.undo();check(doc.native()==before&&doc.cell(0,2,1)==cell,"One Undo restores cursor note and precise hits");
+  PatternTransform remove;remove.operation="deleteRows";remove.amount=1;remove.allowDataLoss=true;
+  const PatternRegion tail{0,2,62,1,1};next=prepareEffectTransform(doc,{tail},remove);
+  const auto track=before.tracks.at(1).id;
+  auto expected=before;
+  std::erase_if(expected.preciseNotes,[&](const auto &note){return note.track==track&&note.position/unit==2;});
+  for(auto &note:expected.preciseNotes)if(note.track==track)note.position-=unit;
+  for(auto &command:expected.performance.commands)if(command.track==track)command.position-=unit;
+  for(auto &command:expected.signal.commands)if(command.target==track)command.position-=unit;
+  check(next==expected,"Channel row deletion moves every extra FX, precise offset and channel graph command without touching other channels or envelopes");
+  const auto following=doc.cell(0,3,1),other=doc.cell(0,3,2),last=doc.cell(0,63,1);
+  doc.editNative(next,preparePatternTransform(doc,{tail},remove));
+  check(doc.cell(0,2,1)==following&&doc.cell(0,3,2)==other&&doc.cell(0,62,1)==last&&doc.cell(0,63,1)==Cell{},"Channel row deletion shifts ordinary fields and empties exactly that channel's tail");
+  doc.undo();check(doc.native()==before&&doc.cell(0,2,1)==cell&&doc.cell(0,63,1)==last,"One Undo restores the complete channel row edit");
+  doc.redo();check(doc.native()==expected&&doc.cell(0,2,1)==following,"Redo reapplies all native and ordinary fields together");
+}
 int main() {
 	try {
-		rowSplices();preciseClipboard();
+		rowSplices();preciseClipboard();cursorFieldAndChannelDelete();
 		nativeColumns();
 		Document doc;
 		put(doc, 0, 0, {49, 1, VOLCMD_VOLUME, 4, CMD_VIBRATO, 0x34});

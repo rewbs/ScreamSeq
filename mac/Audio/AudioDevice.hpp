@@ -100,6 +100,12 @@ public:
   bool pluginFailed() const { return plugins_ && plugins_->failed(); }
   bool pluginLatencyChanged() const noexcept { return plugins_ && plugins_->latencyChangePending(); }
   void refreshPluginLatencies(const NativeSong &);
+  std::unique_ptr<ScratchGestureLibrary> prepareScratchUpdate(const NativeSong &native) const {
+    return playing()&&renderer_?renderer_->prepareScratchUpdate(native):nullptr;
+  }
+  bool publishScratchUpdate(std::unique_ptr<ScratchGestureLibrary> &plan) noexcept {
+    return renderer_&&renderer_->publishScratchUpdate(plan);
+  }
   void updateMusicalAutomation(const NativeSong &native) {if(active()&&plugins_)plugins_->updateMusicalAutomation(native);}
 
   bool mixerControls(const std::vector<MixerControls> &controls) { return !active() || (plugins_ && plugins_->mixerControls(controls)); }

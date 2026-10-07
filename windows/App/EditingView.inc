@@ -19,6 +19,7 @@
             wcscpy_s(code,c.kind==K::PitchSet?L"BS":L"BL");swprintf_s(value,L"%+.3f",c.value);break;
         case K::NudgeForward:case K::NudgeReverse:
             wcscpy_s(code,c.kind==K::NudgeForward?L"NF":L"NR");swprintf_s(value,L"%.2f%%",100*c.value);break;
+        case K::Native:{const auto &info=Tracker::nativePatternCommand(c.native);return {wide(std::string(info.code)),L""};}
         case K::NoteCut:wcscpy_s(code,L"NC");swprintf_s(value,L"%04X",c.position%Tracker::performanceUnitsPerRow);break;
         }
         return {code,value};
@@ -46,6 +47,36 @@
             {"rowCount",s.at("endRow").get<unsigned>()-s.at("startRow").get<unsigned>()+1},
             {"startChannel",s.at("startChannel")},{"channelCount",s.at("endChannel").get<unsigned>()-s.at("startChannel").get<unsigned>()+1}});
     }
+    void clearPatternField() {
+        effectPrefix.clear();
+        if(column<3) {
+            edit("pattern.transform",{{"operation","clear"},{"pattern",patternIndex},{"startRow",row},{"rowCount",1},
+                {"startChannel",channel},{"channelCount",1},{"fields",Json::array({column==0?"note":column==1?"instrument":"volume"})}});
+            return;
+        }
+        const auto old=view->effect(patternIndex,row,channel,(column-3)/2);
+        if(!old)return;
+        Json command=nullptr;
+        if(column%2==0) {
+            using K=Tracker::PatternCommandKind;
+            command=ScreamSeq::PatternFields::command(*old);
+            if(old->kind==K::TrackerEffect)command["parameter"]=old->parameter & view->effectMasks[old->effect];
+            else {const auto &fields=gridCommandFields(old);if(!fields.empty()){
+                const auto &field=fields.at(selectedEffectField());Json reset=field.at("default");
+                // Dot retains the established zero-value behavior; bounded
+                // native selectors/durations reset to their catalog default.
+                if(field.at("key")=="value")reset=0;
+                if(field.at("type")=="integer"&&reset.is_number())reset=int64_t(reset.get<double>());
+                ScreamSeq::PatternFields::set(command,field,reset);
+            }}
+        }
+        edit("pattern.effect.set",{{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",(column-3)/2},{"command",command}});
+    }
+    void deleteChannelRow() {
+        effectPrefix.clear();
+        edit("pattern.transform",{{"operation","deleteRows"},{"pattern",patternIndex},{"startRow",row},
+            {"rowCount",patternRows()-row},{"startChannel",channel},{"channelCount",1},{"amount",1},{"allowDataLoss",true}});
+    }
     void transformPatternSelection(int id) {
         const auto s=selection();const bool rows=id==patternInsertRows||id==patternDeleteRows;
         Json params={{"pattern",patternIndex},{"startRow",s.at("startRow")},
@@ -61,7 +92,13 @@
         const int digit=key>='0'&&key<='9'?int(key-'0'):key>='A'&&key<='F'?int(key-'A'+10):-1;
         auto current=view->effect(patternIndex,row,channel,(column-3)/2);
         if(column%2==0) {
-            if(current && current->kind!=Tracker::PatternCommandKind::TrackerEffect) {openEffectEditor();return true;}
+            if(current && current->kind!=Tracker::PatternCommandKind::TrackerEffect) {
+                openInlineEffect();
+                if(effectInline&&effectInlineControl){wchar_t name[32]{};GetClassNameW(controls.at(effectInlineControl),name,32);
+                    if(_wcsicmp(name,L"Edit")==0&&((key>='0'&&key<='9')||key==VK_OEM_MINUS||key==VK_SUBTRACT))
+                        SendMessageW(controls.at(effectInlineControl),WM_CHAR,key==VK_OEM_MINUS||key==VK_SUBTRACT?'-':key,0);}
+                return true;
+            }
             if(digit<0)return false;
             const unsigned effect=current?current->effect:0,old=current?current->parameter:0;
             setTrackerEffect(effect,view->effectMasks[effect]?((old&0xf0)|digit):((old*16+digit)&255));return true;
@@ -77,8 +114,8 @@
             effectPrefix.clear();setTrackerEffect(entry.at("command"),mask?(old&~mask)|value:old);
             auto n=position();n["column"]=column+1;navigate(n);return true;
         }
-        for(auto code:{"PS","PL","BS","BL","NC","NF","NR"})if(candidate==code){effectPrefix.clear();openEffectEditor(candidate);return true;}
-        const bool prefix=std::any_of(view->commands.at("effect").begin(),view->commands.at("effect").end(),[&](const auto &entry){return entry.at("displayCode").template get<std::string>().starts_with(candidate);}) || candidate=="P" || candidate=="B" || candidate=="N";
+        for(const auto &entry:view->commands.at("native"))if(candidate==entry.at("displayCode").get<std::string>()){effectPrefix.clear();openEffectEditor(candidate);return true;}
+        const bool prefix=std::any_of(view->commands.at("effect").begin(),view->commands.at("effect").end(),[&](const auto &entry){return entry.at("displayCode").template get<std::string>().starts_with(candidate);}) || std::any_of(view->commands.at("native").begin(),view->commands.at("native").end(),[&](const auto &entry){return entry.at("displayCode").template get<std::string>().starts_with(candidate);});
         if(candidate.size()==1&&prefix){effectPrefix=candidate;effectPrefixRevision=view->session.revision;status=L"Effect "+wide(candidate)+L"_ / type the second character";return true;}
         effectPrefix.clear();
         // Single-letter entry remains available for source-format commands.
@@ -191,7 +228,7 @@
         documentOperation("flushPluginEditors",{{"force",true}});
         auto revision=view->session.revision;auto path=view->path;
         auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),towlower);
-        if(saveAs || path.empty() || (ext!=L".screamseq" && ext!=L".resonance")) path=chooseFile(true);
+        if(saveAs || view->session.document.value("requiresSaveAs",false) || path.empty() || (ext!=L".screamseq" && ext!=L".resonance")) path=chooseFile(true);
         if(path.empty()) return false;
         documentOperation("document.save",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}});
         status=L"Native project saved atomically";
@@ -212,10 +249,15 @@
     }
     void openFile() {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(!protectRecordingTake()) return;
         if(!protectUnsaved()) return;
         auto revision=view->session.revision;auto path=chooseFile(false);if(path.empty()) return;
+        if(!protectRecordingTake()) return;
         documentOperation("document.open",{{"expectedRevision",revision},{"path",utf8Path(path)},{"discard",true}});
         status=L"Opened "+path.filename().wstring();
+        const auto warnings=view->session.document.value("loadWarnings",Json::array());
+        if(!warnings.empty())status+=L" / "+std::to_wstring(warnings.size())+L" recovery warnings: "+wide(warnings.front().get<std::string>());
+        if(view->session.document.value("requiresSaveAs",false))status+=L" / Save a new copy to preserve the original";
     }
     void refreshChoosers() {
         if(!controls.contains(patternChooser)) return;

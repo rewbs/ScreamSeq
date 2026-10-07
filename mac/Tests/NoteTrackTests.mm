@@ -185,8 +185,11 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
     check([root[@"native"][@"version"] intValue] == 17, "Column features use native metadata v5");
     root[@"native"][@"version"] = @4;
     [[NSPropertyListSerialization dataWithPropertyList:root format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:path atomically:YES];
-    auto revision = session.automationRevision;
-    check(![session openPath:path error:&error] && [revision isEqual:session.automationRevision], "Reject column fields in legacy metadata atomically");
+    NSData *legacyBytes = [NSData dataWithContentsOfFile:path];
+    check([session openPath:path error:&error], "Recover known column fields from historical metadata");
+    check([[session snapshot:0][@"loadWarnings"] count] > 0 && [[session snapshot:0][@"requiresSaveAs"] boolValue], "Historical column metadata warns and protects its source");
+    check([layout isEqual:call(@"track.get", @{})[@"data"]] && [[session snapshot:0][@"cells"] isEqual:before[@"cells"]], "Historical recovery preserves independent column identities, grouping, mute and pattern cells");
+    check(![session savePath:path error:&error] && [[NSData dataWithContentsOfFile:path] isEqual:legacyBytes], "Historical recovery cannot overwrite the source project");
   }
   [NSFileManager.defaultManager removeItemAtPath:folder error:nil];
   std::cout << "PASS note tracks: stable grouping, atomic rejection, structural Undo, five-format native roundtrip, column mutes, unity audio at three rates and callback audit\n";

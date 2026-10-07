@@ -20,6 +20,45 @@ void graphEditingOperations() {
   const auto duplicate=f.api.invoke("graph.selection.duplicate",{{"graph",graph},{"nodes",{source,plugin}}});CHECK(duplicate.at("wouldChange")==true&&f.doc->native().signal.library[0].nodes.size()==6);
 }
 
+void groupDryMapDetachment() {
+  Fixture f;
+  const auto graph=f.api.invoke("graph.create",Json::object()).at("graph");
+  const Json plugin={{"format","Built-in"},{"classID","resonance.gainer.v1"}};
+  const auto a=f.api.invoke("graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",plugin}}).at("node");
+  const auto b=f.api.invoke("graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",plugin}}).at("node");
+  auto d=definition(f);const auto input=d.at("nodes")[0].at("id"),output=d.at("nodes")[1].at("id");
+  auto edge=[](const Json &source,const Json &target,unsigned out,unsigned in,double gain) {
+    return Json{{"source",source},{"target",target},{"output",out},{"input",in},{"gain",gain}};
+  };
+  d["audio"]=Json::array({edge(input,a,0,0,.5),edge(input,b,1,0,.2),
+    edge(a,b,0,0,.7),edge(a,output,0,0,.3),edge(b,output,0,1,.8)});
+  f.api.invoke("graph.update",{{"definition",d}});
+  const auto group=f.api.invoke("graph.group.create",{{"graph",graph},{"nodes",Json::array({a,b})}}).at("group");
+  auto mapping=[&](const Json &node,unsigned port) {
+    return Json{{"input",{{"source",input},{"target",node},{"output",port},{"input",0}}},
+      {"output",{{"node",node},{"port",0}}}};
+  };
+  f.api.invoke("graph.group.bypass",{{"graph",graph},{"group",group},{"bypass",true},
+    {"dryRoutes",Json::array({mapping(a,0),mapping(b,1)})}});
+  const auto before=f.doc->native();const auto revision=f.doc->revision;const auto history=f.doc->historyBytes();
+  const Json detach={{"graph",graph},{"nodes",Json::array({a,b})},{"heal",{{"incoming",0},{"outgoing",3}}}};
+  auto preview=detach;preview["dryRun"]=true;
+  CHECK(f.api.invoke("graph.nodes.detach",preview).at("wouldChange")==true);
+  CHECK(f.doc->native()==before&&f.doc->revision==revision&&f.doc->historyBytes()==history);
+  CHECK(f.api.invoke("graph.nodes.detach",detach).at("wouldChange")==true);
+  const auto after=f.doc->native();const auto &old=before.signal.library[0];const auto &changed=after.signal.library[0];
+  CHECK(changed.nodes==old.nodes&&changed.groups.size()==1&&changed.groups[0].bypass);
+  CHECK(changed.groups[0].nodes==old.groups[0].nodes);
+  CHECK(changed.groups[0].dryRoutes==std::vector<SignalGroupDryRoute>{old.groups[0].dryRoutes[1]});
+  CHECK(changed.audio.size()==4&&changed.audio[0]==old.audio[1]&&changed.audio[1]==old.audio[2]&&changed.audio[2]==old.audio[4]);
+  const auto &healed=changed.audio[3];
+  CHECK(healed.source==old.audio[0].source&&healed.target==old.audio[3].target&&healed.output==0&&healed.input==0);
+  CHECK(std::abs(healed.gain-.15)<1e-12);
+  f.doc->undo();CHECK(f.doc->native()==before); // One Undo restores both cables and both explicit maps.
+  f.doc->redo();CHECK(f.doc->native()==after);
+  CHECK(ScreamSeq::Project::decodeNativeMetadata(ScreamSeq::Project::encodeNativeMetadata(after))==after);
+}
+
 void groupBypassOperations() {
   Fixture f;const auto graph=f.api.invoke("graph.create",Json::object()).at("graph");
   const auto node=f.api.invoke("graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",{{"format","Built-in"},{"classID","resonance.gainer.v1"}}},{"insertEdge",0}}).at("node");

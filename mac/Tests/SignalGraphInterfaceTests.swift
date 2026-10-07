@@ -1,5 +1,27 @@
 import AppKit
 extension InterfaceTests {
+  static func graphSongSourceDepthChecks() throws {
+    let editor=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1000,height:700))
+    var song:[String:Any]=["plugins":[["id":"rack","name":"Compressor","slot":0]],
+      "mixer":["buses":[["id":"n1","name":"Track 1","kind":"track","inserts":["rack"]]]],
+      "groups":[["id":"n2","name":"Dynamics","nodes":["plugin:rack"]]],"songSources":[]]
+    var writes=[(String,[String:Any])](),revision=1
+    editor.onRequest={method,params,reply in
+      if method=="graph.song.source.add" {
+        writes.append((method,params));revision+=1
+        var source=params["source"] as! [String:Any];source["id"]="n3";song["songSources"]=[source]
+        var groups=song["groups"] as! [[String:Any]]
+        if params["parent"] as? String=="n2"{groups[0]["nodes"]=["plugin:rack","source:n3"]};song["groups"]=groups
+        reply(["result":["revision":"depth:\(revision)","data":["node":"n3"]]])
+      }else if method=="graph.get"{reply(["result":["revision":"depth:\(revision)","data":song]])}
+      else{reply(["error":["message":"No processor catalog needed"]])}
+    }
+    editor.load();editor.navigateProcessingGroup("n2")
+    editor.addSongSource(kind:"lfo",name:"LFO",position:NSPoint(x:420,y:160))
+    try require(writes.count==1 && writes[0].1["parent"] as? String=="n2","Adding a song source inside a processing group captures its parent in the single source-add transaction")
+    try require(editor.processingGroupID=="n2" && editor.selectedID=="source:n3" && editor.canvas.nodes.contains{$0.id=="source:n3"},"Source-add completion stays in the entered group with the new source visible and selected")
+    try require(editor.name.stringValue=="LFO","Source-add completion opens the new source controls without navigating to song root")
+  }
   static func graphAppendPlacementChecks() throws {
     let editor=SignalGraphEditor(frame:.zero)
     let song:[String:Any]=["mixer":["buses":[["id":"n4","name":"Track 4","kind":"track","output":"n9","inserts":["compressor"]],["id":"n9","name":"Master","kind":"master","output":""]]],"plugins":[["id":"compressor","name":"Compressor"]],"layout":[["node":"n4","x":40.0,"y":100.0],["node":"plugin:compressor","x":534.0,"y":100.0],["node":"n9","x":1200.0,"y":100.0]]]
@@ -144,6 +166,7 @@ extension InterfaceTests {
     try require(placement.canvas.nodes.first{$0.id=="b"}?.y==152,"An explicit musician position remains authoritative even when it overlaps another card")
   }
   static func signalGraphChecks() throws {
+    try graphSongSourceDepthChecks()
     try graphAppendPlacementChecks()
     try graphFollowerGestureChecks()
     try graphControlRefreshChecks()
@@ -691,11 +714,12 @@ extension InterfaceTests {
     let canvas=SignalCanvas(frame:NSRect(x:0,y:0,width:900,height:700))
     canvas.collectDrawStatistics=true
     func pixels(_ dirty:NSRect,in crop:NSRect)->Data {
-      let bitmap=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:Int(crop.width),pixelsHigh:Int(crop.height),bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0)!
+      let bitmap=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:Int(crop.width),pixelsHigh:Int(crop.height),bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:Int(crop.width)*4,bitsPerPixel:0)!
       NSGraphicsContext.saveGraphicsState();defer{NSGraphicsContext.restoreGraphicsState()}
       NSGraphicsContext.current=NSGraphicsContext(bitmapImageRep:bitmap)
       let context=NSGraphicsContext.current!.cgContext
       context.translateBy(x:-crop.minX,y:-crop.minY);context.clip(to:crop)
+      context.clear(crop)
       canvas.draw(dirty)
       return Data(bytes:bitmap.bitmapData!,count:bitmap.bytesPerRow*bitmap.pixelsHigh)
     }
@@ -718,6 +742,21 @@ extension InterfaceTests {
     frame.visualSize=NSSize(width:200,height:200);canvas.update([frame],edges:[])
     let border=NSRect(x:250,y:150,width:2,height:14)
     try require(pixels(canvas.bounds,in:border)==pixels(border,in:border),"Partial redraws include visual frame strokes outside the fill rectangle")
+    try require(canvas.isOpaque && canvas.opaqueAncestor === canvas,"The graph's opaque drawing contract stops ancestor redraw propagation at the canvas")
+    let originalAppearance=canvas.appearance
+    defer{canvas.appearance=originalAppearance}
+    for name:NSAppearance.Name in [.aqua,.darkAqua,.accessibilityHighContrastAqua,.accessibilityHighContrastDarkAqua] {
+      guard let appearance=NSAppearance(named:name)else{throw InterfaceFailure(message:"Missing supported graph appearance \(name)")}
+      canvas.appearance=appearance
+      var opaqueBackground=false,full=Data(),partial=Data()
+      appearance.performAsCurrentDrawingAppearance {
+        opaqueBackground=Theme.bg.alphaComponent==1
+        full=pixels(canvas.bounds,in:NSRect(x:0,y:0,width:400,height:350))
+        partial=pixels(border,in:border)
+      }
+      func allOpaque(_ data:Data)->Bool { !data.isEmpty && stride(from:3,to:data.count,by:4).allSatisfy{data[$0]==255} }
+      try require(opaqueBackground && allOpaque(full) && allOpaque(partial),"Full and partial graph redraws cover initially transparent pixels with alpha1, including translucent visual frames, in \(name)")
+    }
     print("PASS graph draw culling: cable-label overhang, frame stroke, reroutes/handles and skipped offscreen cards")
   }
 }
@@ -817,10 +856,11 @@ extension InterfaceTests {
     var method="",params=[String:Any](),calls=0
     editor.onRequest={m,p,r in method=m;params=p;calls+=1;r(["error":["message":"captured"]])}
     editor.connectPorts("n1","plugin:dist",out:0,input:0,modulation:false)
-    try require(method=="mixer.inserts.move" && params["plugins"] as? [String]==["dist","comp"] && params["target"] as? String=="n1" && params["expectedRevision"] != nil,"Track output to an effect input atomically moves the entire suffix onto that track")
+    try require(method=="mixer.sidechains.set" && params["plugin"] as? String=="dist" && params["input"] as? Int==0 && params["expectedRevision"] != nil,"Track output to an effect input adds a main contribution without moving the effect or its following inserts")
     let insert=editor.songConnections.firstIndex{$0["plugin"] as? String=="dist"}!
+    let beforeInsertRewire=calls
     editor.rewire(insert,source:"n1",target:"plugin:dist",out:0,input:0,modulation:false)
-    try require(method=="mixer.inserts.move" && params["plugins"] as? [String]==["dist","comp"],"Dragging the existing input endpoint has identical chain-move semantics")
+    try require(calls==beforeInsertRewire && editor.status.stringValue.contains("Move insert chain"),"A fixed insert cable never silently turns a handle gesture into a chain ownership move")
     editor.detachNodes(["plugin:dist"],positions:[("plugin:dist",810,390)],remove:false)
     try require(method=="mixer.inserts.detach" && params["plugins"] as? [String]==["dist"] && (params["positions"] as? [[String:Any]])?.first?["x"] as? Double==810 && params["expectedRevision"] != nil,"Option-dragging one song insert sends one captured-revision detach and layout transaction")
     let detachCalls=calls;editor.detachNodes(["plugin:dist","plugin:comp"],positions:[],remove:false)
@@ -865,8 +905,8 @@ extension InterfaceTests {
     editor.connectPorts("plugin:comp","plugin:comp",out:1,input:1,modulation:false)
     try require(calls==beforeInvalidSource && editor.status.stringValue.contains("itself"),"Direct plugin patching rejects a self-cycle before sending a mutation")
     editor.selectedID="plugin:comp";editor.useConnectedDetector();try require(method=="plugin.parameters.set" && (params["values"] as? [[String:Any]])?.first?["value"] as? Int==2,"Existing compressors expose a graph action to follow their connected detector")
-    editor.canvas.addingMainInput=true;editor.connectPorts("n1","plugin:comp",out:0,input:0,modulation:false);editor.canvas.addingMainInput=false
-    try require(method=="mixer.sidechains.set" && params["input"] as? Int==0,"Option-drag can sum an additional channel into an insert main input")
+    editor.connectPorts("n1","plugin:comp",out:0,input:0,modulation:false)
+    try require(method=="mixer.sidechains.set" && params["input"] as? Int==0,"A normal socket drag sums an additional channel into an insert main input")
     var patchedMixer=portSong["mixer"] as! [String:Any]
     var patchedBuses=patchedMixer["buses"] as! [[String:Any]];patchedBuses.append(["id":"n3","name":"Key","kind":"track","output":"n2"]);patchedMixer["buses"]=patchedBuses
     patchedMixer["sidechains"]=[["plugin":"comp","source":"n3","input":0,"gainDB":0]];portSong["mixer"]=patchedMixer;editor.update(portSong)
@@ -910,6 +950,12 @@ extension InterfaceTests {
     canvas.selectedEdge=nil;rewired=nil
     canvas.mouseDown(with:event(.leftMouseDown,b.portPoint(SignalCanvasPort(),output:false),.option));canvas.mouseUp(with:event(.leftMouseUp,c.portPoint(SignalCanvasPort(),output:true)))
     try require(connected?.0=="c" && connected?.1=="b" && rewired==nil,"Option-drag preserves existing cables and adds a source")
+    canvas.update([a,b,c],edges:[SignalCanvasEdge(source:"a",target:"b",label:"First"),SignalCanvasEdge(source:"c",target:"b",label:"Second")]);canvas.selectedEdge=0;connected=nil;rewired=nil
+    canvas.mouseDown(with:event(.leftMouseDown,a.portPoint(SignalCanvasPort(),output:true)));canvas.mouseUp(with:event(.leftMouseUp,c.portPoint(SignalCanvasPort(),output:false)))
+    try require(connected?.0=="a" && connected?.1=="c" && rewired==nil && canvas.edges.count==2,"A selected cable never steals its output-socket fan-out gesture or removes another input source")
+    canvas.mouseMoved(with:event(.mouseMoved,b.portPoint(SignalCanvasPort(),output:false)))
+    try require(canvas.toolTip?.contains("2 visible cables")==true && canvas.toolTip?.contains("Drag to add another connection")==true,"Occupied socket hover describes its cable count and how to add or explicitly reroute")
+    canvas.update([a,b,c],edges:[SignalCanvasEdge(source:"a",target:"b",label:"")])
     canvas.edges[0].amount=0;canvas.edges[0].amountRange = -1...1;canvas.edges[0].amountUnit="depth";canvas.selectedEdge=0
     let covered=SignalCanvasNode(id:"cover",title:"Cover",detail:"",kind:"audio",x:260,y:60)
     let withAmount=canvas.edges

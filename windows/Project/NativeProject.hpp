@@ -21,6 +21,9 @@ struct ProjectState {
     uint64_t pluginRevision=0,savedPluginRevision=0; // Session history, not persisted musical data.
 	std::filesystem::path path;
 	std::vector<std::string> issues;
+	std::vector<std::string> loadWarnings;
+	bool requiresSaveAs=false,recoveryLossy=false;
+	std::filesystem::path loadSourcePath;
 };
 struct OpenedProject {
 	std::unique_ptr<Tracker::Document> document;
@@ -35,6 +38,8 @@ ProjectState newProjectState(const Tracker::Document &document);
 void invalidateRecoveryTake(ProjectState &state);
 nlohmann::json nativeProjectTree(Tracker::Document &document,const ProjectState &state);
 std::vector<std::byte> serializeNativeProject(Tracker::Document &document,const ProjectState &state);
+// Also used by API dry runs: overwrite:true never bypasses source protection.
+void validateProjectSaveDestination(const ProjectState &state,const std::filesystem::path &path);
 void saveNativeProject(Tracker::Document &document,ProjectState &state,const std::filesystem::path &path,bool overwrite);
 bool requiresHostedPlayback(const Tracker::Document &document,const ProjectState &state);
 }

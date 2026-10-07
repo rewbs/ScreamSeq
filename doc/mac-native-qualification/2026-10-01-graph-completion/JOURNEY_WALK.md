@@ -380,3 +380,183 @@ walk above. The [gallery](index.html) preserves 22 checkpoint-labeled images.
 The later form, instrument navigation/copy selection and group-detach fixes have
 automated regression coverage; their remaining native visual rechecks are
 explicitly pending. No final all-journeys visual pass is claimed.
+
+
+## Continued native rewalk — 7 October, 6bdb checkpoint
+
+This continuation uses the separately signed `ScreamSeq Menu QA` process,
+PID 2223, fingerprint
+`6bdb96fe33cf65035e01f201caa5c48ddb1f53052320e80ddd2224048f40962f`.
+The musician's PID 65969 was not touched. Audio settings explicitly selected
+BlackHole 2ch, 48 kHz/128; the system default was unchanged. These are functional
+journeys, not display-performance measurements. Evidence is in
+`bin/mac-scratch/qualification/remaining-graph-journeys/`.
+
+API setup is separate: the private fixture already contained sample notes and a
+Track 1 compressor. Later, `13-recorded-api-setup.json` inserted two recorded
+Threshold points; `16-instrument-api-setup.json` converted the sample song to
+instruments, enabled instrument 1's volume envelope, added the retained private
+VST test instrument as instrument 5 and assigned the exported graph to instrument
+1. These setup operations do not count as user interactions or native UI passes.
+
+| Journey | Before evidence | Actual 6bdb walk: actions / switches / redundant confirms | Outcome |
+|---|---|---|---|
+| Main and detector fan-out | Existing one-drag successful path | 1 / 0 / 0 | Track 2 output dragged to Compressor Detector; its existing main output retained. |
+| Fresh group, name, dry boundary and export | Export alone 6 / 1 / 0; full path pending | 10 / 1 graph-depth / 0 | Select Compressor, Ctrl-G, name, context Bypass, choose Main dry path, M restore, Cmd-K export. The dry-path choice is a meaningful routing decision. |
+| Create LFO, target, range, mute and return | Partial earlier source-only path | 25 observed including failed attempt/workaround / 2 graph-depth + 2 panel / 0 | Active-group creation placed LFO outside group and hid it. After returning/ungrouping, drag source onto Threshold, edit −0.1/+0.1, M mute/unmute, Inspect and Back all worked. Clean creation rewalk remains pending after the focused fix. |
+| Recorded point edit/detail/history | Table value changed but detail stayed stale | 9 / 2 panel + 1 floating-placement / 0 | Open activity, Recorded points, float, edit second point −30→−27, Undo −30, Redo −27; selected detail follows each value. Back returns to the same compressor. |
+| Filtered instrument graph and exact copy | Filter hid selected instrument; observation borrowed another copy | 5 core actions + 1 query correction / 1 graph-depth / 0 | Cmd-K Instrument graphs I1 reveals hidden I1, clears Track 8 filter; double-click Track 1 use automatically observes Warm pulse · Channel 1; Song restores root selection. The two filter clicks are setup. |
+| Melody, input instrument/octave, bounded audition and return | No full prior count | 12 successful actions + 1 empty-instrument attempt / 2 panel / 0 | Seven notes on channel 5, input down once, octave up once, Instruments, Control-Space, Command-Option-1 returns to row 7/channel 5. The initial sample-only fixture correctly had no tracker instrument to preview. |
+
+For group/export, the selected processor had Main and Detector ingress and one
+output. The saved reusable graph preserves both inputs and its explicit Main dry
+mapping; export opens an independent library definition. Screenshots
+`03-group-dry-bypass.png` and `04-exported-group.png`, with matching graph and
+transport JSON, qualify this actual fresh boundary path.
+
+LFO screenshots `06-lfo-range.png`, `07-lfo-muted.png`, `08-lfo-provenance.png`
+and `09-lfo-return.png` qualify the successful portions, not the failed initial
+creation. The new source was n23 and the existing group n17 did not contain it.
+The narrow correction adds optional `parent` to `graph.song.source.add` so source,
+initial connection and group membership commit together. Shared, Mac session and
+full AppKit tests passed; a rebuilt native rewalk is still required.
+
+`14-recorded-inline-detail.png` and `15-recorded-redo-detail.png` show the corrected
+selected detail next to the inline table value. Screenshots
+`17-filtered-instrument-bridge.png` and `18-instrument-copy-observed.png` show the
+automatic reveal and exact copy selection that failed on the prior immutable
+checkpoint. The latter breadcrumb is Track 1 → I1 Warm pulse → Detector dynamics.
+
+Following API instrument creation, reopening Instruments at the unchanged cursor
+showed an empty stale picker, despite document.get containing five instruments.
+The panel menu's Inspect editing cursor refreshed it immediately. This is a
+separate confirmed refresh defect; the target-follow token used only pattern,
+row and channel. After this explicit refresh, actual sample and VST instrument
+choices appeared; ordinary note keys reached InstrumentEditor and opened audition
+audio, and Command-Option-1 retained row 7/channel 5 and the selected new-note
+instrument. `19-instrument-preview.png`, `20-plugin-instrument-return.png` and
+transport JSON preserve that limited observation. A quick synthetic key tap does
+not qualify sustained envelope-cursor motion or audible preview quality.
+
+All nine retained playback checkpoints through the recorded edit report playing,
+audio-active, Loop on, zero overruns, fault=false, pluginFailure=false and stable
+routing plans. The later two audition checkpoints are intentionally stopped song
+transport with audio-active preview. These are sampled observations, not an
+uninterrupted trace. The private fixture was saved as `Remaining graph
+journeys.screamseq`; PID 2223 was explicitly closed before the next performance
+capture.
+
+Remaining final rechecks: active-group LFO creation after its fix; asset catalogue
+refresh after its fix; branched-group detach/dry restoration with endpoint history;
+confirmed overload diagnosis; working-zoom port readability; and the latest
+scratch Return/Play stable-target regression. Windows hardware/device checks
+remain deferred by the user.
+
+
+## Continued native rewalk — 7 October, 410c7f77 checkpoint
+
+The isolated `ScreamSeq Graph Final QA` copy (PIDs 12971 and 13823, separated by
+an explicit profiler handoff) used source fingerprint
+`410c7f77d73a8732a6999b81a5207d9adf9572f1794f0c77c3c6d2a10a364c65`.
+BlackHole 2ch was verified again before the bounded overload test
+(`34-blackhole-device.png`). The musician process remained untouched. These
+functional walks ran alongside compilation at times and make no pacing claim.
+
+| Journey | Prior state | Actual native actions / switches / redundant confirms | Outcome |
+|---|---|---|---|
+| Create source inside active group, connect, range, mute, Inspect/Back | 25-action workaround above | 13 / 2 panel / 0, starting inside group | New LFO n38 stays inside n30, selected and visible; drag to Threshold, set −0.05/+0.05, mute/unmute and Inspect/Back retain group context. An additional Undo/Redo pair proves source+membership are one history action. |
+| Follow new-note instrument at unchanged empty cursor | Same-cursor target remained stale | 3 / 1 panel / 0 | Instruments, focus pattern, Option-Down changes input 1→2 and inspector 2 without moving row 7/channel 5. |
+| Refresh pinned asset catalogue and retain draft | Empty stale picker after API creation | 2 reopen actions, then 3 picker-selection actions / 1 panel / 0 | API fixture edits rename/add instruments; pinned target 2 remains, choices refresh; selecting 1 loads 1. An uncommitted sustain field survives another catalogue rename. A remaining caption mismatch was reproduced and corrected separately below. |
+| Scratch captured-row playback and return | Latest stable-target native check pending | 2 / 1 focus return / 0, editor already open | Play from row uses captured P0/R0/CH1; Return focuses that cell's FX1 command. |
+| Explicit two-output group dry map | Pending | 6 / 0 panel / 0 | Select group, M, choose A ingress for A output and B ingress for B output, M restores processing. The two choices express musical routing intent. |
+| Repatch cable endpoint and history | Pending | 3 core + 2 history actions / 0 / 0 | Select Track 3→Master wire, choose To:Track 4; change is immediate. Undo restores Master, Redo restores Track 4. One extra Undo restores fixture. |
+| Multi-output port readability and patching | Pending working-zoom check | 5 Find-node navigation + 4 patch actions / 0 / 0 | All 32 outputs have distinct sockets; Notes differs from audio. Right-click Aux 16→Connect→Track 8 patches it and automatically activates that output. Undo restores original route. |
+| Diagnose and correct a real overload | Earlier no-overload fixture inconclusive | 26 observed / 1 graph-depth / 0 | Find overload reveals the compressor's overloaded detector. Exact cable scope, Show cable source, inline gain change and Clear latches resolve it. Five observed actions inspected a node's default output and corrected a mistaken wire selection; the clean route is 21 actions. |
+
+The fresh LFO creation screenshots are `25-grouped-lfo-visible.png`,
+`26-grouped-lfo-muted.png`, `27-grouped-lfo-provenance.png` and
+`27-grouped-lfo-return.png`; accompanying graph/Undo/transport JSON identifies
+source n38 and group n30. API fixture construction in
+`21-final-fixture-api-setup.json` is not included in the native action count.
+
+`22-asset-active-input.png`, `23-asset-pinned-catalogue.png` and
+`24-asset-draft-retained.png` qualify the catalogue/follow changes. The picker
+selected instrument 1 while its pinned panel caption still said Instrument 2
+(`24-asset-caption-mismatch.png`). The subsequent narrow fix updates captions
+from the actual successfully loaded editor index, preserving pin and draft
+state; rebuilt native confirmation remains pending at this paragraph's checkpoint.
+
+The first branched detach attempt used two unconnected parallel processors;
+the engine correctly rejected it without mutation. API-only fixture preparation
+then added internal A→B gain 0.25, making a connected selected subgraph. With
+explicit A/B dry maps, native Detach chose Input→A and A→Collector but rejected
+with “A group dry map must cover every outgoing audio boundary exactly once.”
+This is a confirmed dry-map repair defect, preserved in
+`31-connected-branch-detach.png` and `31-connected-detach-rejected-graph.json`.
+The root's shared fix and targeted regression must be rewalked in its later
+build; no success is claimed on 410c7f77. Expected topology removes only the two
+chosen crossing edges, adds Input→Collector gain 0.5, retains the B branch and
+internal A→B cable, and drops only the obsolete A dry mapping.
+
+`32-endpoint-redo.png` and three graph snapshots prove real endpoint history,
+not only dropdown text. `33-all 32-output-ports.png` and
+`33-aux16-connected.png` show the dense instrument ports; the latter's graph
+snapshot proves output 16 routing. The auxiliary connection was removed by Undo.
+The long bus descriptions ellipsize at the fit-to-node zoom; the bus numbers and
+separate sockets remain visible, and the target chooser supplies the full label.
+
+For overload, API-only setup adds two built-in gainers at  +12 dB each to Track 2.
+This sends only to BlackHole. `graph.signal.get` measured the second processor
+output and compressor detector at **1.26753354** with clip latches. Native Find
+next overload located the detector. Selecting its cable and opening Scope read
+that exact contribution: 4096 frames at 48 kHz, zero dropped frames and zero invalid
+samples (`34-overload-exact-scope.json/png`). Show cable source opened the upstream
+gainer's controls; editing +12→−12 dB immediately reduced its output to
+**0.07891299** and detector peak to **0.07997221**. Clear overload indicators and
+Find next overload then reported no latched ports; API agreed zero latches.
+`34-overload-signals-before.json`, `35-overload-signals-after.json` and
+`35-no-overloads.png` preserve both states. No audible output test is claimed.
+
+All retained playback snapshots for these actions show playing/audio-active,
+Loop on, no engine/plugin failure and zero overruns. Snapshots are not an
+uninterrupted monitor. The private fixture was saved as `Final graph
+journeys.screamseq` and PID 13823 closed explicitly before the final build rewalk.
+The remaining native acceptance checks at this checkpoint are the repaired
+explicit-dry detach with Undo/Redo and corrected pinned asset caption.
+
+
+## Final native closure — 7 October, 7bb842e8
+
+The repaired build fingerprint
+`7bb842e843933e64f6ae42bfbb59fecd69b6b782983d0cbd59024d9849e10b43`
+was copied and separately signed as `ScreamSeq Graph Closure QA`, PID 19167.
+BlackHole was explicitly selected before playback; the musician's process and
+system defaults remained unchanged. No API mutations were used in these final
+journeys: the already-saved disposable fixture supplied the branch and dry maps.
+
+- **Pinned caption:** pin the Instrument 1 panel, choose Instrument 2 in its picker
+  (3 actions, no panel switch or extra confirm). Caption, picker and envelope now
+  consistently identify Instrument 2; the pin remains set.
+  `36-final-pinned-caption.png` records the corrected result.
+- **Connected branched detach:** starting in the reusable graph, select the group,
+  Cmd-K → Detach and reconnect, then choose Input→A and A→Collector
+  (6 actions, no panel switch or redundant confirm). It now commits the intended
+  Input→Collector gain 0.5 bridge, retaining Input→B, B→Collector, A→B gain 0.25,
+  group membership and the exact B dry map. The obsolete A dry map is removed.
+  Two further history actions restore the entire original library data on Undo
+  and the entire detached library data on Redo, compared from read-only API
+  snapshots. M then bypasses successfully using the retained B map; another M
+  restores processing. `37-final-detached.png`, `38-final-detach-undo.png` and
+  `37/38-final-detach-*.json` record this final pass.
+- **Scratch captured navigation:** Play from row and Return to row (2 actions,
+  one focus return, no confirmation) use P0/R0/CH1/FX1 as displayed, with Return
+  focusing column 4 rather than following playback. `39-final-scratch-play.png`,
+  `39-final-scratch-return.png` and matching context/transport JSON record it.
+
+Both retained transport samples show playing/audio-active, zero overruns,
+fault=false and pluginFailure=false. `final-native-closure-summary.json` records
+exact library history equality and the build/process/device boundary. The fixture
+was saved and PID 19167 explicitly closed, releasing UI for the independent quiet
+performance qualification. This completes the native functional checks named at
+the preceding checkpoint; physical Windows/device checks and display pacing are
+separate qualifications, not implied by these passes.

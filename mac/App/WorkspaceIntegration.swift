@@ -77,8 +77,17 @@ extension AppController {
       if id=="samples" {self.editorMode=1} else if id=="instruments" {self.editorMode=2} else if id=="plugins" {self.editorMode=3}
       self.followWorkspacePanel(id,force:false,opening:true)
     }
+    // Observe menus before the first user event, including the interval between
+    // choosing an item and AppKit dispatching its action after menu dismissal.
+    KeyboardSettings.installInputContext()
     workspaceInputMonitor=NSEvent.addLocalMonitorForEvents(matching:[.keyDown,.keyUp]){[weak self] event in
       guard let self else{return event}
+      // The menu owns type-selection and activation until its action is sent.
+      // Keep key-up delivery and explicit modifier shortcuts on their usual paths.
+      if KeyboardSettings.menuFocus.ownsUnmodifiedKey(event) {
+        KeyboardSettings.traceInput("workspace.key.menu-owned",event:event)
+        return event
+      }
       if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.sequences.handle(event){return nil}
       if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.handleAdditionalShortcut(event) { return nil }
       if self.handlePlaybackKey(event) || self.handleInspectorNote(event) { return nil }
@@ -105,7 +114,8 @@ extension AppController {
         let menu = ContextActions.controls(in: panel.content, title: panel.title)
         ContextActions.appendMenu(panel.actionMenu(), to: menu)
         return menu
-      } + [ContextActions.controls(in: self.orderEditor, title: "Arrangement")]
+      } + [ContextActions.controls(in: self.orderEditor, title: "Arrangement")] + (self.scratchGestureWindow?.isVisible==true ? self.scratchGestureWindow?.contentView.map{[ContextActions.controls(in:$0,title:"Scratch phrases")]} ?? []:[])
+        + (self.sampleRecordingWindow?.isVisible==true ? self.sampleRecordingWindow?.contentView.map{[ContextActions.controls(in:$0,title:"Record sample")]} ?? []:[])
     }
     commandPalette.collect()
     for tabs in [dock.right,dock.bottom,dock.secondary] {
@@ -169,8 +179,13 @@ extension AppController {
       if !force && (id=="samples" ? sampleEditor.hasDraft : instrumentEditor.hasDraft) {panel.target.stringValue="Draft held · "+panel.target.stringValue.replacingOccurrences(of:"Draft held · ",with:"");return}
       let cell=model.cell(position.row,position.channel),instrument=cell[1]>0 ? Int(cell[1]) : patternView.instrument
       let sample=instrument
-      let token="asset:\(position.pattern):\(position.row):\(position.channel)"
-      guard force || workspaceContextTokens[id] != token else{return};workspaceContextTokens[id]=token
+      let token=WorkspaceAssetContext.token(panel:id,model:model,row:position.row,channel:position.channel,input:patternView.instrument)
+      guard force || workspaceContextTokens[id] != token else{
+        // Reopening is an explicit request to inspect fresh data. Keep a picker-
+        // selected target when the writing cursor has not moved.
+        if opening {refreshWorkspaceAsset(id)}
+        return
+      };workspaceContextTokens[id]=token
       if id=="samples" {
         if !model.instruments.isEmpty {
           handleAutomation("instrument.get",params:["instrument":instrument]){[weak self] reply in

@@ -332,6 +332,12 @@ void insertSignalNodes(SignalDefinition &definition,const std::vector<uint64_t> 
   next.audio=std::move(audio);compileSignal(next);definition=std::move(next);
 }
 void detachSignalNodes(SignalDefinition &definition,const std::vector<uint64_t> &ids,bool remove,std::optional<SignalHealPath> heal) {
+  // A detach may remove a group's outgoing boundary. Preserve its remaining
+  // explicit choices, but never turn a stale saved map into a valid edit by
+  // pruning it before checking the original graph.
+  std::map<uint64_t,std::vector<SignalGroupDryRoute>> savedDryMaps;
+  for(const auto &group:definition.groups)if(!group.dryRoutes.empty())
+    savedDryMaps.emplace(group.id,resolvedSignalGroupDryRoutes(definition,group.id,group.bypass));
   auto next=definition;
   const std::set<uint64_t> selected(ids.begin(),ids.end());
   require(!selected.empty()&&selected.size()==ids.size()&&selected.size()<=64,"Select 1–64 distinct processors or modulation sources");
@@ -383,6 +389,20 @@ void detachSignalNodes(SignalDefinition &definition,const std::vector<uint64_t> 
     std::erase_if(next.audio,[&](const auto &e){return selected.count(e.source)||selected.count(e.target);});
     std::erase_if(next.modulation,[&](const auto &e){return selected.count(e.source)||selected.count(e.target);});
     pruneSignalGroups(next);
+  }
+  for(auto &group:next.groups)if(const auto saved=savedDryMaps.find(group.id);saved!=savedDryMaps.end()) {
+    const auto boundary=signalGroupBoundary(next,group.id);
+    std::vector<SignalGroupDryRoute> maps;
+    for(auto map:saved->second) {
+      if(std::find(boundary.outputs.begin(),boundary.outputs.end(),map.output)==boundary.outputs.end())continue;
+      if(boundary.inputs.empty())map.input={};
+      else require(std::find(boundary.inputs.begin(),boundary.inputs.end(),map.input)!=boundary.inputs.end(),
+        "Detaching removes a selected dry input from a surviving group output; choose its dry path explicitly");
+      maps.push_back(map);
+    }
+    // An emptied explicit map must not silently infer a different new path.
+    require(maps.size()==boundary.outputs.size(),"Detaching creates a new group boundary; choose its dry path explicitly");
+    group.dryRoutes=std::move(maps);
   }
   compileSignal(next);definition=std::move(next);
 }

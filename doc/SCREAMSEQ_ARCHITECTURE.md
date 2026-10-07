@@ -32,6 +32,22 @@ Sample-instrument graphs are prepared independently per instrument/raw channel a
 
 The current native project wrapper is a versioned binary property list containing an exact song snapshot, metadata and plugin state. Metadata and container versions are separate. `windows/Project/` implements the compatible portable codec and preservation-aware atomic saves. Plugin recipes use stable class identity; local paths are resolution hints. AU remains macOS-only. Missing platform plugins preserve opaque state and reject playback preparation rather than being replaced silently.
 
+## Typed native pattern commands
+
+`NativePatternCommands` defines stable native operation IDs and an ordered field catalog with types, units, ranges, defaults and scope. `PatternCommandKind::Native` stores one operation plus eight bounded numeric argument slots; both APIs and metadata expose named parameters, including string choices and boolean switches. The existing seven precise command kinds and tracker byte commands retain their representation. Metadata stays at version 17 during this unreleased extension; readers that do not know the new kind reject it.
+
+`NativePatternRuntime` prepares sample-voice controls and precise note actions; `NativeTimingRuntime` prepares tempo and row-length events against the shared musical clock. Native fields do not reuse tracker effect memory. Numeric sample controls do not write opaque plugin polyphonic state. Plugin parameter/bend commands retain their existing host protocols, and note actions use normal instrument note delivery. The complete legacy-family mapping and discrete/import boundaries are in [Native pattern precision map](NATIVE_PATTERN_PRECISION.md).
+
+Both native grids consume the descriptor catalog. Multiple visible parameter slots share the same draw/hit/focus geometry, with column widths calculated from the current pattern. Raw common onset/duration values remain 65536 units per row; beats are the default display and rows are optional, converted with the pattern's actual rows-per-beat signature. A field edit preserves untouched raw values and the captured cell/revision, so formatting and unit switching cannot silently change another parameter.
+
+## Scratch phrase playback
+
+`editor/ScratchGesture.*` defines the bounded, song-local paired motion/fader library and factory starting gestures. `NativePatternOp::Scratch` (SK) and `ScratchStop` (SX) append to the existing numeric operation enum. The named-parameter catalog drives inline editing on both platforms. `ScratchRuntime` compiles stable pattern/track lookups on the control owner, captures the main sample voice's note generation and cue, and publishes absolute sample positions and fader gains through fixed arrays. Guarded `soundlib/Fastmix.cpp` code uses the retained resampler and physical sample bounds. NNA/preview/plugin voices do not inherit the state.
+
+The native metadata17 `scratchGestures` array is optional on read and canonical on save. A missing old array is an empty library, not data loss. File recovery isolates malformed phrases before dependent pattern commands; canonical saves and mutations remain strict. Pattern clipboard payloads carry used definitions and remap collisions atomically. Mac and Windows implement `scratch.gestures.get/set/remove` with revision guards, no-op detection and unified history. A prepared `ScratchGestureLibrary` handoff uses `RealtimeTransition`, preserves active phase/cue, and retires old storage on the control owner. Phrase curve changes and their Undo/Redo can run during playback; structural pattern-event edits retain the existing transport behavior.
+
+The native Mac scratch editor shares `AutomationCanvas` and the formula workbench; the Windows editor uses Win32 controls and Direct2D paired curves. Optional canvas units/endpoint limits preserve the normal automation editor's defaults. Scratch formula previews use `scratchBeats` so formula beat variables match the runtime cycle duration. `scratch.gestures.clone` optionally replaces one captured SK reference in the same history transaction. Captured navigation uses stable pattern/track identities; resolving Return or Preview does not rebase a guarded pattern mutation. See [Scratch phrases](SCREAMSEQ_SCRATCH_PHRASES.md) for musical semantics and boundaries.
+
 ## Build and qualification
 
 Windows: `./windows/build.ps1 -Architecture ARM64 -BuildDirectory bin/windows-dev -Test`.
@@ -92,10 +108,13 @@ UI creation then assigns the new slot as the next edit in unified chronological 
 
 ## Unified pattern FX (current native format)
 
-The sole native project format is outer plist version 6 / native metadata 17.
-Historical native wrapper, metadata and RSONGS1 migrations are removed. Original
-OpenMPT module loading remains. Earlier version references in this document are
-feature history, not accepted alternative encodings.
+Canonical saves use outer plist version 6 / native metadata 17. File opening
+recovers incompatible wrappers and metadata best effort, warns about converted,
+ignored or omitted data, and protects the original with Save a copy. Required
+embedded song/snapshot decoding remains bounded and atomic; a corrupt core
+cannot be recovered by inventing song data. Mutation and canonical-save
+validators remain strict. Legacy NF/NR row-unit durations convert to beats using
+the embedded pattern signature. Original OpenMPT module loading remains.
 
 Every channel exposes 1–8 equal FX columns. `PatternCommandKind::TrackerEffect`
 is kind 5, with source-format `effect` / `parameter` bytes. Columns are zero-based;

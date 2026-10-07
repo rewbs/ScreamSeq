@@ -199,6 +199,9 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     removeButton=ActionButton("Remove"){[weak self] in self?.remove()}
     previewButton=ActionButton("Check edit"){[weak self] in self?.apply(dryRun:true)};applyButton=ActionButton("Apply"){[weak self] in self?.apply(dryRun:false)}
     repeatButton=ActionButton("Fill to row end"){[weak self] in self?.makeRetriggers()}
+    // These secondary controls change availability while following rows. The
+    // native outlined bezel avoids rebuilding the heavier rounded material.
+    for button in [removeButton!,repeatButton!] {button.bezelStyle = .texturedRounded}
     for (view,label) in [(offset,"Note offset"),(instrument,"Instrument"),(velocity,"Volume / velocity"),(parameter,"Effect parameter (hex)"),(repeatCount,"Retrigger count"),(endVolume,"Last retrigger volume")] {view.setAccessibilityLabel(label)}
     units.setAccessibilityLabel("Offset units");snap.setAccessibilityLabel("Timeline snap");effect.setAccessibilityLabel("Selected hit effect")
     for field in [instrument,velocity,repeatCount,endVolume,parameter] {field.fixed(width:56)}
@@ -247,7 +250,7 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
       return
     }
     guard let index=editingRow,saveSelectedFields() else{autoSave?.cancel();return}
-    table.reloadData(forRowIndexes:IndexSet(integer:index),columnIndexes:IndexSet(integersIn:0..<table.numberOfColumns))
+    refreshVisibleCells(row:index)
     syncTimeline();showOffsetHint();scheduleSave()
   }
   func control(_ control:NSControl,textView:NSTextView,doCommandBy selector:Selector)->Bool {
@@ -327,11 +330,7 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     // Moving the pattern cursor changes the note, not the command catalogue.
     // Rebuilding every native menu item here also invalidates the inspector.
     let catalog=items as NSArray
-    if effectCatalog?.isEqual(catalog)==true {
-      // A blank row must not inherit the previously inspected hit's effect.
-      if effect.indexOfSelectedItem != 0 {effect.selectItem(at:0)}
-      changeEffect();return
-    }
+    if effectCatalog?.isEqual(catalog)==true {return}
     effectCatalog=catalog
     effects=items.map(PatternCommand.init)
     effectValues=items.map{($0["allowedParameters"] as? [Int]).map(Set.init)}
@@ -347,8 +346,8 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     let sameTarget=revision != nil && capturedPattern==context.0.pattern && capturedRow==context.1 && capturedChannel==context.2
     let previousSelection=sameTarget ? editingRow.flatMap{draft.indices.contains($0) ? PreciseNote(draft[$0]):nil}:nil
     autoSave?.cancel();inlineInvalid=false
-    capturedPattern=context.0.pattern;capturedRow=context.1;capturedChannel=context.2;rowsPerBeat=max(1,context.0.rowsPerBeat);instrument.stringValue=String(context.3);moveLegacyEffect=false
-    location.stringValue="Pattern \(capturedPattern) · Row \(capturedRow) · Channel \(capturedChannel+1) · \(rowsPerBeat) rows/beat"
+    capturedPattern=context.0.pattern;capturedRow=context.1;capturedChannel=context.2;rowsPerBeat=max(1,context.0.rowsPerBeat);setText(instrument,String(context.3));moveLegacyEffect=false
+    setText(location,"Pattern \(capturedPattern) · Row \(capturedRow) · Channel \(capturedChannel+1) · \(rowsPerBeat) rows/beat")
     pending=true;revision=nil
     request("pattern.notes.get",["pattern":capturedPattern]){[weak self] reply in
       guard let self else{return};self.pending=false
@@ -365,9 +364,15 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
       }
       let retained=previousSelection.flatMap {old in self.draft.firstIndex {let e=PreciseNote($0);return e.position==old.position && e.note==old.note}}
       self.refreshDraft(selecting:retained ?? (self.draft.isEmpty ? nil:0))
-      if self.draft.isEmpty {self.offset.stringValue="0";self.velocity.stringValue="127";self.note.selectItem(withTag:61)}
-      if !sameTarget {self.endVolume.stringValue=self.velocity.stringValue};self.originalDraft=self.draft;self.originalFields=self.fieldValues
-      self.status.stringValue=self.moveLegacyEffect ? "Editing will move the ordinary note and its effect together." : "\(self.draft.count) hits · changes save automatically · Undo restores each edit.";self.controls()
+      if self.draft.isEmpty {
+        self.setText(self.offset,"0");self.setText(self.velocity,"127");self.select(self.note,tag:61)
+        // Reset only blank targets, rather than temporarily clearing every
+        // selected hit's effect before immediately selecting it again.
+        self.select(self.effect,index:0);self.setText(self.parameter,"00")
+        self.setText(self.effectHint,self.effects.first?.hint ?? "");self.showOffsetHint()
+      }
+      if !sameTarget {self.setText(self.endVolume,self.velocity.stringValue)};self.originalDraft=self.draft;self.originalFields=self.fieldValues
+      self.setText(self.status,self.moveLegacyEffect ? "Editing will move the ordinary note and its effect together." : "\(self.draft.count) hits · changes save automatically · Undo restores each edit.");self.controls()
     }
     // The dock reads the current pattern synchronously from its snapshot.
     // Disable controls only if a remote read actually remains outstanding;
@@ -401,10 +406,35 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     timeline.events=draft.map(PreciseNote.init);timeline.selected=editingRow;timeline.row=capturedRow;timeline.rowsPerBeat=rowsPerBeat;timeline.needsDisplay=true
   }
   private func refreshDraft(selecting index:Int?) {
-    updatingTable=true;editingRow=nil;table.reloadData()
-    if let index,draft.indices.contains(index) {table.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)} else {table.deselectAll(nil)}
+    updatingTable=true;editingRow=nil
+    // Following a row normally changes values, not the table's structure.
+    // Retain the native cells and their backing layers instead of tearing down
+    // the entire AppKit table on every cursor movement or timeline drag.
+    if table.numberOfRows != draft.count {table.noteNumberOfRowsChanged()}
+    refreshVisibleCells()
+    let selected=index.flatMap{draft.indices.contains($0) ? $0:nil}
+    if let selected {
+      if table.selectedRow != selected {table.selectRowIndexes(IndexSet(integer:selected),byExtendingSelection:false)}
+    } else if table.selectedRow != -1 {table.deselectAll(nil)}
     updatingTable=false;loadSelectedFields();syncTimeline()
   }
+  private func refreshVisibleCells(row:Int?=nil) {
+    let visible=table.rows(in:table.visibleRect)
+    guard visible.location != NSNotFound else{return}
+    let first=max(0,visible.location),end=min(draft.count,NSMaxRange(visible))
+    guard first<end else{return}
+    for index in first..<end where row==nil || row==index {
+      let event=PreciseNote(draft[index])
+      for (column,item) in table.tableColumns.enumerated() {
+        guard let field=table.view(atColumn:column,row:index,makeIfNecessary:false) as? PreciseNoteCell,field.currentEditor()==nil else{continue}
+        setText(field,cellText(event,item.identifier.rawValue))
+        if field.textColor != Theme.text {field.textColor=Theme.text}
+      }
+    }
+  }
+  private func setText(_ field:NSTextField,_ value:String){if field.stringValue != value {field.stringValue=value}}
+  private func select(_ popup:NSPopUpButton,tag:Int){if popup.selectedTag() != tag {popup.selectItem(withTag:tag)}}
+  private func select(_ popup:NSPopUpButton,index:Int){if popup.indexOfSelectedItem != index {popup.selectItem(at:index)}}
   private func sortDraft(selecting item:[String:Any]?) {
     draft.sort {let a=PreciseNote($0),b=PreciseNote($1);return a.position==b.position ? a.note>b.note:a.position<b.position}
     refreshDraft(selecting:item.flatMap {item in draft.firstIndex {NSDictionary(dictionary:$0).isEqual(to:item)}})
@@ -488,8 +518,13 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
   func tableView(_ tableView:NSTableView,viewFor column:NSTableColumn?,row:Int)->NSView? {
     guard draft.indices.contains(row),let column else{return nil}
     let text=cellText(PreciseNote(draft[row]),column.identifier.rawValue)
-    let field=PreciseNoteCell(string:text);field.font = .monospacedSystemFont(ofSize:12,weight:.regular);field.textColor=Theme.text
-    field.isBordered=false;field.drawsBackground=false;field.delegate=self;field.tag=1000+row*10+(table.tableColumns.firstIndex(of:column) ?? 0)
+    let field:PreciseNoteCell
+    if let reused=tableView.makeView(withIdentifier:column.identifier,owner:self) as? PreciseNoteCell {field=reused}
+    else {
+      field=PreciseNoteCell(string:"");field.identifier=column.identifier
+      field.font = .monospacedSystemFont(ofSize:12,weight:.regular);field.isBordered=false;field.drawsBackground=false;field.delegate=self
+    }
+    setText(field,text);field.textColor=Theme.text;field.tag=1000+row*10+(table.tableColumns.firstIndex(of:column) ?? 0)
     field.onChoose = {[weak self] in
       guard let self,!self.inlineInvalid,self.draft.indices.contains(row) else{return false}
       self.table.activeColumn=self.table.tableColumns.firstIndex(of:column) ?? 0
@@ -502,19 +537,19 @@ final class PreciseNotesEditor:NSView,NSTableViewDataSource,NSTableViewDelegate,
     guard !updatingTable else{return}
     if inlineInvalid {updatingTable=true;if let editingRow {table.selectRowIndexes(IndexSet(integer:editingRow),byExtendingSelection:false)};updatingTable=false;return}
     if !saveSelectedFields() {updatingTable=true;if let editingRow {table.selectRowIndexes(IndexSet(integer:editingRow),byExtendingSelection:false)};updatingTable=false;return}
-    if let editingRow {table.reloadData(forRowIndexes:IndexSet(integer:editingRow),columnIndexes:IndexSet(integersIn:0..<table.numberOfColumns))}
+    if let editingRow {refreshVisibleCells(row:editingRow)}
     loadSelectedFields();syncTimeline();if hasDraft {scheduleSave()}
   }
   private func loadSelectedFields() {
     editingRow=draft.indices.contains(table.selectedRow) ? table.selectedRow:nil
     guard let editingRow else{controls();return}
-    let e=PreciseNote(draft[editingRow]);offset.stringValue=offsetText(e.position%65536);note.selectItem(withTag:e.note);instrument.stringValue=String(e.instrument);velocity.stringValue=String(e.velocity)
-    effect.selectItem(at:effects.firstIndex{$0.command==e.effect && e.parameter&$0.mask==$0.value} ?? 0);parameter.stringValue=String(format:"%02X",e.parameter)
-    effectHint.stringValue=effects.indices.contains(effect.indexOfSelectedItem) ? effects[effect.indexOfSelectedItem].hint:""
+    let e=PreciseNote(draft[editingRow]);setText(offset,offsetText(e.position%65536));select(note,tag:e.note);setText(instrument,String(e.instrument));setText(velocity,String(e.velocity))
+    select(effect,index:effects.firstIndex{$0.command==e.effect && e.parameter&$0.mask==$0.value} ?? 0);setText(parameter,String(format:"%02X",e.parameter))
+    setText(effectHint,effects.indices.contains(effect.indexOfSelectedItem) ? effects[effect.indexOfSelectedItem].hint:"")
     originalFields=fieldValues;showOffsetHint();controls()
   }
   private func showOffsetHint() {
-    if let value=rowOffset() {offsetHint.stringValue=displayBeats ? String(format:"= %.6g row",value):String(format:"= %.6g beat",value/Double(rowsPerBeat))}
+    if let value=rowOffset() {setText(offsetHint,displayBeats ? String(format:"= %.6g row",value):String(format:"= %.6g beat",value/Double(rowsPerBeat)))}
   }
   private func failure(_ reply:[String:Any]) {autoSave?.cancel();status.stringValue=((reply["error"] as? [String:Any])?["message"] as? String ?? "The song changed.")+" Edits retained; use current cursor to reload.";controls()}
   private func controls() {

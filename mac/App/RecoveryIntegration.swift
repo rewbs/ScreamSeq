@@ -58,7 +58,7 @@ extension AppController {
     let revision = session.automationRevision
     if !force && ((!dirty && take == nil && recoveryLastTake == nil) || (take == nil && recoveryLastTake == nil && recoveryLastRevision == revision)) { return }
     let store = RecoveryStore(directory: recoveryDirectory), id = recoveryID
-    let title = model.title, source = documentURL?.path
+    let title = model.title, source = documentURL?.path ?? (documentLoadReport.sourcePath.isEmpty ? nil : documentLoadReport.sourcePath)
     let epoch = recoveryEpoch
     busy = true; recoverySaving = true
     func finish(_ file: URL?, _ error: Error?) {
@@ -161,7 +161,7 @@ extension AppController {
     // Use a separate identity for the protected current song so retention can
     // never prune the very copy the user has selected for restoration.
     let store = RecoveryStore(directory: recoveryDirectory), currentID = UUID().uuidString
-    let preserve = dirty, title = model.title, source = documentURL?.path
+    let preserve = dirty, title = model.title, source = documentURL?.path ?? (documentLoadReport.sourcePath.isEmpty ? nil : documentLoadReport.sourcePath)
     busy = true
     worker.async {
       do {

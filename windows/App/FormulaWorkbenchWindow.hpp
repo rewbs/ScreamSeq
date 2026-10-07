@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "FormulaApplyState.hpp"
 #include <richedit.h>
 #include <cwctype>
 #include <optional>
@@ -16,9 +17,10 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
   std::vector<size_t> filtered_,matches_;
   size_t point_=0;uint64_t generation_=0,completionGeneration_=0;
   std::optional<uint64_t> validGeneration_;
-  std::wstring initial_,completionText_;
+  FormulaApplyState applyState_;
+  std::wstring completionText_;
   LONG completionStart_=0,completionEnd_=0,completionSelectionStart_=0;
-  bool referenceOnly_=false,setting_=false,pending_=false,previewNeeded_=false,accepted_=false,completing_=false;
+  bool referenceOnly_=false,setting_=false,pending_=false,previewNeeded_=false,completing_=false;
   AutomationCanvas canvas_;
   HFONT codeFont_{};UINT codeDpi_=0;
 
@@ -38,7 +40,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
   void error(const std::exception &e)override{status(wide(e.what()));}
   void dismissCompletion(){completing_=false;matches_.clear();ShowWindow(controls_.at(suggestions),SW_HIDE);requestPaint();}
   void changed(){
-    if(setting_||referenceOnly_)return;++generation_;accepted_=false;validGeneration_.reset();values_=Json::array();canvas_.rebuild(Json::array(),values_);
+    if(setting_||referenceOnly_)return;++generation_;applyState_.changed();validGeneration_.reset();values_=Json::array();canvas_.rebuild(Json::array(),values_);
     previewNeeded_=true;SetTimer(window_,3,120,nullptr);status(L"Checking formula… / Ctrl+Space completes; Ctrl+Enter uses this point's draft");
     dismissCompletion();SetTimer(window_,4,120,nullptr);layout();
   }
@@ -81,7 +83,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
   }
   void insertReference(){if(referenceOnly_)return;const auto index=SendMessageW(controls_.at(symbols),LB_GETCURSEL,0,0);if(index<0||size_t(index)>=filtered_.size())return;dismissCompletion();insertText(wide(reference_[filtered_[size_t(index)]].at("insert").get<std::string>()));}
   void previewNow(){
-    if(referenceOnly_||pending_||!previewNeeded_)return;
+    if(referenceOnly_||pending_||applyState_.pending()||!previewNeeded_)return;
     const auto token=generation_;const auto text=source();auto params=params_;
     params["points"][point_]["formula"]=utf8(text);params["points"][point_]["curve"]="scripted";
     pending_=true;previewNeeded_=false;layout();
@@ -93,9 +95,14 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     layout();requestPaint();
   }
   void apply(){
-    if(referenceOnly_||pending_||!validGeneration_||*validGeneration_!=generation_){status(L"Wait for a valid preview of the current text before using it");return;}
-    const auto text=source();if(!sourceCurrent_()||!use_(utf8(text))){status(L"The envelope or selected point changed / formula retained; reopen the original point or copy this text");return;}
-    initial_=text;accepted_=true;dismissCompletion();hide();
+    if(referenceOnly_||pending_||applyState_.pending()||!validGeneration_||*validGeneration_!=generation_){status(L"Wait for a valid preview of the current text before using it");return;}
+    const auto text=source();const auto submitted=generation_;FormulaApplyState::Result result;
+    try{result=applyState_.apply(submitted,text,[&]{layout();return sourceCurrent_()&&use_(utf8(text));},[&]{return generation_;},[&]{return source();});}
+    catch(...){layout();throw;}
+    layout();
+    if(result==FormulaApplyState::Result::Rejected){status(L"The envelope or selected point changed / formula retained; reopen the original point or copy this text");return;}
+    if(result!=FormulaApplyState::Result::Accepted){status(L"Earlier formula applied · newer draft retained; copy it before reopening the point");return;}
+    dismissCompletion();hide();
   }
   void action(int id,unsigned notification)override{
     if(setting_)return;
@@ -107,7 +114,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     if(id==complete){suggest(true);return;}if(id==insert){insertReference();return;}
     if(id==checkPreview){previewNeeded_=true;previewNow();return;}if(id==use){apply();return;}
     if(id==close){dismissCompletion();hide();return;}
-    if(id==discard){setting_=true;set(code,initial_);setting_=false;++generation_;validGeneration_.reset();values_=Json::array();canvas_.rebuild(Json::array(),values_);previewNeeded_=true;dismissCompletion();hide();return;}
+    if(id==discard){if(applyState_.pending()){status(L"Wait for the current formula application before discarding");return;}setting_=true;set(code,applyState_.baseline);setting_=false;++generation_;validGeneration_.reset();values_=Json::array();canvas_.rebuild(Json::array(),values_);previewNeeded_=true;dismissCompletion();hide();return;}
   }
   bool key(WPARAM value,bool ctrl,bool shift)override{
     const auto focus=GetFocus();const int id=focus==window_?0:GetDlgCtrlID(focus);
@@ -128,7 +135,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     if(value==VK_RETURN){wchar_t type[32]{};GetClassNameW(focus,type,32);if(_wcsicmp(type,L"Button")==0){action(id,BN_CLICKED);return true;}}return false;
   }
   void timer(UINT_PTR id)override{
-    if(id==3){KillTimer(window_,3);if(!visible())return;if(pending_){SetTimer(window_,3,120,nullptr);return;}previewNow();}
+    if(id==3){KillTimer(window_,3);if(!visible())return;if(pending_||applyState_.pending()){SetTimer(window_,3,120,nullptr);return;}previewNow();}
     if(id==4){KillTimer(window_,4);if(visible())suggest(false);}
   }
   void fontsChanged()override{
@@ -143,7 +150,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     place(heading,16,14,leftWidth,24,!referenceOnly_);place(code,16,46,leftWidth,std::max(100.0f,h-366),!referenceOnly_);
     place(previewLabel,16,h-308,leftWidth,22,!referenceOnly_);canvas_.viewport={54,h-281,std::max(1.0f,leftWidth-42),140};canvas_.rebuild(Json::array(),values_);
     place(complete,16,h-111,156,26,!referenceOnly_);place(checkPreview,180,h-111,88,26,!referenceOnly_);place(discard,276,h-111,std::max(70.0f,leftWidth-461),26,!referenceOnly_);place(use,leftWidth-93,h-77,109,26,!referenceOnly_);place(statusLabel,16,h-77,std::max(1.0f,leftWidth-122),63,!referenceOnly_);
-    EnableWindow(controls_.at(use),!referenceOnly_&&!pending_&&validGeneration_&&*validGeneration_==generation_);EnableWindow(controls_.at(checkPreview),!pending_);EnableWindow(controls_.at(insert),!filtered_.empty());
+    EnableWindow(controls_.at(use),!referenceOnly_&&!pending_&&!applyState_.pending()&&validGeneration_&&*validGeneration_==generation_);EnableWindow(controls_.at(checkPreview),!pending_&&!applyState_.pending());EnableWindow(controls_.at(discard),!applyState_.pending());EnableWindow(controls_.at(insert),!filtered_.empty());
     if(completing_&&!referenceOnly_){POINT caret{};GetCaretPos(&caret);MapWindowPoints(controls_.at(code),window_,&caret,1);const auto scale=96.0f/GetDpiForWindow(window_);const auto height=std::min(6.0f,float(matches_.size()))*22+4;place(suggestions,std::clamp(caret.x*scale,16.0f,std::max(16.0f,leftWidth-270)),std::clamp(caret.y*scale+22,46.0f,std::max(46.0f,h-height-140)),std::min(300.0f,leftWidth),height);SetWindowPos(controls_.at(suggestions),HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);}
     else ShowWindow(controls_.at(suggestions),SW_HIDE);
   }
@@ -169,14 +176,14 @@ public:
     add(notes,L"EDIT",L"",ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL|WS_VSCROLL);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{complete,L"Complete · Ctrl+Space"},{insert,L"Insert selected value / function"},{checkPreview,L"Check"},{use,L"Use formula"},{close,L"Close"},{discard,L"Discard"}})button(id,text);
     label(heading,L"Formula · Ctrl+Enter to use · F6 for reference");label(previewLabel,L"Preview / normalized value · captured envelope");label(referenceHeading,L"Values and functions");label(statusLabel,L"");
-    setting_=true;set(code,wide(sourceText));setting_=false;initial_=source();SendMessageW(controls_.at(code),EM_EMPTYUNDOBUFFER,0,0);
+    setting_=true;set(code,wide(sourceText));setting_=false;applyState_.baseline=source();SendMessageW(controls_.at(code),EM_EMPTYUNDOBUFFER,0,0);
     const auto reference=request_("automation.formula.reference",Json::object());reference_=reference.at("symbols");auto noteText=wide(reference.at("notes").get<std::string>());std::wstring lines;for(auto c:noteText){if(c=='\n')lines+='\r';lines+=c;}set(notes,lines);
     if(!referenceOnly_){if(!params_.contains("points")||point_>=params_.at("points").size())throw std::runtime_error("Formula point no longer exists");params_["samples"]=1024;canvas_.start=0;canvas_.end=params_.value("span",params_.at("rows").get<double>()*256);previewNeeded_=true;}
     finish();filter();status(L"Checking formula…");
   }
   ~FormulaWorkbenchWindow()override{if(codeFont_)DeleteObject(codeFont_);}
   void show(){const bool wasVisible=visible();NativeToolWindow::show();if(!wasVisible)SetFocus(controls_.at(referenceOnly_?search:code));if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
-  bool retainedDraft()const{return !referenceOnly_&&(pending_||(!accepted_&&source()!=initial_));}
-  Json snapshot()const{Json names=Json::array(),matches=Json::array();for(auto i:filtered_)names.push_back(reference_[i].at("name"));for(auto i:matches_)matches.push_back(reference_[i].at("insert"));return {{"visible",visible()},{"referenceOnly",referenceOnly_},{"source",utf8(source())},{"dirty",retainedDraft()},{"pending",pending_},{"checking",previewNeeded_||pending_},{"valid",validGeneration_&&*validGeneration_==generation_},{"sourceCurrent",referenceOnly_||sourceCurrent_()},{"previewSamples",values_.size()},{"values",values_},{"point",point_},{"symbols",names},{"completionVisible",completing_},{"completions",matches},{"status",utf8(status_)}};}
+  bool retainedDraft()const{return !referenceOnly_&&(pending_||applyState_.retained(source()));}
+  Json snapshot()const{Json names=Json::array(),matches=Json::array();for(auto i:filtered_)names.push_back(reference_[i].at("name"));for(auto i:matches_)matches.push_back(reference_[i].at("insert"));return {{"visible",visible()},{"referenceOnly",referenceOnly_},{"source",utf8(source())},{"dirty",retainedDraft()},{"pending",pending_||applyState_.pending()},{"checking",previewNeeded_||pending_},{"valid",validGeneration_&&*validGeneration_==generation_},{"sourceCurrent",referenceOnly_||sourceCurrent_()},{"previewSamples",values_.size()},{"values",values_},{"point",point_},{"symbols",names},{"completionVisible",completing_},{"completions",matches},{"status",utf8(status_)}};}
 };
 }

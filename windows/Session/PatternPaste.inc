@@ -2,7 +2,7 @@ namespace {
 Json pastePattern(Tracker::Document &document,const Json &p,
     const std::function<void()> &stop,const PatternHostHooks &host) {
     using namespace Tracker;
-    keys(p,{"pattern","startRow","startChannel","rows","channels","cells","fields","mode","clip","dryRun","effects","bindings","notes"});
+    keys(p,{"pattern","startRow","startChannel","rows","channels","cells","fields","mode","clip","dryRun","effects","bindings","notes","scratchGestures"});
     need(document.editable(),"Document is not editable");
     const auto pattern=uint16_t(integer(field(p,"pattern"),0,UINT16_MAX));
     const auto row=uint16_t(integer(field(p,"startRow"),0,UINT16_MAX)),channel=uint16_t(integer(field(p,"startChannel"),0,UINT16_MAX));
@@ -31,7 +31,7 @@ Json pastePattern(Tracker::Document &document,const Json &p,
         if(p.contains("notes")) {
             std::vector<ClipboardNote> notes;
             for(const auto &e:array(p.at("notes"),maximumPreciseNotes)) {
-                keys(e,{"channel","position","note","instrument","velocity","effect","parameter"});
+                keys(e,{"channel","position","note","instrument","velocity","effect","parameter","native","parameters"});
                 notes.push_back({uint16_t(integer(field(e,"channel"),0,channels-1)),{0,0,uint32_t(integer(field(e,"position"),0,uint64_t(rows)*performanceUnitsPerRow-1)),uint16_t(integer(e.value("instrument",Json(0)),0,255)),uint8_t(integer(field(e,"note"),1,255)),uint8_t(integer(e.value("velocity",Json(127)),1,127)),uint8_t(integer(e.value("effect",Json(0)),0,255)),uint8_t(integer(e.value("parameter",Json(0)),0,255))}});
             }
             preparePreciseNotePaste(document,metadata,{pattern,row,rows,channel,channels},notes,fields,mode,clip);
@@ -48,6 +48,7 @@ Json pastePattern(Tracker::Document &document,const Json &p,
             if(e.before!=e.after)changed.emplace(std::pair{e.row,e.channel},e);
         }
         if(fields&PatternEffect) {
+            ScratchJSON::ClipboardGestures scratch(p.value("scratchGestures",Json::array()));
             std::map<uint16_t,uint16_t> bindings;
             if(p.contains("bindings"))for(const auto &b:array(p.at("bindings"),255)) {
                 keys(b,{"id","plugin","parameter","name"});const auto id=uint16_t(integer(field(b,"id"),1,255));
@@ -67,7 +68,7 @@ Json pastePattern(Tracker::Document &document,const Json &p,
             }
             std::set<std::tuple<uint16_t,uint32_t,uint8_t>> occupied;
             if(p.contains("effects"))for(const auto &raw:array(p.at("effects"),maximumPatternCommands)) {
-                keys(raw,{"channel","position","duration","column","kind","binding","value","pitchRange","effect","parameter"});
+                keys(raw,{"channel","position","duration","durationBeats","column","kind","binding","value","pitchRange","effect","parameter","native","parameters"});
                 const auto localChannel=uint16_t(integer(field(raw,"channel"),0,channels-1));
                 const auto column=uint8_t(integer(field(raw,"column"),0,maximumEffectColumns-1));
                 const auto localPosition=uint32_t(integer(field(raw,"position"),0,uint64_t(rows)*performanceUnitsPerRow-1));
@@ -79,6 +80,9 @@ Json pastePattern(Tracker::Document &document,const Json &p,
                 if(binding){need(bindings.contains(binding),"Clipboard parameter effect needs its stable binding");binding=bindings.at(binding);}
                 PatternCommand command{patternID,metadata.tracks.at(destinationChannel).id,uint32_t(position),uint32_t(integer(raw.value("duration",Json(0)),0,UINT32_MAX)),column,commandKind,binding,
                     number(raw.value("value",Json(0)),-96,96),uint8_t(integer(raw.value("pitchRange",Json(2)),1,96)),uint8_t(integer(raw.value("effect",Json(0)),0,MAX_EFFECTS-1)),uint8_t(integer(raw.value("parameter",Json(0)),0,255))};
+                decodeNativePatternAPI(command,raw);
+                const bool scratching=command.kind==PatternCommandKind::Native&&command.native==NativePatternOp::Scratch;
+                if(scratching)need(scratch.source.contains(uint16_t(command.arguments[0])),"Clipboard scratch command needs its gesture phrase");
                 const auto r=uint16_t(position/performanceUnitsPerRow),ch=uint16_t(destinationChannel);const Key key{patternID,command.track,r,column};
                 if(mode=="mix"&&effects.contains(key))continue;
                 if(!column) {
@@ -89,6 +93,7 @@ Json pastePattern(Tracker::Document &document,const Json &p,
                     if(after==before)changed.erase({r,ch});else changed[{r,ch}]={pattern,r,ch,before,after};
                 }
                 if(column>0)metadata.performance.columns[command.track]=std::max(uint8_t(column+1),metadata.performance.columns.contains(command.track)?metadata.performance.columns.at(command.track):uint8_t(1));
+                if(scratching)command.arguments[0]=scratch.remap(metadata.scratchGestures,uint16_t(command.arguments[0]));
                 effects[key]=command;
             }
         }

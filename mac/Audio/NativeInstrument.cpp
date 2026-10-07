@@ -232,8 +232,8 @@ void PluginChain::attachMusicalAutomation(Renderer &renderer, const NativeSong &
     auto &chain = *static_cast<PluginChain *>(context);
     const auto sourcePosition=chain.musicalPosition_;
     const bool advancing=!state.m_flags[SONG_PAUSED]&&!state.m_flags[SONG_FADINGSONG]&&state.m_nSamplesPerTick&&state.TicksOnRow();
-    const double step=advancing?256.0/(double(state.TicksOnRow())*state.m_nSamplesPerTick):0;
-    const double at=state.m_nRow*256.+(advancing?double(state.m_nTickCount)*256./state.TicksOnRow()+state.SamplesIntoTick()*step:0);
+    const double step=advancing?state.NativeRowStep(256):0;
+    const double at=advancing?state.NativeRowPosition(256):state.m_nRow*256.;
     chain.activity_->clock(chain.musicalPosition_,state.m_nPattern,state.m_nCurrentOrder,at,step);
     const auto transport=transportFor(*chain.musicalSong_);
     chain.currentTransport_=transport;
@@ -249,8 +249,8 @@ void PluginChain::attachMusicalAutomation(Renderer &renderer, const NativeSong &
       chain.renderInstrumentSources(count,sourcePosition);
       chain.musicalPosition_ += count; return;
     }
-    double unitsPerSample = 256.0 / (double(state.TicksOnRow()) * state.m_nSamplesPerTick);
-    double position = state.m_nRow * 256.0 + double(state.m_nTickCount) * 256.0 / state.TicksOnRow();
+    double unitsPerSample = state.NativeRowStep(256);
+    double position = state.NativeRowPosition(256) - state.SamplesIntoTick() * unitsPerSample;
     if(chain.activeCommands_&&!chain.activeCommands_->render(state,count,chain.musicalPosition_))chain.failed_=true;
     chain.scheduleMusical(state.m_nPattern, position, unitsPerSample, state.SamplesIntoTick(), count, state.AtStartOfTick());
     chain.renderInstrumentSources(count,sourcePosition);

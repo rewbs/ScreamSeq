@@ -24,7 +24,7 @@ xcrun swiftc -O -swift-version 5 mac/App/SampleLibrary.swift mac/App/SampleMulti
 xcrun swiftc -O -swift-version 5 -import-objc-header mac/Bridge/TrackerSession.h \
   mac/App/AutomationServer.swift mac/App/EditorNavigation.swift mac/Tests/AutomationHost.swift \
   -L "$tracker_build" -L "$tracker_build/hosted" -lTrackerMac -lTrackerHosted -lTrackerEditor -lOpenMPTCore -lTrackerFLAC -lc++ \
-  -framework AppKit -framework AudioToolbox -framework CoreAudio -framework CoreMIDI \
+  -framework AppKit -framework AVFoundation -framework AudioToolbox -framework CoreAudio -framework CoreMIDI \
   -o "$tracker_build/automation-test-host"
 cp "$tracker_build/plugin-scanner" "$tracker_app/Contents/MacOS/plugin-scanner"
 xcrun swift mac/Tools/Icon.swift "$tracker_app/Contents/Resources/ScreamSeq.icns"

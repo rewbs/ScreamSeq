@@ -21,6 +21,7 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
   private var verb="adds",filteredQuery=""
 
   func show(in view: NSView, at point: NSPoint, title: String, entries: [Entry], verb:String="adds", choose: @escaping (Entry) -> Void) {
+    KeyboardSettings.traceInput("graph-search.show.begin",detail:title)
     close(); owner = view.window; responder = view.window?.firstResponder; onChoose = choose
     self.verb=verb
     if panel == nil {
@@ -44,9 +45,13 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
       let screen = parent.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? parent.frame
       panel.setFrameOrigin(NSPoint(x: max(screen.minX, min(screen.maxX-panel.frame.width, anchor.x)), y: max(screen.minY, min(screen.maxY-panel.frame.height, anchor.y-panel.frame.height))))
       parent.addChildWindow(panel, ordered: .above); panel.makeKeyAndOrderFront(nil); panel.makeFirstResponder(search)
+      KeyboardSettings.traceInput("graph-search.show.focus",detail:"panel=\(panel.windowNumber) owner=\(parent.windowNumber)")
     }
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      guard let self, event.window === self.panel else { return event }
+      guard let self else { return event }
+      let event = Self.eventForFocusedSearch(event, keyWindow: NSApp.keyWindow, owner: self.owner, panel: self.panel, search: self.search)
+      KeyboardSettings.traceInput("graph-search.key",event:event,detail:"panel=\(self.panel?.windowNumber ?? 0) owner=\(self.owner?.windowNumber ?? 0)")
+      guard event.window === self.panel else { return event }
       if event.keyCode == 53 { self.close(); return nil }
       if event.keyCode == 36 { self.choose(); return nil }
       if event.keyCode == 125 || event.keyCode == 126 {
@@ -56,6 +61,22 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
       }
       return event
     }
+    KeyboardSettings.traceInput("graph-search.show.end",detail:title)
+  }
+  /// Keep typing queued during a graph chooser's activation in its focused search.
+  /// Returning a retargeted key event uses AppKit's normal text-input path; it does
+  /// not recursively dispatch events or synthesize text/marked-text operations.
+  static func eventForFocusedSearch(_ event: NSEvent, keyWindow: NSWindow?, owner: NSWindow?, panel: NSPanel?, search: NSSearchField) -> NSEvent {
+    guard event.type == .keyDown, let owner, let panel, owner !== panel,
+      keyWindow === panel, event.window === owner, search.window === panel,
+      let focus = panel.firstResponder, focus === search || focus === search.currentEditor(),
+      KeyboardSettings.isDataTyping(event), let characters = event.characters, !characters.isEmpty,
+      characters.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) && !(0xF700...0xF8FF).contains($0.value) })
+    else { return event }
+    return NSEvent.keyEvent(with: .keyDown, location: event.locationInWindow,
+      modifierFlags: event.modifierFlags, timestamp: event.timestamp, windowNumber: panel.windowNumber,
+      context: nil, characters: characters, charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? characters,
+      isARepeat: event.isARepeat, keyCode: event.keyCode) ?? event
   }
   func replace(_ values: [Entry]) { entries = values; filter() }
   func filter() {

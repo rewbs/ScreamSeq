@@ -138,6 +138,7 @@ MixerGraph decodeMixer(id raw) {
 }
 #include "EnvelopeBankMetadata.inc"
 #include "PatternPerformanceMetadata.inc"
+#include "ScratchGestureMetadata.inc"
 #include "SignalGraphMetadata.inc"
 NSDictionary *encodePreciseNote(const PreciseNote &note) {
   NSMutableDictionary *item=[@{@"position":@(note.position),@"instrument":@(note.instrument),@"note":@(note.note),@"velocity":@(note.velocity)} mutableCopy];
@@ -169,6 +170,7 @@ NSDictionary *encodeNativeSong(const NativeSong &native) {
            @"tracks": map(native.tracks), @"samples": map(native.samples), @"instruments": map(native.instruments),
            @"sequences": sequences, @"automation": automation, @"mixer": encodeMixer(native.mixer)} mutableCopy];
   result[@"envelopeBank"]=encodeEnvelopeBank(native);
+  result[@"scratchGestures"]=encodeScratchGestures(native);
   result[@"signalGraph"] = encodeSignalGraph(native.signal);
   {
     NSMutableArray *notes=[NSMutableArray array];
@@ -184,7 +186,7 @@ NSDictionary *encodeNativeSong(const NativeSong &native) {
 NativeSong decodeNativeSong(id raw) {
   using namespace Automation;
   auto value = object(raw);
-  keys(value, @[@"version", @"nextID", @"masterID", @"patterns", @"tracks", @"samples", @"instruments", @"sequences", @"automation", @"mixer", @"noteTracks", @"columnMutes", @"performance", @"preciseNotes", @"signalGraph", @"envelopeBank"]);
+  keys(value, @[@"version", @"nextID", @"masterID", @"patterns", @"tracks", @"samples", @"instruments", @"sequences", @"automation", @"mixer", @"noteTracks", @"columnMutes", @"performance", @"preciseNotes", @"signalGraph", @"envelopeBank", @"scratchGestures"]);
   integer(value[@"version"], 17, 17);
   NativeSong result;
   result.nextID = integer(value[@"nextID"], 1, NativeSong::maximumID);
@@ -228,6 +230,7 @@ NativeSong decodeNativeSong(id raw) {
   }
   result.signal=decodeSignalGraph(value[@"signalGraph"]);
   decodeEnvelopeBank(result,value[@"envelopeBank"]);
+  for(id raw:array(value[@"scratchGestures"]?:@[],255)){auto item=object(raw);auto id=uint16_t(integer(item[@"id"],1,255));require(result.scratchGestures.emplace(id,decodeScratchGesture(item)).second,"Duplicate scratch phrase number");}
   result.performance=decodePatternPerformance(value[@"performance"]);
   result.reserveMasterIdentity();
   return result;

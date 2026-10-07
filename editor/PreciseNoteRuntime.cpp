@@ -21,9 +21,8 @@ PreciseNoteRuntime::PreciseNoteRuntime(const NativeSong &native) {
 uint32_t PreciseNoteRuntime::prepare(OpenMPT::CSoundFile &song,uint32_t count) noexcept {
   using namespace OpenMPT;const auto &state=song.m_PlayState;
   if(!count||state.m_flags[SONG_PAUSED|SONG_FADINGSONG]||!state.m_nSamplesPerTick||!state.TicksOnRow())return count;
-  const double unitsPerSample=double(performanceUnitsPerRow)/(double(state.TicksOnRow())*state.m_nSamplesPerTick);
-  const double tick=double(state.m_nRow)*performanceUnitsPerRow+double(state.m_nTickCount)*performanceUnitsPerRow/state.TicksOnRow();
-  const double position=tick+double(state.SamplesIntoTick())*unitsPerSample;
+  const double unitsPerSample=state.NativeRowStep(performanceUnitsPerRow);
+  const double position=state.NativeRowPosition(performanceUnitsPerRow);
   // The mixer calls this at least once per tick, so ordinary playback (including
   // tempo changes, pattern delay and row repeat) stays on a row or advances by one.
   // Any other row is a jump within the same pattern and order (position jump, or a
@@ -53,7 +52,7 @@ uint32_t PreciseNoteRuntime::prepare(OpenMPT::CSoundFile &song,uint32_t count) n
     song.TriggerNativeNote(event.channel,event.note,event.instrument,event.velocity,event.effect,event.parameter,event.cutCommand);
   }
   if(next_<events_->size()) {
-    const double distance=std::ceil(((*events_)[next_].position-tick)/unitsPerSample-1e-9)-state.SamplesIntoTick();
+    const double distance=std::ceil(((*events_)[next_].position-position)/unitsPerSample-1e-9);
     if(distance<count)count=uint32_t(std::max(1.,distance));
   }
   return count;

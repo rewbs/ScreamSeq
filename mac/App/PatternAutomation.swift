@@ -17,25 +17,31 @@ final class AutomationCanvas: NSView {
   var allowsEditing = true
   var points = [EnvelopePoint]() { didSet { previewValues = []; needsDisplay = true } }
   var rows = 64 { didSet { if rows != oldValue { fit() } } }
+  // Optional timeline units let reusable gesture editors share the native canvas.
+  var positionLimit: Int? { didSet { needsDisplay = true } }
+  var axisUnits = 256.0
+  var fixedPositions = Set<Int>()
+  var pointLimit = 4096
+  var maximumPosition: Int { positionLimit ?? rows * 256 - 1 }
   var snap = 256, selected: Int?, curve = "linear"
   var onEdit: (() -> Void)?, onSelect: (() -> Void)?, onEditFinished: (() -> Void)?
   var visibleStart = 0.0, visibleEnd: Double? = nil
   var valueLow = 0.0, valueHigh = 1.0
   var previewValues = [(Double,Double)]() { didSet { needsDisplay = true } }
   var onViewport: (() -> Void)?
-  var horizontalEnd: Double { min(Double(rows*256-1), visibleEnd ?? Double(rows*256-1)) }
+  var horizontalEnd: Double { min(Double(maximumPosition), visibleEnd ?? Double(maximumPosition)) }
   var horizontalSpan: Double { max(1,horizontalEnd-visibleStart) }
   func position(at x: CGFloat) -> Double { visibleStart + Double((x-plot.minX)/max(1,plot.width))*horizontalSpan }
   func normalizedValue(at y: CGFloat) -> Double { valueLow + Double((plot.maxY-y)/max(1,plot.height))*(valueHigh-valueLow) }
   func setViewport(start:Double, span:Double) {
-    let width = min(Double(rows*256-1),max(1,span))
-    visibleStart = min(max(0,start),max(0,Double(rows*256-1)-width)); visibleEnd = visibleStart+width
+    let width = min(Double(maximumPosition),max(1,span))
+    visibleStart = min(max(0,start),max(0,Double(maximumPosition)-width)); visibleEnd = visibleStart+width
     needsDisplay=true;onViewport?()
   }
   func zoom(_ factor:Double, anchor:Double? = nil) {
     let point=anchor ?? selected.flatMap { points.indices.contains($0) ? Double(points[$0].position) : nil } ?? (visibleStart+horizontalSpan/2)
     let fraction=min(1,max(0,(point-visibleStart)/horizontalSpan))
-    let width=min(Double(rows*256-1),max(1,horizontalSpan/factor))
+    let width=min(Double(maximumPosition),max(1,horizontalSpan/factor))
     setViewport(start:point-fraction*width,span:width)
   }
   func fit() { visibleStart=0;visibleEnd=nil;valueLow=0;valueHigh=1;needsDisplay=true;onViewport?() }
@@ -111,7 +117,7 @@ final class AutomationCanvas: NSView {
         withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular), .foregroundColor: Theme.muted])
       let x = plot.minX + plot.width * CGFloat(step) / 4
       grid.move(to: NSPoint(x: x, y: plot.minY)); grid.line(to: NSPoint(x: x, y: plot.maxY))
-      String(format:"%.2g",(visibleStart+horizontalSpan*Double(step)/4)/256).draw(at: NSPoint(x: x - 4, y: plot.maxY + 5),
+      String(format:"%.2g",(visibleStart+horizontalSpan*Double(step)/4)/axisUnits).draw(at: NSPoint(x: x - 4, y: plot.maxY + 5),
         withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular), .foregroundColor: Theme.muted])
     }
     grid.stroke()
@@ -144,7 +150,7 @@ final class AutomationCanvas: NSView {
     guard allowsEditing, let selected, points.indices.contains(selected) else { return }
     var point = points[selected]
     if curve == "scripted" && point.formula.isEmpty { point.formula = "mix(start, end, t)" }
-    point.position = min(rows * 256 - 1, max(0, position)); point.value = min(1, max(0, value)); point.curve = curve
+    point.position = fixedPositions.contains(point.position) ? point.position : min(maximumPosition, max(0, position)); point.value = min(1, max(0, value)); point.curve = curve
     guard !points.enumerated().contains(where: { $0.offset != selected && $0.element.position == point.position }) else { return }
     points[selected] = point; points.sort { $0.position < $1.position }
     self.selected = points.firstIndex(where: { $0.position == point.position })
@@ -152,6 +158,7 @@ final class AutomationCanvas: NSView {
   }
   func removeSelected() {
     guard allowsEditing, let selected, points.indices.contains(selected) else { return }
+    guard !fixedPositions.contains(points[selected].position) else { return }
     points.remove(at: selected); self.selected = nil; onEdit?(); onSelect?()
   }
   override func mouseDown(with event: NSEvent) {
@@ -162,7 +169,7 @@ final class AutomationCanvas: NSView {
     selected = points.indices.min { hypot(location(points[$0]).x - p.x, location(points[$0]).y - p.y) < hypot(location(points[$1]).x - p.x, location(points[$1]).y - p.y) }
     if let selected, hypot(location(points[selected]).x - p.x, location(points[selected]).y - p.y) > 9 { self.selected = nil }
     if selected == nil {
-      guard points.count < 4096 else { return }
+      guard points.count < pointLimit else { return }
       dragging = true
       let position = snapped(p.x)
       if let existing = points.firstIndex(where: { $0.position == position }) { selected = existing }
@@ -175,7 +182,7 @@ final class AutomationCanvas: NSView {
   }
   private func snapped(_ x: CGFloat) -> Int {
     let raw = position(at:x)
-    return min(rows * 256 - 1, max(0, Int((raw / Double(snap)).rounded()) * snap))
+    return min(maximumPosition, max(0, Int((raw / Double(snap)).rounded()) * snap))
   }
   override func mouseDragged(with event: NSEvent) {
     guard dragging, let selected else { return }

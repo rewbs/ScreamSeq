@@ -43,7 +43,8 @@ extern "C" __attribute__((visibility("default"))) int ResonanceFixtureLatency(ui
   return accepted;
 }
 static std::atomic<bool> fixtureChannelWeights{false};
-static bool fixturePitchMode=false;
+static bool fixturePitchMode=false,fixtureVelocityMode=false;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureVelocityMode(bool enabled){fixtureVelocityMode=enabled;}
 static bool fixtureLargeCatalog=false,fixtureStepped=false;
 static std::atomic<uint64_t> fixtureSingleSampleCalls{0};
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureStepped(bool enabled){fixtureStepped=enabled;fixtureSingleSampleCalls=0;}
@@ -114,12 +115,28 @@ static bool same(const TUID a, const FUID &b) {
   }
 }
 @end
+static bool fixtureEditorResize=false;
+static int fixtureEditorSizeMode=0;
+static bool fixtureEditorRejectResize=false;
+static bool fixtureEditorRemovalResizeRejected=false;
+static IPlugFrame *fixtureEditorFrame=nullptr;
+static IPlugView *fixtureEditorView=nullptr;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureEditorResizeMode(bool value){fixtureEditorResize=value;}
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureEditorSizeMode(int value){fixtureEditorSizeMode=value;}
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureEditorRejectResize(bool value){fixtureEditorRejectResize=value;}
+extern "C" __attribute__((visibility("default"))) bool ResonanceFixtureEditorRemovalResizeRejected(){return fixtureEditorRemovalResizeRejected;}
+extern "C" __attribute__((visibility("default"))) bool ResonanceFixtureEditorResize(int width,int height){
+  ViewRect requested{31,47,31+width,47+height};
+  return fixtureEditorFrame&&fixtureEditorView&&fixtureEditorFrame->resizeView(fixtureEditorView,&requested)==kResultOk;
+}
 class View final : public IPlugView {
   std::atomic<uint32> refs{1};
   NSView *view = nil;
   ResonanceFixtureControl *control = nil;
   IComponentHandler *handler;
   double initial;
+  const int sizeMode=fixtureEditorSizeMode;
+  ViewRect size=sizeMode?ViewRect{17,29,597,269}:fixtureEditorResize?ViewRect{17,29,477,209}:ViewRect{0,0,460,180};
 
 public:
   explicit View(IComponentHandler *h, double value) : handler(h), initial(value) { ++liveViews; }
@@ -146,7 +163,8 @@ public:
   tresult PLUGIN_API attached(void *parent, FIDString type) override {
     if (isPlatformTypeSupported(type) != kResultOk)
       return kResultFalse;
-    view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 460, 180)];
+    fixtureEditorRemovalResizeRejected=false;
+    view = [[NSView alloc] initWithFrame:sizeMode?NSMakeRect(0,0,580,240):NSMakeRect(0,0,460,180)];
     view.wantsLayer = YES;
     view.layer.backgroundColor = [NSColor colorWithCalibratedRed:0.08 green:0.10 blue:0.14 alpha:1].CGColor;
     NSTextField *title = [NSTextField labelWithString:@"Resonance · VST3 Test Interface"];
@@ -169,9 +187,14 @@ public:
     slider.accessibilityLabel = @"Fixture gain";
     [view addSubview:slider];
     [(__bridge NSView *)parent addSubview:view];
+    if(fixtureEditorResize){ViewRect requested{31,47,611,287};if(!fixtureEditorFrame||fixtureEditorFrame->resizeView(this,&requested)!=kResultOk)return kResultFalse;}
     return kResultOk;
   }
   tresult PLUGIN_API removed() override {
+    if(fixtureEditorFrame&&fixtureEditorView==this){
+      ViewRect requested{0,0,620,280};
+      fixtureEditorRemovalResizeRejected=fixtureEditorFrame->resizeView(this,&requested)!=kResultOk;
+    }
     [view removeFromSuperview];
     control.handler = nullptr;
     control = nil;
@@ -182,12 +205,23 @@ public:
   tresult PLUGIN_API onKeyDown(char16, int16, int16) override { return kResultFalse; }
   tresult PLUGIN_API onKeyUp(char16, int16, int16) override { return kResultFalse; }
   tresult PLUGIN_API getSize(ViewRect *r) override {
-    *r = {0, 0, 460, 180};
+    if((sizeMode==1&&!view)||sizeMode==3){*r=ViewRect{};return kResultFalse;}
+    *r = size;
+    return sizeMode==2?kResultFalse:kResultOk;
+  }
+  tresult PLUGIN_API onSize(ViewRect *r) override {
+    if(fixtureEditorRejectResize)return kResultFalse;
+    if(sizeMode==5&&fixtureEditorFrame&&fixtureEditorFrame->resizeView(this,r)!=kResultOk)return kResultFalse;
+    size=*r;
+    [view setFrame:NSMakeRect(r->left,r->top,r->getWidth(),r->getHeight())];
+    return sizeMode==4?kResultFalse:kResultOk;
+  }
+  tresult PLUGIN_API onFocus(TBool) override { return kResultOk; }
+  tresult PLUGIN_API setFrame(IPlugFrame *frame) override {
+    if(frame){fixtureEditorFrame=frame;fixtureEditorView=this;}
+    else if(fixtureEditorView==this){fixtureEditorFrame=nullptr;fixtureEditorView=nullptr;}
     return kResultOk;
   }
-  tresult PLUGIN_API onSize(ViewRect *) override { return kResultOk; }
-  tresult PLUGIN_API onFocus(TBool) override { return kResultOk; }
-  tresult PLUGIN_API setFrame(IPlugFrame *) override { return kResultOk; }
   tresult PLUGIN_API canResize() override { return kResultFalse; }
   tresult PLUGIN_API checkSizeConstraint(ViewRect *r) override { return getSize(r); }
 };
@@ -212,6 +246,7 @@ class Fixture final : public IComponent, public IAudioProcessor, public IEditCon
   float hiddenGain=fixtureHiddenGain;
   IComponentHandler *handler = nullptr;
   std::array<uint16_t, 16 * 128> notes{};
+  float lastVelocity=1;
   std::array<float,16> pitchWheels{};
 
 public:
@@ -356,6 +391,7 @@ public:
       for (int32 i = 0; i < d.inputEvents->getEventCount(); ++i) {
         Event e{};
         d.inputEvents->getEvent(i, e);
+        if(e.type==Event::kNoteOnEvent)lastVelocity=e.noteOn.velocity;
         if (fixtureSingleVoice && e.type == Event::kNoteOnEvent) notes[(e.noteOn.channel & 15) * 128 + (e.noteOn.pitch & 127)] = 1;
         else if (fixtureSingleVoice && e.type == Event::kNoteOffEvent) notes[(e.noteOff.channel & 15) * 128 + (e.noteOff.pitch & 127)] = 0;
         else if (e.type == Event::kNoteOnEvent)
@@ -371,7 +407,7 @@ public:
       for (size_t note = 0; note < 128; ++note) active |= notes[channel * 128 + note] != 0;
       any |= active; if (active) channels += float(channel + 1) / 16;
     }
-    float scale=1;
+    float scale=fixtureVelocityMode?lastVelocity:1;
     scale *= hiddenGain;
     if (programs) scale *= unitGains[0]*unitGains[1];
     if (instrument && fixturePitchMode) scale *= 1 + (std::lround(pitchWheels[0]*16383)-8192)/8192.f;

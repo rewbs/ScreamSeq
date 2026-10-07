@@ -4,6 +4,7 @@
 #include <set>
 #include <stdexcept>
 #include <tuple>
+#include <functional>
 
 namespace Automation {
 struct Error : std::runtime_error {
@@ -44,10 +45,21 @@ inline bool boolean(id value) {
   require(value && CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID(), "Expected a boolean");
   return [value boolValue];
 }
+// Only a bounded file-import scope may ignore fields from another version.
+// The guard restores strict API validation even when decoding throws.
+inline thread_local std::function<void(NSString *)> *importUnknownField = nullptr;
+struct ImportFieldScope {
+  std::function<void(NSString *)> callback;
+  std::function<void(NSString *)> *previous;
+  explicit ImportFieldScope(std::function<void(NSString *)> f) : callback(std::move(f)), previous(importUnknownField) { importUnknownField=&callback; }
+  ~ImportFieldScope() { importUnknownField=previous; }
+};
 inline void keys(NSDictionary *value, NSArray<NSString *> *allowed) {
   object(value);
-  for (id key in value)
-    require([allowed containsObject:key], "Unknown parameter or field");
+  for (id key in value) if (![allowed containsObject:key]) {
+    if(importUnknownField && [key isKindOfClass:NSString.class]) (*importUnknownField)(key);
+    else require(false, "Unknown parameter or field");
+  }
 }
 inline NSData *base64(id value, NSUInteger maximum) {
   NSString *text = string(value, ((maximum + 2) / 3) * 4);

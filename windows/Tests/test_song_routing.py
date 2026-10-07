@@ -91,6 +91,43 @@ class SongRoutingTests(unittest.TestCase):
         for identifier,value in [(3807,gain),(3808,input),(3809,output)]:
             if value is not None:self.field(identifier,value)
 
+    def test_new_bus_socket_cable_preserves_main_and_selected_handle_rewires_only_send(self):
+        first,second,master=self.setup_mixer();third=self.buses()[2]['id']
+        group=self.write('mixer.bus.add',kind='return',name='Branch')['bus']
+        old=dict(target=third,gainDB=-12,preFader=True,enabled=False)
+        self.write('mixer.sends.set',bus=first,sends=[old]);self.start()
+        scale=self.read('workspace.get')['dpi']/96
+        def mouse(message,p):
+            self.desktop.send(self.window(),message,1 if message!=0x202 else 0,(round(p[0]*scale)&65535)|((round(p[1]*scale)&65535)<<16))
+        def socket(node,output):
+            x,y,w,h=self.node(node)['rect'];return (x+w-2 if output else x+2,y+h/2)
+        # Start at an already connected input: this still adds a branch.
+        mouse(0x201,socket(second,False));mouse(0x200,socket(first,True));mouse(0x202,socket(first,True));self.idle()
+        self.assertEqual(self.bus(first)['output'],master)
+        self.assertEqual(self.bus(first)['sends'],[old,dict(target=second,gainDB=0,preFader=False,enabled=True)])
+        self.choose_wire(lambda a:a.get('kind')=='send' and a.get('source')==first and a.get('index')==1)
+        selected=next(e for e in self.edges() if e['action'].get('kind')=='send' and e['action'].get('source')==first and e['action'].get('index')==1)
+        mouse(0x201,selected['targetHandle']);mouse(0x200,socket(group,False));mouse(0x202,socket(group,False));self.idle()
+        self.assertEqual(self.bus(first)['sends'],[old,dict(target=group,gainDB=0,preFader=False,enabled=True)])
+        self.assertEqual(self.bus(first)['output'],master)
+        self.write('history.undo',domain='document');self.assertEqual(self.bus(first)['sends'][1]['target'],second)
+
+    def test_plugin_output_add_and_cut_preserve_other_destinations(self):
+        first,_,master=self.setup_mixer();plugin=self.add_gain()
+        self.write('mixer.bus.set',bus=first,inserts=[plugin])
+        one=self.write('mixer.bus.add',kind='return',name='Branch one')['bus'];two=self.write('mixer.bus.add',kind='return',name='Branch two')['bus'];self.start()
+        for target in (one,two):
+            self.select(3803,0);self.route(5,'plugin:'+plugin,target,output=0);self.press(3812)
+        routes=[r for r in self.read('mixer.get')['instruments'] if r['plugin']==plugin and r['output']==0]
+        self.assertEqual({r['target'] for r in routes},{one,two})
+        self.select(3803,next(i+1 for i,e in enumerate(self.edges()) if e['action'].get('kind')=='plugin-output' and e['action'].get('plugin')==plugin and e['target']==one))
+        self.press(3814)
+        self.assertEqual([r['target'] for r in self.read('mixer.get')['instruments'] if r['plugin']==plugin and r['output']==0],[two])
+        self.write('history.undo',domain='document')
+        self.assertEqual([r for r in self.read('mixer.get')['instruments'] if r['plugin']==plugin and r['output']==0],routes)
+        path=self.folder/'parallel-outputs.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        self.assertEqual([r for r in self.read('mixer.get')['instruments'] if r['plugin']==plugin and r['output']==0],routes)
+
     def test_overview_stages_default_inserts_filter_and_connections(self):
         first,second,master=self.setup_mixer();a=self.add_gain();b=self.add_gain();group=self.write('mixer.bus.add',kind='group',name='Drum group')['bus']
         self.write('mixer.bus.set',bus=first,output=group,inserts=[a]);g=self.write('graph.create',name='Shared chain')['graph'];self.write('graph.assign',target=first,graph=g)

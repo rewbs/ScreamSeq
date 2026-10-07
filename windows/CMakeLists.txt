@@ -52,12 +52,12 @@ target_link_libraries(OpenMPTCore PUBLIC TrackerFLAC ScreamSeqBuildOptions
   PRIVATE shlwapi ole32 rpcrt4)
 
 set(EDITOR_SOURCES
-  TrackLayout PatternCommands AutomationTools TrackerDocument PatternTools NativeSong
+  TrackLayout PatternCommands NativePatternCommands AutomationTools TrackerDocument PatternTools NativeSong
   ArrangementTools MixerGraph MixerRuntime MixerTransition MixerDryBridge MixerPluginRouting NativeEffects SampleImport SongTiming
-  PreciseNoteRuntime RecordNudgeRuntime NoteRecording InstrumentEnvelopeTools EnvelopeBank
+  PreciseNoteRuntime RecordNudgeRuntime ScratchGesture ScratchRuntime NativePatternRuntime NativeTimingRuntime NoteRecording InstrumentEnvelopeTools EnvelopeBank
   StateVariableFilter FractionalDelay Distortion LofiMat CabinetVoicing CabinetSimulator
   Dynamics Maximizer SampleProcessing SampleWaveform SampleDocument SampleArchive
-  SampleClipboard SampleSplice SampleCopy SampleDrawing SampleSnap SampleLoopCrossfade
+  Sampling SampleClipboard SampleSplice SampleCopy SampleDrawing SampleSnap SampleLoopCrossfade
   SignalGraph SignalGroupBypass NoteRouting GraphEditing GraphClipboard SignalRuntime SignalGroupRuntime SongGroupRuntime SongModulation GraphPresentation ParameterProvenance)
 list(TRANSFORM EDITOR_SOURCES PREPEND "${ROOT}/editor/")
 list(TRANSFORM EDITOR_SOURCES APPEND ".cpp")
@@ -72,7 +72,7 @@ target_link_libraries(ScreamSeqPlayback PUBLIC TrackerHosted)
 target_include_directories(ScreamSeqPlayback PUBLIC "${ROOT}/include/nlohmann-json/include")
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Audio/WasapiDevice.cpp")
-  add_library(ScreamSeqAudio STATIC Audio/WasapiDevice.cpp)
+  add_library(ScreamSeqAudio STATIC Audio/WasapiDevice.cpp Audio/WasapiCapture.cpp)
   target_link_libraries(ScreamSeqAudio PUBLIC ScreamSeqBuildOptions PRIVATE ole32 avrt uuid)
 endif()
 add_library(ScreamSeqProject STATIC Project/BinaryPlist.cpp Project/NativeMetadata.cpp Project/NativeProject.cpp
@@ -84,6 +84,7 @@ target_link_libraries(ScreamSeqProject PUBLIC TrackerEditor PRIVATE crypt32 bcry
 if(SCREAMSEQ_BUILD_APP)
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/App/Main.cpp" AND TARGET ScreamSeqAudio)
     add_executable(ScreamSeq WIN32 App/Main.cpp Samples/Library.cpp Samples/LibraryIndex.cpp Samples/Preview.cpp Session/DocumentController.cpp Session/DocumentOperations.cpp Session/TimelineOperations.cpp Session/AssetOperations.cpp Session/PluginOperations.cpp Session/PatternOperations.cpp Session/GraphOperations.cpp Session/MixerOperations.cpp Session/EnvelopeOperations.cpp Api/PipeServer.cpp Resources/ScreamSeq.rc)
+    target_sources(ScreamSeq PRIVATE Session/SampleRecordingOperations.cpp)
     if(MSVC)
       target_link_options(ScreamSeq PRIVATE /STACK:8388608)
     endif()
@@ -113,6 +114,37 @@ if(SCREAMSEQ_BUILD_RENDER_PROBE)
 endif()
 
 if(BUILD_TESTING)
+  add_executable(native-pattern-command-tests "${ROOT}/editor/Tests/NativePatternCommandTests.cpp")
+  target_link_libraries(native-pattern-command-tests PRIVATE TrackerEditor)
+  add_test(NAME native-pattern-commands COMMAND native-pattern-command-tests)
+  add_executable(pattern-field-tests "${CMAKE_CURRENT_SOURCE_DIR}/Tests/PatternFieldTests.cpp")
+  target_link_libraries(pattern-field-tests PRIVATE TrackerEditor)
+  target_include_directories(pattern-field-tests PRIVATE "${ROOT}/include/nlohmann-json/include")
+  add_test(NAME pattern-fields COMMAND pattern-field-tests)
+  add_executable(native-pattern-runtime-tests "${ROOT}/editor/Tests/NativePatternRuntimeTests.cpp")
+  target_link_libraries(native-pattern-runtime-tests PRIVATE TrackerEditor)
+  add_test(NAME native-pattern-runtime COMMAND native-pattern-runtime-tests)
+  add_executable(scratch-runtime-tests "${ROOT}/editor/Tests/ScratchRuntimeTests.cpp")
+  target_link_libraries(scratch-runtime-tests PRIVATE TrackerEditor)
+  add_test(NAME scratch-runtime COMMAND scratch-runtime-tests)
+  # Opt-in timing evidence, deliberately not registered as a CTest deadline gate.
+  add_executable(native-pattern-benchmark "${ROOT}/editor/Tests/NativePatternBenchmark.cpp")
+  target_link_libraries(native-pattern-benchmark PRIVATE TrackerEditor)
+  target_link_options(native-pattern-benchmark PRIVATE /STACK:8388608)
+
+  add_executable(native-timing-tests "${ROOT}/mac/Tests/NativeTimingTests.cpp")
+  target_link_libraries(native-timing-tests PRIVATE TrackerEditor)
+  add_test(NAME native-timing COMMAND native-timing-tests)
+  add_executable(native-delay-tests "${ROOT}/mac/Tests/NativeDelayTests.cpp")
+  target_link_libraries(native-delay-tests PRIVATE TrackerEditor)
+  add_test(NAME native-delay COMMAND native-delay-tests)
+  add_executable(sampling-tests "${ROOT}/editor/Tests/SamplingTests.cpp")
+  target_link_libraries(sampling-tests PRIVATE TrackerEditor)
+  add_test(NAME sampling COMMAND sampling-tests)
+  foreach(target IN ITEMS native-pattern-command-tests pattern-field-tests native-pattern-runtime-tests scratch-runtime-tests native-timing-tests native-delay-tests sampling-tests)
+    target_link_options(${target} PRIVATE /STACK:8388608)
+  endforeach()
+  set_tests_properties(native-pattern-commands pattern-fields native-pattern-runtime scratch-runtime native-timing native-delay sampling PROPERTIES LABELS "portable;functional;no-realtime-audit" TIMEOUT 120)
   add_executable(native-control-tests Tests/NativeControlTests.cpp)
   target_link_libraries(native-control-tests PRIVATE ScreamSeqBuildOptions comctl32)
   add_test(NAME native-control-tests COMMAND native-control-tests)
@@ -124,6 +156,8 @@ if(BUILD_TESTING)
   add_test(NAME sample-preview-tests COMMAND sample-preview-tests "${CMAKE_CURRENT_BINARY_DIR}")
   set_tests_properties(sample-preview-tests PROPERTIES LABELS "samples;cxx-allocation-audit" TIMEOUT 60)
   include(cmake/PortableTests.cmake)
+  add_dependencies(portable-tests native-pattern-command-tests pattern-field-tests native-pattern-runtime-tests
+    scratch-runtime-tests native-timing-tests native-delay-tests sampling-tests)
   add_executable(document-history-allocation-tests "${ROOT}/editor/Tests/DocumentHistoryAllocationTests.cpp")
   target_link_libraries(document-history-allocation-tests PRIVATE TrackerEditor)
   target_compile_options(document-history-allocation-tests PRIVATE "/FI${ROOT}/windows/cmake/WindowsTestPreamble.hpp")
@@ -251,17 +285,18 @@ if(BUILD_TESTING)
   add_test(NAME project-preservation-tests COMMAND project-preservation-tests)
   set_tests_properties(project-preservation-tests PROPERTIES LABELS "worker;project-native" TIMEOUT 120)
   add_executable(document-controller-tests Tests/DocumentControllerTests.cpp Session/DocumentController.cpp Session/DocumentOperations.cpp Session/TimelineOperations.cpp Session/AssetOperations.cpp Session/PluginOperations.cpp Session/PatternOperations.cpp Session/GraphOperations.cpp Session/MixerOperations.cpp Session/EnvelopeOperations.cpp)
-  target_link_libraries(document-controller-tests PRIVATE ScreamSeqProject ScreamSeqPlayback)
+  target_sources(document-controller-tests PRIVATE Session/SampleRecordingOperations.cpp)
+  target_link_libraries(document-controller-tests PRIVATE ScreamSeqProject ScreamSeqPlayback ScreamSeqAudio)
   add_executable(mixer-document-tests Tests/MixerOperationsTests.cpp Session/MixerOperations.cpp)
   add_executable(graph-document-tests Tests/GraphOperations/GraphOperationsTests.cpp Session/GraphOperations.cpp)
   target_link_libraries(graph-document-tests PRIVATE ScreamSeqProject)
   target_link_options(graph-document-tests PRIVATE /STACK:8388608)
   # Separate processes expose a failing scenario and let unrelated API/history
   # cases finish even when a platform-only access violation occurs.
-  foreach(scenario stageConnectionOperations noteRoutingOperations graphEditingOperations groupBypassOperations
+  foreach(scenario audioFanConnections stageConnectionOperations noteRoutingOperations graphEditingOperations groupBypassOperations groupDryMapDetachment
       graphProvenance graphPresentation songModulationSources songAutomationAndBanks stableImplicitMaster songCableCuts
       createReadHistory nodesAndCloning automationAndBanks assignmentsRoutesLayoutCommands hostHooks
-      automationOrderAndRedo cableInsertionAndDetachment songProcessingGroups processingGroups strictValidation dryRunsAndRedo callbackOrderingAndUnrelatedData)
+      automationOrderAndRedo cableInsertionAndDetachment songSourceGroupOperations songProcessingGroups processingGroups strictValidation dryRunsAndRedo callbackOrderingAndUnrelatedData)
     add_test(NAME graph-document-${scenario} COMMAND graph-document-tests ${scenario})
     set_tests_properties(graph-document-${scenario} PROPERTIES LABELS "worker;functional;no-realtime-audit" TIMEOUT 120)
   endforeach()
@@ -302,7 +337,7 @@ if(BUILD_TESTING)
   set_property(TEST document-controller-publication APPEND PROPERTY FIXTURES_REQUIRED document-controller-unicode)
   screamseq_worker_test(document-controller-cache document-controller document-controller-tests --cache "${controller_scratch}")
   set_property(TEST document-controller-cache APPEND PROPERTY FIXTURES_REQUIRED document-controller-large)
-  foreach(mode assets live-parameters live-rack-publication live-graph-publication live-recorded-publication trigger-instruments pattern-performance pattern-clipboard graph-recipes mixer-integration unified-plugin-history)
+  foreach(mode sampling assets live-parameters live-rack-publication live-graph-publication live-recorded-publication trigger-instruments pattern-performance pattern-clipboard graph-recipes mixer-integration unified-plugin-history)
     screamseq_worker_test(document-controller-${mode} document-controller document-controller-tests --${mode} "${controller_scratch}")
   endforeach()
   add_test(NAME document-controller-graph-pattern-view COMMAND document-controller-tests --graph-pattern-view)
@@ -318,4 +353,24 @@ if(BUILD_TESTING)
   endif()
   add_custom_target(worker-tests DEPENDS native-audio-bus-tests native-project-tests document-controller-tests windows-save-tests
     live-parameter-tests recorded-automation-tests hosted-project-tests project-preservation-tests mixer-document-tests graph-document-tests)
+endif()
+
+if(BUILD_TESTING)
+  add_executable(scratch-editor-state-tests Tests/ScratchEditorStateTests.cpp)
+  target_link_libraries(scratch-editor-state-tests PRIVATE ScreamSeqProject)
+  add_dependencies(portable-tests scratch-editor-state-tests)
+  add_executable(sample-recording-tests Tests/SampleRecordingTests.cpp Session/SampleRecordingOperations.cpp)
+  target_include_directories(sample-recording-tests PRIVATE "${ROOT}" "${ROOT}/include/nlohmann-json/include")
+  add_test(NAME sample-recording COMMAND sample-recording-tests)
+  set_tests_properties(sample-recording PROPERTIES LABELS "portable;functional;no-hardware" TIMEOUT 30)
+  add_dependencies(portable-tests sample-recording-tests)
+  add_test(NAME scratch-editor-state COMMAND scratch-editor-state-tests)
+  set_tests_properties(scratch-editor-state PROPERTIES LABELS "portable;functional;no-realtime-audit" TIMEOUT 30)
+  add_executable(scratch-gesture-api-tests Tests/ScratchGestureOperationsTests.cpp Session/TimelineOperations.cpp)
+  target_link_libraries(scratch-gesture-api-tests PRIVATE ScreamSeqProject)
+  if(MSVC)
+    target_link_options(scratch-gesture-api-tests PRIVATE /STACK:8388608)
+  endif()
+  add_test(NAME scratch-gesture-api-tests COMMAND scratch-gesture-api-tests)
+  set_tests_properties(scratch-gesture-api-tests PROPERTIES LABELS "worker;functional;no-realtime-audit" TIMEOUT 120)
 endif()

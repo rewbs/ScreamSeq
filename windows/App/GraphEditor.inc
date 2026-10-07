@@ -10,7 +10,7 @@
     ScreamSeq::GraphCanvas::Point graphDragStart,graphDragOrigin,graphPointer;
     std::array<double,2> graphDragCoordinates{};
     ScreamSeq::GraphCanvas::Socket graphDragSocket;
-    bool graphDragDirty=false;std::string graphDragNode;
+    bool graphDragDirty=false;std::string graphDragNode;std::optional<Json> graphDragReplace;
     std::wstring graphStatus=L"Create a reusable graph or select one from the library";
     bool graphEditorVisible() const {return graphEditorOpen&&workspaceState.layout!="Pattern focus";}
     Json *graphSelectedNode(){if(graphDraft.contains("nodes"))for(auto &n:graphDraft["nodes"])if(n.at("id")==graphNode)return &n;return nullptr;}
@@ -120,7 +120,16 @@
         if(busy||graphPending)return true;if(graphFieldDirty)throw std::runtime_error("Set or reload the field draft before selecting on the canvas");
         workspaceState.focus="graph";SetFocus(window);graphPointer={x,y};graphDragStart={x,y};graphDragDirty=graphDirty;
         const auto socket=graphCanvas.socketAt(x,y),node=graphCanvas.nodeAt(x,y),wire=graphCanvas.wireAt(x,y);
-        if(socket>=0&&graphCanvas.sockets[size_t(socket)].output){graphDragSocket=graphCanvas.sockets[size_t(socket)];dragging=7;}
+        graphDragReplace.reset();
+        const auto handle=graphCanvas.handleAt(x,y,graphWireIndex,graphWireModulation);
+        if(handle>=0){
+            const auto &edge=graphDraft.at(graphWireModulation?"modulation":"audio").at(size_t(graphWireIndex));
+            const bool fixedOutput=handle==1;const auto fixedNode=edge.at(fixedOutput?"source":"target").get<std::string>();
+            const auto port=graphWireModulation?(fixedOutput?0u:edge.at("parameter").get<uint32_t>()):edge.value(fixedOutput?"output":"input",0u);
+            auto fixed=std::find_if(graphCanvas.sockets.begin(),graphCanvas.sockets.end(),[&](const auto &s){return s.node==fixedNode&&s.output==fixedOutput&&s.modulation==graphWireModulation&&s.port==port;});
+            if(fixed!=graphCanvas.sockets.end()){graphDragSocket=*fixed;graphDragReplace.emplace(edge);dragging=7;}
+        }
+        else if(socket>=0){graphDragSocket=graphCanvas.sockets[size_t(socket)];dragging=7;}
         else if(node>=0){graphNode=graphCanvas.nodes[size_t(node)].id;graphDragNode=graphNode;const auto n=graphSelectedNode();graphDragCoordinates={n->at("x").get<double>(),n->at("y").get<double>()};graphWireIndex=-1;loadGraphFields();dragging=6;}
         else if(wire>=0){const auto &w=graphCanvas.wires[size_t(wire)];graphWireIndex=int(w.index);graphWireModulation=w.modulation;graphPageIndex=w.modulation?2:1;SendMessageW(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);loadGraphFields();layoutControls();}
         else{graphDragOrigin={graphCanvas.panX,graphCanvas.panY};dragging=8;}
@@ -130,13 +139,17 @@
         if(dragging==8){graphCanvas.panX=graphDragOrigin.x+x-graphDragStart.x;graphCanvas.panY=graphDragOrigin.y+y-graphDragStart.y;rebuildGraphCanvas();}frameRequested=true;}
     void graphMouseUp(float x,float y){
         if(dragging==9){dragging=0;curveDragBefore=Json::array();rebuildCurveCanvas();layoutControls();return;}
-        if(dragging==7){const auto target=graphCanvas.socketAt(x,y);if(target>=0){const auto socket=graphCanvas.sockets[size_t(target)];if(!socket.output&&socket.modulation==graphDragSocket.modulation&&socket.node!=graphDragSocket.node){auto &edges=graphDraft[socket.modulation?"modulation":"audio"];Json e={{"source",graphDragSocket.node},{"target",socket.node}};if(socket.modulation){double base=0;for(const auto &old:edges)if(old.at("target")==socket.node&&old.at("parameter")==socket.port){base=old.value("base",0.0);break;}e["parameter"]=socket.port;e["minimum"]=0;e["maximum"]=1;e["base"]=base;e["enabled"]=true;}else{e["output"]=graphDragSocket.port;e["input"]=socket.port;e["gain"]=1;}
-            const auto found=std::find_if(edges.begin(),edges.end(),[&](const auto &v){return v.at("source")==e.at("source")&&v.at("target")==e.at("target")&&(socket.modulation?v.at("parameter")==e.at("parameter"):(v.value("output",0u)==graphDragSocket.port&&v.value("input",0u)==socket.port));});
-            if(found==edges.end()){edges.push_back(e);graphDirty=true;++graphGeneration;graphWireIndex=int(edges.size()-1);}else graphWireIndex=int(found-edges.begin());graphWireModulation=socket.modulation;graphPageIndex=socket.modulation?2:1;SendMessageW(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);loadGraphFields();
-        }}}
+        if(dragging==7){const auto target=graphCanvas.socketAt(x,y);if(target>=0){const auto &socket=graphCanvas.sockets[size_t(target)];
+            try{const auto endpoint=[](const auto &v){return ScreamSeq::GraphCableEdits::Endpoint{v.node,v.output,v.modulation,v.port};};
+                auto edited=ScreamSeq::GraphCableEdits::connect(graphDraft.at(socket.modulation?"modulation":"audio"),endpoint(graphDragSocket),endpoint(socket),graphDragReplace);
+                if(edited.changed){graphDraft[socket.modulation?"modulation":"audio"]=std::move(edited.edges);graphDirty=true;++graphGeneration;}
+                graphWireIndex=int(edited.selected);graphWireModulation=socket.modulation;graphPageIndex=socket.modulation?2:1;
+                SendMessageW(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);loadGraphFields();
+            }catch(const std::exception &e){graphStatus=wide(e.what());status=graphStatus;}
+        }graphDragReplace.reset();}
         if(dragging>=6){dragging=0;rebuildGraphCanvas();layoutControls();}
     }
-    void graphCancelDrag(){if(dragging==9){curveCancelDrag();return;}if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=graphDragCoordinates[0];(*n)["y"]=graphDragCoordinates[1];graphDirty=graphDragDirty;++graphGeneration;}}if(dragging==8){graphCanvas.panX=graphDragOrigin.x;graphCanvas.panY=graphDragOrigin.y;}dragging=0;ReleaseCapture();rebuildGraphCanvas();}
+    void graphCancelDrag(){if(dragging==9){curveCancelDrag();return;}if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=graphDragCoordinates[0];(*n)["y"]=graphDragCoordinates[1];graphDirty=graphDragDirty;++graphGeneration;}}if(dragging==8){graphCanvas.panX=graphDragOrigin.x;graphCanvas.panY=graphDragOrigin.y;}graphDragReplace.reset();dragging=0;ReleaseCapture();rebuildGraphCanvas();}
     void graphZoom(float factor){const auto &r=graphCanvas.viewport;const auto anchor=graphCanvas.world(r.x+r.w/2,r.y+r.h/2);graphCanvas.zoom=std::clamp(graphCanvas.zoom*factor,.25f,2.5f);graphCanvas.panX=r.w/2-anchor.x*graphCanvas.zoom;graphCanvas.panY=r.h/2-anchor.y*graphCanvas.zoom;rebuildGraphCanvas();}
     bool graphKey(WPARAM key,bool ctrl,bool alt,bool shift){
         if(!graphEditorVisible())return false;const auto focus=GetFocus();const auto id=focus==window?0:GetDlgCtrlID(focus);
@@ -161,12 +174,13 @@
         for(const auto &wire:graphCanvas.wires){if(wire.bounds.x>canvas.x+canvas.w||wire.bounds.x+wire.bounds.w<canvas.x||wire.bounds.y>canvas.y+canvas.h||wire.bounds.y+wire.bounds.h<canvas.y)continue;const bool selected=graphWireIndex==int(wire.index)&&graphWireModulation==wire.modulation;const auto color=selected?0xf3dfb0:wire.modulation?0xd7ae64:0x56bda9;for(size_t i=1;i<wire.points.size();++i)s.line(wire.points[i-1].x,wire.points[i-1].y,wire.points[i].x,wire.points[i].y,color,selected?3:1.5f);}
         for(const auto &node:graphCanvas.nodes){const auto &b=node.rect;if(b.x>canvas.x+canvas.w||b.x+b.w<canvas.x||b.y>canvas.y+canvas.h||b.y+b.h<canvas.y)continue;s.fill(b.x,b.y,b.w,b.h,0x202c38);s.fill(b.x,b.y,b.w,25*graphCanvas.zoom,0x2a3b49);s.outline(b.x,b.y,b.w,b.h,node.id==graphNode?0xa394d6:0x415967);s.uiText(node.name,b.x+8,b.y+4,b.w-16);s.uiText(ScreamSeq::GraphCanvas::wide(node.kind),b.x+8,b.y+25*graphCanvas.zoom,b.w-16,0x93a8b7);}
         for(const auto &socket:graphCanvas.sockets)if(canvas.contains(socket.at.x,socket.at.y)){const auto color=socket.modulation?0xd7ae64:0x56bda9;s.fill(socket.at.x-4,socket.at.y-4,8,8,color);const auto label=socket.modulation?(socket.output?L"mod":L"p"+std::to_wstring(socket.port)):std::to_wstring(socket.port);s.uiText(label,socket.at.x+(socket.output?-48:10),socket.at.y-7,40,color);}
-        if(dragging==7){const auto wire=ScreamSeq::GraphCanvas::curve(graphDragSocket.at,graphPointer);for(size_t i=1;i<wire.size();++i)s.line(wire[i-1].x,wire[i-1].y,wire[i].x,wire[i].y,graphDragSocket.modulation?0xd7ae64:0x56bda9,2);}
+        if(const auto *wire=graphCanvas.selectedWire(graphWireIndex,graphWireModulation))for(const auto index:{4u,28u}){const auto p=wire->points[index];s.fill(p.x-5,p.y-5,10,10,0x18222d);s.outline(p.x-5,p.y-5,10,10,0xf3dfb0);}
+        if(dragging==7){const auto wire=graphDragSocket.output?ScreamSeq::GraphCanvas::curve(graphDragSocket.at,graphPointer):ScreamSeq::GraphCanvas::curve(graphPointer,graphDragSocket.at);for(size_t i=1;i<wire.size();++i)s.line(wire[i-1].x,wire[i-1].y,wire[i].x,wire[i].y,graphDragSocket.modulation?0xd7ae64:0x56bda9,2);}
         s.unclip();
         if(graphPageIndex==0)s.uiText(L"Captured property",x,r.y+65,248,0x8390a2);
         if(graphPageIndex==1||graphPageIndex==2){s.uiText(L"Source",x,r.y+63,120,0x8390a2);s.uiText(L"Destination",x+128,r.y+63,120,0x8390a2);s.uiText(graphPageIndex==1?L"Output port":L"Stable parameter ID →",x,r.y+107,120,0x8390a2);s.uiText(graphPageIndex==1?L"Input port":L"Parameter",x+128,r.y+107,120,0x8390a2);s.uiText(graphPageIndex==1?L"Gain multiplier":L"Minimum",x,r.y+152,120,0x8390a2);if(graphPageIndex==2){s.uiText(L"Maximum",x+84,r.y+152,76,0x8390a2);s.uiText(L"Base",x+168,r.y+152,80,0x8390a2);}}
         if(graphPageIndex==4){s.uiText(L"Amount / 0…1",x,r.y+73,120,0x8390a2);s.uiText(L"Wet / 0…1",x+128,r.y+73,120,0x8390a2);}
         const bool stale=graphDocument!=documentId||graphRevision!=view->session.revision;
-        s.uiText(stale&&(graphDirty||graphFieldDirty)?L"Song changed / captured graph retained — Reload before applying":graphFieldDirty?L"Field draft / Set property or update wire":graphDirty?L"Graph draft / Apply commits one document Undo":L"Drag sockets to connect · Tab nodes · Ctrl+Tab wires · arrows move · +/- zoom",r.x+8,r.y+r.h-23,r.w-16,stale?0xe7bb79:0x8390a2);s.unclip();s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="graph"?0x6edac5:0x303b49);
+        s.uiText(stale&&(graphDirty||graphFieldDirty)?L"Song changed / captured graph retained — Reload before applying":graphFieldDirty?L"Field draft / Set property or update wire":graphDirty?L"Graph draft / Apply commits one document Undo":L"Drag either socket to add · selected wire handles rewire · Ctrl+Tab selects wires",r.x+8,r.y+r.h-23,r.w-16,stale?0xe7bb79:0x8390a2);s.unclip();s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="graph"?0x6edac5:0x303b49);
     }
-    Json graphEditorSnapshot()const{Json nodes=Json::array(),sockets=Json::array(),wires=Json::array();for(const auto &n:graphCanvas.nodes)nodes.push_back({{"id",n.id},{"x",n.rect.x},{"y",n.rect.y},{"width",n.rect.w},{"height",n.rect.h}});for(const auto &s:graphCanvas.sockets)sockets.push_back({{"node",s.node},{"output",s.output},{"modulation",s.modulation},{"port",s.port},{"x",s.at.x},{"y",s.at.y}});for(const auto &w:graphCanvas.wires)wires.push_back({{"modulation",w.modulation},{"index",w.index},{"x",w.points[16].x},{"y",w.points[16].y}});return {{"visible",graphEditorVisible()},{"graph",graphID},{"node",graphNode},{"wire",graphWireIndex},{"modulation",graphWireModulation},{"dirty",graphDirty},{"fieldDraft",graphFieldDirty},{"pending",graphPending},{"stale",graphDocument!=documentId||graphRevision!=view->session.revision},{"expectedRevision",graphRevision},{"zoom",graphCanvas.zoom},{"nodes",nodes},{"sockets",sockets},{"wires",wires}};}
+    Json graphEditorSnapshot()const{Json nodes=Json::array(),sockets=Json::array(),wires=Json::array();for(const auto &n:graphCanvas.nodes)nodes.push_back({{"id",n.id},{"x",n.rect.x},{"y",n.rect.y},{"width",n.rect.w},{"height",n.rect.h}});for(const auto &s:graphCanvas.sockets)sockets.push_back({{"node",s.node},{"output",s.output},{"modulation",s.modulation},{"port",s.port},{"x",s.at.x},{"y",s.at.y}});for(const auto &w:graphCanvas.wires)wires.push_back({{"modulation",w.modulation},{"index",w.index},{"x",w.points[16].x},{"y",w.points[16].y},{"sourceHandle",{{"x",w.points[4].x},{"y",w.points[4].y}}},{"targetHandle",{{"x",w.points[28].x},{"y",w.points[28].y}}}});return {{"visible",graphEditorVisible()},{"graph",graphID},{"node",graphNode},{"wire",graphWireIndex},{"modulation",graphWireModulation},{"dirty",graphDirty},{"fieldDraft",graphFieldDirty},{"pending",graphPending},{"stale",graphDocument!=documentId||graphRevision!=view->session.revision},{"expectedRevision",graphRevision},{"zoom",graphCanvas.zoom},{"nodes",nodes},{"sockets",sockets},{"wires",wires}};}

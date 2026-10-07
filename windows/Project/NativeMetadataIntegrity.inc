@@ -34,21 +34,28 @@ void validateMetadataReferences(const NativeSong &n) {
   for (const auto &[id,muted] : n.columnMutes) need(tracks.contains(id),"Unknown column mute identity");
   for (auto [id,count] : n.performance.columns) need(tracks.contains(id),"Unknown effect-column track");
   for (const auto &[id,b] : n.performance.bindings) need(!b.plugin.empty() && b.plugin.size() <= 128,"Invalid stable parameter plugin identity");
+  need(n.scratchGestures.size()<=255,"Too many scratch gestures");
+  for(const auto &[id,value]:n.scratchGestures){need(id>=1&&id<=255,"Invalid scratch gesture slot");validateScratchGesture(value);}
   std::set<std::tuple<uint64_t,uint64_t,uint32_t,uint8_t>> commandCells;
-  std::set<uint64_t> pitchTracks;
+  std::set<uint64_t> pitchTracks,scratchTracks;
   for (const auto &c : n.performance.commands) {
+    validateNativePatternCommand(c);
+    if(c.kind==PatternCommandKind::Native&&c.native==NativePatternOp::Scratch){
+      need(n.scratchGestures.contains(uint16_t(c.arguments[0])),"Scratch command refers to a missing gesture");scratchTracks.insert(c.track);}
+    const bool nativeCommand=c.kind==PatternCommandKind::Native;
     const bool parameter = c.kind == PatternCommandKind::ParameterSet || c.kind == PatternCommandKind::ParameterSlide;
-    const bool slide = c.kind == PatternCommandKind::ParameterSlide || c.kind == PatternCommandKind::PitchSlide || isNudge(c.kind);
+    const bool slide = c.kind == PatternCommandKind::ParameterSlide || c.kind == PatternCommandKind::PitchSlide;
     need(patterns.contains(c.pattern) && tracks.contains(c.track) && c.column < (n.performance.columns.contains(c.track) ? n.performance.columns.at(c.track) : 1),"Unknown performance pattern, track or column");
     need(commandCells.emplace(c.pattern,c.track,c.position/performanceUnitsPerRow,c.column).second,"Duplicate performance cell");
     need(parameter ? (n.performance.bindings.contains(c.binding) && c.value >= 0 && c.value <= 1 && c.pitchRange == 2) : c.binding == 0,"Invalid performance binding or parameter value");
     need(!isNudge(c.kind) || (c.value>=0 && c.value<=1 && c.pitchRange==2),"Invalid record nudge strength");
-    need(slide ? c.duration > 0 : c.duration == 0,"Invalid command duration"); if (c.kind==PatternCommandKind::PitchSet || c.kind==PatternCommandKind::PitchSlide || isNudge(c.kind)) pitchTracks.insert(c.track);
+    need(nativeCommand || (slide ? c.duration > 0 : c.duration == 0),"Invalid command duration"); if (c.kind==PatternCommandKind::PitchSet || c.kind==PatternCommandKind::PitchSlide || isNudge(c.kind)) pitchTracks.insert(c.track);
     const bool tracker=c.kind==PatternCommandKind::TrackerEffect,cut=c.kind==PatternCommandKind::NoteCut;
     need((!tracker || (c.column && !(c.position%performanceUnitsPerRow) && c.effect<OpenMPT::MAX_EFFECTS)) &&
       (!cut || c.pitchRange==2) && (!(tracker||cut) || (!c.value && !c.binding)) && (tracker || (!c.effect && !c.parameter)),"Invalid unified FX metadata");
   }
   need(pitchTracks.size() <= 16,"Too many native pitch tracks");
+  need(scratchTracks.size()<=16,"Too many scratch tracks");
   std::set<std::tuple<uint64_t,uint64_t,uint32_t,bool>> notePositions;
   for (const auto &p : n.preciseNotes) {
     const bool on = p.note >= 1 && p.note <= 120;
