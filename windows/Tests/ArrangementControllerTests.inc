@@ -4,7 +4,7 @@
 namespace {
 Json arrangementOrderIDs(const Tracker::Document &document,unsigned sequence) {
   Json result=Json::array();
-  for(const auto &entry:document.native().sequences.at(sequence).orders) result.push_back({{"id","n"+std::to_string(entry.id)}});
+  for(const auto &entry:document.native().sequences.at(sequence).orders) result.push_back(DocumentOperations::entityInfo(entry));
   return result;
 }
 void arrangementCatalogTests(const std::filesystem::path &directory) {

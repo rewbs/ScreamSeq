@@ -38,7 +38,40 @@ size_t graphViewBytes(const Tracker::NativeSong &native){
   for(const auto &bus:native.mixer.buses)if(auto lane=native.signal.lanes.find(bus.id);lane!=native.signal.lanes.end())bytes+=lane->second*(sizeof(PatternGraphLane)+bus.name.size()+32);
   return bytes;
 }
-Json orderIdentity(const Tracker::NativeEntity &entry) {return {{"id","n"+std::to_string(entry.id)}};}
+// Use the same complete entity shape as arrangement.get and song.annotate.
+// Native-only history uses the same engine structure and selected sequence.
+Json entityCatalogs(const OpenMPT::CSoundFile &song,const Tracker::NativeSong &native) {
+  Json result={{"patterns",Json::array()},{"tracks",Json::array()},{"sequences",Json::array()},{"orderMetadata",Json::array()}};
+  for(const auto &[index,entry]:native.patterns) {
+    auto item=DocumentOperations::entityInfo(entry);item["index"]=index;
+    item["rows"]=unsigned(song.Patterns[index].GetNumRows());
+    result["patterns"].push_back(std::move(item));
+  }
+  for(const auto &[index,entry]:native.tracks) {
+    auto item=DocumentOperations::entityInfo(entry);item["index"]=index;result["tracks"].push_back(std::move(item));
+  }
+  for(size_t index=0;index<native.sequences.size();++index) {
+    auto item=DocumentOperations::entityInfo(native.sequences[index].info);item["index"]=index;
+    if(native.sequences[index].info.name.empty()&&index<song.Order.GetNumSequences())
+      item["name"]=::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.Order(OpenMPT::SEQUENCEINDEX(index)).GetName());
+    result["sequences"].push_back(std::move(item));
+  }
+  const auto selected=song.Order.GetCurrentSequenceIndex();
+  if(selected<native.sequences.size())for(const auto &entry:native.sequences[selected].orders)
+    result["orderMetadata"].push_back(DocumentOperations::entityInfo(entry));
+  return result;
+}
+std::array<std::byte,32> entityFingerprint(const Tracker::NativeSong &native) {
+  ::mpt::crypto::hash::SHA256 hash;
+  auto add=[&](const Json &item) {const auto text=item.dump();hash.process(::mpt::const_byte_span(reinterpret_cast<const std::byte*>(text.data()),text.size()));};
+  for(const auto &[index,entry]:native.patterns)add(Json::array({"pattern",index,DocumentOperations::entityInfo(entry)}));
+  for(const auto &[index,entry]:native.tracks)add(Json::array({"track",index,DocumentOperations::entityInfo(entry)}));
+  for(size_t sequence=0;sequence<native.sequences.size();++sequence) {
+    const auto &entry=native.sequences[sequence];add(Json::array({"sequence",sequence,DocumentOperations::entityInfo(entry.info)}));
+    for(size_t order=0;order<entry.orders.size();++order)add(Json::array({"order",sequence,order,DocumentOperations::entityInfo(entry.orders[order])}));
+  }
+  return hash.result();
+}
 template<typename Charge> void chargeJsonView(const Json &j,const Charge &charge) {
   charge(128);
   if(j.is_string()) charge(j.get_ref<const std::string&>().size()+1);
@@ -190,7 +223,9 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   next->dirty=project.recoveredUnsaved || document.revision!=project.savedRevision || project.pluginRevision!=project.savedPluginRevision;next->hosted=Project::requiresHostedPlayback(document,project);
   next->hasOpenEditors=same&&plugins_&&plugins_->openEditorCount()!=0;
   auto &result=next->session;result.documentId=identity_+":"+std::to_string(generation);result.revision=result.documentId+":"+std::to_string(document.revision)+":"+std::to_string(song.Order.GetCurrentSequenceIndex())+":"+std::to_string(project.pluginRevision);
-  Json patterns=Json::array(),orders=Json::array(),orderMetadata=Json::array(),samples=Json::array(),instruments=Json::array(),plugins=Json::array(),sequences=Json::array();
+  const auto catalogs=entityCatalogs(song,native);
+  next->metadataFingerprint=entityFingerprint(native);
+  Json orders=Json::array(),samples=Json::array(),instruments=Json::array(),plugins=Json::array();
   for(unsigned n=0;n<256;++n) next->noteNames[n]=::OpenMPT::mpt::ToWide(song.GetNoteName(uint8_t(n)));
   DocumentOperations operations(document);next->commands=operations.invoke("pattern.commands",Json::object());
   for(const auto &effect:next->commands.at("effect"))if(effect.at("parameterMask")!=0)next->effectMasks.at(effect.at("command").get<unsigned>())=effect.at("parameterMask").get<uint8_t>();
@@ -201,8 +236,7 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     next->effectLetters[n]=n<OpenMPT::MAX_EFFECTS ? wchar_t(spec.GetEffectLetter(static_cast<OpenMPT::EffectCommand>(n))) : L'?';
   }
   for(unsigned p=0;p<song.Patterns.Size();++p) if(song.Patterns.IsValidPat(p)) {
-    const auto &entry=native.patterns.at(uint16_t(p));const auto rows=unsigned(song.Patterns[p].GetNumRows());
-    patterns.push_back({{"index",p},{"rows",rows},{"id","n"+std::to_string(entry.id)},{"name",entry.name}});
+    const auto rows=unsigned(song.Patterns[p].GetNumRows());
     auto old=same && previous->patterns.contains(p) ? previous->patterns.at(p) : nullptr;
     bool equal=old && old->rows==rows && old->channels==next->channels;
     if(equal && (scanPatterns_ || changedPatterns_.contains(p))) {
@@ -220,8 +254,6 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     next->patterns[p]=std::move(pv);
   }
   for(auto p:song.Order()) orders.push_back(p);
-  for(const auto &entry:native.sequences.at(song.Order.GetCurrentSequenceIndex()).orders) orderMetadata.push_back(orderIdentity(entry));
-  for(unsigned i=0;i<song.Order.GetNumSequences();++i) sequences.push_back({{"index",i},{"name",::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.Order(i).GetName())},{"id","n"+std::to_string(native.sequences.at(i).info.id)}});
   for(unsigned i=1;i<=song.GetNumSamples();++i) {
     auto info=operations.invoke("sample.get",{{"sample",i}});
     info["id"]="n"+std::to_string(native.samples.at(uint16_t(i)).id);samples.push_back(info);next->samples[i]=info;
@@ -246,8 +278,8 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   }
   std::string format=spec.fileExtension;std::transform(format.begin(),format.end(),format.begin(),[](unsigned char c){return char(std::toupper(c));});
   result.document={{"title",::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.GetCharsetInternal(),song.GetTitle())},{"format",format},
-    {"channels",next->channels},{"effectColumns",next->effectColumns},{"orders",orders},{"orderMetadata",orderMetadata},{"patterns",patterns},{"samples",samples},{"instruments",instruments},{"nativePlugins",plugins},{"editable",document.editable()},
-    {"sequence",song.Order.GetCurrentSequenceIndex()},{"sequences",sequences},{"tempo",song.Order().GetDefaultTempo().ToDouble()},{"speed",song.Order().GetDefaultSpeed()},
+    {"channels",next->channels},{"effectColumns",next->effectColumns},{"orders",orders},{"orderMetadata",catalogs.at("orderMetadata")},{"patterns",catalogs.at("patterns")},{"tracks",catalogs.at("tracks")},{"samples",samples},{"instruments",instruments},{"nativePlugins",plugins},{"editable",document.editable()},
+    {"sequence",song.Order.GetCurrentSequenceIndex()},{"sequences",catalogs.at("sequences")},{"tempo",song.Order().GetDefaultTempo().ToDouble()},{"speed",song.Order().GetDefaultSpeed()},
     {"formatLimits",{{"patternRowsMin",spec.patternRowsMin},{"patternRowsMax",spec.patternRowsMax},{"patternsMax",spec.patternsMax},{"ordersMax",spec.ordersMax},
       {"patternsRemaining",song.Patterns.GetRemainingCapacity()},{"ordersRemaining",song.Order().size()<spec.ordersMax ? size_t(spec.ordersMax)-song.Order().size() : 0}}},
     {"nativeSummary",{{"preciseNotes",native.preciseNotes.size()},{"signalDefinitions",native.signal.library.size()},{"envelopeTemplates",native.envelopeBank.size()}}},
@@ -256,8 +288,8 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   result.document["hasRecoveryTake"]=same?bool(recording_):project.preserved.contains("recoveryTake");
   {
     std::lock_guard lock(mutex_);
-    bool changed=!view_ || view_->session.documentId!=result.documentId;
-    if(view_) for(const auto *key:{"patterns","samples","instruments","orders","orderMetadata","sequence","sequences","formatLimits","nativePlugins"}) changed|=view_->session.document.at(key)!=result.document.at(key);
+    bool changed=!view_ || view_->session.documentId!=result.documentId || view_->metadataFingerprint!=next->metadataFingerprint;
+    if(view_) for(const auto *key:{"patterns","tracks","samples","instruments","orders","orderMetadata","sequence","sequences","formatLimits","nativePlugins"}) changed|=view_->session.document.at(key)!=result.document.at(key);
     next->catalogRevision=(view_ ? view_->catalogRevision : 0)+(changed ? 1 : 0);
 
   }
@@ -288,15 +320,8 @@ void DocumentController::preflightGrowth(const std::string &method,const Json &p
     if(!params.contains(key) || !params.at(key).is_number()) return 0;
     double n=params.at(key).get<double>();return n>=0 && n<=65535 ? size_t(n) : 0;
   };
-  if(method=="pattern.create") {
-    added=bounded("rows")*current->channels*6+8192;
-    if(params.contains("source")) for(const auto &p:current->session.document.at("patterns"))
-      if(p.at("index")==params.at("source")) added+=p.dump().size();
-    if(params.contains("source")&&document_->native().patterns.contains(uint16_t(bounded("source")))){
-      const auto id=document_->native().patterns.at(uint16_t(bounded("source"))).id;
-      for(const auto &c:document_->native().signal.commands)if(c.pattern==id)added+=sizeof(Tracker::SignalCommand)+sizeof(size_t);
-    }
-  }
+  // Pattern/order structural edits run the shared primitive on a staged
+  // Document, then validate its complete publication through the host hook.
   if(method=="sequence.select") {
     const auto sequence=bounded("sequence");
     const auto selected=document_->song().Order.GetCurrentSequenceIndex();
@@ -307,7 +332,7 @@ void DocumentController::preflightGrowth(const std::string &method,const Json &p
       auto catalogBytes=[&](unsigned index) {
         size_t bytes=256; // orders and orderMetadata array containers.
         auto charge=[&](size_t n){if(n>maxCacheBytes_ || bytes>maxCacheBytes_-n) throw Api::ApiError(-32602,"Edit needs more document view cache headroom");bytes+=n;};
-        for(const auto &entry:document_->native().sequences.at(index).orders) {charge(128);chargeJsonView(orderIdentity(entry),charge);}
+        for(const auto &entry:document_->native().sequences.at(index).orders) {charge(128);chargeJsonView(DocumentOperations::entityInfo(entry),charge);}
         return bytes;
       };
       const auto before=catalogBytes(selected),after=catalogBytes(unsigned(sequence));
@@ -319,7 +344,6 @@ void DocumentController::preflightGrowth(const std::string &method,const Json &p
     const auto channels=bounded("channels");
     if(channels>current->channels) for(const auto &[p,pat]:current->patterns) added+=size_t(pat->rows)*(channels-current->channels)*6;
   }
-  if(method=="order.edit") added=8192;
   if(method=="document.save") added=256*1024; // Maximum UTF-16 destination plus metadata.
   if(method=="sample.pcm.set" || method=="sample.copyToNew") added=16384;
   if(method=="instrument.create") added=(size_t(document_->song().GetNumSamples())+1)*8192;
@@ -394,7 +418,9 @@ Json DocumentController::operation(const std::string &method,Json params) {
   changedPatterns_.clear();
   changedSamples_.clear();
   const bool pcmWrite=method=="sample.process" || method=="sample.draw" || method=="sample.crossfade" || method=="sample.cut" || method=="sample.delete" || method=="sample.paste";
-  scanWaves_=method=="history.undo" || method=="history.redo" || method=="sample.import" || method=="sample.importMany" || method=="instrument.import" || method=="instrument.importMultisample" || method=="sample.copyToNew" || method=="sample.pcm.set";
+  const bool historyReplacesSamples=(method=="history.undo"&&(pluginMethod||document_->undoChangesStructure()))
+    ||(method=="history.redo"&&(pluginMethod||document_->redoChangesStructure()));
+  scanWaves_=historyReplacesSamples || method=="sample.import" || method=="sample.importMany" || method=="instrument.import" || method=="instrument.importMultisample" || method=="sample.copyToNew" || method=="sample.pcm.set";
   if(pcmWrite && params.contains("sample") && params.at("sample").is_number()) {
     const double sample=params.at("sample").get<double>();
     if(sample>=1 && sample<=65535 && std::floor(sample)==sample) changedSamples_.insert(unsigned(sample));
@@ -460,7 +486,28 @@ Json DocumentController::operation(const std::string &method,Json params) {
       if((method=="history.undo" && document_->canUndo()) || (method=="history.redo" && document_->canRedo())){
         const auto &candidate=document_->historyNative(method=="history.redo");validateGraphViewGrowth(candidate);
         Tracker::validatePluginCapacity(projectPluginStates(project_),candidate.mixer.buses.size());}
-      DocumentOperations operations(*document_,[this]{onMain(stop_);},[this](const auto &edits){for(const auto &e:edits) changedPatterns_.insert(e.pattern);onMain([this,edits]{edits_(edits);});});
+      auto validateCandidate=[this](Tracker::Document &candidate) {
+        try {(void)buildView(candidate,project_,generation_);}
+        catch(const Api::ApiError &e) {
+          if(e.code==-32602&&std::string(e.what())=="Document view cache exceeds the aggregate byte budget")
+            throw Api::ApiError(-32602,"Edit needs more document view cache headroom");
+          throw;
+        }
+      };
+      auto validateNative=[this](const Tracker::NativeSong &candidate) {
+        auto bytes=[&](const Tracker::NativeSong &native) {
+          size_t total=0;auto charge=[&](size_t n) {
+            if(n>maxCacheBytes_||total>maxCacheBytes_-n)throw Api::ApiError(-32602,"Edit needs more document view cache headroom");
+            total+=n;
+          };
+          charge(patternViewBytes(native));charge(graphViewBytes(native));
+          chargeJsonView(entityCatalogs(document_->song(),native),charge);return total;
+        };
+        const auto before=bytes(document_->native()),after=bytes(candidate);
+        if(after>before&&(after-before>maxCacheBytes_||view_->cacheBytes>maxCacheBytes_-(after-before)))
+          throw Api::ApiError(-32602,"Edit needs more document view cache headroom");
+      };
+      DocumentOperations operations(*document_,[this]{onMain(stop_);},[this](const auto &edits){for(const auto &e:edits) changedPatterns_.insert(e.pattern);onMain([this,edits]{edits_(edits);});},validateCandidate,validateNative);
       result=operations.invoke(method,params);
     }
   }

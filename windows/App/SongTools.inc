@@ -67,11 +67,27 @@
         const auto state=arrangementWindow->snapshot();
         if(state.at("documentId")!=documentId||state.at("revision")!=view->session.revision)throw std::runtime_error("The arrangement changed. Select a current order.");
     }
+    void navigateArrangementSection(bool next) {
+        if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"The document is busy. Try again when the operation completes.");
+        resolveArrangementSelection();
+        const auto &metadata=view->session.document.at("orderMetadata");
+        const auto selected=orderForIdentity(selectedOrderID);
+        if(selected<0)return;
+        for(int index=selected+(next?1:-1);index>=0&&size_t(index)<metadata.size();index+=next?1:-1){
+            if(!metadata[size_t(index)].at("name").get_ref<const std::string &>().empty()){
+                if(arrangementWindow&&arrangementWindow->visible())arrangementWindow->navigateSection(next);
+                else selectArrangementOrder(metadata[size_t(index)].at("id").get<std::string>());
+                return;
+            }
+        }
+        status=next?L"No later named section":L"No earlier named section";
+        InvalidateRect(window,nullptr,FALSE);
+    }
     Json arrangementOperation(std::string method,Json params) {
         const auto capturedDocument=documentId,capturedSequence=currentSequenceID(),capturedSelection=selectedOrderID;
         const auto selectionGeneration=orderSelectionGeneration;
         const auto result=documentOperation(method,params);
-        if(capturedDocument==documentId&&selectionGeneration==orderSelectionGeneration){
+        if(method!="song.annotate"&&capturedDocument==documentId&&selectionGeneration==orderSelectionGeneration){
             const auto &metadata=view->session.document.at("orderMetadata");
             std::string target=selectedOrderID;
             if(method=="pattern.create"&&!metadata.empty())target=metadata.back().at("id");

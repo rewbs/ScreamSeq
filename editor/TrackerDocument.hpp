@@ -166,6 +166,10 @@ public:
 	bool editNative(NativeSong metadata, const std::vector<Edit> &edits = {});
 	std::vector<Edit> undo();
 	std::vector<Edit> redo();
+	// Private state projection for admission checks; nullptr if history is empty.
+	// Reuses the pending operation without consuming live history. The returned
+	// document retains only that entry, not the live document's history stacks.
+	std::unique_ptr<Document> historyCandidate(bool redo);
 	bool canUndo() const { return !undo_.empty(); }
 	bool canRedo() const { return !redo_.empty(); }
 	const NativeSong &historyNative(bool redo) const {

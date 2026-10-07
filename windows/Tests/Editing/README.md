@@ -1,4 +1,4 @@
-# Document operation layer (not exposed in the app)
+# Document operation layer
 
 `windows/Session/DocumentOperations.hpp/.cpp` owns wire validation and delegates
 musical changes to `Tracker::Document`. It does not add another document model,
@@ -11,7 +11,9 @@ namespace ScreamSeq {
 using Json = nlohmann::json;
 DocumentOperations(Tracker::Document &,
   std::function<void()> stopPlayback = {},
-  std::function<void(const std::vector<Tracker::Edit>&)> publishEdits = {});
+  std::function<void(const std::vector<Tracker::Edit>&)> publishEdits = {},
+  std::function<void(Tracker::Document&)> validateCandidate = {},
+  std::function<void(const Tracker::NativeSong&)> validateNativeCandidate = {});
 Json invoke(const std::string &method, const Json &params);
 static std::vector<std::string> reads();
 static std::vector<std::string> writes();
@@ -24,6 +26,13 @@ the document control thread. Return values are Mac `result.data`, not JSON-RPC
 or revision envelopes. Validation errors use `ScreamSeq::Api::ApiError(-32602)`;
 unknown methods use `-32601`. Other core failures propagate for host mapping to
 `-32003`. Recreate the operation object whenever loading replaces its Document.
+The Windows application registers these operations through its document worker.
+Candidate callbacks reject before live edits or playback stops. The document
+callback receives a private staged structural edit; the native callback admits
+annotations and nonstructural history against the host's publication budget.
+`arrangement.get` bounds its response before returning it. `song.annotate` uses
+the shared annotation transaction; metadata-only Undo/Redo preserves playback
+only when all musical fields, stable IDs and container structure stay equal.
 
 The host revision must include document identity, Document revision and selected
 sequence (and plugin revision when hosting exists). `sequence.select` changes
@@ -32,17 +41,19 @@ The core `Document::edit` replaces supplied `Edit::before` with the current cell
 it is NOT an optimistic per-cell guard. Stale request rejection belongs to the
 host. An API cell patch cannot contain a `before` field.
 
-Callbacks must not throw or mutate the Document. Cell publication happens after
+Playback and cell-publication callbacks must not throw or mutate the Document. Cell publication happens after
 committed edits, including cell Undo/Redo. The host should enqueue the batch, and
 stop playback on queue overflow without claiming the committed edit failed.
-Structural operations validate using a disposable real Document before invoking
-the stop callback. Empty callbacks are appropriate only for offline use.
-Native-only Undo/Redo also stops when metadata changes, because this interface
-has no live column-mute/native-metadata publication hook.
+Structural operations, including Undo/Redo, validate using a disposable real
+Document before invoking the stop callback. Admission callbacks can throw to
+reject before any live mutation. Empty callbacks are appropriate only for
+offline use. Native-only musical Undo/Redo still stops; only proven presentation
+fields on supported annotation entities are exempt.
 
 ## Implemented methods
 
 Reads:
+- `arrangement.get {}`: complete active-sequence orders and named section ranges.
 - `pattern.commands {}`: shared format-specific `patternCommands` catalog.
 - `sample.get {sample}`: exact Mac metadata field set, no waveform calculation.
 - `sample.waveform.get {sample,start?,end?,bins?,channels?}`: shared cached
@@ -50,6 +61,8 @@ Reads:
   `waveform.get` is deliberately not an alias: it is not the Mac method.
 
 Writes:
+- `song.annotate {id,name?,annotation?,color?}`: partial presentation metadata
+  for pattern, track, sequence or order, with shared Undo and no playback stop.
 - `pattern.apply {cells,dryRun?}`: 1..4096 distinct partial cell patches, one
   document Undo, format-aware shared validation, complete before/after changes.
 - `history.undo/redo {domain:"document"}`: shared document history only.
