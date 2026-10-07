@@ -104,6 +104,9 @@ class ScratchEditorTests(unittest.TestCase):
         phrase = self.setup_phrase()
         self.press(3125)  # Use in captured pattern cell.
         self.assertEqual(self.command_at()['parameters']['gesture'], phrase)
+        linkage = ctypes.create_unicode_buffer(512)
+        self.desktop.send(self.child(3202), 0xD, len(linkage), ctypes.addressof(linkage))
+        self.assertIn('1 linked SK uses', linkage.value)
         # Cursor navigation does not redirect a later Use or Make unique.
         self.navigate(row=9, channel=2, column=3)
         self.select_point(0)
@@ -122,6 +125,9 @@ class ScratchEditorTests(unittest.TestCase):
         self.press(3127)  # More / Undo: phrase and cell together.
         self.assertEqual(self.bank(), prior_bank)
         self.assertEqual(self.command_at(), prior_cell)
+        restored = self.state()
+        self.assertEqual(restored['selected'], phrase)
+        self.assertTrue(all(lane['points'] for lane in restored['lanes']), restored)
         self.press(3128)
         self.assertEqual(self.command_at(), after)
         path = self.folder/'scratch-editor.screamseq'

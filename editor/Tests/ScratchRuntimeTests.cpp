@@ -17,7 +17,7 @@ static void tracker_audit_begin(){}
 static void tracker_audit_end(uint64_t *a,uint64_t *f,uint64_t *l){*a=*f=*l=0;}
 #endif
 static void check(bool v,const char *message){if(!v)throw std::runtime_error(message);}
-static void near(double a,double b,double tolerance,const char *message){if(std::abs(a-b)>tolerance){std::cerr<<message<<": "<<a<<" != "<<b<<'\n';throw std::runtime_error(message);}}
+static void checkNear(double a,double b,double tolerance,const char *message){if(std::abs(a-b)>tolerance){std::cerr<<message<<": "<<a<<" != "<<b<<'\n';throw std::runtime_error(message);}}
 template<class F> static void rejects(F f){bool rejected=false;try{f();}catch(const std::exception &){rejected=true;}check(rejected,"Invalid scratch operation accepted");}
 static std::unique_ptr<Document> fixture(bool constant=false,bool instrument=false){
  auto d=std::make_unique<Document>();d->transaction([&](CSoundFile &s){
@@ -46,23 +46,23 @@ static void model(){
  rejects([&]{d->annotate([](NativeSong &n){n.scratchGestures.clear();});});check(d->native()==accepted,"Referenced deletion is atomic");
  rejects([&]{d->annotate([](NativeSong &n){n.performance.commands[0].arguments[1]=100;});});check(d->native()==accepted,"Beyond-pattern rejection is atomic");
  d->undo();check(d->native()==original,"Undo scratch bank and command");d->redo();check(d->native()==accepted,"Redo scratch bank and command");
- auto shape=presets[0].gesture;shape.motion={{0,.25,AutomationCurve::Scripted,CurveFormula("0.5 + 0.25*sin(t*tau)")},{65536,.25,AutomationCurve::Linear,{}}};validateScratchGesture(shape);near(scratchEnvelopeValue(shape.motion,.25,2),.75,1e-12,"Scripted motion uses normalized phase");
- shape.motion[0].formula=CurveFormula("beat/duration");near(scratchEnvelopeValue(shape.motion,.25,2),.25,1e-12,"Script beat and duration retain musical units");
+ auto shape=presets[0].gesture;shape.motion={{0,.25,AutomationCurve::Scripted,CurveFormula("0.5 + 0.25*sin(t*tau)")},{65536,.25,AutomationCurve::Linear,{}}};validateScratchGesture(shape);checkNear(scratchEnvelopeValue(shape.motion,.25,2),.75,1e-12,"Scripted motion uses normalized phase");
+ shape.motion[0].formula=CurveFormula("beat/duration");checkNear(scratchEnvelopeValue(shape.motion,.25,2),.25,1e-12,"Script beat and duration retain musical units");
 }
 static void audio(){
  for(uint32_t rate:{44100u,48000u,96000u})for(size_t preset:{0u,1u,2u,3u,4u,5u,6u}){
   auto d=fixture();add(*d,scratchPresets()[preset].gesture,8192,.5,100,3);
   bool reverse=false,forward=false,held=false,returned=false;double cue=0,last=0;bool active=false;
-  const auto reference=render(*d,rate,1,.35,[&](Renderer &r,uint32_t){const auto *positions=r.song().nativeScratchPositions[0];const double now=r.song().m_PlayState.Chn[0].position.ToDouble();if(positions){if(!active){cue=positions[0];active=true;}forward|=positions[1]>positions[0]+.001;reverse|=positions[1]<positions[0]-.001;held|=positions[1]==positions[0];last=positions[1];near(now,last,2e-8,"Sample follows absolute scratch trajectory");}else if(active && !returned){near(last,cue,1e-6,"Closed scratch returns exactly to captured cue");returned=true;}});
+  const auto reference=render(*d,rate,1,.35,[&](Renderer &r,uint32_t){const auto *positions=r.song().nativeScratchPositions[0];const double now=r.song().m_PlayState.Chn[0].position.ToDouble();if(positions){if(!active){cue=positions[0];active=true;}forward|=positions[1]>positions[0]+.001;reverse|=positions[1]<positions[0]-.001;held|=positions[1]==positions[0];last=positions[1];checkNear(now,last,2e-8,"Sample follows absolute scratch trajectory");}else if(active && !returned){checkNear(last,cue,1e-6,"Closed scratch returns exactly to captured cue");returned=true;}});
   check(forward&&reverse&&returned,"Gesture moves both directions and completes");(void)held;partitions(*d,rate,reference);
  }
  // Independent linear triangular path: 4800 frames of travel from row start,
  // then exact return; every 48kHz tick is exactly 1000 samples at 120 BPM.
  auto d=fixture();ScratchGesture triangle{"Triangle",{{0,0,AutomationCurve::Linear,{}},{32768,1,AutomationCurve::Linear,{}},{65536,0,AutomationCurve::Linear,{}}},{{0,1,AutomationCurve::Linear,{}},{65536,1,AutomationCurve::Linear,{}}}};add(*d,triangle,0,.5,100);
- render(*d,48000,1,.25,[&](Renderer &r,uint32_t frame){const double t=double(frame+1)/12000;near(r.song().m_PlayState.Chn[0].position.ToDouble(),4800*(t<=.5?t*2:2-t*2),2e-6,"Independent absolute-position triangle oracle");});
+ render(*d,48000,1,.25,[&](Renderer &r,uint32_t frame){const double t=double(frame+1)/12000;checkNear(r.song().m_PlayState.Chn[0].position.ToDouble(),4800*(t<=.5?t*2:2-t*2),2e-6,"Independent absolute-position triangle oracle");});
  // A closed fader moves the record without ending it; its cut ramps over 0.5ms.
  auto gated=fixture(true);triangle.fader={{0,0,AutomationCurve::Step,{}},{65536,0,AutomationCurve::Step,{}}};add(*gated,triangle,8192,.5,100);
- const auto muted=render(*gated,48000,1);for(size_t f=800;f<12000;++f)near(muted[2*f],0,1e-8,"Closed scratch fader is silent while motion continues");
+ const auto muted=render(*gated,48000,1);for(size_t f=800;f<12000;++f)checkNear(muted[2*f],0,1e-8,"Closed scratch fader is silent while motion continues");
 }
 static void lifetime(){
  const auto gesture=scratchPresets()[0].gesture;
@@ -74,7 +74,7 @@ static void lifetime(){
  render(*d,48000,1,.1,[](Renderer &r,uint32_t frame){if(frame>=3000)check(!r.song().nativeScratchPositions[0],"SX releases trajectory at exact offset");});
  // A stationary endpoint must remain alive even when reverse mode is selected.
  auto edge=fixture();ScratchGesture hold{"Hold",{{0,0,AutomationCurve::Step,{}},{65536,0,AutomationCurve::Step,{}}},gesture.fader};add(*edge,hold,0,.5,100,1,true);
- render(*edge,48000,1,.25,[](Renderer &r,uint32_t){check(r.song().m_PlayState.Chn[0].nLength>0,"Zero speed retains boundary voice");near(r.song().m_PlayState.Chn[0].position.ToDouble(),0,1e-12,"Stationary gesture holds physical sample start");});
+ render(*edge,48000,1,.25,[](Renderer &r,uint32_t){check(r.song().m_PlayState.Chn[0].nLength>0,"Zero speed retains boundary voice");checkNear(r.song().m_PlayState.Chn[0].position.ToDouble(),0,1e-12,"Stationary gesture holds physical sample start");});
 }
 static void edgesAndPrecedence(){
  const auto baby=scratchPresets()[0].gesture;
@@ -84,12 +84,12 @@ static void edgesAndPrecedence(){
   const auto reference=render(*d,48000,1,.015625,[](Renderer &r,uint32_t){check(r.song().m_PlayState.Chn[0].nLength>0,"Scratch physical endpoint stays alive");});partitions(*d,48000,reference,.015625);
  }
  auto held=fixture(true);ScratchGesture hold{"Held",{{0,.5,AutomationCurve::Step,{}},{65536,.5,AutomationCurve::Step,{}}},baby.fader};add(*held,hold,0,.5,100);
- const auto quiet=render(*held,48000,1,.25);for(size_t frame=9600;frame<12000;++frame){near(quiet[2*frame],0,1e-8,"Held record decays to silence rather than DC");near(quiet[2*frame+1],0,1e-8,"Held stereo record decays to silence rather than DC");}partitions(*held,48000,quiet,.25);
+ const auto quiet=render(*held,48000,1,.25);for(size_t frame=9600;frame<12000;++frame){checkNear(quiet[2*frame],0,1e-8,"Held record decays to silence rather than DC");checkNear(quiet[2*frame+1],0,1e-8,"Held stereo record decays to silence rather than DC");}partitions(*held,48000,quiet,.25);
  auto a=fixture(),b=fixture();add(*a,baby,0,.5,100);add(*b,baby,0,.5,100);b->annotate([](NativeSong &n){const auto p=n.patterns.at(0).id,t=n.tracks.at(0).id;PatternCommand c;c.pattern=p;c.track=t;c.column=1;c.kind=PatternCommandKind::NudgeReverse;c.value=1;c.durationBeats=1;n.performance.columns[t]=2;n.performance.commands.push_back(c);});
  check(render(*a,48000,17,.25)==render(*b,48000,17,.25),"SK takes precedence over NF/NR during its duration");
  // Open trajectories join end-to-start continuously instead of jumping to cue.
  auto open=fixture();ScratchGesture ramp{"Open",{{0,0,AutomationCurve::Linear,{}},{65536,1,AutomationCurve::Linear,{}}},baby.fader};add(*open,ramp,0,.5,20,2);
- const auto pcm=render(*open,48000,1,.25,[](Renderer &r,uint32_t frame){near(r.song().m_PlayState.Chn[0].position.ToDouble(),1920.*(frame+1)/12000.,2e-6,"Open repeated trajectory is continuous");});partitions(*open,48000,pcm,.25);
+ const auto pcm=render(*open,48000,1,.25,[](Renderer &r,uint32_t frame){checkNear(r.song().m_PlayState.Chn[0].position.ToDouble(),1920.*(frame+1)/12000.,2e-6,"Open repeated trajectory is continuous");});partitions(*open,48000,pcm,.25);
 }
 static void reverseAndBeatClock(){
  const ScratchGesture triangle{"Reverse oracle",{{0,0,AutomationCurve::Linear,{}},{32768,1,AutomationCurve::Linear,{}},{65536,0,AutomationCurve::Linear,{}}},{{0,1,AutomationCurve::Linear,{}},{65536,1,AutomationCurve::Linear,{}}}};
@@ -109,14 +109,14 @@ static void reverseAndBeatClock(){
      const double beat=(clock.m_nRow+(clock.m_nTickCount+double(clock.SamplesIntoTick())/clock.m_nSamplesPerTick)/clock.TicksOnRow())/4.;
      const double phase=std::min(1.,beat/.5),distance=travel*(phase<=.5?phase*2:2-phase*2);
      const double expected=cue+(reverse?-distance:distance);
-     near(voice.position.ToDouble(),expected,3e-6,"Reverse option mirrors an independent trajectory around its nonzero cue");
+     checkNear(voice.position.ToDouble(),expected,3e-6,"Reverse option mirrors an independent trajectory around its nonzero cue");
      paths[reverse][frame]=voice.position.ToDouble();
     }
    });
    partitions(*d,rate,reference,.30);
   }
   check(paths[0][paths[0].size()/2]>cue+4000 && paths[1][paths[1].size()/2]<cue-4000,"Reverse option actually moves opposite to the forward baseline");
-  for(size_t frame=0;frame<paths[0].size();++frame)near(paths[0][frame]+paths[1][frame],2*cue,3e-6,"Forward and reverse paths remain exact cue reflections");
+  for(size_t frame=0;frame<paths[0].size();++frame)checkNear(paths[0][frame]+paths[1][frame],2*cue,3e-6,"Forward and reverse paths remain exact cue reflections");
   // Row zero lasts half a beat at 120 BPM; row one changes tempo to 240.
   // A .9-beat gesture therefore lasts .25 + .4*.25 = .35 seconds.
   auto timed=fixture();add(*timed,triangle,0,.9,100);
@@ -130,20 +130,20 @@ static void reverseAndBeatClock(){
      const double rowBeats=clock.m_nRow==0?.5:.25,prior=clock.m_nRow==0?0:.5+(clock.m_nRow-1.)*.25;
      const double elapsed=prior+rowBeats*(clock.m_nTickCount+double(clock.SamplesIntoTick())/clock.m_nSamplesPerTick)/clock.TicksOnRow();
      const double phase=std::min(1.,elapsed/.9),expected=travel*(phase<=.5?phase*2:2-phase*2);
-     near(voice.position.ToDouble(),expected,4e-6,"Scratch phase follows independent beat time across RL and tempo changes");
+     checkNear(voice.position.ToDouble(),expected,4e-6,"Scratch phase follows independent beat time across RL and tempo changes");
      sawExtendedRow|=clock.m_nRow==0&&elapsed>.3;sawTempo|=clock.m_nRow>0;
     } else if(released==UINT32_MAX)released=frame;
    }
-   if(inspect){check(sawExtendedRow&&sawTempo,"Scratch crosses both the extended row and changed-tempo rows");check(released!=UINT32_MAX,"Timed scratch releases");near(released,rate*.35,1.01,"Scratch duration remains .9 beats across row length and tempo");}
+   if(inspect){check(sawExtendedRow&&sawTempo,"Scratch crosses both the extended row and changed-tempo rows");check(released!=UINT32_MAX,"Timed scratch releases");checkNear(released,rate*.35,1.01,"Scratch duration remains .9 beats across row length and tempo");}
    return pcm;
   };
-  const auto reference=timedRender(1,true);for(auto block:{17u,128u,4096u}){const auto actual=timedRender(block,false);for(size_t i=0;i<actual.size();++i)near(actual[i],reference[i],3e-6,"Tempo/row-length scratch PCM is callback-partition independent");}
+  const auto reference=timedRender(1,true);for(auto block:{17u,128u,4096u}){const auto actual=timedRender(block,false);for(size_t i=0;i<actual.size();++i)checkNear(actual[i],reference[i],3e-6,"Tempo/row-length scratch PCM is callback-partition independent");}
  }
 }
 static void live(){
  auto d=fixture(true);add(*d,scratchPresets()[0].gesture,0,1,100,2);Renderer renderer(d->snapshotData(),48000);renderer.preparePreciseNotes(d->native());std::array<float,512> out{};renderer.render(out.data(),256);const auto before=renderer.song().m_PlayState.Chn[0].position.ToDouble();
  auto updated=d->native();updated.scratchGestures[1].motion=scratchPresets()[6].gesture.motion;updated.scratchGestures[1].fader={{0,0,AutomationCurve::Step,{}},{65536,0,AutomationCurve::Step,{}}};auto plan=renderer.prepareScratchUpdate(updated);check(renderer.publishScratchUpdate(plan)&&!plan,"Publish immutable live bank update");
- uint64_t a,b,c;tracker_audit_begin();renderer.render(out.data(),256);tracker_audit_end(&a,&b,&c);check(!renderer.faulted()&&a+b+c==0,"Live curve adoption is realtime-safe");check(renderer.song().nativeScratchPositions[0],"Live bank update retains active gesture");near(renderer.song().nativeScratchPositions[0][0],before,1e-7,"Live update preserves captured trajectory at handoff");for(size_t i=80;i<out.size();++i)near(out[i],0,1e-8,"Live fader edits apply immediately after short ramp");
+ uint64_t a,b,c;tracker_audit_begin();renderer.render(out.data(),256);tracker_audit_end(&a,&b,&c);check(!renderer.faulted()&&a+b+c==0,"Live curve adoption is realtime-safe");check(renderer.song().nativeScratchPositions[0],"Live bank update retains active gesture");checkNear(renderer.song().nativeScratchPositions[0][0],before,1e-7,"Live update preserves captured trajectory at handoff");for(size_t i=80;i<out.size();++i)checkNear(out[i],0,1e-8,"Live fader edits apply immediately after short ramp");
  // Rapid pending updates coalesce; producer reclaim never occurs in callback.
  for(int i=0;i<12;++i){updated.scratchGestures[1].name="Live "+std::to_string(i);auto p=renderer.prepareScratchUpdate(updated);check(renderer.publishScratchUpdate(p),"Pending update coalescing");}
  tracker_audit_begin();renderer.render(out.data(),256);tracker_audit_end(&a,&b,&c);check(a+b+c==0,"Coalesced update allocates/frees/locks zero times");

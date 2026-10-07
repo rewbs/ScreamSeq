@@ -22,14 +22,14 @@ struct Host final:ScreamSeq::Api::SessionHost {
 };
 int main(){try{
   Host host;ScreamSeq::Api::SessionAdapter adapter(host);
-  auto call=[&](const std::string &method,Json p=Json::object(),bool guarded=true){if(guarded&&method!="scratch.gestures.get"&&method!="api.describe"&&!p.contains("expectedRevision"))p["expectedRevision"]=std::to_string(host.document.revision);return adapter.handle({{"jsonrpc","2.0"},{"id",std::to_string(++host.serial)},{"method",method},{"params",p}});};
-  auto invoke=[&](const std::string &method,Json p=Json::object()){auto result=call(method,p);if(result.contains("error"))throw std::runtime_error(result.dump());return result.at("result").at("data");};
+  auto call=[&](const std::string &method,Json p,bool guarded=true){if(guarded&&method!="scratch.gestures.get"&&method!="api.describe"&&!p.contains("expectedRevision"))p["expectedRevision"]=std::to_string(host.document.revision);return adapter.handle({{"jsonrpc","2.0"},{"id",std::to_string(++host.serial)},{"method",method},{"params",p}});};
+  auto invoke=[&](const std::string &method,Json p){auto result=call(method,p);if(result.contains("error"))throw std::runtime_error(result.dump());return result.at("result").at("data");};
   auto reject=[&](Json p,int code=-32602,const std::string &method="scratch.gestures.set"){
     const auto native=host.document.native();const auto revision=host.document.revision;const auto history=host.document.historyBytes();const auto published=host.published;
     const auto result=call(method,std::move(p));CHECK(result.contains("error")&&result["error"]["code"]==code);
     CHECK(host.document.native()==native&&host.document.revision==revision&&host.document.historyBytes()==history&&host.published==published);
   };
-  const auto base=host.document.native();const auto listed=invoke("scratch.gestures.get");CHECK(listed["unitsPerCycle"]==65536&&listed["limits"]["pointsPerLane"]==256&&listed["presets"].size()==7);
+  const auto base=host.document.native();const auto listed=invoke("scratch.gestures.get",Json::object());CHECK(listed["unitsPerCycle"]==65536&&listed["limits"]["pointsPerLane"]==256&&listed["presets"].size()==7);
   const auto dry=invoke("scratch.gestures.set",{{"preset","chirp"},{"dryRun",true}});CHECK(dry["id"]==1&&dry["wouldChange"]==true&&host.document.native()==base&&host.prepared==0);
   invoke("scratch.gestures.set",{{"preset","chirp"}});CHECK(host.document.native().scratchGestures.at(1).name=="Chirp"&&host.document.native().nextID==base.nextID&&host.published==1);
   const auto saved=host.document.native();const auto revision=host.document.revision;
@@ -49,7 +49,7 @@ int main(){try{
   host.reject=true;reject({{"id",7},{"name","Rejected live update"}},-32002);host.reject=false;
   invoke("scratch.gestures.remove",{{"id",2},{"dryRun",true}});CHECK(host.document.native().scratchGestures.contains(2));invoke("scratch.gestures.remove",{{"id",2}});CHECK(!host.document.native().scratchGestures.contains(2));
   auto musical=host.document.native();PatternCommand command{musical.patterns.at(0).id,musical.tracks.at(0).id,0,0,0,PatternCommandKind::Native};command.native=NativePatternOp::Scratch;command.arguments=nativePatternDefaults(command.native);musical.performance.commands.push_back(command);host.document.annotate([&](auto &n){n=musical;});
-  CHECK(invoke("scratch.gestures.get")["gestures"][0]["uses"]==1);reject({{"id",1}},-32602,"scratch.gestures.remove");
+  CHECK(invoke("scratch.gestures.get",Json::object())["gestures"][0]["uses"]==1);reject({{"id",1}},-32602,"scratch.gestures.remove");
   const Json target={{"pattern",0},{"row",0},{"channel",0},{"column",0}};
   const auto beforeClone=host.document.native();const auto cloneRevision=host.document.revision;
   CHECK(invoke("scratch.gestures.clone",{{"id",1},{"target",target},{"dryRun",true}})["id"]==2&&host.document.native()==beforeClone&&host.document.revision==cloneRevision);
@@ -82,7 +82,7 @@ int main(){try{
   for(unsigned i=0;i<256;++i)dense.motion.push_back({uint32_t(uint64_t(i)*65536/255),.5,AutomationCurve::Scripted,denseFormula});dense.fader=dense.motion;
   auto oversized=encodeNativeMetadata(base);auto denseJSON=ScreamSeq::ScratchJSON::gesture(dense);size_t total=base.bytes();unsigned count=0;
   while(total<=16*1024*1024&&count<254){denseJSON["id"]=++count;oversized["scratchGestures"].push_back(denseJSON);total+=sizeof(uint16_t)+scratchGestureBytes(dense);}
-  CHECK(total>16*1024*1024);auto small=ScreamSeq::ScratchJSON::gesture(scratchPresets()[0].gesture);small["id"]=255;oversized["scratchGestures"].push_back(small);
+  CHECK(total>16*1024*1024);auto compactPhrase=ScreamSeq::ScratchJSON::gesture(scratchPresets()[0].gesture);compactPhrase["id"]=255;oversized["scratchGestures"].push_back(compactPhrase);
   report={};const auto bounded=recoverNativeMetadata(oversized,reopened,report);CHECK(!bounded.scratchGestures.empty()&&bounded.scratchGestures.size()<count+1&&bounded.scratchGestures.contains(1)&&bounded.scratchGestures.contains(255)&&bounded.bytes()<=16*1024*1024&&report.lossy&&report.protectSource);
   CHECK(decodeNativeMetadata(oversized)==bounded);
   auto badReference=encoded;badReference["performance"]["commands"][0]["parameters"]["gesture"]=6;strict=false;try{decodeNativeMetadata(badReference);}catch(const std::invalid_argument &){strict=true;}CHECK(strict);

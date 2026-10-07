@@ -114,7 +114,7 @@
             effectPrefix.clear();setTrackerEffect(entry.at("command"),mask?(old&~mask)|value:old);
             auto n=position();n["column"]=column+1;navigate(n);return true;
         }
-        for(const auto &entry:view->commands.at("native"))if(candidate==entry.at("displayCode")){effectPrefix.clear();openEffectEditor(candidate);return true;}
+        for(const auto &entry:view->commands.at("native"))if(candidate==entry.at("displayCode").get<std::string>()){effectPrefix.clear();openEffectEditor(candidate);return true;}
         const bool prefix=std::any_of(view->commands.at("effect").begin(),view->commands.at("effect").end(),[&](const auto &entry){return entry.at("displayCode").template get<std::string>().starts_with(candidate);}) || std::any_of(view->commands.at("native").begin(),view->commands.at("native").end(),[&](const auto &entry){return entry.at("displayCode").template get<std::string>().starts_with(candidate);});
         if(candidate.size()==1&&prefix){effectPrefix=candidate;effectPrefixRevision=view->session.revision;status=L"Effect "+wide(candidate)+L"_ / type the second character";return true;}
         effectPrefix.clear();
