@@ -105,6 +105,12 @@ void boundsScrollAndLimits(Owner &owner){
   f.current["document"]["formatLimits"]={{"patternRowsMin",64},{"patternRowsMax",64},{"patternsMax",2},{"ordersMax",300}};f.tool.update(f.current);f.click(8015);require(f.tool.snapshot()["rowsText"]=="64"&&!IsWindowEnabled(f.control(8013))&&!IsWindowEnabled(f.control(8005)),"Fixed row or full slot limits were ignored");
   f.current["document"]["formatLimits"]["patternsMax"]=3;f.current["document"]["formatLimits"]["ordersMax"]=301;f.current["document"]["patterns"][1]["index"]=2;f.tool.update(f.current);require(IsWindowEnabled(f.control(8013)),"Reusable hole was mistaken for a full pattern catalog");
   f.current["document"]["editable"]=false;f.tool.update(f.current);const auto count=f.writes.size();f.click(8009);f.click(8013);require(f.writes.size()==count,"Read-only inspection allowed an edit");
+  const auto themedList=f.control(8001);const auto retainedFocus=GetFocus();const int retainedSelection=ListView_GetNextItem(themedList,-1,LVNI_SELECTED),retainedTop=ListView_GetTopIndex(themedList),retainedWidth=ListView_GetColumnWidth(themedList,0);
+  for(UINT message:{WM_THEMECHANGED,WM_SETTINGCHANGE,WM_SYSCOLORCHANGE}){
+    ListView_SetBkColor(themedList,RGB(250,0,250));SendMessageW(window,message,0,0);
+    require(ListView_GetBkColor(themedList)==ScreamSeq::NativeReportList::palette(ScreamSeq::NativeControls::highContrast()).background,"Top-level theme message did not refresh report colors");
+    require(GetFocus()==retainedFocus&&ListView_GetNextItem(themedList,-1,LVNI_SELECTED)==retainedSelection&&ListView_GetTopIndex(themedList)==retainedTop&&ListView_GetColumnWidth(themedList,0)==retainedWidth,"Theme refresh changed native report focus/selection/scroll/column width");
+  }
   std::cout<<"Arrange orders minimum 760 x 600 DIPs checked at "<<dpi<<" DPI\n";
 }
 void firstOpenPlacement(Owner &owner){

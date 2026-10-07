@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "NativeReportList.hpp"
 #include <array>
 #include <set>
 
@@ -231,18 +232,19 @@ private:
     if(header->code==LVN_ITEMCHANGED&&!setting_){selected_=ListView_GetNextItem(controls_.at(events),-1,LVNI_SELECTED);selectedKey_.clear();selectedOccurrence_=0;if(selected_>=0&&size_t(selected_)<events_.size()){selectedKey_=eventKey(events_[size_t(selected_)]);for(int i=0;i<selected_;++i)selectedOccurrence_+=eventKey(events_[size_t(i)])==selectedKey_;}else selected_=-1;details();layout();return 0;}
     if(header->code==NM_DBLCLK&&!setting_){const auto row=reinterpret_cast<NMITEMACTIVATE *>(header)->iItem;if(row>=0&&row==selected_)begin(Operation::navigate);return 0;}
     if(header->code==LVN_ODFINDITEMW){const auto &find=*reinterpret_cast<NMLVFINDITEMW *>(header);if(!(find.lvfi.flags&LVFI_STRING)||!find.lvfi.psz||events_.empty())return -1;const auto query=std::wstring_view(find.lvfi.psz);const auto start=size_t(std::max(0,find.iStart));for(size_t i=0;i<events_.size();++i){const auto row=(start+i)%events_.size();for(const auto column:{0u,1u,3u}){const auto value=cell(row,column);if(value.size()>=query.size()&&CompareStringOrdinal(value.data(),int(query.size()),query.data(),int(query.size()),TRUE)==CSTR_EQUAL)return LRESULT(row);}}return -1;}
-    if(header->code==NM_CUSTOMDRAW){auto &draw=*reinterpret_cast<NMLVCUSTOMDRAW *>(header);if(draw.nmcd.dwDrawStage==CDDS_PREPAINT)return CDRF_NOTIFYITEMDRAW;if(draw.nmcd.dwDrawStage==CDDS_ITEMPREPAINT){const bool contrast=NativeControls::highContrast();draw.clrText=contrast?GetSysColor(COLOR_WINDOWTEXT):RGB(218,232,241);draw.clrTextBk=contrast?GetSysColor(COLOR_WINDOW):RGB(24,34,45);return CDRF_DODEFAULT;}}
+    if(header->code==NM_CUSTOMDRAW)return NativeReportList::customDraw(*reinterpret_cast<NMLVCUSTOMDRAW *>(header),[this](size_t row,unsigned column){return cell(row,column);});
     return 0;
   }
   static LRESULT CALLBACK notifications(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data){
     auto &self=*reinterpret_cast<MidiRecordingWindow *>(data);if(m==WM_NCDESTROY)RemoveWindowSubclass(h,notifications,id);
+    if(self.ready_&&NativeReportList::themeMessage(m))NativeReportList::refresh(self.controls_.at(events));
     if(m==WM_NOTIFY&&self.ready_)try{return self.notify(reinterpret_cast<NMHDR *>(l));}catch(const std::exception &error){self.error(error);return 0;}return DefSubclassProc(h,m,w,l);
   }
   static LRESULT CALLBACK listNotifications(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data){
     auto &self=*reinterpret_cast<MidiRecordingWindow *>(data);if(m==WM_NCDESTROY)RemoveWindowSubclass(h,listNotifications,id);
     if(m==WM_NOTIFY){const auto header=reinterpret_cast<NMHDR *>(l);if(header->hwndFrom==ListView_GetHeader(h)){
       if((header->code==HDN_ENDTRACKW||header->code==HDN_ENDTRACKA)&&!self.resizingColumns_){for(int i=0;i<6;++i)self.columnWidths_[size_t(i)]=ListView_GetColumnWidth(h,i)*96.f/GetDpiForWindow(h);const auto &change=*reinterpret_cast<NMHEADERW *>(header);if(change.iItem>=0&&change.iItem<6&&change.pitem&&(change.pitem->mask&HDI_WIDTH))self.columnWidths_[size_t(change.iItem)]=change.pitem->cxy*96.f/GetDpiForWindow(h);}
-      if(header->code==NM_CUSTOMDRAW&&!NativeControls::highContrast()){const auto &draw=*reinterpret_cast<NMCUSTOMDRAW *>(header);if(draw.dwDrawStage==CDDS_PREPAINT)return CDRF_NOTIFYITEMDRAW;if(draw.dwDrawStage==CDDS_ITEMPREPAINT){NativeControls::fill(draw.hdc,draw.rc,RGB(35,49,63));SetBkMode(draw.hdc,TRANSPARENT);SetTextColor(draw.hdc,RGB(169,196,207));SelectObject(draw.hdc,self.font_);auto rect=draw.rc;rect.left+=MulDiv(7,GetDpiForWindow(h),96);if(draw.dwItemSpec<6)DrawTextW(draw.hdc,headings[draw.dwItemSpec],-1,&rect,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|DT_NOPREFIX);return CDRF_SKIPDEFAULT;}}
+      if(header->code==NM_CUSTOMDRAW)return NativeReportList::headerDraw(*reinterpret_cast<NMCUSTOMDRAW *>(header));
     }}return DefSubclassProc(h,m,w,l);
   }
 public:
@@ -251,7 +253,7 @@ public:
     combo(source);button(rescan,L"Rescan");button(arm,L"Record notes: off");add(sound,L"EDIT",L"",ES_READONLY|ES_AUTOHSCROLL);button(chooseSound,L"Choose…");edit(columns,L"1",3);combo(quantum);edit(latency,L"0",20);button(apply,L"Apply settings");button(revert,L"Use saved settings");
     const auto list=add(events,WC_LISTVIEWW,L"Captured notes",LVS_REPORT|LVS_OWNERDATA|LVS_SINGLESEL|LVS_SHOWSELALWAYS|WS_BORDER);ListView_SetExtendedListViewStyle(list,LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
     if(const auto theme=LoadLibraryW(L"uxtheme.dll")){using Theme=HRESULT(WINAPI *)(HWND,LPCWSTR,LPCWSTR);if(const auto setTheme=reinterpret_cast<Theme>(GetProcAddress(theme,"SetWindowTheme")))setTheme(list,L"",L"");FreeLibrary(theme);}
-    const bool contrast=NativeControls::highContrast();ListView_SetBkColor(list,contrast?GetSysColor(COLOR_WINDOW):RGB(24,34,45));ListView_SetTextBkColor(list,contrast?GetSysColor(COLOR_WINDOW):RGB(24,34,45));ListView_SetTextColor(list,contrast?GetSysColor(COLOR_WINDOWTEXT):RGB(218,232,241));
+    NativeReportList::install(list);
     for(int i=0;i<6;++i){LVCOLUMNW column{};column.mask=LVCF_TEXT|LVCF_WIDTH;column.pszText=const_cast<wchar_t *>(headings[size_t(i)]);column.cx=100;ListView_InsertColumn(list,i,&column);}
     button(finishTake,L"Finish take");button(discardTake,L"Discard take");button(refreshReview,L"Refresh review");button(showEvent,L"Show in note editor");button(close,L"Close");
     for(const auto &[id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"MIDI / RECORDING"},{help,L"Record a performance into precise pattern notes. Positive input adjustment places notes earlier.\nNormal keyboard note entry and Live keys keep their current behavior."},{sourceLabel,L"MIDI source"},{connection,L"Disconnected"},{soundLabel,L"Sound"},{columnsLabel,L"Adjacent note columns"},{quantumLabel,L"Timing grid"},{latencyLabel,L"Input adjustment"},{latencyUnits,L"milliseconds"},{draftStatus,L""},{takeStatus,L""},{eventDetail,L""},{statusLabel,L""}})label(id,text);

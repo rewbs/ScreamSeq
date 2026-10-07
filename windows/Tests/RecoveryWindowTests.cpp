@@ -88,6 +88,12 @@ void boundsAndColumns(Owner &owner){
   NMHEADERW changed{};changed.hdr={ListView_GetHeader(list),0,HDN_ENDTRACKW};changed.iItem=0;changed.pitem=&item;SendMessageW(list,WM_NOTIFY,0,reinterpret_cast<LPARAM>(&changed));
   RECT outer{};GetWindowRect(window,&outer);SetWindowPos(window,nullptr,0,0,outer.right-outer.left+MulDiv(100,dpi,96),outer.bottom-outer.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
   require(ListView_GetColumnWidth(list,0)==custom,"Resize discarded the user's column width");
+  const auto themedList=browser.control(7001);const auto retainedFocus=GetFocus();const int retainedSelection=ListView_GetNextItem(themedList,-1,LVNI_SELECTED),retainedTop=ListView_GetTopIndex(themedList),retainedWidth=ListView_GetColumnWidth(themedList,0);
+  for(UINT message:{WM_THEMECHANGED,WM_SETTINGCHANGE,WM_SYSCOLORCHANGE}){
+    ListView_SetBkColor(themedList,RGB(250,0,250));SendMessageW(window,message,0,0);
+    require(ListView_GetBkColor(themedList)==ScreamSeq::NativeReportList::palette(ScreamSeq::NativeControls::highContrast()).background,"Top-level theme message did not refresh report colors");
+    require(GetFocus()==retainedFocus&&ListView_GetNextItem(themedList,-1,LVNI_SELECTED)==retainedSelection&&ListView_GetTopIndex(themedList)==retainedTop&&ListView_GetColumnWidth(themedList,0)==retainedWidth,"Theme refresh changed native report focus/selection/scroll/column width");
+  }
   std::cout<<"Recovery browser minimum 650 x 430 DIPs checked at "<<dpi<<" DPI\n";
 }
 }

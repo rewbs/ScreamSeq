@@ -44,6 +44,23 @@ void minimumClientBounds(HWND main,HWND host){
   require(client.right==LONG(std::round(320*parentScale))&&client.bottom==LONG(std::round(240*parentScale)),"Docked tool cannot use a client area smaller than its floating minimum");
   std::cout<<"Native client minimum: exact 440 x 500 DIPs at "<<dpi<<" DPI; docked bounds unrestricted\n";
 }
+void compactHeaderMeasurement(){
+  Window owner(L"STATIC");ScreamSeq::RenderSurface surface(owner.value);
+  const std::wstring full=L"PATTERN 1234 / 1024 rows",compact=L"P1234 · 1024 rows",shortest=L"P1234";
+  const auto fullWidth=surface.uiTextWidth(full),compactWidth=surface.uiTextWidth(compact),shortWidth=surface.uiTextWidth(shortest);
+  require(fullWidth>compactWidth&&compactWidth>shortWidth,"Header fixture labels do not have ordered measured widths");
+  require(surface.fittingUiText({full,compact,shortest},fullWidth)==full,"Full fitting header was discarded");
+  require(surface.fittingUiText({full,compact,shortest},compactWidth)==compact,"Compact fitting header was clipped instead of selected");
+  require(surface.fittingUiText({full,compact,shortest},shortWidth)==shortest,"Shortest fitting header was clipped instead of selected");
+  require(surface.fittingUiText({full,compact,shortest},shortWidth-1).empty(),"Header draws a partial label when no complete title fits");
+  require(surface.fittingUiText({L"PATTERN 0 / 64 rows",L"P0 · 64 rows",L"P0"},107)==L"P0 · 64 rows","Minimum-width pattern title is not fully readable");
+  const auto entries=surface.textCacheSize();const auto misses=surface.textMisses();
+  for(int i=0;i<200;++i)require(surface.fittingUiText({full,compact,shortest},compactWidth)==compact,"Repeated header choice changed");
+  require(surface.textCacheSize()==entries&&surface.textMisses()==misses,"Unchanged header measurements rebuild DirectWrite layouts");
+  for(int i=0;i<4200;++i)surface.uiTextWidth(L"Bounded measurement "+std::to_wstring(i));
+  require(surface.textCacheSize()<=4096,"Header measurement bypassed the retained text budget");
+  std::cout<<"Measured full/compact/short pattern headers fit and reuse the bounded DirectWrite cache\n";
+}
 void retainedDock(HWND main,HWND host){
   Tool tool(main);
   const auto window=tool.window(),edit=tool.control(1),combo=tool.control(3);
@@ -102,7 +119,7 @@ int main(){
   try{
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqDockTest",[]{
     WNDCLASSW type{};type.lpfnWndProc=DefWindowProcW;type.hInstance=GetModuleHandleW(nullptr);type.lpszClassName=L"ScreamSeq.DockTest.Host";RegisterClassW(&type);
-    HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);host.close();main.close();}
+    HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);compactHeaderMeasurement();host.close();main.close();}
     require(!IsWindow(mainWindow)&&!IsWindow(hostWindow),"Destroy owned dock test hosts");});std::cout<<"Native tool docking: retained HWNDs, focus, keyboard, ownership and bounds passed\n";return 0;
   }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
 }

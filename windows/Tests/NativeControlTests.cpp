@@ -1,4 +1,5 @@
 #include "../App/NativeControls.hpp"
+#include "../App/NativeReportList.hpp"
 #include "PrivateGuiTest.hpp"
 #include <filesystem>
 #include <fstream>
@@ -8,7 +9,24 @@
 
 namespace {
 void require(bool value,const char *message){if(!value)throw std::runtime_error(message);}
+std::wstring reportCell(size_t row,unsigned column){
+  if(column==0)return row==0?L"Alpha / Café / 旋律 / a long native label that must be ellipsized":row==1?L"Beta":L"Row "+std::to_wstring(row);
+  if(column==2)return L"64";
+  if(column==3)return L"Section / 🎵";
+  return {};
+}
+LRESULT CALLBACK reportProcedure(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR){
+  if(m==WM_NCDESTROY)RemoveWindowSubclass(h,reportProcedure,id);
+  if(m==WM_NOTIFY){const auto header=reinterpret_cast<NMHDR *>(l);if(header->hwndFrom==ListView_GetHeader(h)&&header->code==NM_CUSTOMDRAW)return ScreamSeq::NativeReportList::headerDraw(*reinterpret_cast<NMCUSTOMDRAW *>(l));}
+  return DefSubclassProc(h,m,w,l);
+}
 LRESULT CALLBACK parentProc(HWND h,UINT m,WPARAM w,LPARAM l){
+  if(ScreamSeq::NativeReportList::themeMessage(m))if(const auto list=GetDlgItem(h,101))ScreamSeq::NativeReportList::refresh(list);
+  if(m==WM_NOTIFY){const auto header=reinterpret_cast<NMHDR *>(l);if(header->idFrom==101){
+    if(header->code==NM_CUSTOMDRAW)return ScreamSeq::NativeReportList::customDraw(*reinterpret_cast<NMLVCUSTOMDRAW *>(l),reportCell);
+    if(header->code==LVN_GETDISPINFOW){auto &info=*reinterpret_cast<NMLVDISPINFOW *>(l);if((info.item.mask&LVIF_TEXT)&&info.item.pszText)lstrcpynW(info.item.pszText,reportCell(size_t(info.item.iItem),unsigned(info.item.iSubItem)).c_str(),info.item.cchTextMax);return 0;}
+    if(header->code==LVN_ODFINDITEMW){const auto &find=*reinterpret_cast<NMLVFINDITEMW *>(l);return find.lvfi.psz&&_wcsnicmp(find.lvfi.psz,L"Beta",wcslen(find.lvfi.psz))==0?1:-1;}
+  }}
   if(m==WM_MEASUREITEM){reinterpret_cast<MEASUREITEMSTRUCT *>(l)->itemHeight=MulDiv(22,GetDpiForWindow(h),96);return TRUE;}
   if(m==WM_DRAWITEM){ScreamSeq::NativeControls::comboItem(*reinterpret_cast<DRAWITEMSTRUCT *>(l));return TRUE;}
   return DefWindowProcW(h,m,w,l);
@@ -27,6 +45,55 @@ struct Bitmap {
     std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char *>(&file),sizeof(file));out.write(reinterpret_cast<const char *>(&info),sizeof(info));out.write(static_cast<const char *>(pixels),width*height*4);require(bool(out),"Write selector evidence");
   }
 };
+void reportDrawing(HWND parent,HFONT font){
+  using namespace ScreamSeq::NativeReportList;
+  INITCOMMONCONTROLSEX common{sizeof(common),ICC_LISTVIEW_CLASSES};require(InitCommonControlsEx(&common),"Initialize native report");
+  const auto dpi=GetDpiForWindow(parent);
+  auto list=CreateWindowW(WC_LISTVIEWW,L"Report drawing test",WS_CHILD|WS_VISIBLE|WS_TABSTOP|LVS_REPORT|LVS_OWNERDATA|LVS_SINGLESEL|LVS_SHOWSELALWAYS,
+    0,80,MulDiv(520,dpi,96),MulDiv(140,dpi,96),parent,reinterpret_cast<HMENU>(101),GetModuleHandleW(nullptr),nullptr);
+  require(list,"Create owner-data report");ScreamSeq::Tests::ownGuiWindow(list);
+  ListView_SetExtendedListViewStyle(list,LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
+  install(list);require(SetWindowSubclass(list,reportProcedure,1,0),"Install native header test routing");SendMessageW(list,WM_SETFONT,reinterpret_cast<WPARAM>(font),FALSE);
+  int column=0;for(const auto label:{L"Order / a deliberately long heading",L"Pattern",L"Rows",L"Section"}){LVCOLUMNW item{};item.mask=LVCF_TEXT|LVCF_WIDTH;item.pszText=const_cast<wchar_t *>(label);item.cx=MulDiv(110,dpi,96);require(ListView_InsertColumn(list,column++,&item)>=0,"Create report column");}
+  ListView_SetItemCountEx(list,30,LVSICF_NOSCROLL);ListView_SetItemState(list,0,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+  RECT client{},row{};GetClientRect(list,&client);require(ListView_GetItemRect(list,0,&row,LVIR_BOUNDS),"Get native report row");Bitmap image(client.right,client.bottom);
+  auto render=[&]{SendMessageW(list,WM_PRINT,reinterpret_cast<WPARAM>(image.dc),PRF_CLIENT|PRF_CHILDREN|PRF_ERASEBKGND);};
+  const auto dark=palette(false),system=palette(true);const bool contrast=ScreamSeq::NativeControls::highContrast();
+  require(system.background==GetSysColor(COLOR_WINDOW)&&system.text==GetSysColor(COLOR_WINDOWTEXT)&&system.selected==GetSysColor(COLOR_HIGHLIGHT)&&system.selectedText==GetSysColor(COLOR_HIGHLIGHTTEXT)&&system.disabled==GetSysColor(COLOR_GRAYTEXT),"High contrast does not use current system colors");
+  SetActiveWindow(parent);SetFocus(list);SendMessageW(list,WM_CHANGEUISTATE,MAKEWPARAM(UIS_CLEAR,UISF_HIDEFOCUS),0);render();
+  if(!contrast){
+    require(image.at(client.right-8,(row.top+row.bottom)/2)==dark.selected,"Active report row did not use restrained selection");
+    RECT empty{};Header_GetItemRect(ListView_GetHeader(list),1,&empty);MapWindowPoints(ListView_GetHeader(list),list,reinterpret_cast<POINT *>(&empty),2);
+    for(int x=empty.left+2;x<empty.right-2;++x)require(image.at(x,(row.top+row.bottom)/2)==dark.selected,"Long first-column text escaped into its empty neighbor");
+    bool focusVisible=false;for(int x=2;x<client.right-2;++x)focusVisible|=image.at(x,row.top+1)!=dark.selected;require(focusVisible,"Focused native row omitted its focus indicator");
+  }
+  const auto selected=ListView_GetNextItem(list,-1,LVNI_SELECTED);SetFocus(parent);render();
+  if(!contrast){require(image.at(client.right-8,(row.top+row.bottom)/2)==dark.inactive,"Inactive selected row reverted to bright system highlight");for(int x=2;x<client.right-2;++x)require(image.at(x,row.top+1)==dark.inactive,"Inactive native row retained a focus indicator");}
+  require(ListView_GetNextItem(list,-1,LVNI_SELECTED)==selected,"Painting or focus transition changed selected identity");
+  // An owned top-level message must refresh children; Windows does not promise
+  // to broadcast system changes to each list. Do not change global settings.
+  for(UINT message:{WM_SETTINGCHANGE,WM_THEMECHANGED,WM_SYSCOLORCHANGE}){
+    ListView_SetBkColor(list,RGB(250,0,250));SendMessageW(parent,message,0,0);
+    require(ListView_GetBkColor(list)==palette(contrast).background&&ListView_GetNextItem(list,-1,LVNI_SELECTED)==selected&&GetFocus()==parent,"Theme refresh changed selection/focus or did not reach the report");
+  }
+  SetFocus(list);SendMessageW(list,WM_KEYDOWN,VK_DOWN,0);require(ListView_GetNextItem(list,-1,LVNI_SELECTED)==1,"Native report Down navigation changed");
+  SendMessageW(list,WM_KEYDOWN,VK_HOME,0);SendMessageW(list,WM_CHAR,L'B',0);require(ListView_GetNextItem(list,-1,LVNI_SELECTED)==1,"Owner-data type-ahead changed");
+  ListView_SetColumnWidth(list,0,MulDiv(300,dpi,96));ListView_Scroll(list,MulDiv(80,dpi,96),0);render();
+  require(ListView_GetColumnWidth(list,0)==MulDiv(300,dpi,96)&&ListView_GetNextItem(list,-1,LVNI_SELECTED)==1,"Paint reset horizontal scroll/column geometry");
+  RECT shifted{};Header_GetItemRect(ListView_GetHeader(list),0,&shifted);MapWindowPoints(ListView_GetHeader(list),list,reinterpret_cast<POINT *>(&shifted),2);require(shifted.left<0,"Report fixture did not horizontally scroll");
+  // Direct callback checks exercise the DC contract without depending on an
+  // implementation-specific WM_PRINT device context setup.
+  const auto originalText=SetTextColor(image.dc,RGB(1,2,3));const auto originalBackground=SetBkMode(image.dc,OPAQUE);
+  NMLVCUSTOMDRAW draw{};draw.nmcd.hdr.hwndFrom=list;draw.nmcd.hdc=image.dc;draw.nmcd.dwDrawStage=CDDS_ITEMPREPAINT;draw.nmcd.dwItemSpec=1;
+  customDraw(draw,reportCell);require(GetTextColor(image.dc)==RGB(1,2,3)&&GetBkMode(image.dc)==OPAQUE,"Report drawing leaked GDI state");
+  NMCUSTOMDRAW headerDrawInfo{};headerDrawInfo.hdr.hwndFrom=ListView_GetHeader(list);headerDrawInfo.hdc=image.dc;headerDrawInfo.dwDrawStage=CDDS_ITEMPREPAINT;Header_GetItemRect(headerDrawInfo.hdr.hwndFrom,0,&headerDrawInfo.rc);headerDraw(headerDrawInfo);
+  require(GetTextColor(image.dc)==RGB(1,2,3)&&GetBkMode(image.dc)==OPAQUE,"Header drawing leaked GDI state");SetTextColor(image.dc,originalText);SetBkMode(image.dc,originalBackground);
+  render();const auto resources=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
+  for(int i=0;i<200;++i){SetFocus(i%2?list:parent);render();}
+  require(GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS)==resources,"Report paints leaked GDI resources");
+  require(DestroyWindow(list)&&!IsWindow(list),"Destroy report test window");
+  std::cout<<"PASS native report active/inactive/focus pixels, Unicode column clipping, four columns, keyboard/type-ahead, horizontal scroll, system palette, theme refresh and GDI lifetime\n";
+}
 void privateGuiFailureChecks(){
   auto expectedFailure=[](auto body,const std::string &expected){
     bool rejected=false;
@@ -83,6 +150,7 @@ int main(int argc,char **argv){
     const auto before=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
     for(int i=0;i<200;++i){InvalidateRect(combo,nullptr,FALSE);UpdateWindow(combo);}
     require(GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS)==before,"Paint leaks GDI resources");
+    reportDrawing(parent,font);
     require(DestroyWindow(parent)&&!IsWindow(parent)&&!IsWindow(combo),"Destroy owned control windows");DeleteObject(font);
     std::cout<<"PASS retained layout, native selection/popup, flat normal/focused/disabled/empty surfaces, 200 paints without GDI leaks; DPI "<<dpi<<"; high contrast "<<contrast<<"\n";
     });privateGuiFailureChecks();return 0;

@@ -35,7 +35,9 @@
 		// Virtualized grid: field colors and geometry are shared by hit-testing.
 		const auto r=patternGridRect(); s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x10161e);
 		s.fill(r.x,r.y,r.w,gridHeader,0x202834);s.fill(r.x,r.y,3,26,accent);
-		s.uiText(L"PATTERN "+std::to_wstring(patternIndex)+L" / "+std::to_wstring(patternRows())+L" rows",r.x+8,r.y+5,r.w-264,accent);
+		s.uiTextFit({L"PATTERN "+std::to_wstring(patternIndex)+L" / "+std::to_wstring(patternRows())+L" rows",
+            L"P"+std::to_wstring(patternIndex)+L" · "+std::to_wstring(patternRows())+L" rows",
+            L"P"+std::to_wstring(patternIndex)},r.x+8,r.y+5,r.w-264,accent);
 		const unsigned count=view->channels,first=firstChannel(),rows=patternRows();
 		s.clip(r.x+gutter,r.y+gridHeader-23,r.w-gutter,r.h-gridHeader+23);
 		for(unsigned c=first;c<count && c<first+visibleChannels();++c) {

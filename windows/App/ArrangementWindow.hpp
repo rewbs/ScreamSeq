@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "NativeReportList.hpp"
 #include <array>
 #include <set>
 
@@ -333,18 +334,19 @@ private:
     if(header->code==LVN_ITEMCHANGED&&!setting_){const auto &change=*reinterpret_cast<NMLISTVIEW *>(header);if((change.uChanged&LVIF_STATE)&&(change.uNewState&LVIS_SELECTED)&&!(change.uOldState&LVIS_SELECTED)){const auto index=ListView_GetNextItem(controls_.at(orders),-1,LVNI_SELECTED);if(index>=0&&size_t(index)<orders_.size())select(orders_[size_t(index)].id,true);}return 0;}
     if(header->code==NM_DBLCLK&&!setting_){const auto row=reinterpret_cast<NMITEMACTIVATE *>(header)->iItem;if(row>=0&&size_t(row)<orders_.size())select(orders_[size_t(row)].id,true);return 0;}
     if(header->code==LVN_ODFINDITEMW){const auto &find=*reinterpret_cast<NMLVFINDITEMW *>(header);if(!(find.lvfi.flags&LVFI_STRING)||!find.lvfi.psz||orders_.empty())return -1;const auto query=std::wstring_view(find.lvfi.psz);for(size_t i=0;i<orders_.size();++i){const auto row=(size_t(std::max(0,find.iStart))+i)%orders_.size();const auto &label=orders_[row].cells[1];if(label.size()>=query.size()&&CompareStringOrdinal(label.data(),int(query.size()),query.data(),int(query.size()),TRUE)==CSTR_EQUAL)return LRESULT(row);}return -1;}
-    if(header->code==NM_CUSTOMDRAW){auto &draw=*reinterpret_cast<NMLVCUSTOMDRAW *>(header);if(draw.nmcd.dwDrawStage==CDDS_PREPAINT)return CDRF_NOTIFYITEMDRAW;if(draw.nmcd.dwDrawStage==CDDS_ITEMPREPAINT){draw.clrText=NativeControls::highContrast()?GetSysColor(COLOR_WINDOWTEXT):RGB(218,232,241);draw.clrTextBk=NativeControls::highContrast()?GetSysColor(COLOR_WINDOW):RGB(24,34,45);}}
+    if(header->code==NM_CUSTOMDRAW)return NativeReportList::customDraw(*reinterpret_cast<NMLVCUSTOMDRAW *>(header),[this](size_t row,unsigned column){return row<orders_.size()&&column<orders_[row].cells.size()?std::wstring_view(orders_[row].cells[column]):std::wstring_view();});
     return 0;
   }
   static LRESULT CALLBACK notifications(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data){
     auto &self=*reinterpret_cast<ArrangementWindow *>(data);if(m==WM_NCDESTROY)RemoveWindowSubclass(h,notifications,id);
+    if(self.ready_&&NativeReportList::themeMessage(m))NativeReportList::refresh(self.controls_.at(orders));
     if(m==WM_NOTIFY&&self.ready_)try{return self.notify(reinterpret_cast<NMHDR *>(l));}catch(const std::exception &value){self.error(value);return 0;}return DefSubclassProc(h,m,w,l);
   }
   static LRESULT CALLBACK headers(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data){
     auto &self=*reinterpret_cast<ArrangementWindow *>(data);if(m==WM_NCDESTROY)RemoveWindowSubclass(h,headers,id);
     if(m==WM_NOTIFY){const auto header=reinterpret_cast<NMHDR *>(l);if(header->hwndFrom==ListView_GetHeader(h)){
       if((header->code==HDN_ENDTRACKW||header->code==HDN_ENDTRACKA)&&!self.resizingColumns_){for(int i=0;i<4;++i)self.columnWidths_[size_t(i)]=ListView_GetColumnWidth(h,i)*96.f/GetDpiForWindow(h);const auto &changed=*reinterpret_cast<NMHEADERW *>(header);if(changed.iItem>=0&&changed.iItem<4&&changed.pitem&&(changed.pitem->mask&HDI_WIDTH))self.columnWidths_[size_t(changed.iItem)]=changed.pitem->cxy*96.f/GetDpiForWindow(h);}
-      if(header->code==NM_CUSTOMDRAW&&!NativeControls::highContrast()){const auto &draw=*reinterpret_cast<NMCUSTOMDRAW *>(header);if(draw.dwDrawStage==CDDS_PREPAINT)return CDRF_NOTIFYITEMDRAW;if(draw.dwDrawStage==CDDS_ITEMPREPAINT){NativeControls::fill(draw.hdc,draw.rc,RGB(35,49,63));SetBkMode(draw.hdc,TRANSPARENT);SetTextColor(draw.hdc,RGB(169,196,207));SelectObject(draw.hdc,self.font_);static constexpr const wchar_t *labels[]={L"Order",L"Pattern",L"Rows",L"Section"};auto rect=draw.rc;rect.left+=MulDiv(7,GetDpiForWindow(h),96);if(draw.dwItemSpec<4)DrawTextW(draw.hdc,labels[draw.dwItemSpec],-1,&rect,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|DT_NOPREFIX);return CDRF_SKIPDEFAULT;}}
+      if(header->code==NM_CUSTOMDRAW)return NativeReportList::headerDraw(*reinterpret_cast<NMCUSTOMDRAW *>(header));
     }}return DefSubclassProc(h,m,w,l);
   }
 public:
@@ -359,7 +361,7 @@ public:
     if(GetMonitorInfoW(MonitorFromWindow(window_,MONITOR_DEFAULTTONEAREST),&monitor)){const auto &work=monitor.rcWork;const int width=std::min(outer.right-outer.left,work.right-work.left),height=std::min(outer.bottom-outer.top,work.bottom-work.top);SetWindowPos(window_,nullptr,std::clamp(current.left,work.left,work.right-width),std::clamp(current.top,work.top,work.bottom-height),width,height,SWP_NOZORDER|SWP_NOACTIVATE);}
     const auto list=add(orders,WC_LISTVIEWW,L"Complete order list",LVS_REPORT|LVS_OWNERDATA|LVS_SINGLESEL|LVS_SHOWSELALWAYS|WS_BORDER);ListView_SetExtendedListViewStyle(list,LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
     if(const auto library=LoadLibraryW(L"uxtheme.dll")){using Theme=HRESULT(WINAPI *)(HWND,LPCWSTR,LPCWSTR);if(const auto theme=reinterpret_cast<Theme>(GetProcAddress(library,"SetWindowTheme")))theme(list,L"",L"");FreeLibrary(library);}
-    ListView_SetBkColor(list,NativeControls::highContrast()?GetSysColor(COLOR_WINDOW):RGB(24,34,45));ListView_SetTextBkColor(list,NativeControls::highContrast()?GetSysColor(COLOR_WINDOW):RGB(24,34,45));ListView_SetTextColor(list,NativeControls::highContrast()?GetSysColor(COLOR_WINDOWTEXT):RGB(218,232,241));
+    NativeReportList::install(list);
     int column=0;for(const auto name:{L"Order",L"Pattern",L"Rows",L"Section"}){LVCOLUMNW item{};item.mask=LVCF_TEXT|LVCF_WIDTH;item.pszText=const_cast<wchar_t *>(name);item.cx=100;ListView_InsertColumn(list,column++,&item);}
     combo(sequence);combo(assignment);edit(rows,L"64",5);combo(source);
     for(const auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{assign,L"Assign"},{before,L"Insert before"},{after,L"Insert after"},{up,L"Move up"},{down,L"Move down"},{remove,L"Remove"},{play,L"Play selected"},{createNew,L"New + append"},{duplicate,L"Duplicate + append"},{reload,L"Reload draft"},{returnPattern,L"Return to pattern (F6)"},{close,L"Close"}})button(id,label);

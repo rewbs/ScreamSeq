@@ -16,6 +16,7 @@
 #include <tuple>
 #include <string_view>
 #include <cmath>
+#include <initializer_list>
 
 namespace ScreamSeq {
 using Microsoft::WRL::ComPtr;
@@ -52,8 +53,7 @@ class RenderSurface {
     TextCache textCache_;
     std::deque<TextCache::iterator> textOrder_;
     uint64_t textHits_=0,textMisses_=0;
-    void drawText(std::wstring_view value,float x,float y,float width,UINT32 color,bool ui) {
-        if(value.empty() || width<=0) return;
+    IDWriteTextLayout *textLayout(std::wstring_view value,float width,bool ui) {
         const auto units=int(std::ceil(std::min(width,32768.0f)*16));
         auto found=textCache_.find(std::tuple{ui,units,value});
         if(found==textCache_.end()) {
@@ -62,8 +62,13 @@ class RenderSurface {
             if(textCache_.size()>=4096) {textCache_.erase(textOrder_.front());textOrder_.pop_front();}
             found=textCache_.emplace(TextKey{ui,units,std::wstring(value)},std::move(layout)).first;textOrder_.push_back(found);
         } else ++textHits_;
+        return found->second.Get();
+    }
+    void drawText(std::wstring_view value,float x,float y,float width,UINT32 color,bool ui) {
+        if(value.empty() || width<=0) return;
+        const auto layout=textLayout(value,width,ui);
         brush_->SetColor(D2D1::ColorF(color));
-        context_->DrawTextLayout(D2D1::Point2F(x,y),found->second.Get(),brush_.Get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        context_->DrawTextLayout(D2D1::Point2F(x,y),layout,brush_.Get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
     }
 	HANDLE ready_{};
 	UINT width_{}, height_{};
@@ -148,6 +153,22 @@ public:
 	void uiText(std::wstring_view value, float x, float y, float w, UINT32 color = 0xc9d6e5) {
         drawText(value,x,y,w,color,true);
 	}
+    float uiTextWidth(std::wstring_view value) {
+        if(value.empty())return 0;
+        DWRITE_TEXT_METRICS metrics{};
+        check(textLayout(value,32768.f,true)->GetMetrics(&metrics),"Measure retained UI text");
+        return metrics.widthIncludingTrailingWhitespace;
+    }
+    // Prefer the fullest complete label that fits. Measurement uses the same
+    // bounded shaping cache and font as drawing; no layout per unchanged frame.
+    std::wstring_view fittingUiText(std::initializer_list<std::wstring_view> values,float width) {
+        if(width<=0)return {};
+        for(const auto value:values)if(uiTextWidth(value)<=width)return value;
+        return {};
+    }
+    void uiTextFit(std::initializer_list<std::wstring_view> values,float x,float y,float width,UINT32 color=0xc9d6e5) {
+        uiText(fittingUiText(values,width),x,y,width,color);
+    }
 	void clip(float x,float y,float w,float h) { context_->PushAxisAlignedClip(D2D1::RectF(x,y,x+w,y+h),D2D1_ANTIALIAS_MODE_ALIASED); }
 	void unclip() { context_->PopAxisAlignedClip(); }
 	void outline(float x,float y,float w,float h,UINT32 color) {

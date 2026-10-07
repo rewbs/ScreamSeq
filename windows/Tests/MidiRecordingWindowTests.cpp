@@ -95,6 +95,12 @@ void boundsAndColumns(Owner &owner){
   for(auto child=GetWindow(window,GW_CHILD);child;child=GetWindow(child,GW_HWNDNEXT))if(IsWindowVisible(child)){RECT box{};GetWindowRect(child,&box);MapWindowPoints(nullptr,window,reinterpret_cast<POINT *>(&box),2);require(box.left>=0&&box.top>=0&&box.right<=client.right&&box.bottom<=client.bottom,"MIDI control outside minimum client");for(const auto &other:boxes){RECT overlap{};require(!IntersectRect(&overlap,&box,&other),"MIDI controls overlap at minimum size");}boxes.push_back(box);}
   auto list=browser.control(7211);const int custom=MulDiv(196,dpi,96);ListView_SetColumnWidth(list,0,custom);HDITEMW item{};item.mask=HDI_WIDTH;item.cxy=custom;NMHEADERW changed{};changed.hdr={ListView_GetHeader(list),0,HDN_ENDTRACKW};changed.iItem=0;changed.pitem=&item;SendMessageW(list,WM_NOTIFY,0,reinterpret_cast<LPARAM>(&changed));
   RECT outer{};GetWindowRect(window,&outer);SetWindowPos(window,nullptr,0,0,outer.right-outer.left+MulDiv(100,dpi,96),outer.bottom-outer.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);require(ListView_GetColumnWidth(list,0)==custom,"Resize replaced custom take column width");
+  const auto themedList=browser.control(7211);const auto retainedFocus=GetFocus();const int retainedSelection=ListView_GetNextItem(themedList,-1,LVNI_SELECTED),retainedTop=ListView_GetTopIndex(themedList),retainedWidth=ListView_GetColumnWidth(themedList,0);
+  for(UINT message:{WM_THEMECHANGED,WM_SETTINGCHANGE,WM_SYSCOLORCHANGE}){
+    ListView_SetBkColor(themedList,RGB(250,0,250));SendMessageW(window,message,0,0);
+    require(ListView_GetBkColor(themedList)==ScreamSeq::NativeReportList::palette(ScreamSeq::NativeControls::highContrast()).background,"Top-level theme message did not refresh report colors");
+    require(GetFocus()==retainedFocus&&ListView_GetNextItem(themedList,-1,LVNI_SELECTED)==retainedSelection&&ListView_GetTopIndex(themedList)==retainedTop&&ListView_GetColumnWidth(themedList,0)==retainedWidth,"Theme refresh changed native report focus/selection/scroll/column width");
+  }
   std::cout<<"MIDI recording minimum 720 x 570 DIPs checked at "<<dpi<<" DPI\n";
 }
 }
