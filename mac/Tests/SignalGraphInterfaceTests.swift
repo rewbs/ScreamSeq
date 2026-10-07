@@ -5,7 +5,6 @@ extension InterfaceTests {
     var song:[String:Any]=["plugins":[["id":"rack","name":"Compressor","slot":0]],
       "mixer":["buses":[["id":"n1","name":"Track 1","kind":"track","inserts":["rack"]]]],
       "groups":[["id":"n2","name":"Dynamics","nodes":["plugin:rack"]]],"songSources":[]]
-    editor.revision="depth:1";editor.update(song);editor.navigateProcessingGroup("n2")
     var writes=[(String,[String:Any])](),revision=1
     editor.onRequest={method,params,reply in
       if method=="graph.song.source.add" {
@@ -17,6 +16,7 @@ extension InterfaceTests {
       }else if method=="graph.get"{reply(["result":["revision":"depth:\(revision)","data":song]])}
       else{reply(["error":["message":"No processor catalog needed"]])}
     }
+    editor.load();editor.navigateProcessingGroup("n2")
     editor.addSongSource(kind:"lfo",name:"LFO",position:NSPoint(x:420,y:160))
     try require(writes.count==1 && writes[0].1["parent"] as? String=="n2","Adding a song source inside a processing group captures its parent in the single source-add transaction")
     try require(editor.processingGroupID=="n2" && editor.selectedID=="source:n3" && editor.canvas.nodes.contains{$0.id=="source:n3"},"Source-add completion stays in the entered group with the new source visible and selected")

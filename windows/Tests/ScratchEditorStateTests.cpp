@@ -1,4 +1,5 @@
 #include "windows/App/ScratchEditorState.hpp"
+#include "windows/App/FormulaApplyState.hpp"
 #include "editor/CurveFormulaReference.hpp"
 #include <iostream>
 #include <stdexcept>
@@ -6,7 +7,27 @@ using namespace ScreamSeq;
 using Json=nlohmann::json;
 static void check(bool ok,const char *message){if(!ok)throw std::runtime_error(message);}
 template<typename F> static void reject(F f,const char *message){bool rejected=false;try{f();}catch(const std::exception&){rejected=true;}check(rejected,message);}
+static void formulaApplyChecks(){
+  FormulaApplyState state;state.baseline=L"initial";std::wstring text=L"submitted";uint64_t generation=1;unsigned applications=0;
+  auto currentGeneration=[&]{return generation;};auto currentText=[&]{return text;};
+  const auto result=state.apply(generation,text,[&]{
+    ++applications;check(state.pending()&&state.retained(text),"An in-flight callback retains its window even before newer typing");
+    text=L"newer formula";++generation;state.changed();
+    const auto nested=state.apply(generation,text,[&]{++applications;return true;},currentGeneration,currentText);
+    check(nested==FormulaApplyState::Result::Busy,"A message-pumping callback cannot reenter Use");return true;
+  },currentGeneration,currentText);
+  check(result==FormulaApplyState::Result::NewerDraft&&applications==1&&!state.pending(),"Only the submitted formula is applied during callback reentrancy");
+  check(state.baseline==L"submitted"&&!state.accepted&&text==L"newer formula"&&state.retained(text),"Successful old completion must retain newer visible text rather than mark it accepted");
+  const auto stale=state.apply(generation,text,[]{return false;},currentGeneration,currentText);
+  check(stale==FormulaApplyState::Result::Rejected&&state.retained(text)&&state.baseline==L"submitted","A parent changed by the earlier write rejects reapply without rebasing or dropping the new draft");
+  const auto saved=state.apply(generation,text,[&]{++applications;return true;},currentGeneration,currentText);
+  check(saved==FormulaApplyState::Result::Accepted&&state.accepted&&!state.retained(text)&&state.baseline==text,"An unchanged successful application still accepts the exact text");
+  text=L"retained after failure";++generation;state.changed();const auto baseline=state.baseline;
+  reject([&]{state.apply(generation,text,[]()->bool{throw std::runtime_error("controlled save failure");},currentGeneration,currentText);},"Apply propagates write failures");
+  check(!state.pending()&&state.retained(text)&&state.baseline==baseline,"A thrown callback releases its in-flight fence and preserves the draft/baseline");
+}
 int main(){try{
+  formulaApplyChecks();
   Json reference{{"notes",std::string(Tracker::curveFormulaNotes)},{"symbols",Json::array()}};
   for(const auto &v:Tracker::curveFormulaSymbols)reference["symbols"].push_back({{"name",std::string(v.name)},{"description",std::string(v.description)}});
   const auto scratch=scratchFormulaReference(reference);const auto notes=scratch["notes"].get<std::string>();
@@ -38,6 +59,6 @@ int main(){try{
   auto moved=target;moved.pattern=8;moved.channel=1;check(target.sameCell(moved),"Stable identities survive index movement");moved.document="document:original:4";check(!target.sameCell(moved),"Reopening the same path is a different captured document generation");moved=target;++moved.column;check(!target.sameCell(moved),"Captured FX columns cannot silently retarget");
   target.command=nullptr;target.row=target.rows;reject([&]{target.use(1);},"Deleted pattern row must reject");target.row=0;reject([&]{target.use(0);},"Gesture zero is not a song phrase");reject([&]{target.use(256);},"Slot 256 is outside the bank");
   target.row=15;target.rowsPerBeat=7;target.command={{"kind","native"},{"native","scratch"},{"offset",65535},{"parameters",{{"gesture",7},{"beats",1.0/65536}}}};reject([&]{target.use(1);},"An impossible captured tail must not silently extend the pattern");
-  std::cout<<"PASS Windows scratch editor state: paired atomic curves, endpoints/capacity, script validation, generation fencing and stable captured cells (no native UI execution)\n";
+  std::cout<<"PASS Windows scratch editor state: paired atomic curves, endpoints/capacity, script validation, generation fencing, reentrant formula application and stable captured cells (no native UI execution)\n";
   return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}
