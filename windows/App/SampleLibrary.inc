@@ -17,7 +17,7 @@
             [this]{return ScreamSeq::SampleLibraryWindow::Context{documentId,view->session.revision,view->instruments!=0};},
             [this](const Json &result,const std::string &document){
                 if(documentId!=document)return;
-                workspaceState.show("samples",position(),cursorSample(),true);auto &panel=workspaceState.panel("samples");
+                workspaceState.show("samples",position(),cursorSample(),true);setWorkspaceCanvasFocus("samples",true);auto &panel=workspaceState.panel("samples");
                 const auto &first=result.at("samples").at(0);panel.sample=first.at("sample");panel.pinned=true;sampleDraft=false;
                 const auto instrument=first.at("instrument").get<unsigned>();
                 if(instrument||!view->instruments){const auto target=typingTarget(!instrument,instrument?instrument:first.at("sample").get<unsigned>(),49,window);typingSoundId=target.identity;refreshTypingSounds();}

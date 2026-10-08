@@ -53,6 +53,31 @@ class RecordingTests(unittest.TestCase):
             if result: return result
             time.sleep(.03)
         self.fail('recording state did not settle')
+    def wait_recording(self, condition):
+        # Inject replies acknowledge the input queue. The MIDI service captures
+        # it on the worker and may pump this read while that worker is busy.
+        # Retry only this read's explicit busy response, never an input/write.
+        deadline = time.monotonic() + 8; observations = []; busy_responses = 0
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0: break
+            try:
+                result = Client(self.client.pipe, timeout=min(.5, remaining)).call('recording.get')
+            except ApiError as error:
+                if error.code != -32002: raise
+                busy_responses += 1
+                observations.append(dict(readError=str(error), code=error.code)); observations = observations[-16:]
+            else:
+                take = result['data']
+                observations.append(dict(revision=result.get('revision'), take=take.get('take'),
+                                         capturing=take.get('capturing'), eventCount=take.get('eventCount'),
+                                         compatible=take.get('compatible'), missingTime=take.get('missingTime'),
+                                         overflow=take.get('overflow'), inputError=take.get('inputError')))
+                observations = observations[-16:]
+                if condition(take): return take
+            remaining = deadline - time.monotonic()
+            if remaining > 0: time.sleep(min(.03, remaining))
+        self.fail(f'Recording read did not converge within 8 seconds; busy responses={busy_responses}: {observations}')
     def configure(self, **patch):
         old = self.settings()
         params = {k: old[k] for k in ('source', 'armed', 'channelsCount', 'quantization', 'latencyMS')}
@@ -166,8 +191,8 @@ class RecordingTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit silent output required')
     def test_timestamped_chord_api_stop_dry_run_one_undo_reopen_and_native_review(self):
         self.live(columns=2); before = self.musical(); revision = self.doc()['revision']
-        self.inject([0x643c90, 0x644090]); self.wait(lambda: self.take()['eventCount'] == 2)
-        time.sleep(.04); self.inject([0x003c80, 0x004080]); self.wait(lambda: self.take()['eventCount'] == 4)
+        self.inject([0x643c90, 0x644090]); self.wait_recording(lambda take: take['eventCount'] == 2)
+        time.sleep(.04); self.inject([0x003c80, 0x004080]); self.wait_recording(lambda take: take['eventCount'] == 4)
         self.write('transport.stop'); take = self.take()
         self.assertFalse(take['capturing']); self.assertEqual(take['missingTime'], 0)
         self.assertEqual(take['exhaustedVoices'], 0); self.assertEqual(take['overflow'], 0)
@@ -184,7 +209,7 @@ class RecordingTests(unittest.TestCase):
         self.wait(lambda: self.read('workspace.get')['midiWindow']['reviewedCount'] == 4)
         self.assertTrue(self.write('recording.commit', take=take['take'], dryRun=True, replaceRows=True)['data']['wouldChange'])
         self.assertEqual(self.take()['take'], take['take']); self.assertEqual(before, self.musical())
-        self.command(551); self.wait(lambda: not self.take()['take']); after = self.musical()
+        self.command(551); self.wait_recording(lambda take: not take['take']); after = self.musical()
         self.assertNotEqual(before, after)
         self.write('history.undo', domain='document'); self.assertEqual(before, self.musical())
         self.write('history.redo', domain='document'); self.assertEqual(after, self.musical())

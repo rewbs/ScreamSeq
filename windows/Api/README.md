@@ -375,7 +375,8 @@ snapshots exposed as `parameterAutomation` and `instrumentEnvelope`.
 
 `workspace.panel` accepts `panel`, `pinned`, `focus`, `follow`, `return`, and
 `placement`; flags must be booleans. Notes/sample inspectors accept `right` and
-`hide`. Pattern automation and instrument/envelope editors also accept `float`.
+`hide`. Pattern automation and instrument/envelope editors also accept `bottom`,
+`secondary`, and `float`.
 Unknown fields, panels and placements reject with `-32602`; a document operation
 in progress rejects editor placement requests with `-32002`. See the
 [workspace request schema](workspace.schema.json). Workspace operations require
@@ -389,13 +390,17 @@ are hidden, `right` is `""`; separate editors can still appear in `visible`.
 `pinned:false` immediately resumes cursor inspection, and `follow:true` performs
 the same unpin-and-inspect action. Their original return points remain intact.
 
-Automation/instrument editors start hidden, prefer floating placement, and are
-pinned by default to retain their captured target. `placement:"right"` opens
-and selects that editor in the shared dock. `placement:"float"` restores its
+Automation/instrument editors start hidden, prefer floating placement, and follow
+the cursor while idle, unfocused and free of retained drafts. `placement:"right"`,
+`"bottom"` or `"secondary"` opens and selects that editor in the requested region.
+`placement:"float"` restores its
 floating window; `placement:"hide"` keeps its native fields and drafts.
 `focus:true` opens/selects and focuses the editor, using its last non-hidden
 placement when necessary. Placement without focus retains the previous valid,
-visible focus where possible. Close hides the same retained editor.
+visible focus where possible. In compact mode, a focused Pattern, inspector or
+Main editor can remain selected, leaving the newly placed native editor hidden.
+An explicit bottom placement that replaces Main selects the native editor.
+Close hides the same retained editor.
 
 For these editors, `pinned:false` or `follow:true` requests a guarded refresh
 from the cursor. Pending operations, raw fields, staged edits, dragging and
@@ -408,21 +413,29 @@ opening position with playback-follow off. Its stable pattern identity survives
 reordering; a replaced document or removed pattern rejects the return. Return
 takes precedence over `focus:true` in a combined request.
 
-`workspace.get.editorDock` reports `mode` (`none`, `side`, or `tabs`), `active`
-editor, `trackerVisible`, and a DIP `rect`. At a main-window client width of at
-least 1424 DIP, one active editor occupies a 460-DIP right dock beside the
-tracker and its lower editor. Narrower windows use Tracker/Automation/Instrument
-tabs in the main body. Both editors can retain `location:"right"` while only
-the selected editor is visible. A dock ensures at least 666 DIP of workspace
-client height, providing a 500-DIP editor. **Pattern focus** temporarily hides
-the dock while preserving placements. A floated editor remains independent.
+`workspace.get.editorDock` reports `mode` (`none`, `regions`, or `tabs`), `active`
+(the last selected native editor), `trackerVisible`, a DIP `rect`, each region's header/body and selection,
+the selected compact tab, and the versioned presentation `configuration`.
+Use `compactSelection`, region visibility and `visible` to identify the displayed
+host; `active` alone does not identify the focused or visible compact surface.
+The right, bottom and secondary regions share resizable boundaries. Editors in
+different regions can remain visible together; editors assigned to the same
+region share its selection. When the available width or height cannot fit their
+minimum bodies, compact tabs show one selected surface. Resizing from regions to
+tabs retains the actual focused host and updates `compactSelection`; desired
+sizes and placements remain unchanged. Named-layout restoration keeps its saved
+tab selection. The layout never enlarges the owner window. **Pattern focus**
+temporarily hides docks while preserving placements. Floated editors remain
+independent. The **Connected editors** preset opens Pattern, Graph, Instrument
+and Automation in four regions where space permits.
 
 The existing **Automation…** and **Instrument…** actions open the retained
 editors in their preferred placement, initially floating. The command palette's
 **Dock automation beside the tracker** and **Dock instrument beside the tracker**
 actions select the dock. Ctrl+Alt+D inside either editor toggles dock/float.
-The workspace header exposes Tracker, Automation, Instrument, Float, Hide,
-Pinned/Following, Cursor and Return actions.
+Each region has a panel selector. Native editor regions offer local placement,
+Pin/Following, Cursor and Return actions; Main offers its selector and Collapse.
+Compact headers collect native editor actions in a More menu when needed.
 
 `api.describe.revisionGuards` advertises required tokens per write method:
 `transport.play`/`transport.stop` require `expectedRevision`, `context.set`
@@ -430,7 +443,7 @@ requires both `expectedRevision` and `expectedContext`, and workspace writes
 accept neither. `api.describe.workspaceSubset` lists panels, inspector
 `placements`, per-editor `editorPlacements`, and supported presets.
 
-`workspace.layout` supports **Compose**, **Pattern focus**, **Sound design**,
+`workspace.layout` supports **Compose**, **Pattern focus**, **Sound design**, **Connected**,
 **Save custom** and **Restore custom**, matching the shared names. Windows also
 supports **Delete custom** and **Reload saved**. Custom actions accept optional
 `savedName` (default `Custom`): 1–64 Unicode characters, no controls or surrounding
@@ -440,22 +453,25 @@ whitespace, up to 24 case-sensitive names. See [workspace schema](workspace.sche
 and Ctrl+Alt+W expose the same operations; Ctrl+J collapses/reopens the dock.
 
 Layouts save inspector visibility, dock sizes, the base preset, active lower
-editor, automation/instrument locations, active dock editor and Tracker-tab
-selection. Restoring keeps current pins, inspected targets, return points, draft
+editor, automation/instrument locations, each region selection and compact tab.
+The `editors` member uses version 2; the named-layout catalogue remains version 1.
+Previous editor configurations migrate, while seven-field configurations leave
+native presentation preferences unchanged. Restoring keeps current pins, inspected targets, return points, draft
 text and song cursor; it never restores old musical targets or adds song Undo.
 Older saved configurations without editor placement leave current editor
 placements unchanged. Unopened editors are initialized if the saved arrangement
 requires them; already-created editors retain their instances.
-The lower tab strip stays available while collapsed. A normal app stores layouts
+The selected lower editor can be reopened from its workspace command. A normal app stores layouts
 in LocalAppData/org.resonance.tracker/workspace-layouts-v1.json; inspection and
 audio qualification keep them in memory. Saves replace atomically. A concurrent
 file edit rejects with -32001; **Refresh saved** / **Reload saved** reloads the
 catalogue before retry. Invalid storage does not prevent startup.
 
-Only automation and instrument/envelope editors support the new dock/float
-placement. Arbitrary panel docking, multiple independent dock groups, and
-simultaneous lower editors remain unavailable. See
-[`WORKSPACE_DOCKING_PROGRESS.md`](../WORKSPACE_DOCKING_PROGRESS.md) for the
+Only automation and instrument/envelope editors support region/float placement.
+The Main-owned Notes, Samples, FX, Plugins, Mixer and Graph share the bottom
+region. Arbitrary panel docking, simultaneous Main-owned editors and a separate
+Graph pattern-curve host remain unavailable. See
+[`INDEPENDENT_DOCKING_PROGRESS.md`](../INDEPENDENT_DOCKING_PROGRESS.md) for the
 implementation scope and qualification status.
 
 Use `SCREAMSEQ_TEST_EXE` pointing to a separate QA executable and run

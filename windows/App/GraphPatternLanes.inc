@@ -2,6 +2,7 @@
     unsigned graphLaneSelected=0,graphLaneFirst=0;
     static constexpr float graphLaneWidth=124;
     ScreamSeq::WorkspaceRect graphLanesRect()const{
+        if(!trackerWorkspaceVisible())return {};
         const auto r=geometry().pattern;const auto width=std::min(r.w*.4f,float(view->graphPattern->lanes.size())*graphLaneWidth);
         return {r.x+r.w-width,r.y,width,r.h};
     }
@@ -10,6 +11,7 @@
     void revealGraphLane(){
         const auto count=unsigned(view->graphPattern->lanes.size());if(!count){graphLaneFirst=graphLaneSelected=0;if(workspaceState.focus=="graphLanes")workspaceState.focus="pattern";return;}
         graphLaneSelected=std::min(graphLaneSelected,count-1);graphLaneFirst=std::min(graphLaneFirst,count-1);
+        if(!trackerWorkspaceVisible())return;
         const auto visible=std::max(1u,unsigned(graphLanesRect().w/graphLaneWidth));
         if(graphLaneSelected<graphLaneFirst)graphLaneFirst=graphLaneSelected;
         if(graphLaneSelected>=graphLaneFirst+visible)graphLaneFirst=graphLaneSelected-visible+1;
@@ -32,7 +34,7 @@
         documentOperation("graph.commands.set",{{"expectedRevision",revision},{"pattern",pattern},{"commands",events}});
     }
     bool graphLaneKey(WPARAM key,bool ctrl,bool alt,bool shift){
-        if(workspaceState.focus!="graphLanes"||GetFocus()!=window)return false;
+        if(!trackerWorkspaceVisible()||workspaceState.focus!="graphLanes"||GetFocus()!=window)return false;
         if(key==VK_F6||key==VK_TAB){workspaceState.focus="pattern";return true;}
         if(ctrl||alt)return false;revealGraphLane();if(view->graphPattern->lanes.empty())return false;
         if(key==VK_RETURN){openGraphCommands(true);return true;}if(key==VK_DELETE||key==VK_BACK){clearGraphCell();return true;}

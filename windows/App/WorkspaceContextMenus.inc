@@ -139,10 +139,10 @@
     bool workspaceContextMenu(HWND source,POINT screen) {
         // Native child controls (especially EDIT and COMBOBOX) retain their own
         // menus. Only painted workspace canvases participate in this handler.
-        if(source!=window||!trackerWorkspaceVisible())return false;
+        if(source!=window)return false;
         if(workspaceMenuState.value("active",false)||dragging)return true;
         const bool keyboard=screen.x==-1&&screen.y==-1;
-        if(keyboard&&workspaceState.focus!="pattern"&&!(workspaceState.focus=="samples"&&sampleEditorVisible())&&
+        if(keyboard&&!(workspaceState.focus=="pattern"&&trackerWorkspaceVisible())&&!(workspaceMainCanvasFocused("samples"))&&
             !(workspaceState.focus=="graph"&&graphEditorVisible()&&!graphCurveVisible()))return false;
         // A menu's nested message loop may consume note-up messages. Release
         // held musical typing before capturing any canvas target, without
@@ -158,7 +158,7 @@
             float x=target.x+gutter+channelStart(channel)-horizontalScroll+fieldStart(column)+fieldWidth(column)/2;
             float y=target.y+gridHeader+(float(row)-float(firstRow)+.5f)*rowHeight;
             surfaceName="pattern";
-            if(workspaceState.focus=="samples"&&sampleEditorVisible()) {
+            if(workspaceMainCanvasFocused("samples")) {
                 surfaceName="sample";target=sampleWaveRect();x=target.x+target.w/2;y=target.y+target.h/2;
             } else if(workspaceState.focus=="graph"&&graphEditorVisible()&&!graphCurveVisible()) {
                 surfaceName="graph";target=graphCanvas.viewport;x=target.x+target.w/2;y=target.y+target.h/2;
@@ -179,6 +179,7 @@
                 surfaceName=hitNode>=0?"graph-node":hitWire>=0?"graph-wire":"graph";
             } else if(sampleEditorVisible()&&sampleWaveRect().contains(x,y))surfaceName="sample";
             else {
+                if(!trackerWorkspaceVisible())return false;
                 const auto grid=patternGridRect();
                 if(!grid.contains(x,y)||y<grid.y+gridHeader||x<grid.x+gutter)return false;
                 const unsigned line=unsigned((y-grid.y-gridHeader)/rowHeight);
@@ -201,7 +202,7 @@
                 navigate(next);selecting=false;anchorRow=hitRow;anchorChannel=hitChannel;
             }
             workspaceState.focus="pattern";
-        } else if(surfaceName=="sample")workspaceState.focus="samples";
+        } else if(surfaceName=="sample")setWorkspaceCanvasFocus("samples");
         else {
             workspaceState.focus="graph";
             const bool differentNode=hitNode>=0&&(graphNode!=graphCanvas.nodes[size_t(hitNode)].id||graphWireIndex>=0);
@@ -218,7 +219,7 @@
         frameRequested=true;
         const auto document=documentId,revision=view->session.revision;
         const auto context=contextRevision;
-        const auto focus=workspaceState.focus;
+        const auto focus=workspaceState.focus;const bool inspector=inspectorCanvasFocus;
         const auto cursor=position(),selected=selection(),target=workspaceMenuTarget(surfaceName);
         auto items=surfaceName=="pattern"?patternContextItems():surfaceName=="sample"?sampleContextItems():graphContextItems(surfaceName,targetReady);
         workspaceMenuShortcuts(items,surfaceName);
@@ -228,9 +229,9 @@
         const int selectedCommand=ScreamSeq::NativeContextMenu::show(window,screen,items);
         workspaceMenuState["active"]=false;workspaceMenuState["selected"]=selectedCommand;
         if(!selectedCommand)return true;
-        const bool visible=trackerWorkspaceVisible()&&(surfaceName=="pattern"||(surfaceName=="sample"?sampleEditorVisible():graphEditorVisible()&&!graphCurveVisible()));
+        const bool visible=surfaceName=="pattern"?trackerWorkspaceVisible():surfaceName=="sample"?sampleEditorVisible():graphEditorVisible()&&!graphCurveVisible();
         if(!workspaceMenuAllows(items,selectedCommand)||busy||dragging||!visible||document!=documentId||revision!=view->session.revision||
-            context!=contextRevision||focus!=workspaceState.focus||cursor!=position()||selected!=selection()||target!=workspaceMenuTarget(surfaceName)) {
+            context!=contextRevision||focus!=workspaceState.focus||inspector!=inspectorCanvasFocus||cursor!=position()||selected!=selection()||target!=workspaceMenuTarget(surfaceName)) {
             workspaceMenuState["rejected"]=true;status=L"Menu target changed / reopen the menu to use the current selection";frameRequested=true;return true;
         }
         workspaceMenuState["dispatched"]=true;

@@ -8,6 +8,7 @@ class ParameterAutomationWindow final : public NativeToolWindow {
   using Json=Api::Json;
 public:
   struct Cursor {std::string document,revision;unsigned pattern=0;Json patterns,plugins;};
+  static constexpr int dockMinimumWidth=440,dockMinimumHeight=300;
 private:
   using Request=std::function<Json(const std::string &,const Json &)>;
   enum : int {pattern=4201,plugin,search,parameters,kind,snap,pointRow,pointValue,formula,setPoint,deletePoint,rampUp,rampDown,enabled,apply,verify,remove,reload,fromCursor,bank,expand,reference,lastTouched,openRack,fit,zoomOut,zoomIn,panLeft,panRight,tool,rangeStart,rangeEnd,toolValue0,toolValue1,toolValue2,toolValue3,copyRange,previewTool,close,
@@ -23,7 +24,7 @@ private:
   bool setting_=false,pending_=false,dirty_=false,pointFields_=false,enabled_=true,previewNeeded_=false,dragging_=false,dragDirty_=false;
   // Compact pages move the same native controls; drafts, selections and raw
   // field text are never reconstructed when changing pages or window size.
-  bool compact_=false,canvasVisible_=true,toolFieldsDirty_=false;
+  bool compact_=false,shortDock_=false,canvasVisible_=true,toolFieldsDirty_=false;
   int compactPage_=1;
   HWND pendingFocus_{};
   uint64_t generation_=0;Json dragBefore_;int dragSelection_=-1;
@@ -49,7 +50,7 @@ private:
   void status(std::wstring value){status_=std::move(value);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   void rebuild(){canvas_.rebuild(points_,values_);requestPaint();}
-  void schedule(){previewNeeded_=true;if(visible())SetTimer(window_,3,120,nullptr);}
+  void schedule(){previewNeeded_=true;if(visible())resumeVisiblePresentation();}
   void changed(){dirty_=true;++generation_;values_=Json::array();schedule();rebuild();status(L"Curve draft / Apply saves one document Undo step");}
   std::wstring parameterName()const{for(const auto &p:catalog_)if(parameter_&&p.at("id")==*parameter_)return wide(p.at("name").get<std::string>());return L"No parameter";}
   void showPoint(){
@@ -220,6 +221,7 @@ private:
     if(k==VK_TAB&&!points_.empty()){selected_=(selected_+(shift?-1:1)+int(points_.size()))%int(points_.size());showPoint();requestPaint();return true;}
     if(selected_>=0&&(k==VK_LEFT||k==VK_RIGHT||k==VK_UP||k==VK_DOWN)){auto p=points_[size_t(selected_)];if(k==VK_LEFT||k==VK_RIGHT)p["position"]=uint32_t(std::clamp(p.at("position").get<double>()+(k==VK_LEFT?-1:1)*(shift?1.0:double(snap_)),0.0,double(rows_)*256-1));else p["value"]=std::clamp(p.at("value").get<double>()+(k==VK_UP?1:-1)*(shift?.001:.01),0.0,1.0);replacePoint(std::move(p));return true;}return false;
   }
+  void resumeVisiblePresentation()noexcept override{if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
   void timer(UINT_PTR id)override{if(id!=3)return;KillTimer(window_,3);if(!visible())return;if(pending_||dragging_){SetTimer(window_,3,120,nullptr);return;}if(previewNeeded_)previewNow();}
   void drawControl(const DRAWITEMSTRUCT &d)override{
     if(d.CtlType!=ODT_BUTTON||d.CtlID<pageTarget||d.CtlID>pageTools){NativeToolWindow::drawControl(d);return;}
@@ -237,10 +239,65 @@ private:
   void layout()override{
     // Preserve the former 1040x760 outer-window layout after nonclient chrome;
     // use pages when the available client area becomes materially smaller.
-    const auto [w,h]=size();const auto previousFocus=GetFocus();compact_=w<1000||h<700;std::set<int> shown;
+    const auto [w,h]=size();const auto previousFocus=GetFocus();const bool wasShort=shortDock_;
+    shortDock_=docked()&&h<500;compact_=shortDock_||w<1000||h<700;std::set<int> shown;
+    // A first shrink may page controls that were all visible in the wide form.
+    // Reveal the existing focused field without rebuilding its text/selection.
+    if(shortDock_&&!wasShort&&previousFocus&&IsChild(window_,previousFocus)) {
+      const auto id=GetDlgCtrlID(previousFocus);
+      if(id==formula||id==expand||id==reference||id==bank||id==rampUp||id==rampDown)compactPage_=2;
+      else if(id==tool||id==rangeStart||id==rangeEnd||(id>=toolValue0&&id<=toolValue3)||id==copyRange||id==previewTool||id==panLeft||id==panRight)compactPage_=3;
+      else if(id==pattern||id==plugin||id==search||id==parameters||id==lastTouched||id==openRack||id==absolute||id==remove||id==fromCursor||id==close)compactPage_=0;
+      else if(id==fit||id==zoomOut||id==zoomIn)compactPage_=1;
+      else if((id==pointRow||id==pointValue||id==setPoint||id==deletePoint||id==enabled)&&compactPage_!=2)compactPage_=1;
+      else if((id==kind||id==snap)&&compactPage_==0)compactPage_=1;
+    }
+    set(rowLabel,shortDock_?L"Row":L"Row / 1⁄256");set(valueLabel,shortDock_?L"Value %":L"Value / %");
     auto put=[&](int id,float x,float y,float width,float height,bool show=true){if(show)shown.insert(id);place(id,x,y,width,height,show);};
     const int valueCount=std::array<int,9>{0,0,1,2,2,4,3,1,1}.at(size_t(tool_));
-    if(compact_){
+    if(shortDock_){
+      // Explicit 440x300-DIP dock body. Keep curve editing and Apply visible;
+      // details use the same retained pages instead of scrolling the whole form.
+      const float left=8,inner=std::max(1.f,w-16),gap=6,half=(inner-gap)/2,third=(inner-2*gap)/3,quarter=(inner-3*gap)/4;
+      for(int i=0;i<4;++i)put(pageTarget+i,left+i*(quarter+gap),4,quarter,26);
+      put(targetLabel,left,32,inner,18);
+      for(int i=0;i<3;++i)put(std::array<int,3>{apply,verify,reload}[size_t(i)],left+i*(third+gap),h-60,third,26);
+      put(statusLabel,left,h-30,inner,26);
+      const auto pointFields=[&](float y){
+        const float fieldWidth=(inner-30-46-176-5*gap)/2;float x=left;
+        put(rowLabel,x,y+4,30,18);x+=30+gap;put(pointRow,x,y,fieldWidth,26);x+=fieldWidth+gap;
+        put(valueLabel,x,y+4,46,18);x+=46+gap;put(pointValue,x,y,fieldWidth,26);x+=fieldWidth+gap;
+        put(setPoint,x,y,88,26);x+=88+gap;put(deletePoint,x,y,88,26);
+      };
+      canvasVisible_=compactPage_==1;canvas_.viewport={};
+      if(compactPage_==0){
+        put(pattern,left,52,half,230);put(plugin,left+half+gap,52,half,260);
+        put(search,left,84,inner,26);put(parameters,left,116,inner,std::max(1.f,h-246));
+        for(int i=0;i<3;++i){
+          put(std::array<int,3>{lastTouched,openRack,absolute}[size_t(i)],left+i*(third+gap),h-124,third,26);
+          put(std::array<int,3>{remove,fromCursor,close}[size_t(i)],left+i*(third+gap),h-92,third,26);
+        }
+      }else if(compactPage_==1){
+        float x=left;const float kindWidth=inner-278;
+        for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{kind,kindWidth},{snap,82.f},{enabled,74.f},{fit,40.f},{zoomOut,26.f},{zoomIn,26.f}}){put(id,x,52,width,id==kind?230.f:id==snap?220.f:26.f);x+=width+gap;}
+        canvas_.viewport={left,100,inner,std::max(1.f,h-198)};
+        pointFields(h-92);
+      }else if(compactPage_==2){
+        put(kind,left,52,inner-174,230);put(snap,w-176,52,82,220);put(enabled,w-88,52,80,26);
+        put(formulaLabel,left,86,inner,18);put(formula,left,104,inner,26);
+        put(expand,left,136,half,26);put(reference,left+half+gap,136,half,26);
+        pointFields(170);
+        for(int i=0;i<3;++i)put(std::array<int,3>{bank,rampUp,rampDown}[size_t(i)],left+i*(third+gap),h-92,third,26);
+      }else{
+        const float rangeWidth=(inner-100-2*gap)/2;
+        put(rangeLabel,left,52,100,26);put(rangeStart,left+106,52,rangeWidth,26);put(rangeEnd,left+112+rangeWidth,52,rangeWidth,26);
+        put(tool,left,84,inner-244,230);put(kind,w-246,84,144,230);put(snap,w-96,84,88,220);
+        for(int i=0;i<4;++i){const float x=left+(i%2)*(half+gap),y=112+(i/2)*46.f;put(toolLabel0+i,x,y,half,16,i<valueCount);put(toolValue0+i,x,y+16,half,26,i<valueCount);}
+        const float actionWidth=(inner-124-3*gap)/2;
+        put(copyRange,left,h-92,actionWidth,26);put(previewTool,left+actionWidth+gap,h-92,actionWidth,26);
+        put(panLeft,w-138,h-92,62,26);put(panRight,w-70,h-92,62,26);
+      }
+    }else if(compact_){
       const float left=10,inner=std::max(1.f,w-20),gap=6,half=(inner-gap)/2,third=(inner-2*gap)/3,quarter=(inner-3*gap)/4;
       const float contentBottom=h-116;
       put(heading,left,8,inner,24);
@@ -316,7 +373,7 @@ private:
     for(double p=std::ceil(canvas_.start/step)*step;p<=canvas_.end;p+=step){const auto x=canvas_.screen(p,0).x;s.line(x,r.y,x,r.y+r.h,0x2a3947);}
     for(size_t i=1;i<canvas_.curve.size();++i)s.line(canvas_.curve[i-1].x,canvas_.curve[i-1].y,canvas_.curve[i].x,canvas_.curve[i].y,enabled_?0x6edac5:0x647c89,2);
     for(size_t i=0;i<canvas_.handles.size();++i){const auto p=canvas_.handles[i];s.fill(p.x-4,p.y-4,8,8,int(i)==selected_?0xffd08a:0x6edac5);}s.unclip();s.outline(r.x,r.y,r.w,r.h,GetFocus()==window_?0x6edac5:0x334757);
-    wchar_t label[160]{};swprintf_s(label,L"Rows %.2f–%.2f · %.1f–%.1f%% · Ctrl+wheel zooms; Ctrl+Shift zooms values",canvas_.start/256,canvas_.end/256,canvas_.valueLow*100,canvas_.valueHigh*100);s.uiText(label,r.x,r.y-22,r.w,0x93aabd);
+    wchar_t label[160]{};swprintf_s(label,shortDock_?L"Rows %.2f–%.2f · %.1f–%.1f%%":L"Rows %.2f–%.2f · %.1f–%.1f%% · Ctrl+wheel zooms; Ctrl+Shift zooms values",canvas_.start/256,canvas_.end/256,canvas_.valueLow*100,canvas_.valueHigh*100);s.uiText(label,r.x,r.y-22,r.w,0x93aabd);
   }
 public:
   ParameterAutomationWindow(HWND owner,Request request,std::function<Cursor()> context,std::function<void(const std::string &,uint32_t)> inspect,std::function<void(const std::string &,uint32_t)> absoluteEditor):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)),absolute_(std::move(absoluteEditor)){
@@ -338,10 +395,16 @@ public:
     if(now.document==captured_.document&&now.pattern==captured_.pattern&&now.revision==captured_.revision)return true;
     load(true);return true;
   }
+  // Prepare only a newly constructed staging window. Layout restoration owns
+  // adoption/placement after every requested editor has loaded successfully.
+  void initializeHidden(std::string plugin={},std::optional<uint32_t> parameter={}){
+    require(!visible()&&!docked()&&captured_.document.empty()&&generation_==0&&!retainedDraft(),"Hidden initialization requires a fresh, undocked automation editor");
+    load(true,std::move(plugin),parameter);
+  }
   void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||retainedDraft();show();if(!retain){load(true,std::move(plugin),parameter);if(compact_&&!parameter_){compactPage_=0;layout();}}if(previewNeeded_)SetTimer(window_,3,120,nullptr);focusPage();}
   Json snapshot()const{
     Json handles=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});const auto r=canvas_.viewport;
-    return {{"visible",visible()},{"compact",compact_},{"page",std::array<const char *,4>{"target","curve","formula","tools"}[size_t(compactPage_)]},{"canvasVisible",canvasVisible_},{"toolFieldDraft",toolFieldsDirty_},{"retainedDraft",retainedDraft()},{"document",captured_.document},{"expectedRevision",captured_.revision},{"pattern",captured_.pattern},{"patternID",patternID_},{"plugin",pluginID_},{"parameter",parameter_?Json(*parameter_):Json()},{"lane",laneID_},{"dirty",dirty_},{"fieldDraft",pointFields_},{"pending",pending_},{"stale",!current()},{"enabled",enabled_},{"points",points_},{"selectedPoint",selected_},{"parameterCount",catalog_.size()},{"filteredCount",filtered_.size()},{"start",canvas_.start},{"end",canvas_.end},{"valueLow",canvas_.valueLow},{"valueHigh",canvas_.valueHigh},{"previewSamples",canvas_.curve.size()},{"handles",handles},{"canvas",{r.x,r.y,r.w,r.h}},{"status",utf8(status_)},{"envelopeBank",bank_?bank_->snapshot():Json{{"visible",false}}},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}}};
+    return {{"visible",visible()},{"compact",compact_},{"shortDock",shortDock_},{"page",std::array<const char *,4>{"target","curve","formula","tools"}[size_t(compactPage_)]},{"canvasVisible",canvasVisible_},{"toolFieldDraft",toolFieldsDirty_},{"retainedDraft",retainedDraft()},{"generation",generation_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"pattern",captured_.pattern},{"patternID",patternID_},{"plugin",pluginID_},{"parameter",parameter_?Json(*parameter_):Json()},{"lane",laneID_},{"dirty",dirty_},{"fieldDraft",pointFields_},{"pending",pending_},{"stale",!current()},{"enabled",enabled_},{"points",points_},{"selectedPoint",selected_},{"parameterCount",catalog_.size()},{"filteredCount",filtered_.size()},{"start",canvas_.start},{"end",canvas_.end},{"valueLow",canvas_.valueLow},{"valueHigh",canvas_.valueHigh},{"previewSamples",canvas_.curve.size()},{"handles",handles},{"canvas",{r.x,r.y,r.w,r.h}},{"status",utf8(status_)},{"envelopeBank",bank_?bank_->snapshot():Json{{"visible",false}}},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}}};
   }
 };
 }

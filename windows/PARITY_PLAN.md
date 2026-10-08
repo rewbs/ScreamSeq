@@ -1,6 +1,21 @@
 # Windows / Mac parity plan
 
-Current arrangement-matrix checkpoint (2026-10-07): a retained native matrix
+Current independent-docking checkpoint (2026-10-07): the Connected workspace
+shows Pattern, Graph, Instrument and Automation in independent native regions.
+Short pages, compact fallback and guarded layout preparation retain editor HWNDs,
+raw fields, targets, caret and focus. Candidate 8 passes **393/393 app cases**,
+**33/33 focused cases**, **48/48 native targets**, and review of **37 source-matched
+192-DPI views**. See [docking evidence](INDEPENDENT_DOCKING_PROGRESS.md), including
+historical failures and qualification limits. Checkpoint destination:
+`bin/windows-checkpoints/independent-dock-regions-20261007/`; its manifest is the
+authority for completed immutable packaging.
+
+Next is independent Graph curve ownership so routing and its curve remain visible
+together. Its ignored prototypes are unbuilt. Full Windows/Mac parity remains
+the goal; foreground/multiple-scale presentation, accessibility and reciprocal
+Mac runtime remain outside this checkpoint's evidence.
+
+Previous arrangement-matrix checkpoint (2026-10-07): a retained native matrix
 provides paged order-by-track density, exact occurrence navigation, captured
 Copy/Paste and guarded Overwrite/Merge/Mix. Shared copying includes precise notes
 and all FX columns, preserves exact independent pattern properties, and validates
@@ -12,9 +27,6 @@ exact nonzero PCM comparisons. Fifteen source-matched 192-DPI views pass review.
 See [matrix evidence](MATRIX_PROGRESS.md), including retained failures and limits.
 Checkpoint destination: `bin/windows-checkpoints/arrangement-matrix-20261007/`;
 its manifest confirms completed packaging.
-
-Next are [independent dock regions](INDEPENDENT_DOCKING_PLAN.md), including useful
-short instrument and automation panels. Full Windows/Mac parity remains the goal.
 
 Previous visual-consistency checkpoint (2026-10-07): the pattern header fits its
 available width, and Arrangement, Recovery and MIDI lists share restrained
@@ -117,12 +129,13 @@ search now ranks relevant titles, supports unordered words and restores field
 focus. Toolbar collisions and compact inspector clipping are corrected. See
 [workspace evidence](WORKSPACE_LAYOUTS_PROGRESS.md) for exact qualification.
 
-The current docking checkpoint adds retained automation/instrument docking, compact editor
+The earlier docking checkpoint adds retained automation/instrument docking, compact editor
 pages, floating/redocking and local keyboard routing. Wide windows can show the
 graph beside the selected editor; smaller windows retain each editor behind tabs.
 See [docking evidence](WORKSPACE_DOCKING_PROGRESS.md) for qualification and limits.
-Arbitrary independent dock groups and the cross-platform
-qualification gates below remain open.
+The current [independent-region work](INDEPENDENT_DOCKING_PROGRESS.md) adds
+simultaneous native regions. Arbitrary panel docking, simultaneous Main editors,
+a separate Graph curve host and the cross-platform qualification gates remain open.
 
 Native context menus now connect pattern, sample, graph, instrument and detailed
 sample workflows to the existing guarded actions. The command palette supports

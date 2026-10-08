@@ -231,7 +231,25 @@ class WorkspaceContextMenuTests(unittest.TestCase):
                     elif change == 'context':
                         self.navigate(row=7, following=False)
                     else:
+                        focus_document = self.doc()
+                        focus_context = self.read('context.get')
+                        serial = self.state()['contextMenu']['serial']
                         self.client.call('workspace.panel', dict(panel='notes', focus=True))
+                        # Moving native focus may cancel TrackPopupMenu before
+                        # a command is selected. Never dereference that HMENU.
+                        focused = self.ready()
+                        state = focused['contextMenu']
+                        self.assertEqual(state['serial'], serial)
+                        self.assertEqual(focused['focus'], 'notes')
+                        self.assertEqual(self.doc(), focus_document)
+                        self.assertEqual(self.read('context.get'), focus_context)
+                        if not state['active']:
+                            self.assertFalse(native_context_menu._popups(self))
+                            self.assertFalse(user.IsWindow(menu.hwnd))
+                            self.assertEqual(state['selected'], 0)
+                            self.assertFalse(state['rejected'])
+                            self.assertFalse(state['dispatched'])
+                            continue
                     before = self.doc()
                     menu.choose(126)
                 state = self.ready()['contextMenu']

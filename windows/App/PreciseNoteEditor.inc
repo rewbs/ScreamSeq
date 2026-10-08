@@ -8,7 +8,89 @@
     Json noteDragBefore=Json::array();
     std::array<unsigned,256> noteDensity{};
     std::wstring noteStatus=L"Enter on a note to inspect precise hits";
-    bool noteEditorVisible() const {return trackerWorkspaceVisible()&&workspaceState.lowerVisible&&!graphEditorVisible()&&!mixerEditorVisible()&&noteEditorOpen&&!effectEditorOpen&&workspaceState.layout!="Pattern focus"&&!sampleEditorVisible();}
+    struct InitialNotes {
+        std::shared_ptr<const ScreamSeq::DocumentView> source;
+        std::string document,revision;
+        uint64_t context=0,generation=0;
+        Json cursor,target,events=Json::array(),draft=Json::array(),original=Json::array(),effects=Json::array();
+        bool pinned=false,moveLegacyEffect=false;
+        unsigned pattern=0,row=0,channel=0,rowsPerBeat=4,units=0,snap=0;
+        int selected=-1,pitchSelection=60,effectSelection=0;
+        std::array<unsigned,256> density{};
+        std::vector<std::wstring> effectLabels;
+        std::array<std::wstring,4> fields;
+        std::wstring status;
+    };
+    void validateInitialNotes(const InitialNotes &initial) const {
+        const auto published=controller->view();const auto &panel=workspaceState.panel("notes");
+        if(busy||recoveryRestoring||notePending||noteCaptured||noteEditorOpen||noteDraftGeneration!=initial.generation||
+            documentId!=initial.document||view->session.documentId!=initial.document||view->session.revision!=initial.revision||
+            published->session.documentId!=initial.document||published->session.revision!=initial.revision||
+            contextRevision!=initial.context||position()!=initial.cursor||panel.pinned!=initial.pinned||panel.target!=initial.target||
+            noteUnits!=initial.units||noteSnap!=initial.snap)
+            throw std::runtime_error("Song, target or precise-note draft changed while preparing the layout");
+    }
+    InitialNotes prepareInitialNotes() {
+        // Do not use documentOperation here: its refreshDocument path changes
+        // inspector controls and layout before the whole arrangement is ready.
+        if(busy||recoveryRestoring||notePending||noteCaptured||noteEditorOpen)
+            throw std::runtime_error("Prepare only an unopened precise-note editor while the document is ready");
+        InitialNotes initial;initial.source=view;initial.document=documentId;initial.revision=view->session.revision;
+        initial.context=contextRevision;initial.generation=noteDraftGeneration;initial.cursor=position();
+        const auto &panel=workspaceState.panel("notes");initial.target=panel.target;initial.pinned=panel.pinned;
+        initial.units=noteUnits;initial.snap=noteSnap;
+        initial.pattern=initial.target.value("pattern",patternIndex);initial.row=initial.target.value("row",row);initial.channel=initial.target.value("channel",channel);
+        if(!initial.source->patterns.contains(initial.pattern)||initial.row>=initial.source->pattern(initial.pattern).rows||initial.channel>=initial.source->channels)
+            throw std::runtime_error("The inspected row no longer exists / choose another target");
+        validateInitialNotes(initial);
+        auto snapshot=workspacePreparationRead("pattern.notes.get",{{"pattern",initial.pattern}});
+        validateInitialNotes(initial);
+        if(snapshot.at("pattern").get<unsigned>()!=initial.pattern||snapshot.at("rows").get<unsigned>()!=initial.source->pattern(initial.pattern).rows||
+            snapshot.at("unitsPerRow").get<unsigned>()!=Tracker::performanceUnitsPerRow||!snapshot.at("events").is_array()||
+            snapshot.at("events").size()>Tracker::maximumPreciseNotes||!snapshot.at("effects").is_array()||snapshot.at("effects").size()>4096)
+            throw std::runtime_error("Unexpected precise-note snapshot while preparing the layout");
+        initial.rowsPerBeat=snapshot.at("rowsPerBeat").get<unsigned>();if(!initial.rowsPerBeat)throw std::runtime_error("Invalid captured note timing");
+        initial.events=std::move(snapshot.at("events"));initial.effects=std::move(snapshot.at("effects"));
+        for(const auto &event:initial.events)if(event.at("channel")==initial.channel&&event.at("position").get<unsigned>()/Tracker::performanceUnitsPerRow==initial.row)initial.draft.push_back(event);
+        const auto cell=initial.source->cell(initial.pattern,initial.row,initial.channel);
+        if(initial.draft.empty()&&((cell.note>=1&&cell.note<=120)||cell.note==254||cell.note==255)){
+            Json event={{"channel",initial.channel},{"position",initial.row*Tracker::performanceUnitsPerRow},{"note",cell.note},
+                {"instrument",cell.note<128?unsigned(cell.instrument):0u},{"velocity",cell.note<128&&cell.volumeCommand==1?std::clamp(unsigned(cell.volume)*127/64,1u,127u):127u}};
+            if(cell.note<128&&cell.effect)for(const auto &effect:initial.effects)if(effect.at("command")==cell.effect&&
+                std::find(effect.at("allowedParameters").begin(),effect.at("allowedParameters").end(),cell.parameter)!=effect.at("allowedParameters").end()){
+                event["effect"]=cell.effect;event["parameter"]=cell.parameter;initial.moveLegacyEffect=true;break;
+            }
+            initial.draft.push_back(std::move(event));
+        }
+        const Json selected=initial.draft.empty()?Json():initial.draft[0];
+        std::sort(initial.draft.begin(),initial.draft.end(),[](const auto &a,const auto &b){return a.at("position")!=b.at("position")?a.at("position")<b.at("position"):a.at("note")>b.at("note");});
+        for(size_t i=0;i<initial.draft.size();++i){const auto &event=initial.draft[i];if(event==selected)initial.selected=int(i);++initial.density[(event.at("position").get<unsigned>()%Tracker::performanceUnitsPerRow)/256];}
+        initial.original=initial.draft;
+        for(const auto &effect:initial.effects)initial.effectLabels.push_back(wide(effect.at("displayCode").get<std::string>()+"  "+effect.at("name").get<std::string>()));
+        const Json event=initial.selected>=0?initial.draft[size_t(initial.selected)]:Json{{"position",initial.row*Tracker::performanceUnitsPerRow},{"note",61},{"instrument",cell.instrument},{"velocity",127}};
+        const auto pitch=event.at("note").get<unsigned>();initial.pitchSelection=int(pitch<=120?pitch-1:pitch==255?120:121);
+        initial.fields[0]=std::to_wstring(event.at("instrument").get<unsigned>());initial.fields[1]=std::to_wstring(event.at("velocity").get<unsigned>());
+        std::wostringstream offset;offset<<std::setprecision(10)<<double(event.at("position").get<unsigned>()%Tracker::performanceUnitsPerRow)/65536.0/(initial.units==0?initial.rowsPerBeat:1);initial.fields[2]=offset.str();
+        const auto effect=event.value("effect",0u),parameter=event.value("parameter",0u);
+        for(size_t i=0;i<initial.effects.size();++i)if(initial.effects[i].at("command")==effect&&(parameter&initial.effects[i].at("parameterMask").get<unsigned>())==initial.effects[i].at("parameterValue").get<unsigned>()){initial.effectSelection=int(i);break;}
+        wchar_t hex[8]{};swprintf_s(hex,L"%02X",parameter);initial.fields[3]=hex;
+        initial.status=initial.moveLegacyEffect?L"Draft / Apply moves the ordinary note and its local effect together":L"Precise row draft / Apply creates one Undo step";
+        return initial;
+    }
+    void adoptInitialNotes(InitialNotes &&initial) {
+        validateInitialNotes(initial);
+        notePattern=initial.pattern;noteRow=initial.row;noteChannel=initial.channel;noteRowsPerBeat=initial.rowsPerBeat;
+        noteRevision=std::move(initial.revision);noteDocument=std::move(initial.document);noteEvents=std::move(initial.events);noteEffects=std::move(initial.effects);
+        noteDraft=std::move(initial.draft);noteOriginal=std::move(initial.original);noteDensity=initial.density;noteSelected=initial.selected;noteMoveLegacyEffect=initial.moveLegacyEffect;noteStatus=std::move(initial.status);
+        const bool previous=settingNoteFields;settingNoteFields=true;struct Guard{bool &setting;bool previous;~Guard(){setting=previous;}}guard{settingNoteFields,previous};
+        SendMessageW(controls.at(noteEffectControl),CB_RESETCONTENT,0,0);for(const auto &label:initial.effectLabels)SendMessageW(controls.at(noteEffectControl),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+        SendMessageW(controls.at(notePitch),CB_SETCURSEL,initial.pitchSelection,0);SendMessageW(controls.at(noteEffectControl),CB_SETCURSEL,initial.effectSelection,0);
+        for(size_t i=0;i<initial.fields.size();++i)SetWindowTextW(controls.at(std::array<int,4>{noteInstrument,noteVelocity,noteOffset,noteParameter}[i]),initial.fields[i].c_str());
+        SendMessageW(controls.at(noteUnitControl),CB_SETCURSEL,initial.units,0);SendMessageW(controls.at(noteSnapControl),CB_SETCURSEL,initial.snap,0);
+        SendMessageW(controls.at(noteList),LB_SETCOUNT,noteDraft.size(),0);SendMessageW(controls.at(noteList),LB_SETCURSEL,noteSelected,0);
+        noteCaptured=true;++noteDraftGeneration;
+    }
+    bool noteEditorVisible() const {return workspaceMainEditorVisible("notes");}
     bool noteBelongs(const Json &e) const {return e.at("channel")==noteChannel&&e.at("position").get<unsigned>()/Tracker::performanceUnitsPerRow==noteRow;}
     std::wstring noteOffsetText(unsigned units) const {std::wostringstream s;s<<std::setprecision(10)<<double(units)/65536.0/(noteUnits==0?noteRowsPerBeat:1);return s.str();}
     void installNoteControls() {
@@ -84,13 +166,14 @@
         frameRequested=true;
     }
     void openNoteEditor(bool reload=false) {
+        if(busy||notePending)throw std::runtime_error("Wait for the current document operation");
+        revealWorkspaceMainEditor("notes");
         graphEditorOpen=false;
         mixerEditorOpen=false;
-        if(busy||notePending)throw std::runtime_error("Wait for the current document operation");
         noteEditorOpen=true;effectEditorOpen=false;workspaceState.lowerHeight=std::max(workspaceState.lowerHeight,320.0f);
         if(noteCaptured&&!reload){layoutControls();SetFocus(controls.at(noteList));return;}
         const auto target=workspaceState.panel("notes").target;const auto capturedDocument=documentId;
-        const auto loadingFocus=GetFocus();const auto loadingContext=contextRevision;const auto loadingPanel=workspaceState.focus;
+        const auto loadingFocus=GetFocus();const auto loadingContext=contextRevision;const auto loadingPanel=workspaceState.focus;const bool loadingInspector=inspectorCanvasFocus;
         const unsigned pattern=target.value("pattern",patternIndex),row=target.value("row",this->row),channel=target.value("channel",this->channel);
         auto snapshot=documentOperation("pattern.notes.get",{{"pattern",pattern}});
         if(documentId!=capturedDocument)throw std::runtime_error("Document changed while loading precise notes");
@@ -113,7 +196,7 @@
         refreshNoteDraft(noteDraft.empty()?Json():noteDraft[0]);noteOriginal=noteDraft;
         noteStatus=noteMoveLegacyEffect?L"Draft / Apply moves the ordinary note and its local effect together":L"Precise row draft / Apply creates one Undo step";
         layoutControls();
-        if(GetFocus()==loadingFocus&&contextRevision==loadingContext&&workspaceState.focus==loadingPanel)SetFocus(controls.at(noteList));
+        if(GetFocus()==loadingFocus&&contextRevision==loadingContext&&workspaceState.focus==loadingPanel&&inspectorCanvasFocus==loadingInspector)SetFocus(controls.at(noteList));
     }
     void duplicateNote() {
         saveSelectedNote();Json item=noteSelected>=0?noteDraft.at(size_t(noteSelected)):editedNote(-1);
@@ -161,7 +244,7 @@
         return true;
     }
     template<class Place> void layoutNoteControls(Place place) {
-        const auto r=effectEditorRect();const bool show=noteEditorVisible();const float x=r.x+196;
+        const auto r=workspaceMainEditorRect();const bool show=noteEditorVisible();const float x=r.x+196;
         place(noteList,r.x+8,r.y+45,178,std::max(40.0f,r.h-53),show);
         place(noteReload,r.x+r.w-228,r.y+4,90,24,show);place(noteCheck,r.x+r.w-132,r.y+4,62,24,show);place(noteApply,r.x+r.w-64,r.y+4,58,24,show);
         place(notePitch,x,r.y+48,86,260,show);place(noteInstrument,x+92,r.y+48,52,25,show);place(noteVelocity,x+150,r.y+48,58,25,show);
@@ -178,7 +261,7 @@
         }
     }
     ScreamSeq::WorkspaceRect noteTimelineRect() const {
-        const auto r=effectEditorRect();return {r.x+204,r.y+192,std::max(1.0f,r.w-226),std::max(1.0f,r.h-226)};
+        const auto r=workspaceMainEditorRect();return {r.x+204,r.y+192,std::max(1.0f,r.w-226),std::max(1.0f,r.h-226)};
     }
     unsigned noteSnapStep() const {return noteSnap==0?256:std::max(1u,65536*noteRowsPerBeat/(noteSnap==1?16:noteSnap==2?32:64));}
     unsigned notePositionAt(float x,bool free) const {
@@ -192,7 +275,7 @@
             r.y+(1-float(e.at("velocity").get<unsigned>())/127)*r.h};
     }
     void drawNoteEditor() {
-        auto &s=*surface;const auto r=effectEditorRect(),plot=noteTimelineRect();const float x=r.x+196;
+        auto &s=*surface;const auto r=workspaceMainEditorRect(),plot=noteTimelineRect();const float x=r.x+196;
         constexpr UINT32 accent=0x6edac5,muted=0x8999aa,gold=0xdcb971;
         s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x18212b);
         s.uiText(L"PRECISE NOTES / P"+std::to_wstring(notePattern)+L" R"+std::to_wstring(noteRow)+L" CH"+std::to_wstring(noteChannel+1)+L" / "+std::to_wstring(noteDraft.size())+L" hits",r.x+9,r.y+8,std::max(1.0f,r.w-246),accent);
@@ -217,7 +300,7 @@
     bool noteMouseDown(float x,float y,bool doubleClick) {
         if(!noteEditorVisible()||!noteCaptured)return false;
         const auto plot=noteTimelineRect();if(!plot.contains(x,y))return false;
-        workspaceState.focus="notes";SetFocus(window);frameRequested=true;
+        setWorkspaceCanvasFocus("notes");SetFocus(window);frameRequested=true;
         if(notePending||busy)return true;
         try {
             saveSelectedNote();int nearest=-1;float best=144;
@@ -250,10 +333,10 @@
         if(!noteEditorVisible())return false;
         const auto focus=GetFocus();const int id=GetDlgCtrlID(focus);const bool control=focus!=window&&id>=noteList&&id<=noteEndVelocity;
         if(key==VK_ESCAPE&&dragging==5){const int selected=noteSelected;noteDraft=noteDragBefore;dragging=0;ReleaseCapture();noteDragBefore=Json::array();++noteDraftGeneration;refreshNoteDraft(selected>=0?noteDraft[size_t(selected)]:Json());noteStatus=L"Timing drag cancelled";return true;}
-        if(control&&key==VK_ESCAPE){workspaceState.focus="pattern";SetFocus(window);return true;}
+        if(control&&key==VK_ESCAPE){revealWorkspacePattern();workspaceState.focus="pattern";layoutControls();SetFocus(window);return true;}
         if(control&&key==VK_RETURN&&id!=notePitch&&id!=noteUnitControl&&id!=noteSnapControl&&id!=noteEffectControl){command(noteApply);return true;}
-        if((focus==controls.at(noteList)||(focus==window&&workspaceState.focus=="notes"))&&ctrl&&key=='D'){command(noteAdd);return true;}
-        if(focus!=window||workspaceState.focus!="notes"||!noteCaptured)return false;
+        if((focus==controls.at(noteList)||(focus==window&&workspaceMainCanvasFocused("notes")))&&ctrl&&key=='D'){command(noteAdd);return true;}
+        if(focus!=window||!workspaceMainCanvasFocused("notes")||!noteCaptured)return false;
         if(!ctrl&&!alt&&key==VK_TAB){SetFocus(controls.at(noteList));return true;}
         if(!ctrl&&!alt&&key==VK_DELETE){command(noteRemove);return true;}
         if(ctrl||notePending||busy||noteSelected<0||key<VK_LEFT||key>VK_DOWN)return false;

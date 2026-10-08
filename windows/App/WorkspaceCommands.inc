@@ -1,6 +1,7 @@
     std::vector<ScreamSeq::WorkspaceCommand> defaultWorkspaceCommands()const {
         return {
             {layoutsCommand,L"Workspace / Manage saved layouts",L"Ctrl+Alt+W"},
+            {connectedWorkspaceCommand,L"Workspace / Connected editors",L""},
             {dockAutomationCommand,L"Workspace / Dock automation beside the tracker",L"Ctrl+Alt+D in editor"},
             {dockInstrumentCommand,L"Workspace / Dock instrument beside the tracker",L"Ctrl+Alt+D in editor"},
             {saveLayoutCommand,L"Workspace / Save custom layout",L""},{restoreLayoutCommand,L"Workspace / Restore custom layout",L""},

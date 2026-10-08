@@ -49,12 +49,12 @@
     },
     "editorPanel": {
       "type": "object",
-      "description": "Retained pattern automation or instrument/envelope editor. Initially hidden with float preference and pinned=true. Right selects the shared dock; float retains/restores its floating window; hide retains drafts. At narrow workspace widths the dock shares the main body with a Tracker tab.",
+      "description": "Retained pattern automation or instrument/envelope editor. Initially hidden with float preference and cursor following. Right, bottom and secondary select independent workspace regions; float retains/restores its floating window; hide retains drafts. Windows too small for those regions use compact tabs without changing preferred sizes or placements.",
       "properties": {
         "panel": {"enum": ["automation", "instruments"]},
-        "placement": {"enum": ["right", "float", "hide"]},
+        "placement": {"enum": ["right", "bottom", "secondary", "float", "hide"]},
         "pinned": {"type": "boolean", "description": "False requests cursor following. A pending operation or retained draft can defer target refresh; it does not discard that draft."},
-        "focus": {"type": "boolean", "description": "True opens/selects the retained editor and focuses it. A hidden editor uses its last non-hidden placement, initially float."},
+        "focus": {"type": "boolean", "description": "True opens/selects the retained editor and focuses it. A hidden editor uses its last non-hidden placement, initially float. False or omitted preserves valid existing focus where possible; in compact mode the focused Pattern, inspector or Main host may remain selected and the newly placed native editor hidden. Explicit bottom replacement of Main selects the native editor."},
         "follow": {"type": "boolean", "description": "True unpins and requests a guarded refresh from the current cursor. Retained drafts and pending work keep their captured target/revision."},
         "return": {"type": "boolean", "description": "True returns to the initial opening position using stable pattern identity, with playback-follow off and tracker focus. Rejects if that document or pattern is unavailable."}
       },
@@ -63,10 +63,10 @@
     },
     "layout": {
       "oneOf": [
-        {"type": "object", "properties": {"name": {"enum": ["Compose", "Pattern focus", "Sound design", "Reload saved"]}}, "required": ["name"], "additionalProperties": false},
+        {"type": "object", "properties": {"name": {"enum": ["Compose", "Pattern focus", "Sound design", "Connected", "Reload saved"]}}, "required": ["name"], "additionalProperties": false},
         {"type": "object", "properties": {"name": {"enum": ["Save custom", "Restore custom", "Delete custom"]}, "savedName": {"type": "string", "minLength": 1, "maxLength": 64, "description": "Default Custom. UTF-8 Unicode name; no controls or leading/trailing whitespace. Up to 24 names, case sensitive."}}, "required": ["name"], "additionalProperties": false}
       ],
-      "description": "Saves presentation: preset, inspector visibility, dock sizes, lower editor/collapse state, automation/instrument placements, active editor and Tracker tab. Restore retains current targets, pins, drafts and song cursor. Old configurations without editor placement leave current editor placement unchanged. Pattern focus temporarily hides the dock without forgetting placement."
+      "description": "Saves presentation: preset, inspector visibility, desired region sizes, lower editor/collapse state, native placements, each region's selection and compact tab. Connected opens pattern, Graph, Instrument and Automation together where space permits. Restore prepares unopened editors before adoption and retains current targets, pins, drafts and song cursor. Old configurations without editor placement leave current placement unchanged. Pattern focus temporarily hides docks without forgetting placement."
     }
   }
 }

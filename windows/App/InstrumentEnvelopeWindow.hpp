@@ -19,7 +19,7 @@ private:
     name,volume,pan,fade,nna,dct,dna,mapFrom,mapTo,mapSample,mapStage,apply,reload,fromCursor,close,audition,importFile,keymap,
     heading=4500,targetLabel,nodeLabel,tickLabel,valueLabel,loopStartLabel,loopEndLabel,sustainStartLabel,sustainEndLabel,releaseLabel,
     rangeLabel,toolLabel0,toolLabel1,toolLabel2,toolLabel3,toolLabel4,nameLabel,volumeLabel,panLabel,fadeLabel,nnaLabel,dctLabel,dnaLabel,mapLabel,statusLabel,keymapLabel,
-    pageEnvelope=4600,pagePoints,pageTools,pageProperties,pageKeymap,
+    pageEnvelope=4600,pagePoints,pageTools,pageProperties,pageKeymap,shortOptions,
     contextAdd=4700,contextEdit,contextDelete,contextDock};
   static constexpr std::array<const char *,3> kinds={"volume","pan","pitch"};
   static constexpr std::array<const char *,9> operations={"flip-time","flip-values","shift","scale","ramp","sine","humanize","paste","insert"};
@@ -28,7 +28,7 @@ private:
   Context captured_;std::string identity_;unsigned index_=0;int kind_=0,selected_=-1,tool_=0;
   Json envelope_=Json::object(),properties_=Json::object(),mapping_=Json::array(),clipboard_;
   bool setting_=false,pending_=false,envelopeDirty_=false,propertiesDirty_=false,mappingDirty_=false,mappingFields_=false,pointFields_=false,markerFields_=false,dragging_=false;
-  int selectedKey_=-1,page_=0;bool compact_=false,canvasVisible_=true,toolFieldsDirty_=false;
+  int selectedKey_=-1,page_=0;bool compact_=false,canvasVisible_=true,toolFieldsDirty_=false,shortDock_=false,shortEnvelopeOptions_=false;
   HWND pendingFocus_{};bool contextOpen_=false;
   static constexpr std::array<const char *,5> pages={"envelope","points","tools","properties","keymap"};
   uint64_t generation_=0;Json dragBefore_;bool dragDirty_=false;int dragSelection_=-1;
@@ -156,7 +156,7 @@ private:
     layout();requestPaint();return true;
   }
   void action(int id,unsigned notification)override{
-    if(setting_)return;if(id>=pageEnvelope&&id<=pageKeymap&&notification==BN_CLICKED){if(dragging_)cancelDrag();selectPage(id-pageEnvelope);layout();requestPaint();return;}if(id==audition){require(current(),"Instrument changed / Reload before audition");audition_(index_,identity_,captured_.document,captured_.revision);return;}if(id==close){if(dragging_)cancelDrag();hide();return;}
+    if(setting_)return;if(id==shortOptions&&notification==BN_CLICKED){if(dragging_)cancelDrag();shortEnvelopeOptions_=!shortEnvelopeOptions_;layout();requestPaint();return;}if(id>=pageEnvelope&&id<=pageKeymap&&notification==BN_CLICKED){if(dragging_)cancelDrag();selectPage(id-pageEnvelope);layout();requestPaint();return;}if(id==audition){require(current(),"Instrument changed / Reload before audition");audition_(index_,identity_,captured_.document,captured_.revision);return;}if(id==close){if(dragging_)cancelDrag();hide();return;}
     if(notification==EN_CHANGE){if(id==tick||id==value){pointFields_=true;++generation_;}else if(id>=loopStart&&id<=release){markerFields_=true;++generation_;}else if(id>=name&&id<=fade){propertiesDirty_=true;++generation_;}else if(id==mapFrom||id==mapTo){mappingFields_=true;++generation_;}else if(id==rangeStart||id==rangeEnd||(id>=toolValue0&&id<=toolValue4)){toolFieldsDirty_=true;++generation_;}return;}if(pending_)return;
     if(id==keymap&&notification==LBN_SELCHANGE){if(mappingFields_){SendMessageW(controls_.at(keymap),LB_SETCURSEL,selectedKey_,0);throw std::runtime_error("Stage or discard the key range fields before selecting another note");}selectedKey_=int(SendMessageW(controls_.at(keymap),LB_GETCURSEL,0,0));showMapFields();return;}
     if(notification==CBN_SELCHANGE){if(id==instrument||id==kind){if(draft()){choices();throw std::runtime_error("Apply or Reload the instrument draft before changing target");}try{if(id==instrument){const auto i=selection(id);if(i>=0)load(false,captured_.instruments.at(size_t(i)).at("id"));}else load(false,{},std::clamp(selection(kind),0,2));}catch(...){choices();throw;}return;}
@@ -185,6 +185,55 @@ private:
     if(GetFocus()!=window_||pending_||!canvasVisible_)return false;if(ctrl&&(k==VK_LEFT||k==VK_RIGHT)){action(k==VK_LEFT?panLeft:panRight,BN_CLICKED);return true;}if(ctrl)return false;if(k==VK_HOME){action(fit,BN_CLICKED);return true;}if(k==VK_OEM_PLUS||k==VK_ADD||k==VK_OEM_MINUS||k==VK_SUBTRACT){action(k==VK_OEM_PLUS||k==VK_ADD?zoomIn:zoomOut,BN_CLICKED);return true;}if(!editable()||pointFields_||markerFields_)return false;
     if(k==VK_DELETE){removePoint();return true;}if(k==VK_INSERT){action(addPoint,BN_CLICKED);return true;}if(k==VK_TAB&&!points().empty()){selected_=(selected_+(shift?-1:1)+int(points().size()))%int(points().size());showPoint();requestPaint();return true;}
     if(selected_>=0&&(k==VK_LEFT||k==VK_RIGHT||k==VK_UP||k==VK_DOWN)){const int amount=shift?4:1;movePoint(points()[size_t(selected_)][0].get<int>()+(k==VK_LEFT?-amount:k==VK_RIGHT?amount:0),points()[size_t(selected_)][1].get<int>()+(k==VK_UP?amount:k==VK_DOWN?-amount:0));return true;}return false;}
+  void layoutShortDock(float w,float h){
+    // Region chrome is outside this body. Retain every field HWND and draft;
+    // the Options view is presentation state, never an envelope reload.
+    std::vector<int> shown;auto at=[&](int id,float x,float y,float width,float height=26){shown.push_back(id);place(id,x,y,width,height);};
+    const float left=12,width=w-24,gap=4,half=(width-gap)/2,third=(width-2*gap)/3;
+    at(instrument,left,6,width-(page_==0?96:0),240);
+    if(page_==0){at(shortOptions,w-104,6,92);set(shortOptions,shortEnvelopeOptions_?L"Curve":L"Options");}
+    const float tab=(width-4*gap)/5;for(int i=0;i<5;++i)at(pageEnvelope+i,left+i*(tab+gap),36,tab,24);
+    const float action=(width-4*gap)/5;int column=0;
+    for(int id:{apply,reload,fromCursor,audition,close})at(id,left+(action+gap)*column++,h-48,action,26);
+    at(statusLabel,left,h-20,width,18);
+    canvasVisible_=page_==0&&!shortEnvelopeOptions_;
+    if(page_==0&&!shortEnvelopeOptions_){
+      const float kindWidth=width-64-82-72-3*gap;
+      at(kind,left,64,kindWidth,220);at(enabled,left+kindWidth+gap,64,64,24);
+      at(sustain,w-12-72-gap-82,64,82,24);at(loop,w-12-72,64,72,24);
+      canvas_.viewport={42,104,w-54,std::max(100.f,h-200)};
+      float x=left;for(auto [id,labelId,fieldWidth]:std::initializer_list<std::tuple<int,int,float>>{{node,nodeLabel,100.f},{tick,tickLabel,70.f},{value,valueLabel,70.f},{setPoint,0,88.f},{deletePoint,0,width-344.f}}){
+        if(labelId)at(labelId,x,h-94,fieldWidth,14);at(id,x,h-80,fieldWidth,id==node?240:26);x+=fieldWidth+gap;
+      }
+    }else if(page_==0){
+      at(targetLabel,left,66,width,18);at(kind,left,88,width,220);
+      for(int i=0;i<3;++i)at(enabled+i,left+(third+gap)*i,120,third,24);
+      at(carry,left,150,third,24);at(filter,left+third+gap,150,third,24);at(adsr,left+2*(third+gap),150,third,24);
+      at(clear,left,180,half);at(bank,left+half+gap,180,half);
+      const float nav=(width-4*gap)/5;int index=0;for(int id:{panLeft,zoomOut,fit,zoomIn,panRight})at(id,left+(nav+gap)*index++,214,nav,26);
+    }else if(page_==1){
+      for(auto [id,labelId,index]:std::initializer_list<std::tuple<int,int,int>>{{node,nodeLabel,0},{tick,tickLabel,1},{value,valueLabel,2}}){at(labelId,left+(third+gap)*index,66,third,16);at(id,left+(third+gap)*index,84,third,id==node?240:26);}
+      at(setPoint,left,114,third);at(addPoint,left+third+gap,114,third);at(deletePoint,left+2*(third+gap),114,third);
+      for(auto [id,labelId,index]:std::initializer_list<std::tuple<int,int,int>>{{loopStart,loopStartLabel,0},{loopEnd,loopEndLabel,1},{release,releaseLabel,2}}){at(labelId,left+(third+gap)*index,144,third,18);at(id,left+(third+gap)*index,162,third);}
+      for(int i=0;i<2;++i){at(sustainStartLabel+i,left+(third+gap)*i,192,third,18);at(sustainStart+i,left+(third+gap)*i,210,third);}at(setMarkers,left+2*(third+gap),210,third);
+    }else if(page_==2){
+      at(rangeLabel,left,68,84,22);at(rangeStart,left+88,64,(width-92)/2);at(rangeEnd,left+92+(width-92)/2,64,(width-92)/2);
+      at(tool,left,96,width,230);
+      const int count=std::array<int,9>{0,0,1,2,2,5,3,1,1}.at(size_t(tool_));
+      for(int i=0;i<count;++i){const float x=left+(third+gap)*(i%3),y=128+44.f*(i/3);at(toolLabel0+i,x,y,third,18);at(toolValue0+i,x,y+18,third);}
+      at(copyRange,left,216,half);at(previewTool,left+half+gap,216,half);
+    }else if(page_==3){
+      at(newInstrument,left,66,half);at(importFile,left+half+gap,66,half);
+      at(nameLabel,left,96,width,18);at(name,left,114,width);
+      for(int i=0;i<3;++i){const float x=left+(third+gap)*i;at(volumeLabel+i,x,144,third,18);at(volume+i,x,162,third);at(nnaLabel+i,x,192,third,18);at(nna+i,x,210,third,230);}
+    }else{
+      at(keymapLabel,left,66,width,18);at(keymap,left,86,width,std::max(64.f,h-234));
+      at(mapLabel,left,h-146,width,18);at(mapFrom,left,h-126,half);at(mapTo,left+half+gap,h-126,half);
+      at(mapSample,left,h-94,width-142,230);at(mapStage,w-150,h-94,138);
+    }
+    for(const auto &[id,control]:controls_)if(std::find(shown.begin(),shown.end(),id)==shown.end())NativeControls::show(control,false);
+    if(canvasVisible_)rebuild();
+  }
   void layoutCompact(float w,float h){
     // Pages only change visibility and geometry. The original HWNDs, field text,
     // selections, keymap scroll and captured draft remain owned by this editor.
@@ -226,7 +275,7 @@ private:
     if(canvasVisible_)rebuild();
   }
   void layoutFull(float w,float h){
-    canvasVisible_=true;for(int id=pageEnvelope;id<=pageKeymap;++id)NativeControls::show(controls_.at(id),false);
+    canvasVisible_=true;for(int id=pageEnvelope;id<=shortOptions;++id)NativeControls::show(controls_.at(id),false);
     place(heading,18,14,w-36,24);place(instrument,18,48,280,260);place(kind,306,48,210,210);place(newInstrument,524,48,154,26);place(bank,686,48,146,26);place(importFile,840,48,158,26);place(targetLabel,18,123,w-36,24);
     float x=18;for(auto [id,width]:std::initializer_list<std::pair<int,int>>{{enabled,120},{sustain,104},{loop,94},{carry,94},{filter,118},{adsr,112},{clear,112}}){place(id,x,88,width,26);x+=width+8;}
     canvas_.viewport={42,174,w-364,std::max(100.f,h-568)};place(keymapLabel,w-302,150,284,22);place(keymap,w-302,174,284,canvas_.viewport.h);rebuild();const float y=h-376;place(nodeLabel,18,y-18,145,18);place(node,18,y,145,240);place(tickLabel,174,y-18,88,18);place(tick,174,y,86,26);place(valueLabel,268,y-18,90,18);place(value,268,y,86,26);place(setPoint,362,y,94,26);place(addPoint,464,y,84,26);place(deletePoint,556,y,96,26);x=w-230;for(auto [id,width]:std::initializer_list<std::pair<int,int>>{{panLeft,32},{zoomOut,32},{fit,42},{zoomIn,32},{panRight,32}}){place(id,x,y,width,26);x+=width+4;}
@@ -238,10 +287,28 @@ private:
     place(apply,18,h-52,148,28);place(reload,174,h-52,118,28);place(fromCursor,300,h-52,126,28);place(audition,434,h-52,126,28);place(close,w-118,h-52,100,28);place(statusLabel,18,h-22,w-36,20);
   }
   void layout()override{
-    const auto focus=GetFocus();const auto [w,h]=size();compact_=w<1080||h<780;
-    if(compact_)layoutCompact(w,h);else layoutFull(w,h);
+    const auto focus=GetFocus();const auto [w,h]=size();const bool wasShort=shortDock_;compact_=w<1080||h<780;shortDock_=docked()&&h<500;
+    if(shortDock_&&!wasShort){
+      // The wide form exposes every section. Keep its focused field visible
+      // when the same HWND first moves into a short, paged dock body.
+      const auto id=GetDlgCtrlID(focus);
+      if(focus==window_){selectPage(0);shortEnvelopeOptions_=false;}
+      else if(focus&&IsChild(window_,focus)){
+        if((id>=name&&id<=dna)||id==newInstrument||id==importFile)selectPage(3);
+        else if((id>=mapFrom&&id<=mapStage)||id==keymap)selectPage(4);
+        else if(id>=tool&&id<=previewTool)selectPage(2);
+        else if((id>=loopStart&&id<=setMarkers)||id==addPoint)selectPage(1);
+        else if((id>=carry&&id<=clear)||id==bank||(id>=fit&&id<=panRight)){selectPage(0);shortEnvelopeOptions_=true;}
+        else if(id>=node&&id<=deletePoint){if(page_!=1&&(page_!=0||shortEnvelopeOptions_))selectPage(1);}
+        else if(id==kind||(id>=enabled&&id<=loop))selectPage(0);
+      }
+    }
+    if(shortDock_)layoutShortDock(w,h);else if(compact_)layoutCompact(w,h);else layoutFull(w,h);
     if(focus&&IsChild(window_,focus)&&!IsWindowVisible(focus))SetFocus(controls_.at(compact_?pageEnvelope+page_:instrument));
-    for(auto [id,title,key]:std::initializer_list<std::tuple<int,const wchar_t *,const char *>>{{enabled,L"Envelope","enabled"},{sustain,L"Sustain","sustain"},{loop,L"Loop","loop"},{carry,L"Carry","carry"},{filter,L"Filter","filter"}})set(id,std::wstring(title)+(envelope_.value(key,false)?L" · on":L" · off"));
+    const bool inlinePoint=shortDock_&&page_==0&&!shortEnvelopeOptions_;
+    set(apply,shortDock_?L"Apply":L"Apply instrument");set(fromCursor,shortDock_?L"Cursor":L"From cursor");set(audition,shortDock_?L"Audition":L"Audition…");
+    set(nodeLabel,inlinePoint?L"Point":L"Selected node");set(tickLabel,inlinePoint?L"Tick":L"Tick / 0–65535");set(valueLabel,inlinePoint?L"Value":L"Value / 0–64");set(deletePoint,inlinePoint?L"Delete":L"Delete point");
+    for(auto [id,title,key]:std::initializer_list<std::tuple<int,const wchar_t *,const char *>>{{enabled,L"Envelope","enabled"},{sustain,L"Sustain","sustain"},{loop,L"Loop","loop"},{carry,L"Carry","carry"},{filter,L"Filter","filter"}})set(id,std::wstring(inlinePoint&&id==enabled?L"Env":title)+(envelope_.value(key,false)?(inlinePoint?L" on":L" · on"):(inlinePoint?L" off":L" · off")));
     for(auto [id,control]:controls_)if(id>=instrument&&id<=keymap)EnableWindow(control,!pending_||id==close);for(int id=enabled;id<=previewTool;++id)EnableWindow(controls_.at(id),!pending_&&editable());for(int id=name;id<=apply;++id)EnableWindow(controls_.at(id),!pending_&&!identity_.empty());EnableWindow(controls_.at(keymap),!pending_&&!identity_.empty());EnableWindow(controls_.at(filter),!pending_&&editable()&&kind_==2);EnableWindow(controls_.at(bank),!pending_&&editable());
     // Native disabling clears focus during a document request. Restore only
     // that lost focus, never a newer choice made while the request was pending.
@@ -253,14 +320,14 @@ private:
     RECT r=d.rcItem;r.top=r.bottom-std::max(2,int(2*GetDpiForWindow(window_)/96));SetDCBrushColor(d.hDC,RGB(110,218,197));FillRect(d.hDC,&r,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
   }
   void paint(RenderSurface &s)override{
-    const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);if(compact_){s.line(12,134,w-12,134,0x334757);s.line(12,h-88,w-12,h-88,0x334757);}if(!canvasVisible_)return;const auto r=canvas_.viewport;s.fill(r.x,r.y,r.w,r.h,0x101923);s.clip(r.x,r.y,r.w,r.h);
+    const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);if(compact_){if(!shortDock_)s.line(12,134,w-12,134,0x334757);s.line(12,h-(shortDock_?52:88),w-12,h-(shortDock_?52:88),0x334757);}if(!canvasVisible_)return;const auto r=canvas_.viewport;s.fill(r.x,r.y,r.w,r.h,0x101923);s.clip(r.x,r.y,r.w,r.h);
     for(int v=0;v<=64;v+=16){const auto y=canvas_.screen(0,v/64.).y;s.line(r.x,y,r.x+r.w,y,0x2a3947);}const auto step=std::max(256.,std::ceil((canvas_.end-canvas_.start)/4096)*256);for(double t=std::ceil(canvas_.start/step)*step;t<=canvas_.end;t+=step){const auto x=canvas_.screen(t,0).x;s.line(x,r.y,x,r.y+r.h,0x2a3947);}
     auto marker=[&](const char *key,uint32_t color){if(envelope_.empty())return;const auto index=envelope_.value(key,255u);if(index>=points().size())return;const auto x=canvas_.screen(points()[index][0].get<unsigned>()*256,0).x;s.line(x,r.y,x,r.y+r.h,color,1.5f);};
     if(envelope_.value("loop",false)){marker("loopStart",0xb9a46a);marker("loopEnd",0xb9a46a);}if(envelope_.value("sustain",false)){marker("sustainPoint",0x638dce);marker("sustainEnd",0x638dce);}marker("releaseNode",0xc787a4);
     for(size_t i=1;i<canvas_.curve.size();++i)s.line(canvas_.curve[i-1].x,canvas_.curve[i-1].y,canvas_.curve[i].x,canvas_.curve[i].y,envelope_.value("enabled",false)?0x6edac5:0x647c89,2);
     for(const auto tick:playbackTicks_){const auto x=canvas_.screen(tick*256,0).x;s.line(x,r.y,x,r.y+r.h,0xe4eff6,1.5f);}
     for(size_t i=0;i<canvas_.handles.size();++i){const auto p=canvas_.handles[i];s.fill(p.x-4,p.y-4,8,8,int(i)==selected_?0xffd08a:0x6edac5);}s.unclip();s.outline(r.x,r.y,r.w,r.h,GetFocus()==window_?0x6edac5:0x334757);for(int v=0;v<=64;v+=16)s.uiText(std::to_wstring(v),8,canvas_.screen(0,v/64.).y-7,30,0x93aabd);
-    wchar_t text[180]{};swprintf_s(text,compact_?L"Ticks %.2f–%.2f":L"Ticks %.2f–%.2f · loop: gold · sustain: blue · release: rose · playback: white",canvas_.start/256,canvas_.end/256);s.uiText(text,r.x,r.y-23,r.w,0x93aabd);
+    wchar_t text[180]{};swprintf_s(text,compact_?L"Ticks %.2f–%.2f":L"Ticks %.2f–%.2f · loop: gold · sustain: blue · release: rose · playback: white",canvas_.start/256,canvas_.end/256);s.uiText(text,r.x,r.y-(shortDock_?15:23),r.w,0x93aabd);
   }
 public:
   InstrumentEnvelopeWindow(HWND owner,Request request,std::function<Context()> context,Audition auditionCallback,SelectSound selectSound):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),audition_(std::move(auditionCallback)),selectSound_(std::move(selectSound)){
@@ -269,11 +336,16 @@ public:
     auto items=[&](int id,std::initializer_list<const wchar_t *> names){for(auto name:names)SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(id,0);};items(kind,{L"Volume envelope",L"Pan envelope",L"Pitch / filter envelope"});items(tool,{L"Flip time",L"Flip values",L"Shift",L"Scale",L"Ramp",L"Sine",L"Humanize",L"Paste",L"Insert paste"});items(nna,{L"Cut",L"Continue",L"Note off",L"Fade"});items(dct,{L"Off",L"Note",L"Sample",L"Instrument",L"Plugin"});items(dna,{L"Cut",L"Note off",L"Fade"});
     for(auto [id,title]:std::initializer_list<std::pair<int,const wchar_t *>>{{newInstrument,L"New from sample"},{bank,L"Envelope bank…"},{enabled,L"Envelope"},{sustain,L"Sustain"},{loop,L"Loop"},{carry,L"Carry"},{filter,L"Filter"},{adsr,L"ADSR preset"},{clear,L"Clear points"},{setPoint,L"Set point"},{addPoint,L"Add point"},{deletePoint,L"Delete point"},{setMarkers,L"Set markers"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{panLeft,L"‹"},{panRight,L"›"},{copyRange,L"Copy range"},{previewTool,L"Preview tool"},{mapStage,L"Stage key range"},{apply,L"Apply instrument"},{reload,L"Reload"},{fromCursor,L"From cursor"},{close,L"Close"},{audition,L"Audition…"}})button(id,title);
     for(auto [id,title]:std::initializer_list<std::pair<int,const wchar_t *>>{{pageEnvelope,L"Envelope"},{pagePoints,L"Points"},{pageTools,L"Tools"},{pageProperties,L"Instrument"},{pageKeymap,L"Keymap"}})button(id,title);
+    button(shortOptions,L"Options");
     for(auto [id,title]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Instrument and envelopes"},{targetLabel,L""},{nodeLabel,L"Selected node"},{tickLabel,L"Tick / 0–65535"},{valueLabel,L"Value / 0–64"},{loopStartLabel,L"Loop start"},{loopEndLabel,L"Loop end"},{sustainStartLabel,L"Sustain start"},{sustainEndLabel,L"Sustain end"},{releaseLabel,L"Release / 255: none"},{rangeLabel,L"Tick range"},{nameLabel,L"Name"},{volumeLabel,L"Volume / 64"},{panLabel,L"Pan / 256"},{fadeLabel,L"Fade / 32768"},{nnaLabel,L"New note action"},{dctLabel,L"Duplicate check"},{dnaLabel,L"Duplicate action"},{mapLabel,L"Keymap range / notes 0–127"},{statusLabel,L""}})label(id,title);for(int id=toolLabel0;id<=toolLabel4;++id)label(id,L"");
     for(int id:{targetLabel,statusLabel})SetWindowLongPtrW(controls_.at(id),GWL_STYLE,GetWindowLongPtrW(controls_.at(id),GWL_STYLE)|SS_ENDELLIPSIS|SS_NOPREFIX);
     set(mapFrom,L"0");set(mapTo,L"119");set(rangeStart,L"0");set(rangeEnd,L"49");finish();
   }
   void openAt(){const bool retain=visible()||retainedDraft();show();if(!retain)load(true);SetFocus(controls_.at(instrument));}
+  void initializeHidden(){
+    require(!(GetWindowLongPtrW(window_,GWL_STYLE)&WS_VISIBLE)&&!docked()&&captured_.document.empty()&&generation_==0&&!retainedDraft(),"Initialize only a fresh hidden instrument editor");
+    load(true);
+  }
   bool retainedDraft()const{return pending_||draft()||toolFieldsDirty_||dragging_||(bank_&&bank_->retainedDraft());}
   bool followCursor(){
     if(retainedDraft())return false;const auto c=context_();auto chosen=std::find_if(c.instruments.begin(),c.instruments.end(),[&](const auto &i){return i.at("index")==c.instrument;});if(chosen==c.instruments.end())chosen=c.instruments.begin();
@@ -293,6 +365,6 @@ public:
   }
   Json musicalTarget()const{return {{"document",captured_.document},{"revision",captured_.revision},{"sample",false},{"slot",index_},{"id",identity_}};}
   void playback(const std::string &document,const Json &instruments,const std::vector<Tracker::VoicePosition> &voices){if(!visible())return;std::vector<double> next;if(document==captured_.document&&std::any_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.at("id")==identity_&&i.at("index")==index_;}))for(const auto &v:voices)if(v.instrument==index_)next.push_back(v.envelopeTicks[size_t(kind_)]);if(next!=playbackTicks_){playbackTicks_=std::move(next);requestPaint();}}
-  Json snapshot()const{const auto r=canvas_.viewport;Json handles=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});return {{"visible",visible()},{"compactLayout",compact_},{"toolFieldDraft",toolFieldsDirty_},{"retainedDraft",retainedDraft()},{"page",pages[size_t(page_)]},{"canvasVisible",canvasVisible_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"instrument",identity_},{"index",index_},{"kind",kinds[size_t(kind_)]},{"dirty",draft()},{"envelopeDirty",envelopeDirty_},{"fieldDraft",pointFields_||markerFields_||mappingFields_},{"mappingFields",mappingFields_},{"mappingDirty",mappingDirty_},{"selectedKey",selectedKey_},{"pending",pending_},{"stale",!current()},{"envelope",envelope_},{"selectedPoint",selected_},{"mapping",mapping_},{"handles",handles},{"playbackTicks",playbackTicks_},{"canvas",{r.x,r.y,r.w,r.h}},{"start",canvas_.start/256},{"end",canvas_.end/256},{"status",utf8(status_)},{"envelopeBank",bank_?bank_->snapshot():Json{{"visible",false}}}};}
+  Json snapshot()const{const auto r=canvas_.viewport;Json handles=Json::array(),bounds=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});for(const auto &[id,control]:controls_)if(IsWindowVisible(control)){RECT rect{};GetWindowRect(control,&rect);MapWindowPoints(nullptr,window_,reinterpret_cast<POINT *>(&rect),2);bounds.push_back({{"id",id},{"bounds",{rect.left,rect.top,rect.right,rect.bottom}}});}return {{"visible",visible()},{"compactLayout",compact_},{"shortDock",shortDock_},{"shortEnvelopeOptions",shortEnvelopeOptions_},{"generation",generation_},{"controlBounds",bounds},{"toolFieldDraft",toolFieldsDirty_},{"retainedDraft",retainedDraft()},{"page",pages[size_t(page_)]},{"canvasVisible",canvasVisible_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"instrument",identity_},{"index",index_},{"kind",kinds[size_t(kind_)]},{"dirty",draft()},{"envelopeDirty",envelopeDirty_},{"fieldDraft",pointFields_||markerFields_||mappingFields_},{"mappingFields",mappingFields_},{"mappingDirty",mappingDirty_},{"selectedKey",selectedKey_},{"pending",pending_},{"stale",!current()},{"envelope",envelope_},{"selectedPoint",selected_},{"mapping",mapping_},{"handles",handles},{"playbackTicks",playbackTicks_},{"canvas",{r.x,r.y,r.w,r.h}},{"start",canvas_.start/256},{"end",canvas_.end/256},{"status",utf8(status_)},{"envelopeBank",bank_?bank_->snapshot():Json{{"visible",false}}}};}
 };
 }

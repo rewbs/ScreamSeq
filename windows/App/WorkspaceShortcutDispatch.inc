@@ -105,7 +105,7 @@
         return {{"command",id},{"keys",workspaceShortcuts->keys(id)}};
     }
     uint64_t workspaceShortcutContext() {
-        const auto identity=documentId+"|"+view->session.revision+"|"+std::to_string(contextRevision)+"|"+selection().dump()+"|"+workspaceState.focus+"|"+std::to_string(reinterpret_cast<uintptr_t>(GetFocus()))+"|"+std::to_string(reinterpret_cast<uintptr_t>(GetActiveWindow()));
+        const auto identity=documentId+"|"+view->session.revision+"|"+std::to_string(contextRevision)+"|"+selection().dump()+"|"+workspaceState.focus+"|"+std::to_string(inspectorCanvasFocus)+"|"+std::to_string(reinterpret_cast<uintptr_t>(GetFocus()))+"|"+std::to_string(reinterpret_cast<uintptr_t>(GetActiveWindow()));
         if(identity!=shortcutContextIdentity){shortcutContextIdentity=identity;++shortcutContextSerial;}
         return shortcutContextSerial;
     }
@@ -147,7 +147,7 @@
         const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,alt=(GetKeyState(VK_MENU)&0x8000)!=0;
         if(!workspaceShortcuts->pending()&&nativeOwnsShortcut(key,ctrl,alt))return false;
         // Unmodified F is a hexadecimal digit outside the note column.
-        if(!workspaceShortcuts->pending()&&!ctrl&&!alt&&key=='F'&&GetFocus()==window&&workspaceState.focus=="pattern"&&column!=0)return false;
+        if(!workspaceShortcuts->pending()&&!ctrl&&!alt&&key=='F'&&GetFocus()==window&&trackerWorkspaceVisible()&&workspaceState.focus=="pattern"&&column!=0)return false;
         ScreamSeq::WorkspaceShortcuts::Stroke stroke;
         try{stroke=ScreamSeq::WorkspaceShortcuts::parseStroke(*encoded);}
         catch(const ScreamSeq::Api::ApiError &){cancelWorkspaceShortcut();return false;} // Reserved system chord.
@@ -160,28 +160,29 @@
         return decision.consumed;
     }
     void runWorkspaceShortcut(int id) {
-        const auto focus=GetFocus();const auto panel=workspaceState.focus;
+        const auto focus=GetFocus();const auto panel=workspaceState.focus;const bool inspector=inspectorCanvasFocus;
         if(id==patternPasteMix&&(!trackerWorkspaceVisible()||panel!="pattern"||ScreamSeq::NativeToolWindow::belongsToTool(focus))){
             status=L"Focus the pattern selection before mix paste";return;
         }
         const bool preserve=id==liveKeysCommand||id==togglePlaybackCommand||id==stopCommand||id==saveCommand||id==saveAsCommand||id==undoCommand||id==redoCommand||id==redoAlternateCommand;
         command(id);
         if(id==stopCommand&&!ScreamSeq::NativeToolWindow::belongsToTool(focus))command(focusPatternCommand);
-        if(preserve&&ScreamSeq::NativeToolWindow::belongsToTool(focus)&&workspaceFocusVisible(focus)){workspaceState.focus=panel;SetFocus(focus);}
+        if(preserve&&ScreamSeq::NativeToolWindow::belongsToTool(focus)&&workspaceFocusVisible(focus)){setWorkspaceCanvasFocus(panel,inspector);SetFocus(focus);}
     }
     bool focusedEditingCommand(int id) {
         if(id==togglePlaybackCommand){if(device.running()&&!auditionOnly)stopAndFinishRecording();else play();return true;}
         if(id==redoAlternateCommand){command(redoCommand);return true;}
         if(id==nextPanelCommand){
+            if(focusNextWorkspaceRegion())return true;
             if(!trackerWorkspaceVisible())focusVisibleWorkspaceCanvas();
             else if(workspaceState.focus=="pattern"&&!view->graphPattern->lanes.empty())command(graphLanesFocus);
-            else {workspaceState.focus=workspaceState.focus=="pattern"&&workspaceState.visible()?workspaceState.active:"pattern";SetFocus(window);layoutControls();}
+            else {const bool inspector=workspaceState.focus=="pattern"&&workspaceInspectorVisible();setWorkspaceCanvasFocus(inspector?workspaceState.active:"pattern",inspector);SetFocus(window);layoutControls();}
             return true;
         }
         if(id<copyFocusedCommand||id>selectAllFocusedCommand)return false;
-        if(!trackerWorkspaceVisible()||ScreamSeq::NativeToolWindow::belongsToTool(GetFocus()))throw std::runtime_error("Focus the tracker or sample selection first");
-        if(workspaceState.focus=="samples")command(id==copyFocusedCommand?sampleCopyCommand:id==pasteFocusedCommand?samplePasteCommand:id==cutFocusedCommand?sampleCutCommand:id==deleteFocusedCommand?sampleClearCommand:sampleAllCommand);
-        else if(workspaceState.focus=="pattern"&&(id==copyFocusedCommand||id==pasteFocusedCommand||id==deleteFocusedCommand))command(id==copyFocusedCommand?copyCommand:id==pasteFocusedCommand?pasteCommand:clearCommand);
+        if(ScreamSeq::NativeToolWindow::belongsToTool(GetFocus()))throw std::runtime_error("Focus the tracker or sample selection first");
+        if(workspaceMainCanvasFocused("samples"))command(id==copyFocusedCommand?sampleCopyCommand:id==pasteFocusedCommand?samplePasteCommand:id==cutFocusedCommand?sampleCutCommand:id==deleteFocusedCommand?sampleClearCommand:sampleAllCommand);
+        else if(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()&&(id==copyFocusedCommand||id==pasteFocusedCommand||id==deleteFocusedCommand))command(id==copyFocusedCommand?copyCommand:id==pasteFocusedCommand?pasteCommand:clearCommand);
         else throw std::runtime_error("Focus a matching pattern or sample selection first");
         return true;
     }

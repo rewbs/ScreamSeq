@@ -51,7 +51,7 @@
         pluginInstruments=std::make_unique<ScreamSeq::PluginInstrumentsWindow>(window,selectedPlugin,[this](const auto &method,const auto &params){return documentOperation(method,params);},[this]{return std::pair(documentId,view->session.revision);});pluginInstruments->show();
     }
     std::wstring pluginDetailStatus=L"Select a plugin to edit its parameters";
-    bool pluginEditorVisible() const {return trackerWorkspaceVisible()&&workspaceState.lowerVisible&&!graphEditorVisible()&&!mixerEditorVisible()&&workspaceState.layout!="Pattern focus" && !sampleEditorVisible() && !effectEditorVisible() && !noteEditorVisible();}
+    bool pluginEditorVisible() const {return workspaceMainEditorVisible("plugins");}
     int selectedPluginSlot() const {
         const auto &rack=view->session.document.at("nativePlugins");
         for(size_t i=0;i<rack.size();++i) if(rack[i].at("instanceID")==selectedPlugin) return int(i);
@@ -174,7 +174,7 @@
         frameRequested=true;
     }
     template<class Place> void layoutPluginControls(const Place &place) {
-        syncPluginRack();const auto r=sampleEditorRect();const bool show=pluginEditorVisible();const auto x=r.x+230,y=r.y;
+        syncPluginRack();const auto r=workspaceMainEditorRect();const bool show=pluginEditorVisible();const auto x=r.x+230,y=r.y;
         place(pluginsCommand,0,0,1,1,false);place(pluginUndo,r.x+r.w-160,y+4,74,24,show);place(pluginRedo,r.x+r.w-82,y+4,74,24,show);
         place(pluginPage,x,y+4,std::min(180.0f,r.w-406),230,show);
         place(pluginLibrary,r.x+8,y+35,r.w-254,250,show);place(pluginBrowse,r.x+r.w-240,y+35,78,24,show);place(pluginAdd,r.x+r.w-154,y+35,64,24,show);place(pluginRescan,r.x+r.w-86,y+35,78,24,show);
@@ -280,7 +280,7 @@
         return true;
     }
     void drawPluginEditor() {
-        auto r=sampleEditorRect();auto &s=*surface;s.fill(r.x,r.y,r.w,r.h,0x171f29);s.fill(r.x,r.y,r.w,32,0x232e3b);
+        auto r=workspaceMainEditorRect();auto &s=*surface;s.fill(r.x,r.y,r.w,r.h,0x171f29);s.fill(r.x,r.y,r.w,32,0x232e3b);
         s.uiText(L"PLUGINS  /  "+std::to_wstring(listedPlugins.size())+L" in rack",r.x+12,r.y+8,210,0x72dcc6);
         if(listedPlugins.empty())s.uiText(L"Add an effect or instrument",r.x+18,r.y+76,194,0x8fa8ba);
         if(r.h>=161 && pluginDetailPage!=0)s.uiText(pluginExtrasError?pluginDetailStatus:pluginDraft?L"Program selection / Load applies / Escape discards":pluginDetailPage==1?L"Factory settings replace the saved state in one plugin Undo step":pluginDetailPage==2?L"Enable auxiliary ports here; routing remains a separate assignment":pluginDetailPage==3?L"Share one plugin across tracker instruments and MIDI channels":pluginDetailPage==4?L"Save and load sounds / routing and instrument assignments stay in the song":L"Reconnect a moved or Mac-origin VST3 to its matching Windows module",r.x+230,r.y+134,r.w-242,pluginDraft||pluginExtrasError?0xe2b86c:0x8fa8ba);
