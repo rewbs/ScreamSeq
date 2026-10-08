@@ -706,24 +706,52 @@ in version 3. Invalid or mismatched metadata is rejected before replacing the
 open song. There is no automatic lossy downgrade.
 
 `arrangement.matrix` reads paged track/order summaries without touching the UI.
-Optional `startOrder`/`orderCount` (maximum 128) and
-`startChannel`/`channelCount` (maximum 32) bound work and response size.
-Each block has a track ID, channel index, pitched-note count, nonempty-cell count
-and sixteen event-density bins spanning the pattern's rows. Repeated patterns
-reuse one calculated summary per request. End/skip orders contain no blocks.
+Optional `startOrder`/`orderCount` (default 64, maximum 128) and
+`startChannel`/`channelCount` (default up to 16 remaining, maximum 32) bound work
+and response size. `startOrder == totalOrders` returns an empty page; zero counts
+and out-of-range channels reject even for that page. Each block has a `trackID`,
+`channel`, unsigned 32-bit `events` and `notes`, and sixteen `bins` spanning the
+pattern's rows. Events count occupied six-field tracker cells, individual precise
+on/off events, and native FX records. Notes count pitched tracker cells and precise
+onsets. `trackerEvents`, `preciseEvents` and `nativeFxEvents` expose these layers
+separately; stored native FX-1 and legacy FX-1 both count if both exist. Bins use
+precise sub-row positions. Repeated patterns reuse one calculated summary per
+request, while order entities retain their own identity/name/annotation/color.
+End/skip orders contain no blocks. Mac and Windows use the same shared summary.
 
 `arrangement.copyBlock` takes `expectedRevision`, `sourceOrder`, `targetOrder`,
 `sourceChannel`, `targetChannel`, optional `channelCount` (default 1), `mode`
 (`overwrite`/`merge`/`mix`), `makeUnique` (default true), `clip` (default false)
 and `dryRun` (default false). Both orders belong to the current sequence.
-It copies whole pattern-channel blocks. Differing pattern lengths require
-explicit `clip:true`, which copies only overlapping rows. If the destination
+It copies whole pattern-channel blocks, including precise notes and every FX
+column. Differing pattern lengths require explicit `clip:true`, which copies only
+overlapping rows, excludes native events at the exact end, and clips slide
+durations to that end. It does not synthesize note-offs. If the destination
 pattern is reused anywhere in the song, the default creates an independent
 pattern for that order while preserving its order ID and all untouched columns.
+The clone preserves exact destination signature, raw groove, engine name/color,
+and unrelated native lanes and template links. Extra FX columns grow only as
+needed for accepted occupied source columns.
 `makeUnique:false` deliberately edits every use of the destination pattern.
-Preview returns `changedCells`, `clonesPattern` and the proposed `targetPattern`.
-Apply stops playback for the structural change and creates one document undo
-step. A no-op does neither. Prepare and apply with the same revision.
+Tracker fields retain ordinary pattern-paste mode semantics. Precise-note keys
+are track, position and onset/release partition: overwrite replaces the overlap,
+merge lets source win an exact collision, and mix retains destination collisions.
+Native FX keys are track, row and column; legacy FX-1 (including parameter-only
+cells) shares occupancy with native column zero. Overwrite replaces the span,
+merge accepts occupied source slots, and mix fills only destination-empty slots.
+Accepted native FX-1 clears conflicting legacy effect/parameter fields. All source
+data is captured before edits, including overlapping same-pattern channel moves.
+An identical source/destination pattern and channel span is a validated no-op,
+including separate order occurrences that alias that pattern; it preserves any
+legal imported legacy/native FX-1 coexistence and does not create a clone.
+Preview returns `wouldChange`, `changedCells`, `clonesPattern` and the proposed
+`targetPattern`. `wouldChange` includes native-only edits; `changedCells` counts
+six-field cells only. Preview validates the complete candidate without consuming
+IDs or history. Apply stops playback only for a changed edit and creates one
+document Undo step. A no-op preserves revision, playback and Redo. Prepare and
+apply with the same revision. Windows additionally admits the complete prospective
+view cache before stopping playback and bounds matrix replies below its 32 MiB
+transport limit; request a smaller page if a reply is rejected as too large.
 
 Hosted plugins now expose `instanceID` in `document.get.nativePlugins`.
 This identifies an instance independently of its rack slot, survives state

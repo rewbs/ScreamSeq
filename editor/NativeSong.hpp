@@ -2,7 +2,9 @@
 #include "common/stdafx.h"
 #include "soundlib/Sndfile.h"
 #include <map>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 #include "MusicalAutomation.hpp"
 #include "MixerGraph.hpp"
@@ -12,6 +14,7 @@
 #include "EnvelopeBank.hpp"
 
 namespace Tracker {
+using PrimaryEffectCells = std::set<std::tuple<uint64_t,uint64_t,uint32_t>>; // pattern, track, row
 // Stable, project-local identities and UTF-8 metadata. Module playback stays in
 // CSoundFile; native features never rely on a mutable order index as identity.
 struct NativeEntity {
@@ -67,6 +70,7 @@ struct NativeSong {
   void removePluginRoutes(const std::string &instance);
   void reconcile(const OpenMPT::CSoundFile &song);
   void clonePatternAutomation(uint64_t source, uint64_t destination);
+  bool clearPrimaryEffects(const PrimaryEffectCells &cells);
   void validate(const OpenMPT::CSoundFile &song) const;
   void prepareEffects(OpenMPT::CSoundFile &song) const; // Control thread only.
   bool hasAnnotations() const;

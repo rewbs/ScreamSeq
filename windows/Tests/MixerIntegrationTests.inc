@@ -1,10 +1,11 @@
 // Included by the document-controller worker harness.
 void mixerIntegrationTests(const std::filesystem::path &directory) {
-  unsigned stops=0,publications=0;bool active=false,refuse=false;HostedProjectPlayback *playback=nullptr;
+  unsigned stops=0,publications=0,nativePublications=0;bool active=false,refuse=false;HostedProjectPlayback *playback=nullptr;
   const auto owner=std::this_thread::get_id();
   PlaybackHooks hooks;
-  hooks.feedback=[&]{need(std::this_thread::get_id()==owner,"Feedback escaped UI owner");PlaybackFeedback f;f.playing=active;if(active&&playback){f.meters=playback->chain().mixerMeters();f.activity=playback->chain().graphActivity();}return f;};
+  hooks.feedback=[&]{need(std::this_thread::get_id()==owner,"Feedback escaped UI owner");PlaybackFeedback f;f.playing=f.audioActive=active;f.generation=1;if(active&&playback){f.meters=playback->chain().mixerMeters();f.activity=playback->chain().graphActivity();}return f;};
   hooks.controls=[&](const auto &values){need(std::this_thread::get_id()==owner,"Mixer queue has a second producer");++publications;return !refuse&&(!active||playback->chain().mixerControls(values));};
+  hooks.publishNativeUpdate=[&](auto *target,auto &plan){need(std::this_thread::get_id()==owner,"Routing queue has a second producer");++nativePublications;return !refuse&&active&&target==playback&&target->publishNativeUpdate(plan);};
   DocumentController c({},"mixer-integration",[&]{++stops;active=false;},[](const auto &){},{},64u*1024u*1024u,{},std::move(hooks));
   auto view=c.view();invoke(c,"mixer.enable",{{"dryRun",true}});need(c.view()==view&&stops==0,"Enable preview changed music");
   invoke(c,"mixer.enable",Json::object());
@@ -18,26 +19,34 @@ void mixerIntegrationTests(const std::filesystem::path &directory) {
   need(rejected&&c.view()==enabled&&active&&stops==stopped,"Queue refusal changed music or stopped playback");
   need(call(c,"mixer.get",Json::object()).at("buses")==baseline,"Refused queue changed mixer baseline");
   refuse=false;invoke(c,"mixer.bus.set",{{"bus",master},{"gainDB",-12}});need(active&&stops==stopped,"Control-only edit stopped playback");
-  std::array<float,2048> pcm{};need(playback->render(pcm.data(),1024),"Mixer render failed");
+  // The real device consumes these plans concurrently. This offline fixture
+  // renders the 10 ms transition explicitly before requesting another one.
+  std::array<float,2048> pcm{};auto renderPublication=[&]{need(playback->render(pcm.data(),1024),"Mixer render failed");const auto reading=playback->chain().mixerRoutingReading();need(!reading.preparing()&&!reading.rejected(),"Prepared mixer routing did not reach the renderer");};
+  renderPublication();
   need(call(c,"mixer.meters",Json::object()).at("meters").size()==baseline.size(),"Prepared mixer meters absent");
   auto changed=c.view();invoke(c,"mixer.bus.set",{{"bus",master},{"gainDB",-96},{"preview",true}});
   need(c.view()==changed&&call(c,"mixer.get",Json::object()).at("buses").back().at("gainDB")==-12,"Preview changed saved music");
   // A no-op baseline edit restores a cancelled preview without creating Undo.
   invoke(c,"mixer.bus.set",{{"bus",master},{"gainDB",-12}});need(c.view()==changed,"Preview reset created history");
+  renderPublication();const auto beforeHistory=nativePublications;
   invoke(c,"history.undo",{{"domain","document"}});need(call(c,"mixer.get",Json::object()).at("buses")==baseline,"Queue refusal or preview left a phantom Undo entry");
-  invoke(c,"history.redo",{{"domain","document"}});
-  // Invalid topology never stops a prepared render; valid topology does.
+  renderPublication();invoke(c,"history.redo",{{"domain","document"}});renderPublication();
+  need(active&&stops==stopped&&nativePublications==beforeHistory+2,"Mixer history did not use live prepared publication");
+  // Invalid topology is atomic. Supported bus routing uses a prepared plan.
   active=true;const auto beforeStops=stops;view=c.view();rejected=false;
   try{invoke(c,"mixer.bus.set",{{"bus",master},{"output",master}});}catch(const Api::ApiError &){rejected=true;}
   need(rejected&&c.view()==view&&active&&stops==beforeStops,"Invalid route stopped or committed");
-  const auto group=invoke(c,"mixer.bus.add",{{"kind","group"},{"name","Disconnected send"}}).at("bus");
-  need(!active&&stops==beforeStops+1,"Topology mutation did not stop");
-  invoke(c,"mixer.bus.set",{{"bus",group},{"output",nullptr}});
-  invoke(c,"mixer.sends.set",{{"bus",group},{"sends",Json::array({{{"target",master},{"gainDB",-6}}})}});
+  refuse=true;rejected=false;try{invoke(c,"mixer.bus.add",{{"kind","group"},{"name","Disconnected send"}});}catch(const Api::ApiError &e){rejected=e.code==-32002;}refuse=false;
+  need(rejected&&c.view()==view&&active&&stops==beforeStops,"Refused prepared route changed music/history or stopped playback");
+  const auto beforeRoute=nativePublications;
+  const auto group=invoke(c,"mixer.bus.add",{{"kind","group"},{"name","Disconnected send"}}).at("bus");renderPublication();
+  invoke(c,"mixer.bus.set",{{"bus",group},{"output",nullptr}});renderPublication();
+  invoke(c,"mixer.sends.set",{{"bus",group},{"sends",Json::array({{{"target",master},{"gainDB",-6}}})}});renderPublication();
+  need(active&&stops==beforeStops&&nativePublications==beforeRoute+3,"Supported routing edits did not publish live");
   const auto path=directory/"mixer-integration.screamseq";
   const auto saved=call(c,"mixer.get",Json::object()).at("buses");
   invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});
-  invoke(c,"mixer.bus.remove",{{"bus",group}});invoke(c,"history.undo",{{"domain","document"}});
+  invoke(c,"mixer.bus.remove",{{"bus",group}});renderPublication();invoke(c,"history.undo",{{"domain","document"}});renderPublication();
   need(call(c,"mixer.get",Json::object()).at("buses")==saved,"Group removal Undo lost sends/disconnection");
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
   need(call(c,"mixer.get",Json::object()).at("buses")==saved,"Reopen lost mixer routes");
@@ -65,5 +74,5 @@ void mixerIntegrationTests(const std::filesystem::path &directory) {
   auto silence=render(48000);need(std::all_of(silence.begin(),silence.end(),[](float v){return v==0;}),"Detached tracks still audible");
   for(const auto &b:buses)if(b.at("id")!=output)invoke(pcmController,"mixer.sends.set",{{"bus",b.at("id")},{"sends",Json::array({{{"target",output},{"gainDB",0}}})}});
   for(auto rate:{44100u,48000u,96000u}){auto restored=render(rate);double delta=0,energy=0;for(size_t i=0;i<restored.size();++i){delta=std::max(delta,std::abs(double(restored[i])-references[rate][i]));energy+=std::abs(restored[i]);}need(delta<1e-6&&energy>1,"Unity sends did not restore disconnected-track PCM");}
-  std::cout<<"PASS mixer live publication/refusal/preview/history, topology stop, disconnection/sends/reopen and PCM at 44.1/48/96 kHz\n";
+  std::cout<<"PASS mixer live publication/refusal/preview/history and prepared routing, disconnection/sends/reopen and PCM at 44.1/48/96 kHz\n";
 }

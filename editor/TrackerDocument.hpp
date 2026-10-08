@@ -170,6 +170,10 @@ public:
 	std::vector<Edit> edit(const std::vector<Edit> &edits);
 	void validateEdits(const std::vector<Edit> &edits) const;
 	bool editNative(NativeSong metadata, const std::vector<Edit> &edits = {});
+	// Private state projection for admission checks; nullptr if history is empty.
+	// Reuses the pending operation without consuming live history. The returned
+	// document retains only that entry, not the live document's history stacks.
+	std::unique_ptr<Document> historyCandidate(bool redo);
     // A native-only history entry may publish an external prepared plan after
     // every allocation succeeds, before changing native data/history/revision.
     // The callback must not mutate this Document. Refusal leaves both histories
@@ -178,6 +182,12 @@ public:
     std::vector<Edit> redo(const std::function<void()> &beforeCommit = {});
 	bool canUndo() const { return !undo_.empty(); }
 	bool canRedo() const { return !redo_.empty(); }
+	bool historyNativeOnly(bool redo) const noexcept {
+		const auto &history = redo ? redo_ : undo_;
+		if(history.empty()) return false;
+		const auto &entry = history.back();
+		return entry.cells.empty() && entry.before.empty() && entry.after.empty() && !entry.sample && !entry.splice && !entry.slot;
+	}
 	// Shared ordering for document edits and a platform host's plugin snapshots.
 	// History movement keeps its original sequence; only a new edit forks redo.
 	uint64_t historySequence() const noexcept { return historySequence_; }
@@ -220,7 +230,9 @@ public:
 	PreparedSampleProcess prepareSampleLoops(int sample, const std::optional<SampleLoopSettings> &normal,
 	                                        const std::optional<SampleLoopSettings> &sustain) const;
 	std::vector<SampleSnapResult> snapSample(int sample, std::span<const uint32_t> positions, const SampleSnapOptions &options) const;
-	SampleProcessResult applySampleProcess(PreparedSampleProcess prepared);
+	// Called after validation/allocation and before the nonthrowing commit. A
+	// refusal (throw) preserves samples, revision and both history stacks.
+	SampleProcessResult applySampleProcess(PreparedSampleProcess prepared, const std::function<void()> &beforeCommit = {});
 	SampleClipboard copySample(int sample, uint32_t first, uint32_t last, SampleChannels channels) const;
 	PreparedSampleEdit prepareSamplePaste(int sample, const SampleClipboard &clipboard, const SamplePasteOptions &options) const;
 	PreparedSampleEdit prepareSampleErase(int sample, uint32_t first, uint32_t last) const;
@@ -288,7 +300,7 @@ class Renderer
 	uint32_t regionLastRow_ = UINT32_MAX;
 	std::unique_ptr<PreciseNoteRuntime> preciseNotes_;
 	std::unique_ptr<RecordNudgeRuntime> recordNudges_;
-	std::unique_ptr<RecordingClock> recordingClock_ = std::make_unique<RecordingClock>();
+	std::shared_ptr<RecordingClock> recordingClock_ = std::make_shared<RecordingClock>();
 	uint64_t renderHostTime_ = 0;
 	double hostTicksPerSample_ = 0;
 	uint32_t renderOffset_ = 0;
@@ -319,6 +331,7 @@ public:
 	void preparePreciseNotes(const NativeSong &native) { preciseNotes_=std::make_unique<PreciseNoteRuntime>(native); recordNudges_=std::make_unique<RecordNudgeRuntime>(native); native.prepareEffects(*song_); }
 	void recordingTime(uint64_t hostTime,double ticksPerSample) noexcept { renderHostTime_=hostTime;hostTicksPerSample_=ticksPerSample; }
 	const RecordingClock &recordingClock() const { return *recordingClock_; }
+	std::shared_ptr<const RecordingClock> recordingClockSnapshot() const noexcept { return recordingClock_; }
 	bool enqueue(const std::vector<Edit> &edits);
  bool canUpdateSampleLoops() const noexcept {return loopWritten_.load(std::memory_order_relaxed)-loopRead_.load(std::memory_order_acquire)<loopUpdates_.size();}
  bool updateSampleLoops(uint16_t sample,const SampleEditGeometry &geometry) noexcept;

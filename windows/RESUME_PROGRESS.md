@@ -1,4 +1,233 @@
-# Windows continuation — 2026-09-21
+# Windows continuation
+
+Stopping point requested by the user: Precise Notes editing parity is qualified;
+resume with the unintegrated Mixer strip proposal only after its recorded source
+review findings are resolved. See [PARITY_HANDOFF.md](PARITY_HANDOFF.md) for the
+prioritized remaining work and exact continuation locations.
+
+Latest candidate 3 adds fractional offsets, captured empty-row sound, same-row
+Reload selection/scroll/focus retention and readable focus titles. App SHA256:
+`7295FB90A4A27875E4E331A347DE7E57A324823F46EE87905CE4F1EC68FB1008`.
+Full run 1 passes **404/404 in 1,027.617 seconds**, focused run 2 **82/82 in 150.469
+seconds**, native **50/50 in 101.85 seconds**, and **18 reviewed 192-DPI views**.
+All final runners have strict outer success. See
+[PRECISE_NOTE_PARITY_PROGRESS.md](PRECISE_NOTE_PARITY_PROGRESS.md) for preserved
+failures and scope. Checkpoint destination:
+`bin/windows-checkpoints/precise-note-parity-20261007/`; the completed manifest and
+independent verifier establish publication. Full Windows/Mac parity stays open.
+
+Previous Precise Notes checkpoint (2026-10-07): the retained native owner provides
+Timeline, Hit, Tools and selectable Details pages with independent pin/target/Return,
+compact placement and V4 saved-layout restoration. Pattern and routing remain
+available beside its draft. Candidate2 App SHA256:
+`5D2AFC83DA9D08B1B6CBA1349693C73888EF9D184B4850CC2ABED9FA8C7C0142`.
+Full run 1 passes **403/403 in 1,028.969 seconds**, focused run 2 **81/81 in 148.854 seconds**, native
+**50/50 in 101.58 seconds**, and **16 reviewed source-matched views** pass at 192 DPI.
+All final runners have strict outer success. See
+[PRECISE_NOTE_HOST_PROGRESS.md](PRECISE_NOTE_HOST_PROGRESS.md), including preserved
+failed build/capture inputs and scoped limits. Checkpoint destination:
+`bin/windows-checkpoints/precise-note-host-20261007/`; its completed manifest and
+independent verifier establish immutable publication.
+
+The host checkpoint's separate proposals for fractions, Reload selection and
+selected-sound seeding are integrated and freshly qualified above. Preserve the
+old matrix draft backup/stash until separately reconciled.
+
+Previous Graph Curve checkpoint (2026-10-07): independent native editing, V3 layouts
+and retained Formula/Bank/Guide children. Candidate 7 SHA256:
+`4AC1575B2783FEDDCD97D0E306A9440307E3652A0DF72D83A91F987A4401C20B`.
+Full run 3 **399/399 in 1,017.774 seconds**, focused run 8 **38/38 in 171.953 seconds**, native
+**49/49 in 82.73 seconds**, and **21 reviewed views** at 192 DPI. See
+[GRAPH_CURVE_HOST_PROGRESS.md](GRAPH_CURVE_HOST_PROGRESS.md). Immutable checkpoint:
+`bin/windows-checkpoints/graph-curve-host-20261007/`.
+
+Previous independent-docking checkpoint (2026-10-07): Connected shows Pattern,
+Graph, Instrument and Automation together in independent native regions. Short
+retained pages, compact fallback, actual keyboard focus and guarded saved-layout
+preparation preserve targets, raw edits, caret and desired split sizes.
+Candidate 8 SHA256:
+`6344453CC9222ECB0F3D04FC8065FDD4FB93480FC3D6209627894478670C0074`.
+Full run 4 passes **393/393 in 971.215 seconds**, focused run 7 **33/33 in
+106.856 seconds**, native **48/48**, and **37 source-matched views** pass review
+at 192 DPI. Full/focused runs have no failures or skips and strict outer success.
+See [INDEPENDENT_DOCKING_PROGRESS.md](INDEPENDENT_DOCKING_PROGRESS.md) for exact
+identities, earlier failed runs and scoped visual limits. Checkpoint destination:
+`bin/windows-checkpoints/independent-dock-regions-20261007/`; its manifest is the
+authority for completed immutable packaging.
+
+
+Previous arrangement-matrix checkpoint (2026-10-07): native order-by-track pages,
+native-aware density, exact occurrence Open and captured Copy/Paste are connected.
+Shared complete-copy preparation handles precise notes and unified FX, preserves
+exact independent clones, and rejects capacity before changing playback/history.
+Final application SHA256:
+`0944532EC88D6C2B3D63185E974258A410C28D4F084543BF5CA402846F4E9C10`.
+Full application run 2 passes **385/385** in **894.919 seconds**, no failures or
+skips, strict outer exit **0**. Focused cases pass **11/11**, native **44/44**,
+shared **9/9**, controller **3/3**, and separate Editing **15/15** with six exact
+nonzero PCM comparisons. Fifteen final source-matched views pass review at
+192 DPI. See [MATRIX_PROGRESS.md](MATRIX_PROGRESS.md) for identities, prior
+outcomes and qualification limits. Checkpoint destination:
+`bin/windows-checkpoints/arrangement-matrix-20261007/`; its manifest confirms
+completed packaging.
+
+Previous visual-consistency checkpoint (2026-10-07): measured compact pattern
+headers and consistent retained native report drawing are implemented. Active
+and inactive selection, keyboard focus, column clipping/scrolling and complete
+dark headers work across Arrangement, Recovery and MIDI recording. Final SHA256:
+`C018127596FE6A4B07C806F80B832E9D296137A275EDCF71AD42207D08C23B1E`.
+Native run 3 passes **42/42** in **29.94 seconds**; focused app run 2 passes
+**46/46** in **60.950 seconds**, strict outer exit **0**. Fourteen final views
+pass review at 192 DPI. See [UI_CONSISTENCY_PROGRESS.md](UI_CONSISTENCY_PROGRESS.md)
+for retained failures and qualification limits. Checkpoint destination:
+`bin/windows-checkpoints/ui-consistency-20261007/`; its manifest confirms packaging.
+The prior full 373-case run belongs to the annotation baseline, not this build.
+
+Previous sections/annotations checkpoint (2026-10-07): native Arrange has named
+order-occurrence sections, strict Previous/Next section navigation and retained
+Section and Pattern details pages. Independent captured targets and draft
+generations preserve unfinished Unicode text across selection/page changes,
+hide/reopen and stale revisions. `arrangement.get` and guarded `song.annotate`
+share the Mac contracts; annotation Undo/Redo preserves active playback.
+Structural history now validates its exact prospective document/cache before
+stopping or consuming the pending history entry.
+
+Final application SHA256:
+`085DB141035EEA3C1EB0A8987EE65580A13C6A2A2447199BC840346828F8075F`.
+Native tests pass **42/42**, focused application tests **14/14** with strict
+isolation, and the separate document-operation suite **15/15 groups** with six
+exact offline PCM comparisons. Fifteen source-matched views pass review at
+192 DPI. Full application run 2 passes **373/373** in **887.795 seconds**, no
+failures or skips, with strict outer isolation. Checkpoint destination:
+`bin/windows-checkpoints/annotations-20261007/`; its manifest confirms packaging.
+See [ANNOTATION_PROGRESS.md](ANNOTATION_PROGRESS.md) for exact evidence and
+retained earlier production, test-fixture and build outcomes.
+
+Previous arrangement/timing checkpoint (2026-10-07): native Arrange orders
+and Tempo and groove tools are connected to the shared guarded worker. Stable
+occurrence selection, sequence switching, pattern creation/duplication, explicit
+selected-order playback and normalized timing preview are implemented. Drafts,
+focus and scroll survive refreshes and rejected requests. See
+[ARRANGEMENT_PROGRESS.md](ARRANGEMENT_PROGRESS.md) for exact scope and evidence.
+Candidate 6 passes **367/367 application tests** in **898.856 seconds** with
+strict outer isolation, **8/8 focused cases**, **42/42 native CTests** and a
+separate **11/11 document-operation groups** with six exact offline PCM
+comparisons. Fifteen source-matched 192-DPI views pass review. The shared
+Duplicate operation now preserves exact pattern timing, engine name/color and
+native musical metadata, including resized duplicates and native persistence.
+SHA256: `83E06DAB17094A66B79C4D971C536CBC4A7BFE879BAB2D15ACF6302D38C13EB3`.
+Checkpoint: `bin/windows-checkpoints/arrangement-20261007/`; its manifest is the
+authority for packaging completion. The report retains earlier production,
+fixture and foreground-isolation failures without relabeling them as passes.
+
+Its original next-step [sections and annotations plan](ANNOTATION_PLAN.md)
+remains a historical scope audit; the current implementation is above.
+
+Previous recording checkpoint (2026-10-07): timestamped WinMM input, correlated
+WASAPI presentation history and worker-owned precise-note takes are connected to
+a retained native MIDI/recording window. Shared one-Undo commit, native persistence,
+copy-only live recovery and stopped imported-take review are implemented;
+Save/Open/close guard unfinished takes.
+
+Qualified ARM64 candidate 5 SHA256:
+`DEAA2252608550EBD6B309A8426AF68862093465B7BD1DE05BC1C0F2F1FD98AF`.
+The final full application suite passes **359/359** in **875.469 seconds**, no
+failures or skips, with strict outer isolation (`bin/windows-recording-final-rerun2-app-tests.log`,
+`-isolation.log`, `-exe-sha256.txt`). Focused cases pass **15/15** in 16.046 seconds;
+native tests pass **40/40** in 18.41 seconds. Eight source-matched rendering/native
+control views pass review at 192 DPI. See [RECORDING_PROGRESS.md](RECORDING_PROGRESS.md)
+for exact logs, scoped visual limits and retained failed-run chronology, including
+the unreproduced Stop interleaving and unattributed historical desktop resources.
+
+Checkpoint location: `bin/windows-checkpoints/recording-20261007/`; the package
+manifest is the authority for packaging completion. Physical MIDI, reciprocal Mac
+runtime, foreground/multiple-scale review, accessibility and independent dock
+groups remain open; this functional checkpoint does not complete the parity goal.
+
+Its original next-step [arrangement plan](ARRANGEMENT_PLAN.md) remains a
+historical source audit. Current implementation and qualification are above.
+
+Previous recovery pass (2026-10-07): `RECOVERY_PROGRESS.md` records ten-second
+immutable autosave, ten retained generations per session, a native recovery
+browser and revision-guarded recovery APIs. Restore protects current unsaved work,
+validates before replacement and opens a pathless dirty document. Manual plugin
+state and imported unfinished takes survive snapshots without modifying the live
+song. Its historical recording/take gap is addressed by the current slice above.
+
+The final candidate passes **345/345 application tests** in 890.030 seconds,
+**14/14 focused recovery cases** and a separate **1/1 vendor-input regression**,
+all with successful strict outer isolation. The diagnostic native suite passes
+**38/38**; its earlier 37/38 desktop-teardown failure remains unexplained and
+preserved, with no production fix claimed. Eight final renderer/native-control
+views are reviewed at 192 DPI. See the recovery report for exact executable
+identity, logs, historical failures and visual limits. The committed package is
+`bin/windows-checkpoints/recovery-20261007/`.
+Its original next-step plan is retained in `RECORDING_PLAN.md`; current recording
+implementation and remaining qualification are in `RECORDING_PROGRESS.md`.
+
+Previous sample UI pass (2026-10-07): `SAMPLE_WORKFLOWS_PROGRESS.md` records retained
+Drawing, Process, Loops, Paste and Snap pages, independent normal/sustain drafts
+with joint preview/Apply, reviewed paste with rate/gain options, and selection
+or loop snapping with grid origin and automatic selection. Shared musical
+operations, Undo and native storage are reused. The minimum client is 900×720
+DIPs; pending loop bounds appear as dashed waveform markers.
+
+Candidate 3 passes the complete **330/330 application tests** with no failures
+or skips in 835.843 seconds and a successful strict outer isolation check, plus
+**32/32 affected UI tests** and **36/36 native CTests**. Its **19
+renderer/native-control views** are reviewed with exact
+source/binary identity. The full-suite log is
+`bin/windows-sample-workflows-final-app-tests.log`.
+An additional isolated probe reproduced native-focus loss after loop/paste
+Preview/Apply. Candidate 4 contains that correction and page-specific menu
+hints; all **33/33 individual affected UI tests pass** in 194.613 seconds, but
+**the outer run fails strict foreground isolation with exit 1**. The foreground
+change is unattributed, so final-build isolation qualification remains unresolved.
+Its **19 refreshed rendering views** are reviewed and pass their own isolation
+checks; those do not qualify the failed application run. The final UI log is
+`bin/windows-sample-workflows-candidate4-ui-final.log`. The full-suite and native
+CTest results remain tied to the retained `bin/ScreamSeq-sample-candidate3.exe`
+baseline; the report records both exact executable hashes. It also retains the
+first candidate's 31/32 failure and correction, and the final candidate's initial
+32/33 result caused by a mistaken test expectation about native button focus.
+Both candidate-4 outer isolation failures are preserved:
+`bin/windows-sample-workflows-candidate4-isolation-final.log` and
+`bin/windows-sample-workflows-candidate4-outer-isolation-failure.log`.
+No reactivation or further equality-chasing test run was attempted.
+The later recovery checkpoint above supersedes this checkpoint's next-step plan;
+its historical isolation failure remains preserved.
+
+## Previous checkpoints
+
+The command/menu pass (2026-10-07): `WORKSPACE_COMMANDS_PROGRESS.md` records native
+context menus for pattern, sample, graph, instrument and detailed sample editors,
+plus a 99-command palette with configurable shortcuts/sequences, atomic saved
+preferences, Clear/Reset and Reload. Native text and local editor input retain
+priority; captured menu targets reject stale actions. Full Mac parity remains
+active. The following sample workflow checkpoint connects its existing backend
+capabilities to the retained UI described above.
+
+The command checkpoint's full baseline passes **324/324 application tests** with
+no failures or skips. Final palette-only conflict feedback passes **9/9 focused
+app tests** and **35/35 native CTests**. The report distinguishes the full-run
+and final-build hashes and records the earlier regressions and their fixes.
+The preserved ARM64 package is
+`bin/windows-checkpoints/workspace-commands-20261007/`.
+
+The preceding UI pass (2026-10-07): `WORKSPACE_DOCKING_PROGRESS.md` records retained
+automation/instrument docking, responsive workspace tabs and compact editor
+pages. `WORKSPACE_LAYOUTS_PROGRESS.md` covers the persistent lower editor tabs,
+named layout manager, command-palette search/focus improvements and visual
+corrections. The separate build is `bin/windows-ui-parity/`. Current verification
+and remaining limitations are in those reports. Full Mac parity remains active.
+
+Qualification: the docking baseline passed all 298 application tests and 34
+native CTests. The final build, including focus corrections and visual copy,
+passed all 49 affected UI tests with no skips. Its 24 renderer/native-control
+compositions are reviewed; foreground and sustained presentation gates remain
+open. The report distinguishes the full-run and final-build fingerprints.
+The preserved ARM64 package is
+`bin/windows-checkpoints/workspace-docking-20261007/`.
 
 Latest user-directed refinement: `FLAT_CONTROLS_PROGRESS.md` removes unrelated
 control redraws during cursor movement and gives native selectors a flat style.

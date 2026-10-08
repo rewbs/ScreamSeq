@@ -2,6 +2,8 @@
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"
 #include "windows/App/PatternClipboard.hpp"
+#include "windows/Project/BinaryPlist.hpp"
+#include "windows/Project/ProjectIO.hpp"
 #include "common/mptString.h"
 #include <iostream>
 
@@ -224,12 +226,16 @@ void patternClipboardTests(const std::filesystem::path &directory) {
     {"cells",Json::array({Json::array({65,1,1,40,0,0})})},
     {"effects",Json::array({{{"channel",0},{"position",16384},{"column",7},{"kind","parameter-set"},{"binding",23},{"value",0.25}}})},
     {"bindings",Json::array({{{"id",23},{"plugin","Preserved missing plugin"},{"parameter",456},{"name","Timbre Ω"}}})}});
+  invoke(c,"pattern.notes.set",{{"pattern",0},{"events",Json::array({{{"channel",1},{"position",4*65536+123},{"note",65},{"instrument",1},{"velocity",90}},
+    {{"channel",1},{"position",4*65536+32769},{"note",255}},{{"channel",1},{"position",5*65536},{"note",62}}})}});
   auto snapshot=c.view();const auto text=patternClipboardText(*snapshot,0,4,4,1,1);
   need(text.starts_with("ScreamSeq Pattern 2\n"),"Native clipboard must use Mac's text header");
   const auto payload=parsePatternClipboard(text);
   need(payload.at("cells")[0]==Json::array({65,1,1,40,0,0}),"Clipboard changed six-field tracker bytes");
   need(payload.at("effects")[0].at("channel")==0&&payload.at("effects")[0].at("position")==16384&&payload.at("effects")[0].at("column")==7,"Clipboard lost relative native FX coordinates");
   need(payload.at("bindings").size()==1&&payload.at("bindings")[0].size()==4,"Clipboard must include only referenced stable binding fields");
+  need(payload.at("notes").size()==2&&payload.at("notes")[0].at("channel")==0&&payload.at("notes")[0].at("position")==123&&payload.at("notes")[0].at("velocity")==90&&
+    payload.at("notes")[1].at("position")==32769&&payload.at("notes")[1].at("note")==255,"Clipboard lost exact precise on/off coordinates or included the end boundary");
   need(parsePatternClipboard("ScreamSeq Pattern 2\r\n"+payload.dump())==payload,"Windows newline clipboard is not portable");
   const auto legacy=parsePatternClipboard("Resonance Pattern 1\r\n3D,01,01,40,00,00\tFF,00,00,00,00,00\r\n00,00,00,00,00,00\tFE,00,00,00,00,00");
   need(legacy.at("rows")==2&&legacy.at("channels")==2&&legacy.at("cells")[1][0]==255&&legacy.at("cells")[3][0]==254,"Legacy text import changed dimensions or special notes");
@@ -239,6 +245,17 @@ void patternClipboardTests(const std::filesystem::path &directory) {
   bool rejected=false;try{parsePatternClipboard(std::string(maximumPatternClipboardBytes+1,'x'));}catch(const std::exception &){rejected=true;}need(rejected,"Oversized clipboard accepted");
   auto request=payload;request["pattern"]=0;request["startRow"]=10;request["startChannel"]=2;
   invoke(c,"pattern.paste",request);need(c.view()->effectColumns[2]==8&&c.view()->effect(0,10,2,7)->position==10*65536+16384,"Copied text did not restore FX 8");
+  const auto pasted=call(c,"pattern.notes.get",{{"pattern",0}});
+  need(c.view()->notesAt(0,10,2).size()==2&&c.view()->notesAt(0,10,2)[0].note.position==10*65536+123,"Copied text did not restore exact native note offsets");
+  invoke(c,"history.undo",{{"domain","document"}});need(c.view()->notesAt(0,10,2).empty(),"Clipboard Undo retained pasted native notes");
+  invoke(c,"history.redo",{{"domain","document"}});need(call(c,"pattern.notes.get",{{"pattern",0}})==pasted,"Clipboard Redo changed native note payload");
+  unsigned checked=0,applied=0;auto current=[&]{++checked;return true;};auto apply=[&]{++applied;};
+  need(guardedPatternCut([]{return false;},current,apply)==PatternCutResult::NotCopied&&!checked&&!applied,"Failed clipboard publication attempted to clear the pattern");
+  bool copyThrew=false;try{guardedPatternCut([]()->bool{throw std::runtime_error("Clipboard busy");},current,apply);}catch(const std::runtime_error &){copyThrew=true;}
+  need(copyThrew&&!checked&&!applied,"Clipboard exception attempted to clear the pattern");
+  need(guardedPatternCut([]{return true;},[]{return false;},apply)==PatternCutResult::Stale&&!applied,"Changed song after copy was cut");
+  need(guardedPatternCut([]{return true;},current,apply)==PatternCutResult::Applied&&checked==1&&applied==1,"Current published clipboard did not cut exactly once");
+  need(call(c,"pattern.notes.get",{{"pattern",0}})==pasted,"Clipboard failure/guard tests changed the document");
   invoke(c,"pattern.notes.set",{{"pattern",0},{"events",Json::array({{{"channel",2},{"position",10*65536+20},{"note",61}},{{"channel",2},{"position",10*65536+30000},{"note",255}},{{"channel",2},{"position",11*65536},{"note",62}}})}});
   need(c.view()->notesAt(0,10,2).size()==2&&c.view()->notesAt(0,11,2).size()==1&&c.view()->notesAt(0,10,1).empty()&&c.view()->notesAt(1,10,2).empty(),"Sparse note lookup crossed a row, channel or pattern");
   need(snapshot->notesAt(0,10,2).empty(),"Note cache mutated an older view");
@@ -345,6 +362,11 @@ void graphPatternViewTests() {
   need(call(limited,"graph.get",{{"includeState",false}}).at("commands").empty(),"rejected graph command left partial data");
   std::cout<<"PASS graph lane projection, exact offsets, immutable reuse, rename Undo and precommit cache budget\n";
 }
+#include "RecoveryControllerTests.inc"
+#include "RecordingControllerTests.inc"
+#include "ArrangementControllerTests.inc"
+#include "AnnotationControllerTests.inc"
+#include "MatrixControllerTests.inc"
 void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
   unsigned stops=0;bool rejectStop=false;
   DocumentController c({},"unified-plugin-history",[&]{if(rejectStop)throw std::runtime_error("controlled stop rejection");++stops;},[](const auto &){});
@@ -431,6 +453,11 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
   const auto originalNative=document->native();auto destination=originalNative;destination.ensureMixer();
   operations.invoke("plugin.add",{{"descriptor",gain},{"target","n"+std::to_string(destination.mixer.buses.front().id)}});
   const auto placedNative=document->native();const auto placedRack=project.preserved.at("plugins");
+  bool reachedGroupedApply=false;rejected=false;
+  try {operations.history(false,[&](bool,bool){reachedGroupedApply=true;},[](const auto &){throw Api::ApiError(-32602,"controlled grouped native admission refusal");});}
+  catch(const Api::ApiError &e){rejected=e.code==-32602;}
+  need(rejected&&!reachedGroupedApply&&document->native()==placedNative&&project.preserved.at("plugins")==placedRack&&operations.canUndo()&&!operations.canRedo(),
+    "Grouped admission refusal consumed document/rack history before validation");
   for(bool redoDirection:{false,true}){
     rejected=false;
     try{operations.history(redoDirection,[&](bool redo,bool stopped){need(stopped,"Grouped history repeated the transport stop");if(redo)document->redo();else document->undo();throw std::runtime_error("controlled postcommit callback failure");});}
@@ -443,8 +470,18 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
   need(document->native()==originalNative&&project.preserved.at("plugins").empty(),"History could not be used after a postcommit callback failure");
   std::cout<<"PASS chronological aliases, targeted/grouped plugin add/remove, dry-run/stale/stop/postcommit rejection, cache guard, interleaved edits, recorded-lane remapping, redo forks and persistence\n";
 }
+#include "ParameterActivityControllerTests.inc"
+#include "LiveNativeControllerTests.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--parameter-activity") {parameterActivityControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==2 && std::string(argv[1])=="--live-native") {liveNativeControllerTests();liveLoopControllerTests();return 0;}
+    if(argc==3 && std::string(argv[1])=="--matrix") {matrixControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--annotations") {annotationControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--arrangement") {arrangementControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--recording") {recordingControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--recovery") {recoveryControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==5 && std::string(argv[1])=="--recovery-manual") {recoveryManualEditorTests(std::filesystem::u8path(argv[2]),std::filesystem::u8path(argv[3]),std::filesystem::u8path(argv[4]));return 0;}
     if(argc==3 && std::string(argv[1])=="--unified-plugin-history") {unifiedPluginHistoryTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==2 && std::string(argv[1])=="--graph-pattern-view") {graphPatternViewTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--graph-recipes") {graphRecipeRenderTests(std::filesystem::u8path(argv[2]));return 0;}

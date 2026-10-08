@@ -21,7 +21,7 @@ Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsig
     if(method=="graph.plugin.bypass") {
       need(document_.editable(),"This document is read-only");keys(p,{"graph","node","bypass","dryRun"});
       need(field(p,"bypass").is_boolean(),"Expected bypass boolean");node->plugin.bypass=p.at("bypass").get<bool>();
-      if(!dry&&audioActive&&next!=document_.native())throw Api::ApiError(-32002,"Stop playback and preview notes to change recipe bypass on Windows; playback has been preserved");
+      if(!dry&&audioActive&&!prepareNativeUpdate_&&next!=document_.native())throw Api::ApiError(-32002,"Stop playback and preview notes to change recipe bypass on Windows; playback has been preserved");
       result={{"bypass",node->plugin.bypass}};commit=true;
     } else if(method=="graph.plugin.set") {
       need(document_.editable(),"This document is read-only");
@@ -42,7 +42,10 @@ Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsig
       need(node->plugin==graphEditorRecipe_,"Plugin recipe changed; reopen its interface before applying settings");captureSignalParameterBases(*definition,nodeID,graphEditor_->parameters());node->plugin.state=graphEditor_->state().state;node->plugin.parameters.clear();result=metadata(*graphEditor_);commit=true;
     } else throw Api::ApiError(-32601,"Unknown graph plugin method");
     if(commit){next.validate(document_.song());auto committedRecipe=node->plugin;
-      if(!dry&&next!=document_.native())document_.annotate([&](NativeSong &n){n=std::move(next);},stop_);
+      if(!dry&&next!=document_.native()){
+        auto publish=prepareNativeUpdate_?prepareNativeUpdate_(document_.native(),next):stop_;
+        document_.annotate([&](NativeSong &n){n=std::move(next);},publish);
+      }
       if(!dry&&method=="graph.plugin.editor.commit")graphEditorRecipe_=std::move(committedRecipe);
     }
     return result;

@@ -40,6 +40,7 @@ struct GraphHostHooks {
   std::function<Tracker::ParameterProvenanceRecording(const std::string &,uint32_t)> recording;
   std::map<std::pair<std::string,uint32_t>,Tracker::ParameterProvenanceRecording> cachedRecordings;
   std::function<void(const Tracker::NativeSong &)> validateCandidate;
+  std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> prepareNativeUpdate;
 };
 // Control-thread only. Caller checks/removes expectedRevision and constructs the
 // outer Mac response envelope. This layer returns result.data, not fake host data.

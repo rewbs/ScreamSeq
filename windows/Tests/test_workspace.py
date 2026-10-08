@@ -17,7 +17,18 @@ from client import Client, ApiError, TransportError
 ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
 
 
+def stable_workspace(state):
+    """Compare workspace state while retaining every field except the read clock."""
+    midi = state['midi']
+    timestamp = midi['hostTime']
+    if not isinstance(timestamp, str) or not timestamp.isascii() or not timestamp.isdecimal():
+        raise AssertionError('workspace.midi.hostTime must be a decimal QPC timestamp')
+    return {**state, 'midi': {**midi, 'hostTime': '<read clock>'}}
+
+
 class WorkspaceTests(unittest.TestCase):
+    maxDiff = None
+
     def setUp(self):
         exe = Path(os.environ.get('SCREAMSEQ_TEST_EXE', ROOT / 'bin/windows-arm64/Release/ScreamSeq.exe'))
         self.process = subprocess.Popen([str(exe), '--inspection', '--automation', '--seconds', '60'])
@@ -213,14 +224,14 @@ class WorkspaceTests(unittest.TestCase):
         context = self.client.call('context.get')
         self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'hide'})
         state = self.client.call('workspace.get')['data']
-        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'hide'})
+        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'hide', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide'})
         self.assertEqual((state['right'], state['focus'], state['visible']), ('notes', 'notes', ['notes']))
         for name in ('Pattern focus', 'Compose'):
             self.client.call('workspace.layout', {'name': name})
             self.assertEqual(self.client.call('workspace.get')['data']['locations']['samples'], 'hide')
         self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'right'})
         state = self.client.call('workspace.get')['data']
-        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right'})
+        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide'})
         self.assertEqual(state['right'], 'notes')
         for field in ('pins', 'inspection', 'returnPoints'):
             self.assertEqual(state[field], before[field])
@@ -231,11 +242,11 @@ class WorkspaceTests(unittest.TestCase):
         self.client.call('workspace.panel', {'panel': 'notes', 'placement': 'hide'})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('samples', 'pattern', ['samples']))
-        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'right'})
+        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide'})
         self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'hide'})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('', 'pattern', []))
-        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'hide'})
+        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'hide', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide'})
         self.client.call('workspace.panel', {'panel': 'notes', 'placement': 'right'})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('notes', 'pattern', ['notes']))
@@ -244,12 +255,12 @@ class WorkspaceTests(unittest.TestCase):
         self.client.call('workspace.panel', {'panel': 'samples', 'focus': True})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('samples', 'samples', ['samples']))
-        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right'})
+        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide'})
         # Complete validation must precede placement changes.
         with self.assertRaises(ApiError) as invalid:
             self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'hide', 'pinned': 1})
         self.assertEqual(invalid.exception.code, -32602)
-        self.assertEqual(self.client.call('workspace.get')['data'], state)
+        self.assertEqual(stable_workspace(self.client.call('workspace.get')['data']), stable_workspace(state))
 
     def test_describe_advertises_method_specific_revision_guards(self):
         description = self.client.call('api.describe')['data']
@@ -281,39 +292,50 @@ class WorkspaceTests(unittest.TestCase):
                     with self.assertRaises(ApiError) as invalid:
                         self.client.call(method, {**fields, token: tokens[token]})
                     self.assertEqual(invalid.exception.code, -32602)
-                    self.assertEqual(self.client.call('workspace.get')['data'], before)
+                    self.assertEqual(stable_workspace(self.client.call('workspace.get')['data']), stable_workspace(before))
         self.assertEqual(self.client.call('context.get'), context)
         self.assertFalse(self.client.call('transport.get')['data']['playing'])
 
     def test_describe_advertises_only_the_supported_workspace_subset(self):
         description = self.client.call('api.describe')['data']
         self.assertEqual(description.get('workspaceSubset'), {
-            'panels': ['notes', 'samples'], 'placements': ['right', 'hide'],
-            'layouts': ['Compose', 'Pattern focus', 'Sound design']})
+            'panels': ['notes', 'samples', 'automation', 'instruments', 'graphCurve', 'preciseNotes'], 'placements': ['right', 'hide'],
+            'editorPlacements': {'automation': ['right', 'bottom', 'secondary', 'float', 'hide'], 'instruments': ['right', 'bottom', 'secondary', 'float', 'hide'], 'graphCurve': ['right', 'bottom', 'secondary', 'float', 'hide'], 'preciseNotes': ['right', 'bottom', 'secondary', 'float', 'hide']},
+            'layouts': ['Compose', 'Pattern focus', 'Sound design', 'Connected', 'Graph editing', 'Save custom', 'Restore custom', 'Delete custom', 'Reload saved'],
+            'namedLayouts': {'optionalField': 'savedName', 'default': 'Custom', 'maximum': 24, 'nameCharacters': 64},
+            'schema': 'windows/Api/workspace.schema.json'})
         for placement in ('bottom', 'secondary', 'float'):
             before = self.client.call('workspace.get')['data']
             with self.assertRaises(ApiError) as invalid:
                 self.client.call('workspace.panel', {'panel': 'notes', 'placement': placement})
             self.assertEqual(invalid.exception.code, -32602)
-            self.assertEqual(self.client.call('workspace.get')['data'], before)
-        for layout in ('Save custom', 'Restore custom'):
+            self.assertEqual(stable_workspace(self.client.call('workspace.get')['data']), stable_workspace(before))
+        for layout in ('Not a layout', 'Float everything'):
             before = self.client.call('workspace.get')['data']
             with self.assertRaises(ApiError) as invalid:
                 self.client.call('workspace.layout', {'name': layout})
             self.assertEqual(invalid.exception.code, -32602)
-            self.assertEqual(self.client.call('workspace.get')['data'], before)
+            self.assertEqual(stable_workspace(self.client.call('workspace.get')['data']), stable_workspace(before))
 
     def assert_wheel_steps(self, steps):
         self.resize_client(1057, 719)
         self.navigate(row=40, channel=1, following=True)
         before = self.client.call('context.get')
-        first = self.client.call('workspace.get')['data']['viewport']['firstRow']
+        workspace = self.client.call('workspace.get')['data']
+        first = workspace['viewport']['firstRow']
         user = ctypes.WinDLL('user32', use_last_error=True)
         user.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
         hwnd = self.native_window()
+        # A wheel message carries screen coordinates. Target a real tracker
+        # cell so the test also respects independent-region input ownership.
+        grid, scale = workspace['geometry']['pattern'], workspace['dpi'] / 96
+        point = wintypes.POINT(round((grid['x'] + 44) * scale), round((grid['y'] + 56) * scale))
+        user.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+        self.assertTrue(user.ClientToScreen(hwnd, ctypes.byref(point)))
+        location = (point.x & 0xFFFF) | ((point.y & 0xFFFF) << 16)
         for delta, offset in steps:
             with self.subTest(delta=delta, expectedOffset=offset):
-                user.SendMessageW(hwnd, 0x20A, (delta & 0xFFFF) << 16, 0)  # WM_MOUSEWHEEL
+                user.SendMessageW(hwnd, 0x20A, (delta & 0xFFFF) << 16, location)  # WM_MOUSEWHEEL
                 state = self.client.call('workspace.get')['data']
                 self.assertEqual(state['viewport']['firstRow'], first + offset)
                 context = self.client.call('context.get')
@@ -442,7 +464,7 @@ class WorkspaceTests(unittest.TestCase):
             with self.assertRaises(ApiError) as invalid:
                 self.client.call('workspace.panel', request)
             self.assertEqual(invalid.exception.code, -32602)
-            self.assertEqual(self.client.call('workspace.get')['data'], state)
+            self.assertEqual(stable_workspace(self.client.call('workspace.get')['data']), stable_workspace(state))
         self.assertEqual(self.client.call('document.get')['revision'], original)
         self.assertFalse(self.client.call('document.get')['data']['canUndo'])
 

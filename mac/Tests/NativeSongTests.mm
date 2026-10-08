@@ -8,6 +8,43 @@
 using namespace Tracker;
 using namespace OpenMPT;
 static void check(bool value, const char *message) { if (!value) throw std::runtime_error(message); }
+static void matrixAPITests(NSString *folder) {
+  auto document=Document::demo();document->editOrder(0,0,"after");
+  NSString *input=[folder stringByAppendingPathComponent:@"matrix.mptm"];document->save(input.UTF8String);
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;check([session openPath:input error:&error],"Open matrix API fixture");
+  auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary * {
+    auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+    auto response=[session automationMethod:method params:request error:&error];
+    if(!response)throw std::runtime_error(error.localizedDescription.UTF8String);return response;
+  };
+  call(@"pattern.notes.set",@{@"pattern":@0,@"events":@[@{@"channel":@4,@"position":@17,@"note":@61,@"instrument":@1},
+    @{@"channel":@4,@"position":@(2*65536),@"note":@255}]},true);
+  call(@"pattern.effects.set",@{@"pattern":@0,@"columns":@[@{@"channel":@4,@"count":@2}],
+    @"commands":@[@{@"channel":@4,@"position":@65536,@"column":@1,@"kind":@"tracker",@"effect":@(CMD_PANNING8),@"parameter":@32}]},true);
+  NSDictionary *original=call(@"arrangement.matrix",@{})[@"data"];
+  NSDictionary *source=original[@"orders"][0][@"blocks"][4];
+  check([source[@"events"] intValue]==3&&[source[@"notes"] intValue]==1&&[source[@"preciseEvents"] intValue]==2&&
+    [source[@"nativeFxEvents"] intValue]==1&&[source[@"trackerEvents"] intValue]==0,"Mac matrix missed native-only notes/FX");
+  auto params=[@{@"sourceOrder":@0,@"targetOrder":@1,@"sourceChannel":@4,@"targetChannel":@5} mutableCopy];
+  params[@"dryRun"]=@YES;NSString *revision=session.automationRevision;auto preview=call(@"arrangement.copyBlock",params,true);
+  check(![preview[@"changed"] boolValue]&&[revision isEqual:session.automationRevision]&&[preview[@"data"][@"wouldChange"] boolValue]&&
+    [preview[@"data"][@"changedCells"] intValue]==0&&[preview[@"data"][@"clonesPattern"] boolValue],"Mac native-only preview mutated/skipped");
+  [params removeObjectForKey:@"dryRun"];auto applied=call(@"arrangement.copyBlock",params,true);check([applied[@"changed"] boolValue],"Mac adapter skipped native-only copy");
+  NSDictionary *matrix=call(@"arrangement.matrix",@{})[@"data"];
+  check([matrix[@"orders"][1][@"blocks"][5][@"events"] intValue]==3&&[matrix[@"orders"][0] isEqual:original[@"orders"][0]],"Mac copied event summary or source alias changed");
+  check([matrix[@"orders"][1][@"id"] isEqual:original[@"orders"][1][@"id"]],"Mac independent copy replaced occurrence ID");
+  call(@"history.undo",@{@"domain":@"document"},true);check([original isEqual:call(@"arrangement.matrix",@{})[@"data"]],"Mac matrix copy was not one Undo");
+  params[@"targetOrder"]=@0;params[@"targetChannel"]=@4;revision=session.automationRevision;
+  auto noop=call(@"arrangement.copyBlock",params,true);check(![noop[@"changed"] boolValue]&&![noop[@"data"][@"wouldChange"] boolValue]&&[revision isEqual:session.automationRevision],"Mac native no-op changed revision");
+  call(@"history.redo",@{@"domain":@"document"},true);check([matrix isEqual:call(@"arrangement.matrix",@{})[@"data"]],"Mac no-op consumed matrix Redo");
+  NSString *saved=[folder stringByAppendingPathComponent:@"matrix.resonance"];
+  check([session savePath:saved error:&error]&&[session openPath:saved error:&error]&&[matrix isEqual:call(@"arrangement.matrix",@{})[@"data"]],"Mac matrix native persistence");
+  check([call(@"arrangement.matrix",@{@"startOrder":matrix[@"totalOrders"]})[@"data"][@"orders"] count]==0,"Mac matrix end page changed");
+  for(NSDictionary *bad in @[@{@"orderCount":@0},@{@"channelCount":@0},@{@"channelCount":@33},@{@"startOrder":@YES}]) {
+    NSError *failure=nil;check(![session automationMethod:@"arrangement.matrix" params:bad error:&failure]&&failure.code==-32602,"Mac matrix malformed page accepted");
+  }
+  std::cout<<"PASS Mac matrix API native-only density/copy, dry-run/no-op, alias identities, Undo/Redo and persistence\n";
+}
 int main() {
   @autoreleasepool {
     try {
@@ -133,6 +170,7 @@ int main() {
       }
       auto folder = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
       [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
+      matrixAPITests(folder);
       for (auto type : {MOD_TYPE_MOD, MOD_TYPE_XM, MOD_TYPE_S3M, MOD_TYPE_IT, MOD_TYPE_MPT}) {
         NSString *input = [folder stringByAppendingPathComponent:@"source.module"];
         Test::writeDemoModule(type, input.UTF8String);

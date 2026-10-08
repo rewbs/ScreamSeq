@@ -1,4 +1,182 @@
-# Windows / Mac parity plan — 2026-09-21 upstream integration
+# Windows / Mac parity plan
+
+Current stopping point (2026-10-07): fractional Precise Notes offsets, captured
+sound for empty rows, Reload selection/scroll/focus retention and readable focus
+captions pass **404/404 full app cases**, **82/82 focused cases**, **50/50 native
+targets**, and **18 reviewed source-matched 192-DPI views**. See
+[editing parity evidence](PRECISE_NOTE_PARITY_PROGRESS.md) and the prioritized
+[remaining-work report](PARITY_HANDOFF.md). Checkpoint destination:
+`bin/windows-checkpoints/precise-note-parity-20261007/`; its manifest and independent
+verification establish publication. Mixer strips remain an unintegrated proposal.
+The older entries below retain their historical scope; the handoff is the current
+remaining-work priority list. The Windows/Mac parity goal stays open.
+
+Previous Precise Notes checkpoint (2026-10-07): one retained editor adds independent
+placement, captured targets, four compact pages and V4 saved-layout migration.
+Pattern, routing, Precise Notes and Graph Curve can remain visible together. Final
+candidate 2 passes **403/403 app cases**, **81/81 focused cases**, **50/50 native
+targets**, and two-reviewer inspection of **16 source-matched 192-DPI views**.
+See [Precise Notes evidence](PRECISE_NOTE_HOST_PROGRESS.md) for exact identities,
+retained failures and limits. Checkpoint destination:
+`bin/windows-checkpoints/precise-note-host-20261007/`; its completed manifest and
+independent verification receipt establish publication. Its then-next fractional
+offsets, Reload retention and empty-row sound work is completed above.
+
+Previous Graph Curve checkpoint (2026-10-07): routing and its retained curve editor
+can stay visible beside Pattern and parameter Automation. V3 saved layouts,
+independent drafts, captured targets, native focus and Formula/Bank/Guide children
+are integrated. Candidate 7 passes **399/399 app cases**, **38/38 focused cases**,
+**49/49 native targets**, and review of **21 source-matched 192-DPI views**.
+See [Graph Curve evidence](GRAPH_CURVE_HOST_PROGRESS.md). Immutable checkpoint:
+`bin/windows-checkpoints/graph-curve-host-20261007/`.
+
+Previous independent-docking checkpoint (2026-10-07): the Connected workspace
+shows Pattern, Graph, Instrument and Automation in independent native regions.
+Short pages, compact fallback and guarded layout preparation retain editor HWNDs,
+raw fields, targets, caret and focus. Candidate 8 passes **393/393 app cases**,
+**33/33 focused cases**, **48/48 native targets**, and review of **37 source-matched
+192-DPI views**. See [docking evidence](INDEPENDENT_DOCKING_PROGRESS.md), including
+historical failures and qualification limits. Checkpoint destination:
+`bin/windows-checkpoints/independent-dock-regions-20261007/`; its manifest is the
+authority for completed immutable packaging.
+
+
+Previous arrangement-matrix checkpoint (2026-10-07): a retained native matrix
+provides paged order-by-track density, exact occurrence navigation, captured
+Copy/Paste and guarded Overwrite/Merge/Mix. Shared copying includes precise notes
+and all FX columns, preserves exact independent pattern properties, and validates
+the complete prospective document before changing playback or history. One Undo
+and native save/reopen are covered. The final candidate passes **385/385 app
+tests**, **11/11 focused matrix cases**, **44/44 native tests**, **9/9 shared
+groups**, **3/3 controller groups**, and separate **15/15 Editing groups** with
+exact nonzero PCM comparisons. Fifteen source-matched 192-DPI views pass review.
+See [matrix evidence](MATRIX_PROGRESS.md), including retained failures and limits.
+Checkpoint destination: `bin/windows-checkpoints/arrangement-matrix-20261007/`;
+its manifest confirms completed packaging.
+
+Previous visual-consistency checkpoint (2026-10-07): the pattern header fits its
+available width, and Arrangement, Recovery and MIDI lists share restrained
+active/inactive selections, visible keyboard focus, dark complete headers and
+correct Unicode column clipping. Retained native interactions and drafts remain
+intact. The final candidate passes **42/42 native tests**, **46/46 focused app
+cases** with strict isolation, and review of **14 source-matched 192-DPI views**.
+See [visual-consistency evidence](UI_CONSISTENCY_PROGRESS.md), including prior
+failures and the explicit limits of this presentation-only pass. Checkpoint:
+`bin/windows-checkpoints/ui-consistency-20261007/`; its manifest confirms packaging.
+
+Its original [arrangement matrix plan](MATRIX_PLAN.md) remains a scope audit;
+the current implementation and evidence are above.
+
+Previous sections/annotations checkpoint (2026-10-07): Arrange now has named
+order-occurrence sections, Previous/Next section navigation, and retained Section
+and Pattern details pages. Independent drafts preserve raw Unicode names/notes
+through navigation, hiding and stale revisions. Guarded annotation APIs, native
+persistence and playback-preserving annotation Undo/Redo are connected.
+The final candidate passes **373/373 application tests** with strict isolation,
+**14/14 focused cases**, **42/42 native tests**, a separate **15/15
+document-operation groups** and six exact offline PCM comparisons. Fifteen
+source-matched 192-DPI views pass review. See
+[annotation evidence](ANNOTATION_PROGRESS.md) for executable identity and retained
+earlier failures. Checkpoint destination: `bin/windows-checkpoints/annotations-20261007/`;
+its manifest confirms packaging.
+
+Previous arrangement/timing checkpoint (2026-10-07): retained native order
+and tempo/groove tools expose guarded arrangement edits, stable order-occurrence
+selection, sequence selection, new/duplicate patterns and timing preview/Apply.
+Candidate 6 passes **367/367 application tests** with strict outer isolation,
+**8/8 focused cases**, **42/42 native tests**, a separate **11/11
+document-operation groups** and six exact offline PCM comparisons. Fifteen
+source-matched 192-DPI views pass review. Shared duplication also preserves exact
+pattern-specific timing and metadata. See [arrangement evidence](ARRANGEMENT_PROGRESS.md)
+for executable identity, logs and earlier failures. Checkpoint destination:
+`bin/windows-checkpoints/arrangement-20261007/`; its manifest confirms packaging.
+Its original next-step [sections and annotations plan](ANNOTATION_PLAN.md) is
+retained as a scope audit; current annotation implementation is above.
+
+Previous recording checkpoint (2026-10-07): timestamped WinMM input, correlated
+WASAPI presentation history, worker-owned precise-note takes and a retained
+native MIDI/recording window are implemented. The six guarded `recording.*`
+methods share commit preparation with Mac; one Undo, native persistence,
+copy-only live recovery and stopped imported-take review are connected.
+
+Candidate 5 passes **359/359 application tests** in 875.469 seconds, with no
+failures or skips and strict outer isolation; **15/15 focused cases** in 16.046
+seconds; and **40/40 native tests** in 18.41 seconds. Eight source-matched views
+pass native bounds and original-resolution review at 192 DPI. Final full-run
+evidence is `bin/windows-recording-final-rerun2-app-tests.log`, `-isolation.log`
+and `-exe-sha256.txt`. See [recording evidence](RECORDING_PROGRESS.md) for the exact
+application hash, retained failed runs and diagnostic distinctions. The test-only
+GUI-worker boundary removes post-GUI desktop migration; historical resource
+causes remain unattributed. This qualifies the functional and scoped visual
+checkpoint, not full Windows/Mac parity or every release gate.
+
+Checkpoint location: `bin/windows-checkpoints/recording-20261007/`; the package
+manifest is the authority for packaging completion.
+
+Its [arrangement and timing plan](ARRANGEMENT_PLAN.md) is retained as a historical
+audit; current implementation and remaining qualification are above.
+
+Previous recovery checkpoint (2026-10-07): ten-second immutable autosave, ten
+generations per session, a retained native browser and guarded recovery APIs are
+implemented. Restore protects current work before replacement and opens a pathless
+dirty document; snapshots preserve manual plugin state and imported unfinished
+takes. See [recovery evidence](RECOVERY_PROGRESS.md) for final build identity,
+qualification, retained failures and visual limits. Its then-next recording
+slice is implemented above; the original [recording plan](RECORDING_PLAN.md)
+is retained as a historical audit and qualification checklist.
+The final recovery build passes 345 application tests, 14 focused recovery cases
+and a supplemental vendor-input case with strict isolation. The diagnostic native
+suite passes 38/38; the original unexplained 37/38 desktop-teardown failure is
+retained. Eight rendered views at 192 DPI pass review; foreground, other scales
+and sustained presentation remain separate gates.
+
+Previous sample UI checkpoint (2026-10-07): the detailed editor now has retained
+Drawing, Process, Loops, Paste and Snap pages. Independent normal/sustain rows
+support joint preview/Apply and dashed pending boundaries; paste has a reviewed
+clipboard/revision, rate conversion and gain controls; selection and loop
+snapping include grid origin and automatic selection. The existing shared APIs,
+Undo and native storage remain authoritative. See
+[sample workflow evidence](SAMPLE_WORKFLOWS_PROGRESS.md).
+
+The baseline passes all 330 application tests with strict outer isolation, plus
+32 affected UI tests and 36 native CTests. The final focus-restoration/menu-hint
+candidate's 33 individual UI tests pass, **but its outer run fails strict
+foreground isolation with exit 1**. The foreground change is unattributed;
+final-build isolation qualification remains unresolved. Its 19 reviewed
+renderer/native-control views at large, compact and minimum client sizes pass
+their own isolation checks, which do not qualify the failed test run. The report
+records the distinct candidate hashes and both isolation-failure traces. Those
+historical failures remain preserved. Independent dock groups,
+remaining editor menus and the cross-platform qualification gates below remain open.
+
+Current UI work (2026-10-07): the workspace has direct lower-editor tabs,
+collapse/reopen, named saved arrangements and a retained layout manager. Command
+search now ranks relevant titles, supports unordered words and restores field
+focus. Toolbar collisions and compact inspector clipping are corrected. See
+[workspace evidence](WORKSPACE_LAYOUTS_PROGRESS.md) for exact qualification.
+
+The earlier docking checkpoint adds retained automation/instrument docking, compact editor
+pages, floating/redocking and local keyboard routing. Wide windows can show the
+graph beside the selected editor; smaller windows retain each editor behind tabs.
+See [docking evidence](WORKSPACE_DOCKING_PROGRESS.md) for qualification and limits.
+The current [independent-region work](INDEPENDENT_DOCKING_PROGRESS.md) adds
+simultaneous native regions. Arbitrary panel docking, simultaneous Main editors,
+a separate Graph curve host and the cross-platform qualification gates remain open.
+
+Native context menus now connect pattern, sample, graph, instrument and detailed
+sample workflows to the existing guarded actions. The command palette supports
+custom keys, sequences, Clear, Reset and saved-preference reload. Main-window and
+retained-editor dispatch share the binding model, preserving native text input,
+local editor commands and note release. See
+[command and menu evidence](WORKSPACE_COMMANDS_PROGRESS.md) for exact scope,
+candidate-specific tests and visual limits.
+
+The sample UI retains independent raw loop drafts and paste preview signatures
+bound to document, sample identity, revision and clipboard ID. Unrelated edits
+cannot silently rebase those drafts. Completing these interactions does not
+replace accessibility or cross-platform qualification.
+
+## Upstream integration checkpoint — 2026-09-21
 
 Baseline: upstream `bcfe0f8a7`, following `c486a0642`. The remote has no `main`;
 its default branch is `codex/screamseq`. Local Windows work was preserved in
@@ -64,52 +242,34 @@ follows `SampleLibraryIntegration.swift`: separate library revisions,
 bounded background indexing/search, folder tags, preview, and the existing
 atomic `sample.importMany` / `instrument.importMultisample` transactions.
 
-## Next: devices, timestamped MIDI/recording and recovery
+## Current: timestamped MIDI and recording qualification
 
-The current Mac source has output selection/64–512-frame preferences in
-`mac/App/main.swift`, CoreMIDI input, shared `NoteRecording` transactions, and
-application-owned autosave/recovery. Windows has shared recording primitives
-and preserved recovery-take data, but no integrated capture/recovery workflow.
+Windows now supplies correlated presentation timestamps to the shared renderer,
+advances origins through callbacks larger than 4,096 frames, and retains clock
+history independently of renderer lifetime. WinMM source discovery/connection
+runs off-thread, using opaque device-interface IDs and a bounded generation-aware
+queue. Driver millisecond precision and anchor uncertainty are reported honestly;
+invalid/startup clocks do not substitute the edit cursor.
 
-1. Explicit endpoint selection and truthful negotiated periods are now implemented
-   and tested (`AUDIO_SETTINGS_PROGRESS.md`), without changing system defaults.
-   Next publish correlated
-   audio presentation time, not the UI's callback arrival time. The shared
-   renderer resets its frame offset on every `render`; Windows' hosted renderer
-   splits at 4,096 frames, so timestamp origins must advance for every slice.
-   Validate stream restart/discontinuity and buffer/latency accounting.
-2. Native MIDI input must retain driver timestamps, use bounded callback queues,
-   report overflow and release held voices on disconnect/overflow. WinMM timestamps
-   are milliseconds from `midiInStart`; WASAPI's correlated QPC values use 100 ns
-   units. Explicitly convert to one advertised host clock and qualify its
-   precision; do not label millisecond hardware timing sample-accurate. Discover
-   opaque [device-interface identities](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/obtaining-a-device-interface-name)
-   off-thread; don't reconnect to an unrelated device when WinMM ordinals change.
-3. Integrate the existing `recording.start/capture/get/stop/commit/discard`
-   contract and shared `NoteRecording`. Preserve takes across stale edits; validate
-   whole capture batches, use actual presentation-clock history, keep replies
-   bounded, and commit in one document Undo. Save/Open protect unfinished takes.
-4. Add private immutable recovery snapshots, atomic generation writes, browser,
-   explicit guarded restore and take recovery. `windows/Project/NativeProject.cpp`
-   already preserves `recoveryTake` and its compatibility provenance; retain that
-   boundary and never overwrite the source song during restore.
+The six `recording.*` methods and native retained window support stable captured
+targets, atomic batches, explicit loss review, one-Undo commit and exact native
+persistence. API Stop stops capture without commit; native Stop attempts Finish
+once and leaves losses or stale takes for review. Autosave closes notes only in a
+copy, while explicit Restore drains/stops capture before protective replacement.
+Imported takes hydrate stopped with fresh IDs and preserved compatibility.
+The shared commit helper is used by both frontends. Container 6 / metadata 17 is
+unchanged; the optional loss-reason recovery field is supported by current source
+on both platforms and requires reciprocal Mac qualification.
 
-Clock contracts were checked against Microsoft's
-[IAudioClock::GetPosition](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclock-getposition)
-and [MIM_DATA](https://learn.microsoft.com/en-us/windows/win32/multimedia/mim-data).
-Hardware timing, hotplug and reciprocal Mac recovery remain qualification gates.
-
-The 2026-09-22 read-only WinMM inventory found no MIDI input devices. Enumeration
-itself was slow, reinforcing the requirement to keep discovery off the UI thread.
-Physical MIDI timing/hotplug therefore remains external qualification; bounded
-callback injection and real audio-clock/API capture can still be tested locally.
-For the clock, count the initial primed silence in submitted stream frames and
-derive the next presentation origin from correlated device position/frequency
-and QPC, using 100 ns host units. Startup zero positions and inaccurate readings
-must not fabricate clock mappings. Underruns, clock regression and stream restart
-need explicit validity handling; keep source-frame mapping independent of plugin
-latency maintenance. Tests must include a callback larger than 4,096 frames and
-delayed timestamp lookup, with equivalent PCM at different callback sizes.
+The final full application suite passes 359/359, with the 15/15 focused suite and
+40/40 native suite also passing. Retain the three historical native migration
+failures alongside the replacement-harness pass. See
+[recording evidence](RECORDING_PROGRESS.md) for exact candidate-specific results;
+[the original recording plan](RECORDING_PLAN.md) remains a historical checklist.
+Hardware MIDI timing/hotplug and real sample/plugin performance capture,
+reciprocal Mac reopen, independent dock groups, accessibility and the broader
+release gates below remain open. The existing short silent WASAPI and injected
+callback tests do not establish those results.
 
 ## What changed upstream and how it changes the work
 
@@ -122,7 +282,7 @@ delayed timestamp lookup, with equivalent PCM at different callback sizes.
 | Voice positions for sample and envelope playback | Shared bounded atomic telemetry, Windows transport fields, sample waveform markers and native instrument-envelope markers integrated. See `INSTRUMENT_ENVELOPE_PROGRESS.md`. | Audition piano, detailed waveform markers and preview releases are implemented in `AUDITION_PROGRESS.md`; broader vendor release-tail qualification remains. |
 | Dynamic plugin latency and safer editor shutdown | Shared chain maintenance ported through the extracted backend; Windows pauses/joins WASAPI before reactivation and compensation updates, retains transport position, respects Stop. Fixture latency/lifetime tests pass. | Exercise interactive commercial instruments, changing graph latency during long sessions, full host allocation/free/lock evidence. |
 | Plugin aliases, routing and editor interactions | Native rack, discovery, assign/remove/bypass, program/port controls, modeless instrument aliases/MIDI channels, sound presets, library organization, explicit VST3 location repair and native graph/mixer connections integrated; live parameters reach the prepared renderer. Two ARM64 effects and Surge XT instrument tested through the app. See `PLUGIN_ALIASES_PROGRESS.md`, `PLUGIN_PRESETS_PROGRESS.md`, `PLUGIN_LIBRARY_PROGRESS.md`, `PLUGIN_PATH_PROGRESS.md` and `SONG_ROUTING_PROGRESS.md`. | Live opaque-state replacement (including Surge's first-open zoom state) and broader missing-plugin recovery. |
-| Mac context menus, docking, focus, recovery and visual refinements | Reviewed; Windows retains its native implementation. | Implement the equivalent interactions and visual hierarchy in Windows, then compare actual windows at multiple scales. |
+| Mac context menus, docking, focus, recovery and visual refinements | Retained automation/instrument docking, compact pages, named layouts, five native context-menu surfaces, configurable shortcuts, native autosave/recovery and timestamped MIDI/take review are implemented; see the workspace, recovery and recording reports above. | Hardware MIDI and reciprocal Mac qualification, other editor menu surfaces, independent dock groups, accessibility and actual foreground comparison at multiple scales remain open. |
 
 ## Execution order and completion gates
 
@@ -210,11 +370,11 @@ preserve concurrent edit guards.
 4. **Recording and workspace.** Native sample zoom/drawing/crossfade, processing,
    snapping and clipboard controls are implemented in `SAMPLE_DETAIL_PROGRESS.md`;
    their current qualification is recorded there. Native sample/instrument audition
-   and detailed voice markers are implemented in `AUDITION_PROGRESS.md`. Complete
-   device selection, MIDI input
-   and mapping, precise recording/recovery, floating
-   and persisted docks, accessibility, configurable keys and command palette
-   parity. Keep cursor, selection, focus, pins and playback independent.
+   and detailed voice markers are implemented in `AUDITION_PROGRESS.md`. Device
+   selection, timestamped MIDI/takes and recovery, retained floating/docked editors,
+   named layouts and configurable command keys are now integrated. Complete their
+   remaining qualification, independent dock groups, accessibility and remaining
+   editor-menu parity. Keep cursor, selection, focus, pins and playback independent.
    Pattern/dock typing and main-workspace Live keys are implemented in
    `MUSICAL_TYPING_PROGRESS.md`; broader floating-tool keyboard behavior remains.
    Native sample settings, batch import, captured replacement and creation of a

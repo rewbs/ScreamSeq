@@ -44,7 +44,9 @@ std::unique_ptr<Document> richDocument() {
   auto &b = n.mixer.buses.at(0); b.preGainDB = -2; b.prePan = -.3; b.gainDB = -8; b.pan = .4; b.width = 1.3; b.timingMS = -12; b.mute = true; b.solo = true; b.color = 0xffffff; b.sends.push_back({ret,-5,true,false});
   n.mixer.buses.at(n.tracks.size()).inserts = {"fx-identity"};
   n.mixer.instruments = {{"instrument-identity",fourth,0},{"fx-identity",ret,2}};
-  n.mixer.sidechains = {{third,"fx-identity",3,-7,true,false}};
+  // Additional main-input fan-in and auxiliary sidechains share this persisted
+  // routing collection. Keep both in every exact codec/shared-restore check.
+  n.mixer.sidechains = {{third,"fx-identity",3,-7,true,false},{fourth,"fx-identity",0,-4,false,true}};
   n.mixer.detached={"unconnected-effect"};
   n.noteTracks = {{group,{track,second}}}; n.columnMutes = {{track,true},{second,false}};
   const auto span = uint32_t(doc->song().Patterns[n.patterns.begin()->first].GetNumRows())*256;
@@ -168,7 +170,7 @@ void negativeTests(const Json &j) {
   rejectAt(j,"/patterns/0/1/name",std::string(257,'a')); rejectAt(j,"/patterns/0/1/name",std::string("a\0b",3)); rejectAt(j,"/patterns/0/1/name",std::string("\xC0\x80",2));
   rejectAt(j,"/automation/0/pattern","n999999"); rejectAt(j,"/automation/0/parameter",4294967296ULL); rejectAt(j,"/automation/0/enabled",1); rejectAt(j,"/automation/0/points/0/1",1.1); rejectAt(j,"/automation/0/points/1/0",0); rejectAt(j,"/automation/0/points/8/3","unrecognized_function(t)");
   rejectAt(j,"/automation/0/points/0/1",std::numeric_limits<double>::infinity()); rejectAt(j,"/automation/0/points/0/1",std::numeric_limits<double>::quiet_NaN());
-  rejectAt(j,"/mixer/buses/0/output","n999999"); rejectAt(j,"/mixer/buses/0/preGainDB",25); rejectAt(j,"/mixer/buses/0/prePan",1.01); rejectAt(j,"/mixer/buses/0/timingMS",501); rejectAt(j,"/mixer/sidechains/0/input",0); rejectAt(j,"/mixer/instruments/0/output",64);
+  rejectAt(j,"/mixer/buses/0/output","n999999"); rejectAt(j,"/mixer/buses/0/preGainDB",25); rejectAt(j,"/mixer/buses/0/prePan",1.01); rejectAt(j,"/mixer/buses/0/timingMS",501); rejectAt(j,"/mixer/sidechains/0/input",64); rejectAt(j,"/mixer/instruments/0/output",64);
   rejectAt(j,"/noteTracks/0/columns/0","n999999"); rejectAt(j,"/columnMutes/0/0","n999999");
   rejectAt(j,"/performance/columns/0/1",0); rejectAt(j,"/performance/bindings/0/id",256); rejectAt(j,"/performance/commands/0/binding",2); rejectAt(j,"/performance/commands/0/value",2); rejectAt(j,"/performance/commands/1/duration",0); rejectAt(j,"/performance/commands/2/pitchRange",97); rejectAt(j,"/performance/commands/0/track","n999999");
   rejectAt(j,"/performance/commands/4/value",1); rejectAt(j,"/performance/commands/4/duration",1); rejectAt(j,"/performance/commands/4/binding",255);

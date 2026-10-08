@@ -1,9 +1,52 @@
 # Windows document-worker application integration
 
+`RecordingIntegration.inc` connects native WinMM input and the retained
+`MidiRecordingWindow.hpp` to document-owned `recording.*` transactions. Callbacks
+queue bounded driver timestamps; a correlated WASAPI presentation clock maps
+them through the shared renderer. Armed playback captures precise notes; armed
+stopped input performs cursor step entry. Native Stop finishes one document Undo,
+while API Stop retains the take. Loss or a stale base retains review. Fixed input
+boundaries prevent queued events from crossing Finish, Discard or song replacement.
+MIDI and keyboard holds share current audition voices without changing Live keys.
+See `../Api/recording.schema.json`, `../Api/midi.schema.json` and
+`../RECORDING_PROGRESS.md` for contracts and qualification limits.
+
+`RecoveryIntegration.inc` connects the ten-second timer, native browser, footer
+and `recovery.*` APIs to immutable document-owner capture and a serial disk worker.
+Manual plugin state is overlaid on copied project bytes without consuming live
+gestures/history or stopping playback. Restore protects the current song under a
+fresh recovery identity, validates a replacement fully, checks the latest
+fingerprint and publishes a pathless dirty document. Save/open epochs prevent
+late writes from repainting stale status; close drains outstanding work.
+`RecoveryWindow.hpp` retains selected copy identity and native keyboard ownership.
+The default store keeps the legacy `org.resonance.tracker` identifier. Qualification
+uses explicitly enabled private stores. See `../RECOVERY_PROGRESS.md` and
+`../Api/recovery.schema.json`. Snapshots now copy live takes without modifying
+capture; restore hydrates a fresh stopped take. Ordinary Save/Open protect an
+unfinished take until explicit Finish or Discard.
+
+The workspace exposes lower editor selection, dock collapse, named layout
+manager and storage, and categorized multi-word command search.
+Layouts preserve current editor drafts, pins and targets, with guarded atomic
+preference writes outside document history. See `../WORKSPACE_LAYOUTS_PROGRESS.md`
+for the first checkpoint. Automation, instrument/envelope and Graph Curve editors retain
+their HWNDs, controls and drafts across right, bottom and secondary regions,
+responsive workspace tabs and floating windows. Short docked pages remain
+usable at 440×300 DIP; floating minima remain 440×500. The Connected preset puts
+Pattern, Graph, Instrument and Automation together when space permits. Graph
+editing instead shows Pattern, routing, Graph Curve and parameter Automation. Each
+native region has local placement, follow/pin, cursor and return actions. Saved
+layouts preserve independent region selections and desired split sizes.
+`../INDEPENDENT_DOCKING_PROGRESS.md` records current qualification and remaining
+workspace parity gaps; `../WORKSPACE_DOCKING_PROGRESS.md` is the preceding
+shared-dock checkpoint. `../GRAPH_CURVE_HOST_PROGRESS.md` distinguishes the new
+curve-owner implementation from its still-pending qualification.
+
 Native Audio settings now selects an output endpoint and preferred buffer period
 through independent guarded session APIs. Driver-supported periods and buffer
 capacity are reported separately from preferences. See
-`../AUDIO_SETTINGS_PROGRESS.md`; timestamps/MIDI/recording remain in progress.
+`../AUDIO_SETTINGS_PROGRESS.md`; physical MIDI timing/hotplug remains a separate
+qualification gate from the implemented timestamp and recording workflow.
 
 The current sample-library/browser, independent preview, filename families and
 captured multi-sample import review are covered in `../SAMPLE_LIBRARY_PROGRESS.md`.
@@ -91,6 +134,13 @@ guard waveform reads and edits. It retains at most 4096 peak bins and 4096
 staged drawing points, with per-sample viewport/selection state. Painting reads
 cached data; shared prepared operations perform validation, PCM edits, history
 and stop-before-publication. See `../SAMPLE_DETAIL_PROGRESS.md`.
+
+The detailed sample editor now keeps the waveform and selection visible above
+five retained native pages: Drawing, Process, Loops, Paste and Snap. Normal and
+sustain loop drafts preview and apply together; paste exposes rate conversion
+and gains with an exact reviewed clipboard guard. Snapping supports either loop,
+grid origin and completed-selection snapping. Section reload preserves other
+raw fields and their revision guards. See `../SAMPLE_WORKFLOWS_PROGRESS.md`.
 
 ## Owner boundaries
 
@@ -227,11 +277,14 @@ UI state, with meter snapshots collected by a UI timer. The reusable graph dock
 adds cached nodes, ports and wires, socket dragging, pan/zoom, definition/property
 drafts and bus assignments. Its plugin controls and native VST3 draft editors
 operate on independent graph recipes with document Undo. Painting never queries
-the worker or plugins. The Pattern curve page retains a separate captured source
-and pattern draft, with native point fields, dragging, snap, zoom, all nine curve
+the worker or plugins. Pattern curve opens one retained native owner beside
+routing, with a captured source/stable pattern identity, native point fields,
+dragging, snap, zoom, all nine curve
 types and worker-evaluated formula previews. Generation checks preserve newer
-edits during requests. Song overview, expanded formula/bank editors,
-insert/send/sidechain controls and simultaneous independent lower docks remain.
+edits during requests. Retained song overview, formula and envelope-bank tools
+are described below. Simultaneous Main editors remain open work. The new owner
+also owns its Formula, Guide and Bank children; no second editable curve remains
+in Main. Its source-only integration is not yet build or runtime qualification.
 
 Mixer gain/balance/width/mute/solo updates publish one bounded control batch on
 the single UI producer. The shared Document prepares Undo storage before that
@@ -287,7 +340,8 @@ The sample editor draws bounded live voice cursors from shared atomic telemetry;
 overlapping voices and sample loops use actual positions. Stopped transport
 publishes `audioActive:false` and no `voicePositions`. Envelope cursors, the
 audition piano and pattern/dock musical typing are implemented in the reports
-linked above. Browser preview and MIDI recording remain open work.
+linked above. Independent browser preview and MIDI recording are implemented;
+their respective reports retain hardware and cross-platform qualification limits.
 
 `--vst3-test-cache <absolute path>` selects an isolated registry for inspection,
 offline-hosted or audio qualification mode. It does not scan automatically.

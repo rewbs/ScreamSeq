@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScreamSeq Windows MIDI input settings",
+  "description": "Independent native input preferences. Device enumeration and connection run outside the UI and audio threads. Empty source disconnects input. Settings are session preferences, separate from musical Undo; changes do not retarget an existing take.",
+  "type": "object", "required": ["jsonrpc", "id", "method", "params"], "additionalProperties": false,
+  "properties": {
+    "jsonrpc": {"const": "2.0"}, "id": {"type": "string", "minLength": 1, "maxLength": 80},
+    "method": {"enum": ["midi.devices.get", "midi.settings.get", "midi.settings.set"]},
+    "params": {"type": "object"}
+  },
+  "allOf": [
+    {"if": {"properties": {"method": {"enum": ["midi.devices.get", "midi.settings.get"]}}}, "then": {"properties": {"params": {"maxProperties": 0}}}},
+    {"if": {"properties": {"method": {"const": "midi.settings.set"}}}, "then": {"properties": {"params": {
+      "required": ["expectedMidiRevision", "source", "armed", "channelsCount", "quantization", "latencyMS"], "additionalProperties": false,
+      "properties": {
+        "expectedMidiRevision": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\u0000]+$"},
+        "source": {"type": "string", "maxLength": 4096, "pattern": "^[^\\u0000]*$", "description": "Opaque input device-interface ID from midi.devices.get; empty disconnects."},
+        "armed": {"type": "boolean"}, "channelsCount": {"type": "integer", "minimum": 1, "maximum": 127},
+        "quantization": {"type": "integer", "minimum": 0, "maximum": 65536},
+        "latencyMS": {"type": "number", "minimum": -500, "maximum": 500}, "dryRun": {"type": "boolean"}
+      }
+    }}}}
+  ]
+}

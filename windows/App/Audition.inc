@@ -9,6 +9,7 @@
     std::array<uint64_t,128*193> auditionVoices{};
     std::array<uint64_t,121> pianoVoices{};
     uint64_t &auditionVoice(unsigned note,unsigned channel=UINT16_MAX){return auditionVoices.at(note+128*(channel==UINT16_MAX?0:channel+1));}
+    uint64_t auditionVoice(unsigned note,unsigned channel=UINT16_MAX)const{return auditionVoices.at(note+128*(channel==UINT16_MAX?0:channel+1));}
     bool auditionAnimating()const {
         if(!device.running()||!renderer)return false;const auto t=renderer->telemetry();
         return t.voices||t.left>1e-6f||t.right>1e-6f;
@@ -19,6 +20,7 @@
     }
     void panicAudition() {
         typedNotes.clear();
+        midiNotes.clear();
         for(auto &voice:auditionVoices)++voice;
         pendingAuditionCount=0;if(auditionPreparing)++stopGeneration;
         if(renderer)renderer->panic();

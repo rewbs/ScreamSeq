@@ -11,6 +11,7 @@ class EnvelopeBankWindow final : public NativeToolWindow {
   static constexpr const char *curves[]{"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse","scripted"};
   Request request_;Context context_;std::function<bool()> sourceCurrent_;
   std::string document_,revision_,catalogueRevision_,selected_,linked_;
+  std::wstring sourceLink_=L"Captured source is independent";
   Json target_,capturedShape_,entries_=Json::array(),catalogue_=Json::array(),shape_=Json::object(),values_=Json::array();
   bool catalogueScope_=false,dirty_=false,pointFields_=false,timingFields_=false,pending_=false,setting_=false,previewNeeded_=false,dragging_=false;
   uint64_t generation_=0;int selectedPoint_=-1,kind_=1;Json dragBefore_;bool dragDirty_=false;int dragSelection_=-1;
@@ -44,7 +45,7 @@ class EnvelopeBankWindow final : public NativeToolWindow {
       require(context_()==std::pair(document,revision),"Song changed while loading the bank; draft retained");pending_=false;if(token!=generation_){status(L"Newer template edits retained / Reload to replace them");layout();return;}
       revision_=revision;linked_=bank.value("linkedTemplate",std::string{});catalogueRevision_=cat.at("revision").get<std::string>();catalogue_=cat.at("entries");entries_=catalogueScope_?catalogue_:bank.at("entries");
       auto chosen=SendMessageW(controls_.at(catalogueDestination),CB_GETCURSEL,0,0);SendMessageW(controls_.at(catalogueDestination),CB_RESETCONTENT,0,0);for(const auto &e:catalogue_){auto text=wide(e.at("name").get<std::string>());SendMessageW(controls_.at(catalogueDestination),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}SendMessageW(controls_.at(catalogueDestination),CB_SETCURSEL,catalogue_.empty()?-1:std::clamp(int(chosen),0,int(catalogue_.size()-1)),0);
-      std::wstring link=L"Captured source is independent";if(!linked_.empty()){link=L"Captured source is linked";for(const auto &entry:bank.at("entries"))if(entry.at("id")==linked_)link+=L" to “"+wide(entry.at("name").get<std::string>())+L"”";}if(!sourceCurrent_())link=L"Source editor changed / reopen the bank to capture that draft";set(linkLabel,link);fillList();if(!catalogueError.empty())status(catalogueError);layout();
+      std::wstring link=L"Captured source is independent";if(!linked_.empty()){link=L"Captured source is linked";for(const auto &entry:bank.at("entries"))if(entry.at("id")==linked_)link+=L" to “"+wide(entry.at("name").get<std::string>())+L"”";}sourceLink_=std::move(link);fillList();if(!catalogueError.empty())status(catalogueError);layout();
     }catch(...){pending_=false;layout();throw;}}
   void previewNow(){if(shape_.empty()||pending_)return;const auto token=generation_;const auto length=shape_.at("span").get<unsigned>();previewNeeded_=false;try{auto result=call("automation.formula.preview",{{"points",points()},{"rows",(length+255)/256},{"span",length},{"rowsPerBeat",shape_.value("rowsPerBeat",4)},{"samples",1024}});if(token==generation_){values_=result.at("values");canvas_.rebuild(points(),values_);requestPaint();}}catch(const std::exception &e){if(token==generation_){values_=Json::array();canvas_.rebuild(points(),values_);error(e);}}}
   void setTimingFields(){const auto length=number(span)*256,signature=number(beat);require(length>=1&&length<=16777216&&std::floor(length)==length&&signature>=1&&signature<=65536&&std::floor(signature)==signature,"Use a duration from 1/256 to 65536 rows and an integer beat signature");for(const auto &p:points())require(p.at("position").get<double>()<length,"The shorter duration would exclude an existing point");shape_["span"]=unsigned(length);shape_["rowsPerBeat"]=unsigned(signature);canvas_.start=0;canvas_.end=length;timingFields_=false;changed();}
@@ -106,7 +107,7 @@ class EnvelopeBankWindow final : public NativeToolWindow {
     place(unlink,16,h-98,220,26);place(publish,right,h-98,166,26,!catalogueScope_);place(catalogueDestination,right+174,h-98,editorWidth-324,210,!catalogueScope_);place(replace,w-158,h-98,142,26,!catalogueScope_);place(statusLabel,16,h-57,w-32,46);
     const bool editable=!catalogueScope_&&!selected_.empty();for(int id:{name,pointRow,pointValue,pointKind,pointFormula,span,beat})EnableWindow(controls_.at(id),editable);
     for(int id:{saveCurrent,saveMaster,useCopy,useLinked,unlink,publish,replace,remove,importEntry,reload,setPoint,deletePoint,setTiming,preview,scope,list,catalogueDestination})EnableWindow(controls_.at(id),!pending_&&(id==reload||id==scope||id==list||id==saveCurrent||!selected_.empty()));
-    EnableWindow(controls_.at(unlink),!pending_&&!linked_.empty());
+    refreshSourceState();
     EnableWindow(controls_.at(expandFormula),editable&&!pending_);EnableWindow(controls_.at(referenceFormula),!pending_);
   }
   void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);const auto &r=canvas_.viewport;surface.fill(r.x,r.y,r.w,r.h,0x10171f);surface.clip(r.x,r.y,r.w,r.h);for(int i=0;i<=4;++i)surface.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,0x2a3948);for(size_t i=1;i<canvas_.curve.size();++i)surface.line(canvas_.curve[i-1].x,canvas_.curve[i-1].y,canvas_.curve[i].x,canvas_.curve[i].y,0x68d3bc,2);for(size_t i=0;i<canvas_.handles.size();++i){auto p=canvas_.handles[i];surface.fill(p.x-4,p.y-4,8,8,int(i)==selectedPoint_?0xf3dfb0:0x7ce5cd);}surface.unclip();surface.uiText(L"100%",r.x-37,r.y-4,35,0x94a4b4);surface.uiText(L"0%",r.x-37,r.y+r.h-13,35,0x94a4b4);surface.uiText(L"0 rows",r.x,r.y+r.h+4,90,0x94a4b4);}
@@ -123,7 +124,16 @@ public:
     for(auto text:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})SendMessageW(controls_.at(pointKind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));SendMessageW(controls_.at(pointKind),CB_SETCURSEL,1,0);
     finish();refresh();
   }
-  void show(){NativeToolWindow::show();if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
+  void refreshSourceState(){
+    if(!ready_)return;
+    const bool available=!pending_&&sourceCurrent_();
+    EnableWindow(controls_.at(saveCurrent),available);
+    for(int id:{useCopy,useLinked})EnableWindow(controls_.at(id),available&&!selected_.empty());
+    EnableWindow(controls_.at(unlink),available&&!linked_.empty());
+    set(linkLabel,sourceCurrent_()?sourceLink_:L"Source changed / captured curve retained; reopen the bank to capture a new draft");
+    if(workbench_)workbench_->refreshSourceState();
+  }
+  void show(){refreshSourceState();NativeToolWindow::show();if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
   bool retainedDraft()const{return draft()||pending_||(workbench_&&(workbench_->visible()||workbench_->retainedDraft()));}
   Json snapshot()const{Json handles=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});return {{"visible",visible()},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}},{"formulaReference",referenceWindow_?referenceWindow_->snapshot():Json{{"visible",false}}},{"target",target_},{"document",document_},{"expectedRevision",revision_},{"catalogueRevision",catalogueRevision_},{"scope",catalogueScope_?"catalogue":"song"},{"selected",selected_},{"linkedTemplate",linked_},{"dirty",dirty_},{"fieldDraft",pointFields_||timingFields_},{"pending",pending_},{"sourceCurrent",sourceCurrent_()},{"shape",shape_},{"selectedPoint",selectedPoint_},{"previewSamples",canvas_.curve.size()},{"handles",handles},{"status",utf8(status_)}};}
 };

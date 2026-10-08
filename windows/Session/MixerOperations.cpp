@@ -96,7 +96,8 @@ Json MixerOperations::invoke(const std::string &method,const Json &p) {
     if(!dry&&(different||preview||(method=="mixer.bus.set"&&graph.active()))) {
       std::vector<MixerControls> controls;if(controlsOnly&&graph.active())for(size_t i=0;i<graph.buses.size();++i){const auto &b=graph.buses[i];controls.push_back({b.preGainDB,b.gainDB,b.pan,b.width,plan.nodes[i].audible,b.prePan});}
       const bool active=graph.active();
-      auto publish=[&]{if(controlsOnly&&active){if(host_.controls&&!host_.controls(controls))throw Api::ApiError(-32002,"Mixer control queue is busy; retry the same revision");need(bool(host_.controls)||!feedback.playing,"Active mixer needs a real live control hook");}else if(!controlsOnly&&stop_)stop_();};
+      const auto prepared=!controlsOnly&&different&&host_.prepareNativeUpdate?host_.prepareNativeUpdate(native,next):std::function<void()>{};
+      auto publish=[&]{if(controlsOnly&&active){if(host_.controls&&!host_.controls(controls))throw Api::ApiError(-32002,"Mixer control queue is busy; retry the same revision");need(bool(host_.controls)||!feedback.playing,"Active mixer needs a real live control hook");}else if(prepared)prepared();else if(!controlsOnly&&stop_)stop_();};
       if(preview||!different)publish();else document_.annotate([&](NativeSong &n){n=std::move(next);},publish);
     }
     return result;

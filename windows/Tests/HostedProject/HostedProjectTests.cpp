@@ -22,6 +22,43 @@ static std::vector<float> render(Tracker::Document &doc,const Project::ProjectSt
   HostedProjectPlayback playback(doc,state,rate,settings,true);return renderPrepared(playback,rate,block);
 }
 static double energy(const std::vector<float>&audio){double sum=0;for(auto value:audio){check(std::isfinite(value),"finite lifetime PCM");sum+=std::abs(value);}return sum;}
+static void recordingTiming(Tracker::Document &doc,const Project::ProjectState &state){
+  constexpr uint64_t origin=100000000;
+  for(unsigned rate:{44100u,48000u,96000u}){
+    std::vector<Tracker::RecordedPosition> expected;
+    std::vector<float> baseline;
+    for(unsigned block:{128u,17u,4096u,8193u}){
+      auto playback=std::make_unique<HostedProjectPlayback>(doc,state,rate,HostedPlaybackSettings{},true);
+      auto timeline=playback->recordingTimeline();std::vector<float> audio(24000);
+      for(unsigned at=0;at<12000;){const auto count=std::min(block,12000-at);bool success=false;
+        const auto time=RenderTime{origin,7,rate,true}.offset(at);
+        {AudioAudit::Scope scope;success=playback->render(audio.data()+at*2,count,time);}check(success,"timed callback renders");at+=count;}
+      check(timeline->generation.load()==7&&timeline->firstHostTime.load()==origin,"timeline publishes hardware generation and origin");
+      check(!timeline->stopped.load(std::memory_order_acquire),"rendered timeline is live");
+      check(std::abs(int64_t(timeline->endHostTime.load())-int64_t(origin+uint64_t(12000)*10000000/rate))<=1,"large callback slices have distinct presentation times within one 100ns rounding tick");
+      std::vector<Tracker::RecordedPosition> positions;
+      for(unsigned frame:{100u,2000u,4100u,8000u,10000u,11900u}){
+        const auto found=timeline->locate(origin+uint64_t(frame)*10000000/rate+1,7);
+        check(found.has_value(),"delayed input locates after each internal 4096-frame boundary");positions.push_back(*found);}
+      if(expected.empty()){expected=positions;baseline=audio;}
+      else {check(std::equal(audio.begin(),audio.end(),baseline.begin(),[](float a,float b){return std::abs(a-b)<1e-6f;}),"recording timestamp publication leaves PCM unchanged");for(size_t i=0;i<positions.size();++i)
+        check(positions[i].sequence==expected[i].sequence&&positions[i].order==expected[i].order&&positions[i].pattern==expected[i].pattern&&
+          std::abs(int64_t(positions[i].position)-expected[i].position)<=2,"musical positions independent of callback partition within two 1/65536-row units");}
+      const auto stopped=origin+uint64_t(10001)*10000000/rate;
+      {AudioAudit::Scope scope;playback->render(audio.data(),0,RenderTime{stopped,7,rate,false,false,true});}
+      check(timeline->stopped.load(std::memory_order_acquire),"Stop flag follows final audible bound publication");
+      check(timeline->locate(stopped-1,7).has_value()&&!timeline->locate(stopped,7),"normal Stop clamps queued future audio but retains played history");
+      playback.reset();check(timeline->locate(origin+10000,7).has_value(),"immutable take clock survives renderer destruction");
+    }
+  }
+  HostedProjectPlayback playback(doc,state,48000,{},true);std::vector<float> audio(20000);
+  auto timeline=playback.recordingTimeline();check(playback.render(audio.data(),4096,RenderTime{origin,7,48000,true}),"generation fixture");
+  check(playback.render(audio.data(),4096,RenderTime{origin+1000000,8,48000,true}),"restart fixture");
+  check(!timeline->stopped.load()&&!timeline->locate(origin+1000,7)&&!timeline->locate(origin+1000,8)&&timeline->locate(origin+1001000,8).has_value(),"a pinned take cannot join a new live device stream");
+  check(playback.render(audio.data(),4096),"legacy untimed render");
+  check(!timeline->locate(origin+1001000,8)&&timeline->generation.load()==0,"offline legacy render explicitly clears hardware origin");
+  std::cout<<"PASS retained presentation timeline, Stop/restart, 3 rates and 4 callback partitions\n";
+}
 static std::vector<float> audition(Tracker::Document &doc,const Project::ProjectState &state,unsigned rate,unsigned block){
   HostedPlaybackSettings settings;settings.audition=true;HostedProjectPlayback playback(doc,state,rate,settings,true);
   std::vector<float> output(size_t(rate)*4);const auto initial=playback.renderer().telemetry();
@@ -37,6 +74,7 @@ static std::vector<float> audition(Tracker::Document &doc,const Project::Project
   check(std::all_of(output.begin()+rate*2,output.end(),[](float x){return std::abs(x)<1e-6f;}),"sample note-off terminates preview");
   return output;
 }
+#include "PreparedNativeUpdates.inc"
 int main(){try{
   {AudioAudit::Scope scope;auto p=::operator new(8);::operator delete(p);
     auto aligned=::operator new(64,std::align_val_t{64});::operator delete(aligned,std::align_val_t{64});}
@@ -62,6 +100,8 @@ int main(){try{
   state.preserved["automation"]=Json::array({Json::array({0,1,-12,48000})});
   auto automation=projectAbsoluteAutomation(state);check(automation.size()==1&&automation[0].frame==48000,"canonical 48-kHz automation not rescaled twice");
   state.preserved["automation"]=Json::array();
+  preparedNativeUpdates(state);
+  recordingTiming(*doc,state);
   for(unsigned rate:{44100u,48000u,96000u}){
     const auto original=doc->snapshotData();auto baseline=audition(*doc,state,rate,128);double worst=0;
     for(unsigned block:{17u,4096u,8193u}){auto other=audition(*doc,state,rate,block);for(size_t i=0;i<baseline.size();++i)worst=std::max(worst,std::abs(double(other[i])-baseline[i]));}
@@ -136,7 +176,10 @@ int main(){try{
     HostedProjectPlayback fault(*doc,state,48000,{},true);
     check(fault.chain().parameter(0,UINT32_MAX,0.5f),"invalid parameter enters the bounded control queue");
     std::vector<float> silence(8193*2,1.0f);
-    check(!fault.render(silence.data(),8193)&&fault.failed(),"callback reports processor faults");
+    check(!fault.render(silence.data(),8193,RenderTime{100000000,37,48000,true})&&fault.failed(),"callback reports processor faults");
+    const auto faultTime=fault.recordingTimeline();check(faultTime->generation.load()==0&&!faultTime->stopped.load(),"live processor fault invalidates timing");
+    {AudioAudit::Scope scope;fault.render(silence.data(),0,RenderTime{100001000,37,48000,false,false,true});}
+    check(faultTime->generation.load()==0&&faultTime->stopped.load()&&!faultTime->locate(100000001,37),"final Stop cannot revive a faulted timeline's old generation");
     check(std::all_of(silence.begin(),silence.end(),[](float s){return s==0;}),"fault silences the entire device request");
     std::fill(silence.begin(),silence.end(),1.0f);
     check(!fault.render(silence.data(),8193),"latched processor fault stays silent");

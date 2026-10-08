@@ -93,7 +93,11 @@ void validateRecords(Json &root,const Tracker::NativeSong &native) {
 }
 }
 OpenedProject openNativeProject(const std::filesystem::path &path) {
-	auto bytes=readProjectBytes(path);auto root=decodePlist(bytes);
+	auto result=openNativeProjectBytes(readProjectBytes(path));result.state.path=path;return result;
+}
+OpenedProject openNativeProjectBytes(std::span<const std::byte> bytes) {
+	need(!bytes.empty() && bytes.size()<=maximumProjectBytes,"Native project exceeds the read limit or is empty");
+	auto root=decodePlist(bytes);
 	need(root.is_object(),"Native project root must be a dictionary");
 	const auto version=integer(root.at("version"),6);need(version==6,"Unsupported native container version; this build requires project 6 / metadata 17");
 	need(root.at("native").at("version")==17,"Unsupported native metadata version; this build requires metadata 17");
@@ -115,6 +119,7 @@ OpenedProject openNativeProject(const std::filesystem::path &path) {
 		const auto &take=root.at("recoveryTake");need(take.is_object(),"Invalid recovery take");
 		(void)flag(take.at("compatible"));
 		for(const auto *key:{"missingTime","exhaustedVoices","overflow"}) (void)integer(take.at(key),UINT32_MAX);
+		if(take.contains("inputError")) (void)text(take.at("inputError"),512);
 		for(const auto &event:array(take.at("events"),Tracker::maximumPreciseNotes)) {
 			need(event.is_object(),"Invalid recovery event");
 			for(const auto *key:{"pattern","track"}) {
@@ -126,12 +131,12 @@ OpenedProject openNativeProject(const std::filesystem::path &path) {
 			auto note=integer(event.at("note"),255),velocity=integer(event.at("velocity"),127);
 			need((note>=1 && note<=120 || note==254 || note==255) && velocity>0,"Invalid recovered note or velocity");
 		}
-		result.state.issues.push_back("Recovery take retained for review; recording commit is not yet available");
+		result.state.issues.push_back("Recovered recording take retained for stopped review");
 		result.state.recoveryOrigin=RecoveryOrigin{result.document->revision,unsigned(result.document->song().Order.GetCurrentSequenceIndex())};
 	}
 	result.state.preserved=std::move(root);
 	result.state.metadataBaseline=encodeNativeMetadata(result.document->native());
-	result.state.savedRevision=result.document->revision;result.state.path=path;
+	result.state.savedRevision=result.document->revision;
 	if(requiresHostedPlayback(*result.document,result.state)) result.state.issues.push_back("Project requires hosted routing/effects; do not substitute dry playback");
 	return result;
 }
@@ -191,7 +196,7 @@ void saveNativeProject(Tracker::Document &document,ProjectState &state,const std
 	auto tree=nativeProjectTree(document,state);auto bytes=encodePlist(tree);
 	// Compute every allocating state update before publishing the destination.
 	ProjectState saved=state;saved.preserved=std::move(tree);saved.metadataBaseline=encodeNativeMetadata(document.native());
-	saved.savedRevision=document.revision;saved.savedPluginRevision=state.pluginRevision;saved.path=path;
+	saved.savedRevision=document.revision;saved.savedPluginRevision=state.pluginRevision;saved.path=path;saved.recoveredUnsaved=false;
 	writeProjectFile(path,bytes,overwrite);
 	state=std::move(saved);
 }

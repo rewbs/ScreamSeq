@@ -56,6 +56,10 @@ records the measured scope and remaining graph work. It is a dated checkpoint,
 not a guarantee for every build or plugin. Windows implementation boundaries are
 documented in [application integration](windows/App/INTEGRATION.md); its earlier
 native qualification is collected in [the continuation record](windows/RESUME_PROGRESS.md).
+The [Windows parity handoff](windows/PARITY_HANDOFF.md) records the retained
+workspace, arrangement/matrix, recording/recovery and Precise Notes checkpoints.
+The [main integration report](windows/MAIN_INTEGRATION_REPORT.md) covers the newer
+graph, modulation, observation and editing features supported by Windows.
 
 ## Build and run
 

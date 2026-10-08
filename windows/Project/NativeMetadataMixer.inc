@@ -27,7 +27,7 @@ MixerGraph decodeMixer(const Json &v, unsigned version) {
     g.buses.push_back(std::move(bus));
   }
   for (const auto &r : items(v,"instruments",128)) g.instruments.push_back({text(field(r,"plugin"),128),field(r,"target")=="" && version>=15 ? 0 : decodeID(field(r,"target")),u32(r,"output",0,63)});
-  if (version >= 4) for (const auto &r : items(v,"sidechains",128)) g.sidechains.push_back({decodeID(field(r,"source")),text(field(r,"plugin"),128),u32(r,"input",1,63),real(r,"gainDB",-96,12),boolean(field(r,"preFader")),boolean(field(r,"enabled"))});
+  if (version >= 4) for (const auto &r : items(v,"sidechains",128)) g.sidechains.push_back({decodeID(field(r,"source")),text(field(r,"plugin"),128),u32(r,"input",0,63),real(r,"gainDB",-96,12),boolean(field(r,"preFader")),boolean(field(r,"enabled"))});
   else need(!v.contains("sidechains"),"Legacy mixer cannot contain sidechains");
   if (version < 10) for (const auto &r : g.instruments) for (const auto &b : g.buses) need(std::find(b.inserts.begin(),b.inserts.end(),r.plugin) == b.inserts.end(),"Legacy mixer cannot contain effect-output routes");
   return g;

@@ -1,36 +1,16 @@
 """Native precise-note drafts, canvas and history in a private owned process."""
 import unittest
 import test_pattern_performance as support
+from precise_note_native_support import PreciseNoteNativeMixin
 
 
-class PreciseNoteEditorTests(unittest.TestCase):
+class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
     setUp = support.PatternPerformanceTests.setUp
     doc = support.PatternPerformanceTests.doc
     read = support.PatternPerformanceTests.read
     write = support.PatternPerformanceTests.write
     cells = support.PatternPerformanceTests.cells
     navigate = support.PatternPerformanceTests.navigate
-    control = support.PatternPerformanceTests.control
-    key = support.PatternPerformanceTests.key
-    command = support.PatternPerformanceTests.command
-    text = support.PatternPerformanceTests.text
-
-    def editor(self):
-        return self.read('workspace.get')['noteEditor']
-
-    def combo(self, control, index):
-        self.desktop.send(self.control(control), 0x14E, index)
-        self.command(control, 1)
-
-    def mouse(self, message, x, y, buttons=0):
-        scale = self.read('workspace.get')['dpi'] / 96
-        self.desktop.send(self.desktop.hwnd(self.pid), message, buttons,
-                          int(x * scale) | (int(y * scale) << 16))
-
-    def open_row(self, row=4, channel=0):
-        self.navigate(row=row, channel=channel, column=0)
-        self.command(107)
-        self.assertTrue(self.editor()['visible'])
 
     def test_retrigger_draft_local_fx_check_one_undo_and_reopen(self):
         local = next(e for e in self.read('pattern.notes.get', pattern=0)['effects'] if e['command'])
@@ -42,7 +22,7 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.open_row()
         self.assertEqual(self.editor()['draftCount'], 1)
         self.assertEqual(self.doc(), before)
-        self.text(364, '.125')  # Half of a row at four rows per beat.
+        self.text(364, '1/8')  # Musical fraction: half a row at four rows per beat.
         self.text(363, '100')
         self.text(376, '3')
         self.text(377, '40')
@@ -75,7 +55,7 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.write('pattern.notes.set', pattern=0, events=[dict(channel=0, position=4*65536, note=65)])
         self.open_row()
         self.text(363, '92')
-        self.command(109)  # Pin this inspector target.
+        self.native_panel(pinned=True)  # Pin the independent editable row owner.
         self.navigate(row=10, channel=1)
         self.command(316)  # Rack and return must preserve the captured row draft.
         self.command(107)
@@ -87,11 +67,11 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.assertEqual(self.doc(), before)
         self.assertTrue(self.editor()['stale'])
         self.assertEqual(self.editor()['selectedEvent']['velocity'], 92)
-        self.command(373)
+        self.command(9203)  # Explicit Reload captured, not Load selection.
         self.assertFalse(self.editor()['stale'])
         self.assertEqual(self.editor()['row'], 4)
         self.assertEqual(self.editor()['selectedEvent']['velocity'], 127)
-        self.command(110)  # Follow current cursor; explicit reload captures it.
+        self.native_panel(pinned=False)  # Unpin the native row owner, not the inspector.
         self.command(373)
         self.assertEqual((self.editor()['row'], self.editor()['channel']), (10, 1))
 
@@ -101,6 +81,21 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.open_row()
         self.combo(365, 1)
         self.assertEqual(self.editor()['selectedEvent']['position'] % 65536, 16384)
+        self.text(364, '3/16')
+        self.assertEqual(self.editor()['selectedEvent']['position'] % 65536, 12288)
+        self.combo(365, 0)
+        self.assertEqual(self.editor()['selectedEvent']['position'] % 65536, 12288)
+        self.combo(365, 1)
+        before_invalid = self.doc()
+        for raw in ('1/0', '1//8', '/8', '1/', 'nan', 'inf', '1e309', '1/-8', '1/1'):
+            with self.subTest(offset=raw):
+                self.text(364, raw)
+                selected = self.editor()['selectedEvent']
+                self.command(371)
+                self.command(372)
+                self.assertEqual(self.editor()['selectedEvent'], selected)
+                self.assertEqual(self.editor()['raw']['offset'], raw)
+                self.assertEqual(self.doc(), before_invalid)
         self.text(364, '1.5')
         self.combo(365, 0)  # Invalid text must not silently clamp when changing units.
         self.assertEqual(self.desktop.send(self.control(365), 0x147), 1)
@@ -142,6 +137,7 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.assertEqual(self.editor()['selectedEvent']['position'], initial['position']+256)
         self.command(372)
         self.assertEqual(len(self.read('pattern.notes.get', pattern=0)['events']), 1)
+        self.focus_canvas()  # Delete must target the canvas after the native Apply action.
         self.key(0x2E)
         self.assertEqual(self.editor()['draftCount'], 0)
         self.command(372)
@@ -160,6 +156,31 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.assertEqual(len(result), 5000)
         self.assertEqual([e['velocity'] for e in result[:-1]], [64]*4999)
         self.assertEqual(result[-1]['velocity'], 110)
+        # Reload the same occurrence after its saved non-identity fields change.
+        # Full-JSON equality or resetting to row zero would select the wrong hit.
+        external = [dict(e) for e in result]
+        external[-1]['velocity'] = 93
+        self.write('pattern.notes.set', pattern=0, events=external)
+        self.desktop.send(self.control(360), 0x197, 4980)  # LB_SETTOPINDEX
+        top = self.desktop.send(self.control(360), 0x18E)
+        before_reload = self.doc()
+        self.command(9203)
+        self.assertEqual(self.doc(), before_reload)
+        self.assertEqual(self.editor()['selected'], 4999)
+        self.assertEqual(self.editor()['selectedEvent'], external[-1])
+        self.assertEqual(self.desktop.send(self.control(360), 0x18E), top)
+        self.text(363, '111')
+        self.command(372)
+        revised = self.read('pattern.notes.get', pattern=0)['events']
+        self.assertEqual(revised[:-1], external[:-1])
+        self.assertEqual(revised[-1]['velocity'], 111)
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], external)
+        self.write('history.redo', domain='document')
+        path = self.folder / 'precise-reloaded-occurrence.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], revised)
 
     def test_grid_clear_removes_precise_hits_and_preserves_other_rows_and_fx(self):
         self.write('pattern.notes.set', pattern=0, events=[dict(channel=0, position=4*65536+200, note=65),
@@ -180,7 +201,7 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.write('document.timing.set', rowsPerBeat=6, rowsPerMeasure=24)
         self.open_row(row=5)
         self.command(369)
-        self.text(364, '.125')
+        self.text(364, ' +1e0 / +8 ')  # Signed scientific fraction uses the same offset parser.
         self.assertEqual(self.editor()['selectedEvent']['position'], 5*65536+49152)
         self.combo(365, 1)
         self.assertEqual(self.editor()['selectedEvent']['position'], 5*65536+49152)
@@ -195,6 +216,96 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.assertEqual(self.editor()['selectedEvent']['position'], 5*65536+40960)
         self.command(372)
         self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'][0]['position'], 5*65536+40960)
+
+    def test_empty_row_captures_explicit_empty_input_slot(self):
+        self.write('pattern.apply', cells=[dict(pattern=0, row=5, channel=0,
+            note=0, instrument=0, volumeCommand=0, volume=0, effect=0, parameter=0)])
+        before = self.doc()
+        self.client.call('workspace.input', dict(expectedRevision=before['revision'],
+            expectedContext=self.read('context.get')['contextRevision'], instrument=255))
+        self.open_row(row=5)
+        self.assertEqual(self.editor()['draftCount'], 0)
+        self.assertEqual(self.editor()['raw']['instrument'], '255')
+        self.assertEqual(self.doc(), before)
+        self.command(369)
+        self.assertEqual(self.editor()['selectedEvent']['instrument'], 255)
+        self.command(372)
+        events = self.read('pattern.notes.get', pattern=0)['events']
+        hit = next(e for e in events if e['channel'] == 0 and e['position'] == 5*65536)
+        self.assertEqual(hit['instrument'], 255)
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], [])
+
+    def test_empty_row_captures_selected_sample_and_instrument_with_history(self):
+        def choose_sound(slot):
+            control = self.main_control(135)
+            self.note_idle(control)
+            entries = self.desktop.send(control, 0x146)  # CB_GETCOUNT
+            index = next(i for i in range(entries)
+                         if self.desktop.send(control, 0x150, i) == slot)  # CB_GETITEMDATA
+            self.desktop.send(control, 0x14E, index)
+            self.main_command(135, 1)
+            self.assertEqual(self.read('workspace.get')['musicalTyping']['slot'], slot)
+
+        # Exact published sample IDs establish that the chosen sound is real.
+        samples = self.doc()['data']['samples']
+        self.assertGreaterEqual(len(samples), 2)
+        wanted, other = samples[1], samples[0]
+        self.write('pattern.apply', cells=[dict(pattern=0, row=5, channel=0,
+            note=0, instrument=0, volumeCommand=0, volume=0, effect=0, parameter=0)])
+        choose_sound(wanted['index'])
+        self.assertTrue(self.read('workspace.get')['musicalTyping']['sample'])
+        self.assertEqual(self.read('workspace.get')['musicalTyping']['id'], wanted['id'])
+        self.open_row(row=5)
+        self.native_panel(pinned=True)
+        self.assertEqual(self.editor()['draftCount'], 0)
+        self.assertEqual(self.editor()['raw']['instrument'], str(wanted['index']))
+        before = self.doc()
+        choose_sound(other['index'])  # Existing captured insertion fields stay independent.
+        self.assertEqual(self.editor()['raw']['instrument'], str(wanted['index']))
+        self.command(369)
+        self.assertEqual(self.editor()['selectedEvent']['instrument'], wanted['index'])
+        self.command(371)
+        self.assertEqual(self.doc(), before)
+        self.command(372)
+        captured = self.read('pattern.notes.get', pattern=0)['events']
+        hit = next(e for e in captured if e['channel'] == 0 and e['position'] == 5*65536)
+        self.assertEqual(hit['instrument'], wanted['index'])
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], [])
+        self.write('history.redo', domain='document')
+        path = self.folder / 'captured-precise-sound.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], captured)
+
+        # Switch module representation: selected instrument identity must win,
+        # never the coincidentally numbered sample from the preceding phase.
+        self.write('instrument.create', sample=other['index'])
+        instrument = self.write('instrument.create', sample=wanted['index'])['instrument']
+        self.write('pattern.apply', cells=[dict(pattern=0, row=6, channel=0,
+            note=0, instrument=0, volumeCommand=0, volume=0, effect=0, parameter=0)])
+        choose_sound(instrument)
+        chosen = self.read('workspace.get')['musicalTyping']
+        self.assertFalse(chosen['sample'])
+        self.assertEqual(chosen['id'], next(i['id'] for i in self.doc()['data']['instruments']
+                                           if i['index'] == instrument))
+        self.navigate(row=6, channel=0)
+        self.command(373)  # Explicit new capture adopts the new document/sound.
+        self.assertEqual(self.editor()['raw']['instrument'], str(instrument))
+        before_events = self.read('pattern.notes.get', pattern=0)['events']
+        self.command(369)
+        self.command(372)
+        saved = self.read('pattern.notes.get', pattern=0)['events']
+        hit = next(e for e in saved if e['channel'] == 0 and e['position'] == 6*65536)
+        self.assertEqual(hit['instrument'], instrument)
+        self.assertEqual([e for e in saved if e is not hit], before_events)
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], before_events)
+        self.write('history.redo', domain='document')
+        self.write('document.save', path=str(path), overwrite=True)
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], saved)
 
 
 if __name__ == '__main__':

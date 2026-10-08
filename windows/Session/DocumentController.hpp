@@ -8,6 +8,8 @@
 #include "MixerOperations.hpp"
 #include "../Api/SessionAdapter.hpp"
 #include "../Project/NativeProject.hpp"
+#include "../Audio/PresentationClock.hpp"
+#include "editor/NoteRecording.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -52,13 +54,17 @@ struct DocumentView {
   std::array<wchar_t,256> volumeLetters{},effectLetters{};
   std::array<uint8_t,256> effectMasks{};
   Json commands;
+  Json recording; // Compact immutable take status; events are read explicitly.
   std::shared_ptr<const NativePatternView> nativePattern;
   std::shared_ptr<const PatternGraphView> graphPattern;
   std::vector<uint8_t> effectColumns;
   size_t nativePatternBytes=0;
   std::filesystem::path path;
-  bool dirty=false, hosted=false;
+  bool dirty=false, hosted=false, hasOpenEditors=false;
   uint64_t catalogRevision=0;
+  // Internal catalog invalidation, including entities in inactive sequences.
+  // Never exposed as document data or used as musical identity.
+  std::array<std::byte,32> metadataFingerprint{};
   size_t cacheBytes=0;
   unsigned channels=0, instruments=0;
   unsigned noteMin=1,noteMax=120;
@@ -68,14 +74,32 @@ struct DocumentView {
   std::optional<Tracker::PatternCommand> effect(unsigned p,unsigned r,unsigned c,unsigned column) const;
   std::span<const PatternNoteView> notesAt(unsigned p,unsigned r,unsigned c) const;
 };
+// Owned by the worker and returned immutable. Native bytes never become a
+// project-sized JSON response; the disk service can write them independently.
+struct RecoverySnapshot {
+  std::shared_ptr<const std::vector<std::byte>> bytes;
+  std::string revision,title,fingerprint,guardFingerprint;
+  std::optional<std::filesystem::path> source;
+  bool hasRecording=false,needsProtection=false,hasOpenEditors=false;
+};
 // One serial document owner. Work, cache construction and retired cache disposal
 // run here. service() is called ONLY by the UI thread for playback hooks.
 class DocumentController {
+  struct RecordingTake {
+    Tracker::NoteRecording notes;
+    std::string id,baseRevision;
+    double latencyMS=0;
+    uint64_t startTimestamp=0,lastTimestamp=0,clockGeneration=0;
+    std::shared_ptr<const RecordingTimeline> timeline;
+    explicit RecordingTake(Tracker::NoteRecording value):notes(std::move(value)){}
+  };
   std::unique_ptr<Tracker::Document> document_;
   std::unique_ptr<AssetOperations> assets_;
   std::unique_ptr<PluginOperations> plugins_;
   std::unique_ptr<HostedProjectPlayback> playback_;
+  uint64_t playbackDocumentGeneration_=0;
   Project::ProjectState project_;
+  std::unique_ptr<RecordingTake> recording_;
   std::string identity_;
   uint64_t generation_=0;
   std::shared_ptr<const DocumentView> view_;
@@ -106,8 +130,21 @@ class DocumentController {
   void preflightGrowth(const std::string &method,const Json &params);
   void validateAssetCandidate(const Tracker::Document &candidate) const;
   void validateGraphViewGrowth(const Tracker::NativeSong &candidate) const;
+  void validateDocumentCandidate(Tracker::Document &candidate);
+  void validateNativeCandidate(const Tracker::NativeSong &candidate) const;
   PlaybackFeedback playbackFeedback();
   void open(const std::filesystem::path &path);
+  void installCandidate(Project::OpenedProject candidate,std::function<void()> beforeCommit={});
+  std::shared_ptr<const RecoverySnapshot> recoverySnapshot();
+  Json recordingSummary(const RecordingTake *,const std::string &atRevision,bool events=false) const;
+  std::unique_ptr<RecordingTake> hydrateRecording(const Tracker::Document &,const Project::ProjectState &,const std::string &nextRevision) const;
+  std::optional<Tracker::RecordedPosition> recordingPosition(RecordingTake &,uint64_t timestamp);
+  std::optional<Tracker::RecordedPosition> recordingStopPosition(RecordingTake &);
+  void overlayRecording(Project::ProjectState &,const RecordingTake &,bool closeHeld=true);
+  void installRecording(std::unique_ptr<RecordingTake>,bool removePreserved=false);
+  Json recordingOperation(const std::string &method,const Json &params);
+  Json parameterActivityOperation(const std::string &method,const Json &params);
+  std::function<void()> prepareNativeUpdate(const Tracker::NativeSong &before,const Tracker::NativeSong &next);
   std::string revision() const;
   Json operation(const std::string &method,Json params);
 public:
@@ -120,6 +157,13 @@ public:
   bool publicationPending() const {return publicationPending_.load();}
   std::shared_ptr<const DocumentView> view();
   std::future<Json> invoke(std::string method,Json params);
+  std::future<std::shared_ptr<const RecoverySnapshot>> captureRecovery(std::string expectedRevision);
+  // Parse, validate and allocate the complete next view before stopping or
+  // replacing anything. A recovered document has a new identity, no file path,
+  // and explicit unsaved state, without manufacturing music/history edits.
+  std::future<std::shared_ptr<const DocumentView>> recover(
+    std::shared_ptr<const std::vector<std::byte>> bytes,std::string expectedRevision,bool discard=false,
+    std::string expectedFingerprint={});
   // Borrowed by the stopped UI/audio owner. Stop/join callbacks and release all
   // readers before calling prepare again; replacement and disposal run here.
   std::future<HostedProjectPlayback *> prepare(unsigned rate,Json settings,bool loop,bool offline=false,bool audition=false);

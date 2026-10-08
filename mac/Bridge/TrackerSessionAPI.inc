@@ -143,6 +143,10 @@
         @"playbackDisplay":@{@"timeline":@"pattern.timeline.get: first row visits in the selected order occurrence, with tempo and flow commands; unreachable times are null",@"voicePositions":@"transport.get includes sample frames and envelope ticks for native voices, including audition",@"disconnectedMixerMetadataVersion":@15},
         @"automationRate" : @48000,
         @"maxPatternCells" : @4096,
+        @"arrangementMatrix":@{@"maximumOrders":@128,@"maximumChannels":@32,@"defaultOrders":@64,@"defaultChannels":@16,@"densityBins":@16,
+          @"density":@"events = occupied tracker cells + precise on/off events + native FX records; notes = pitched tracker cells + precise onsets. trackerEvents, preciseEvents and nativeFxEvents expose the stored layers separately; counts and bins are uint32.",
+          @"copy":@"Whole channel blocks in the current sequence, including precise notes and every FX column. makeUnique preserves exact destination pattern timing and unrelated native lanes/links. Explicit clip copies the overlapping span and excludes events at its end.",
+          @"preview":@"dryRun validates the complete candidate without consuming IDs/history. wouldChange includes native-only edits; changedCells counts six-field cell edits only. Changed Apply creates one Undo and stops playback; no-op preserves playback and Redo."},
         @"patternPerformance": @{@"unitsPerRow":@(performanceUnitsPerRow), @"maximumColumns":@(maximumEffectColumns),
           @"maximumCommands":@(maximumPatternCommands), @"maximumBindings":@255,
           @"displayCodes":@{@"parameter-set":@"PS",@"parameter-slide":@"PL",@"pitch-set":@"BS",@"pitch-slide":@"BL",@"note-cut":@"NC",@"nudge-forward":@"NF",@"nudge-reverse":@"NR"},
@@ -345,35 +349,28 @@
                               std::min<uint64_t>(32, song.GetNumChannels() - channel));
       const auto &native = _document->native();
       const auto &slots = native.sequences[song.Order.GetCurrentSequenceIndex()].orders;
-      std::map<PATTERNINDEX, NSArray *> cache;
-      NSMutableArray *rows = [NSMutableArray array];
-      for (size_t order = start; order < std::min<uint64_t>(song.Order().size(), start + count); ++order) {
-        const auto pattern = song.Order()[order];
-        if (song.Patterns.IsValidPat(pattern) && !cache.count(pattern)) {
-          NSMutableArray *blocks = [NSMutableArray array];
-          const auto nr = song.Patterns[pattern].GetNumRows();
-          for (size_t ch = channel; ch < channel + channels; ++ch) {
-            std::array<uint16_t, 16> bins{};
-            size_t events = 0, notes = 0;
-            for (uint16_t row = 0; row < nr; ++row) {
-              auto cell = _document->cell(pattern, row, ch);
-              if (cell != Cell{}) { ++events; ++bins[std::min<size_t>(15, size_t(row) * 16 / nr)]; }
-              if (cell.note >= NOTE_MIN && cell.note <= NOTE_MAX) ++notes;
-            }
-            NSMutableArray *density = [NSMutableArray array];
-            for (auto n : bins) [density addObject:@(n)];
-            [blocks addObject:@{@"channel": @(ch), @"trackID": nativeID(native.tracks.at(ch).id),
-                               @"events": @(events), @"notes": @(notes), @"bins": density}];
-          }
-          cache[pattern] = blocks;
+      ArrangementMatrixRange range{uint32_t(start),uint32_t(count),uint32_t(channel),uint32_t(channels)};
+      const auto summary=summarizeArrangement(*_document,range);
+      NSMutableArray *summaries=[NSMutableArray array];
+      for(const auto &pattern:summary.patterns) {
+        NSMutableArray *blocks=[NSMutableArray array];
+        for(const auto &block:pattern.blocks) {
+          NSMutableArray *density=[NSMutableArray array];for(const auto n:block.bins)[density addObject:@(n)];
+          [blocks addObject:@{@"channel":@(block.channel),@"trackID":nativeID(block.trackID),@"events":@(block.events),@"notes":@(block.notes),
+            @"bins":density,@"trackerEvents":@(block.trackerEvents),@"preciseEvents":@(block.preciseEvents),@"nativeFxEvents":@(block.nativeFxEvents)}];
         }
-        NSMutableDictionary *item = [nativeEntity(slots[order]) mutableCopy];
-        item[@"order"] = @(order); item[@"pattern"] = @(pattern);
-        item[@"blocks"] = cache.count(pattern) ? cache.at(pattern) : @[];
-        item[@"rows"] = song.Patterns.IsValidPat(pattern) ? @(song.Patterns[pattern].GetNumRows()) : @0;
-        if (song.Patterns.IsValidPat(pattern)) {
-          item[@"patternID"] = nativeID(native.patterns.at(pattern).id);
-          item[@"patternName"] = @(native.patterns.at(pattern).name.c_str());
+        [summaries addObject:blocks];
+      }
+      NSMutableArray *rows = [NSMutableArray array];
+      for (const auto &order:summary.orders) {
+        NSMutableDictionary *item = [nativeEntity(slots[order.order]) mutableCopy];
+        item[@"order"] = @(order.order); item[@"pattern"] = @(order.pattern);
+        item[@"blocks"] = @[];item[@"rows"] = @0;
+        if (order.summaryIndex!=noArrangementPatternSummary) {
+          const auto &pattern=summary.patterns.at(order.summaryIndex);
+          item[@"blocks"]=summaries[order.summaryIndex];item[@"rows"]=@(pattern.rows);
+          item[@"patternID"] = nativeID(pattern.patternID);
+          item[@"patternName"] = @(native.patterns.at(pattern.pattern).name.c_str());
         }
         [rows addObject:item];
       }
@@ -398,9 +395,9 @@
       const bool dryRun = p[@"dryRun"] ? boolean(p[@"dryRun"]) : false;
       try {
         auto plan = prepareArrangementCopy(*_document, copy);
-        if (!dryRun && !plan.edits.empty()) { _audio->stop(); applyArrangementCopy(*_document, plan); }
-        result = @{@"dryRun": @(dryRun), @"changedCells": @(plan.edits.size()), @"clonesPattern": @(plan.clone),
+        result = @{@"dryRun": @(dryRun), @"wouldChange":@(plan.changed()), @"changedCells": @(plan.edits.size()), @"clonesPattern": @(plan.clone),
                    @"targetPattern": @(plan.targetPattern), @"targetOrder": @(plan.targetOrder)};
+        if (!dryRun && plan.changed()) { _audio->stop(); applyArrangementCopy(*_document, plan); }
       } catch (const std::invalid_argument &e) { throw Error(-32602, e.what()); }
     } else if ([method isEqual:@"song.annotate"]) {
       allowed(@[@"id", @"name", @"annotation", @"color"]);

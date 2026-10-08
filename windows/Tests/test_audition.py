@@ -76,7 +76,7 @@ class AuditionTests(unittest.TestCase):
         self.remember(stem,evidence,(path,report))
         return evidence
 
-    def live(self):
+    def live(self, midi=False):
         path = self.folder / 'audition.screamseq'
         self.live_report = self.folder / 'wasapi-host.json'
         self.write('document.save', path=str(path))
@@ -84,12 +84,12 @@ class AuditionTests(unittest.TestCase):
             os.environ['SCREAMSEQ_TEST_EXE'], '--audio-test-silent',
             '--audio-test-allow-stop', '--automation', '--seconds', '120',
             '--project', str(path), '--vst3-test-cache', str(self.cache),
-            '--report', str(self.live_report)])
+            '--report', str(self.live_report), *(['--midi-test-input'] if midi else [])])
         self.client = Client(r'\\.\pipe\ScreamSeq.Api.' + str(self.pid), timeout=20)
         end = time.monotonic() + 30
         while time.monotonic() < end:
             try:
-                if self.read('transport.get')['audioActive']:
+                if self.read('transport.get')['playing'] and not self.read('workspace.get')['documentBusy']:
                     self.write('transport.stop')
                     return
             except TransportError:
@@ -119,6 +119,36 @@ class AuditionTests(unittest.TestCase):
     def settled(self):
         time.sleep(.12)
         return self.read('transport.get')
+
+    def wait_sample_detail_waveform(self, before):
+        # First-show reflow can schedule a waveform read. Match its published
+        # cache to the current canvas; an outstanding matching timer is a no-op.
+        sample = next(s for s in before['data']['samples'] if s['index'] == 1)
+        identity = (before['documentId'], before['revision'])
+        deadline = time.monotonic() + 8
+        last = None
+        while time.monotonic() < deadline:
+            response = self.client.call('workspace.get')
+            self.assertEqual((response['documentId'], response['revision']), identity)
+            workspace = response['data']; local = workspace['sampleDetail']
+            last = dict(documentBusy=workspace['documentBusy'],
+                        pendingViewCommands=workspace['pendingViewCommands'], status=workspace['status'],
+                        sampleDetail={k: local.get(k) for k in ('visible', 'pending', 'stale', 'document',
+                            'expectedRevision', 'sample', 'id', 'viewStart', 'viewEnd', 'waveStart',
+                            'waveEnd', 'waveBins', 'canvas', 'status')}, peakCount=len(local.get('peaks', [])))
+            if local.get('visible'):
+                self.assertEqual((local['document'], local['expectedRevision'], local['sample'], local['id']),
+                                 (*identity, 1, sample['id']), last)
+                self.assertFalse(local['stale'], last)
+                span = local['viewEnd'] - local['viewStart']; width = local['canvas'][2]
+                wanted = min(span, int(max(1, min(4096, width))))
+                if (not workspace['documentBusy'] and not workspace['pendingViewCommands']
+                        and not local['pending'] and span > 0 and width > 0
+                        and local['waveStart'] == local['viewStart'] and local['waveEnd'] == local['viewEnd']
+                        and local['waveBins'] == wanted and len(local['peaks']) == 2 * wanted):
+                    return
+            time.sleep(.01)  # Poll backoff only; readiness is the cache/worker state above.
+        self.fail(f'Sample Detail waveform did not become ready: {last}')
 
     def test_validation_inspection_and_no_device_for_release(self):
         before = self.doc()
@@ -171,7 +201,29 @@ class AuditionTests(unittest.TestCase):
 
     def plugin_instrument(self,class_id):
         descriptor=next(p for p in self.read('plugin.discover',format='VST3') if p['classID']==class_id)
-        self.write('plugin.add',descriptor=descriptor)
+        before=self.doc();rack=before['data']['nativePlugins']
+        try:
+            self.client.call('plugin.add',dict(expectedRevision=before['revision'],descriptor=descriptor))
+        except ApiError as error:
+            if error.code != -32003 or str(error) != 'Request began but reply timed out; outcome uncertain, inspect before retry':
+                raise
+            # A cold vendor load can outlive the server's response deadline.
+            # Its worker still owns the original request: never send another
+            # add. Recover only after observing its exact, committed append.
+            deadline=time.monotonic()+30
+            while time.monotonic()<deadline:
+                if not self.read('workspace.get')['documentBusy']:
+                    after=self.doc()['data']['nativePlugins']
+                    appended=after[-1] if len(after)==len(rack)+1 else {}
+                    existing={p['instanceID'] for p in rack}
+                    if (after[:-1]==rack and appended.get('classID')==class_id
+                            and appended.get('format')=='VST3'
+                            and appended.get('instanceID') and appended['instanceID'] not in existing):
+                        break
+                    raise
+                time.sleep(.025)
+            else:
+                raise
         plugin=self.doc()['data']['nativePlugins'][-1]['instanceID']
         index=self.write('instrument.create',empty=True)['instrument']
         self.write('plugin.instruments.set',plugin=plugin,assignments=[dict(instrument=index,channel=3)])
@@ -180,6 +232,27 @@ class AuditionTests(unittest.TestCase):
             self.assertEqual(len(changes),6)
             self.write('plugin.parameters.set',slot=0,values=changes)
         return index
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'),'private VST3 provider fixture')
+    def test_plugin_fixture_recovers_committed_timeout_without_duplicate(self):
+        original=self.client.call;adds=0
+        def timed_out_reply(method,*args,**kwargs):
+            nonlocal adds
+            result=original(method,*args,**kwargs)
+            if method=='plugin.add':
+                adds+=1
+                # Keep the real committed plugin but lose its successful reply,
+                # matching the server's uncertain-outcome contract.
+                raise ApiError(dict(code=-32003,message='Request began but reply timed out; outcome uncertain, inspect before retry'))
+            return result
+        self.client.call=timed_out_reply
+        try:
+            instrument=self.plugin_instrument('5245534F4E414E43494E535452550001')
+        finally:
+            self.client.call=original
+        rack=self.doc()['data']['nativePlugins']
+        self.assertEqual(adds,1);self.assertEqual(len(rack),1)
+        self.assertEqual(rack[0]['instrumentAssignments'],[dict(instrument=instrument,channel=3)])
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'),'private VST3 provider fixture')
     def test_vst3_provider_instrument_audition_pcm(self):
@@ -249,6 +322,7 @@ class AuditionTests(unittest.TestCase):
     def test_sample_markers_preview_replay_and_idle_presentation(self):
         self.live();self.desktop.send(self.desktop.hwnd(self.pid),0x111,505)
         before=self.doc();params=dict(expectedRevision=before['revision'],sample=1,note=49,on=True)
+        self.wait_sample_detail_waveform(before)
         first=self.client.call('transport.note',params,request_id='preview-replay')
         playing=self.settled();self.assertTrue(playing['voicePositions'])
         generations=[p['generation'] for p in playing['voicePositions']]
@@ -364,8 +438,20 @@ class AuditionTests(unittest.TestCase):
         self.desktop.send(root,0x111,113);self.desktop.send(root,0x111,507)
         self.assertTrue(self.read('workspace.get')['liveKeyboard']);self.root_key('Z')
         self.assertEqual(before,self.doc());self.assertTrue(self.settled()['voicePositions'])
+        held=self.typing()['held'];self.assertEqual([note['key'] for note in held],[ord('Z')])
         self.client.call('workspace.panel',dict(panel='samples',focus=True));self.root_key(9)
-        focus=self.desktop.focus(root);self.assertEqual(focus,private_desktop.user.GetDlgItem(root,230))
+        # Inspector focus must not enter the separate Main sample editor.
+        main_field=private_desktop.user.GetDlgItem(root,230);self.assertTrue(main_field)
+        focus=self.desktop.focus(root);self.assertEqual(focus,root);self.assertNotEqual(focus,main_field)
+        self.assertEqual(self.typing()['held'],held);self.assertEqual(before,self.doc())
+        # Explicitly select Main Samples before checking its native text field.
+        self.desktop.send(root,0x111,108)
+        workspace=self.read('workspace.get')
+        private_desktop.user.IsWindowVisible.argtypes=[wintypes.HWND]
+        self.assertTrue(private_desktop.user.IsWindowVisible(main_field))
+        self.assertEqual(workspace['focus'],'samples');self.assertEqual(self.desktop.focus(root),root)
+        self.assertEqual(self.typing()['held'],held);self.root_key(9)
+        focus=self.desktop.focus(root);self.assertEqual(focus,main_field)
         self.root_key('X');self.assertEqual(len(self.typing()['held']),1)
         # A release delivered to a different main control is handled by the pump.
         private_desktop.user.PostMessageW.argtypes=[wintypes.HWND,wintypes.UINT,wintypes.WPARAM,wintypes.LPARAM]
@@ -373,6 +459,151 @@ class AuditionTests(unittest.TestCase):
         self.assertFalse(self.settled()['voicePositions']);self.assertFalse(self.typing()['held'])
         self.desktop.send(root,0x111,507);self.assertFalse(self.read('workspace.get')['liveKeyboard'])
         self.assertEqual(before,self.doc());self.write('transport.stop')
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
+    def test_midi_and_typing_share_sound_release_orders_and_panic(self):
+        self.live(midi=True)
+        sources=self.read('midi.devices.get')['devices']
+        self.assertEqual(len(sources),1)
+        settings=self.read('midi.settings.get')
+        self.client.call('midi.settings.set',dict(expectedMidiRevision=settings['revision'],
+            source=sources[0]['id'],armed=False,channelsCount=2,quantization=0,latencyMS=0))
+        root=self.desktop.hwnd(self.pid);self.desktop.send(root,0x111,113);self.desktop.send(root,0x111,507)
+        self.assertTrue(self.read('workspace.get')['liveKeyboard'])
+        before=self.doc()
+
+        def midi(on,channel=0):
+            state=self.read('midi.settings.get');fixture=state['qualificationInput']
+            elapsed=(int(state['hostTime'])-int(fixture['anchorHostTime']))//10000
+            packed=(0x90 if on else 0x80)|channel|(48<<8)|((100 if on else 0)<<16)
+            self.client.call('midi.test.inject',dict(expectedMidiRevision=state['revision'],
+                generation=fixture['generation'],events=[dict(packed=packed,milliseconds=elapsed)]))
+            return self.settled()
+
+        self.root_key('Z');first=self.settled();self.assertTrue(first['voicePositions'])
+        shared=midi(True)
+        self.assertEqual([v['generation'] for v in shared['voicePositions']],
+                         [v['generation'] for v in first['voicePositions']])
+        self.root_key('Z',up=True);self.assertTrue(self.settled()['voicePositions'])
+        self.assertFalse(midi(False)['voicePositions'])
+
+        first=midi(True);self.assertTrue(first['voicePositions']);self.root_key('Z')
+        self.assertEqual([v['generation'] for v in self.settled()['voicePositions']],
+                         [v['generation'] for v in first['voicePositions']])
+        self.assertTrue(midi(False)['voicePositions'])
+        self.root_key('Z',up=True);self.assertFalse(self.settled()['voicePositions'])
+
+        midi(True,0);midi(True,1);self.assertTrue(midi(False,1)['voicePositions'])
+        self.assertFalse(midi(False,0)['voicePositions'])
+        self.root_key('Z');midi(True);self.write('transport.panic')
+        self.assertFalse(self.typing()['held']);self.assertFalse(self.settled()['voicePositions'])
+        self.root_key('Z');self.assertTrue(self.settled()['voicePositions'])
+        self.assertTrue(midi(False)['voicePositions'])  # Old MIDI release cannot stop the new typed voice.
+        self.root_key('Z',up=True);self.assertFalse(self.settled()['voicePositions'])
+
+        # Same pitch on another selected sound belongs to a new voice.
+        self.root_key('Z');self.root_select(135,1);newer=midi(True)
+        self.assertTrue(any(v['sample']==2 for v in newer['voicePositions']))
+        self.root_key('Z',up=True);self.assertTrue(any(v['sample']==2 for v in self.settled()['voicePositions']))
+        self.assertFalse(midi(False)['voicePositions']);self.assertEqual(before,self.doc())
+        self.write('transport.stop')
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
+    def test_rejected_midi_step_batch_releases_previously_held_voice(self):
+        self.live(midi=True)
+        module=self.folder/'owned-narrow-note-range.mod'
+        shutil.copyfile(Path(__file__).resolve().parents[2]/'test/test.mod',module)
+        self.write('document.open',path=str(module),discard=True)
+        self.assertEqual(self.doc()['data']['format'],'MOD')
+        self.assertLess(self.typing()['noteMax'],120)
+        self.root_select(135,0);self.assertEqual(self.typing()['slot'],1)
+        self.navigate(row=1,channel=0,column=0,following=False)
+        source=self.read('midi.devices.get')['devices'][0]['id'];settings=self.read('midi.settings.get')
+        self.client.call('midi.settings.set',dict(expectedMidiRevision=settings['revision'],
+            source=source,armed=False,channelsCount=1,quantization=0,latencyMS=0))
+
+        baseline=self.read('transport.get');input_before=self.read('midi.settings.get')
+        self.assertFalse(baseline['fault']);self.assertEqual(baseline['auditionDropped'],0)
+        self.assertEqual(input_before['lost'],0)
+        observations=[]
+        def record_observation(sample):
+            observations.append(sample)
+            if len(observations)>16:del observations[1:-15]
+
+        def wait_for_voice_state(phase,ready):
+            deadline=time.monotonic()+8
+            def observe(method):
+                remaining=deadline-time.monotonic()
+                if remaining<=0:raise TimeoutError('MIDI voice observation deadline expired')
+                return Client(self.client.pipe,timeout=min(.5,remaining)).call(method)['data']
+            while time.monotonic()<deadline:
+                try:
+                    workspace=observe('workspace.get');transport=observe('transport.get')
+                    sample=dict(phase=phase,documentBusy=workspace['documentBusy'],status=workspace['status'],
+                        midi={key:workspace['midi'][key] for key in ('connected','generation','lost')},
+                        transport={key:transport[key] for key in ('audioActive','audition','playing','callbacks','frames',
+                            'voices','voicePositions','fault','auditionDropped','playbackEpoch')})
+                    record_observation(sample)
+                    self.assertFalse(transport['fault'],sample)
+                    self.assertEqual(transport['auditionDropped'],baseline['auditionDropped'],sample)
+                    self.assertEqual(workspace['midi']['lost'],input_before['lost'],sample)
+                    self.assertTrue(workspace['midi']['connected'],sample)
+                    self.assertEqual(workspace['midi']['generation'],input_before['generation'],sample)
+                    if ready(workspace,transport):return transport
+                except (TransportError,TimeoutError) as error:
+                    record_observation(dict(phase=phase,readError=str(error)))
+                remaining=deadline-time.monotonic()
+                if remaining>0:time.sleep(min(.03,remaining))
+            self.fail(f'{phase} did not settle within 8 seconds: '+json.dumps(observations,sort_keys=True))
+
+        def inject(packed):
+            state=self.read('midi.settings.get');fixture=state['qualificationInput']
+            elapsed=(int(state['hostTime'])-int(fixture['anchorHostTime']))//10000
+            reply=self.client.call('midi.test.inject',dict(expectedMidiRevision=state['revision'],
+                generation=fixture['generation'],events=[dict(packed=value,milliseconds=elapsed) for value in packed]))
+            self.assertEqual(reply['data']['accepted'],len(packed))
+
+        # This repository MOD has a looping sample 1, so a missed release stays
+        # observable rather than disappearing because a one-shot sample ended.
+        note=min(49,self.typing()['noteMax'])-1
+        inject([0x90|(note<<8)|(100<<16)])
+        # Queue admission and one fixed delay do not prove the first prepared
+        # callback has consumed this note. Observe the actual looping voice.
+        held=wait_for_voice_state('initial sample voice',lambda workspace,transport:
+            not workspace['documentBusy'] and transport['audioActive'] and transport['audition'] and
+            not transport['playing'] and transport['voices']>0 and
+            any(voice['sample']==1 for voice in transport['voicePositions']))
+        state=self.read('midi.settings.get')
+        self.client.call('midi.settings.set',dict(expectedMidiRevision=state['revision'],
+            source=source,armed=True,channelsCount=1,quantization=0,latencyMS=0))
+        before=self.doc();cells=self.read('pattern.get',pattern=0,startRow=0,rowCount=64)
+        invalid=self.typing()['noteMax']  # MIDI is zero-based; resulting tracker note exceeds this format.
+        inject([0x80|(note<<8),0x90|(invalid<<8)|(100<<16)])
+        rejected=False;silent_at=None
+        def rejection_and_release(workspace,transport):
+            nonlocal rejected,silent_at
+            self.assertTrue(transport['audioActive'] and transport['audition'] and not transport['playing'],transport)
+            self.assertEqual(transport['playbackEpoch'],held['playbackEpoch'],transport)
+            if workspace['documentBusy']:return False
+            if not rejected:
+                if 'outside' not in workspace['status'] or 'range' not in workspace['status']:return False
+                rejected=True
+            # A single empty voicePositions read can be a concurrent snapshot;
+            # require zero telemetry too, sustained over advancing callbacks.
+            if transport['voices'] or transport['voicePositions']:
+                silent_at=None;return False
+            if silent_at is None:silent_at=(transport['callbacks'],transport['frames'])
+            return transport['callbacks']>=silent_at[0]+2 and transport['frames']>silent_at[1]
+        released=wait_for_voice_state('rejected step releases held voice',rejection_and_release)
+        self.assertEqual(self.doc(),before)
+        self.assertEqual(self.read('pattern.get',pattern=0,startRow=0,rowCount=64),cells)
+        self.assertEqual(self.read('context.get')['row'],1)
+        self.desktop.send(self.desktop.hwnd(self.pid),0x111,549)
+        error=self.read('workspace.get')['midiWindow']['status']
+        self.assertIn('outside',error);self.assertIn('range',error)
+        self.assertEqual(self.read('midi.settings.get')['lost'],0)
+        self.remember('midi-rejected-step-state-observations',dict(held=held,released=released,observations=observations))
+        self.write('transport.stop')
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
     def test_native_sample_and_instrument_typing_capture_text_and_close(self):

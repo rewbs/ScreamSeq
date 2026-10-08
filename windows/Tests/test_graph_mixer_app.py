@@ -13,10 +13,17 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'windows/Api'))
 from client import Client, ApiError, TransportError
 from private_desktop import PrivateDesktop
+from precise_note_native_support import PreciseNoteNativeMixin
 ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
 
 
 class GraphMixerAppTests(unittest.TestCase):
+    # Only non-TestCase helper methods; no inherited/duplicated test inventory.
+    note_windows = PreciseNoteNativeMixin.note_windows
+    note_hwnd = PreciseNoteNativeMixin.note_hwnd
+    note_idle = PreciseNoteNativeMixin.note_idle
+    resize_main = PreciseNoteNativeMixin.resize_main
+
     def setUp(self):
         self.folder = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='graph-mixer-', dir=os.environ['TMPDIR'])))
         self.catalogue = self.folder / 'catalogue' / 'envelope-catalogue-v1.json'
@@ -110,10 +117,37 @@ class GraphMixerAppTests(unittest.TestCase):
         self.assertEqual(next(b for b in self.read('mixer.get')['buses'] if b['id'] == group)['output'], '')
         self.command(404)  # Remove group.
         self.assertFalse(any(b['id'] == group for b in self.read('mixer.get')['buses']))
-        self.command(107)  # Notes and mixer retain separate captured drafts.
+        # Make the compact hiding condition explicit; native Notes can coexist
+        # with the same retained Mixer at a wide workstation size.
+        musical = self.doc()
+        state = self.resize_main(900, 620)
+        mixer = {key: state['mixerEditor'][key] for key in ('bus', 'draft', 'expectedRevision')}
+        root = self.desktop.hwnd(self.pid)
+        self.desktop.send(root, 0x111, 107)  # Public entry command; no permanent Main107 HWND.
+        state = self.note_idle()
+        notes = self.note_hwnd()
+        captured = {key: state['preciseNotes'][key] for key in (
+            'document', 'patternID', 'trackID', 'row', 'expectedRevision', 'draftCount', 'selectedEvent')}
+        self.assertEqual(state['editorDock']['mode'], 'tabs')
+        self.assertEqual(state['editorDock']['compactSelection'], 'preciseNotes')
+        self.assertTrue(state['preciseNotes']['visible'])
         self.assertFalse(self.read('workspace.get')['mixerEditor']['visible'])
         self.command(400)
+        state = self.note_idle()
+        self.assertEqual(state['editorDock']['compactSelection'], 'mixer')
+        self.assertFalse(state['preciseNotes']['visible'])
         self.assertTrue(self.read('workspace.get')['mixerEditor']['visible'])
+        state = self.resize_main(1440, 852)
+        self.assertEqual(state['editorDock']['mode'], 'regions')
+        self.assertTrue(state['editorDock']['trackerVisible'])
+        self.assertTrue(state['mixerEditor']['visible'])
+        self.assertTrue(state['preciseNotes']['visible'])
+        self.assertEqual(state['editorDock']['hosts']['bottom']['selected'], 'mixer')
+        self.assertEqual(state['editorDock']['hosts']['secondary']['selected'], 'preciseNotes')
+        self.assertEqual(self.note_hwnd(), notes)
+        self.assertEqual({key: state['mixerEditor'][key] for key in mixer}, mixer)
+        self.assertEqual({key: state['preciseNotes'][key] for key in captured}, captured)
+        self.assertEqual(self.doc(), musical)
 
     def test_native_mixer_controls_fit_small_window(self):
         user = ctypes.WinDLL('user32')
@@ -138,7 +172,7 @@ class GraphMixerAppTests(unittest.TestCase):
                 self.assertLessEqual(rect.right, frame.right)
                 self.assertLessEqual(rect.bottom, frame.bottom)
 
-    def test_live_mixer_controls_keep_wasapi_running_and_routing_stops(self):
+    def test_live_mixer_controls_and_supported_routing_keep_wasapi_running(self):
         self.write('mixer.enable')
         master = self.read('mixer.get')['buses'][-1]['id']
         path = self.folder / 'live-mixer.screamseq'
@@ -168,8 +202,18 @@ class GraphMixerAppTests(unittest.TestCase):
         meters = self.read('mixer.meters')
         self.assertTrue(meters['playing'])
         self.assertTrue(meters['meters'])
-        self.write('mixer.bus.add', kind='return', name='New topology')
-        self.assertFalse(self.read('transport.get')['audioActive'])
+        before_route = self.read('transport.get')
+        added = self.write('mixer.bus.add', kind='return', name='New topology')['bus']
+        self.assertIn(added, [bus['id'] for bus in self.read('mixer.get')['buses']])
+        for _ in range(100):
+            current = self.read('transport.get')
+            self.assertTrue(current['audioActive'])
+            self.assertFalse(current['fault'])
+            if current['frames'] > before_route['frames'] and len(self.read('mixer.meters')['meters']) == len(meters['meters']) + 1:
+                break
+            time.sleep(.02)
+        else:
+            self.fail('live return routing was not adopted by the running renderer')
 
     def test_graph_clones_real_baseline_preserves_omitted_state_history_and_reopen(self):
         identity = self.add_gain()
@@ -277,9 +321,46 @@ class GraphMixerAppTests(unittest.TestCase):
         buses = self.read('mixer.get')['buses']
         track, master = buses[0]['id'], buses[-1]['id']
         self.write('mixer.bus.set', bus=master, inserts=[fx])
-        self.rejected('mixer.sidechains.set', plugin=fx, input=1, sources=[dict(source=track)])
+        ports = self.read('plugin.buses.get', slot=0)['buses']
+        detector = next(p for p in ports if p['direction'] == 'input' and p['index'] == 1)
+        self.assertTrue(detector['supported'])
+        self.assertFalse(detector['active'])
+        before = self.doc()
+        side_before = self.read('mixer.get')['sidechains']
+        preview = self.write('mixer.sidechains.set', plugin=fx, input=1,
+                             sources=[dict(source=track)], dryRun=True)
+        self.assertTrue(preview['wouldChange'])
+        self.assertEqual(self.doc(), before)
+        # Supported ports can be connected without an explicit rack enable.
+        # The playback copy enables routed ports; saved plugin flags stay put.
+        self.write('mixer.sidechains.set', plugin=fx, input=1, sources=[dict(source=track)])
+        side_routed = self.read('mixer.get')['sidechains']
+        self.assertEqual(side_routed, [dict(source=track, plugin=fx, input=1,
+                                           gainDB=0, preFader=False, enabled=True)])
+        self.assertEqual(self.doc()['data']['nativePlugins'][0]['auxiliaryInputs'], [])
+        self.rejected('mixer.sidechains.set', plugin=fx, input=63, sources=[dict(source=track)])
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('mixer.get')['sidechains'], side_before)
+        self.write('history.redo', domain='document')
+        self.assertEqual(self.read('mixer.get')['sidechains'], side_routed)
         self.write('plugin.buses.set', slot=0, inputs=[1])
         self.write('mixer.sidechains.set', plugin=fx, input=1, sources=[dict(source=track)])
+        self.assertEqual(self.doc()['data']['nativePlugins'][0]['auxiliaryInputs'], [1])
+        self.write('mixer.sidechains.set', plugin=fx, input=0,
+                   sources=[dict(source=track, gainDB=-6, preFader=True)])
+        main_input = side_routed + [dict(source=track, plugin=fx, input=0,
+                                         gainDB=-6, preFader=True, enabled=True)]
+        self.assertEqual(self.read('mixer.get')['sidechains'], main_input)
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('mixer.get')['sidechains'], side_routed)
+        self.write('history.redo', domain='document')
+        self.assertEqual(self.read('mixer.get')['sidechains'], main_input)
+        path = self.folder / 'main-input-fan-in.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path), discard=True)
+        self.assertEqual(self.read('mixer.get')['sidechains'], main_input)
+        self.assertEqual([p['instanceID'] for p in self.doc()['data']['nativePlugins']], [fx, synth])
+        self.assertEqual(self.doc()['data']['nativePlugins'][0]['auxiliaryInputs'], [1])
         self.write('mixer.plugin.route', plugin=synth, output=0, target=None, disconnected=True)
         routes = self.read('mixer.get')['instruments']
         self.assertTrue(any(r['plugin'] == synth and r['target'] == '' for r in routes))

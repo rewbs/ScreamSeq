@@ -6985,7 +6985,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Read a bounded arrangement page with per-track note counts and sixteen event-density bins per pattern block.",
+      "description": "Read a bounded arrangement page on Mac or Windows. Each block reports uint32 events, notes, trackerEvents, preciseEvents, nativeFxEvents and sixteen bins. Events count occupied tracker cells plus individual precise on/off events and native FX records; notes count tracker pitched cells plus precise onsets. Repeated patterns share calculation, not occurrence identities. End/Skip blocks are empty; startOrder equal to totalOrders returns an empty page.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -7036,7 +7036,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Copy track blocks between orders, making a shared destination pattern independent by default. One undo step; dryRun previews changed-cell count and pattern cloning.",
+      "description": "Copy tracker cells, precise notes and every FX column between current-sequence orders on Mac or Windows. makeUnique preserves exact destination timing and unrelated native lanes/links. Explicit clip copies only the overlapping span and excludes events at its end. One Undo for a changed Apply; no-op preserves playback and Redo. dryRun validates the complete candidate without consuming IDs. wouldChange includes native-only edits; changedCells counts six-field cells only.",
       "type": "object",
       "properties": {
         "jsonrpc": {

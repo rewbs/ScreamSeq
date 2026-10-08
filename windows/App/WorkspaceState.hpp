@@ -10,7 +10,7 @@ struct WorkspaceRect {
 	bool contains(float px, float py) const { return px>=x && py>=y && px<x+w && py<y+h; }
 };
 struct WorkspaceGeometry {
-	WorkspaceRect pattern, inspector, graph, automation, verticalDivider, horizontalDivider;
+	WorkspaceRect pattern, inspector, graph, automation, lowerTabs, verticalDivider, horizontalDivider;
 };
 struct InspectorState {
 	bool pinned=false, opened=false, hidden=false;
@@ -21,7 +21,8 @@ class WorkspaceState {
 public:
 	std::array<InspectorState,2> panels;
 	std::string layout="Compose", active="notes", focus="pattern";
-	float rightWidth=340, lowerHeight=180;
+	float rightWidth=340, lowerHeight=210;
+	bool lowerVisible=true;
 
 	static size_t index(const std::string &id) {
 		if(id=="notes") return 0;
@@ -54,20 +55,22 @@ public:
 		capture(id,position,sample);
 		if(takeFocus) focus=id;
 	}
-	WorkspaceGeometry geometry(float width,float height,float minimumLowerHeight=128) const {
+	WorkspaceGeometry geometry(float width,float height,float minimumLowerHeight=128,float top=88) const {
 		WorkspaceGeometry g;
-		const float left=170, top=88, bottom=std::max(top+180,height-44);
+		const float left=170, bottom=std::max(top+180,height-44);
 		const bool compose=layout!="Pattern focus";
 		const float right=visible() ? width-std::clamp(rightWidth,300.0f,std::max(300.0f,width-left-350)) : width-8;
-		const float split=compose ? bottom-std::clamp(std::max(lowerHeight,minimumLowerHeight),128.0f,std::max(128.0f,bottom-top-180)) : bottom;
+		const bool lower=compose&&lowerVisible;
+		const float split=lower ? bottom-std::clamp(std::max(lowerHeight,minimumLowerHeight+30),158.0f,std::max(158.0f,bottom-top-180)) : compose?bottom-30:bottom;
 		g.pattern={left,top,std::max(1.0f,right-left-6),std::max(1.0f,split-top-6)};
 		if(visible()) { g.inspector={right,top,std::max(1.0f,width-right-8),std::max(1.0f,split-top-6)}; g.verticalDivider={right-6,top,6,split-top}; }
-		if(compose) {
+		if(lower) {
 			const float divider=visible() ? right : left+(width-left)*0.62f;
-			g.graph={left,split,divider-left-6,bottom-split};
-			g.automation={divider,split,width-divider-8,bottom-split};
+			g.lowerTabs={left,split,width-left-8,30};
+			g.graph={left,split+30,divider-left-6,bottom-split-30};
+			g.automation={divider,split+30,width-divider-8,bottom-split-30};
 			g.horizontalDivider={left,split-6,width-left-8,6};
-		}
+		} else if(compose) g.lowerTabs={left,split,width-left-8,30};
 		return g;
 	}
 };

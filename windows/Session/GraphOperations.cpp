@@ -473,8 +473,10 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
     if(host_.validateCandidate)host_.validateCandidate(next);
     const bool changed=next!=document_.native();
     if(changed&&!dry) {
-      if((next.mixer!=document_.native().mixer||!sameSignalProcessing(next.signal,document_.native().signal))&&stopPlayback_) stopPlayback_();
-      document_.annotate([&](NativeSong &n){n=next;});
+      std::function<void()> publish;
+      if(next.mixer!=document_.native().mixer||!sameSignalProcessing(next.signal,document_.native().signal))
+        publish=host_.prepareNativeUpdate?host_.prepareNativeUpdate(document_.native(),next):stopPlayback_;
+      document_.annotate([&](NativeSong &n){n=next;},publish);
     }
     return {{"dryRun",dry},{"wouldChange",changed},{"graph",id(affected)},{"node",id(nodeID)},{"group",id(groupID)}};
   } catch(const std::invalid_argument &e) { throw Api::ApiError(-32602,e.what()); }

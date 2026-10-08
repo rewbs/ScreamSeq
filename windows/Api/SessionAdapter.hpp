@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -113,8 +114,8 @@ class SessionAdapter {
   }
   Json describe() const {
     Json result= {{"protocol","ScreamSeq local API"},{"version",1},
-      {"reads",{"api.describe","document.get","pattern.get","transport.get","context.get","workspace.get"}},
-      {"writes",{"transport.play","transport.stop","context.set","workspace.panel","workspace.layout"}},{"maxPatternCells",4096},
+      {"reads",{"api.describe","document.get","pattern.get","transport.get","context.get","workspace.get","workspace.commands.get"}},
+      {"writes",{"transport.play","transport.stop","context.set","workspace.input","workspace.panel","workspace.layout","workspace.shortcut.set"}},{"maxPatternCells",4096},
       {"coordinates","Patterns, rows, channels and orders are zero-based. Samples and instruments are one-based; zero means none."},
       {"noteEncoding","0=empty; 1=C-0, 49=C-4, 61=C-5. Special notes and format command IDs follow document.get."},
       {"platform","windows"},{"musicalEditing",false},{"fullApiParity",false},
@@ -127,19 +128,27 @@ class SessionAdapter {
         {"durable",false}}},
       {"revisionGuards",{{"transport.play",{"expectedRevision"}},{"transport.stop",{"expectedRevision"}},
         {"context.set",{"expectedRevision","expectedContext"}},
-        {"workspace.panel",Json::array()},{"workspace.layout",Json::array()}}},
-      {"workspaceSubset",{{"panels",{"notes","samples"}},{"placements",{"right","hide"}},
-        {"layouts",{"Compose","Pattern focus","Sound design"}}}},
-      {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. Workspace operations accept neither revision token; unsupported parameters reject."}};
+        {"workspace.input",{"expectedRevision","expectedContext"}},
+        {"workspace.panel",Json::array()},{"workspace.layout",Json::array()},{"workspace.shortcut.set",Json::array()}}},
+      {"workspaceSubset",{{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"placements",{"right","hide"}},
+        {"editorPlacements",{{"automation",{"right","bottom","secondary","float","hide"}},{"instruments",{"right","bottom","secondary","float","hide"}},{"graphCurve",{"right","bottom","secondary","float","hide"}},{"preciseNotes",{"right","bottom","secondary","float","hide"}}}},
+        {"layouts",{"Compose","Pattern focus","Sound design","Connected","Graph editing","Save custom","Restore custom","Delete custom","Reload saved"}},
+        {"namedLayouts",{{"optionalField","savedName"},{"default","Custom"},{"maximum",24},{"nameCharacters",64}}},
+        {"schema","windows/Api/workspace.schema.json"}}},
+      {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. workspace.input also requires both tokens; other workspace operations accept neither token. Unsupported parameters reject."}};
     if(host_ && host_->supportsDocumentOperations()) {
-      for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
-      for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.open","pattern.notes.set","document.timing.set"}) {
+      for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","arrangement.get","arrangement.matrix","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
+      for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.open","pattern.notes.set","document.timing.set","song.annotate","arrangement.copyBlock"}) {
         result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
       }
       result["musicalEditing"]=true;
+      result["arrangementMatrix"]={{"maximumOrders",128},{"maximumChannels",32},{"defaultOrders",64},{"defaultChannels",16},{"densityBins",16},
+        {"density","events = occupied tracker cells + precise on/off events + native FX records; notes = pitched tracker cells + precise onsets. trackerEvents, preciseEvents and nativeFxEvents expose the stored layers separately; counts and bins are uint32."},
+        {"copy","Whole channel blocks in the current sequence, including precise notes and every FX column. makeUnique preserves exact destination pattern timing and unrelated native lanes/links. Explicit clip copies the overlapping span and excludes events at its end."},
+        {"preview","dryRun validates the complete candidate without consuming IDs/history. wouldChange includes native-only edits; changedCells counts six-field cell edits only. Changed Apply creates one Undo and stops playback; no-op preserves playback and Redo."}};
       for(const auto &m:host_->additionalDocumentReads()) if(std::find(result["reads"].begin(),result["reads"].end(),m)==result["reads"].end())result["reads"].push_back(m);
       for(const auto &m:host_->additionalDocumentWrites()) {
-        if(std::find(result["writes"].begin(),result["writes"].end(),m)==result["writes"].end())result["writes"].push_back(m);result["revisionGuards"][m]={m=="plugin.library.set"?"expectedLibraryRevision":"expectedRevision"};
+        if(std::find(result["writes"].begin(),result["writes"].end(),m)==result["writes"].end())result["writes"].push_back(m);result["revisionGuards"][m]=m=="parameter.activity.watch"?Json::array():Json::array({m=="plugin.library.set"?"expectedLibraryRevision":"expectedRevision"});
       }
       result["windowsExtensions"]={{"document.open","absolute path, expectedRevision, discard:true required for unsaved work"},
         {"plugin.editor.open","slot and expectedRevision; native VST3 editor on the private STA; no musical change unless the vendor emits edits"},
@@ -151,11 +160,28 @@ class SessionAdapter {
         {"commands","tracker, parameter-set, parameter-slide, pitch-set, pitch-slide, note-cut, nudge-forward (NF), nudge-reverse (NR). Nudges: strength value 0..1, duration >0 in 65536 units/row; sample-only, reversal above 0.5 opposing strength. Use pattern.commands for source-format IDs and two-character displayCode."},
         {"timing","65536 units per row; tracker commands require row boundaries. Bindings use stable plugin instance and parameter IDs."},
         {"transforms","pattern.transform uses shared selection/channel/note-track/pattern/song transforms; field effect includes all FX columns. Precise notes remain independent."}};
+      const auto extraReads=host_->additionalDocumentReads();
+      if(std::find(extraReads.begin(),extraReads.end(),"recording.get")!=extraReads.end())
+        result["recording"]={{"schema","windows/Api/recording.schema.json"},{"maxCaptureEvents",1024},{"maxTakeEvents",65536},
+          {"hostClock","QPC converted to 100 ns units; timestamps are decimal uint64 strings"},
+          {"timing","65536 units per row; zero quantization retains exact timing. Positive latencyMS places input earlier."},
+          {"history","Start/capture/stop/discard do not change musical revision. A stopped compatible take commits in one document Undo. Failed commits retain the take."},
+          {"recovery","Autosave copies a live take without stopping it; restored takes are stopped, with fresh IDs and preserved compatibility."}};
     }
     if(host_) {
       for(const auto &m:host_->independentReads())result["reads"].push_back(m);
       for(const auto &m:host_->independentWrites())result["writes"].push_back(m);
       result["revisionGuards"].update(host_->independentGuards());
+      const auto independent=host_->independentReads();
+      if(std::find(independent.begin(),independent.end(),"recovery.status")!=independent.end())
+        result["recovery"]={{"schema","windows/Api/recovery.schema.json"},{"intervalSeconds",10},{"generations",10},
+          {"restore","Opaque listed ID; protects the current unsaved song, then opens an unsaved document with a new identity."},
+          {"recording","Live and imported unfinished takes are preserved. Restored takes are stopped and remain reviewable; incompatibility prevents silent commit."}};
+      if(std::find(independent.begin(),independent.end(),"midi.settings.get")!=independent.end())
+        result["midi"]={{"schema","windows/Api/midi.schema.json"},{"input","WinMM device-interface IDs; empty source disconnects. Discovery and connection run on a control worker."},
+          {"timestampPrecision","Driver milliseconds anchored to the advertised QPC 100 ns clock, with reported anchor uncertainty."},
+          {"overflow","Bounded callback queue; loss quarantines pending input, releases held audition notes and retains a stopped take for review."},
+          {"settings","Independent expectedMidiRevision; settings affect the next take, without changing the pinned target of a retained take."}};
     }
     return result;
   }
@@ -232,16 +258,16 @@ public:
     if(std::this_thread::get_id()!=owner_) return errorResponse(q["id"],-32002,"Dispatch onto the session control thread");
     const std::string method=q["method"];
     const auto &p=q["params"];
-    const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout";
+    const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout" || method=="workspace.commands.get" || method=="workspace.shortcut.set" || method=="workspace.input";
     const auto reads=host_ ? host_->additionalDocumentReads() : std::vector<std::string>{};
     const auto writes=host_ ? host_->additionalDocumentWrites() : std::vector<std::string>{};
     const auto separateReads=host_?host_->independentReads():std::vector<std::string>{};
     const auto separateWrites=host_?host_->independentWrites():std::vector<std::string>{};
     const bool independentRead=std::find(separateReads.begin(),separateReads.end(),method)!=separateReads.end();
     const bool independentWrite=std::find(separateWrites.begin(),separateWrites.end(),method)!=separateWrites.end();
-    const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="document.timing.get" || method=="automation.formula.reference" || method=="automation.formula.preview");
-    const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set");
-    const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || method=="context.set" || (workspace && method!="workspace.get");
+    const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="document.timing.get" || method=="arrangement.get" || method=="arrangement.matrix" || method=="automation.formula.reference" || method=="automation.formula.preview");
+    const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set" || method=="song.annotate" || method=="arrangement.copyBlock");
+    const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || method=="context.set" || (workspace && method!="workspace.get" && method!="workspace.commands.get");
     if(!write && !independentRead && !docRead && !workspace && method!="api.describe" && method!="document.get" && method!="context.get" && method!="pattern.get" && method!="transport.get")
       return errorResponse(q["id"],-32601,"Unknown method; call api.describe");
     std::string revision;
@@ -266,7 +292,7 @@ public:
       if(host_) before=host_->snapshot();
       else before.revision="unbound";
       revision=before.revision;
-      if(write && !workspace && method!="plugin.library.set") {
+      if(write && (!workspace || method=="workspace.input") && method!="plugin.library.set" && method!="parameter.activity.watch") {
         require(p.contains("expectedRevision") && p["expectedRevision"].is_string(),"expectedRevision is required");
         const auto expected=p["expectedRevision"].get<std::string>();
         require(!expected.empty() && expected.size()<=200 && expected.find('\0')==std::string::npos,"Invalid expectedRevision");
@@ -279,7 +305,22 @@ public:
       else if(method=="transport.get") { keys(p,{}); data=before.transport; }
       else if(method=="pattern.get") data=getPattern(p);
       else if(docRead || docWrite) data=host_->documentOperation(method,p);
-      else if(workspace) data=host_->workspace(method,p);
+      else if(workspace) {
+        if(method=="workspace.input") {
+          keys(p,{"expectedRevision","expectedContext","instrument","octave"});
+          require(p.contains("expectedContext")&&p.at("expectedContext").is_string(),"expectedContext is required");
+          if(p.at("expectedContext")!=before.context.at("contextRevision"))throw ApiError(-32001,"Workspace context changed; read it again");
+          require(p.contains("instrument")||p.contains("octave"),"Supply instrument or octave");
+          const auto inputInteger=[&](const char *key,unsigned low,unsigned high) {
+            if(!p.contains(key))return;
+            const auto &raw=p.at(key);require(raw.is_number(),"Input selection must be an integer number");
+            const auto value=raw.get<double>();
+            require(std::isfinite(value)&&std::floor(value)==value&&value>=low&&value<=high,"Input selection is outside its integer range");
+          };
+          inputInteger("instrument",1,255);inputInteger("octave",0,8);
+        }
+        data=host_->workspace(method,p);
+      }
       else if(method=="context.set") {
         host_->navigate(prepareNavigation(p,before)); data=host_->snapshot().context;
       }
@@ -292,7 +333,7 @@ public:
       const auto after=(write || docRead) ? host_->snapshot() : before;
       Json result={{"revision",after.revision},{"changed",before.revision!=after.revision},
         {"playbackStopped",before.transport.value("playing",false) && !after.transport.value("playing",false)}, {"data",std::move(data)}};
-      if(method=="context.get" || method=="context.set")
+      if(method=="context.get" || method=="context.set" || method=="workspace.input")
         result["contextChanged"]=before.context.at("contextRevision")!=after.context.at("contextRevision");
       else if(host_) result["documentId"]=after.documentId;
       Json response={{"jsonrpc","2.0"},{"id",q["id"]},{"result",std::move(result)}};

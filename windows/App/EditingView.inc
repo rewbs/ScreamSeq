@@ -3,6 +3,7 @@
     uint64_t listedCatalog=UINT64_MAX;
     std::string inspectionClipboard;
     std::string effectPrefix,effectPrefixRevision;
+    #include "PatternNudgeEditor.inc"
     std::pair<std::wstring,std::wstring> effectText(const std::optional<Tracker::PatternCommand> &command) const {
         if(!command)return {L"..",L"...."};
         const auto &c=*command;wchar_t code[4]{},value[24]{};
@@ -18,7 +19,7 @@
         case K::PitchSet:case K::PitchSlide:
             wcscpy_s(code,c.kind==K::PitchSet?L"BS":L"BL");swprintf_s(value,L"%+.3f",c.value);break;
         case K::NudgeForward:case K::NudgeReverse:
-            wcscpy_s(code,c.kind==K::NudgeForward?L"NF":L"NR");swprintf_s(value,L"%.2f%%",100*c.value);break;
+            wcscpy_s(code,c.kind==K::NudgeForward?L"NF":L"NR");swprintf_s(value,L"%.3g/%.3g",100*c.value,double(c.duration)/65536.);break;
         case K::NoteCut:wcscpy_s(code,L"NC");swprintf_s(value,L"%04X",c.position%Tracker::performanceUnitsPerRow);break;
         }
         return {code,value};
@@ -61,6 +62,8 @@
         const int digit=key>='0'&&key<='9'?int(key-'0'):key>='A'&&key<='F'?int(key-'A'+10):-1;
         auto current=view->effect(patternIndex,row,channel,(column-3)/2);
         if(column%2==0) {
+            if(current&&(current->kind==Tracker::PatternCommandKind::NudgeForward||current->kind==Tracker::PatternCommandKind::NudgeReverse))
+                return beginPatternNudgeEdit({},key>='0'&&key<='9'?std::wstring(1,wchar_t(key)):key==VK_DECIMAL||key==VK_OEM_PERIOD?L".":L"");
             if(current && current->kind!=Tracker::PatternCommandKind::TrackerEffect) {openEffectEditor();return true;}
             if(digit<0)return false;
             const unsigned effect=current?current->effect:0,old=current?current->parameter:0;
@@ -77,7 +80,8 @@
             effectPrefix.clear();setTrackerEffect(entry.at("command"),mask?(old&~mask)|value:old);
             auto n=position();n["column"]=column+1;navigate(n);return true;
         }
-        for(auto code:{"PS","PL","BS","BL","NC","NF","NR"})if(candidate==code){effectPrefix.clear();openEffectEditor(candidate);return true;}
+        if(candidate=="NF"||candidate=="NR"){effectPrefix.clear();return beginPatternNudgeEdit(candidate=="NF"?"nudge-forward":"nudge-reverse");}
+        for(auto code:{"PS","PL","BS","BL","NC"})if(candidate==code){effectPrefix.clear();openEffectEditor(candidate);return true;}
         const bool prefix=std::any_of(view->commands.at("effect").begin(),view->commands.at("effect").end(),[&](const auto &entry){return entry.at("displayCode").template get<std::string>().starts_with(candidate);}) || candidate=="P" || candidate=="B" || candidate=="N";
         if(candidate.size()==1&&prefix){effectPrefix=candidate;effectPrefixRevision=view->session.revision;status=L"Effect "+wide(candidate)+L"_ / type the second character";return true;}
         effectPrefix.clear();
@@ -92,7 +96,8 @@
     }
     void updateTitle() {
         if(!window) return;
-        auto name=view->path.empty() ? L"Demo" : view->path.filename().wstring();
+        auto name=view->path.empty() ? wide(view->session.document.value("title",std::string())) : view->path.filename().wstring();
+        if(name.empty())name=L"Untitled";
         auto title=(view->dirty ? L"* " : L"")+name+L" - "+wide(view->session.document.at("format").get<std::string>())+L" - ScreamSeq";
         if(busy) title+=L" [Document worker busy]";
         SetWindowTextW(window,title.c_str());
@@ -107,7 +112,7 @@
     }
     void advance() {auto n=position();n["row"]=std::min(row+editStep,patternRows()-1);n["following"]=false;navigate(n);}
     bool enterCell(WPARAM key,bool repeat=false) {
-        if(workspaceState.focus!="pattern") return false;
+        if(!trackerWorkspaceVisible()||workspaceState.focus!="pattern") return false;
         if(busy) {status=L"Document busy / Stop and navigation remain available";return true;}
         if(column>=3)return enterEffect(key);
         auto c=view->cell(patternIndex,row,channel);
@@ -137,21 +142,32 @@
         edit("pattern.apply",{{"cells",Json::array({cell})}});
         if(column==0) advance();return true;
     }
-    void copyCells() {
+    bool copyCells() {
         const auto region=selection();const auto clipboardSequence=inspection?0:GetClipboardSequenceNumber();
         auto data=await(std::async(std::launch::async,[snapshot=view,p=patternIndex,region]{return ScreamSeq::patternClipboardText(*snapshot,p,
             region.at("startRow"),region.at("endRow"),region.at("startChannel"),region.at("endChannel"));}));
-        if(inspection){inspectionClipboard=std::move(data);status=L"Pattern selection copied";return;}
-        if(GetClipboardSequenceNumber()!=clipboardSequence){status=L"Clipboard changed while preparing the selection / copy cancelled";return;}
+        if(inspection){inspectionClipboard=std::move(data);status=L"Pattern selection copied";return true;}
+        if(GetClipboardSequenceNumber()!=clipboardSequence){status=L"Clipboard changed while preparing the selection / copy cancelled";return false;}
         const auto text=wide(data);const auto bytes=(text.size()+1)*sizeof(wchar_t);
         auto memory=GlobalAlloc(GMEM_MOVEABLE,bytes);if(!memory) throw std::bad_alloc();
         auto target=GlobalLock(memory);if(!target) {GlobalFree(memory);throw std::runtime_error("Cannot allocate clipboard data");}
         memcpy(target,text.c_str(),bytes);GlobalUnlock(memory);
         if(!OpenClipboard(window)) {GlobalFree(memory);throw std::runtime_error("Clipboard busy");}
-        if(GetClipboardSequenceNumber()!=clipboardSequence){CloseClipboard();GlobalFree(memory);status=L"Clipboard changed / copy cancelled";return;}
+        if(GetClipboardSequenceNumber()!=clipboardSequence){CloseClipboard();GlobalFree(memory);status=L"Clipboard changed / copy cancelled";return false;}
         const bool published=EmptyClipboard() && SetClipboardData(CF_UNICODETEXT,memory);
         CloseClipboard();if(!published) {GlobalFree(memory);throw std::runtime_error("Cannot publish pattern clipboard");}
-        status=L"Pattern selection copied / all FX columns and bindings";
+        status=L"Pattern selection copied / precise notes and all FX columns";return true;
+    }
+    void cutCells(){
+        const auto identity=documentId,revision=view->session.revision;const auto target=patternIndex;const auto region=selection();
+        const auto result=ScreamSeq::guardedPatternCut([&]{return copyCells();},
+            [&]{return documentId==identity&&view->session.revision==revision&&patternIndex==target;},[&]{
+                documentOperation("pattern.transform",{{"expectedRevision",revision},{"operation","clear"},{"scope","selection"},{"pattern",target},
+                    {"startRow",region.at("startRow")},{"rowCount",region.at("endRow").get<unsigned>()-region.at("startRow").get<unsigned>()+1},
+                    {"startChannel",region.at("startChannel")},{"channelCount",region.at("endChannel").get<unsigned>()-region.at("startChannel").get<unsigned>()+1}});
+            });
+        if(result==ScreamSeq::PatternCutResult::Stale)status=L"Copied / cut cancelled because the song or pattern changed";
+        else if(result==ScreamSeq::PatternCutResult::Applied)status=L"Pattern selection cut / document Undo available";
     }
     void pasteCells(const std::string &mode="overwrite") {
         const auto origin=position();const auto revision=view->session.revision;
@@ -187,6 +203,7 @@
     }
     bool saveFile(bool saveAs=false) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(!protectRecordingTake())return false;
         pluginEditorWarning.clear();
         documentOperation("flushPluginEditors",{{"force",true}});
         auto revision=view->session.revision;auto path=view->path;
@@ -201,6 +218,7 @@
     bool unsavedChecked=false; // The last protectUnsaved() got as far as knowing whether the song is dirty.
     bool protectUnsaved() {
         unsavedChecked=false;
+        if(!protectRecordingTake())return false;
         documentOperation("flushPluginEditors",{{"force",true}});
         unsavedChecked=true;
         if(!view->dirty) return true;
@@ -222,19 +240,22 @@
         if(listedCatalog!=view->catalogRevision) {
             refreshTypingSounds();
             const auto sampleSelection=SendMessageW(controls.at(sampleCommandBase),LB_GETCURSEL,0,0);
-            const auto orderSelection=SendMessageW(controls.at(orderChooser),CB_GETCURSEL,0,0);
             for(int id:{patternChooser,orderChooser,sampleCommandBase}) SendMessageW(controls.at(id),id==sampleCommandBase ? LB_RESETCONTENT : CB_RESETCONTENT,0,0);
             for(const auto &[i,sample]:view->samples) {
                 auto label=std::to_wstring(i)+L"  "+wide(sample.at("name").get<std::string>());
                 auto n=SendMessageW(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));SendMessageW(controls.at(sampleCommandBase),LB_SETITEMDATA,n,i);
             }
             for(const auto &[i,p]:view->patterns) {auto label=L"Pattern "+std::to_wstring(i);auto n=SendMessageW(controls.at(patternChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));SendMessageW(controls.at(patternChooser),CB_SETITEMDATA,n,i);}
-            unsigned order=0;for(const auto &p:view->session.document.at("orders")) {auto label=std::to_wstring(order++)+L" : P"+std::to_wstring(p.get<unsigned>());SendMessageW(controls.at(orderChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+            listedOrderIDs.clear();unsigned order=0;for(const auto &p:view->session.document.at("orders")) {
+                const auto index=p.get<unsigned>();const auto label=std::to_wstring(order)+L" : "+(index==65535?std::wstring(L"End"):index==65534?std::wstring(L"Skip"):L"P"+std::to_wstring(index)+(view->patterns.contains(index)?L"":L" (missing)"));
+                SendMessageW(controls.at(orderChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));listedOrderIDs.push_back(view->session.document.at("orderMetadata").at(order++).at("id"));
+            }
             if(sampleSelection!=LB_ERR) SendMessageW(controls.at(sampleCommandBase),LB_SETCURSEL,sampleSelection,0);
-            if(order) SendMessageW(controls.at(orderChooser),CB_SETCURSEL,orderSelection>=0 && size_t(orderSelection)<order ? orderSelection : 0,0);
             listedCatalog=view->catalogRevision;
         }
         unsigned selected=0;for(auto &[p,v]:view->patterns) {if(p==patternIndex) break;++selected;}ScreamSeq::NativeControls::select(controls.at(patternChooser),selected);
+        const auto occurrence=std::find(listedOrderIDs.begin(),listedOrderIDs.end(),selectedOrderID);
+        ScreamSeq::NativeControls::select(controls.at(orderChooser),occurrence==listedOrderIDs.end()?-1:std::distance(listedOrderIDs.begin(),occurrence));
         ScreamSeq::NativeControls::select(controls.at(octaveChooser),octave);ScreamSeq::NativeControls::select(controls.at(stepChooser),editStep);
         ScreamSeq::NativeControls::select(controls.at(effectColumnChooser),view->effectColumns.at(channel)-1);
     }

@@ -8,16 +8,14 @@
     unsigned sampleAnchor=0;
     std::string sampleDragId, sampleDragRevision;
     SampleRange sampleDragBefore;
-    bool sampleEditorVisible() const {return !graphEditorVisible()&&!mixerEditorVisible()&&workspaceState.layout!="Pattern focus" && workspaceState.active=="samples" && workspaceState.visible();}
+    bool sampleEditorVisible() const {return workspaceMainEditorVisible("samples");}
     unsigned selectedSample() const {return workspaceState.panel("samples").sample;}
     std::string selectedSampleId() const {
         auto it=view->samples.find(selectedSample());return it==view->samples.end() ? std::string{} : it->second.at("id").get<std::string>();
     }
-    ScreamSeq::WorkspaceRect sampleEditorRect() const {
-        auto g=geometry();return {g.graph.x,g.graph.y,g.automation.x+g.automation.w-g.graph.x,g.graph.h};
-    }
+    ScreamSeq::WorkspaceRect sampleEditorRect() const {return workspaceMainEditorRect();}
     ScreamSeq::WorkspaceRect sampleWaveRect() const {
-        auto r=sampleEditorRect();return {r.x+12,r.y+38,r.w-24,std::max(20.0f,r.h-78)};
+        auto r=workspaceMainEditorRect();return {r.x+12,r.y+38,r.w-24,std::max(20.0f,r.h-78)};
     }
     SampleRange &sampleRange() {
         if(sampleRangeDocument!=documentId) {sampleRanges.clear();sampleRangeDocument=documentId;sampleDraft=false;}
@@ -74,7 +72,7 @@
         Json files=Json::array();for(const auto &path:paths)files.push_back(utf8Path(path));
         auto result=documentOperation("sample.importMany",{{"expectedRevision",revision},{"paths",files},{"createInstruments",createInstruments}});
         if(documentId!=document)return;
-        workspaceState.show("samples",position(),cursorSample(),true);auto &p=workspaceState.panel("samples");
+        workspaceState.show("samples",position(),cursorSample(),true);setWorkspaceCanvasFocus("samples",true);auto &p=workspaceState.panel("samples");
         const auto &first=result.at("samples").at(0);p.sample=first.at("sample");p.pinned=true;sampleDraft=false;
         if(createInstruments||!view->instruments){const auto held=typingTarget(!createInstruments,first.at(createInstruments?"instrument":"sample"),49,window);typingSoundId=held.identity;refreshTypingSounds();}
         status=std::to_wstring(result.at("count").get<unsigned>())+L" sample(s) imported / one Undo restores the previous song";
@@ -129,7 +127,7 @@
         if(!sampleEditorVisible() || !sampleWaveRect().contains(x,y) || selectedSampleId().empty()) return false;
         sampleDraft=false;auto &r=sampleRange();sampleDragBefore=r;sampleAnchor=extend ? r.first : sampleFrameAt(x);
         sampleDragId=selectedSampleId();sampleDragRevision=view->session.revision;
-        workspaceState.focus="samples";workspaceState.panel("samples").pinned=true;
+        setWorkspaceCanvasFocus("samples");workspaceState.panel("samples").pinned=true;
         sampleMouseMove(x);SetFocus(window);dragging=4;SetCapture(window);return true;
     }
     void sampleMouseMove(float x) {
@@ -137,7 +135,7 @@
         const auto frame=sampleFrameAt(x);auto &r=sampleRange();r.first=std::min(sampleAnchor,frame);r.last=std::max(sampleAnchor,frame);refreshSampleFields();
     }
     void drawSampleEditor() {
-        const auto r=sampleEditorRect(),w=sampleWaveRect();const auto range=sampleRange();auto &s=*surface;
+        const auto r=workspaceMainEditorRect(),w=sampleWaveRect();const auto range=sampleRange();auto &s=*surface;
         s.fill(r.x,r.y,r.w,r.h,0x171f29);s.fill(r.x,r.y,r.w,32,0x232e3b);
         s.uiText(L"SAMPLE EDITOR",r.x+12,r.y+8,138,0x72dcc6);
         s.fill(w.x,w.y,w.w,w.h,0x0c141c);
@@ -174,5 +172,5 @@
         const auto count=range.last-range.first;const auto rate=view->samples.contains(selectedSample()) ? view->samples.at(selectedSample()).value("rate",0u) : 0;
         wchar_t summary[160]{};swprintf_s(summary,L"%u frames  /  %.2f ms  /  drag or Shift+arrows to select",count,rate ? 1000.0*count/rate : 0);
         s.uiText(sampleDraft ? L"Range draft / Enter to apply / Escape to cancel" : summary,r.x+375,r.y+r.h-29,r.w-387,0x9bacbc);
-        s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="samples" ? 0x548e87 : 0x303e4e);
+        s.outline(r.x,r.y,r.w,r.h,(workspaceMainCanvasFocused("samples")&&workspacePresentationFocus()=="samples") ? 0x548e87 : 0x303e4e);
     }

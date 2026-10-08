@@ -63,8 +63,8 @@ std::vector<PluginAudioBus> PluginOperations::audioBuses(size_t index,bool requi
 std::vector<PluginParameter> PluginOperations::parameterMetadata(const std::string &identity) {
   return editor(slot({{"plugin",identity}})).parameters();
 }
-std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.library.get","plugin.path.get","graph.plugin.path.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","automation.get","graph.plugin.get"};}
-std::vector<std::string> PluginOperations::writes(){return {"automation.replaceLane","plugin.add","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
+std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.library.get","plugin.path.get","graph.plugin.path.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","automation.get","automation.recorded.get","graph.plugin.get"};}
+std::vector<std::string> PluginOperations::writes(){return {"automation.replaceLane","automation.recorded.edit","plugin.add","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
 #include "GraphPluginOperations.inc"
 size_t PluginOperations::slot(const Json &p) const {
   const auto &rack=project_.preserved.at("plugins");
@@ -189,6 +189,19 @@ Tracker::NativePlugin &PluginOperations::editor(size_t index) {
   auto state=projectPluginStates(project_).at(index);auto &p=editors_[state.instanceID];
   if(!p)p=std::make_unique<NativePlugin>(state,48000);return *p;
 }
+bool PluginOperations::overlayRecoveryState(Project::ProjectState &copy) const {
+  bool changed=false;
+  for(auto &record:copy.preserved.at("plugins")) {
+    const auto found=editors_.find(record.at("instanceID").get<std::string>());
+    if(found==editors_.end() || !found->second)continue;
+    // These retained instances never receive song automation. Do not consume
+    // popEdit() or touch gesture bookkeeping while taking a recovery copy.
+    const auto state=blob(found->second->state().state);
+    if(record.at("state")!=state){record["state"]=state;changed=true;}
+  }
+  if(changed)Project::invalidateRecoveryTake(copy);
+  return changed;
+}
 void PluginOperations::dropEditor(const std::string &instance,const std::string &reason) noexcept {
   try {
     const std::string key=instance; // The caller's reference may point into the erased entry.
@@ -265,7 +278,7 @@ bool PluginOperations::flushEditors(bool force) {
 #include "PluginPathOperations.inc"
 #include "AbsoluteAutomation.inc"
 Json PluginOperations::invoke(const std::string &method,const Json &p) {
-  if(method=="automation.get"||method=="automation.replaceLane")return invokeAutomation(method,p);
+  if(method=="automation.get"||method=="automation.replaceLane"||method=="automation.recorded.get"||method=="automation.recorded.edit")return invokeAutomation(method,p);
   if(method.starts_with("plugin.path."))return invokePath(method,p);
   if(method=="plugin.preset.inspect") {keys(p,{"path"});return Plugins::PluginPreset::summary(Plugins::PluginPreset::read(text(field(p,"path"))));}
   if(method=="plugin.discover") {

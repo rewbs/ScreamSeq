@@ -186,11 +186,35 @@ class SongRoutingTests(unittest.TestCase):
         self.assertTrue(any(e['action'].get('plugin')==plugin and e['target']==group for e in self.edges()));self.assertEqual(self.read('plugin.state.get',slot=0)['data'],baseline)
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','owned silent WASAPI')
-    def test_layout_keeps_audio_running_and_routing_stops_after_validation(self):
+    def test_layout_and_validated_routing_keep_audio_running_through_history(self):
         first,_,_=self.setup_mixer();self.add_gain();path=self.folder/'live.screamseq';self.write('document.save',path=str(path));self.launch(path);self.start();self.choose_node(3802,first)
         before=self.read('transport.get');self.desktop.send(self.window(),0x100,0x27);self.press(3835);time.sleep(.25);after=self.read('transport.get');self.assertTrue(after['audioActive']);self.assertGreater(after['frames'],before['frames']);self.assertFalse(after['fault']);self.assertEqual(after['overruns'],0)
-        self.choose_wire(lambda a:a.get('kind')=='output' and a.get('source')==first);self.press(3814);self.assertFalse(self.read('transport.get')['audioActive']);self.assertEqual(self.bus(first)['output'],'')
-        self.record('song-routing-live',beforeLayout=before,afterLayout=after,afterRouting=self.read('transport.get'))
+        def adopted(previous, previous_plan):
+            deadline=time.monotonic()+8
+            while time.monotonic()<deadline:
+                current=self.read('transport.get');routing=self.read('graph.signal.get')['routing']
+                self.assertTrue(current['audioActive']);self.assertFalse(current['fault']);self.assertEqual(current['overruns'],0)
+                self.assertEqual(current['playbackEpoch'],previous['playbackEpoch'])
+                self.assertEqual(routing['failedPlan'],0)
+                if (current['frames']>previous['frames'] and current['callbacks']>previous['callbacks']
+                        and routing['requestedPlan']>previous_plan and routing['renderedPlan']==routing['requestedPlan']
+                        and routing['state']=='stable' and not routing['latencyPending']):
+                    return current,routing
+                time.sleep(.02)
+            self.fail(f'Live routing was not adopted: {current}, {routing}')
+        original=self.bus(first);layout=self.read('graph.get',includeState=False)['layout']
+        plan=self.read('graph.signal.get')['routing']['renderedPlan']
+        self.choose_wire(lambda a:a.get('kind')=='output' and a.get('source')==first);self.press(3814)
+        disconnected=dict(original,output='');self.assertEqual(self.bus(first),disconnected)
+        disconnected_audio,disconnected_plan=adopted(after,plan)
+        self.write('history.undo',domain='document');self.assertEqual(self.bus(first),original)
+        restored_audio,restored_plan=adopted(disconnected_audio,disconnected_plan['renderedPlan'])
+        self.write('history.redo',domain='document');self.assertEqual(self.bus(first),disconnected)
+        redone_audio,redone_plan=adopted(restored_audio,restored_plan['renderedPlan'])
+        self.assertEqual(self.read('graph.get',includeState=False)['layout'],layout)
+        self.record('song-routing-live',beforeLayout=before,afterLayout=after,afterRouting=disconnected_audio,
+                    disconnectedPlan=disconnected_plan,afterUndo=restored_audio,undoPlan=restored_plan,
+                    afterRedo=redone_audio,redoPlan=redone_plan)
 
     def test_minimum_native_control_bounds_focus_and_layout_history(self):
         first,_,_=self.setup_mixer();self.start();user=private_desktop.user
@@ -206,7 +230,17 @@ class SongRoutingTests(unittest.TestCase):
         before=self.doc();self.press(3819);self.assertTrue(self.local()['layoutDraft']);self.assertEqual(self.doc(),before);self.press(3835);self.assertTrue(self.read('graph.get',includeState=False)['layout']);self.write('history.undo',domain='document');self.assertEqual(self.read('graph.get',includeState=False)['layout'],[])
 
     def test_unavailable_insert_retains_routing_and_open_does_not_select_another_plugin(self):
-        _,_,master=self.setup_mixer();a=self.add_gain();b=self.add_gain();self.write('mixer.bus.set',bus=master,inserts=[b]);self.write('plugin.remove',slot=1);self.start()
+        _,_,master=self.setup_mixer();a=self.add_gain();b=self.add_gain();self.write('mixer.bus.set',bus=master,inserts=[b])
+        # Explicit plugin.remove now intentionally cleans its routes. Model an
+        # imported missing reference instead, preserving the saved insert ID.
+        path=self.folder/'unavailable-insert.screamseq';self.write('document.save',path=str(path))
+        tree=plistlib.loads(path.read_bytes());native=tree['native']
+        self.assertEqual([p['instanceID'] for p in tree['plugins']],[a,b])
+        tree['plugins']=[p for p in tree['plugins'] if p['instanceID']!=b]
+        path.write_bytes(plistlib.dumps(tree,fmt=plistlib.FMT_BINARY))
+        self.assertEqual(plistlib.loads(path.read_bytes())['native'],native)
+        self.write('document.open',path=str(path),discard=True);self.start()
+        self.assertEqual([p['instanceID'] for p in self.doc()['data']['nativePlugins']],[a]);self.assertEqual(self.bus(master)['inserts'],[b])
         self.assertEqual(self.node('plugin:'+b)['bus'],master);self.choose_node(3802,'plugin:'+b);before=self.doc();self.press(3821)
         self.assertEqual(self.doc(),before);self.assertIn('unavailable',self.local()['status']);self.assertEqual(self.local()['selected'],'plugin:'+b)
         self.select(3823,1);self.press(3827);self.assertNotIn(b,self.bus(master)['inserts']);self.write('history.undo',domain='document');self.assertEqual(self.bus(master)['inserts'],[b]);self.assertEqual(self.doc()['data']['nativePlugins'][0]['instanceID'],a)

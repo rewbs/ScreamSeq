@@ -500,7 +500,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       if (root[@"recoveryTake"]) {
         using namespace Automation;
         const auto data = object(root[@"recoveryTake"]);
-        keys(data, @[@"compatible", @"events", @"missingTime", @"exhaustedVoices", @"overflow"]);
+        keys(data, @[@"compatible", @"events", @"missingTime", @"exhaustedVoices", @"overflow", @"inputError"]);
         recoveredTakeCompatible = boolean(data[@"compatible"]);
         recoveredTake = std::make_unique<NoteRecording>(next->native(), next->song(), std::vector<uint16_t>{0}, 1, 0);
         recoveredTake->capturing = false;
@@ -516,6 +516,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
         recoveredTake->missingTime = uint32_t(integer(data[@"missingTime"], 0, UINT32_MAX));
         recoveredTake->exhaustedVoices = uint32_t(integer(data[@"exhaustedVoices"], 0, UINT32_MAX));
         recoveredTake->overflow = uint32_t(integer(data[@"overflow"], 0, UINT32_MAX));
+        if(data[@"inputError"]) {
+          const auto reason=string(data[@"inputError"],512);
+          require([reason lengthOfBytesUsingEncoding:NSUTF8StringEncoding]<=512,"Recovered input error is too long");
+          recoveredTake->inputError=reason.UTF8String;
+        }
       }
     } else
       next = Document::open(path.UTF8String);
@@ -808,8 +813,10 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     NSMutableArray *events = [NSMutableArray array];
     for (const auto &n : take.events) [events addObject:@{@"pattern":nativeID(n.pattern), @"track":nativeID(n.track),
       @"position":@(n.position), @"instrument":@(n.instrument), @"note":@(n.note), @"velocity":@(n.velocity)}];
-    root[@"recoveryTake"] = @{@"compatible":@([_recordingRevision isEqual:self.automationRevision]),
-      @"events":events, @"missingTime":@(take.missingTime), @"exhaustedVoices":@(take.exhaustedVoices), @"overflow":@(take.overflow)};
+    auto retainedTake=[@{@"compatible":@([_recordingRevision isEqual:self.automationRevision]),
+      @"events":events, @"missingTime":@(take.missingTime), @"exhaustedVoices":@(take.exhaustedVoices), @"overflow":@(take.overflow)} mutableCopy];
+    if(!take.inputError.empty())retainedTake[@"inputError"]=@(take.inputError.c_str());
+    root[@"recoveryTake"]=retainedTake;
   }
   NSError *error = nil;
   NSData *data = [NSPropertyListSerialization dataWithPropertyList:root

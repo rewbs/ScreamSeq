@@ -7,6 +7,7 @@ struct PlaybackFeedback {
   bool audioActive=false; // Includes independent instrument/sample audition.
   unsigned sampleRate=48000;
   double latency=0;
+  uint64_t generation=0; // Host transport epoch, including stopped/restarted devices.
   std::vector<Tracker::MixerMeter> meters;
   std::vector<Tracker::SignalActivity> activity;
 };
@@ -15,6 +16,8 @@ struct PlaybackHooks {
   std::function<void(size_t,bool)> pluginBypass;
   std::function<PlaybackFeedback()> feedback;
   std::function<bool(const std::vector<Tracker::MixerControls> &)> controls;
+  std::function<bool(HostedProjectPlayback *,HostedProjectPlayback::PreparedNativeUpdate &)> publishNativeUpdate;
+  std::function<std::function<void()>(unsigned,const Tracker::SampleEditGeometry &)> prepareSampleLoops;
 };
 struct MixerHostHooks {
   std::vector<Tracker::PluginState> plugins;
@@ -22,6 +25,7 @@ struct MixerHostHooks {
   std::function<PlaybackFeedback()> feedback;
   std::function<bool(const std::vector<Tracker::MixerControls> &)> controls;
   std::function<void(const Tracker::NativeSong &)> validateCandidate;
+  std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> prepareNativeUpdate;
 };
 class MixerOperations {
   Tracker::Document &document_;

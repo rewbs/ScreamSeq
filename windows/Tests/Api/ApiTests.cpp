@@ -47,6 +47,36 @@ struct TestHost : SessionHost {
   void play(const json &settings) override { ++plays; state.transport["playing"]=true; state.transport["region"]=settings; }
   void stop() override { ++stops; state.transport["playing"]=false; }
 };
+void transientInputTests() {
+  struct Host : TestHost {
+    unsigned inputs=0,watches=0;
+    bool supportsDocumentOperations() const override{return true;}
+    std::vector<std::string> additionalDocumentWrites() const override{return {"parameter.activity.watch"};}
+    Json workspace(const std::string &method,const Json &p) override {
+      check(method=="workspace.input","Unexpected workspace dispatch");++inputs;
+      state.context["contextRevision"]="cursor:"+std::to_string(inputs);
+      return {{"instrument",p.value("instrument",1)},{"octave",p.value("octave",4)},{"contextRevision",state.context.at("contextRevision")}};
+    }
+    Json documentOperation(const std::string &method,const Json &) override {
+      check(method=="parameter.activity.watch","Unexpected activity dispatch");++watches;return {{"token","1:1"}};
+    }
+  } host;SessionAdapter api(host);
+  const auto params=Json{{"expectedRevision",host.state.revision},{"expectedContext","cursor:0"},{"instrument",3.0},{"octave",5.0}};
+  auto q=request("workspace.input",params,"input");const auto result=api.handle(q);
+  check(result.at("result").at("contextChanged")==true&&result.at("result").at("changed")==false&&host.inputs==1,"Input changes only context");
+  check(api.handle(q)==result&&host.inputs==1,"Input replay must not advance context again");
+  check(api.handle(request("workspace.input",params,"stale"))["error"]["code"]==-32001,"Input requires fresh context");
+  for(auto invalid:{Json{{"instrument",true}},Json{{"instrument",0}},Json{{"octave",9}},Json{{"octave",1.5}},Json::object()}) {
+    invalid["expectedRevision"]=host.state.revision;invalid["expectedContext"]=host.state.context.at("contextRevision");
+    check(api.handle(request("workspace.input",invalid,"invalid"))["error"]["code"]==-32602,"Invalid input must reject before host");
+  }
+  check(host.inputs==1&&host.plays==0&&host.stops==0,"Input rejection changed transport or context");
+  const auto watch=request("parameter.activity.watch",{{"target","copy"},{"parameter",1}},"watch");const auto watched=api.handle(watch);
+  check(watched.contains("result")&&api.handle(watch)==watched&&host.watches==1,"Monitor watch has transient cached write semantics");
+  const auto description=api.handle(request("api.describe"))["result"]["data"];
+  check(description["revisionGuards"]["parameter.activity.watch"]==Json::array(),"Monitor watch must not advertise a musical revision guard");
+  std::cout<<"PASS guarded input context and transient monitor replay\n";
+}
 void sessionTests() {
   TestHost host; SessionAdapter api(host);
   auto doc=api.handle(request("document.get"));
@@ -192,11 +222,12 @@ int main(int argc, char **argv) {
     std::cout << "PASS envelope validation\n";
     auto described = session.handle(request("api.describe"));
     check(described.contains("result"), "api.describe must work without a host");
-    check(described["result"]["data"]["writes"] == json::array({"transport.play","transport.stop","context.set","workspace.panel","workspace.layout"}), "only implemented navigation/workspace/transport methods advertised");
+    check(described["result"]["data"]["writes"] == json::array({"transport.play","transport.stop","context.set","workspace.input","workspace.panel","workspace.layout","workspace.shortcut.set"}), "only implemented navigation/workspace/transport methods advertised");
     check(session.handle(request("api.describe",{{"unknown",1}}))["error"]["code"] == -32602, "describe rejects params");
     std::cout << "PASS minimal capabilities\n";
     check(session.handle(request("document.get"))["error"]["code"] == -32002, "unbound session must not invent document data");
     sessionTests();
+    transientInputTests();
     pipeTests();
     serializationPipeTests();
     requestBoundaryTests();

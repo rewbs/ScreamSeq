@@ -391,15 +391,17 @@ std::vector<Edit> Document::edit(const std::vector<Edit> &input)
 {
 	validateEdits(input);
 	std::optional<NativeSong> metadata;
+	PrimaryEffectCells replacedEffects;
 	for(const auto &e:input) {
 		const auto before=cell(e.pattern,e.row,e.channel);
 		if(before.effect==e.after.effect && before.parameter==e.after.parameter) continue;
-		const auto pattern=native_.patterns.at(e.pattern).id,track=native_.tracks.at(e.channel).id;
-		auto matches=[&](const auto &c){return c.pattern==pattern&&c.track==track&&!c.column&&c.position/performanceUnitsPerRow==e.row;};
-		if(std::any_of(native_.performance.commands.begin(),native_.performance.commands.end(),matches)) {
-			if(!metadata) metadata=native_;
-			std::erase_if(metadata->performance.commands,matches);
-		}
+		replacedEffects.emplace(native_.patterns.at(e.pattern).id,native_.tracks.at(e.channel).id,e.row);
+	}
+	if(!replacedEffects.empty() && std::any_of(native_.performance.commands.begin(),native_.performance.commands.end(),[&](const auto &c) {
+		return !c.column && replacedEffects.contains({c.pattern,c.track,c.position/performanceUnitsPerRow});
+	})) {
+		metadata=native_;
+		metadata->clearPrimaryEffects(replacedEffects);
 	}
 	if(metadata) {
 		std::vector<Edit> changes;
@@ -447,6 +449,20 @@ bool Document::editNative(NativeSong metadata, const std::vector<Edit> &input)
 	for(const auto &edit:entry.cells)put(*song_,edit);
 	native_=std::move(metadata);undo_.push_back(std::move(entry));committedHistory();++revision;trimHistory();
 	return true;
+}
+std::unique_ptr<Document> Document::historyCandidate(bool redo)
+{
+	const auto &history = redo ? redo_ : undo_;
+	if(history.empty()) return {};
+	auto candidate = std::make_unique<Document>(snapshotData());
+	candidate->native_ = native_;
+	candidate->song_->Order.SetSequence(song_->Order.GetCurrentSequenceIndex());
+	candidate->sourcePath_ = sourcePath_;
+	candidate->revision = revision;
+	(redo ? candidate->redo_ : candidate->undo_).push_back(history.back());
+	if(redo) candidate->redo();
+	else candidate->undo();
+	return candidate;
 }
 std::vector<Edit> Document::undo(const std::function<void()> &beforeCommit)
 {
@@ -719,10 +735,10 @@ int Document::addPattern(int rows, bool duplicate, int source)
 		if(!s.Patterns.Insert(index, rows)) throw std::runtime_error("Could not allocate pattern.");
 		if(duplicate && s.Patterns.IsValidPat(source))
 		{
-			// Pattern assignment also copies name, colour, signature and tempo swing.
-			auto &copy = s.Patterns[index];
-			copy = s.Patterns[source];
-			if(copy.GetNumRows() != ROWINDEX(rows) && !copy.Resize(ROWINDEX(rows))) throw std::runtime_error("Could not allocate pattern.");
+			// Same-song assignment preserves imported timing exactly; SetTempoSwing
+			// would normalize the source's already-normalized groove a second time.
+			s.Patterns[index] = s.Patterns[source];
+			if(s.Patterns[index].GetNumRows() != ROWINDEX(rows) && !s.Patterns[index].Resize(ROWINDEX(rows))) throw std::runtime_error("Could not resize duplicate pattern.");
 			auto entity = native.patterns.at(source);
 			entity.id = native.makeEntity().id;
 			native.clonePatternAutomation(native.patterns.at(source).id, entity.id);

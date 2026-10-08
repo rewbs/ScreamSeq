@@ -61,6 +61,7 @@ struct WasapiDevice::Impl {
   Event stopEvent, startEvent, readyEvent, startedEvent;
   std::thread worker;
   RenderCallback callback = nullptr;
+  TimedRenderCallback timedCallback = nullptr;
   void* context = nullptr;
   std::uint32_t convertedRate = 0;
   Options options;
@@ -73,6 +74,8 @@ struct WasapiDevice::Impl {
   std::atomic<std::int32_t> error{0}, fallbackError{0};
   std::atomic<std::uint64_t> callbackCount{0}, framesRendered{0}, maxCallback{0}, maxService{0}, maxGap{0};
   std::atomic<std::uint64_t> overruns{0}, starvation{0}, timeouts{0}, faults{0};
+  std::atomic<std::uint64_t> clockGeneration{0},clockHostTime{0},clockDiscontinuities{0};
+  std::atomic<bool> clockValid{false};
 
   void fail(HRESULT hr) noexcept {
     error.store(static_cast<std::int32_t>(hr));
@@ -103,6 +106,7 @@ struct WasapiDevice::Impl {
     if (stopEvent.value) SetEvent(stopEvent.value);
     if (worker.joinable()) worker.join();
     active.store(false);
+    clockValid.store(false);
   }
 
   HRESULT initialize(IMMDevice* device, ComPtr<IAudioClient>& client,
@@ -190,10 +194,13 @@ struct WasapiDevice::Impl {
     return S_OK;
   }
 
-  void stream(IAudioClient* client, IAudioRenderClient* render, HANDLE audioEvent,
+  void stream(IAudioClient* client, IAudioRenderClient* render, IAudioClock* clock,std::uint64_t clockFrequency,HANDLE audioEvent,
               std::vector<float>& samples) noexcept {
     const auto capacity = bufferFrames.load();
     const auto hz = rate.load();
+    PresentationClock presentation;
+    presentation.reset(hz,clockFrequency,capacity,clockGeneration.fetch_add(1)+1);
+    clockValid.store(false);clockHostTime.store(0);
     LARGE_INTEGER frequency{}; QueryPerformanceFrequency(&frequency);
     const auto qpcHz = static_cast<std::uint64_t>(frequency.QuadPart);
     const auto nanoseconds = [qpcHz](std::uint64_t delta) noexcept { return delta * 1000000000ULL / qpcHz; };
@@ -214,11 +221,12 @@ struct WasapiDevice::Impl {
     HANDLE events[] = {stopEvent.value, audioEvent};
     std::uint64_t lastWake = 0;
     bool serviced = false;
+    bool failedStream = false;
     for (;;) {
       const DWORD wait = WaitForMultipleObjects(2, events, FALSE, 2000);
       if (wait == WAIT_OBJECT_0) break;
-      if (wait == WAIT_TIMEOUT) { timeouts.fetch_add(1, std::memory_order_relaxed); fail(HRESULT_FROM_WIN32(ERROR_TIMEOUT)); break; }
-      if (wait != WAIT_OBJECT_0 + 1) { fail(HRESULT_FROM_WIN32(GetLastError())); break; }
+      if (wait == WAIT_TIMEOUT) { timeouts.fetch_add(1, std::memory_order_relaxed); fail(HRESULT_FROM_WIN32(ERROR_TIMEOUT)); failedStream=true;break; }
+      if (wait != WAIT_OBJECT_0 + 1) { fail(HRESULT_FROM_WIN32(GetLastError())); failedStream=true;break; }
 #ifdef SCREAMSEQ_WASAPI_ALLOCATION_AUDIT
       AudioAudit::Scope audit;
 #endif
@@ -227,17 +235,25 @@ struct WasapiDevice::Impl {
       lastWake = serviceStart;
       UINT32 padding = 0;
       hr = client->GetCurrentPadding(&padding);
-      if (FAILED(hr)) { fail(hr); break; }
-      if (padding > capacity) { fail(E_UNEXPECTED); break; }
+      if (FAILED(hr)) { fail(hr);failedStream=true; break; }
+      if (padding > capacity) { fail(E_UNEXPECTED);failedStream=true; break; }
       if (serviced && padding == 0) starvation.fetch_add(1, std::memory_order_relaxed);
       const UINT32 available = capacity - padding;
       if (!available) continue;
+      UINT64 position=0,qpc=0;
+      const auto clockResult=clock?clock->GetPosition(&position,&qpc):E_NOINTERFACE;
+      const auto time=presentation.buffer(position,qpc,hostTime100ns(),clockResult==S_OK);
+      clockValid.store(false,std::memory_order_release);
+      clockGeneration.store(time.generation);clockHostTime.store(time.hostTime);
+      if(time.discontinuity)clockDiscontinuities.fetch_add(1);
+      clockValid.store(time.valid,std::memory_order_release);
       hr = render->GetBuffer(available, &output);
-      if (FAILED(hr)) { fail(hr); break; }
+      if (FAILED(hr)) { fail(hr);failedStream=true; break; }
       // Bounded, preallocated stereo scratch; no ownership/destruction in this path.
       std::memset(samples.data(), 0, static_cast<std::size_t>(available) * 2 * sizeof(float));
       const auto callbackStart = ticks();
-      callback(context, samples.data(), available);
+      if(timedCallback)timedCallback(context,samples.data(),available,time);
+      else callback(context, samples.data(), available);
       const auto callbackNs = nanoseconds(ticks() - callbackStart);
       std::memcpy(output, samples.data(), static_cast<std::size_t>(available) * 2 * sizeof(float));
       hr = render->ReleaseBuffer(available, 0);
@@ -249,11 +265,15 @@ struct WasapiDevice::Impl {
       if (callbackNs > static_cast<std::uint64_t>(available) * 1000000000ULL / hz || serviceNs > periodNs)
         overruns.fetch_add(1, std::memory_order_relaxed);
       serviced = true;
-      if (FAILED(hr)) { fail(hr); break; }
+      if (FAILED(hr)) { fail(hr);failedStream=true; break; }
+      presentation.submitted(available);
     }
     active.store(false);
-    hr = client->Stop();
-    if (FAILED(hr)) fail(hr);
+    const auto stoppedAt=hostTime100ns();hr = client->Stop();
+    if (FAILED(hr)) {fail(hr);failedStream=true;}
+    clockValid.store(false,std::memory_order_release);
+    if(failedStream){clockGeneration.fetch_add(1);clockDiscontinuities.fetch_add(1);}
+    if(timedCallback)timedCallback(context,samples.data(),0,RenderTime{stoppedAt,clockGeneration.load(),hz,false,failedStream,true});
   }
 
   void threadMain(bool reopening) noexcept {
@@ -272,6 +292,8 @@ struct WasapiDevice::Impl {
       ComPtr<IMMDevice> device;
       ComPtr<IAudioClient> client;
       ComPtr<IAudioRenderClient> render;
+      ComPtr<IAudioClock> clock;
+      UINT64 clockFrequency=0;
       std::vector<float> samples;
       if (SUCCEEDED(hr) && !audioEvent.value) hr = HRESULT_FROM_WIN32(GetLastError());
       if (SUCCEEDED(hr)) hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
@@ -288,12 +310,14 @@ struct WasapiDevice::Impl {
         if(SUCCEEDED(hr)&&!reopening)endpoint=id.value;
       }
       if (SUCCEEDED(hr)) hr = initialize(device.Get(), client, render, audioEvent.value, samples, reopening);
+      if(SUCCEEDED(hr)&&SUCCEEDED(client->GetService(__uuidof(IAudioClock),reinterpret_cast<void **>(clock.GetAddressOf()))))
+        if(FAILED(clock->GetFrequency(&clockFrequency)))clockFrequency=0;
       if (FAILED(hr)) fail(hr);
       initResult.store(hr); SetEvent(readyEvent.value); ready = true;
       if (FAILED(hr)) return;
       HANDLE events[] = {stopEvent.value, startEvent.value};
       const auto wait = WaitForMultipleObjects(2, events, FALSE, INFINITE);
-      if (wait == WAIT_OBJECT_0 + 1) stream(client.Get(), render.Get(), audioEvent.value, samples);
+      if (wait == WAIT_OBJECT_0 + 1) stream(client.Get(), render.Get(),clock.Get(),clockFrequency,audioEvent.value, samples);
       else if (wait != WAIT_OBJECT_0) fail(HRESULT_FROM_WIN32(GetLastError()));
       // release audio client before closing the event it was handed
       render.Reset(); client.Reset();
@@ -352,6 +376,17 @@ bool WasapiDevice::openConverted(RenderCallback callback,void* context,std::uint
   if(!impl_->launch(false)){impl_->endpoint.clear();return false;}
   impl_->opened=true;return true;
 }
+bool WasapiDevice::openTimed(TimedRenderCallback callback,void* context){return openTimed(callback,context,Options{});}
+bool WasapiDevice::openTimed(TimedRenderCallback callback,void* context,const Options &options){
+  close();impl_->resetStats();
+  if(!callback||options.endpoint.size()>4096||options.endpoint.find(L'\0')!=std::wstring::npos||options.periodFrames>65536){impl_->fail(E_INVALIDARG);return false;}
+  impl_->options=options;impl_->timedCallback=callback;impl_->context=context;
+  if(!impl_->launch(false)){impl_->endpoint.clear();return false;}
+  impl_->opened=true;return true;
+}
+WasapiDevice::ClockStatus WasapiDevice::clockStatus()const noexcept {
+  return {impl_->clockGeneration.load(),impl_->clockHostTime.load(),impl_->clockDiscontinuities.load(),impl_->clockValid.load()};
+}
 std::uint32_t WasapiDevice::sampleRate() const noexcept { return impl_->rate.load(); }
 std::uint32_t WasapiDevice::periodFrames() const noexcept { return impl_->period.load(); }
 std::wstring WasapiDevice::endpointId()const{return impl_->endpoint;}
@@ -371,7 +406,7 @@ bool WasapiDevice::start() {
 }
 void WasapiDevice::stop() noexcept { impl_->stop(); }
 void WasapiDevice::close() noexcept {
-  impl_->stop(); impl_->opened = false; impl_->callback = nullptr; impl_->context = nullptr;impl_->convertedRate=0;
+  impl_->stop(); impl_->opened = false; impl_->callback = nullptr;impl_->timedCallback=nullptr; impl_->context = nullptr;impl_->convertedRate=0;
   impl_->options=Options{};impl_->endpoint.clear();
   impl_->rate = 0; impl_->period = 0; impl_->bufferFrames = 0; impl_->channels = 0; impl_->mode = Mode::Closed;
 }

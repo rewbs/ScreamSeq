@@ -1,4 +1,5 @@
 #pragma once
+#include "PresentationClock.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -12,6 +13,8 @@ namespace ScreamSeq {
 class WasapiDevice final {
 public:
   using RenderCallback = void (*)(void*, float*, std::uint32_t) noexcept;
+  using TimedRenderCallback = void (*)(void*, float*, std::uint32_t,const RenderTime &) noexcept;
+  struct ClockStatus {std::uint64_t generation=0,lastHostTime=0,discontinuities=0;bool valid=false;};
   enum class Mode : std::uint32_t { Closed, LowLatencyShared, StandardShared };
   struct Options {
     std::wstring endpoint; // Empty selects the current multimedia default.
@@ -51,6 +54,12 @@ public:
   // No callback runs until start(). Prepare the renderer at sampleRate() first.
   bool open(RenderCallback callback, void* context);
   bool open(RenderCallback callback, void* context, const Options &options);
+  // Origins describe when frame zero reaches the output device, in QPC 100 ns.
+  // Timing is explicitly invalid while its device correlation is unavailable.
+  // A final zero-frame stopped notification bounds retained timing at Stop.
+  bool openTimed(TimedRenderCallback callback,void* context);
+  bool openTimed(TimedRenderCallback callback,void* context,const Options &options);
+  ClockStatus clockStatus() const noexcept;
   // Dedicated sample-file preview: retain the source rate and use Windows'
   // quality shared-mode converter. Does not alter the endpoint or song device.
   bool openConverted(RenderCallback callback, void* context, std::uint32_t sourceRate);

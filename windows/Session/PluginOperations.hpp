@@ -18,6 +18,7 @@ class PluginOperations {
   std::function<void()> stop_;
   std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters_;
   std::function<void(size_t,bool)> liveBypass_;
+  std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> prepareNativeUpdate_;
   std::optional<std::pair<size_t,bool>> bypassOnly(const Json &,const Json &) const;
   struct History {Json plugins,automation;size_t bytes=0;uint64_t sequence=0;};
   std::deque<History> undo_,redo_;
@@ -56,6 +57,7 @@ public:
     std::optional<std::filesystem::path> libraryPath={});
   ~PluginOperations();
   void liveBypass(std::function<void(size_t,bool)> callback) {liveBypass_=std::move(callback);}
+  void nativeUpdates(std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> callback) {prepareNativeUpdate_=std::move(callback);}
   static std::vector<std::string> reads();
   static std::vector<std::string> writes();
   Json invoke(const std::string &,const Json &);
@@ -64,6 +66,10 @@ public:
   Json invokePath(const std::string &,const Json &);
   Json invokeGraph(const std::string &,const Json &,unsigned sampleRate,bool audioActive=false);
   bool flushEditors(bool force=false); // Debounce gestures; save/close forces capture.
+  // Copy manual rack editor state into an independent recovery project only.
+  // Does not consume notifications, commit history, stop playback or apply the
+  // graph recipe editor's explicit-Apply draft.
+  bool overlayRecoveryState(Project::ProjectState &copy) const;
   void editorWarning(std::string text){editorWarning_=std::move(text);}
   std::string takeEditorWarning(){return std::exchange(editorWarning_,std::string{});}
   std::vector<GraphRackRecord> graphRack() const;

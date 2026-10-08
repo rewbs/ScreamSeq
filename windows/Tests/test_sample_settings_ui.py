@@ -30,6 +30,8 @@ class SampleSettingsUITests(unittest.TestCase):
     field=detail.SampleDetailUITests.field
     idle=detail.SampleDetailUITests.idle
     press=detail.SampleDetailUITests.press
+    page=detail.SampleDetailUITests.page
+    verify_visible_controls_fit=detail.SampleDetailUITests.verify_visible_controls_fit
     select=detail.SampleDetailUITests.select
     region=detail.SampleDetailUITests.region
     dialog=dialogs.EditorAppTests.dialog
@@ -87,11 +89,12 @@ class SampleSettingsUITests(unittest.TestCase):
         self.field(4856,'Old document');self.reopen();self.assertEqual(self.text(4856),self.info()['name'])
 
     def test_settings_and_audio_drafts_do_not_silently_overwrite_each_other(self):
+        self.page('process')
         self.field(4856,'Pending name');self.select(4828,5);before=self.pcm();self.press(4833)
         self.assertEqual(self.pcm(),before);self.assertEqual(self.text(4856),'Pending name');self.assertIn('settings',self.state()['status'])
         self.field(4815,8);self.field(4816,24);self.press(4860)
         self.assertEqual(self.info()['name'],'Pending name');self.assertEqual((self.text(4815),self.text(4816)),('8','24'));self.assertTrue(self.state()['fieldDraft'])
-        self.press(4817);self.press(4833);self.assertNotEqual(self.pcm(),before);self.assertEqual(self.info()['name'],'Pending name')
+        self.press(4817);self.assertEqual((self.state()['start'],self.state()['end']),(8,24),self.state()['status']);self.press(4833);self.assertNotEqual(self.pcm(),before);self.assertEqual(self.info()['name'],'Pending name')
 
     def test_replace_captured_sample_cancel_stale_guard_and_history(self):
         path=self.audio_file('Replacement 音.wav');before=self.info();pcm=self.pcm();other=self.info(2);identity=self.state()['id']
@@ -122,14 +125,8 @@ class SampleSettingsUITests(unittest.TestCase):
         self.reopen('sample-instrument.screamseq');self.assertEqual(self.read('instrument.get',instrument=created)['mapping'],mapping)
 
     def test_settings_controls_fit_minimum_and_f6_leaves_main_sound_chooser(self):
-        # Include every newly added interactive control in the established bounds check.
-        user=private_desktop.user;w=ctypes.wintypes;user.GetClientRect.argtypes=[w.HWND,ctypes.POINTER(w.RECT)];user.GetWindowRect.argtypes=user.GetClientRect.argtypes;user.MapWindowPoints.argtypes=[w.HWND,w.HWND,ctypes.POINTER(w.POINT),w.UINT];user.SetWindowPos.argtypes=[w.HWND,w.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,w.UINT]
-        scale=self.read('workspace.get')['dpi']/96;private_desktop.check(user.SetWindowPos(self.window(),None,0,0,int(1080*scale),int(790*scale),0x16));self.idle();client=w.RECT();user.GetClientRect(self.window(),ctypes.byref(client));rects=[]
-        for identifier in range(4801,4864):
-            rect=w.RECT();user.GetWindowRect(self.control(identifier),ctypes.byref(rect));p=(w.POINT*2)(w.POINT(rect.left,rect.top),w.POINT(rect.right,rect.bottom));user.MapWindowPoints(None,self.window(),p,2)
-            self.assertGreaterEqual(p[0].x,0,identifier);self.assertGreaterEqual(p[0].y,0,identifier);self.assertLessEqual(p[1].x,client.right,identifier);self.assertLessEqual(p[1].y,client.bottom,identifier);rects.append((identifier,p[0].x,p[0].y,p[1].x,p[1].y))
-        for i,a in enumerate(rects):
-            for b in rects[i+1:]:self.assertFalse(max(a[1],b[1])<min(a[3],b[3]) and max(a[2],b[2])<min(a[4],b[4]),(a,b))
+        self.verify_visible_controls_fit()
+        user=private_desktop.user;w=ctypes.wintypes
         self.press(4806);main=self.desktop.hwnd(self.pid);chooser=user.GetDlgItem(main,135);self.desktop.send(chooser,0x201,1,5|(5<<16));self.desktop.send(chooser,0x202,0,5|(5<<16));self.desktop.send(chooser,0x14F,0);self.assertEqual(self.desktop.focus(main),chooser)
         user.PostMessageW.argtypes=[w.HWND,w.UINT,w.WPARAM,w.LPARAM];private_desktop.check(user.PostMessageW(chooser,0x100,0x75,0));self.idle();self.assertEqual(self.desktop.focus(main),main)
 

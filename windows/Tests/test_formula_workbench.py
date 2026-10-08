@@ -4,12 +4,13 @@ from ctypes import wintypes
 import json
 import time
 import unittest
+from graph_curve_native_support import GraphCurveNativeMixin
 import private_desktop
 import test_envelope_bank_ui as support
 from client import ApiError
 
 
-class FormulaWorkbenchTests(unittest.TestCase):
+class FormulaWorkbenchTests(GraphCurveNativeMixin, unittest.TestCase):
     setUp = support.EnvelopeBankUITests.setUp
     doc = support.EnvelopeBankUITests.doc
     read = support.EnvelopeBankUITests.read
@@ -40,24 +41,8 @@ class FormulaWorkbenchTests(unittest.TestCase):
         return context['formulaReference' if reference else 'formulaWorkbench']
 
     def whwnd(self, bank=False, reference=False):
-        owner = self.bank_hwnd() if bank else self.desktop.hwnd(self.pid)
-        user = private_desktop.user
-        user.GetWindow.argtypes = [wintypes.HWND, wintypes.UINT]
-        user.GetWindow.restype = wintypes.HWND
-        found = []
-        @private_desktop.callback
-        def visit(hwnd, _):
-            pid = wintypes.DWORD()
-            user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            name = ctypes.create_unicode_buffer(128)
-            user.GetClassNameW(hwnd, name, 128)
-            expected = 'ScreamSeq.FormulaReference' if reference else 'ScreamSeq.FormulaWorkbench'
-            if pid.value == self.pid and name.value == expected and user.GetWindow(hwnd, 4) == owner:
-                found.append(hwnd)
-            return True
-        private_desktop.check(user.EnumDesktopWindows(self.desktop.desktop, visit, 0))
-        self.assertEqual(len(found), 1, found)
-        return found[0]
+        return self.logical_child(('bank.' if bank else 'curve.') +
+                                  ('reference' if reference else 'formula'))
 
     def wcontrol(self, identifier, bank=False, reference=False):
         result = private_desktop.user.GetDlgItem(self.whwnd(bank, reference), identifier)
@@ -263,7 +248,9 @@ class FormulaWorkbenchTests(unittest.TestCase):
         self.assertEqual(self.whwnd(), hwnd)
         self.assertEqual(self.workbench()['source'], 'mix(start,end,t*t)')
         path = self.folder / 'replacement.screamseq'
+        self.curve_api_idle()
         self.write('document.save', path=str(path))
+        self.curve_api_idle()
         self.write('document.open', path=str(path), discard=True)
         before = self.doc()
         self.wcommand(2007)
@@ -330,7 +317,7 @@ class FormulaWorkbenchTests(unittest.TestCase):
         self.wfield(2001, '.25')
         self.wait_preview()
         parent = self.state()['points']
-        last = self.state()['handles'][-1]
+        last = self.curve_canvas()['handles'][-1]
         self.mouse(0x201, last, 1)
         self.mouse(0x202, last)
         self.wcommand(2007)
@@ -345,7 +332,7 @@ class FormulaWorkbenchTests(unittest.TestCase):
         self.assertEqual(self.whwnd(), hwnd)
         self.assertTrue(user.IsZoomed(hwnd))
         self.assertEqual(self.workbench()['source'], '.25')
-        first = self.state()['handles'][0]
+        first = self.curve_canvas()['handles'][0]
         self.mouse(0x201, first, 1)
         self.mouse(0x202, first)
         self.wcommand(2007)

@@ -124,7 +124,7 @@ MixerGraph decodeMixer(id raw) {
   for (id rawSide in array(value[@"sidechains"], 128)) {
     auto side = object(rawSide); keys(side, @[@"source", @"plugin", @"input", @"gainDB", @"preFader", @"enabled"]);
     graph.sidechains.push_back({decodeNativeID(side[@"source"]), string(side[@"plugin"], 128).UTF8String,
-      uint32_t(integer(side[@"input"], 1, 63)), number(side[@"gainDB"], -96, 12), boolean(side[@"preFader"]), boolean(side[@"enabled"])});
+      uint32_t(integer(side[@"input"], 0, 63)), number(side[@"gainDB"], -96, 12), boolean(side[@"preFader"]), boolean(side[@"enabled"])});
   }
   return graph;
 }

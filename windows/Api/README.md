@@ -1,10 +1,129 @@
 # Windows local API subset
 
+Parameter activity uses the shared prepared processor monitor: `parameter.activity.targets`,
+`.parameters`, `.sources` and `.get` read actual host values and controlling sources.
+`parameter.activity.watch` is a transient replay-cached write without a song revision
+guard or musical Undo. Processor keys include the document identity; a replaced song
+cannot reuse a previous song's monitor. Read points after a cursor, resetting it when
+the token changes. No processor values are fabricated before playback preparation.
+
+`automation.recorded.get` pages absolute 48 kHz automation by stable plugin identity
+and parameter. `automation.recorded.edit` adds, moves, updates or removes one point
+with `expectedRevision`, complete prevalidation, `dryRun`, one chronological Undo and
+native project persistence. Enabled parameter envelopes and pattern commands exclude
+new recorded points. See [parameter-activity.schema.json](parameter-activity.schema.json).
+
+`workspace.input` changes the selected typing instrument and/or octave using both
+`expectedRevision` and `expectedContext`; it changes context only, with no musical
+Undo or transport stop. Other workspace operations keep their existing unguarded
+presentation-only contracts.
+
 This directory provides a private transport and a control-thread session adapter,
 not full macOS API parity. The attached host determines document-operation support;
 query the running instance's `api.describe` for its current method catalog. Do not
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
+
+`document.get` includes stable current-sequence order identities in
+`orderMetadata: [{id: "n…", name, annotation, color}]`, aligned with every untrimmed entry in `orders`,
+including End (`65535`), Skip (`65534`) and entries after End. Each existing
+`sequences` entry also has a stable `id`, annotation and color; a nonempty native
+name takes precedence over the engine sequence name. Patterns and tracks expose
+the same metadata fields, with `index` identifying the engine slot. Use these identities to retain an
+occurrence when repeated patterns are moved; numeric order indexes remain the
+arguments to revision-guarded `order.edit` and `transport.play`.
+`formatLimits` reports `patternRowsMin`, `patternRowsMax`, `patternsMax`,
+`ordersMax`, `patternsRemaining` and `ordersRemaining` from the actual module
+specifications. Pattern capacity includes reusable holes; order capacity counts
+the complete untrimmed sequence used by create/insert validation.
+
+The native Arrange and Tempo and groove windows use existing `pattern.create`,
+`order.edit`, `sequence.select` and `document.timing.get` / `.set` operations.
+Their read-only workspace snapshots are `arrangementWindow` and
+`songTimingWindow`; `arrangementSelection` contains the selected occurrence
+`id`, current `order` index and `sequenceID`, independently of cursor/playhead.
+Timing Preview uses `dryRun:true`. Creation/timing drafts retain their original
+revision and require explicit Reload after another edit or sequence change.
+Changing timing creates one document Undo and stops playback; preview and no-op
+leave playback and history intact. Existing pattern timing overrides remain in
+force. Pattern duplication preserves exact source pattern timing overrides and
+engine name/color alongside native musical metadata; changing its requested row
+count truncates or extends cells while retaining those properties.
+
+`arrangement.get {}` returns `{sequence, sequenceID, orders, sections}`. Every
+untrimmed order has `{id, name, annotation, color, order, pattern}`, plus
+`patternID` when it references a valid pattern. Each nonempty order name starts
+a section: `{id, name, firstOrder, lastOrder, color}`. Its range ends before the
+next named order or at the sequence's final slot. An unnamed prefix has no
+implicit section; whitespace names count as nonempty, including on End/Skip.
+
+`song.annotate` requires `expectedRevision`, a canonical `n…` entity `id`, and
+one or more of `name`, `annotation`, `color`. It accepts patterns, tracks,
+sequences and order occurrences, including orders in inactive sequences.
+Omitted fields are retained. Names allow 256 UTF-16 code units, annotations
+4096, and colors integer `0..16777215`. It returns the full entity metadata;
+unknown fields and `dryRun` reject. An empty order name removes its section.
+Changes create one document Undo and persist in the existing native format.
+No-ops preserve revision and Redo; annotation edits and their Undo/Redo preserve
+playback. Musical and structural history retain their existing stop behavior.
+
+Arrange now has Orders, Section and Pattern details pages. Section edits the
+captured order occurrence's name; Pattern details edits the captured pattern's
+name and notes. Each has independent retained drafts, captured identity and
+revision, explicit Reload, and stale-edit rejection. Selection changes do not
+retarget unfinished text. `arrangementWindow.sectionDraft` and `.patternDraft`
+report these contexts. Previous/Next section use strict earlier/later named
+orders without wrapping or relocating playback; selecting End/Skip leaves the
+pattern cursor unchanged. These actions and both editors appear in the
+configurable command catalog. Color editing is available through the API;
+there is no native color picker in this checkpoint.
+
+`arrangement.matrix` and `arrangement.copyBlock` use the shared Mac request
+schema and copy semantics in [AUTOMATION.md](../../mac/AUTOMATION.md). The read
+returns full order/track entities and bounded block summaries, including precise
+notes and native FX. Pages default to 64 orders and up to 16 tracks; maximums are
+128 and 32. Counts/bins are unsigned 32-bit, and repeated occurrences retain
+independent order identities. End/Skip slots have no blocks. The copy requires
+`expectedRevision`; `dryRun` validates the complete prospective song and view
+cache before any playback stop, ID allocation in the live song, or history edit.
+`wouldChange` includes native-only changes even when `changedCells` is zero.
+Changed Apply creates one document Undo; no-op preserves revision, playback and
+Redo. Native project persistence retains exact cloned pattern timing and metadata.
+Responses are charged as escaped JSON before appending each bounded page item,
+leaving room for the transport envelope under 32 MiB. Query `api.describe` for
+the live `arrangementMatrix` contract and available native interaction paths.
+
+Application recovery uses the Mac-compatible `recovery.status`, `recovery.list`,
+`recovery.save` and `recovery.restore` contracts, also described in
+[`recovery.schema.json`](recovery.schema.json). `context.get.data.autosave` has
+the same status: enabled, ten-second interval, ten retained generations per
+session, last successful timestamp/copy, persistent error and saving flag.
+Save and restore require `expectedRevision`; successful request-ID replay is
+idempotent. Save captures immutable native bytes and writes them on a serial disk
+worker, leaving revision, dirty state, original path, Undo and playback unchanged.
+Its response revision identifies the captured song even if editing continues
+while those bytes are written. Unchanged automatic snapshots are deduplicated,
+including opaque manual plugin editor state; prepared playback automation is
+never written into the saved baseline.
+
+Restore accepts only a listed opaque ID. It durably protects the current unsaved
+song under a separate session identity, then validates and opens the selected
+copy as a new unsaved document with no file destination. Ordinary Save clears
+only this session's copies, ordered after its pending writes. Storage is
+`%LOCALAPPDATA%/org.resonance.tracker/Recovery`. Incomplete writes do not appear;
+damaged metadata falls back to a generic title without hiding the song bytes.
+The modeless recovery browser opens from the footer or File / Recover a song in
+the command palette. Existing copies are offered on normal interactive startup.
+
+Inspection/audio qualification never accesses that real recovery store. Explicit
+`--recovery-test-directory ABSOLUTE_PATH` with `--automation` and inspection or
+audio-test mode enables private fixture storage. The optional
+`--recovery-test-write-delay-ms 0..2000` is restricted to inspection with that
+private directory, to exercise concurrent editing and ordered Save cleanup.
+Windows preserves unfinished recording takes and their compatibility metadata;
+live MIDI input, take review and Finish/Discard are described in
+[`../RECORDING_PROGRESS.md`](../RECORDING_PROGRESS.md).
+Unapplied graph recipe editor drafts retain their explicit Apply semantics.
 
 Windows output selection is available through `audio.devices.get`,
 `audio.settings.get` and `audio.settings.set`; see
@@ -61,6 +180,17 @@ cache and latest operation report. Its native controls call the existing
 The dock's Detail button and command palette open this window. See
 `../SAMPLE_DETAIL_PROGRESS.md`.
 
+The retained sample pages add `page`, `loops`, `pastePreview` and `autoSnap` to
+that read-only snapshot. `loops` includes independent raw normal/sustain frame
+strings, enabled/direction flags, `dirty` and `stale`; invalid input remains
+observable without becoming song data. Joint Preview/Apply uses
+`sample.loops.set`. Paste Preview retains its exact options, target revision and
+clipboard ID; Apply uses that reviewed clipboard or rejects a mismatch.
+`pastePreview` describes a locally retained preview, not a guarantee that an
+external clipboard or document change has not occurred. Snap selection and
+either loop use `sample.snap.get`; only explicit Apply changes saved loops.
+See `../SAMPLE_WORKFLOWS_PROGRESS.md` for scope and qualification.
+
 The actual application now also registers `graph.*`, `mixer.*` and
 `envelope.bank.*` / `envelope.catalogue.*` operations. Their fields match the
 existing Mac schema. Graph recipe copies use the real rack's saved baseline;
@@ -89,13 +219,19 @@ publication/history-hook integration and native qualification remain pending.
 draft flags, selection and retained hit-test geometry. The contextual workspace
 panel API is unchanged.
 
-The Graph dock's Pattern curve page uses `graph.automation.get/set` and
-`automation.formula.preview`. `workspace.get.graphCurve` reports its captured
-graph/source/pattern/revision, retained point fields, selection, viewport and
-preview status. Values use the shared 256 units per row and normalized 0..1
+The retained Graph Curve editor uses `graph.automation.get/set` and
+`automation.formula.preview`. Graph's Pattern curve action opens that editor
+while routing remains on its previous page. `workspace.get.graphCurve` reports
+its captured graph/source/stable pattern identity/revision, retained point fields,
+selection, viewport and preview status. Values use the shared 256 units per row and normalized 0..1
 model; native fields display rows and percent. All nine curve types and scripted
 expressions use the shared evaluator. Formula previews run on the worker and
-painting consumes cached samples. Song overview remains outstanding.
+painting consumes cached samples. Reload remains bound to the captured target;
+Tools → Load selection deliberately replaces local edits only after a successful
+guarded read. Automatic following never discards retained curve or child drafts.
+The same native owner retains its Bank, Formula and Guide windows when moved or
+hidden. Song overview remains outstanding. See
+[Graph Curve implementation status](../GRAPH_CURVE_HOST_PROGRESS.md) for qualification.
 
 The native **Expand** action opens a retained multiline formula draft with local
 completion/Undo and searchable reference. `workspace.get.formulaWorkbench` and
@@ -233,9 +369,10 @@ partially mutate on validation failure.
 `context.set` uses the existing shared schema fields `expectedRevision`,
 `expectedContext`, and at least one of `pattern`, `row`, `channel`, `column`,
 `following`. Read both tokens from one `context.get`. Booleans are not integers;
-validate the complete request before moving. Current Windows columns are 0–4
-(note, sample/instrument, volume, effect, parameter). Extra effect lanes are not
-implemented. Changing pattern defaults Follow off. A no-op retains the context
+validate the complete request before moving. Columns 0–2 are note,
+sample/instrument and volume. Effect lane `n` uses command/value columns
+`3+2*n` and `4+2*n`; the channel's visible effect count bounds navigation.
+Changing pattern defaults Follow off. A no-op retains the context
 token. Navigation/selection never change song revision, Undo or transport.
 `following` is the canonical Mac field; `follow` remains a read-only legacy alias.
 Selection bounds are inclusive, matching Mac, and are part of the context token.
@@ -262,53 +399,202 @@ or target changes discard those requests; returning focus to the pattern cancels
 them. Edits are never replayed by this queue. See `../DEFERRED_VIEWS_PROGRESS.md`
 and `../Tests/README.md` for qualification and the isolated suite runner.
 
-`workspace.get` reports retained `notes`/`samples` panels, `locations`, `right`, `visible`,
-`pins`, `targets`, `focus`, and `focusLayout`. Windows extensions include `layout`,
-structured `inspection`, `returnPoints`, DIP `geometry`, `dpi`, and `viewport`.
-These are actual GUI state, not a second musical model.
+`workspace.get` reports four panel IDs: `notes`, `samples`, `automation`, and
+`instruments`. `locations`, `visible`, `pins`, `targets`, structured `inspection`,
+`returnPoints`, and `focus` describe the retained GUI state. The legacy `right`
+field identifies only the selected notes/sample inspector. `layout`,
+`focusLayout`, DIP `geometry`, `dpi`, and `viewport` remain presentation state.
+The automation and instrument entries in `inspection` contain the same editor
+snapshots exposed as `parameterAutomation` and `instrumentEnvelope`.
 
-`workspace.panel` accepts the existing schema: `panel`, `pinned`, `focus`,
-`follow`, `return`, `placement`. Only `notes`/`samples` and `right`/`hide`
-placement are supported; other placements/panels reject atomically with -32602.
-Placement alone does not select a different panel or steal focus; `focus:true`
-explicitly selects and opens it. Each panel retains its own `right`/`hide`
-location, including inactive panels. Hiding the selected panel selects the other
-only if it is placed at `right`, and returns hidden-panel focus to the pattern.
-If both panels are hidden, `right` is `""` and `visible` is empty. Presets/open
-actions can reopen their selected panel without resetting the other's location.
-`pinned:false` immediately resumes following the current edit cursor without
-replacing the original return point. `follow:true` is the Cursor action: unpin
-and inspect the edit cursor. Return
-moves to that panel's original opening position with playback-follow off, then
-focuses the pattern. Hidden/tabbed panels keep independent targets and pins.
-Read-only inspectors follow cursor changes without taking focus; there are no
-editable drafts yet. Workspace operations, like Mac, do not require song/context
-tokens; supplying either token rejects as an unknown parameter. They cannot
-edit music. Agent focus requests change in-app focus only.
+`workspace.panel` accepts `panel`, `pinned`, `focus`, `follow`, `return`, and
+`placement`; flags must be booleans. Notes/sample inspectors accept `right` and
+`hide`. Pattern automation and instrument/envelope editors also accept `bottom`,
+`secondary`, and `float`.
+Unknown fields, panels and placements reject with `-32602`; a document operation
+in progress rejects editor placement requests with `-32002`. See the
+[workspace request schema](workspace.schema.json). Workspace operations require
+neither song nor context tokens; supplying either rejects as an unknown field.
+They do not edit music, create musical Undo or change the audio device route.
+
+Notes/sample placement alone does not request keyboard focus. `focus:true`
+selects and opens the inspector. Each retains its own location; hiding the
+selected inspector selects the other only if it is placed at `right`. If both
+are hidden, `right` is `""`; separate editors can still appear in `visible`.
+`pinned:false` immediately resumes cursor inspection, and `follow:true` performs
+the same unpin-and-inspect action. Their original return points remain intact.
+
+Automation/instrument editors start hidden and prefer floating placement. The
+`graphCurve` editor starts hidden and prefers the secondary region. Clean,
+unfocused editors follow the cursor or selected Graph automation source while
+idle and free of retained drafts. `placement:"right"`,
+`"bottom"` or `"secondary"` opens and selects that editor in the requested region.
+`placement:"float"` restores its
+floating window; `placement:"hide"` keeps its native fields and drafts.
+`focus:true` opens/selects and focuses the editor, using its last non-hidden
+placement when necessary. Placement without focus retains the previous valid,
+visible focus where possible. In compact mode, a focused Pattern, inspector or
+Main editor can remain selected, leaving the newly placed native editor hidden.
+An explicit bottom placement that replaces Main selects the native editor.
+Close hides the same retained editor.
+
+For these editors, `pinned:false` or `follow:true` requests a guarded refresh
+from the cursor or selected routing source. Pending operations, raw fields, staged edits, dragging and
+retained bank/formula drafts can defer the refresh. The request still unpins;
+it does not discard the draft or silently retarget an Apply. Automatic follow
+only visits visible, unpinned editors while document work is idle and keyboard
+focus is outside that editor. Native Reload/From cursor remain explicit refresh
+actions. `return:true` selects/focuses the tracker at the editor's original
+opening position with playback-follow off. Its stable pattern identity survives
+reordering; a replaced document or removed pattern rejects the return. Return
+takes precedence over `focus:true` in a combined request.
+
+`workspace.get.editorDock` reports `mode` (`none`, `regions`, or `tabs`), `active`
+(the last selected native editor), `trackerVisible`, a DIP `rect`, each region's header/body and selection,
+the selected compact tab, and the versioned presentation `configuration`.
+Use `compactSelection`, region visibility and `visible` to identify the displayed
+host; `active` alone does not identify the focused or visible compact surface.
+The right, bottom and secondary regions share resizable boundaries. Editors in
+different regions can remain visible together; editors assigned to the same
+region share its selection. When the available width or height cannot fit their
+minimum bodies, compact tabs show one selected surface. Resizing from regions to
+tabs retains the actual focused host and updates `compactSelection`; desired
+sizes and placements remain unchanged. Named-layout restoration keeps its saved
+tab selection. The layout never enlarges the owner window. **Pattern focus**
+temporarily hides docks while preserving placements. Floated editors remain
+independent. The **Connected editors** preset opens Pattern, Graph, Instrument
+and Automation in four regions where space permits. **Graph editing** instead
+shows Pattern, routing, Graph Curve and parameter Automation; the Instrument
+editor stays retained while hidden. Connected hides the retained Graph Curve
+editor to restore its Instrument/Automation arrangement.
+
+The existing **Automation…** and **Instrument…** actions open the retained
+editors in their preferred placement, initially floating. The command palette's
+**Dock automation beside the tracker** and **Dock instrument beside the tracker**
+actions select the dock. **Open selected source pattern curve** and **Dock Graph
+curve beside routing** open the retained curve editor. Ctrl+Alt+D inside each
+native editor toggles dock/float.
+Each region has a panel selector. Native editor regions offer local placement,
+Pin/Following, Cursor and Return actions; Main offers its selector and Collapse.
+Compact headers collect native editor actions in a More menu when needed.
 
 `api.describe.revisionGuards` advertises required tokens per write method:
 `transport.play`/`transport.stop` require `expectedRevision`, `context.set`
 requires both `expectedRevision` and `expectedContext`, and workspace writes
-accept neither. `api.describe.workspaceSubset` lists the supported panels,
-placements and presets rather than advertising arbitrary Mac docking/layouts.
+accept neither. `api.describe.workspaceSubset` lists panels, inspector
+`placements`, per-editor `editorPlacements`, and supported presets.
 
-`workspace.layout` supports **Compose**, **Pattern focus**, **Sound design**.
-Save/Restore custom, arbitrary docking and floating explicitly reject rather
-than succeeding as no-ops. Layout sizes and panel state are session-local.
-Keyboard and native button actions call the same host operations. API calls do
-not raise the process or change the system audio route.
+`workspace.layout` supports **Compose**, **Pattern focus**, **Sound design**, **Connected**,
+**Save custom** and **Restore custom**, matching the shared names. Windows also
+supports **Graph editing**, **Delete custom** and **Reload saved**. Custom actions accept optional
+`savedName` (default `Custom`): 1–64 Unicode characters, no controls or surrounding
+whitespace, up to 24 case-sensitive names. See [workspace schema](workspace.schema.json).
+`workspace.get.savedLayouts` lists names; `lowerEditor`, `lowerVisible`, and
+`geometry.lowerTabs` describe the retained lower dock. The **Layouts…** manager
+and Ctrl+Alt+W expose the same operations; Ctrl+J collapses/reopens the dock.
 
-Reproduce with `SCREAMSEQ_TEST_EXE` set to the separate QA executable:
-`python -B windows/Tests/test_workspace.py -v`. Tests exercise real HWND buttons,
-command-palette text/Enter, drag selection, divider resize, pins/return, strict
-validation and stale guards through the actual per-process pipe. Mouse-message
-tests are DPI-aware; computer-use inspection is a separate visual check.
+Layouts save inspector visibility, dock sizes, the base preset, active lower
+editor, automation/instrument/Graph Curve locations, each region selection and compact tab.
+The `editors` member uses version 3; the named-layout catalogue remains version 1.
+Exact version-2 and legacy two-editor configurations migrate with Graph Curve
+hidden, while seven-field configurations leave
+native presentation preferences unchanged. Restoring keeps current pins, inspected targets, return points, draft
+text and song cursor; it never restores old musical targets or adds song Undo.
+Older saved configurations without editor placement leave current editor
+placements unchanged. Unopened editors are initialized if the saved arrangement
+requires them; already-created editors retain their instances. An existing
+Guide-only Graph Curve owner remains empty on restore and retains its Guide.
+An explicit curve opening or Load selection initializes that same owner.
+The selected lower editor can be reopened from its workspace command. A normal app stores layouts
+in LocalAppData/org.resonance.tracker/workspace-layouts-v1.json; inspection and
+audio qualification keep them in memory. Saves replace atomically. A concurrent
+file edit rejects with -32001; **Refresh saved** / **Reload saved** reloads the
+catalogue before retry. Invalid storage does not prevent startup.
+
+Automation, instrument/envelope and Graph Curve editors support region/float placement.
+The Main-owned Notes, Samples, FX, Plugins, Mixer and Graph share the bottom
+region. Arbitrary panel docking and simultaneous Main-owned editors remain
+unavailable. See [`GRAPH_CURVE_HOST_PROGRESS.md`](../GRAPH_CURVE_HOST_PROGRESS.md) for the
+implementation scope and qualification status.
+
+Use `SCREAMSEQ_TEST_EXE` pointing to a separate QA executable and run
+`windows/Tests/run_isolated.py --log <absolute-log-path> --test test_workspace_docking`
+with the configured Python runtime. The isolated runner protects the active
+musician's desktop; native message/API checks and visual presentation evidence
+remain separate. The compact editor suites are `test_parameter_compact_ui` and
+`test_instrument_compact_ui`; baseline workspace/layout suites remain relevant.
+
+### Commands, shortcuts and context menus
+
+`workspace.commands.get` accepts `{}` and returns `data.commands`. Each entry
+contains `id`, `name`, active `keys`, `defaults`, `customized`, and `contextHint`.
+Treat IDs such as `windows.command.<integer>` as opaque Windows IDs obtained from
+the current catalog. `contextHint` describes intrinsic local behavior such as
+Enter on an FX cell; it is not another configurable global binding.
+
+`workspace.shortcut.set` accepts exactly `command` (a catalog ID) and `keys`
+(an array of zero to four strings). An empty array clears a binding. One stroke
+sets a shortcut; two to four form a sequence, for example `["ctrl+alt+g", "r"]`.
+The first custom stroke needs Ctrl or Alt to preserve note entry. Sending the
+exact `defaults` array for that same command restores its trusted default,
+including built-in unmodified bindings such as Space or F6. Canonical
+strings are lowercase, with modifiers in `ctrl+alt+shift+` order, followed by
+printable ASCII or a named Windows key such as `space`, `return`, `left`, or
+`f6`. Printable keys use the active keyboard layout's unshifted identity plus
+explicit modifiers: a shifted semicolon is `shift+;`, not `:`. The palette
+recorder uses the same mapping as dispatch. Use `plus` for the plus key. See the
+[workspace schema](workspace.schema.json) for names and aliases. Invalid keys,
+duplicate modifiers, unknown IDs and any duplicate or prefix conflict reject
+the complete change. Escape cannot continue a sequence. Windows-reserved
+Ctrl+Alt+Delete, Ctrl+Escape, Alt+Tab and Alt+Escape combinations (also with extra
+modifiers) reject in every position. A prefix expires after 1.5 seconds and
+cancels on Escape, a mismatch, unmappable text input such as AltGr, or a
+document, selection, focus or active-window change.
+
+Both methods use the usual document result envelope. They require neither
+`expectedRevision` nor `expectedContext`, and reject those extra fields.
+Setting returns `data.command` and canonical `data.keys`; `changed:false`
+describes unchanged song history even when the preference changes.
+The operation leaves playback running (`playbackStopped:false`). Successful writes use
+the adapter's existing request-ID replay. `workspace.get.shortcuts` reports
+only the current sequence `pending` and `hint` presentation state.
+
+Open **Commands** with its default Ctrl+K binding to search, select a command,
+then **Set shortcut**, **Set sequence**, **Clear**, or **Reset default**.
+Sequence recording accepts two to four strokes; Enter saves and Escape cancels.
+Native text editing, open selectors, editor-local commands and musical note
+releases retain priority. Custom global bindings do not replace those local
+workflows. Normal sessions atomically save overrides in
+`%LOCALAPPDATA%/org.resonance.tracker/workspace-shortcuts-v1.json`; inspection
+and audio qualification keep them in memory. An absent file is not created by
+reading it. Invalid or concurrently changed storage rejects publication and
+retains live bindings; it does not alter song data. Use the palette's
+**Workspace / Reload saved shortcuts** command to load the current preference
+file before retrying a rejected write. This is a separate explicit action;
+failed writes never overwrite another session's preferences.
+
+Native context menus are available on the pattern grid, lower sample waveform,
+graph canvas/nodes/wires, instrument envelope editor, and detailed sample
+editor. They expose existing actions with current enabled/check states. The
+instrument menu includes point editing, tools/bank, Apply and dock/float; sample
+detail groups selection/view, drawing, processing, private clipboard, loops,
+crossfade and settings. Native text fields retain their standard editing menus.
+Main workspace menu shortcut labels reflect the current global bindings;
+clearing a binding removes its hint. Keyboard context requests on an unsupported
+or hidden canvas do not fall back to a different musical target.
+Each application menu captures its musical target and rechecks document,
+revision, selection and relevant draft state after the native modal loop.
+Cancellation performs no musical operation; a changed target rejects the
+chosen action. Existing shared API, Undo and native persistence paths perform
+musical edits. See [command workflow progress](../WORKSPACE_COMMANDS_PROGRESS.md)
+for current qualification and remaining scope.
 
 ## Wire and security
 
 The base adapter catalog includes `api.describe`, `document.get`, `pattern.get`,
 `context.get`, `transport.get`, `transport.play`, `transport.stop`, `context.set`,
-`workspace.get`, `workspace.panel` and `workspace.layout`. Attached document hosts
+`workspace.get`, `workspace.panel`, `workspace.layout`, `workspace.commands.get`
+and `workspace.shortcut.set`. Attached document hosts
 can enable additional operations; use the live catalog, not a hard-coded superset.
 Unsupported methods return `-32601`. The adapter uses the existing
 string-ID JSON-RPC envelope, revision guard (-32001), parameter errors (-32602),
@@ -450,7 +736,19 @@ bindings without silently retargeting them. Writes require `expectedRevision`.
 The native FX and precise-note inspectors use these same transactions. A precise
 row draft captures its target and revision, preserves unrelated events, and saves
 through one `pattern.notes.set` transaction. `workspace.get.noteEditor` reports
-its target, selected event, count, pending/stale status and logical canvas bounds.
+its target, selected event, count, pending/stale status and owner-client DIP canvas
+bounds. The sole native editor is `workspace.panel {panel:"preciseNotes"}`;
+`notes` remains the read-only inspector with independent pin/origin. `preciseNotes`
+and compatibility `noteEditor` snapshots describe the same retained HWND, stable
+pattern/track IDs and raw fields; workspace polling omits the full row draft.
+The retained native pages are Timeline, Hit, Tools and read-only Details; Details
+shows captured timing and note-local effect guidance without changing the draft.
+Command 107 and the lower Notes alias open that sole owner. Editors preferences
+V4 strictly records all four native identities. Older bottom Notes selections
+migrate to preciseNotes bottom; seven-field Notes aliases reuse an existing
+placement and choose bottom only if hidden. Explicit V4 files use native
+placement rather than a Main `notes` identity. No song format or pattern.notes
+request semantics change.
 
 The native clipboard publishes Mac's `ScreamSeq Pattern 2` Unicode text format,
 including relative FX and only the referenced stable bindings. It also accepts
@@ -673,6 +971,70 @@ it does not introduce different musical editing semantics. Windows-only
 `workspace.get.instrumentEnvelope.mappingFields`, `mappingDirty` and
 `selectedKey` expose unfinished range fields, staged mapping state and the
 native list selection. See `../INSTRUMENT_IMPORT_PROGRESS.md`.
+
+## MIDI input and retained recording takes
+
+`recording.get/start/capture/stop/commit/discard` use shared precise-note recording;
+see `recording.schema.json`. Writes require current `expectedRevision`, plus an
+opaque `take` ID for operations on an existing take. Start pins the base revision,
+distinct zero-based raw `channels`, `instrument` (1–255), optional `quantization`
+(0–65536 row units) and `latencyMS` (−500 through +500; positive places input earlier).
+
+Capture validates its entire array of at most 1024 events before changing the
+take, then sorts equal timestamps stably. Events supply decimal uint64
+`timestamp`, MIDI `status`, `note` and `velocity`. Windows host time is QPC
+converted to 100 ns units. Note-on/off and CC120/123 are accepted. The audio
+presentation clock accounts for primed silence and each renderer slice. Missing
+or expired mappings increase `missingTime`; no cursor time is substituted.
+A take binds its first valid stream generation and cannot join a restarted
+stream. `transport.get.recordingClock` reports validity, generation,
+discontinuities and host ticks per second.
+
+Get returns `take`, `capturing`, `compatible`, `baseRevision`, `eventCount`,
+`events`, `missingTime`, `exhaustedVoices`, `overflow`, `inputError` and current
+`hostTime`. Events contain stable native `patternID` and `track`, row-unit
+`position`, core `note`, `instrument` and `velocity`. The compact
+`workspace.get.recording` summary omits event payloads. A stopped compatible take
+commits with optional `replaceRows` and `dryRun`. Commit validates the complete
+candidate and applies one document Undo. Dry runs, invalid requests and stale
+commits retain the take. Take lifecycle alone does not advance musical revision.
+Successful commit/discard consumes the take and any imported recovery wrapper.
+
+API `transport.stop` ends capture and retains the take. Native Stop/Space also
+attempts Finish. Lost input, exhausted voices, overflow or an incompatible base
+retain the stopped take for review. Explicit Finish can accept a compatible
+partial take; it cannot rebase a stale one. Save/Open/close require Finish or
+Discard first. Recovery snapshots copy and close held notes without changing
+the live take. Restore deliberately ends old capture before protecting/replacing
+the song, excludes input during that boundary and hydrates a fresh stopped take.
+Failed restore leaves the old take stopped and available. Optional
+`recoveryTake.inputError` preserves loss reasons; older files remain supported.
+
+Windows-only `midi.devices.get` and `midi.settings.get/set` use a separate
+`expectedMidiRevision` guard; see `midi.schema.json`. They expose opaque device
+interface IDs, connection state and input-loss/timestamp counters. Preferences
+are `source` (empty disconnects), `armed`, `channelsCount`, `quantization` and
+`latencyMS`; they are session state outside musical Undo. No-ops preserve their
+revision. Dry runs validate without changing input, takes or music. Device calls
+run on a control worker. WinMM callbacks queue bounded raw messages; driver
+milliseconds map to host time with precision and anchor uncertainty exposed.
+Source loss releases input holds and retains the take. Input during Finish,
+Discard or song replacement cannot later become a cursor step edit.
+
+The native MIDI & recording window and command palette expose input selection,
+Arm, timing, adjacent columns, review, Finish, Discard and precise-note navigation.
+Armed stopped MIDI enters cursor notes; armed playback starts a take after Play.
+The main Sound selector is authoritative. Computer keyboard step entry and Live
+keys keep their existing behavior. MIDI and keyboard holds for the same current
+sound/pitch share audition voice ownership.
+
+Qualification only: `--midi-test-input` requires automated inspection or explicit
+audio-test mode. It substitutes an owned input adapter and advertises
+`midi.test.inject`, guarded by settings revision and connection generation.
+Injected driver messages traverse the production queue and timestamp conversion.
+Its optional `after` barrier invokes actual `apiStop` or `nativeStop` before timer
+servicing to test pending batches. Normal sessions never expose this method.
+This fixture does not qualify physical MIDI drivers, hotplug or hardware latency.
 
 Graph interaction parity (30 September 2026): `graph.node.add` supports `insertEdge` or `connect`; modulation Add initializes zero depth and a shared target base. `graph.nodes.detach` preserves internal/sidechain connections and heals a unique serial Main path, with optional `remove` and saved `positions`. These changes use the shared graph validation and one transaction. Rack parameter/bus/bypass APIs accept a persistent `plugin` ID instead of `slot` (exactly one). The new GraphOperations regression scenario is `cableInsertionAndDetachment`; this Mac checkout has not executed the Windows binary.
 

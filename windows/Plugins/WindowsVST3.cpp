@@ -1070,6 +1070,11 @@ void NativeBackend::closeEditor() {
 }
 void NativeBackend::showEditor(){
  pluginMainCall([&]{auto &s=*impl_;if(s.window)return;if(!s.controller)throw std::runtime_error("VST3 has no controller/editor");
+  // Manual recipe values may still be queued for the processor. A newly
+  // created editor must observe those values before its initialization gestures;
+  // waiting for the editor timer would let the old controller state win.
+  s.syncController();
+  if(s.failed.load(std::memory_order_acquire))throw std::runtime_error("Cannot synchronize VST3 parameters before opening its editor");
   s.view=s.controller->createView(ViewType::kEditor);if(!s.view)throw std::runtime_error("VST3 has no native editor");
   try{
    require(s.view->isPlatformTypeSupported(kPlatformTypeHWND),"VST3 editor does not support HWND");
