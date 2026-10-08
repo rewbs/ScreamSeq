@@ -18,7 +18,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
   std::optional<uint64_t> validGeneration_;
   std::wstring initial_,completionText_;
   LONG completionStart_=0,completionEnd_=0,completionSelectionStart_=0;
-  bool referenceOnly_=false,setting_=false,pending_=false,previewNeeded_=false,accepted_=false,completing_=false;
+  bool referenceOnly_=false,setting_=false,pending_=false,previewNeeded_=false,accepted_=false,completing_=false,statusError_=false;
   AutomationCanvas canvas_;
   HFONT codeFont_{};UINT codeDpi_=0;
 
@@ -34,8 +34,12 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
   }
   CHARRANGE selection()const{CHARRANGE range{};SendMessageW(controls_.at(code),EM_EXGETSEL,0,reinterpret_cast<LPARAM>(&range));return range;}
   void setSelection(LONG first,LONG last){CHARRANGE range{first,last};SendMessageW(controls_.at(code),EM_EXSETSEL,0,reinterpret_cast<LPARAM>(&range));}
-  void status(std::wstring text){status_=std::move(text);set(statusLabel,status_);requestPaint();}
-  void error(const std::exception &e)override{status(wide(e.what()));}
+  std::wstring displayStatus()const{
+    if(!referenceOnly_&&!sourceCurrent_()&&!statusError_)return L"Source changed / formula retained; reopen the original point or copy this text";
+    return status_;
+  }
+  void status(std::wstring text,bool error=false){status_=std::move(text);statusError_=error;set(statusLabel,displayStatus());requestPaint();}
+  void error(const std::exception &e)override{status(wide(e.what()),true);}
   void dismissCompletion(){completing_=false;matches_.clear();ShowWindow(controls_.at(suggestions),SW_HIDE);requestPaint();}
   void changed(){
     if(setting_||referenceOnly_)return;++generation_;accepted_=false;validGeneration_.reset();values_=Json::array();canvas_.rebuild(Json::array(),values_);
@@ -134,6 +138,11 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
   void fontsChanged()override{
     const auto dpi=GetDpiForWindow(window_);if(codeDpi_!=dpi){auto font=CreateFontW(-int(15*dpi/96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Consolas");SendMessageW(controls_.at(code),WM_SETFONT,reinterpret_cast<WPARAM>(font),FALSE);if(codeFont_)DeleteObject(codeFont_);codeFont_=font;codeDpi_=dpi;}
     else SendMessageW(controls_.at(code),WM_SETFONT,reinterpret_cast<WPARAM>(codeFont_),FALSE);
+    // WM_SETFONT can restore automatic system text color. The plain-text
+    // control has one format; set its default after all native font updates.
+    // This changes presentation without selecting text or editing its Undo stack.
+    CHARFORMAT2W format{};format.cbSize=sizeof(format);format.dwMask=CFM_COLOR;format.crTextColor=RGB(218,232,241);
+    if(!SendMessageW(controls_.at(code),EM_SETCHARFORMAT,SCF_DEFAULT,reinterpret_cast<LPARAM>(&format)))throw std::runtime_error("Cannot set formula text color");
     SendMessageW(controls_.at(symbols),LB_SETITEMHEIGHT,0,LPARAM(56*dpi/96));SendMessageW(controls_.at(suggestions),LB_SETITEMHEIGHT,0,LPARAM(22*dpi/96));
   }
   void layout()override{
@@ -143,7 +152,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     place(heading,16,14,leftWidth,24,!referenceOnly_);place(code,16,46,leftWidth,std::max(100.0f,h-366),!referenceOnly_);
     place(previewLabel,16,h-308,leftWidth,22,!referenceOnly_);canvas_.viewport={54,h-281,std::max(1.0f,leftWidth-42),140};canvas_.rebuild(Json::array(),values_);
     place(complete,16,h-111,156,26,!referenceOnly_);place(checkPreview,180,h-111,88,26,!referenceOnly_);place(discard,276,h-111,std::max(70.0f,leftWidth-461),26,!referenceOnly_);place(use,leftWidth-93,h-77,109,26,!referenceOnly_);place(statusLabel,16,h-77,std::max(1.0f,leftWidth-122),63,!referenceOnly_);
-    EnableWindow(controls_.at(use),!referenceOnly_&&!pending_&&validGeneration_&&*validGeneration_==generation_);EnableWindow(controls_.at(checkPreview),!pending_);EnableWindow(controls_.at(insert),!filtered_.empty());
+    refreshSourceState();EnableWindow(controls_.at(checkPreview),!pending_);EnableWindow(controls_.at(insert),!filtered_.empty());
     if(completing_&&!referenceOnly_){POINT caret{};GetCaretPos(&caret);MapWindowPoints(controls_.at(code),window_,&caret,1);const auto scale=96.0f/GetDpiForWindow(window_);const auto height=std::min(6.0f,float(matches_.size()))*22+4;place(suggestions,std::clamp(caret.x*scale,16.0f,std::max(16.0f,leftWidth-270)),std::clamp(caret.y*scale+22,46.0f,std::max(46.0f,h-height-140)),std::min(300.0f,leftWidth),height);SetWindowPos(controls_.at(suggestions),HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);}
     else ShowWindow(controls_.at(suggestions),SW_HIDE);
   }
@@ -162,7 +171,6 @@ public:
     create(referenceOnly_?L"ScreamSeq.FormulaReference":L"ScreamSeq.FormulaWorkbench",title.c_str(),referenceOnly_?640:960,680);
     add(code,MSFTEDIT_CLASS,L"",ES_MULTILINE|ES_AUTOVSCROLL|ES_WANTRETURN|ES_NOHIDESEL|WS_VSCROLL|WS_BORDER);
     SendMessageW(controls_.at(code),EM_SETTEXTMODE,TM_PLAINTEXT|TM_MULTILEVELUNDO,0);SendMessageW(controls_.at(code),EM_EXLIMITTEXT,0,2048);SendMessageW(controls_.at(code),EM_SETUNDOLIMIT,128,0);SendMessageW(controls_.at(code),EM_SETEVENTMASK,0,ENM_CHANGE);SendMessageW(controls_.at(code),EM_SETBKGNDCOLOR,0,RGB(16,23,31));
-    CHARFORMAT2W format{};format.cbSize=sizeof(format);format.dwMask=CFM_COLOR;format.crTextColor=RGB(218,232,241);SendMessageW(controls_.at(code),EM_SETCHARFORMAT,SCF_ALL,reinterpret_cast<LPARAM>(&format));
     edit(search,L"",256);SendMessageW(controls_.at(search),EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(L"Find a value or function"));
     add(symbols,L"LISTBOX",L"",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS|WS_VSCROLL);
     add(suggestions,L"LISTBOX",L"",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL|WS_BORDER);
@@ -175,8 +183,13 @@ public:
     finish();filter();status(L"Checking formula…");
   }
   ~FormulaWorkbenchWindow()override{if(codeFont_)DeleteObject(codeFont_);}
-  void show(){const bool wasVisible=visible();NativeToolWindow::show();if(!wasVisible)SetFocus(controls_.at(referenceOnly_?search:code));if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
+  void refreshSourceState(){
+    if(!ready_)return;
+    EnableWindow(controls_.at(use),!referenceOnly_&&!pending_&&sourceCurrent_()&&validGeneration_&&*validGeneration_==generation_);
+    set(statusLabel,displayStatus());
+  }
+  void show(){const bool wasVisible=visible();refreshSourceState();NativeToolWindow::show();if(!wasVisible)SetFocus(controls_.at(referenceOnly_?search:code));if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
   bool retainedDraft()const{return !referenceOnly_&&(pending_||(!accepted_&&source()!=initial_));}
-  Json snapshot()const{Json names=Json::array(),matches=Json::array();for(auto i:filtered_)names.push_back(reference_[i].at("name"));for(auto i:matches_)matches.push_back(reference_[i].at("insert"));return {{"visible",visible()},{"referenceOnly",referenceOnly_},{"source",utf8(source())},{"dirty",retainedDraft()},{"pending",pending_},{"checking",previewNeeded_||pending_},{"valid",validGeneration_&&*validGeneration_==generation_},{"sourceCurrent",referenceOnly_||sourceCurrent_()},{"previewSamples",values_.size()},{"values",values_},{"point",point_},{"symbols",names},{"completionVisible",completing_},{"completions",matches},{"status",utf8(status_)}};}
+  Json snapshot()const{Json names=Json::array(),matches=Json::array();for(auto i:filtered_)names.push_back(reference_[i].at("name"));for(auto i:matches_)matches.push_back(reference_[i].at("insert"));return {{"visible",visible()},{"referenceOnly",referenceOnly_},{"source",utf8(source())},{"dirty",retainedDraft()},{"pending",pending_},{"checking",previewNeeded_||pending_},{"valid",validGeneration_&&*validGeneration_==generation_},{"sourceCurrent",referenceOnly_||sourceCurrent_()},{"previewSamples",values_.size()},{"values",values_},{"point",point_},{"symbols",names},{"completionVisible",completing_},{"completions",matches},{"status",utf8(displayStatus())}};}
 };
 }

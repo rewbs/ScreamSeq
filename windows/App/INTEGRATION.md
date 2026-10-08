@@ -29,16 +29,18 @@ The workspace exposes lower editor selection, dock collapse, named layout
 manager and storage, and categorized multi-word command search.
 Layouts preserve current editor drafts, pins and targets, with guarded atomic
 preference writes outside document history. See `../WORKSPACE_LAYOUTS_PROGRESS.md`
-for the first checkpoint. Automation and instrument/envelope editors retain
+for the first checkpoint. Automation, instrument/envelope and Graph Curve editors retain
 their HWNDs, controls and drafts across right, bottom and secondary regions,
 responsive workspace tabs and floating windows. Short docked pages remain
 usable at 440×300 DIP; floating minima remain 440×500. The Connected preset puts
-Pattern, Graph, Instrument and Automation together when space permits. Each
+Pattern, Graph, Instrument and Automation together when space permits. Graph
+editing instead shows Pattern, routing, Graph Curve and parameter Automation. Each
 native region has local placement, follow/pin, cursor and return actions. Saved
 layouts preserve independent region selections and desired split sizes.
 `../INDEPENDENT_DOCKING_PROGRESS.md` records current qualification and remaining
 workspace parity gaps; `../WORKSPACE_DOCKING_PROGRESS.md` is the preceding
-shared-dock checkpoint.
+shared-dock checkpoint. `../GRAPH_CURVE_HOST_PROGRESS.md` distinguishes the new
+curve-owner implementation from its still-pending qualification.
 
 Native Audio settings now selects an output endpoint and preferred buffer period
 through independent guarded session APIs. Driver-supported periods and buffer
@@ -263,12 +265,14 @@ UI state, with meter snapshots collected by a UI timer. The reusable graph dock
 adds cached nodes, ports and wires, socket dragging, pan/zoom, definition/property
 drafts and bus assignments. Its plugin controls and native VST3 draft editors
 operate on independent graph recipes with document Undo. Painting never queries
-the worker or plugins. The Pattern curve page retains a separate captured source
-and pattern draft, with native point fields, dragging, snap, zoom, all nine curve
+the worker or plugins. Pattern curve opens one retained native owner beside
+routing, with a captured source/stable pattern identity, native point fields,
+dragging, snap, zoom, all nine curve
 types and worker-evaluated formula previews. Generation checks preserve newer
 edits during requests. Retained song overview, formula and envelope-bank tools
-are described below. Simultaneous Main editors and a separate Graph curve host
-remain open.
+are described below. Simultaneous Main editors remain open work. The new owner
+also owns its Formula, Guide and Bank children; no second editable curve remains
+in Main. Its source-only integration is not yet build or runtime qualification.
 
 Mixer gain/balance/width/mute/solo updates publish one bounded control batch on
 the single UI producer. The shared Document prepares Undo storage before that

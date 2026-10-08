@@ -73,6 +73,8 @@ void retainedDock(HWND main,HWND host){
   tool.placementChanged([&]{++changed;});
   tool.workspaceKeys([&](WPARAM key,bool){++globals;return key==VK_F8;});
   tool.musicalTyping({},[&](WPARAM key){if(key=='Z'){++releases;return true;}return false;},[]{});
+  unsigned focusPaints=0;
+  tool.focusPresentationChanged([&]{++focusPaints;});
   tool.dock(host);tool.dockBounds(10,12,520,360);
   require(tool.docked()&&GetParent(window)==host&&(GetWindowLongPtrW(window,GWL_STYLE)&WS_CHILD),"Tool did not become a docked child");
   require(tool.window()==window&&tool.control(1)==edit&&tool.control(3)==combo,"Docking replaced a retained HWND");
@@ -83,6 +85,14 @@ void retainedDock(HWND main,HWND host){
   const float scale=GetDpiForWindow(host)/96.f;
   require(bounds.left==int(std::round(10*scale))&&bounds.top==int(std::round(12*scale))&&bounds.right-bounds.left==int(std::round(520*scale)),"Dock bounds are not in parent DIPs");
   const auto unchangedLayouts=tool.layouts;tool.dockBounds(10,12,520,360);require(tool.layouts==unchangedLayouts,"Unchanged dock bounds triggered a redundant layout");
+  const auto beforeFocusPaints=focusPaints;
+  SetFocus(window);require(focusPaints>beforeFocusPaints,"Native canvas focus did not request presentation");
+  const auto canvasFocusPaints=focusPaints;SetFocus(edit);
+  require(focusPaints>canvasFocusPaints&&tool.layouts==unchangedLayouts&&text(edit)==L"Captured draft",
+      "Native child focus did not request presentation or caused layout/draft mutation");
+  SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+  require(first==2&&last==7,"Focus presentation changed the retained native caret");
+  tool.focusPresentationChanged({});
   SendMessageW(edit,WM_KEYDOWN,VK_F6,0);require(tool.localKeys==1&&globals==0,"Workspace key intercepted a local editor shortcut");
   SendMessageW(edit,WM_KEYDOWN,VK_F8,0);require(globals==1,"Unhandled key did not reach workspace callback exactly once");
   SendMessageW(edit,WM_KEYUP,'Z',0);require(releases==1,"Docked key-up failed to release musical input");

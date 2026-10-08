@@ -191,13 +191,19 @@ until explicit API close or document replacement. Commit supports dry run.
 draft flags, selection and retained hit-test geometry. The contextual workspace
 panel API is unchanged.
 
-The Graph dock's Pattern curve page uses `graph.automation.get/set` and
-`automation.formula.preview`. `workspace.get.graphCurve` reports its captured
-graph/source/pattern/revision, retained point fields, selection, viewport and
-preview status. Values use the shared 256 units per row and normalized 0..1
+The retained Graph Curve editor uses `graph.automation.get/set` and
+`automation.formula.preview`. Graph's Pattern curve action opens that editor
+while routing remains on its previous page. `workspace.get.graphCurve` reports
+its captured graph/source/stable pattern identity/revision, retained point fields,
+selection, viewport and preview status. Values use the shared 256 units per row and normalized 0..1
 model; native fields display rows and percent. All nine curve types and scripted
 expressions use the shared evaluator. Formula previews run on the worker and
-painting consumes cached samples. Song overview remains outstanding.
+painting consumes cached samples. Reload remains bound to the captured target;
+Tools → Load selection deliberately replaces local edits only after a successful
+guarded read. Automatic following never discards retained curve or child drafts.
+The same native owner retains its Bank, Formula and Guide windows when moved or
+hidden. Song overview remains outstanding. See
+[Graph Curve implementation status](../GRAPH_CURVE_HOST_PROGRESS.md) for qualification.
 
 The native **Expand** action opens a retained multiline formula draft with local
 completion/Undo and searchable reference. `workspace.get.formulaWorkbench` and
@@ -390,8 +396,10 @@ are hidden, `right` is `""`; separate editors can still appear in `visible`.
 `pinned:false` immediately resumes cursor inspection, and `follow:true` performs
 the same unpin-and-inspect action. Their original return points remain intact.
 
-Automation/instrument editors start hidden, prefer floating placement, and follow
-the cursor while idle, unfocused and free of retained drafts. `placement:"right"`,
+Automation/instrument editors start hidden and prefer floating placement. The
+`graphCurve` editor starts hidden and prefers the secondary region. Clean,
+unfocused editors follow the cursor or selected Graph automation source while
+idle and free of retained drafts. `placement:"right"`,
 `"bottom"` or `"secondary"` opens and selects that editor in the requested region.
 `placement:"float"` restores its
 floating window; `placement:"hide"` keeps its native fields and drafts.
@@ -403,7 +411,7 @@ An explicit bottom placement that replaces Main selects the native editor.
 Close hides the same retained editor.
 
 For these editors, `pinned:false` or `follow:true` requests a guarded refresh
-from the cursor. Pending operations, raw fields, staged edits, dragging and
+from the cursor or selected routing source. Pending operations, raw fields, staged edits, dragging and
 retained bank/formula drafts can defer the refresh. The request still unpins;
 it does not discard the draft or silently retarget an Apply. Automatic follow
 only visits visible, unpinned editors while document work is idle and keyboard
@@ -427,12 +435,17 @@ sizes and placements remain unchanged. Named-layout restoration keeps its saved
 tab selection. The layout never enlarges the owner window. **Pattern focus**
 temporarily hides docks while preserving placements. Floated editors remain
 independent. The **Connected editors** preset opens Pattern, Graph, Instrument
-and Automation in four regions where space permits.
+and Automation in four regions where space permits. **Graph editing** instead
+shows Pattern, routing, Graph Curve and parameter Automation; the Instrument
+editor stays retained while hidden. Connected hides the retained Graph Curve
+editor to restore its Instrument/Automation arrangement.
 
 The existing **Automation…** and **Instrument…** actions open the retained
 editors in their preferred placement, initially floating. The command palette's
 **Dock automation beside the tracker** and **Dock instrument beside the tracker**
-actions select the dock. Ctrl+Alt+D inside either editor toggles dock/float.
+actions select the dock. **Open selected source pattern curve** and **Dock Graph
+curve beside routing** open the retained curve editor. Ctrl+Alt+D inside each
+native editor toggles dock/float.
 Each region has a panel selector. Native editor regions offer local placement,
 Pin/Following, Cursor and Return actions; Main offers its selector and Collapse.
 Compact headers collect native editor actions in a More menu when needed.
@@ -445,7 +458,7 @@ accept neither. `api.describe.workspaceSubset` lists panels, inspector
 
 `workspace.layout` supports **Compose**, **Pattern focus**, **Sound design**, **Connected**,
 **Save custom** and **Restore custom**, matching the shared names. Windows also
-supports **Delete custom** and **Reload saved**. Custom actions accept optional
+supports **Graph editing**, **Delete custom** and **Reload saved**. Custom actions accept optional
 `savedName` (default `Custom`): 1–64 Unicode characters, no controls or surrounding
 whitespace, up to 24 case-sensitive names. See [workspace schema](workspace.schema.json).
 `workspace.get.savedLayouts` lists names; `lowerEditor`, `lowerVisible`, and
@@ -453,25 +466,27 @@ whitespace, up to 24 case-sensitive names. See [workspace schema](workspace.sche
 and Ctrl+Alt+W expose the same operations; Ctrl+J collapses/reopens the dock.
 
 Layouts save inspector visibility, dock sizes, the base preset, active lower
-editor, automation/instrument locations, each region selection and compact tab.
-The `editors` member uses version 2; the named-layout catalogue remains version 1.
-Previous editor configurations migrate, while seven-field configurations leave
+editor, automation/instrument/Graph Curve locations, each region selection and compact tab.
+The `editors` member uses version 3; the named-layout catalogue remains version 1.
+Exact version-2 and legacy two-editor configurations migrate with Graph Curve
+hidden, while seven-field configurations leave
 native presentation preferences unchanged. Restoring keeps current pins, inspected targets, return points, draft
 text and song cursor; it never restores old musical targets or adds song Undo.
 Older saved configurations without editor placement leave current editor
 placements unchanged. Unopened editors are initialized if the saved arrangement
-requires them; already-created editors retain their instances.
+requires them; already-created editors retain their instances. An existing
+Guide-only Graph Curve owner remains empty on restore and retains its Guide.
+An explicit curve opening or Load selection initializes that same owner.
 The selected lower editor can be reopened from its workspace command. A normal app stores layouts
 in LocalAppData/org.resonance.tracker/workspace-layouts-v1.json; inspection and
 audio qualification keep them in memory. Saves replace atomically. A concurrent
 file edit rejects with -32001; **Refresh saved** / **Reload saved** reloads the
 catalogue before retry. Invalid storage does not prevent startup.
 
-Only automation and instrument/envelope editors support region/float placement.
+Automation, instrument/envelope and Graph Curve editors support region/float placement.
 The Main-owned Notes, Samples, FX, Plugins, Mixer and Graph share the bottom
-region. Arbitrary panel docking, simultaneous Main-owned editors and a separate
-Graph pattern-curve host remain unavailable. See
-[`INDEPENDENT_DOCKING_PROGRESS.md`](../INDEPENDENT_DOCKING_PROGRESS.md) for the
+region. Arbitrary panel docking and simultaneous Main-owned editors remain
+unavailable. See [`GRAPH_CURVE_HOST_PROGRESS.md`](../GRAPH_CURVE_HOST_PROGRESS.md) for the
 implementation scope and qualification status.
 
 Use `SCREAMSEQ_TEST_EXE` pointing to a separate QA executable and run

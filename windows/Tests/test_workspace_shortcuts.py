@@ -5,6 +5,7 @@ import os
 import time
 import unittest
 
+import graph_curve_native_support as curve_native
 import private_desktop
 import test_formula_workbench as formula
 import test_workspace_docking as docking
@@ -285,11 +286,24 @@ class WorkspaceShortcutTests(unittest.TestCase):
             self.desktop.send(self.native_window(), 0x111, identifier | (1 << 16), control)
             self.ready()
         self.command(490)
-        shape = self.control(self.native_window(), 481)
+        curve = self.native_window('ScreamSeq.GraphCurve')
+        # Reuse bounded read/control readiness without changing this fixture's
+        # Main-window helpers or inheriting another suite's test methods.
+        def curve_ready(control=None):
+            return curve_native.GraphCurveNativeMixin.curve_api_idle(self, control)
+        page = self.control(curve, 9101)
+        curve_ready(page)
+        self.desktop.send(page, 0xF5)  # BM_CLICK: retained Formula page.
+        self.assertEqual(self.state()['graphCurve']['page'], 'formula')
+        shape = self.control(curve, 481)
+        curve_ready(shape)
         self.desktop.send(shape, 0x14E, 8)
-        self.desktop.send(self.native_window(), 0x111, 481 | (1 << 16), shape)
-        self.field(self.native_window(), 485, 'mix(start,end,t)')
-        self.command(498)
+        self.desktop.send(curve, 0x111, 481 | (1 << 16), shape)
+        curve_ready(self.control(curve, 485))
+        self.field(curve, 485, 'mix(start,end,t)')
+        expand = self.control(curve, 498)
+        curve_ready(expand)
+        self.desktop.send(expand, 0xF5)  # Open this curve's retained workbench once.
         self.assertTrue(self.wait_preview()['valid'])
         tool = self.native_window('ScreamSeq.FormulaWorkbench')
         code = self.field(tool, 2001, '1+2')

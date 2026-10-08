@@ -172,5 +172,5 @@
         const auto count=range.last-range.first;const auto rate=view->samples.contains(selectedSample()) ? view->samples.at(selectedSample()).value("rate",0u) : 0;
         wchar_t summary[160]{};swprintf_s(summary,L"%u frames  /  %.2f ms  /  drag or Shift+arrows to select",count,rate ? 1000.0*count/rate : 0);
         s.uiText(sampleDraft ? L"Range draft / Enter to apply / Escape to cancel" : summary,r.x+375,r.y+r.h-29,r.w-387,0x9bacbc);
-        s.outline(r.x,r.y,r.w,r.h,workspaceMainCanvasFocused("samples") ? 0x548e87 : 0x303e4e);
+        s.outline(r.x,r.y,r.w,r.h,(workspaceMainCanvasFocused("samples")&&workspacePresentationFocus()=="samples") ? 0x548e87 : 0x303e4e);
     }

@@ -143,7 +143,7 @@
         if(workspaceMenuState.value("active",false)||dragging)return true;
         const bool keyboard=screen.x==-1&&screen.y==-1;
         if(keyboard&&!(workspaceState.focus=="pattern"&&trackerWorkspaceVisible())&&!(workspaceMainCanvasFocused("samples"))&&
-            !(workspaceState.focus=="graph"&&graphEditorVisible()&&!graphCurveVisible()))return false;
+            !(workspaceState.focus=="graph"&&graphEditorVisible()))return false;
         // A menu's nested message loop may consume note-up messages. Release
         // held musical typing before capturing any canvas target, without
         // changing playback or drafts. Audition delivery can pump messages.
@@ -160,7 +160,7 @@
             surfaceName="pattern";
             if(workspaceMainCanvasFocused("samples")) {
                 surfaceName="sample";target=sampleWaveRect();x=target.x+target.w/2;y=target.y+target.h/2;
-            } else if(workspaceState.focus=="graph"&&graphEditorVisible()&&!graphCurveVisible()) {
+            } else if(workspaceState.focus=="graph"&&graphEditorVisible()) {
                 surfaceName="graph";target=graphCanvas.viewport;x=target.x+target.w/2;y=target.y+target.h/2;
                 for(size_t i=0;i<graphCanvas.wires.size();++i)if(graphWireIndex==int(graphCanvas.wires[i].index)&&graphWireModulation==graphCanvas.wires[i].modulation) {
                     hitWire=int(i);surfaceName="graph-wire";x=graphCanvas.wires[i].points[16].x;y=graphCanvas.wires[i].points[16].y;break;
@@ -174,7 +174,7 @@
             client={LONG(std::lround(x*scale)),LONG(std::lround(y*scale))};screen=client;ClientToScreen(window,&screen);
         } else {
             ScreenToClient(window,&client);const float x=client.x/scale,y=client.y/scale;
-            if(graphEditorVisible()&&!graphCurveVisible()&&graphCanvas.viewport.contains(x,y)) {
+            if(graphEditorVisible()&&graphCanvas.viewport.contains(x,y)) {
                 hitNode=graphCanvas.nodeAt(x,y);hitWire=hitNode<0?graphCanvas.wireAt(x,y):-1;
                 surfaceName=hitNode>=0?"graph-node":hitWire>=0?"graph-wire":"graph";
             } else if(sampleEditorVisible()&&sampleWaveRect().contains(x,y))surfaceName="sample";
@@ -229,7 +229,7 @@
         const int selectedCommand=ScreamSeq::NativeContextMenu::show(window,screen,items);
         workspaceMenuState["active"]=false;workspaceMenuState["selected"]=selectedCommand;
         if(!selectedCommand)return true;
-        const bool visible=surfaceName=="pattern"?trackerWorkspaceVisible():surfaceName=="sample"?sampleEditorVisible():graphEditorVisible()&&!graphCurveVisible();
+        const bool visible=surfaceName=="pattern"?trackerWorkspaceVisible():surfaceName=="sample"?sampleEditorVisible():graphEditorVisible();
         if(!workspaceMenuAllows(items,selectedCommand)||busy||dragging||!visible||document!=documentId||revision!=view->session.revision||
             context!=contextRevision||focus!=workspaceState.focus||inspector!=inspectorCanvasFocus||cursor!=position()||selected!=selection()||target!=workspaceMenuTarget(surfaceName)) {
             workspaceMenuState["rejected"]=true;status=L"Menu target changed / reopen the menu to use the current selection";frameRequested=true;return true;

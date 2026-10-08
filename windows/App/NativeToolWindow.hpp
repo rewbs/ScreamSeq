@@ -28,7 +28,33 @@ class NativeToolWindow {
       if(auto handler=reinterpret_cast<WorkspaceShortcutHandler *>(GetPropW(host,workspaceShortcutProperty)))return (*handler)(key,repeat,prefixOnly);
     return false;
   }
-  std::function<void()> placementChanged_;
+  std::function<void()> placementChanged_,focusPresentationChanged_;
+  // Resolve only registered tools on this UI thread. Native GW_OWNER can be
+  // Main for a floating child created from a docked editor; owner_ retains the
+  // logical constructor owner through later dock/float transitions.
+  static NativeToolWindow *presentationTool(HWND target){
+    for(unsigned depth=0;target&&depth<64;++depth){
+      DWORD process=0;
+      if(GetWindowThreadProcessId(target,&process)!=GetCurrentThreadId()||process!=GetCurrentProcessId())return nullptr;
+      if(auto *tool=reinterpret_cast<NativeToolWindow *>(GetPropW(target,toolProperty_));
+          tool&&tool->window_==target&&tool->ready_)return tool;
+      if(!(GetWindowLongPtrW(target,GWL_STYLE)&WS_CHILD))break;
+      target=GetParent(target);
+    }
+    return nullptr;
+  }
+  void notifyFocusPresentation(){
+    if(!ready_)return;
+    auto *tool=this;
+    for(unsigned depth=0;tool&&depth<64;++depth){
+      // The bounded owner walk is presentation-only: no input/placement
+      // ownership changes, focus moves, layout, timers or target reads.
+      tool->requestPaint();if(tool->focusPresentationChanged_)tool->focusPresentationChanged_();
+      auto *owner=presentationTool(tool->owner_);
+      if(owner==tool)break;
+      tool=owner;
+    }
+  }
   static void windowLong(HWND window,int index,LONG_PTR value) {
     SetLastError(ERROR_SUCCESS);
     if(!SetWindowLongPtrW(window,index,value) && GetLastError()!=ERROR_SUCCESS)
@@ -190,6 +216,7 @@ protected:
     r.left+=7;r.right-=5;DrawTextW(d.hDC,text.c_str(),int(text.size()),&r,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|(d.CtlType==ODT_BUTTON?DT_CENTER:DT_LEFT));if(d.itemState&ODS_FOCUS){r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}}
   static LRESULT CALLBACK childProc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR context){
     auto &self=*reinterpret_cast<NativeToolWindow *>(context);
+    if(m==WM_SETFOCUS||m==WM_KILLFOCUS)self.notifyFocusPresentation();
     if(m==WM_KEYUP||m==WM_SYSKEYUP)try{if((self.musicalRelease_&&self.musicalRelease_(w))||self.keyUp(w))return 0;}catch(const std::exception &e){self.error(e);return 0;}
     if(m==WM_KILLFOCUS&&!self.relocating_&&!self.owns(reinterpret_cast<HWND>(w)))self.releaseMusicalInput();
     // TranslateMessage may have queued a character before keyDown consumed an
@@ -220,7 +247,9 @@ protected:
     return DefSubclassProc(h,m,w,l);
   }
   static LRESULT CALLBACK proc(HWND h,UINT m,WPARAM w,LPARAM l){auto self=reinterpret_cast<NativeToolWindow *>(GetWindowLongPtrW(h,GWLP_USERDATA));if(m==WM_NCCREATE){self=static_cast<NativeToolWindow *>(reinterpret_cast<CREATESTRUCTW *>(l)->lpCreateParams);self->window_=h;SetWindowLongPtrW(h,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}if(!self)return DefWindowProcW(h,m,w,l);
-    try{switch(m){
+    try{
+      if(m==WM_SETFOCUS||m==WM_KILLFOCUS)self->notifyFocusPresentation();
+      switch(m){
       case WM_CLOSE:self->hide();return 0;
       case WM_CONTEXTMENU:self->workspaceShortcut(VK_ESCAPE,false,true);if(self->contextMenu(reinterpret_cast<HWND>(w),POINT{GET_X_LPARAM(l),GET_Y_LPARAM(l)}))return 0;break;
       case WM_ACTIVATE:if(LOWORD(w)==WA_INACTIVE&&!self->relocating_)self->releaseMusicalInput();break;
@@ -254,6 +283,14 @@ public:
   HWND window()const{return window_;}
   bool docked()const{return dockParent_!=nullptr;}
   bool owns(HWND target)const{return window_&&target&&(target==window_||IsChild(window_,target));}
+  bool presentationOwns(HWND target)const{
+    auto *tool=presentationTool(target);
+    for(unsigned depth=0;tool&&depth<64;++depth){
+      if(tool==this)return true;
+      auto *owner=presentationTool(tool->owner_);if(owner==tool)break;tool=owner;
+    }
+    return false;
+  }
   static bool belongsToTool(HWND target){for(auto current=target;current;current=GetParent(current))if(GetPropW(current,toolProperty_))return true;return false;}
   void dock(HWND parent){if(!parent)throw std::invalid_argument("Choose a dock host window");relocate(parent);}
   void floatWindow(){relocate(nullptr);}
@@ -271,8 +308,21 @@ public:
   void workspaceKeys(std::function<bool(WPARAM,bool)> keys){workspaceKeys_=std::move(keys);}
   void workspaceDockAction(std::function<void()> action){workspaceDockAction_=std::move(action);}
   void placementChanged(std::function<void()> changed){placementChanged_=std::move(changed);}
+  // A focus event requests painting only; callers must not move focus or layout.
+  void focusPresentationChanged(std::function<void()> changed){focusPresentationChanged_=std::move(changed);}
   void musicalTyping(std::function<bool(HWND,WPARAM,bool)> key,std::function<bool(WPARAM)> release,std::function<void()> deactivate){musicalKey_=std::move(key);musicalRelease_=std::move(release);musicalDeactivate_=std::move(deactivate);}
   void show(){const bool changed=!shown();ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|(docked()?SWP_NOACTIVATE:0));requestPaint();if(visible())resumeVisiblePresentation();if(changed)notifyPlacement();}
-  virtual void hide(){const bool changed=shown(),focused=owns(GetFocus());releaseMusicalInput();if(window_){KillTimer(window_,2);ShowWindow(window_,SW_HIDE);}if(focused)SetFocus(owner_);if(changed)notifyPlacement();}
+  virtual void hide(){
+    const bool changed=shown(),focused=owns(GetFocus());releaseMusicalInput();
+    if(window_){KillTimer(window_,2);ShowWindow(window_,SW_HIDE);}
+    // A source-free child can belong to a retained but hidden native tool.
+    // Return through that same ownership chain to the nearest usable window.
+    // GetParent does not return the owner of a WS_OVERLAPPEDWINDOW tool.
+    // Child windows have parents; other native tools have explicit owners.
+    if(focused)for(auto owner=owner_;owner&&IsWindow(owner);
+        owner=(GetWindowLongPtrW(owner,GWL_STYLE)&WS_CHILD)?GetParent(owner):GetWindow(owner,GW_OWNER))
+      if(IsWindowVisible(owner)&&IsWindowEnabled(owner)){SetFocus(owner);break;}
+    if(changed)notifyPlacement();
+  }
 };
 }

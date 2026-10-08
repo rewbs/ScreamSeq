@@ -20,7 +20,7 @@
         if(!graphCommandsWindow)graphCommandsWindow=std::make_unique<ScreamSeq::GraphCommandsWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{
             std::string target;for(const auto &[id,c]:view->nativePattern->trackChannels)if(c==channel){target="n"+std::to_string(id);break;}
             return ScreamSeq::GraphCommandsWindow::Cursor{documentId,view->session.revision,target,patternIndex,row};
-        },[this](const auto &id){if(graphDirty||graphFieldDirty||curveDraft())throw std::runtime_error("Apply or Reload the existing graph draft first");graphID=id;command(graphCommand);});
+        },[this](const auto &id){if(graphDirty||graphFieldDirty)throw std::runtime_error("Apply or Reload the existing graph draft first");graphID=id;command(graphCommand);});
         std::string target;unsigned lane=0;if(selected&&!view->graphPattern->lanes.empty()){const auto &l=view->graphPattern->lanes.at(graphLaneSelected);target="n"+std::to_string(l.target);lane=l.column;}
         graphCommandsWindow->openAt(target,lane);
     }
@@ -60,6 +60,7 @@
         return text;
     }
     void drawGraphLanes(const Tracker::Telemetry &playback){
+        const bool focused=workspacePresentationFocus()=="graphLanes";
         const auto r=graphLanesRect();if(r.w<=0)return;auto &s=*surface;const auto &lanes=view->graphPattern->lanes;const auto pattern=graphPatternID();
         s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x141b23);s.fill(r.x,r.y,r.w,gridHeader,0x29303a);
         for(unsigned i=graphLaneFirst;i<lanes.size()&&float(i-graphLaneFirst)*graphLaneWidth<r.w;++i){const auto &lane=lanes[i];const auto x=r.x+(i-graphLaneFirst)*graphLaneWidth;
@@ -67,10 +68,10 @@
             for(unsigned line=0;line<visibleRows()&&firstRow+line<patternRows();++line){const auto rr=firstRow+line;const auto y=r.y+gridHeader+line*rowHeight;
                 if(rr%4==0)s.fill(x,y,graphLaneWidth,rowHeight,rr%16==0?0x202d3c:0x192431);
                 if(device.running()&&playback.pattern==patternIndex&&playback.row==rr)s.fill(x,y,graphLaneWidth,rowHeight,0x174238);
-                if(rr==row&&i==graphLaneSelected){s.fill(x+1,y,graphLaneWidth-2,rowHeight,workspaceState.focus=="graphLanes"?0x51452f:0x36362e);s.outline(x+1,y,graphLaneWidth-2,rowHeight,0x9b885b);}
+                if(rr==row&&i==graphLaneSelected){s.fill(x+1,y,graphLaneWidth-2,rowHeight,focused?0x51452f:0x36362e);s.outline(x+1,y,graphLaneWidth-2,rowHeight,0x9b885b);}
                 auto c=view->graphPattern->at(pattern,rr,lane.target,lane.column);s.text(graphCommandText(c),x+7,y,graphLaneWidth-14,c?0xdcb971:0x49596a);
             }s.line(x,r.y,x,r.y+r.h,0x49515b);
-        }s.unclip();s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="graphLanes"?0xdcb971:0x303b49);
+        }s.unclip();s.outline(r.x,r.y,r.w,r.h,focused?0xdcb971:0x303b49);
     }
     Json graphLanesSnapshot()const{
         const auto r=graphLanesRect();Json lanes=Json::array(),cells=Json::array();const auto pattern=graphPatternID();

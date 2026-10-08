@@ -11,7 +11,7 @@
     std::array<double,2> graphDragCoordinates{};
     ScreamSeq::GraphCanvas::Socket graphDragSocket;
     bool graphDragDirty=false;std::string graphDragNode;
-    bool graphDragging() const {return dragging>=6&&dragging<=9;}
+    bool graphDragging() const {return dragging>=6&&dragging<=8;}
     std::wstring graphStatus=L"Create a reusable graph or select one from the library";
     bool graphEditorVisible() const {return workspaceMainEditorVisible("graph");}
     Json *graphSelectedNode(){if(graphDraft.contains("nodes"))for(auto &n:graphDraft["nodes"])if(n.at("id")==graphNode)return &n;return nullptr;}
@@ -74,7 +74,7 @@
     };
     bool initialGraphPristine() const {
         return graphDocument.empty()&&graphRevision.empty()&&graphData.empty()&&graphDraft.empty()&&graphPluginData.empty()&&
-            graphEditorToken.empty()&&!graphDirty&&!graphFieldDirty&&!graphPending&&!refreshingGraph&&!graphDragDirty&&!curveDraft();
+            graphEditorToken.empty()&&!graphDirty&&!graphFieldDirty&&!graphPending&&!refreshingGraph&&!graphDragDirty;
     }
     bool canAdoptInitialGraph(const PreparedInitialGraph &candidate) const {
         const auto published=controller->view();
@@ -193,7 +193,7 @@
             }
         }catch(const std::exception &e){graphStatus=wide(e.what());}refreshingGraph=false;
     }
-    void graphTimer(){if(!graphEditorVisible()){KillTimer(window,4);return;}if(!busy&&!graphDirty&&!graphFieldDirty&&!curveDraft()&&!graphPending&&dragging<6&&(graphRevision!=view->session.revision||graphDocument!=documentId)){refreshGraph();layoutControls();}}
+    void graphTimer(){if(!graphEditorVisible()){KillTimer(window,4);return;}if(!busy&&!graphDirty&&!graphFieldDirty&&!graphPending&&dragging<6&&(graphRevision!=view->session.revision||graphDocument!=documentId)){refreshGraph();layoutControls();}}
     template<class Place>void layoutGraphControls(Place place){
         const auto r=workspaceMainEditorRect();const bool show=graphEditorVisible();const float x=r.x+r.w-256;const bool chosen=!graphID.empty();
         std::set<int> placed;auto showControl=[&](int id,float a,float b,float w,float h,bool visible){placed.insert(id);place(id,a,b,w,h,visible);};
@@ -201,10 +201,10 @@
         // HWND must stay hidden so it cannot cover Live keys.
         showControl(graphCommand,744,52,76,26,false);
         showControl(graphLibrary,r.x+6,r.y+5,std::max(80.0f,r.w-524),230,show);float a=x-260;
-        showControl(graphNew,a,r.y+5,44,25,show&&graphPageIndex!=5);showControl(graphFit,a+48,r.y+5,42,25,show&&graphPageIndex!=5);showControl(graphApply,a+94,r.y+5,65,25,show&&graphPageIndex!=5);showControl(graphReload,a+163,r.y+5,85,25,show&&graphPageIndex!=5);
-        showControl(graphKind,r.x+6,r.y+36,112,210,show&&graphPageIndex!=5);showControl(graphAddSource,r.x+122,r.y+36,78,25,show&&graphPageIndex!=5);
-        showControl(graphRack,r.x+206,r.y+36,std::max(50.0f,r.w-568),230,show&&graphPageIndex!=5);showControl(graphAddEffect,x-88,r.y+36,78,25,show&&graphPageIndex!=5);
-        showControl(graphPage,x,r.y+5,248,210,show);showControl(graphNodePicker,x,r.y+37,248,230,show&&(graphPageIndex==0||graphPageIndex==3||graphPageIndex==5));
+        showControl(graphNew,a,r.y+5,44,25,show);showControl(graphFit,a+48,r.y+5,42,25,show);showControl(graphApply,a+94,r.y+5,65,25,show);showControl(graphReload,a+163,r.y+5,85,25,show);
+        showControl(graphKind,r.x+6,r.y+36,112,210,show);showControl(graphAddSource,r.x+122,r.y+36,78,25,show);
+        showControl(graphRack,r.x+206,r.y+36,std::max(50.0f,r.w-568),230,show);showControl(graphAddEffect,x-88,r.y+36,78,25,show);
+        showControl(graphPage,x,r.y+5,248,210,show);showControl(graphNodePicker,x,r.y+37,248,230,show&&(graphPageIndex==0||graphPageIndex==3));
         if(graphPageIndex==0){showControl(graphProperty,x,r.y+82,248,230,show);showControl(graphPropertyValue,x,r.y+114,248,25,show);showControl(graphSetProperty,x,r.y+146,248,25,show);showControl(graphClone,x,r.y+182,120,25,show);showControl(graphRemove,x+128,r.y+182,120,25,show);showControl(graphDeleteNode,x,r.y+214,248,25,show);}
         if(graphPageIndex==1||graphPageIndex==2){showControl(graphWire,x,r.y+37,248,230,show);showControl(graphSource,x,r.y+80,120,230,show);showControl(graphDestination,x+128,r.y+80,120,230,show);
             showControl(graphOutputPort,x,r.y+124,120,25,show&&graphPageIndex==1);showControl(graphInputPort,x+128,r.y+124,120,25,show);
@@ -221,12 +221,19 @@
     void graphLoadPluginControls(){graphRequireCurrent();auto node=graphSelectedNode();if(!node||node->at("kind")!="plugin")throw std::runtime_error("Select an effect node");const auto generation=graphGeneration;const auto target=graphNode;auto catalog=documentOperation("graph.plugin.get",{{"graph",graphID},{"node",graphNode}});if(generation!=graphGeneration||target!=graphNode)throw std::runtime_error("Plugin catalog completed for an older draft; current fields retained");graphPluginData=std::move(catalog);graphExposedNode=graphPluginTarget=graphNode;SendMessageW(controls.at(graphParameter),CB_RESETCONTENT,0,0);for(const auto &p:graphPluginData.at("parameters")){auto name=wide(p.at("name").get<std::string>()+" / "+p.at("unitLabel").get<std::string>());SendMessageW(controls.at(graphParameter),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}SendMessageW(controls.at(graphParameter),CB_SETCURSEL,0,0);graphParameterSelected();}
     void graphParameterSelected(){const auto i=SendMessageW(controls.at(graphParameter),CB_GETCURSEL,0,0);if(i>=0&&graphPluginData.contains("parameters")&&size_t(i)<graphPluginData.at("parameters").size()){const auto &p=graphPluginData.at("parameters")[size_t(i)];graphExposedParameter=p.at("id").get<uint32_t>();settingGraphFields=true;graphText(graphParameterValue,p.at("value"));settingGraphFields=false;graphFieldDirty=false;rebuildGraphCanvas();}}
     bool graphControlCommand(int id){
-        if(id<graphCommand||id>graphReconnect)return false;if(busy||graphPending||dragging>=6)throw ScreamSeq::Api::ApiError(-32002,"Graph editor is busy");setWorkspaceCanvasFocus(GetFocus()==window&&graphCurveVisible()?"graphCurve":"graph");
+        if(id<graphCommand||id>graphReconnect)return false;
+        if(busy||graphPending||dragging>=6){
+            // A late native selection notification may already have changed
+            // the combo. Keep it consistent with the retained model target.
+            if(id==graphNodePicker)graphFillNodes(id,graphNode);
+            throw ScreamSeq::Api::ApiError(-32002,"Graph editor is busy");
+        }
+        setWorkspaceCanvasFocus("graph");
         if(id==graphReconnect){graphRequireCurrent();openPluginPath({{"graph",graphID},{"node",graphNode}});return true;}
         if(id==graphCommand){const bool firstOpen=graphDocument!=documentId;graphEditorOpen=true;mixerEditorOpen=false;workspaceState.layout="Compose";setWorkspaceCanvasFocus(workspaceMainCanvasIdentity());refreshGraph();layoutControls();if(firstOpen)graphCanvas.fit(graphDraft);rebuildGraphCanvas();SetFocus(window);return true;}
         if(id==graphReload){graphDirty=graphFieldDirty=false;++graphGeneration;refreshGraph(true);return true;}
         if(id==graphFit){graphCanvas.fit(graphDraft);rebuildGraphCanvas();return true;}
-        if(id==graphPage||id==graphProperty||id==graphNodePicker||id==graphWire||id==graphParameter){if(graphFieldDirty){if(id==graphPage)SendMessageW(controls.at(id),CB_SETCURSEL,graphPageIndex,0);if(id==graphProperty)SendMessageW(controls.at(id),CB_SETCURSEL,graphPropertyIndex,0);if(id==graphNodePicker)graphFillNodes(id,graphNode);if(id==graphWire)SendMessageW(controls.at(id),CB_SETCURSEL,graphWireIndex+1,0);if(id==graphParameter&&graphPluginData.contains("parameters"))for(size_t i=0;i<graphPluginData.at("parameters").size();++i)if(graphPluginData.at("parameters")[i].at("id")==graphExposedParameter)SendMessageW(controls.at(id),CB_SETCURSEL,i,0);throw std::runtime_error("Set or reload the field draft before changing selection");}if(id==graphPage){graphPageIndex=int(SendMessageW(controls.at(id),CB_GETCURSEL,0,0));graphWireIndex=-1;if(GetFocus()==window)setWorkspaceCanvasFocus(workspaceMainCanvasIdentity());}if(id==graphProperty)graphPropertyIndex=int(SendMessageW(controls.at(id),CB_GETCURSEL,0,0));if(id==graphNodePicker){graphNode=graphChosenNode(id);graphPluginData=Json::object();}if(id==graphWire){graphWireIndex=int(SendMessageW(controls.at(id),CB_GETCURSEL,0,0))-1;graphWireModulation=graphPageIndex==2;}if(id==graphParameter){graphParameterSelected();return true;}loadGraphFields();rebuildGraphCanvas();return true;}
+        if(id==graphPage||id==graphProperty||id==graphNodePicker||id==graphWire||id==graphParameter){if(graphFieldDirty){if(id==graphPage)SendMessageW(controls.at(id),CB_SETCURSEL,graphPageIndex,0);if(id==graphProperty)SendMessageW(controls.at(id),CB_SETCURSEL,graphPropertyIndex,0);if(id==graphNodePicker)graphFillNodes(id,graphNode);if(id==graphWire)SendMessageW(controls.at(id),CB_SETCURSEL,graphWireIndex+1,0);if(id==graphParameter&&graphPluginData.contains("parameters"))for(size_t i=0;i<graphPluginData.at("parameters").size();++i)if(graphPluginData.at("parameters")[i].at("id")==graphExposedParameter)SendMessageW(controls.at(id),CB_SETCURSEL,i,0);throw std::runtime_error("Set or reload the field draft before changing selection");}if(id==graphPage){const auto chosen=int(SendMessageW(controls.at(id),CB_GETCURSEL,0,0));if(chosen==5){SendMessageW(controls.at(id),CB_SETCURSEL,graphPageIndex,0);openGraphCurve();return true;}graphPageIndex=chosen;graphWireIndex=-1;if(GetFocus()==window)setWorkspaceCanvasFocus(workspaceMainCanvasIdentity());}if(id==graphProperty)graphPropertyIndex=int(SendMessageW(controls.at(id),CB_GETCURSEL,0,0));if(id==graphNodePicker){graphNode=graphChosenNode(id);graphPluginData=Json::object();}if(id==graphWire){graphWireIndex=int(SendMessageW(controls.at(id),CB_GETCURSEL,0,0))-1;graphWireModulation=graphPageIndex==2;}if(id==graphParameter){graphParameterSelected();return true;}loadGraphFields();rebuildGraphCanvas();return true;}
         if(id==graphKind||id==graphRack)return true;
         if(id==graphBus){if(graphFieldDirty){SendMessageW(controls.at(graphBus),CB_SETCURSEL,graphBusIndex,0);throw std::runtime_error("Assign or reload the field draft before changing buses");}graphBusIndex=int(SendMessageW(controls.at(graphBus),CB_GETCURSEL,0,0));loadGraphFields();return true;}
         if(id==graphSource||id==graphDestination){graphFieldChanged();return true;}
@@ -246,7 +253,6 @@
         return true;
     }
     bool graphMouseDown(float x,float y){
-        if(graphCurveVisible()){if(curveMouseDown(x,y))return true;return graphCanvas.viewport.contains(x,y);}
         if(!graphEditorVisible()||!graphCanvas.viewport.contains(x,y))return false;
         if(busy||graphPending)return true;if(graphFieldDirty)throw std::runtime_error("Set or reload the field draft before selecting on the canvas");
         workspaceState.focus="graph";SetFocus(window);graphPointer={x,y};graphDragStart={x,y};graphDragDirty=graphDirty;
@@ -255,25 +261,24 @@
         else if(node>=0){graphNode=graphCanvas.nodes[size_t(node)].id;graphDragNode=graphNode;const auto n=graphSelectedNode();graphDragCoordinates={n->at("x").get<double>(),n->at("y").get<double>()};graphWireIndex=-1;loadGraphFields();dragging=6;}
         else if(wire>=0){const auto &w=graphCanvas.wires[size_t(wire)];graphWireIndex=int(w.index);graphWireModulation=w.modulation;graphPageIndex=w.modulation?2:1;SendMessageW(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);loadGraphFields();layoutControls();}
         else{graphDragOrigin={graphCanvas.panX,graphCanvas.panY};dragging=8;}
-        if(graphDragging())SetCapture(window);frameRequested=true;return true;
+        noteGraphCurveSelection();if(graphDragging())SetCapture(window);frameRequested=true;return true;
     }
-    void graphMouseMove(float x,float y){if(!graphDragging())return;if(dragging==9){curveMouseMove(x,y);return;}graphPointer={x,y};if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=std::clamp(double(graphDragCoordinates[0]+(x-graphDragStart.x)/graphCanvas.zoom),-100000.0,100000.0);(*n)["y"]=std::clamp(double(graphDragCoordinates[1]+(y-graphDragStart.y)/graphCanvas.zoom),-100000.0,100000.0);graphDirty=true;++graphGeneration;rebuildGraphCanvas();}}
+    void graphMouseMove(float x,float y){if(!graphDragging())return;graphPointer={x,y};if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=std::clamp(double(graphDragCoordinates[0]+(x-graphDragStart.x)/graphCanvas.zoom),-100000.0,100000.0);(*n)["y"]=std::clamp(double(graphDragCoordinates[1]+(y-graphDragStart.y)/graphCanvas.zoom),-100000.0,100000.0);graphDirty=true;++graphGeneration;rebuildGraphCanvas();}}
         if(dragging==8){graphCanvas.panX=graphDragOrigin.x+x-graphDragStart.x;graphCanvas.panY=graphDragOrigin.y+y-graphDragStart.y;rebuildGraphCanvas();}frameRequested=true;}
     void graphMouseUp(float x,float y){
-        if(dragging==9){dragging=0;curveDragBefore=Json::array();rebuildCurveCanvas();layoutControls();return;}
         if(dragging==7){const auto target=graphCanvas.socketAt(x,y);if(target>=0){const auto socket=graphCanvas.sockets[size_t(target)];if(!socket.output&&socket.modulation==graphDragSocket.modulation&&socket.node!=graphDragSocket.node){auto &edges=graphDraft[socket.modulation?"modulation":"audio"];Json e={{"source",graphDragSocket.node},{"target",socket.node}};if(socket.modulation){double base=0;for(const auto &old:edges)if(old.at("target")==socket.node&&old.at("parameter")==socket.port){base=old.value("base",0.0);break;}e["parameter"]=socket.port;e["minimum"]=0;e["maximum"]=1;e["base"]=base;e["enabled"]=true;}else{e["output"]=graphDragSocket.port;e["input"]=socket.port;e["gain"]=1;}
             const auto found=std::find_if(edges.begin(),edges.end(),[&](const auto &v){return v.at("source")==e.at("source")&&v.at("target")==e.at("target")&&(socket.modulation?v.at("parameter")==e.at("parameter"):(v.value("output",0u)==graphDragSocket.port&&v.value("input",0u)==socket.port));});
             if(found==edges.end()){edges.push_back(e);graphDirty=true;++graphGeneration;graphWireIndex=int(edges.size()-1);}else graphWireIndex=int(found-edges.begin());graphWireModulation=socket.modulation;graphPageIndex=socket.modulation?2:1;SendMessageW(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);loadGraphFields();
         }}}
         if(graphDragging()){dragging=0;rebuildGraphCanvas();layoutControls();}
     }
-    void graphCancelDrag(){if(!graphDragging())return;if(dragging==9){curveCancelDrag();return;}if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=graphDragCoordinates[0];(*n)["y"]=graphDragCoordinates[1];graphDirty=graphDragDirty;++graphGeneration;}}if(dragging==8){graphCanvas.panX=graphDragOrigin.x;graphCanvas.panY=graphDragOrigin.y;}dragging=0;ReleaseCapture();rebuildGraphCanvas();}
+    void graphCancelDrag(){if(!graphDragging())return;if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=graphDragCoordinates[0];(*n)["y"]=graphDragCoordinates[1];graphDirty=graphDragDirty;++graphGeneration;}}if(dragging==8){graphCanvas.panX=graphDragOrigin.x;graphCanvas.panY=graphDragOrigin.y;}dragging=0;ReleaseCapture();rebuildGraphCanvas();}
     void graphZoom(float factor){const auto &r=graphCanvas.viewport;const auto anchor=graphCanvas.world(r.x+r.w/2,r.y+r.h/2);graphCanvas.zoom=std::clamp(graphCanvas.zoom*factor,.25f,2.5f);graphCanvas.panX=r.w/2-anchor.x*graphCanvas.zoom;graphCanvas.panY=r.h/2-anchor.y*graphCanvas.zoom;rebuildGraphCanvas();}
     bool graphKey(WPARAM key,bool ctrl,bool alt,bool shift){
         if(!graphEditorVisible())return false;const auto focus=GetFocus();const auto id=focus==window?0:GetDlgCtrlID(focus);
         if(key==VK_ESCAPE&&graphDragging()){graphCancelDrag();return true;}
         if(id>=graphLibrary&&id<=graphDeleteNode){if(key==VK_ESCAPE){graphFieldDirty=false;loadGraphFields();return true;}if(key==VK_RETURN&&id==graphPropertyValue){command(graphSetProperty);return true;}if(key==VK_RETURN&&id==graphParameterValue){command(graphSetParameter);return true;}return false;}
-        if(graphCurveVisible()||focus!=window||workspaceState.focus!="graph")return false;
+        if(focus!=window||workspaceState.focus!="graph")return false;
         if(ctrl&&key==VK_RETURN){command(graphApply);return true;}if(ctrl)return false;
         if(key==VK_HOME){command(graphFit);return true;}if(key==VK_OEM_PLUS||key==VK_ADD){graphZoom(1.2f);return true;}if(key==VK_OEM_MINUS||key==VK_SUBTRACT){graphZoom(1/1.2f);return true;}
         if(key==VK_ESCAPE){graphFieldDirty=false;loadGraphFields();return true;}
@@ -283,7 +288,6 @@
         return false;
     }
     void drawGraphEditor(){
-        if(graphCurveVisible()){drawGraphCurve();return;}
         auto &s=*surface;const auto r=workspaceMainEditorRect(),canvas=graphCanvas.viewport;const float x=r.x+r.w-256;s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x17202a);s.fill(canvas.x,canvas.y,canvas.w,canvas.h,0x10171f);
         s.clip(canvas.x,canvas.y,canvas.w,canvas.h);
         const float spacing=48*graphCanvas.zoom;for(float a=std::fmod(graphCanvas.panX,spacing);a<canvas.w;a+=spacing)if(a>=0)s.line(canvas.x+a,canvas.y,canvas.x+a,canvas.y+canvas.h,0x192530);
@@ -297,6 +301,6 @@
         if(graphPageIndex==1||graphPageIndex==2){s.uiText(L"Source",x,r.y+63,120,0x8390a2);s.uiText(L"Destination",x+128,r.y+63,120,0x8390a2);s.uiText(graphPageIndex==1?L"Output port":L"Stable parameter ID →",x,r.y+107,120,0x8390a2);s.uiText(graphPageIndex==1?L"Input port":L"Parameter",x+128,r.y+107,120,0x8390a2);s.uiText(graphPageIndex==1?L"Gain multiplier":L"Minimum",x,r.y+152,120,0x8390a2);if(graphPageIndex==2){s.uiText(L"Maximum",x+84,r.y+152,76,0x8390a2);s.uiText(L"Base",x+168,r.y+152,80,0x8390a2);}}
         if(graphPageIndex==4){s.uiText(L"Amount / 0…1",x,r.y+73,120,0x8390a2);s.uiText(L"Wet / 0…1",x+128,r.y+73,120,0x8390a2);}
         const bool stale=graphDocument!=documentId||graphRevision!=view->session.revision;
-        s.uiText(stale&&(graphDirty||graphFieldDirty)?L"Song changed / captured graph retained — Reload before applying":graphFieldDirty?L"Field draft / Set property or update wire":graphDirty?L"Graph draft / Apply commits one document Undo":L"Drag sockets to connect · Tab nodes · Alt+Tab wires · arrows move · +/- zoom",r.x+8,r.y+r.h-23,r.w-16,stale?0xe7bb79:0x8390a2);s.unclip();s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="graph"?0x6edac5:0x303b49);
+        s.uiText(stale&&(graphDirty||graphFieldDirty)?L"Song changed / captured graph retained — Reload before applying":graphFieldDirty?L"Field draft / Set property or update wire":graphDirty?L"Graph draft / Apply commits one document Undo":L"Drag sockets to connect · Tab nodes · Alt+Tab wires · arrows move · +/- zoom",r.x+8,r.y+r.h-23,r.w-16,stale?0xe7bb79:0x8390a2);s.unclip();s.outline(r.x,r.y,r.w,r.h,workspacePresentationFocus()=="graph"?0x6edac5:0x303b49);
     }
     Json graphEditorSnapshot()const{Json nodes=Json::array(),sockets=Json::array(),wires=Json::array();for(const auto &n:graphCanvas.nodes)nodes.push_back({{"id",n.id},{"x",n.rect.x},{"y",n.rect.y},{"width",n.rect.w},{"height",n.rect.h}});for(const auto &s:graphCanvas.sockets)sockets.push_back({{"node",s.node},{"output",s.output},{"modulation",s.modulation},{"port",s.port},{"x",s.at.x},{"y",s.at.y}});for(const auto &w:graphCanvas.wires)wires.push_back({{"modulation",w.modulation},{"index",w.index},{"x",w.points[16].x},{"y",w.points[16].y}});return {{"visible",graphEditorVisible()},{"graph",graphID},{"node",graphNode},{"wire",graphWireIndex},{"modulation",graphWireModulation},{"dirty",graphDirty},{"fieldDraft",graphFieldDirty},{"pending",graphPending},{"stale",graphDocument!=documentId||graphRevision!=view->session.revision},{"expectedRevision",graphRevision},{"zoom",graphCanvas.zoom},{"nodes",nodes},{"sockets",sockets},{"wires",wires}};}

@@ -2,6 +2,9 @@
         return {
             {layoutsCommand,L"Workspace / Manage saved layouts",L"Ctrl+Alt+W"},
             {connectedWorkspaceCommand,L"Workspace / Connected editors",L""},
+            {graphEditingWorkspaceCommand,L"Workspace / Graph editing",L""},
+            {openGraphCurveCommand,L"Graph / Open selected source pattern curve",L""},
+            {dockGraphCurveCommand,L"Workspace / Dock Graph curve beside routing",L"Ctrl+Alt+D in editor"},
             {dockAutomationCommand,L"Workspace / Dock automation beside the tracker",L"Ctrl+Alt+D in editor"},
             {dockInstrumentCommand,L"Workspace / Dock instrument beside the tracker",L"Ctrl+Alt+D in editor"},
             {saveLayoutCommand,L"Workspace / Save custom layout",L""},{restoreLayoutCommand,L"Workspace / Restore custom layout",L""},
