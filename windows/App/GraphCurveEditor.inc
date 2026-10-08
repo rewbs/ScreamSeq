@@ -107,7 +107,7 @@
         try{if(!curveDraft()&&curveContextChanged())curveLoad();if(curvePreviewNeeded)curvePreviewNow();}catch(const std::exception &e){curveStatus=wide(e.what());}layoutControls();
     }
     template<class Place>void layoutGraphCurveControls(Place place){
-        const auto r=sampleEditorRect();const float x=r.x+r.w-256;const bool show=graphCurveVisible();std::set<int> placed;
+        const auto r=workspaceMainEditorRect();const float x=r.x+r.w-256;const bool show=graphCurveVisible();std::set<int> placed;
         auto at=[&](int id,float a,float b,float w,float h,bool visible=true){placed.insert(id);place(id,a,b,w,h,show&&visible);};
         at(curvePattern,r.x+6,r.y+36,std::max(90.0f,r.w-600),230);at(curveSnap,x-326,r.y+36,110,230);at(curveFit,x-210,r.y+36,44,25);at(curveZoomOut,x-162,r.y+36,38,25);at(curveZoomIn,x-120,r.y+36,38,25);at(curveEnable,x-78,r.y+36,72,25);
         at(curveRow,x,r.y+86,120,25);at(curveValue,x+128,r.y+86,120,25);at(curveKind,x,r.y+117,248,220);at(curveFormula,x,r.y+148,120,25,curveKindIndex==8);at(curveExpand,x+128,r.y+148,58,25,curveKindIndex==8);at(curveReference,x+190,r.y+148,58,25);
@@ -129,7 +129,7 @@
     }
     bool graphCurveCommand(int id){
         if(id<curvePattern||id>curveReference)return false;if(busy||curvePending||dragging>=6)throw std::runtime_error("Curve editor is busy");
-        if(id==curveReference){openFormulaReference();return true;}workspaceState.focus="graphCurve";
+        if(id==curveReference){openFormulaReference();return true;}setWorkspaceCanvasFocus("graphCurve");
         if(id==curveBank){openCurveBank();return true;}if(id==curveExpand){openCurveFormula();return true;}
         if(id==curveReload){if(graphDocument!=documentId)throw std::runtime_error("Document changed; reload the graph before replacing its curve draft");++curveGeneration;curveLoad(true);return true;}
         if(curveGraph.empty())throw std::runtime_error("Select an automation source node");
@@ -150,7 +150,7 @@
     uint32_t curvePositionAt(float x)const{const auto raw=std::round(curveCanvas.position(x)/curveSnapUnits)*curveSnapUnits;return uint32_t(std::clamp(raw,0.0,double(curveRows)*256-1));}
     bool curveMouseDown(float x,float y){
         const auto &r=curveCanvas.viewport;const ScreamSeq::WorkspaceRect hit{r.x-7,r.y-7,r.w+14,r.h+14};if(!graphCurveVisible()||!hit.contains(x,y))return false;if(curveGraph.empty()||busy||curvePending)return true;if(curveFieldsDirty)throw std::runtime_error("Set or discard the point fields before selecting another point");
-        workspaceState.focus="graphCurve";SetFocus(window);curveDragBefore=curvePoints;curveDragWasDirty=curveDirty;curveDragSelection=curveSelected;curveSelected=curveCanvas.hit(x,y);
+        setWorkspaceCanvasFocus("graphCurve");SetFocus(window);curveDragBefore=curvePoints;curveDragWasDirty=curveDirty;curveDragSelection=curveSelected;curveSelected=curveCanvas.hit(x,y);
         if(curveSelected<0){Json point={{"position",curvePositionAt(x)},{"value",curveCanvas.value(y)},{"curve",curveNames[curveKindIndex]}};if(curveKindIndex==8)point["formula"]=utf8Path(effectField(curveFormula));curveReplace(std::move(point));}else curveShowFields();dragging=9;SetCapture(window);frameRequested=true;return true;
     }
     void curveMouseMove(float x,float y){if(dragging!=9||curveSelected<0)return;auto point=curvePoints[size_t(curveSelected)];point["position"]=curvePositionAt(x);point["value"]=curveCanvas.value(y);try{curveReplace(std::move(point));}catch(const std::exception &e){curveStatus=wide(e.what());}}
@@ -166,7 +166,7 @@
     }
     bool curveWheel(float x,float y,int delta,bool horizontal,bool zoom){if(!graphCurveVisible()||!curveCanvas.viewport.contains(x,y))return false;if(zoom)curveCanvas.zoom(std::pow(2.0,double(delta)/WHEEL_DELTA),curveRows);else curveCanvas.pan((horizontal?1:-1)*double(delta)/WHEEL_DELTA*(curveCanvas.end-curveCanvas.start)*.125,curveRows);curvePreviewNeeded=true;rebuildCurveCanvas();SetTimer(window,5,120,nullptr);return true;}
     void drawGraphCurve(){
-        auto &s=*surface;const auto r=sampleEditorRect(),c=curveCanvas.viewport;const float x=r.x+r.w-256;s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x17202a);s.fill(c.x,c.y,c.w,c.h,0x10171f);
+        auto &s=*surface;const auto r=workspaceMainEditorRect(),c=curveCanvas.viewport;const float x=r.x+r.w-256;s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x17202a);s.fill(c.x,c.y,c.w,c.h,0x10171f);
         if(!curveGraph.empty())s.uiText(curveTitle+L" · Pattern "+std::to_wstring(curvePatternIndex),c.x,c.y-18,c.w,0xa4b7c7);
         if(!curveGraph.empty()){s.clip(c.x,c.y,c.w,c.h);for(int i=0;i<=4;++i){const auto y=c.y+c.h*i/4;s.line(c.x,y,c.x+c.w,y,0x273541);}const auto step=std::max(256.0,double(curveRowsPerBeat)*256*std::ceil((curveCanvas.end-curveCanvas.start)/std::max(1.0,double(curveRowsPerBeat)*256)/16));
             for(double p=std::ceil(curveCanvas.start/step)*step;p<=curveCanvas.end;p+=step){auto at=curveCanvas.screen(p,0);s.line(at.x,c.y,at.x,c.y+c.h,0x273541);}

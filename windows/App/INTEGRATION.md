@@ -25,15 +25,20 @@ uses explicitly enabled private stores. See `../RECOVERY_PROGRESS.md` and
 capture; restore hydrates a fresh stopped take. Ordinary Save/Open protect an
 unfinished take until explicit Finish or Discard.
 
-The workspace now exposes a persistent lower editor tab strip, dock collapse,
-named layout manager and storage, and categorized multi-word command search.
+The workspace exposes lower editor selection, dock collapse, named layout
+manager and storage, and categorized multi-word command search.
 Layouts preserve current editor drafts, pins and targets, with guarded atomic
 preference writes outside document history. See `../WORKSPACE_LAYOUTS_PROGRESS.md`
-for the first checkpoint. Automation and instrument/envelope editors now retain
-their HWNDs, controls and drafts across a shared right dock, responsive workspace
-tabs and floating windows. Compact pages keep their workflows usable at 440×500
-DIP. `../WORKSPACE_DOCKING_PROGRESS.md` records the current qualification and
-remaining workspace parity gaps.
+for the first checkpoint. Automation and instrument/envelope editors retain
+their HWNDs, controls and drafts across right, bottom and secondary regions,
+responsive workspace tabs and floating windows. Short docked pages remain
+usable at 440×300 DIP; floating minima remain 440×500. The Connected preset puts
+Pattern, Graph, Instrument and Automation together when space permits. Each
+native region has local placement, follow/pin, cursor and return actions. Saved
+layouts preserve independent region selections and desired split sizes.
+`../INDEPENDENT_DOCKING_PROGRESS.md` records current qualification and remaining
+workspace parity gaps; `../WORKSPACE_DOCKING_PROGRESS.md` is the preceding
+shared-dock checkpoint.
 
 Native Audio settings now selects an output endpoint and preferred buffer period
 through independent guarded session APIs. Driver-supported periods and buffer
@@ -261,8 +266,9 @@ operate on independent graph recipes with document Undo. Painting never queries
 the worker or plugins. The Pattern curve page retains a separate captured source
 and pattern draft, with native point fields, dragging, snap, zoom, all nine curve
 types and worker-evaluated formula previews. Generation checks preserve newer
-edits during requests. Song overview, expanded formula/bank editors,
-insert/send/sidechain controls and simultaneous independent lower docks remain.
+edits during requests. Retained song overview, formula and envelope-bank tools
+are described below. Simultaneous Main editors and a separate Graph curve host
+remain open.
 
 Mixer gain/balance/width/mute/solo updates publish one bounded control batch on
 the single UI producer. The shared Document prepares Undo storage before that

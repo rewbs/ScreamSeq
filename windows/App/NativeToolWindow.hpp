@@ -105,11 +105,11 @@ class NativeToolWindow {
         SetWindowPos(window_,nullptr,previousRect.left,previousRect.top,previousRect.right-previousRect.left,previousRect.bottom-previousRect.top,SWP_NOZORDER|SWP_NOACTIVATE|SWP_FRAMECHANGED);
         if(wasShown)ShowWindow(window_,SW_SHOWNOACTIVATE);
       }catch(...){}
-      relocating_=false;if(restoreFocus&&wasShown&&IsWindow(focus))SetFocus(focus);try{layoutAll();}catch(...){}std::rethrow_exception(failure);
+      relocating_=false;if(restoreFocus&&wasShown&&IsWindow(focus))SetFocus(focus);try{layoutAll();if(visible())resumeVisiblePresentation();}catch(...){}std::rethrow_exception(failure);
     }
     relocating_=false;
     if(restoreFocus&&wasShown&&IsWindowVisible(focus))SetFocus(focus);
-    layoutAll();notifyPlacement();
+    layoutAll();if(visible())resumeVisiblePresentation();notifyPlacement();
   }
 protected:
   HWND owner_{},window_{};
@@ -170,6 +170,9 @@ protected:
   void render(){if(!ready_||!IsWindowVisible(window_)||IsIconic(window_))return;if(WaitForSingleObject(surface_->ready(),0)!=WAIT_OBJECT_0){SetTimer(window_,2,16,nullptr);return;}surface_->begin();paint(*surface_);surface_->finishDrawing();check(surface_->present(),"Present editor tool");}
   virtual void layout()=0;
   virtual void fontsChanged(){}
+  // UI-thread presentation work may have been deferred while this retained
+  // HWND was hidden. Never reload its target or move focus from this hook.
+  virtual void resumeVisiblePresentation()noexcept{}
   virtual void paint(RenderSurface &)=0;
   virtual void action(int,unsigned)=0;
   virtual bool key(WPARAM,bool,bool){return false;}
@@ -269,7 +272,7 @@ public:
   void workspaceDockAction(std::function<void()> action){workspaceDockAction_=std::move(action);}
   void placementChanged(std::function<void()> changed){placementChanged_=std::move(changed);}
   void musicalTyping(std::function<bool(HWND,WPARAM,bool)> key,std::function<bool(WPARAM)> release,std::function<void()> deactivate){musicalKey_=std::move(key);musicalRelease_=std::move(release);musicalDeactivate_=std::move(deactivate);}
-  void show(){const bool changed=!shown();ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|(docked()?SWP_NOACTIVATE:0));requestPaint();if(changed)notifyPlacement();}
+  void show(){const bool changed=!shown();ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|(docked()?SWP_NOACTIVATE:0));requestPaint();if(visible())resumeVisiblePresentation();if(changed)notifyPlacement();}
   virtual void hide(){const bool changed=shown(),focused=owns(GetFocus());releaseMusicalInput();if(window_){KillTimer(window_,2);ShowWindow(window_,SW_HIDE);}if(focused)SetFocus(owner_);if(changed)notifyPlacement();}
 };
 }

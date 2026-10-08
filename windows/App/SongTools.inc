@@ -54,7 +54,7 @@
         if(songTimingWindow)songTimingWindow->update(songTimingContext());
     }
     void returnToSongPattern() {
-        deferredViews.clear();dockTrackerSelected=true;workspaceState.focus="pattern";
+        deferredViews.clear();revealWorkspacePattern();workspaceState.focus="pattern";
         layoutControls();ensureCursorVisible();
         if(workspaceFocusVisible(window))SetFocus(window);
     }

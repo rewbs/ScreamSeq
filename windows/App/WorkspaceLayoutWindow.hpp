@@ -55,8 +55,8 @@ class WorkspaceLayoutWindow final : public NativeToolWindow {
     if(id==reload)p={{"name","Reload saved"}};
     else if(id==applyPreset) {
       auto selected=SendMessageW(controls_.at(preset),CB_GETCURSEL,0,0);
-      if(selected<0||selected>2)return;
-      p={{"name",std::array<const char *,3>{"Compose","Pattern focus","Sound design"}[size_t(selected)]}};
+      if(selected<0||selected>3)return;
+      p={{"name",std::array<const char *,4>{"Compose","Pattern focus","Sound design","Connected"}[size_t(selected)]}};
     } else if(id==restore)p={{"name","Restore custom"},{"savedName",selectedName()}};
     else if(id==remove)p={{"name","Delete custom"},{"savedName",selectedName()}};
     else if(id==save)p={{"name","Save custom"},{"savedName",utf8(field(name))}};
@@ -74,7 +74,7 @@ public:
     minimumWidth_=580;minimumHeight_=390;create(L"ScreamSeqWorkspaceLayouts",L"Workspace layouts",640,420);
     combo(preset);combo(saved);edit(name,L"Custom",128);
     button(applyPreset,L"Apply preset");button(restore,L"Restore");button(save,L"Save / update");button(remove,L"Delete");button(close,L"Close");button(reload,L"Refresh saved");
-    for(auto text:{L"Compose",L"Pattern focus",L"Sound design"})SendMessageW(controls_.at(preset),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+    for(auto text:{L"Compose",L"Pattern focus",L"Sound design",L"Connected editors"})SendMessageW(controls_.at(preset),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
     SendMessageW(controls_.at(preset),CB_SETCURSEL,0,0);finish();
   }
   void open(){refresh();show();SetFocus(controls_.at(name));}

@@ -5,7 +5,6 @@
 		const bool playing=device.running() && !auditionOnly;
 		s.fill(0,0,width,height,bg);s.fill(0,0,width,44,0x222a35);
 		s.fill(164,44,width-164,40,0x191f29);s.line(164,43,width,43,0x344151);
-        if(hasWorkspaceDock()){s.fill(164,84,width-164,34,0x202834);s.line(164,118,width,118,0x344151);}
 		s.uiText(L"SCREAMSEQ",12,12,146,accent);
 		// This column begins after the native toolbar. Narrow windows can omit it:
 		// the project title also remains in the sidebar and native window title.
@@ -33,6 +32,7 @@
             s.uiText(timing,846,58,timingWidth,muted);
         }
 		// Virtualized grid: field colors and geometry are shared by hit-testing.
+		if(trackerWorkspaceVisible()){
 		const auto r=patternGridRect(); s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x10161e);
 		s.fill(r.x,r.y,r.w,gridHeader,0x202834);s.fill(r.x,r.y,3,26,accent);
 		s.uiTextFit({L"PATTERN "+std::to_wstring(patternIndex)+L" / "+std::to_wstring(patternRows())+L" rows",
@@ -83,7 +83,8 @@
 		}
 		s.unclip();s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="pattern" ? 0x56858b : 0x303b49);
         drawGraphLanes(playback);
-		if(workspaceState.visible()) {
+        }
+		if(workspaceInspectorVisible()) {
 			auto p=g.inspector;const auto &state=workspaceState.panel(workspaceState.active);
 			s.clip(p.x,p.y,p.w,p.h);s.fill(p.x,p.y,p.w,p.h,panelBg);s.fill(p.x,p.y,p.w,62,0x222b38);s.line(p.x,p.y+62,p.x+p.w,p.y+62,0x344151);float x=p.x+10,y=p.y+67,w=p.w-20;
 			s.uiText(state.pinned ? L"PINNED TARGET" : L"FOLLOWING EDIT CURSOR",x,y,w,state.pinned ? gold : accent);y+=22;
@@ -119,22 +120,23 @@
 				s.uiText(data.value("loop",false) ? L"Normal loop: "+std::to_wstring(data.value("loopStart",0u))+L" -> "+std::to_wstring(data.value("loopEnd",0u)) : L"Normal loop: off",x,y,w,gold);y+=22;
 				s.uiText(data.value("sustainLoop",false) ? L"Sustain loop: "+std::to_wstring(data.value("sustainStart",0u))+L" -> "+std::to_wstring(data.value("sustainEnd",0u)) : L"Sustain loop: off",x,y,w,0xb5a0e8);
 			}
-			s.unclip();s.outline(p.x,p.y,p.w,p.h,workspaceState.focus==workspaceState.active ? accent : 0x303b49);
+			s.unclip();s.outline(p.x,p.y,p.w,p.h,workspaceInspectorCanvasIntent()&&workspaceState.focus==workspaceState.active ? accent : 0x303b49);
 		}
-		if(workspaceState.layout!="Pattern focus") {
+		if(!hasWorkspaceDock()&&workspaceState.layout!="Pattern focus") {
 			s.fill(g.lowerTabs.x,g.lowerTabs.y,g.lowerTabs.w,g.lowerTabs.h,0x202834);
 			s.line(g.lowerTabs.x,g.lowerTabs.y+g.lowerTabs.h-1,g.lowerTabs.x+g.lowerTabs.w,g.lowerTabs.y+g.lowerTabs.h-1,0x344151);
         }
-        if(workspaceState.layout!="Pattern focus" && workspaceState.lowerVisible) {
-            if(graphEditorVisible())drawGraphEditor();
-            else if(mixerEditorVisible())drawMixerEditor();
-            else if(sampleEditorVisible()) drawSampleEditor();
-            else if(effectEditorVisible()) drawEffectEditor();
-            else if(noteEditorVisible()) drawNoteEditor();
-            else drawPluginEditor();
+        if(graphEditorVisible())drawGraphEditor();
+        else if(mixerEditorVisible())drawMixerEditor();
+        else if(sampleEditorVisible()) drawSampleEditor();
+        else if(effectEditorVisible()) drawEffectEditor();
+        else if(noteEditorVisible()) drawNoteEditor();
+        else if(pluginEditorVisible())drawPluginEditor();
+        if(!hasWorkspaceDock()&&workspaceState.layout!="Pattern focus"&&workspaceState.lowerVisible){
 			s.fill(g.horizontalDivider.x,g.horizontalDivider.y,g.horizontalDivider.w,g.horizontalDivider.h,0x344151);
 		}
-		if(workspaceState.visible()) s.fill(g.verticalDivider.x,g.verticalDivider.y,g.verticalDivider.w,g.verticalDivider.h,0x344151);
+		if(workspaceInspectorVisible()) s.fill(g.verticalDivider.x,g.verticalDivider.y,g.verticalDivider.w,g.verticalDivider.h,0x344151);
+        if(hasWorkspaceDock())drawWorkspaceRegionChrome();
 		s.fill(164,height-40,width-164,40,0x202834);s.line(164,height-40,width,height-40,0x344151);
 		s.fill(164,height-38,3,16,liveKeyboard ? gold : 0xb498de);
 		s.text(L"EDIT P"+std::to_wstring(patternIndex)+L" R"+std::to_wstring(row)+L" CH"+std::to_wstring(channel+1)+L" / "+(follow ? L"FOLLOW PLAYBACK" : L"DETACHED EDITING")+L" / FOCUS "+wide(workspaceState.focus)+(liveKeyboard?L" / LIVE KEYS":L""),174,height-38,width-184);

@@ -1,13 +1,40 @@
-    // Retained native editors share a right-hand dock. At narrow widths its
-    // tabs use the workspace body, leaving every editor usable at normal scale.
+    // Presentation preferences never own a musical target or an editor draft.
     struct WorkspaceEditorPanel {
         std::string location="hide", preferred="float", document, patternID;
         Json origin=Json::object();
-        bool pinned=true, configured=false;
+        bool pinned=false, configured=false;
     };
     std::array<WorkspaceEditorPanel,2> workspaceEditors;
     std::string activeWorkspaceEditor="automation";
     bool dockTrackerSelected=false, changingEditorPlacement=false, followingEditors=false;
+    Regions::Config regionConfiguration;
+    float regionDragRight=460,regionDragBottom=334;
+    bool previousPatternVisible=true,previousMainVisible=true;
+    struct CompletedWorkspaceLayout {
+        Regions::Mode mode=Regions::Mode::none;
+        bool pattern=false,inspector=false;
+        std::string main;
+        std::vector<HWND> mainControls;
+    } completedWorkspaceLayout;
+    // Notes/Samples retain their public focus names in both the legacy inspector
+    // and Main editor. Remember which canvas owns input rather than guessing
+    // from whichever matching surface happens to be visible after a resize.
+    bool inspectorCanvasFocus=false;
+    static bool inspectorFocusAlias(const std::string &id){return id=="notes"||id=="samples";}
+    void setWorkspaceCanvasFocus(const std::string &id,bool inspector=false){
+        workspaceState.focus=id;inspectorCanvasFocus=inspector&&inspectorFocusAlias(id);
+    }
+    bool workspaceInspectorCanvasIntent()const{return inspectorCanvasFocus&&inspectorFocusAlias(workspaceState.focus);}
+    bool workspaceMainCanvasFocused(const std::string &id)const{
+        return workspaceState.focus==id&&!workspaceInspectorCanvasIntent()&&workspaceMainEditorVisible(id);
+    }
+    std::string workspaceMainCanvasIdentity(HWND target=nullptr)const{
+        const auto main=lowerEditorName();if(main!="graph"||graphPageIndex!=5)return main;
+        // Shared Graph controls keep their own native input. Entering the painted
+        // Main body or a curve-specific control belongs to the visible curve.
+        if(target&&target!=window){const auto id=GetDlgCtrlID(target);if(id<curvePattern||id>curveReference)return "graph";}
+        return "graphCurve";
+    }
     struct EditorPlacementGuard {
         bool &flag;bool previous;
         explicit EditorPlacementGuard(bool &value):flag(value),previous(value){flag=true;}
@@ -21,23 +48,140 @@
     ScreamSeq::NativeToolWindow *workspaceEditorWindow(const std::string &id)const {
         return id=="automation"?static_cast<ScreamSeq::NativeToolWindow *>(parameterAutomationWindow.get()):static_cast<ScreamSeq::NativeToolWindow *>(instrumentEnvelopeWindow.get());
     }
-    bool hasWorkspaceDock()const {return workspaceState.layout!="Pattern focus"&&std::any_of(workspaceEditors.begin(),workspaceEditors.end(),[](const auto &p){return p.location=="right";});}
+    static bool dockLocation(const std::string &location){return location=="right"||location=="bottom"||location=="secondary";}
+    Regions::Config currentWorkspaceRegions()const {
+        auto value=regionConfiguration;
+        for(size_t i=0;i<workspaceEditors.size();++i)value.locations[i]=Regions::placement(workspaceEditors[i].location);
+        const auto previousMain=value.selected[1];
+        if(Regions::mainBottom(previousMain))value.selected[1]=lowerEditorName();
+        for(size_t i=0;i<3;++i)if(!Regions::belongs(value,static_cast<Regions::Region>(i),value.selected[i]))
+            value.selected[i]=i==1?lowerEditorName():Regions::firstNative(value,static_cast<Regions::Region>(i));
+        if(value.compactSelection==previousMain)value.compactSelection=value.selected[1];
+        if(dockTrackerSelected||!Regions::compactAvailable(value,value.compactSelection))value.compactSelection="pattern";
+        Regions::validate(value);return value;
+    }
+    bool hasWorkspaceDock()const {return workspaceState.layout!="Pattern focus"&&std::any_of(workspaceEditors.begin(),workspaceEditors.end(),[](const auto &p){return dockLocation(p.location);});}
     float workspaceClientWidth()const {RECT r{};GetClientRect(window,&r);return r.right*96.0f/GetDpiForWindow(window);}
-    bool sideWorkspaceDock()const {return hasWorkspaceDock()&&workspaceClientWidth()>=1424;}
-    bool trackerWorkspaceVisible()const {return !hasWorkspaceDock()||sideWorkspaceDock()||dockTrackerSelected;}
+    Regions::Geometry workspaceRegionGeometry()const {
+        RECT client{};GetClientRect(window,&client);const auto scale=96.f/GetDpiForWindow(window);
+        Regions::Minimums minimums;minimums.patternWidth=workspaceState.visible()?656.f:350.f;
+        return Regions::solve({170,88,std::max(0.f,client.right*scale-178),std::max(0.f,client.bottom*scale-132)},
+            currentWorkspaceRegions(),minimums,workspaceState.layout=="Pattern focus",workspaceState.lowerVisible);
+    }
+    bool sideWorkspaceDock()const {return hasWorkspaceDock()&&workspaceRegionGeometry().mode==Regions::Mode::regions;}
+    bool trackerWorkspaceVisible()const {return !hasWorkspaceDock()||workspaceRegionGeometry().pattern.h>0;}
+    bool workspaceMainEditorVisible(const std::string &id)const {
+        if(workspaceState.layout=="Pattern focus"||!workspaceState.lowerVisible||lowerEditorName()!=id)return false;
+        if(!hasWorkspaceDock())return true;
+        const auto regions=workspaceRegionGeometry();const auto &host=regions.hosts[1];return host.visible&&host.selected==id;
+    }
+    ScreamSeq::WorkspaceRect workspaceMainEditorRect()const {
+        if(hasWorkspaceDock())return workspaceRegionGeometry().hosts[1].body;
+        const auto g=geometry();return {g.graph.x,g.graph.y,g.automation.x+g.automation.w-g.graph.x,g.graph.h};
+    }
+    void revealWorkspacePattern(){dockTrackerSelected=true;regionConfiguration.compactSelection="pattern";}
+    void revealWorkspaceMainEditor(const std::string &id){
+        if(!Regions::mainBottom(id))throw std::invalid_argument("Choose a main editor");
+        regionConfiguration.selected[1]=id;regionConfiguration.compactSelection=id;
+        dockTrackerSelected=false;workspaceState.lowerVisible=true;
+    }
+    bool workspaceCanvasVisible(const std::string &id,bool inspector)const{
+        if(id=="pattern"||id=="graphLanes")return trackerWorkspaceVisible();
+        if(inspectorFocusAlias(id))return inspector
+            ?workspaceInspectorVisible()&&id==workspaceState.active:workspaceMainEditorVisible(id);
+        if(id=="graphCurve")return graphCurveVisible();
+        if(id=="graph")return graphEditorVisible()&&!graphCurveVisible();
+        if(Regions::mainBottom(id))return workspaceMainEditorVisible(id);
+        return false;
+    }
+    bool workspaceMainControl(HWND target)const{
+        if(!target||target==window||!IsChild(window,target)||!IsWindowVisible(target)||!IsWindowEnabled(target)||
+            ScreamSeq::NativeToolWindow::belongsToTool(target)||!workspaceMainEditorVisible(lowerEditorName()))return false;
+        RECT bounds{};GetWindowRect(target,&bounds);MapWindowPoints(nullptr,window,reinterpret_cast<POINT *>(&bounds),2);
+        const auto scale=96.f/GetDpiForWindow(window);const auto body=workspaceMainEditorRect();
+        return bounds.left*scale>=body.x&&bounds.top*scale>=body.y&&
+            bounds.right*scale<=body.x+body.w&&bounds.bottom*scale<=body.y+body.h;
+    }
+    void rememberCompletedWorkspaceLayout(){
+        if(IsIconic(window))return;
+        CompletedWorkspaceLayout completed;
+        completed.mode=hasWorkspaceDock()?workspaceRegionGeometry().mode:Regions::Mode::none;
+        if(completed.mode==Regions::Mode::regions){
+            completed.pattern=trackerWorkspaceVisible();completed.inspector=workspaceInspectorVisible();
+            if(workspaceMainEditorVisible(lowerEditorName())){
+                completed.main=lowerEditorName();
+                // Record actual HWND membership while the old body is laid out.
+                // A later WM_SIZE/DPI change must not classify these controls
+                // against a newly solved (and possibly hidden) compact body.
+                for(const auto &[id,control]:controls)if(workspaceMainControl(control))completed.mainControls.push_back(control);
+            }
+        }
+        completedWorkspaceLayout=std::move(completed);
+    }
+    void retainWorkspaceFocusForResize(WPARAM sizeKind){
+        // Ordinary layout restoration and panel placement keep their explicit
+        // selected tab. Only the window's regions-to-tabs resize transition
+        // carries the surface that currently owns keyboard input into tabs.
+        if(sizeKind==SIZE_MINIMIZED||controls.empty()||preparingWorkspaceLayout||changingEditorPlacement||
+            completedWorkspaceLayout.mode!=Regions::Mode::regions||!hasWorkspaceDock()||
+            workspaceRegionGeometry().mode!=Regions::Mode::tabs)return;
+        const auto focused=GetFocus();
+        if(!focused||!IsWindow(focused)||!IsWindowVisible(focused)||!IsWindowEnabled(focused))return;
+        const auto &completed=completedWorkspaceLayout;std::string host;
+        if(focused==window){
+            if(((workspaceState.focus=="pattern"||workspaceState.focus=="graphLanes")&&completed.pattern)||
+                (workspaceInspectorCanvasIntent()&&completed.inspector))host="pattern";
+            else if(!workspaceInspectorCanvasIntent()&&!completed.main.empty()&&completed.main==lowerEditorName()&&
+                (workspaceState.focus==completed.main||(completed.main=="graph"&&workspaceState.focus=="graphCurve")))host=completed.main;
+        }else{
+            for(const auto *id:{"automation","instruments"})if(auto *tool=workspaceEditorWindow(id);
+                tool&&tool->docked()&&tool->visible()&&tool->owns(focused))host=id;
+            if(host.empty()&&!completed.main.empty()&&completed.main==lowerEditorName()&&IsChild(window,focused)&&
+                !ScreamSeq::NativeToolWindow::belongsToTool(focused)&&
+                std::find(completed.mainControls.begin(),completed.mainControls.end(),focused)!=completed.mainControls.end())host=completed.main;
+        }
+        if(!host.empty()&&Regions::compactAvailable(currentWorkspaceRegions(),host)){
+            regionConfiguration.compactSelection=host;dockTrackerSelected=host=="pattern";
+        }
+    }
+    std::string focusedWorkspaceRegion(HWND target)const{
+        for(const auto *id:{"automation","instruments"})if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible()&&tool->owns(target))return id;
+        if(workspaceMainControl(target))return lowerEditorName();
+        if(target!=window||!workspaceCanvasVisible(workspaceState.focus,inspectorCanvasFocus))return {};
+        if(workspaceState.focus=="pattern"||workspaceState.focus=="graphLanes"||workspaceInspectorCanvasIntent())return "pattern";
+        return workspaceState.focus=="graphCurve"?"graph":workspaceState.focus;
+    }
     bool workspaceFocusVisible(HWND target)const {
-        return target&&IsWindow(target)&&IsWindowVisible(target)&&IsWindowEnabled(target)&&(target!=window||trackerWorkspaceVisible());
+        return target&&IsWindow(target)&&IsWindowVisible(target)&&IsWindowEnabled(target)&&
+            (target!=window||workspaceFocusedCanvasVisible());
     }
     void focusVisibleWorkspaceCanvas() {
-        if(!trackerWorkspaceVisible())if(auto *tool=workspaceEditorWindow(activeWorkspaceEditor);tool&&tool->visible()) {
-            workspaceState.focus=activeWorkspaceEditor;SetFocus(tool->window());return;
+        if(!trackerWorkspaceVisible()) {
+            if(workspaceMainEditorVisible(lowerEditorName())){setWorkspaceCanvasFocus(workspaceMainCanvasIdentity());SetFocus(window);return;}
+            for(const auto *id:{"automation","instruments"})if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible()) {
+                setWorkspaceCanvasFocus(id);SetFocus(tool->window());return;
+            }
         }
-        workspaceState.focus="pattern";SetFocus(window);
+        setWorkspaceCanvasFocus("pattern");SetFocus(window);
     }
-    float workspaceContentTop()const {return hasWorkspaceDock()?122.0f:88.0f;}
-    ScreamSeq::WorkspaceRect workspaceEditorRect()const {
-        RECT r{};GetClientRect(window,&r);const auto scale=96.0f/GetDpiForWindow(window),w=r.right*scale,h=r.bottom*scale;
-        return {sideWorkspaceDock()?w-468:170,122,sideWorkspaceDock()?460:w-178,std::max(1.0f,h-166)};
+    float workspaceContentTop()const {return 88.f;}
+    ScreamSeq::WorkspaceRect workspaceEditorRect(const std::string &id="")const {
+        const auto selected=id.empty()?activeWorkspaceEditor:id;const auto regions=workspaceRegionGeometry();
+        for(const auto &host:regions.hosts)if(host.selected==selected&&host.visible)return host.body;
+        return {};
+    }
+    void placeWorkspaceEditor(const std::string &id,const std::string &location){
+        regionConfiguration=Regions::placed(currentWorkspaceRegions(),static_cast<Regions::Panel>(workspaceEditorIndex(id)),Regions::placement(location),lowerEditorName());
+        auto &state=workspaceEditors[workspaceEditorIndex(id)];state.location=location;if(location!="hide")state.preferred=location;
+    }
+    void selectWorkspaceEditor(const std::string &id){
+        auto &state=workspaceEditors[workspaceEditorIndex(id)];
+        if(dockLocation(state.location)){
+            const auto region=static_cast<Regions::Region>(Regions::placement(state.location));
+            regionConfiguration=Regions::selected(currentWorkspaceRegions(),region,id);
+            regionConfiguration.compactSelection=id;dockTrackerSelected=false;
+        }
+        activeWorkspaceEditor=id;
     }
     void captureWorkspaceEditorOrigin(const std::string &id) {
         auto &p=workspaceEditors[workspaceEditorIndex(id)];if(!p.origin.empty())return;
@@ -65,18 +209,18 @@
         tool->placementChanged([this,id]{
             if(changingEditorPlacement)return;
             auto &state=workspaceEditors[workspaceEditorIndex(id)];auto *editor=workspaceEditorWindow(id);
-            if(editor->visible()){state.location=editor->docked()?"right":"float";state.preferred=state.location;captureWorkspaceEditorOrigin(id);}
-            else {state.location="hide";if(workspaceState.focus==id)workspaceState.focus="pattern";}
+            if(editor->visible()){placeWorkspaceEditor(id,editor->docked()?(dockLocation(state.location)?state.location:"right"):"float");captureWorkspaceEditorOrigin(id);}
+            else {placeWorkspaceEditor(id,"hide");if(workspaceState.focus==id)workspaceState.focus="pattern";}
             layoutControls();
         });
     }
     void finishWorkspaceEditorOpen(const std::string &id) {
         auto &p=workspaceEditors[workspaceEditorIndex(id)];captureWorkspaceEditorOrigin(id);
-        if(p.preferred=="right") {
+        if(dockLocation(p.preferred)) {
             EditorPlacementGuard guard(changingEditorPlacement);workspaceEditorWindow(id)->dock(window);
-            p.location="right";activeWorkspaceEditor=id;dockTrackerSelected=false;
+            placeWorkspaceEditor(id,p.preferred);selectWorkspaceEditor(id);
             if(workspaceState.layout=="Pattern focus")workspaceState.layout="Compose";
-        } else p.location="float";
+        } else placeWorkspaceEditor(id,"float");
         layoutControls();
     }
     void ensureWorkspaceEditor(const std::string &id) {
@@ -99,11 +243,16 @@
         const auto id=p.at("panel").get<std::string>();auto &state=workspaceEditors[workspaceEditorIndex(id)];
         for(auto i=p.begin();i!=p.end();++i)if(i.key()!="panel"&&i.key()!="placement"&&i.key()!="pinned"&&i.key()!="focus"&&i.key()!="follow"&&i.key()!="return")throw ScreamSeq::Api::ApiError(-32602,"Unknown workspace parameter");
         for(const auto *key:{"pinned","focus","follow","return"})if(p.contains(key)&&!p[key].is_boolean())throw ScreamSeq::Api::ApiError(-32602,"Panel flags must be boolean");
-        if(p.contains("placement")&&(!p["placement"].is_string()||(p["placement"]!="right"&&p["placement"]!="float"&&p["placement"]!="hide")))throw ScreamSeq::Api::ApiError(-32602,"Choose right, float or hide for this editor");
+        if(p.contains("placement")){if(!p["placement"].is_string())throw ScreamSeq::Api::ApiError(-32602,"Choose right, bottom, secondary, float or hide");(void)Regions::placement(p["placement"].get<std::string>());}
         Json returnPoint;if(p.value("return",false))returnPoint=workspaceEditorReturnPoint(id);
         if(busy)throw ScreamSeq::Api::ApiError(-32002,"Wait for the current document operation before moving an editor");
-        const auto previousFocus=GetFocus();
-        const bool retainTrackerFocus=!p.value("focus",false)&&previousFocus==window&&trackerWorkspaceVisible();
+        const auto previousFocus=GetFocus();const auto previousPanel=workspaceState.focus;
+        const bool previousInspector=inspectorCanvasFocus;
+        std::string retainedSurface;
+        if(!p.value("focus",false)&&!p.value("return",false)) {
+            retainedSurface=focusedWorkspaceRegion(previousFocus);
+            if(isWorkspaceEditor(retainedSurface))retainedSurface.clear();
+        }
         const auto placement=p.value("placement",state.location=="hide"?state.preferred:state.location);
         // Hiding an unopened editor is a pure presentation operation.
         if((p.contains("placement")&&placement!="hide")||p.value("focus",false)||p.value("follow",false))ensureWorkspaceEditor(id);
@@ -112,79 +261,294 @@
         if(p.value("follow",false))state.pinned=false;
         if(tool&&(p.value("follow",false)||(p.contains("pinned")&&!state.pinned)))followWorkspaceEditor(id);
         if(p.contains("placement")) {
-            state.location=placement;
-            if(placement!="hide")state.preferred=placement;
-            if(tool){if(placement=="right")tool->dock(window);else if(placement=="float")tool->floatWindow();else tool->hide();}
+            placeWorkspaceEditor(id,placement);
+            if(tool){if(dockLocation(placement))tool->dock(window);else if(placement=="float")tool->floatWindow();else tool->hide();}
         }
-        if(tool&&((p.contains("placement")&&placement=="right")||p.value("focus",false))) {
+        if(tool&&((p.contains("placement")&&dockLocation(placement))||p.value("focus",false))) {
             if(workspaceState.layout=="Pattern focus")workspaceState.layout="Compose";
-            state.location=placement=="hide"?state.preferred:placement;
-            if(state.location=="right"){tool->dock(window);activeWorkspaceEditor=id;dockTrackerSelected=retainTrackerFocus&&!sideWorkspaceDock();}
+            placeWorkspaceEditor(id,placement=="hide"?state.preferred:placement);
+            if(dockLocation(state.location)){
+                tool->dock(window);selectWorkspaceEditor(id);
+                if(!retainedSurface.empty()&&!sideWorkspaceDock()&&Regions::compactAvailable(currentWorkspaceRegions(),retainedSurface)){
+                    regionConfiguration.compactSelection=retainedSurface;dockTrackerSelected=retainedSurface=="pattern";
+                    if(previousFocus==window)setWorkspaceCanvasFocus(previousPanel,previousInspector);
+                    else if(retainedSurface!="pattern")setWorkspaceCanvasFocus(workspaceMainCanvasIdentity(previousFocus));
+                }
+            }
             else tool->floatWindow();
         }
         // Returning must expose the tracker even if navigate() is a no-op at
         // the opening position and therefore does not perform another layout.
-        if(p.value("return",false))dockTrackerSelected=true;
+        if(p.value("return",false))revealWorkspacePattern();
         layoutControls();
-        if(state.location=="hide"&&workspaceState.focus==id)workspaceState.focus="pattern";
-        if(p.value("return",false)){workspaceState.focus="pattern";navigate(returnPoint);SetFocus(window);}
-        else if(p.value("focus",false)&&tool){tool->show();workspaceState.focus=id;SetFocus(tool->window());}
+        if(state.location=="hide"&&workspaceState.focus==id)setWorkspaceCanvasFocus("pattern");
+        if(p.value("return",false)){setWorkspaceCanvasFocus("pattern");navigate(returnPoint);SetFocus(window);}
+        else if(p.value("focus",false)&&tool){tool->show();setWorkspaceCanvasFocus(id);SetFocus(tool->window());}
         else if(workspaceFocusVisible(previousFocus))SetFocus(previousFocus);
         else if(!workspaceFocusVisible(GetFocus()))focusVisibleWorkspaceCanvas();
         ensureCursorVisible();
     }
     Json workspaceDockSnapshot()const {
-        auto r=workspaceEditorRect();return {{"mode",!hasWorkspaceDock()?"none":sideWorkspaceDock()?"side":"tabs"},{"active",activeWorkspaceEditor},{"trackerVisible",trackerWorkspaceVisible()},{"rect",{{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}}}};
+        const auto regions=workspaceRegionGeometry();auto rect=[](const auto &r)->Json{return {{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}};};
+        Json hosts=Json::object();for(size_t i=0;i<3;++i){const auto &host=regions.hosts[i];hosts[std::string(Regions::regionNames[i])]={{"selected",host.selected},{"visible",host.visible},{"header",rect(host.header)},{"body",rect(host.body)}};}
+        return {{"mode",regions.mode==Regions::Mode::none?"none":regions.mode==Regions::Mode::regions?"regions":"tabs"},
+            {"active",activeWorkspaceEditor},{"trackerVisible",trackerWorkspaceVisible()},{"rect",rect(workspaceEditorRect())},
+            {"hosts",std::move(hosts)},{"compactSelection",regions.compactSelection},{"configuration",workspaceDockConfiguration()}};
     }
     Json workspaceDockConfiguration()const {
-        return {{"locations",Json::array({workspaceEditors[0].location,workspaceEditors[1].location})},{"active",activeWorkspaceEditor},{"tracker",dockTrackerSelected}};
+        return Regions::encode(currentWorkspaceRegions());
     }
-    void validateWorkspaceDockConfiguration(const Json &v)const {
-        auto need=[](bool condition){if(!condition)throw ScreamSeq::Api::ApiError(-32602,"Invalid saved editor placement");};
-        need(v.is_object()&&v.size()==3&&v.contains("locations")&&v["locations"].is_array()&&v["locations"].size()==2);
-        for(const auto &p:v["locations"])need(p.is_string()&&(p=="right"||p=="float"||p=="hide"));
-        need(v.contains("active")&&v["active"].is_string()&&isWorkspaceEditor(v["active"].get<std::string>()));
-        need(v.contains("tracker")&&v["tracker"].is_boolean());
+    Regions::Config decodeWorkspaceDockConfiguration(const Json &v,const std::string &main,float lower)const {
+        return Regions::decodeEditors(&v,currentWorkspaceRegions(),main,lower);
     }
-    void prepareWorkspaceDockConfiguration(const Json &v) {
-        // Create unopened editors before changing existing presentation state.
-        for(const auto *id:{"automation","instruments"})if(v["locations"][workspaceEditorIndex(id)]!="hide")ensureWorkspaceEditor(id);
-    }
-    void restoreWorkspaceDockConfiguration(const Json &v) {
-        EditorPlacementGuard guard(changingEditorPlacement);
-        for(size_t i=0;i<2;++i){workspaceEditors[i].location=v["locations"][i].get<std::string>();if(workspaceEditors[i].location!="hide")workspaceEditors[i].preferred=workspaceEditors[i].location;}
-        activeWorkspaceEditor=v["active"].get<std::string>();dockTrackerSelected=v["tracker"].get<bool>();
-    }
-    template<class Place>void layoutWorkspaceEditors(Place place) {
-        EditorPlacementGuard guard(changingEditorPlacement);
-        if(hasWorkspaceDock()) {
-            RECT client{},outer{};GetClientRect(window,&client);GetWindowRect(window,&outer);const auto minimum=LONG(std::ceil(666*GetDpiForWindow(window)/96.0f));
-            if(client.bottom<minimum)SetWindowPos(window,nullptr,0,0,outer.right-outer.left,outer.bottom-outer.top+minimum-client.bottom,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+    // Worker waits pump ordinary input. A candidate may be discarded, but must
+    // never roll back a newer cursor, field edit, focus choice or arrangement.
+    Json workspacePreparationGuard()const {
+        Json editors=Json::array(),inspectors=Json::array();
+        for(const auto *id:{"automation","instruments"}) {
+            const auto &state=workspaceEditors[workspaceEditorIndex(id)];
+            auto *tool=workspaceEditorWindow(id);
+            Json captured=Json::object();
+            if(tool) {
+                const auto snapshot=id==std::string("automation")?parameterAutomationWindow->snapshot():instrumentEnvelopeWindow->snapshot();
+                for(const auto *key:{"generation","document","expectedRevision","pattern","patternID","plugin","parameter","instrument","index","page","selectedPoint","retainedDraft","pending"})
+                    if(snapshot.contains(key))captured[key]=snapshot.at(key);
+            }
+            editors.push_back({{"identity",reinterpret_cast<uintptr_t>(tool)},
+                {"visible",tool&&tool->visible()},{"docked",tool&&tool->docked()},
+                {"location",state.location},{"preferred",state.preferred},{"pinned",state.pinned},
+                {"origin",state.origin},{"document",state.document},{"patternID",state.patternID},{"captured",std::move(captured)}});
         }
-        if(workspaceEditors[workspaceEditorIndex(activeWorkspaceEditor)].location!="right")for(const auto *id:{"automation","instruments"})if(workspaceEditors[workspaceEditorIndex(id)].location=="right"){activeWorkspaceEditor=id;break;}
-        const bool dock=hasWorkspaceDock(),side=sideWorkspaceDock(),tracker=trackerWorkspaceVisible();const auto r=workspaceEditorRect();
-        // Hide primary native controls beneath the retained editor in tab mode.
-        if(!tracker)for(auto [id,h]:controls){if(id>=editorTrackerTab&&id<=editorReturnCommand)continue;RECT bounds{};GetWindowRect(h,&bounds);POINT p{bounds.left,bounds.top};ScreenToClient(window,&p);if(p.x>=int(164*GetDpiForWindow(window)/96.0f)&&p.y>=int(88*GetDpiForWindow(window)/96.0f))ScreamSeq::NativeControls::show(h,false);}
-        float x=176;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{editorTrackerTab,92.f},{editorAutomationTab,108.f},{editorInstrumentTab,108.f},{editorFloatCommand,60.f},{editorHideCommand,54.f},{editorPinCommand,72.f},{editorCursorCommand,66.f},{editorReturnCommand,66.f}}){place(id,x,91,width,25,dock);x+=width+4;}
-        if(dock){ScreamSeq::NativeControls::text(controls.at(editorTrackerTab),side?L"Focus tracker":L"Tracker");ScreamSeq::NativeControls::text(controls.at(editorPinCommand),workspaceEditors[workspaceEditorIndex(activeWorkspaceEditor)].pinned?L"Pinned":L"Following");}
+        for(const auto &panel:workspaceState.panels)
+            inspectors.push_back({{"pinned",panel.pinned},{"opened",panel.opened},{"hidden",panel.hidden},
+                {"target",panel.target},{"origin",panel.origin},{"sample",panel.sample}});
+        const auto current=controller->view();
+        return {{"document",documentId},{"revision",view->session.revision},
+            {"workerDocument",current->session.documentId},{"workerRevision",current->session.revision},
+            {"context",contextRevision},{"position",position()},
+            {"focus",reinterpret_cast<uintptr_t>(GetFocus())},{"focusedPanel",workspaceState.focus},{"inspectorCanvasFocus",inspectorCanvasFocus},
+            {"layout",layoutConfiguration()},{"inspectors",std::move(inspectors)},{"editors",std::move(editors)},
+            {"plugin",selectedPlugin},{"parameter",selectedParameter},{"pluginDraft",pluginDraft},{"pluginPresetPending",pluginPresetPending},
+            {"notes",{{"captured",noteCaptured},{"generation",noteDraftGeneration},{"pending",notePending}}},
+            {"effects",effectDraftExists},
+            {"curve",{{"generation",curveGeneration},{"document",curveDocument},{"revision",curveRevision},
+                {"graph",curveGraph},{"node",curveNode},{"pattern",curvePatternIndex},
+                {"dirty",curveDirty},{"fieldDraft",curveFieldsDirty},{"pending",curvePending}}},
+            {"graph",{{"document",graphDocument},{"revision",graphRevision},{"generation",graphGeneration},
+                {"id",graphID},{"node",graphNode},{"dirty",graphDirty},{"fieldDraft",graphFieldDirty},{"pending",graphPending}}},
+            {"mixer",{{"document",mixerDocument},{"revision",mixerRevision},{"generation",mixerGeneration},
+                {"target",mixerTarget},{"dirty",mixerDirty},{"pending",mixerPending}}}};
+    }
+    void validateWorkspacePreparation(const Json &guard)const {
+        if(guard!=workspacePreparationGuard())
+            throw ScreamSeq::Api::ApiError(-32003,"Workspace changed while preparing the layout; current edits were retained");
+    }
+    struct PreparedWorkspaceEditors {
+        std::shared_ptr<bool> preparing=std::make_shared<bool>(true);
+        std::unique_ptr<ScreamSeq::ParameterAutomationWindow> automation;
+        std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instruments;
+    };
+    PreparedWorkspaceEditors prepareWorkspaceDockConfiguration(const Regions::Config &v,const Json &guard) {
+        PreparedWorkspaceEditors prepared;
+        // Capture both intended targets before the first pumped wait. These
+        // windows remain unregistered, hidden and disconnected from placement.
+        const auto [plugin,parameter]=initialParameterAutomationTarget();
+        if(v.locations[0]!=Regions::Placement::hidden&&!parameterAutomationWindow) {
+            prepared.automation=makeParameterAutomationWindow(prepared.preparing);
+            prepared.automation->initializeHidden(plugin,parameter);
+            validateWorkspacePreparation(guard);
+        }
+        if(v.locations[1]!=Regions::Placement::hidden&&!instrumentEnvelopeWindow) {
+            prepared.instruments=makeInstrumentEnvelopeWindow(prepared.preparing);
+            prepared.instruments->initializeHidden();
+            validateWorkspacePreparation(guard);
+        }
+        return prepared;
+    }
+    void adoptWorkspaceEditors(PreparedWorkspaceEditors &&prepared) {
+        // Only these staged objects share this token. Existing editors keep
+        // their ordinary callbacks throughout preparation and later waits.
+        *prepared.preparing=false;
+        if(prepared.automation) {
+            parameterAutomationWindow=std::move(prepared.automation);
+            configureWorkspaceEditor("automation");captureWorkspaceEditorOrigin("automation");
+        }
+        if(prepared.instruments) {
+            instrumentEnvelopeWindow=std::move(prepared.instruments);
+            connectInstrumentEnvelopeTyping();configureWorkspaceEditor("instruments");captureWorkspaceEditorOrigin("instruments");
+        }
+    }
+    void restoreWorkspaceDockConfiguration(const Regions::Config &v) {
+        EditorPlacementGuard guard(changingEditorPlacement);
+        regionConfiguration=v;
+        for(size_t i=0;i<2;++i){workspaceEditors[i].location=Regions::name(v.locations[i]);if(workspaceEditors[i].location!="hide")workspaceEditors[i].preferred=workspaceEditors[i].location;}
+        dockTrackerSelected=v.compactSelection=="pattern";
+        if(isWorkspaceEditor(v.compactSelection))activeWorkspaceEditor=v.compactSelection;
+    }
+    template<class Place>void layoutWorkspaceEditors(Place apply) {
+        EditorPlacementGuard guard(changingEditorPlacement);
+        const auto regions=workspaceRegionGeometry();const bool dock=hasWorkspaceDock(),tracker=trackerWorkspaceVisible();
+        const auto focused=GetFocus();
+        // This layout may hide workspace surfaces, but it does not own another
+        // modeless tool's pending-focus protocol. A disabled native field may
+        // intentionally leave focus null until that tool completes its work.
+        bool ownedWorkspaceFocus=focused&&(focused==window||
+            (IsChild(window,focused)&&!ScreamSeq::NativeToolWindow::belongsToTool(focused)));
+        if(focused)for(const auto *id:{"automation","instruments"})if(auto *tool=workspaceEditorWindow(id);tool&&tool->owns(focused))ownedWorkspaceFocus=true;
+        std::map<int,ScreamSeq::WorkspaceRect> shown;
+        auto place=[&](int id,float x,float y,float w,float h){shown[id]={x,y,w,h};};
+        if(dock&&regions.mode==Regions::Mode::regions)for(size_t i=0;i<3;++i){
+            const auto &host=regions.hosts[i];if(!host.visible)continue;
+            layoutWorkspaceRegionHeader(place,i,host.header);
+        }
+        if(dock&&regions.mode==Regions::Mode::tabs){
+            float x=regions.tabs.x+4;const auto y=regions.tabs.y+2;
+            for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{editorTrackerTab,80.f},{editorAutomationTab,96.f},{editorInstrumentTab,96.f}}){place(id,x,y,width,24);x+=width+4;}
+            const auto mainButton=regionControlBase+regionControlStride;
+            place(mainButton,x,y,116,24);ScreamSeq::NativeControls::text(controls.at(mainButton),workspaceRegionTitle(lowerEditorName())+L" ▾");x+=120;
+            for(size_t i=0;i<3;++i)if(regions.hosts[i].visible&&isWorkspaceEditor(regions.hosts[i].selected)){
+                if(x+222<=regions.tabs.x+regions.tabs.w-4)layoutWorkspaceRegionActions(place,i,x,y);
+                else {const auto more=regionControlBase+int(i)*regionControlStride+1;place(more,x,y,28,24);ScreamSeq::NativeControls::text(controls.at(more),L"…");}
+            }
+        }
+        const auto placeOnce=[&](int id){const auto found=shown.find(id);if(found==shown.end())apply(id,0,0,1,1,false);else{const auto &r=found->second;apply(id,r.x,r.y,r.w,r.h,true);}};
+        for(int id=editorTrackerTab;id<=editorReturnCommand;++id)placeOnce(id);
+        for(int id=regionControlBase;id<=regionControlEnd;++id)if(controls.contains(id))placeOnce(id);
         for(const auto *id:{"automation","instruments"}) {
             const auto &p=workspaceEditors[workspaceEditorIndex(id)];auto *tool=workspaceEditorWindow(id);if(!tool)continue;
-            if(p.location=="right") {
+            if(dockLocation(p.location)) {
                 if(!tool->docked())tool->dock(window);
-                tool->dockBounds(r.x,r.y,r.w,r.h);
-                const bool show=dock&&id==activeWorkspaceEditor&&(side||!dockTrackerSelected);
+                const auto r=workspaceEditorRect(id);const bool show=dock&&r.w>0&&r.h>0;
+                if(show)tool->dockBounds(r.x,r.y,r.w,r.h);
                 if(show&&!tool->visible())tool->show();else if(!show&&tool->visible())tool->hide();
             } else if(p.location=="float") {if(tool->docked())tool->floatWindow();if(!tool->visible())tool->show();}
             else if(tool->visible())tool->hide();
         }
-        for(int id:{editorTrackerTab,editorAutomationTab,editorInstrumentTab})ScreamSeq::NativeControls::active(controls.at(id),id==editorTrackerTab?tracker:id==editorAutomationTab?activeWorkspaceEditor=="automation"&&(!tracker||side):activeWorkspaceEditor=="instruments"&&(!tracker||side));
-        if(!tracker&&GetFocus()==window)focusVisibleWorkspaceCanvas();
+        for(int id:{editorTrackerTab,editorAutomationTab,editorInstrumentTab}){
+            const auto *tool=id==editorTrackerTab?nullptr:workspaceEditorWindow(id==editorAutomationTab?"automation":"instruments");
+            ScreamSeq::NativeControls::active(controls.at(id),id==editorTrackerTab?tracker:tool&&tool->visible());
+        }
+        const bool main=workspaceMainEditorVisible(lowerEditorName());
+        if((previousPatternVisible&&!tracker)||(previousMainVisible&&!main))releaseTypedNotes();
+        previousPatternVisible=tracker;previousMainVisible=main;
+        // Preserve a newly valid focus even if the original surface was hidden.
+        if(ownedWorkspaceFocus&&!workspaceFocusVisible(GetFocus()))focusVisibleWorkspaceCanvas();
+    }
+    static std::wstring workspaceRegionTitle(const std::string &id){
+        if(id=="automation")return L"Automation";if(id=="instruments")return L"Instrument";
+        if(id=="notes")return L"Notes";if(id=="samples")return L"Samples";if(id=="effects")return L"Pattern FX";
+        if(id=="plugins")return L"Plugins";if(id=="mixer")return L"Mixer";if(id=="graph")return L"Graph";return L"Tracker";
+    }
+    bool workspaceEditorFollowHeld(const std::string &id)const {
+        const auto &state=workspaceEditors[workspaceEditorIndex(id)];if(state.pinned)return false;
+        const auto *tool=workspaceEditorWindow(id);if(!tool)return false;
+        return tool->owns(GetFocus())||(id=="automation"?parameterAutomationWindow->retainedDraft():instrumentEnvelopeWindow->retainedDraft());
+    }
+    void installWorkspaceRegionControls(){
+        for(int region=0;region<3;++region)for(int action=0;action<5;++action){
+            const auto id=regionControlBase+region*regionControlStride+action;
+            const auto control=CreateWindowExW(0,L"BUTTON",L"",WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
+            if(!control)throw std::runtime_error("Cannot create workspace region controls");controls.emplace(id,control);
+        }
+    }
+    template<class Place>void layoutWorkspaceRegionActions(Place place,size_t region,float x,float y){
+        const auto config=currentWorkspaceRegions();const auto &id=config.selected[region];if(!isWorkspaceEditor(id))return;
+        const auto base=regionControlBase+int(region)*regionControlStride;
+        const auto &panel=workspaceEditors[workspaceEditorIndex(id)];
+        const std::array<std::wstring,4> labels={L"…",panel.pinned?L"Pinned":workspaceEditorFollowHeld(id)?L"Follow held":L"Following",L"Cursor",L"Return"};
+        for(size_t action=0;action<4;++action){const float width=std::array<float,4>{28,70,54,54}[action];
+            place(base+int(action)+1,x,y,width,24);ScreamSeq::NativeControls::text(controls.at(base+int(action)+1),labels[action]);x+=width+4;
+        }
+    }
+    template<class Place>void layoutWorkspaceRegionHeader(Place place,size_t region,const ScreamSeq::WorkspaceRect &r){
+        const auto config=currentWorkspaceRegions();const auto &id=config.selected[region];const auto base=regionControlBase+int(region)*regionControlStride;
+        const bool native=isWorkspaceEditor(id);const float width=native?100.f:144.f;
+        place(base,r.x+4,r.y+2,width,24);ScreamSeq::NativeControls::text(controls.at(base),workspaceRegionTitle(id)+L" ▾");
+        if(native)layoutWorkspaceRegionActions(place,region,r.x+width+8,r.y+2);
+        else {place(base+1,r.x+r.w-88,r.y+2,84,24);ScreamSeq::NativeControls::text(controls.at(base+1),L"Collapse");}
+    }
+    void drawWorkspaceRegionChrome(){
+        if(!hasWorkspaceDock())return;const auto regions=workspaceRegionGeometry();auto &s=*surface;
+        if(regions.mode==Regions::Mode::tabs)s.fill(regions.tabs.x,regions.tabs.y,regions.tabs.w,regions.tabs.h,0x202834);
+        else for(const auto &host:regions.hosts)if(host.visible){
+            const auto &r=host.header;s.fill(r.x,r.y,r.w,r.h,0x202834);s.line(r.x,r.y+r.h-1,r.x+r.w,r.y+r.h-1,0x344151);
+        }
+        for(const auto &r:{regions.verticalDivider,regions.horizontalDivider})if(r.w>0&&r.h>0)s.fill(r.x,r.y,r.w,r.h,0x344151);
+    }
+    void workspaceRegionMenu(size_t region,bool placement){
+        const auto config=currentWorkspaceRegions();const auto id=config.selected[region];
+        if(placement&&!isWorkspaceEditor(id)){workspaceState.lowerVisible=false;revealWorkspacePattern();layoutControls();focusVisibleWorkspaceCanvas();return;}
+        const auto menu=CreatePopupMenu();if(!menu)throw std::runtime_error("Cannot open panel menu");
+        struct MenuGuard{HMENU menu;~MenuGuard(){DestroyMenu(menu);}}guard{menu};
+        std::vector<std::string> choices;
+        if(placement)choices={"right","bottom","secondary","float","hide","pin","cursor","return"};
+        else {if(region==1)for(const auto name:Regions::mainBottomNames)choices.emplace_back(name);
+            for(const auto name:Regions::panelNames)if(Regions::belongs(config,static_cast<Regions::Region>(region),name))choices.emplace_back(name);}
+        for(size_t i=0;i<choices.size();++i){
+            const std::wstring label=placement?std::array<const wchar_t *,8>{L"Dock right",L"Dock bottom",L"Dock secondary",L"Float",L"Hide",L"Pin target",L"Follow cursor",L"Return to opening position"}[i]:workspaceRegionTitle(choices[i]);
+            const bool checked=placement?(i==5?workspaceEditors[workspaceEditorIndex(id)].pinned:workspaceEditors[workspaceEditorIndex(id)].location==choices[i]):config.selected[region]==choices[i];
+            AppendMenuW(menu,MF_STRING|(checked?MF_CHECKED:0),UINT_PTR(i+1),label.c_str());
+        }
+        RECT anchor{};GetWindowRect(controls.at(regionControlBase+int(region)*regionControlStride+(placement?1:0)),&anchor);
+        releaseTypedNotes();
+        const auto selected=TrackPopupMenuEx(menu,TPM_RETURNCMD|TPM_NONOTIFY,anchor.left,anchor.bottom,window,nullptr);
+        if(!selected)return;
+        if(config!=currentWorkspaceRegions())throw std::runtime_error("Workspace changed while the panel menu was open");
+        const auto &choice=choices.at(size_t(selected-1));
+        if(placement){
+            if(choice=="pin")workspaceEditorRequest({{"panel",id},{"pinned",!workspaceEditors[workspaceEditorIndex(id)].pinned}});
+            else if(choice=="cursor"||choice=="return")workspaceEditorRequest({{"panel",id},{choice=="cursor"?"follow":"return",true}});
+            else workspaceEditorRequest({{"panel",id},{"placement",choice},{"focus",choice!="hide"}});
+        }
+        else if(isWorkspaceEditor(choice))workspaceEditorRequest({{"panel",choice},{"focus",true}});
+        else {revealWorkspaceMainEditor(choice);command(choice=="notes"?notesCommand:choice=="samples"?samplesCommand:choice=="effects"?effectsCommand:choice=="plugins"?pluginsCommand:choice=="mixer"?mixerCommand:graphCommand);}
+    }
+    bool workspaceRegionMouseDown(float x,float y){
+        if(!sideWorkspaceDock())return false;const auto geometry=workspaceRegionGeometry();
+        if(geometry.verticalDivider.contains(x,y))dragging=10;else if(geometry.horizontalDivider.contains(x,y))dragging=11;else return false;
+        const auto config=currentWorkspaceRegions();regionDragRight=config.rightWidth;regionDragBottom=config.bottomHeight;SetCapture(window);return true;
+    }
+    bool workspaceRegionMouseMove(float x,float y){
+        if(dragging!=10&&dragging!=11)return false;RECT client{};GetClientRect(window,&client);const auto scale=96.f/GetDpiForWindow(window);
+        if(dragging==10)regionConfiguration.rightWidth=std::clamp(client.right*scale-8-x,440.f,1600.f);
+        else regionConfiguration.bottomHeight=std::clamp(client.bottom*scale-44-y,128.f,1600.f);
+        layoutControls();ensureCursorVisible();return true;
+    }
+    bool cancelWorkspaceRegionDrag(){
+        if(dragging!=10&&dragging!=11)return false;
+        regionConfiguration.rightWidth=regionDragRight;regionConfiguration.bottomHeight=regionDragBottom;dragging=0;ReleaseCapture();layoutControls();return true;
+    }
+    bool focusNextWorkspaceRegion(){
+        if(!hasWorkspaceDock())return false;std::vector<std::pair<std::string,HWND>> regions;
+        if(trackerWorkspaceVisible())regions.emplace_back("pattern",window);
+        if(workspaceMainEditorVisible(lowerEditorName()))regions.emplace_back(lowerEditorName(),window);
+        for(const auto *id:{"instruments","automation"})if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible())regions.emplace_back(id,tool->window());
+        if(regions.empty())return true;const auto focused=focusedWorkspaceRegion(GetFocus());
+        auto current=std::find_if(regions.begin(),regions.end(),[&](const auto &item){return item.first==focused;});
+        auto next=current==regions.end()||++current==regions.end()?regions.begin():current;
+        setWorkspaceCanvasFocus(Regions::mainBottom(next->first)?workspaceMainCanvasIdentity():next->first);SetFocus(next->second);return true;
+    }
+    void openConnectedWorkspace(){
+        auto configuration=layoutConfiguration();configuration["layout"]="Compose";configuration["active"]="notes";
+        configuration["hidden"]=Json::array({true,true});configuration["lowerVisible"]=true;configuration["lowerEditor"]="graph";
+        Regions::Config regions;regions.locations={Regions::Placement::secondary,Regions::Placement::right};
+        regions.selected={"instruments","graph","automation"};regions.compactSelection="pattern";configuration["editors"]=Regions::encode(regions);
+        restoreLayoutConfiguration(configuration);
     }
     bool workspaceEditorCommand(int id) {
+        if(id==connectedWorkspaceCommand){openConnectedWorkspace();return true;}
+        if(id>=regionControlBase&&id<=regionControlEnd){
+            const auto region=size_t((id-regionControlBase)/regionControlStride);const auto action=(id-regionControlBase)%regionControlStride;
+            if(action<2){workspaceRegionMenu(region,action==1);return true;}
+            if(action>4)return true;
+            const auto panel=currentWorkspaceRegions().selected[region];if(!isWorkspaceEditor(panel))return true;
+            Json request={{"panel",panel}};if(action==2)request["pinned"]=!workspaceEditors[workspaceEditorIndex(panel)].pinned;
+            else if(action==3)request["follow"]=true;else if(action==4)request["return"]=true;workspaceEditorRequest(request);return true;
+        }
         if(id==dockAutomationCommand||id==dockInstrumentCommand){workspaceEditorRequest({{"panel",id==dockAutomationCommand?"automation":"instruments"},{"placement","right"},{"focus",true}});return true;}
         if(id<editorTrackerTab||id>editorReturnCommand)return false;
-        if(id==editorTrackerTab){dockTrackerSelected=true;workspaceState.focus="pattern";layoutControls();SetFocus(window);return true;}
-        if(id==editorAutomationTab||id==editorInstrumentTab){workspaceEditorRequest({{"panel",id==editorAutomationTab?"automation":"instruments"},{"placement","right"},{"focus",true}});return true;}
+        if(id==editorTrackerTab){revealWorkspacePattern();workspaceState.focus="pattern";layoutControls();SetFocus(window);return true;}
+        if(id==editorAutomationTab||id==editorInstrumentTab){const std::string panel=id==editorAutomationTab?"automation":"instruments";const auto &state=workspaceEditors[workspaceEditorIndex(panel)];workspaceEditorRequest({{"panel",panel},{"placement",state.location=="hide"?state.preferred:state.location},{"focus",true}});return true;}
         Json p={{"panel",activeWorkspaceEditor}};
         if(id==editorFloatCommand){p["placement"]="float";p["focus"]=true;}else if(id==editorHideCommand)p["placement"]="hide";
         else if(id==editorPinCommand)p["pinned"]=!workspaceEditors[workspaceEditorIndex(activeWorkspaceEditor)].pinned;

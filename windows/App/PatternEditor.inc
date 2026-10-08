@@ -1,14 +1,113 @@
 // A retained, nonmodal FX draft. Cursor navigation and worker refreshes cannot
 // redirect its captured cell or silently rebase its revision.
     bool effectEditorOpen=false,effectDraftExists=false,settingEffectFields=false;
+    uint64_t effectDraftGeneration=0;
     unsigned effectDraftPattern=0,effectDraftRow=0,effectDraftChannel=0,effectDraftColumn=0;
     std::string effectDraftRevision,effectDraftDocument;
     Json effectChoices=Json::array(),effectBindingChoices=Json::array();
     std::vector<size_t> visibleEffectChoices;
     int effectSelected=-1;
     std::wstring effectEditorStatus=L"Enter on an FX cell to edit";
-    bool effectEditorVisible() const {return trackerWorkspaceVisible()&&workspaceState.lowerVisible&&!graphEditorVisible()&&!mixerEditorVisible()&&effectEditorOpen&&workspaceState.layout!="Pattern focus"&&!sampleEditorVisible();}
-    ScreamSeq::WorkspaceRect effectEditorRect() const {const auto g=geometry();return {g.graph.x,g.graph.y,g.automation.x+g.automation.w-g.graph.x,g.graph.h};}
+    struct InitialEffects {
+        std::shared_ptr<const ScreamSeq::DocumentView> source;
+        std::string document,revision,plugin;
+        uint64_t context=0,generation=0;
+        uint32_t parameter=0;
+        unsigned pattern=0,row=0,channel=0,column=0;
+        Json cursor,parameterCatalog,choices=Json::array(),bindings=Json::array();
+        std::vector<size_t> visible;
+        std::vector<std::wstring> choiceLabels,bindingLabels;
+        std::array<std::wstring,5> previousFields,fields;
+        std::array<LRESULT,2> previousSelections{};
+        int selected=0,selectedBinding=-1;
+        std::wstring status=L"Draft / changes apply to the displayed cell / Escape returns to the grid";
+    };
+    std::array<std::wstring,5> initialEffectFields() const {
+        return {effectField(effectValue),effectField(effectOffset),effectField(effectDuration),effectField(effectRange),effectField(effectSearch)};
+    }
+    void validateInitialEffects(const InitialEffects &initial) const {
+        const auto published=controller->view();
+        if(busy||recoveryRestoring||effectDraftExists||effectEditorOpen||effectDraftGeneration!=initial.generation||
+            documentId!=initial.document||view->session.documentId!=initial.document||view->session.revision!=initial.revision||
+            published->session.documentId!=initial.document||published->session.revision!=initial.revision||
+            contextRevision!=initial.context||position()!=initial.cursor||selectedPlugin!=initial.plugin||selectedParameter!=initial.parameter||
+            pluginParameters!=initial.parameterCatalog||initialEffectFields()!=initial.previousFields||
+            SendMessageW(controls.at(effectKind),CB_GETCURSEL,0,0)!=initial.previousSelections[0]||
+            SendMessageW(controls.at(effectBinding),CB_GETCURSEL,0,0)!=initial.previousSelections[1])
+            throw std::runtime_error("Song, target or FX draft changed while preparing the layout");
+    }
+    InitialEffects prepareInitialEffects(const std::string &code="") const {
+        if(busy||recoveryRestoring||effectDraftExists||effectEditorOpen)
+            throw std::runtime_error("Prepare only an unopened FX editor while the document is ready");
+        InitialEffects initial;initial.source=view;initial.document=documentId;initial.revision=view->session.revision;
+        initial.context=contextRevision;initial.generation=effectDraftGeneration;initial.cursor=position();
+        initial.pattern=patternIndex;initial.row=row;initial.channel=channel;initial.column=column>=3?(column-3)/2:0;
+        initial.plugin=selectedPlugin;initial.parameter=selectedParameter;initial.parameterCatalog=pluginParameters;
+        initial.previousFields=initialEffectFields();initial.previousSelections={SendMessageW(controls.at(effectKind),CB_GETCURSEL,0,0),SendMessageW(controls.at(effectBinding),CB_GETCURSEL,0,0)};
+        if(!initial.source->patterns.contains(initial.pattern)||initial.row>=initial.source->pattern(initial.pattern).rows||
+            initial.channel>=initial.source->channels||initial.column>=initial.source->effectColumns.at(initial.channel))
+            throw std::runtime_error("The inspected FX cell no longer exists / choose another target");
+        initial.choices=initial.source->commands.at("effect");
+        for(auto [kind,display,name]:std::initializer_list<std::tuple<const char *,const char *,const char *>>{
+            {"parameter-set","PS","Parameter set"},{"parameter-slide","PL","Parameter slide"},{"pitch-set","BS","Pitch set"},{"pitch-slide","BL","Pitch slide"},{"note-cut","NC","Precise note cut"}})
+            initial.choices.push_back({{"kind",kind},{"displayCode",display},{"name",name}});
+        const auto current=initial.source->effect(initial.pattern,initial.row,initial.channel,initial.column);
+        std::wstring currentCode=L"..";
+        if(current){
+            wchar_t display[4]{};using Kind=Tracker::PatternCommandKind;
+            switch(current->kind){
+            case Kind::TrackerEffect:
+                if(!current->effect)wcscpy_s(display,L"..");
+                else if(initial.source->effectMasks[current->effect])swprintf_s(display,L"%c%X",initial.source->effectLetters[current->effect],unsigned(current->parameter>>4));
+                else swprintf_s(display,L"0%c",initial.source->effectLetters[current->effect]);break;
+            case Kind::ParameterSet:wcscpy_s(display,L"PS");break;case Kind::ParameterSlide:wcscpy_s(display,L"PL");break;
+            case Kind::PitchSet:wcscpy_s(display,L"BS");break;case Kind::PitchSlide:wcscpy_s(display,L"BL");break;case Kind::NoteCut:wcscpy_s(display,L"NC");break;
+            }
+            currentCode=display;
+        }
+        const auto wanted=code.empty()?currentCode:wide(code);bool selected=false;
+        for(size_t i=0;i<initial.choices.size();++i){
+            const auto &choice=initial.choices[i];if(!selected&&wide(choice.at("displayCode").get<std::string>())==wanted){initial.selected=int(i);selected=true;}
+            initial.visible.push_back(i);initial.choiceLabels.push_back(wide(choice.at("displayCode").get<std::string>()+"  "+choice.at("name").get<std::string>()));
+        }
+        const bool same=current&&(code.empty()||wide(code)==currentCode);
+        const auto kind=initial.choices.at(initial.selected).value("kind",std::string("tracker"));
+        const auto number=[](double value){std::wostringstream text;text<<std::setprecision(12)<<value;return text.str();};
+        initial.fields[0]=number(same?(kind=="tracker"?current->parameter:current->value):kind=="tracker"?initial.choices.at(initial.selected).at("suggestedParameter").get<double>():0);
+        initial.fields[1]=number(same?current->position%Tracker::performanceUnitsPerRow:0);
+        initial.fields[2]=number(same?current->duration:(kind=="parameter-slide"||kind=="pitch-slide"?Tracker::performanceUnitsPerRow:0));
+        initial.fields[3]=number(same?current->pitchRange:2);initial.fields[4]=L"";
+        for(const auto &[id,binding]:initial.source->nativePattern->performance.bindings){
+            if(same&&current->binding==id)initial.selectedBinding=int(initial.bindings.size());
+            initial.bindings.push_back({{"id",id}});initial.bindingLabels.push_back(std::to_wstring(id)+L"  "+wide(binding.name.empty()?binding.plugin:binding.name));
+        }
+        for(const auto &parameter:initial.parameterCatalog)if(parameter.at("id")==initial.parameter&&parameter.value("writable",false)&&!initial.plugin.empty()){
+            unsigned free=1;while(free<=255&&initial.source->nativePattern->performance.bindings.contains(uint16_t(free)))++free;
+            if(free<=255){
+                initial.bindings.push_back({{"id",free},{"plugin",initial.plugin},{"parameter",initial.parameter},{"name",parameter.at("name")}});
+                initial.bindingLabels.push_back(L"New: "+wide(parameter.at("name").get<std::string>()));
+                if(initial.selectedBinding<0)initial.selectedBinding=int(initial.bindings.size())-1;
+            }
+            break;
+        }
+        if(initial.selectedBinding<0&&!initial.bindings.empty())initial.selectedBinding=0;
+        validateInitialEffects(initial);return initial;
+    }
+    void adoptInitialEffects(InitialEffects &&initial) {
+        validateInitialEffects(initial);
+        effectDraftPattern=initial.pattern;effectDraftRow=initial.row;effectDraftChannel=initial.channel;effectDraftColumn=initial.column;
+        effectDraftRevision=std::move(initial.revision);effectDraftDocument=std::move(initial.document);effectChoices=std::move(initial.choices);effectBindingChoices=std::move(initial.bindings);
+        visibleEffectChoices=std::move(initial.visible);effectSelected=initial.selected;effectEditorStatus=std::move(initial.status);
+        const bool previous=settingEffectFields;settingEffectFields=true;struct Guard{bool &setting;bool previous;~Guard(){setting=previous;}}guard{settingEffectFields,previous};
+        SendMessageW(controls.at(effectKind),CB_RESETCONTENT,0,0);for(const auto &label:initial.choiceLabels)SendMessageW(controls.at(effectKind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+        SendMessageW(controls.at(effectKind),CB_SETCURSEL,effectSelected,0);
+        SendMessageW(controls.at(effectBinding),CB_RESETCONTENT,0,0);for(const auto &label:initial.bindingLabels)SendMessageW(controls.at(effectBinding),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+        SendMessageW(controls.at(effectBinding),CB_SETCURSEL,initial.selectedBinding,0);
+        for(size_t i=0;i<initial.fields.size();++i)SetWindowTextW(controls.at(std::array<int,5>{effectValue,effectOffset,effectDuration,effectRange,effectSearch}[i]),initial.fields[i].c_str());
+        effectDraftExists=true;++effectDraftGeneration;
+    }
+    bool effectEditorVisible() const {return workspaceMainEditorVisible("effects");}
+    ScreamSeq::WorkspaceRect effectEditorRect() const {return workspaceMainEditorRect();}
     std::wstring effectField(int id) const {
         const auto h=controls.at(id);const int count=GetWindowTextLengthW(h);std::wstring value(size_t(count)+1,0);
         GetWindowTextW(h,value.data(),count+1);value.resize(count);return value;
@@ -44,16 +143,17 @@
         SendMessageW(controls.at(effectKind),CB_SETCURSEL,selected,0);
     }
     void openEffectEditor(const std::string &code="",bool reload=false) {
+        if(busy)throw std::runtime_error("Wait for the document worker before opening an FX draft");
+        revealWorkspaceMainEditor("effects");
         graphEditorOpen=false;
         mixerEditorOpen=false;
-        if(busy)throw std::runtime_error("Wait for the document worker before opening an FX draft");
         noteEditorOpen=false;
         if(effectDraftExists&&!reload) {
             effectEditorOpen=true;
             workspaceState.show("notes",position(),cursorSample(),false);layoutControls();SetFocus(controls.at(effectValue));
             effectEditorStatus=L"Existing draft retained / Use cursor to edit another cell";return;
         }
-        effectEditorOpen=effectDraftExists=true;workspaceState.show("notes",position(),cursorSample(),false);
+        effectEditorOpen=effectDraftExists=true;++effectDraftGeneration;workspaceState.show("notes",position(),cursorSample(),false);
         effectDraftPattern=patternIndex;effectDraftRow=row;effectDraftChannel=channel;effectDraftColumn=column>=3?(column-3)/2:0;
         effectDraftRevision=view->session.revision;effectDraftDocument=documentId;
         effectChoices=view->commands.at("effect");
@@ -143,8 +243,8 @@
         return true;
     }
     template<class Place> void layoutEffectControls(Place place) {
-        const auto r=effectEditorRect();const bool show=effectEditorVisible();
-        const auto pattern=geometry().pattern;place(effectsCommand,pattern.x+pattern.w-254,pattern.y+3,78,24);
+        const auto r=workspaceMainEditorRect();const bool show=effectEditorVisible();
+        const auto pattern=geometry().pattern;place(effectsCommand,pattern.x+pattern.w-254,pattern.y+3,78,24,trackerWorkspaceVisible());
         place(effectReload,r.x+r.w-152,r.y+4,82,24,show);place(effectApply,r.x+r.w-64,r.y+4,58,24,show);
         const float x=r.x+12,w=r.w-24;
         place(effectSearch,x,r.y+47,std::min(170.0f,w*.26f),25,show);
@@ -154,7 +254,7 @@
         place(effectBinding,x+376,r.y+100,std::max(80.0f,w-376),220,show);
     }
     void drawEffectEditor() {
-        auto &s=*surface;const auto r=effectEditorRect();const float x=r.x+12;
+        auto &s=*surface;const auto r=workspaceMainEditorRect();const float x=r.x+12;
         s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x1a222e);
         s.uiText(L"PATTERN FX / P"+std::to_wstring(effectDraftPattern)+L" R"+std::to_wstring(effectDraftRow)+L" CH"+std::to_wstring(effectDraftChannel+1)+L" FX"+std::to_wstring(effectDraftColumn+1),x,r.y+8,r.w-170,0x6edac5);
         s.uiText(L"Search effects",x,r.y+28,160,0x91a0b2);

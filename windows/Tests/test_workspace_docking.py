@@ -137,7 +137,7 @@ class WorkspaceDockingTests(unittest.TestCase):
         field = self.field(window, 4207, '3.')
         captured = self.ready()['parameterAutomation']
         self.assertTrue(captured['fieldDraft'] and captured['dirty'])
-        for placement in ('right', 'float', 'hide', 'right', 'float'):
+        for placement in ('right', 'bottom', 'secondary', 'float', 'hide', 'right', 'float'):
             with self.subTest(placement=placement):
                 state = self.panel('automation', placement=placement, focus=placement != 'hide')
                 self.assert_retained('ScreamSeq.ParameterAutomation', window, field, '3.', song)
@@ -147,7 +147,8 @@ class WorkspaceDockingTests(unittest.TestCase):
                     self.assertEqual(current[key], captured[key], key)
                 self.assertEqual(bool(user.IsWindowVisible(window)), placement != 'hide')
                 if placement != 'hide':
-                    self.assertEqual(bool(user.IsChild(self.native_window(), window)), placement == 'right')
+                    self.assertEqual(bool(user.IsChild(self.native_window(), window)),
+                                     placement in ('right', 'bottom', 'secondary'))
 
     def test_instrument_dock_float_retains_property_text_and_sound_target(self):
         self.write('instrument.create', sample=1)
@@ -168,31 +169,40 @@ class WorkspaceDockingTests(unittest.TestCase):
                             'dirty', 'envelope', 'mapping', 'selectedPoint'):
                     self.assertEqual(state['instrumentEnvelope'][key], captured[key], key)
 
-    def test_side_dock_shows_graph_and_responsive_tabs_keep_both_editors(self):
+    def test_regions_show_graph_and_responsive_tabs_keep_both_editors(self):
         window = self.automation()
         self.write('graph.create', name='Docked routing')
         self.command(430)
         song = self.doc()
         self.resize_client(1600, 900)
         state = self.panel('automation', placement='right')
-        self.assertEqual(state['editorDock']['mode'], 'side')
+        self.assertEqual(state['editorDock']['mode'], 'regions')
         self.assertTrue(state['editorDock']['trackerVisible'])
         self.assertTrue(state['graphEditor']['visible'] and state['parameterAutomation']['visible'])
         self.assertTrue(user.IsWindowVisible(self.control(self.native_window(), 431)))
         self.assertEqual(self.desktop.focus(window), self.native_window())
+        self.assertEqual(state['focus'], 'graph')
         self.resize_client(1000, 760)
         state = self.ready()
         self.assertEqual(state['editorDock']['mode'], 'tabs')
         self.assertFalse(state['editorDock']['trackerVisible'])
         self.assertEqual(state['editorDock']['active'], 'automation')
-        self.assertTrue(state['parameterAutomation']['visible'])
+        self.assertEqual(state['editorDock']['compactSelection'], 'graph')
+        self.assertTrue(state['graphEditor']['visible'])
+        self.assertFalse(state['parameterAutomation']['visible'])
         self.assertEqual(self.native_window('ScreamSeq.ParameterAutomation'), window)
+        self.assertEqual(self.desktop.focus(window), self.native_window())
+        self.assertEqual(state['focus'], 'graph')
+        # An explicit tab selection, rather than resize, changes input owner.
+        state = self.panel('automation', focus=True)
+        self.assertTrue(state['parameterAutomation']['visible'])
         self.assertEqual(self.desktop.focus(window), window)
         self.assertEqual(state['focus'], 'automation')
         self.resize_client(1600, 900)
         state = self.ready()
-        self.assertEqual(state['editorDock']['mode'], 'side')
+        self.assertEqual(state['editorDock']['mode'], 'regions')
         self.assertTrue(state['graphEditor']['visible'])
+        self.assertTrue(state['parameterAutomation']['visible'])
         self.assertEqual(self.doc(), song)
 
     def test_docked_local_keyboard_owns_f6_escape_and_pending_fields(self):
@@ -277,9 +287,13 @@ class WorkspaceDockingTests(unittest.TestCase):
     def test_native_tabs_and_layout_restore_keep_both_editor_drafts(self):
         self.write('instrument.create', sample=1)
         automation = self.automation()
+        # New editors follow by default. This persistence case deliberately
+        # captures explicit pins, independently of saved placement preferences.
+        self.panel('automation', pinned=True)
         curve_field = self.field(automation, 4207, '3.')
         self.command(503)
         instrument = self.native_window('ScreamSeq.InstrumentEnvelope')
+        self.panel('instruments', pinned=True)
         name_field = self.field(instrument, 4439, 'Draft through dock tabs')
         song = self.doc()
         self.resize_client(1000, 760)
@@ -325,7 +339,7 @@ class WorkspaceDockingTests(unittest.TestCase):
         self.resize_client(1600, 900)
         self.command(502)
         window = self.native_window('ScreamSeq.ParameterAutomation')
-        state = self.panel('automation', placement='right')
+        state = self.panel('automation', placement='right', pinned=True)
         origin = state['returnPoints']['automation']
         self.assertTrue(state['pins']['automation'])
         # Returning from compact tabs at the unchanged opening cursor must
@@ -372,7 +386,7 @@ class WorkspaceDockingTests(unittest.TestCase):
         self.add_gain()
         opening_pattern = self.write('pattern.create', rows=64)['pattern']
         self.navigate(pattern=opening_pattern, row=12)
-        self.panel('automation', placement='right')
+        self.panel('automation', placement='right', pinned=True)
         # Undo removes the newly created pattern while leaving the document
         # identity active; a reused index must never become a return target.
         self.write('history.undo', domain='document')
@@ -397,7 +411,7 @@ class WorkspaceDockingTests(unittest.TestCase):
     def test_invalid_dock_requests_preserve_existing_placement_and_song(self):
         self.panel('automation', placement='right')
         song = self.doc()
-        for fields in (dict(placement='bottom'), dict(placement=True), dict(pinned=1),
+        for fields in (dict(placement='left'), dict(placement=True), dict(pinned=1),
                        dict(focus='yes'), dict(unexpected=True)):
             with self.subTest(fields=fields):
                 before = self.ready()

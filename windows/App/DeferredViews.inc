@@ -10,7 +10,7 @@
         case effectsCommand:case mixerCommand:case mixerRouting:case graphCommand:
         case curveBank:case curveReference:case graphCommandsCommand:
         case parameterAutomationCommand:case absoluteAutomationCommand:
-        case dockAutomationCommand:case dockInstrumentCommand:case editorAutomationTab:case editorInstrumentTab:
+        case connectedWorkspaceCommand:case dockAutomationCommand:case dockInstrumentCommand:case editorAutomationTab:case editorInstrumentTab:
         case sampleDetailCommand:case sampleBrowseCommand:case audioSettingsCommand:case instrumentEnvelopeCommand:case auditionCommand:return true;
         default:return false;
         }

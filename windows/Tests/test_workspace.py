@@ -300,8 +300,8 @@ class WorkspaceTests(unittest.TestCase):
         description = self.client.call('api.describe')['data']
         self.assertEqual(description.get('workspaceSubset'), {
             'panels': ['notes', 'samples', 'automation', 'instruments'], 'placements': ['right', 'hide'],
-            'editorPlacements': {'automation': ['right', 'float', 'hide'], 'instruments': ['right', 'float', 'hide']},
-            'layouts': ['Compose', 'Pattern focus', 'Sound design', 'Save custom', 'Restore custom', 'Delete custom', 'Reload saved'],
+            'editorPlacements': {'automation': ['right', 'bottom', 'secondary', 'float', 'hide'], 'instruments': ['right', 'bottom', 'secondary', 'float', 'hide']},
+            'layouts': ['Compose', 'Pattern focus', 'Sound design', 'Connected', 'Save custom', 'Restore custom', 'Delete custom', 'Reload saved'],
             'namedLayouts': {'optionalField': 'savedName', 'default': 'Custom', 'maximum': 24, 'nameCharacters': 64},
             'schema': 'windows/Api/workspace.schema.json'})
         for placement in ('bottom', 'secondary', 'float'):
@@ -321,13 +321,21 @@ class WorkspaceTests(unittest.TestCase):
         self.resize_client(1057, 719)
         self.navigate(row=40, channel=1, following=True)
         before = self.client.call('context.get')
-        first = self.client.call('workspace.get')['data']['viewport']['firstRow']
+        workspace = self.client.call('workspace.get')['data']
+        first = workspace['viewport']['firstRow']
         user = ctypes.WinDLL('user32', use_last_error=True)
         user.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
         hwnd = self.native_window()
+        # A wheel message carries screen coordinates. Target a real tracker
+        # cell so the test also respects independent-region input ownership.
+        grid, scale = workspace['geometry']['pattern'], workspace['dpi'] / 96
+        point = wintypes.POINT(round((grid['x'] + 44) * scale), round((grid['y'] + 56) * scale))
+        user.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+        self.assertTrue(user.ClientToScreen(hwnd, ctypes.byref(point)))
+        location = (point.x & 0xFFFF) | ((point.y & 0xFFFF) << 16)
         for delta, offset in steps:
             with self.subTest(delta=delta, expectedOffset=offset):
-                user.SendMessageW(hwnd, 0x20A, (delta & 0xFFFF) << 16, 0)  # WM_MOUSEWHEEL
+                user.SendMessageW(hwnd, 0x20A, (delta & 0xFFFF) << 16, location)  # WM_MOUSEWHEEL
                 state = self.client.call('workspace.get')['data']
                 self.assertEqual(state['viewport']['firstRow'], first + offset)
                 context = self.client.call('context.get')

@@ -407,8 +407,20 @@ class AuditionTests(unittest.TestCase):
         self.desktop.send(root,0x111,113);self.desktop.send(root,0x111,507)
         self.assertTrue(self.read('workspace.get')['liveKeyboard']);self.root_key('Z')
         self.assertEqual(before,self.doc());self.assertTrue(self.settled()['voicePositions'])
+        held=self.typing()['held'];self.assertEqual([note['key'] for note in held],[ord('Z')])
         self.client.call('workspace.panel',dict(panel='samples',focus=True));self.root_key(9)
-        focus=self.desktop.focus(root);self.assertEqual(focus,private_desktop.user.GetDlgItem(root,230))
+        # Inspector focus must not enter the separate Main sample editor.
+        main_field=private_desktop.user.GetDlgItem(root,230);self.assertTrue(main_field)
+        focus=self.desktop.focus(root);self.assertEqual(focus,root);self.assertNotEqual(focus,main_field)
+        self.assertEqual(self.typing()['held'],held);self.assertEqual(before,self.doc())
+        # Explicitly select Main Samples before checking its native text field.
+        self.desktop.send(root,0x111,108)
+        workspace=self.read('workspace.get')
+        private_desktop.user.IsWindowVisible.argtypes=[wintypes.HWND]
+        self.assertTrue(private_desktop.user.IsWindowVisible(main_field))
+        self.assertEqual(workspace['focus'],'samples');self.assertEqual(self.desktop.focus(root),root)
+        self.assertEqual(self.typing()['held'],held);self.root_key(9)
+        focus=self.desktop.focus(root);self.assertEqual(focus,main_field)
         self.root_key('X');self.assertEqual(len(self.typing()['held']),1)
         # A release delivered to a different main control is handled by the pump.
         private_desktop.user.PostMessageW.argtypes=[wintypes.HWND,wintypes.UINT,wintypes.WPARAM,wintypes.LPARAM]

@@ -1,5 +1,6 @@
 """Explicit recovery restores retain native vendor-window enable ownership."""
 import ctypes
+import json
 from ctypes import wintypes
 import os
 import shutil
@@ -55,6 +56,50 @@ class RecoveryVendorInputTests(unittest.TestCase):
         private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop, visit, 0))
         return found
 
+    def recovery_diagnostic(self, browser, *, enabled=None, disabled=None, chosen=None):
+        state = self.read('workspace.get')
+        restore = private_desktop.user.GetDlgItem(browser, 7004)
+        return dict(monotonic=time.monotonic(), chosen=chosen,
+                    documentBusy=state['documentBusy'], recovery=state['recovery'],
+                    restoreNativeEnabled=bool(private_desktop.user.IsWindowEnabled(restore)),
+                    vendorEnabled=None if enabled is None else bool(private_desktop.user.IsWindowEnabled(enabled)),
+                    vendorInitiallyDisabled=None if disabled is None else bool(private_desktop.user.IsWindowEnabled(disabled)),
+                    focus=self.desktop.focus(browser))
+
+    def select_ready_copy(self, browser, chosen):
+        restore = private_desktop.user.GetDlgItem(browser, 7004)
+        listing = private_desktop.user.GetDlgItem(browser, 7001)
+        self.assertTrue(restore and listing)
+
+        def ready():
+            state = self.read('workspace.get')
+            recovery_state = state['recovery']
+            return (state if recovery_state['visible'] and not state['documentBusy']
+                    and not recovery_state['pending'] and recovery_state['restoreEnabled']
+                    and private_desktop.user.IsWindowEnabled(restore)
+                    and any(copy['id'] == chosen for copy in recovery_state['copies']) else None)
+
+        try:
+            state = self.wait(ready)
+            index = next(i for i, copy in enumerate(state['recovery']['copies']) if copy['id'] == chosen)
+            # Use the real native list's selection path, never cross-process LVITEM pointers.
+            self.desktop.send(listing, 0x100, 0x24, 0)  # Home.
+            for _ in range(index):
+                self.desktop.send(listing, 0x100, 0x28, 0)  # Down.
+            selected = self.read('workspace.get')['recovery']['selected']
+            self.assertEqual(selected, chosen)
+            state = self.wait(ready)
+            self.assertEqual(state['recovery']['selected'], chosen)
+            self.assertTrue(state['recovery']['restoreEnabled'])
+            self.assertTrue(private_desktop.user.IsWindowEnabled(restore))
+            return state
+        except BaseException:
+            try:
+                print('RECOVERY_VENDOR_READINESS ' + json.dumps(self.recovery_diagnostic(browser, chosen=chosen), sort_keys=True), flush=True)
+            except Exception as error:
+                print('RECOVERY_VENDOR_READINESS diagnostic error: ' + repr(error), flush=True)
+            raise
+
     def test_failed_protection_reenables_only_previously_enabled_vendor_editor(self):
         chosen = self.write('recovery.save')['data']['lastCopy']
         chosen_bytes = (self.directory / chosen).read_bytes()
@@ -79,6 +124,7 @@ class RecoveryVendorInputTests(unittest.TestCase):
         main = self.window()
         self.command(548)
         browser = self.window('ScreamSeq.Recovery')
+        self.select_ready_copy(browser, chosen)
         private_desktop.check(private_desktop.user.PostMessageW(browser, 0x111, 7004, 0))
 
         def writing_protection():
@@ -107,6 +153,13 @@ class RecoveryVendorInputTests(unittest.TestCase):
             self.assertTrue(state['error'])
             self.assertEqual(state['selected'], chosen)
             self.assertEqual((moved / chosen).read_bytes(), chosen_bytes)
+        except BaseException:
+            try:
+                print('RECOVERY_VENDOR_FAILURE ' + json.dumps(self.recovery_diagnostic(
+                    browser, enabled=enabled, disabled=disabled, chosen=chosen), sort_keys=True), flush=True)
+            except Exception as error:
+                print('RECOVERY_VENDOR_FAILURE diagnostic error: ' + repr(error), flush=True)
+            raise
         finally:
             if swapped:
                 if self.directory.is_file():

@@ -106,7 +106,7 @@
     }
     void advance() {auto n=position();n["row"]=std::min(row+editStep,patternRows()-1);n["following"]=false;navigate(n);}
     bool enterCell(WPARAM key,bool repeat=false) {
-        if(workspaceState.focus!="pattern") return false;
+        if(!trackerWorkspaceVisible()||workspaceState.focus!="pattern") return false;
         if(busy) {status=L"Document busy / Stop and navigation remain available";return true;}
         if(column>=3)return enterEffect(key);
         auto c=view->cell(patternIndex,row,channel);

@@ -8,6 +8,7 @@
 #include "RenderSurface.hpp"
 #include "ApiDispatch.hpp"
 #include "WorkspaceState.hpp"
+#include "WorkspaceRegions.hpp"
 #include "WorkspaceLayouts.hpp"
 #include "WorkspaceLayoutWindow.hpp"
 #include "CommandPalette.hpp"
@@ -59,6 +60,8 @@
 #include <vector>
 
 namespace {
+namespace Regions = ScreamSeq::WorkspaceRegions;
+constexpr int connectedWorkspaceCommand=562,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
 constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
@@ -334,7 +337,7 @@ public:
             {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
                 {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
                 {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
-            {"unavailable",{"arbitraryPanelDocking","simultaneousLowerDocks"}}};
+            {"unavailable",{"arbitraryPanelDocking","simultaneousMainEditors","independentGraphCurveHost"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
@@ -347,7 +350,7 @@ public:
 			for(auto it=p.begin();it!=p.end();++it)require(it.key()=="name"||it.key()=="savedName","Unknown workspace layout field");
 			auto name=p["name"].get<std::string>();
 			const bool custom=name=="Save custom"||name=="Restore custom"||name=="Delete custom";
-			require(custom||name=="Reload saved"||name=="Compose" || name=="Pattern focus" || name=="Sound design","Choose Compose, Pattern focus, Sound design or a custom layout action");
+			require(custom||name=="Reload saved"||name=="Compose" || name=="Pattern focus" || name=="Sound design"||name=="Connected","Choose Compose, Pattern focus, Sound design, Connected or a custom layout action");
             require(!p.contains("savedName")||(custom&&p["savedName"].is_string()),"savedName is only valid for a custom layout action");
             if(name=="Reload saved") {if(!savedLayouts.reload())throw std::runtime_error(savedLayouts.diagnostic());}
             else if(custom) {
@@ -355,7 +358,8 @@ public:
                 if(name=="Save custom"){savedLayouts.save(saved,layoutConfiguration());status=L"Workspace layout saved / "+wide(saved);}
                 else if(name=="Delete custom"){require(savedLayouts.get(saved)!=nullptr,"Saved layout not found");savedLayouts.remove(saved);status=L"Workspace layout deleted / "+wide(saved);}
                 else {const auto value=savedLayouts.get(saved);require(value!=nullptr,"Saved layout not found");const Json configuration=*value;restoreLayoutConfiguration(configuration);status=L"Workspace layout restored / "+wide(saved);}
-            } else {
+            } else if(name=="Connected")openConnectedWorkspace();
+            else {
                 workspaceState.layout=name;workspaceState.lowerVisible=true;
                 if(name=="Pattern focus") {workspaceState.focus="pattern";SetFocus(window);}
                 else workspaceState.show(name=="Compose" ? "notes" : "samples",position(),cursorSample(),false);
@@ -378,10 +382,13 @@ public:
 				if(!panel.pinned) workspaceState.capture(id,position(),cursorSample());
 			}
 			if(p.value("follow",false)) { panel.pinned=false; workspaceState.capture(id,position(),cursorSample(),true); }
-			if(p.value("return",false)) { auto origin=panel.origin; origin["following"]=false; workspaceState.focus="pattern"; navigate(origin); }
-			if(p.value("focus",false)) workspaceState.show(id,position(),cursorSample(),true);
+			if(p.value("return",false)) { auto origin=panel.origin; origin["following"]=false; revealWorkspacePattern();workspaceState.focus="pattern"; navigate(origin); }
+			if(p.value("focus",false)&&!p.value("return",false)) {revealWorkspacePattern();workspaceState.show(id,position(),cursorSample(),true);setWorkspaceCanvasFocus(id,true);}
 		}
 		layoutControls();
+        if(method=="workspace.panel"&&(p.value("return",false)||p.value("focus",false))){
+            setWorkspaceCanvasFocus(p.value("return",false)?"pattern":p.at("panel").get<std::string>(),!p.value("return",false));SetFocus(window);
+        }
 		return workspaceSnapshot();
 	}
 	void navigate(const Json &value) override {
@@ -447,6 +454,16 @@ public:
         if(busy||recoveryRestoring) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
         try {auto result=await(controller->invoke(method,params));refreshDocument();if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();return result;}
         catch(...) {refreshDocument();throw;}
+    }
+    // Internal first-open reads must not refresh presentation until the whole
+    // layout is ready. The native restore fixture overrides this boundary to
+    // exercise failed reads and pumped input; it is not an API or launch option.
+    virtual Json workspacePreparationRead(const std::string &method,const Json &params) {
+        static const std::set<std::string> reads={"pattern.notes.get","graph.get","mixer.get",
+            "automation.pattern.get","plugin.parameters.get","instrument.envelope.get","instrument.get"};
+        if(!reads.contains(method))throw std::logic_error("Only initial editor reads may prepare a workspace");
+        if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"Wait for the document before preparing a workspace");
+        return await(controller->invoke(method,params));
     }
     #include "SampleLibrary.inc"
     #include "AudioSettings.inc"
@@ -546,9 +563,16 @@ public:
     #include "GraphCurveEditor.inc"
     #include "GraphPatternLanes.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
+    std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> makeInstrumentEnvelopeWindow(std::shared_ptr<bool> preparing={}){
+        return std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();});
+    }
+    void connectInstrumentEnvelopeTyping(){
+        auto *tool=instrumentEnvelopeWindow.get();
+        connectTyping(*tool,[tool]{return tool->musicalTarget();});
+    }
     void openInstrumentEnvelope(){
-        if(!instrumentEnvelopeWindow)instrumentEnvelopeWindow=std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();});
-        connectTyping(*instrumentEnvelopeWindow,[this]{return instrumentEnvelopeWindow->musicalTarget();});
+        if(!instrumentEnvelopeWindow)instrumentEnvelopeWindow=makeInstrumentEnvelopeWindow();
+        connectInstrumentEnvelopeTyping();
         configureWorkspaceEditor("instruments");
         if(!workspaceEditors[1].origin.empty()&&workspaceEditors[1].pinned){instrumentEnvelopeWindow->show();SetFocus(instrumentEnvelopeWindow->window());}
         else instrumentEnvelopeWindow->openAt();
@@ -578,14 +602,21 @@ public:
         absoluteAutomationWindow->openAt(std::move(plugin),parameter);
     }
     std::unique_ptr<ScreamSeq::ParameterAutomationWindow> parameterAutomationWindow;
-    void openParameterAutomation(std::string requestedPlugin={},std::optional<uint32_t> requestedParameter={}){
-        if(!parameterAutomationWindow)parameterAutomationWindow=std::make_unique<ScreamSeq::ParameterAutomationWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::ParameterAutomationWindow::Cursor{documentId,view->session.revision,patternIndex,view->session.document.at("patterns"),view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter){
+    std::unique_ptr<ScreamSeq::ParameterAutomationWindow> makeParameterAutomationWindow(std::shared_ptr<bool> preparing={}){
+        return std::make_unique<ScreamSeq::ParameterAutomationWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::ParameterAutomationWindow::Cursor{documentId,view->session.revision,patternIndex,view->session.document.at("patterns"),view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter){
             if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the rack draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;}))throw std::runtime_error("The captured plugin is unavailable");
             selectedPlugin=plugin;selectedParameter=parameter;pluginDetailPage=0;pluginDetailsRevision.clear();command(pluginsCommand);
         },[this](const auto &plugin,uint32_t parameter){openAbsoluteAutomation(plugin,parameter);});
+    }
+    std::pair<std::string,std::optional<uint32_t>> initialParameterAutomationTarget(std::string requestedPlugin={},std::optional<uint32_t> requestedParameter={})const{
         std::string plugin=std::move(requestedPlugin);auto parameter=requestedParameter;
         if(plugin.empty()){if(workspaceState.focus=="pattern"&&column>=3){const auto command=view->effect(patternIndex,row,channel,(column-3)/2);if(command&&(command->kind==Tracker::PatternCommandKind::ParameterSet||command->kind==Tracker::PatternCommandKind::ParameterSlide)){const auto &binding=view->nativePattern->performance.bindings.at(command->binding);plugin=binding.plugin;parameter=binding.parameter;}}
         else if(!selectedPlugin.empty()){plugin=selectedPlugin;parameter=selectedParameter;}}
+        return {std::move(plugin),parameter};
+    }
+    void openParameterAutomation(std::string requestedPlugin={},std::optional<uint32_t> requestedParameter={}){
+        if(!parameterAutomationWindow)parameterAutomationWindow=makeParameterAutomationWindow();
+        const auto [plugin,parameter]=initialParameterAutomationTarget(std::move(requestedPlugin),requestedParameter);
         configureWorkspaceEditor("automation");
         if(!workspaceEditors[0].origin.empty()&&workspaceEditors[0].pinned){parameterAutomationWindow->show();SetFocus(parameterAutomationWindow->window());}
         else parameterAutomationWindow->openAt(plugin,parameter);
@@ -674,10 +705,10 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 			auto rect = reinterpret_cast<RECT *>(lp);
 			SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE); return 0;
 		}
-		case WM_SIZE: if(app->window)app->ensureCursorVisible();app->layoutControls();return 0;
+		case WM_SIZE: app->retainWorkspaceFocusForResize(wp);if(app->window)app->ensureCursorVisible();app->layoutControls();return 0;
 		case WM_GETMINMAXINFO: {
 			auto limits=reinterpret_cast<MINMAXINFO *>(lp);float scale=GetDpiForWindow(window)/96.0f;
-			limits->ptMinTrackSize={LONG(900*scale),LONG((app->hasWorkspaceDock()?710:620)*scale)};return 0;
+			limits->ptMinTrackSize={LONG(900*scale),LONG(620*scale)};return 0;
 		}
 		case WM_DRAWITEM: app->drawButton(*reinterpret_cast<DRAWITEMSTRUCT *>(lp));return TRUE;
         case WM_MEASUREITEM: reinterpret_cast<MEASUREITEMSTRUCT *>(lp)->itemHeight=unsigned(22*GetDpiForWindow(window)/96);return TRUE;
@@ -715,10 +746,17 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         case WM_ACTIVATEAPP:if(!wp)app->releaseTypedNotes();break;
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
-        case WM_LBUTTONDBLCLK:{if(!app->trackerWorkspaceVisible())return 0;const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->graphLaneClick(x,y,true))app->noteMouseDown(x,y,true);return 0;}
+        case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->graphLaneClick(x,y,true))app->noteMouseDown(x,y,true);return 0;}
 		case WM_LBUTTONUP: app->graphMouseUp(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));app->noteMouseUp();app->dragging=0;ReleaseCapture();return 0;
-		case WM_CAPTURECHANGED:if(app->dragging>=6)app->graphCancelDrag();app->noteMouseUp();app->dragging=0;return 0;
-		case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT at{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};ScreenToClient(window,&at);const float scale=96.0f/GetDpiForWindow(window);if(app->curveWheel(at.x*scale,at.y*scale,GET_WHEEL_DELTA_WPARAM(wp),message==WM_MOUSEHWHEEL,(GET_KEYSTATE_WPARAM(wp)&MK_CONTROL)!=0))return 0;if(message==WM_MOUSEHWHEEL)app->scrollHorizontal(GET_WHEEL_DELTA_WPARAM(wp));else if(GET_KEYSTATE_WPARAM(wp)&MK_SHIFT)app->scrollHorizontal(-GET_WHEEL_DELTA_WPARAM(wp));else app->scroll(GET_WHEEL_DELTA_WPARAM(wp));return 0;}
+		case WM_CAPTURECHANGED:if(app->dragging>=6&&app->dragging<=9)app->graphCancelDrag();app->cancelWorkspaceRegionDrag();app->noteMouseUp();app->dragging=0;return 0;
+		case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{
+            POINT at{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};ScreenToClient(window,&at);const float scale=96.0f/GetDpiForWindow(window),x=at.x*scale,y=at.y*scale;
+            if(app->curveWheel(x,y,GET_WHEEL_DELTA_WPARAM(wp),message==WM_MOUSEHWHEEL,(GET_KEYSTATE_WPARAM(wp)&MK_CONTROL)!=0))return 0;
+            if(!app->trackerWorkspaceVisible()||!app->geometry().pattern.contains(x,y))return 0;
+            if(message==WM_MOUSEHWHEEL)app->scrollHorizontal(GET_WHEEL_DELTA_WPARAM(wp));
+            else if(GET_KEYSTATE_WPARAM(wp)&MK_SHIFT)app->scrollHorizontal(-GET_WHEEL_DELTA_WPARAM(wp));
+            else app->scroll(GET_WHEEL_DELTA_WPARAM(wp));return 0;
+        }
 		case WM_SETCURSOR: {
 			POINT pt{};GetCursorPos(&pt);ScreenToClient(window,&pt);float scale=96.0f/GetDpiForWindow(window);auto g=app->geometry();
 			if(g.verticalDivider.contains(pt.x*scale,pt.y*scale)) {SetCursor(LoadCursorW(nullptr,IDC_SIZEWE));return TRUE;}

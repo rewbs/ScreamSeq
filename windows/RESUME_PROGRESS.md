@@ -1,6 +1,27 @@
 # Windows continuation
 
-Latest arrangement-matrix checkpoint (2026-10-07): native order-by-track pages,
+Latest independent-docking checkpoint (2026-10-07): Connected shows Pattern,
+Graph, Instrument and Automation together in independent native regions. Short
+retained pages, compact fallback, actual keyboard focus and guarded saved-layout
+preparation preserve targets, raw edits, caret and desired split sizes.
+Candidate 8 SHA256:
+`6344453CC9222ECB0F3D04FC8065FDD4FB93480FC3D6209627894478670C0074`.
+Full run 4 passes **393/393 in 971.215 seconds**, focused run 7 **33/33 in
+106.856 seconds**, native **48/48**, and **37 source-matched views** pass review
+at 192 DPI. Full/focused runs have no failures or skips and strict outer success.
+See [INDEPENDENT_DOCKING_PROGRESS.md](INDEPENDENT_DOCKING_PROGRESS.md) for exact
+identities, earlier failed runs and scoped visual limits. Checkpoint destination:
+`bin/windows-checkpoints/independent-dock-regions-20261007/`; its manifest is the
+authority for completed immutable packaging.
+
+Next is independent Graph curve ownership, allowing routing and its curve to
+remain visible together. Source-only owner, V3 layout, Main/API and test drafts
+are retained under ignored `bin/`; they are unbuilt and unqualified. The current
+checkpoint still hosts the curve inside Main's Graph page. Preserve the old
+matrix draft backup/stash until separately reconciled. The Windows/Mac parity
+goal stays open.
+
+Previous arrangement-matrix checkpoint (2026-10-07): native order-by-track pages,
 native-aware density, exact occurrence Open and captured Copy/Paste are connected.
 Shared complete-copy preparation handles precise notes and unified FX, preserves
 exact independent clones, and rejects capacity before changing playback/history.
@@ -14,13 +35,6 @@ nonzero PCM comparisons. Fifteen final source-matched views pass review at
 outcomes and qualification limits. Checkpoint destination:
 `bin/windows-checkpoints/arrangement-matrix-20261007/`; its manifest confirms
 completed packaging.
-
-The next implementation is [independent dock regions](INDEPENDENT_DOCKING_PLAN.md).
-The attached `independent-dock-regions` worktree contains source drafts for pure
-region geometry/preferences and shorter retained instrument/automation layouts.
-They are not built or qualified and are excluded from this matrix checkpoint.
-Preserve the old matrix draft backup/stash until separately reconciled.
-The Windows/Mac parity goal stays open.
 
 Previous visual-consistency checkpoint (2026-10-07): measured compact pattern
 headers and consistent retained native report drawing are implemented. Active
