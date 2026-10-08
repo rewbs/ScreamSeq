@@ -40,7 +40,7 @@
       require(hasTarget(),"Open a precise-note row first");
       if(id==list&&notification==LBN_SELCHANGE){const auto next=SendMessageW(controls_.at(list),LB_GETCURSEL,0,0);saveSelected();if(next>=0&&size_t(next)<draft_.size())refresh(draft_[size_t(next)]);}
       else if(id==units&&notification==CBN_SELCHANGE){
-        const auto next=selection(units);require(next>=0&&next<2,"Choose units");const auto amount=numeric(offset,0,1)*(units_==0?rowsPerBeat_:1);require(amount<1,"Offset must be inside this row");
+        const auto next=selection(units);require(next>=0&&next<2,"Choose units");const auto amount=rowOffset();
         const bool clean=pointRaw().at("offset")==pointBaseline_.at("offset");units_=unsigned(next);
         {Setting guard(setting_);set(offset,offsetText(std::min(65535u,unsigned(std::lround(amount*unitsPerRow)))));}
         if(clean)pointBaseline_["offset"]=utf8(field(offset));++generation_;

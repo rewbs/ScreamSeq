@@ -27,7 +27,7 @@
         out+=L"Staged offset: "+decimal(double(position)/unitsPerRow,17)+L" row = "+decimal(double(position)/unitsPerRow/rowsPerBeat_,17)+L" beat ("+std::to_wstring(position)+L" / 65536 row units).\r\n";
       }else out+=L"No selected hit. Timeline: double-click to add one.\r\n";
       out+=L"Offset field: "+field(offset)+(units_==0?L" beats":L" rows")+L"\r\n";
-      try{const auto amount=numeric(offset,0,1)*(units_==0?rowsPerBeat_:1);require(amount<1,"Offset outside row");
+      try{const auto amount=rowOffset();
         out+=L"Visible offset = "+decimal(amount,17)+L" row = "+decimal(amount/rowsPerBeat_,17)+L" beat.\r\n";
       }catch(const std::exception &){out+=L"The offset remains an invalid raw draft; correct it before Check or Apply.\r\n";}
     }

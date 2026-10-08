@@ -9,6 +9,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cwchar>
 #include <iomanip>
 #include <optional>
 #include <set>
@@ -33,6 +34,10 @@ public:
     // Reload captured can address a row that is no longer under the cursor.
     std::function<SeedCell(unsigned,unsigned,unsigned)> cell;
     std::vector<std::wstring> noteNames;
+    // Snapshot of the selected module sound, resolved by stable catalogue ID.
+    // Zero means no compatible current selection. Only an empty row uses it;
+    // ordinary/precise events keep their own instrument, including zero.
+    unsigned insertionInstrument=0;
     uint64_t selectionGeneration=0;
     bool busy=false;
   };
@@ -57,7 +62,7 @@ private:
   ContextProvider context_;
   std::function<void()> return_;
   Target target_;
-  SeedCell seed_;
+  unsigned insertionInstrument_=0;
   std::string document_,revision_,observedDocument_,observedRevision_;
   std::vector<std::wstring> names_;
   Json events_=Json::array(),draft_=Json::array(),original_=Json::array(),effects_=Json::array();

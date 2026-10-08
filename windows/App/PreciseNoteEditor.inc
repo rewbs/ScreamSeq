@@ -9,6 +9,14 @@
         value.document=source->session.documentId;value.revision=source->session.revision;
         value.patterns=source->session.document.at("patterns");value.tracks=source->session.document.at("tracks");
         value.noteNames.assign(source->noteNames.begin(),source->noteNames.end());
+        // Match musical typing's module representation. Never reinterpret a
+        // selected sample slot as an instrument with the same number.
+        const bool sample=source->instruments==0;
+        if(typingDocument==value.document&&typingSample==sample&&!typingSoundId.empty()){
+            const auto &catalog=source->session.document.at(sample?"samples":"instruments");
+            const auto sound=std::find_if(catalog.begin(),catalog.end(),[&](const auto &item){return item.at("id")==typingSoundId;});
+            if(sound!=catalog.end())value.insertionInstrument=sound->at("index").get<unsigned>();
+        }
         value.selectionGeneration=preciseNoteSelectionSerial;value.busy=busy||recoveryRestoring;
         value.cell=[source](unsigned pattern,unsigned row,unsigned channel){const auto cell=source->cell(pattern,row,channel);
             return ScreamSeq::PreciseNoteWindow::SeedCell{cell.note,cell.instrument,cell.volumeCommand,cell.volume,cell.effect,cell.parameter};};

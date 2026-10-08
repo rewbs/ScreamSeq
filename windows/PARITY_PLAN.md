@@ -1,6 +1,17 @@
 # Windows / Mac parity plan
 
-Current Precise Notes checkpoint (2026-10-07): one retained editor adds independent
+Current stopping point (2026-10-07): fractional Precise Notes offsets, captured
+sound for empty rows, Reload selection/scroll/focus retention and readable focus
+captions pass **404/404 full app cases**, **82/82 focused cases**, **50/50 native
+targets**, and **18 reviewed source-matched 192-DPI views**. See
+[editing parity evidence](PRECISE_NOTE_PARITY_PROGRESS.md) and the prioritized
+[remaining-work report](PARITY_HANDOFF.md). Checkpoint destination:
+`bin/windows-checkpoints/precise-note-parity-20261007/`; its manifest and independent
+verification establish publication. Mixer strips remain an unintegrated proposal.
+The older entries below retain their historical scope; the handoff is the current
+remaining-work priority list. The Windows/Mac parity goal stays open.
+
+Previous Precise Notes checkpoint (2026-10-07): one retained editor adds independent
 placement, captured targets, four compact pages and V4 saved-layout migration.
 Pattern, routing, Precise Notes and Graph Curve can remain visible together. Final
 candidate 2 passes **403/403 app cases**, **81/81 focused cases**, **50/50 native
@@ -8,9 +19,8 @@ targets**, and two-reviewer inspection of **16 source-matched 192-DPI views**.
 See [Precise Notes evidence](PRECISE_NOTE_HOST_PROGRESS.md) for exact identities,
 retained failures and limits. Checkpoint destination:
 `bin/windows-checkpoints/precise-note-host-20261007/`; its completed manifest and
-independent verification receipt establish publication. Fractional offsets,
-Reload selection retention and empty-row sound seeding remain next-phase work.
-The Windows/Mac parity goal stays open.
+independent verification receipt establish publication. Its then-next fractional
+offsets, Reload retention and empty-row sound work is completed above.
 
 Previous Graph Curve checkpoint (2026-10-07): routing and its retained curve editor
 can stay visible beside Pattern and parameter Automation. V3 saved layouts,

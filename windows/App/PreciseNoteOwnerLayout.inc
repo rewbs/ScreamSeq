@@ -17,6 +17,11 @@
     if(shortLayout_&&!wasShort&&focused&&IsChild(window_,focused))page_=pageForControl(GetDlgCtrlID(focused));
     const float left=8,inner=std::max(1.f,w-16),gap=6,third=(inner-2*gap)/3,half=(inner-gap)/2;
     std::set<int> shown;auto put=[&](int id,float x,float y,float width,float height){shown.insert(id);place(id,x,y,width,height);};
+    // Reenabling/refocusing the native Hit list can reveal its caret item.
+    // Preserve the explicit viewport through this pending-focus transition;
+    // selection and scroll are independent, even when the hit is partly visible.
+    const auto listControl=controls_.at(list);const bool retainListEntry=pending_&&focused==listControl;
+    const auto restoreListTop=retainListEntry||(!pending_&&pendingFocus_==listControl)?SendMessageW(listControl,LB_GETTOPINDEX,0,0):LB_ERR;
     const auto tabWidth=(inner-3*gap)/4;
     for(size_t i=0;i<pageIDs.size();++i)put(pageIDs[i],left+float(i)*(tabWidth+gap),4,tabWidth,26);
     put(titleLabel,left,32,inner,18);set(titleLabel,hasTarget()?L"PRECISE NOTES / P"+std::to_wstring(target_.pattern)+L" R"+std::to_wstring(target_.row)+L" CH"+std::to_wstring(target_.channel+1)+L" / "+std::to_wstring(draft_.size())+L" hits":L"PRECISE NOTES / no captured row");
@@ -53,8 +58,14 @@
     // Disabling the active field can transiently clear focus. Do not let another
     // owner/layout claim that null focus; restore only if it is still unclaimed.
     if(pending_&&focused&&IsChild(window_,focused)&&!GetFocus())pendingFocus_=focused;
+    if(retainListEntry&&!GetFocus()&&pendingFocus_==listControl&&restoreListTop>=0&&!draft_.empty())
+      SendMessageW(listControl,LB_SETTOPINDEX,std::min<size_t>(size_t(restoreListTop),draft_.size()-1),0);
     if(!pending_&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;
-      if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
+      if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT)){
+        SetFocus(restore);
+        if(restore==controls_.at(list)&&GetFocus()==restore&&restoreListTop>=0&&!draft_.empty())
+          SendMessageW(restore,LB_SETTOPINDEX,std::min<size_t>(size_t(restoreListTop),draft_.size()-1),0);
+      }}
     if(focused&&IsChild(window_,focused)&&!IsWindowVisible(focused)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))focusPage();
   }
   void paint(RenderSurface &surface)override{
