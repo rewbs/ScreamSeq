@@ -354,6 +354,105 @@ void descriptionValidationBeforeAdoption(Owner &owner){
   }
 }
 
+void selectedSoundSeed(Owner &owner){
+  {
+    Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.current.insertionInstrument=2;
+    f.beforeReply=[&](const std::string &method,Json &){if(method=="pattern.notes.get")f.current.insertionInstrument=3;};
+    f.tool.openAt();f.dock(owner.window);f.page(1);
+    require(f.tool.snapshot().at("raw").at("instrument")=="2"&&f.tool.snapshot().at("draftCount")==0,"An empty row did not freeze the sound selected before its read");
+    f.beforeReply={};f.tool.observeContext();require(text(f.control(Tool::instrument))==L"2","A later sound choice rewrote the captured empty-row fields");
+    f.page(0);f.click(Tool::addHit);require(f.tool.snapshot().at("selectedEvent").at("instrument")==2,"Add used a later sound or ordinary empty-cell zero");
+    f.click(Tool::checkDraft);require(f.writes==0&&f.saved.at("pattern-a").empty()&&f.submissions.back().at("dryRun")==true,"Sound seeding/Check saved music");
+    f.click(Tool::applyDraft);require(f.writes==1&&f.saved.at("pattern-a")[0].at("instrument")==2,"Apply did not save exactly the captured sound");
+    f.tool.reloadCaptured();require(f.tool.snapshot().at("selectedEvent").at("instrument")==2,"Reload replaced an existing precise event with the current sound");
+    // Only a subsequent explicit capture of a truly empty row adopts sound 3.
+    f.current.selected->row=4;++f.current.selectionGeneration;f.tool.loadSelection();require(f.tool.snapshot().at("draftCount")==0&&f.tool.snapshot().at("raw").at("instrument")=="3","Explicit empty-row recapture did not adopt the newly selected sound");
+  }
+  for(unsigned note:{61u,254u,255u}){
+    Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.current.insertionInstrument=7;
+    f.current.cell=[note](unsigned,unsigned,unsigned){return Tool::SeedCell{note,0,0,0,0,0};};f.tool.initializeHidden();
+    const auto hit=f.tool.snapshot().at("selectedEvent");require(hit.at("note")==note&&hit.at("instrument")==0,"Selected sound replaced ordinary instrument-zero continuation/release semantics");
+    require(f.writes==0&&f.submissions.empty(),"Ordinary seeding wrote the song");
+  }
+  {
+    Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.current.insertionInstrument=4;
+    f.current.cell=[](unsigned,unsigned,unsigned){return Tool::SeedCell{0,9,0,0,0,0};};f.tool.initializeHidden();
+    require(f.tool.snapshot().at("raw").at("instrument")=="4"&&f.tool.snapshot().at("draftCount")==0,"Instrument-only ordinary cell displaced the selected empty-row sound");
+  }
+  {
+    Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.current.insertionInstrument=300;f.tool.openAt();f.dock(owner.window);
+    require(f.tool.snapshot().at("raw").at("instrument")=="300","Out-of-range selected sound was silently truncated or substituted");
+    f.click(Tool::addHit);require(f.tool.snapshot().at("draftCount")==0&&f.submissions.empty(),"A sample beyond the shared 8-bit note slot limit was accepted");
+    f.current.insertionInstrument=0;f.tool.reloadCaptured();require(f.tool.snapshot().at("raw").at("instrument")=="0","Explicit compatible no-selection fallback did not remain zero");
+    f.click(Tool::addHit);require(f.tool.snapshot().at("selectedEvent").at("instrument")==0,"Missing selection borrowed a previous sound");
+  }
+}
+
+void fractionalOffsets(Owner &owner){
+  Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array({event(0,2,16384),event(1,2,49152,67,90)});f.tool.openAt();f.dock(owner.window);
+  const auto position=[&]{return f.tool.snapshot().at("selectedEvent").at("position").get<unsigned>()%units;};
+  for(const auto *raw:{L"1/8",L" +1e0 / +8 ",L"-1/-8",L"\t1 / 8\t",L"\u00a01 / 8\u2003"}){
+    f.field(Tool::offset,raw);require(position()==32768&&text(f.control(Tool::offset))==raw,"Valid fraction/sign/exponent/whitespace was not retained or rounded correctly");
+    f.click(Tool::checkDraft);require(f.writes==0&&f.submissions.back().at("dryRun")==true,"Fraction Check changed the source");
+    f.click(Tool::pageDetails);const auto details=f.tool.snapshot().at("details").get<std::string>();require(details.find("invalid raw draft")==std::string::npos&&details.find("Visible offset = 0.5 row")!=std::string::npos,"Details disagrees with the editing fraction parser");f.page(0);
+  }
+  f.choose(Tool::units,1);require(text(f.control(Tool::offset))==L"0.5"&&position()==32768,"Beat-fraction conversion changed the event");
+  f.field(Tool::offset,L"3/16");require(position()==12288,"Row fraction did not use 65536 exact row units");f.choose(Tool::units,0);require(position()==12288&&text(f.control(Tool::offset))==L"0.046875","Fraction units round trip quantized timing");
+  f.choose(Tool::units,1);
+  for(const auto *raw:{L"1/0",L"1/-0",L"1//8",L"/8",L"1/",L"nan",L"inf",L"1e309/8",L"1/1e-400",L"1/-8",L"1/1",L"1/2x",L""}){
+    f.field(Tool::offset,raw);const auto before=retained(f.tool.snapshot());const auto calls=f.calls.size();f.click(Tool::checkDraft);f.click(Tool::applyDraft);
+    f.choose(Tool::units,0);require(f.calls.size()==calls&&retained(f.tool.snapshot())==before&&f.tool.snapshot().at("units")==1,"Invalid fraction queued a request, changed an event or switched units");
+    f.click(Tool::pageDetails);require(f.tool.snapshot().at("details").get<std::string>().find("invalid raw draft")!=std::string::npos,"Details accepted an offset rejected by Apply");f.page(0);
+  }
+  f.field(Tool::offset,L"1e-400/8");require(position()==0,"Finite underflow-to-zero differs from Mac Double fraction input");
+  f.page(1);f.field(Tool::instrument,L"2/1");const auto calls=f.calls.size();f.click(Tool::applyDraft);require(f.calls.size()==calls,"Offset fraction grammar leaked into the instrument field");
+  f.field(Tool::instrument,L"1");f.field(Tool::velocity,L"64/1");f.click(Tool::applyDraft);require(f.calls.size()==calls,"Offset fraction grammar leaked into the velocity field");
+  f.field(Tool::velocity,L"64");f.field(Tool::offset,L"3/16");f.click(Tool::applyDraft);
+  require(f.writes==1&&f.saved.at("pattern-a")[0]==event(1,2,49152,67,90)&&f.saved.at("pattern-a")[1].at("position")==2*units+12288,"Fraction Apply lost unrelated data or exact integer timing");
+  f.current.revision="six-row-signature";f.beforeReply=[](const std::string &method,Json &reply){if(method=="pattern.notes.get")reply["rowsPerBeat"]=6;};f.tool.reloadCaptured();f.choose(Tool::units,0);f.field(Tool::offset,L"1/8");
+  require(position()==49152,"Fraction did not follow the captured six-row beat");const auto before=f.calls.size();f.field(Tool::offset,L"1/6");f.click(Tool::applyDraft);require(f.calls.size()==before,"Exact next-row endpoint was accepted at six rows per beat");
+}
+
+void reloadOccurrenceIdentity(Owner &owner){
+  Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();for(unsigned i=0;i<1000;++i)f.saved["pattern-a"].push_back(event(0,2,i*60,61+i%12,64));
+  f.saved["pattern-a"].push_back(event(0,2,601*60,255));f.tool.openAt();f.dock(owner.window);f.page(1);
+  // Release sorts before the onset at the same timestamp; they are distinct.
+  f.select(601);const auto release=f.tool.snapshot().at("selectedEvent");require(release.at("note")==255,"Fixture did not select the coincident release");
+  f.current.revision="reload-release";f.tool.reloadCaptured();require(f.tool.snapshot().at("selectedEvent")==release,"Captured Reload lost onset/release identity");
+  f.select(602);const auto selected=f.tool.snapshot().at("selectedEvent");auto &saved=f.saved["pattern-a"];
+  for(auto &hit:saved)if(hit.at("position")==selected.at("position")&&hit.at("note")==selected.at("note")){hit["velocity"]=101;hit["effect"]=1;hit["parameter"]=0x37;}
+  std::reverse(saved.begin(),saved.end());f.current.revision="reload-velocity-fx";
+  const auto list=f.control(Tool::list);focus(list);SendMessageW(list,LB_SETTOPINDEX,600,0);const auto top=SendMessageW(list,LB_GETTOPINDEX,0,0);
+  require(top==600&&GetFocus()==list&&SendMessageW(list,LB_GETCURSEL,0,0)==602,"Reload fixture did not establish a focused late-list viewport independent of selection");
+  bool observedPending=false;f.beforeReply=[&](const auto &method,Json &){if(method!="pattern.notes.get")return;observedPending=true;
+    const auto during=SendMessageW(list,LB_GETTOPINDEX,0,0);
+    std::cout<<"Reload list request: beforeTop="<<top<<" pendingTop="<<during<<" focus="<<GetFocus()<<" selected="<<SendMessageW(list,LB_GETCURSEL,0,0)<<'\n';
+    require(during==top,"Starting a captured Reload moved the retained list viewport");};
+  f.tool.reloadCaptured();f.beforeReply={};auto current=f.tool.snapshot();require(current.at("selected")==602&&current.at("selectedEvent").at("velocity")==101&&current.at("selectedEvent").at("effect")==1,"Reload used full-event equality or list index instead of the saved occurrence");
+  const auto afterTop=SendMessageW(list,LB_GETTOPINDEX,0,0);std::cout<<"Reload list completion: top="<<afterTop<<" focus="<<GetFocus()<<" selected="<<SendMessageW(list,LB_GETCURSEL,0,0)<<'\n';
+  require(observedPending&&GetFocus()==list&&SendMessageW(list,LB_GETCURSEL,0,0)==602,"Successful captured Reload did not restore the exact list focus and selected occurrence");
+  require(afterTop==top,"Successful same-row Reload lost late list scroll");
+  // Stable IDs, not mutable slots, determine whether this is still the row.
+  f.current.patterns[0]["index"]=4;f.current.tracks[0]["index"]=2;for(auto &hit:saved)hit["channel"]=2;f.current.revision="moved-slots";
+  f.tool.reloadCaptured();current=f.tool.snapshot();require(current.at("pattern")==4&&current.at("channel")==2&&current.at("selected")==602&&current.at("selectedEvent").at("position")==selected.at("position"),"Stable slot movement reset the selected occurrence");
+  f.field(Tool::offset,L"unfinished fraction/");const auto retainedBefore=retained(f.tool.snapshot());const auto field=f.control(Tool::offset);SendMessageW(field,EM_SETSEL,2,7);const auto range=caret(field);
+  f.beforeReply=[](const std::string &,Json &){throw std::runtime_error("Owned Reload failure");};rejected([&]{f.tool.reloadCaptured();},"Throwing Reload was accepted");
+  require(retained(f.tool.snapshot())==retainedBefore&&caret(field)==range&&GetFocus()==field&&SendMessageW(f.control(Tool::list),LB_GETTOPINDEX,0,0)==top,"Failed Reload lost occurrence/raw/caret/focus/scroll");
+  f.beforeReply={};saved.erase(std::remove_if(saved.begin(),saved.end(),[&](const auto &hit){return hit.at("position")==selected.at("position")&&hit.at("note")==selected.at("note");}),saved.end());
+  std::sort(saved.begin(),saved.end(),[](const auto &a,const auto &b){return a.at("position")!=b.at("position")?a.at("position")<b.at("position"):a.at("note")>b.at("note");});f.current.revision="deleted-hit";
+  f.tool.reloadCaptured();require(f.tool.snapshot().at("selected")==0&&f.tool.snapshot().at("selectedEvent")==saved[0],"Missing occurrence did not use the existing first-hit fallback");
+  f.current.selected=Tool::Target{"pattern-b","track-b",1,5,1};++f.current.selectionGeneration;f.tool.loadSelection();require(f.tool.snapshot().at("selected")==0&&f.tool.snapshot().at("patternID")=="pattern-b","Different stable target borrowed the old occurrence selection");
+  require(f.writes==0&&f.submissions.empty(),"Reload selection presentation wrote the song");
+  {
+    Fixture other(owner.window);other.dock(owner.window);other.page(1);other.select(1);
+    // A different stable pattern contains the SAME timestamp/pitch as the old
+    // selected hit. It still starts at its own first event, not the old hint.
+    other.saved["pattern-b"]=Json::array({event(1,2,100,61),event(1,2,49152,67)});
+    other.current.selected=Tool::Target{"pattern-b","track-b",1,2,1};++other.current.selectionGeneration;
+    other.tool.loadSelection();require(other.tool.snapshot().at("selected")==0&&other.tool.snapshot().at("selectedEvent").at("position")==2*units+100,"A new stable target inherited a coincident old event hint");
+  }
+}
+
 }
 int wmain(int argc,wchar_t **argv){try{
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -371,6 +470,9 @@ int wmain(int argc,wchar_t **argv){try{
     focusedButtonEnterRunsItsOwnAction(owner);std::cout<<"PASS precise-note focused Button Enter and explicit Apply shortcut\n";
     musicalDetailsAndReadonlyKeys(owner);std::cout<<"PASS precise-note musical hit overview and retained read-only Details\n";
     descriptionValidationBeforeAdoption(owner);std::cout<<"PASS precise-note optional description validation before adoption\n";
+    selectedSoundSeed(owner);std::cout<<"PASS precise-note selected sound capture and ordinary zero preservation\n";
+    fractionalOffsets(owner);std::cout<<"PASS precise-note offset fractions, units, Details and strict invalid input\n";
+    reloadOccurrenceIdentity(owner);std::cout<<"PASS precise-note same-target Reload occurrence identity and late list retention\n";
     owner.close();
   });return 0;
 }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}

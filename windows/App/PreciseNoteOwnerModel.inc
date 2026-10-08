@@ -17,16 +17,39 @@
   Json toolsRaw()const{return {{"repeatCount",utf8(field(repeatCount))},{"endVelocity",utf8(field(endVelocity))},{"replaceLegacy",replaceLegacy_}};}
   std::wstring offsetText(unsigned value)const{std::wostringstream text;text<<std::setprecision(10)<<double(value)/unitsPerRow/(units_==0?rowsPerBeat_:1);return text.str();}
   double numeric(int id,double low,double high,bool whole=false)const{
-    // Deliberately the existing Windows effectNumber grammar. No fractions/trim expansion.
+    // Preserve the existing grammar for instrument/velocity/retrigger fields.
     const auto text=field(id);size_t used=0;double value=0;
     try{value=std::stod(text,&used);}catch(...){throw std::runtime_error("Enter a numeric note value");}
     require(used==text.size()&&std::isfinite(value)&&value>=low&&value<=high&&(!whole||std::floor(value)==value),"Note value is outside its allowed range");return value;
+  }
+  double rowOffset()const{
+    // Musical fractions belong only to Offset. Decimal/sign/exponent parsing,
+    // finite numerator/denominator/result and one optional slash match Mac.
+    const auto whitespace=[](wchar_t c){return c==L' '||c==L'\t'||c==0xa0||c==0x1680||
+      (c>=0x2000&&c<=0x200a)||c==0x202f||c==0x205f||c==0x3000;};
+    const auto newline=[](wchar_t c){return (c>=L'\n'&&c<=L'\r')||c==0x85||c==0x2028||c==0x2029;};
+    const auto trim=[&](std::wstring text,bool lines){const auto space=[&](wchar_t c){return whitespace(c)||(lines&&newline(c));};
+      while(!text.empty()&&space(text.back()))text.pop_back();
+      const auto first=std::find_if_not(text.begin(),text.end(),space);text.erase(text.begin(),first);return text;};
+    const auto number=[&](std::wstring text){text=trim(std::move(text),false);require(!text.empty(),"Enter a numeric offset or fraction");
+      require(std::none_of(text.begin(),text.end(),[&](wchar_t c){return whitespace(c)||newline(c);}),"Keep whitespace outside each fraction number");
+      wchar_t *end=nullptr;const auto value=std::wcstod(text.c_str(),&end);
+      // Finite subnormals/underflow-to-zero are valid Double input on Mac.
+      // Overflow still fails the finite check; no locale/input state changes.
+      require(end==text.c_str()+text.size()&&std::isfinite(value),"Offset must be a finite number or fraction");return value;};
+    const auto text=trim(field(offset),true);const auto slash=text.find(L'/');double value;
+    if(slash==std::wstring::npos)value=number(text);
+    else {require(text.find(L'/',slash+1)==std::wstring::npos,"Enter at most one fraction slash");
+      const auto numerator=number(text.substr(0,slash)),denominator=number(text.substr(slash+1));
+      require(denominator!=0,"Offset fraction denominator must not be zero");value=numerator/denominator;}
+    value*=units_==0?rowsPerBeat_:1;
+    require(std::isfinite(value)&&value>=0&&value<1,"Offset must be inside this row");return value;
   }
   std::wstring noteName(unsigned note)const{
     if(note<names_.size())return names_[note];if(note==255)return L"Note off";if(note==254)return L"Cut";return L"Note "+std::to_wstring(note);
   }
   void loadFields(){
-    Setting guard(setting_);const Json event=selected_>=0?draft_.at(size_t(selected_)):Json{{"position",target_.row*unitsPerRow},{"note",61},{"instrument",seed_.instrument},{"velocity",127}};
+    Setting guard(setting_);const Json event=selected_>=0?draft_.at(size_t(selected_)):Json{{"position",target_.row*unitsPerRow},{"note",61},{"instrument",insertionInstrument_},{"velocity",127}};
     const auto note=event.at("note").get<unsigned>();selection(pitch,int(note<=120?note-1:note==255?120:121));
     set(instrument,std::to_wstring(event.at("instrument").get<unsigned>()));set(velocity,std::to_wstring(event.at("velocity").get<unsigned>()));
     set(offset,offsetText(event.at("position").get<unsigned>()%unitsPerRow));
@@ -51,7 +74,7 @@
   Json edited(int except)const{
     const auto chosen=selection(pitch);require(chosen>=0,"Choose a precise note");
     const auto note=unsigned(SendMessageW(controls_.at(pitch),CB_GETITEMDATA,chosen,0));
-    const auto amount=numeric(offset,0,1)*(units_==0?rowsPerBeat_:1);require(amount<1,"Offset must be inside this row");
+    const auto amount=rowOffset();
     Json event={{"channel",target_.channel},{"position",target_.row*unitsPerRow+std::min(65535u,unsigned(std::lround(amount*unitsPerRow)))},
       {"note",note},{"instrument",note<128?unsigned(numeric(instrument,0,255,true)):0u},{"velocity",note<128?unsigned(numeric(velocity,1,127,true)):127u}};
     if(note<128){const auto effect=selection(localEffect);require(effect>=0&&size_t(effect)<effects_.size(),"Choose a supported note-local effect");
@@ -113,10 +136,10 @@
       result.draft.push_back(std::move(event));}
     return result;
   }
-  void adopt(Candidate next){
+  void adopt(Candidate next,Json selectionHint=nullptr){
     // Candidate parsing and all context/generation guards finish before native fields change.
     target_=std::move(next.target);document_=std::move(next.context.document);revision_=std::move(next.context.revision);names_=std::move(next.context.noteNames);
-    seed_=next.seed;rows_=next.rows;rowsPerBeat_=next.rowsPerBeat;events_=std::move(next.events);draft_=std::move(next.draft);effects_=std::move(next.effects);
+    insertionInstrument_=next.context.insertionInstrument;rows_=next.rows;rowsPerBeat_=next.rowsPerBeat;events_=std::move(next.events);draft_=std::move(next.draft);effects_=std::move(next.effects);
     moveLegacyEffect_=next.moveLegacyEffect;initialized_=true;
     {Setting guard(setting_);SendMessageW(controls_.at(localEffect),CB_RESETCONTENT,0,0);
       for(const auto &effect:effects_){const auto text=wide(effect.at("displayCode").get<std::string>()+"  "+effect.at("name").get<std::string>());SendMessageW(controls_.at(localEffect),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
@@ -125,17 +148,24 @@
     // A successful explicit recapture resets row-conversion intent, but keeps
     // raw retrigger options and their baseline. Invalid option text stays dirty.
     toolsBaseline_["replaceLegacy"]=replaceLegacy_;
-    refresh(draft_.empty()?Json():draft_[0]);original_=draft_;++generation_;
+    Json selected=draft_.empty()?Json():draft_[0];
+    if(!selectionHint.is_null())for(const auto &event:draft_)if(event.at("position")==selectionHint.at("position")&&event.at("note")==selectionHint.at("note")){selected=event;break;}
+    refresh(std::move(selected));original_=draft_;++generation_;
     status(moveLegacyEffect_?L"Draft / Apply moves the ordinary note and local effect together":L"Precise row draft / Apply creates one Undo step");
   }
   void load(const Context &before,Target target,bool follow){
     require(!before.busy&&!pending_&&!dragging_&&bool(before.cell),"Wait for the current document operation");
     const auto oldGeneration=generation_;const auto seed=before.cell(target.pattern,target.row,target.channel);
+    // Retain an occurrence by identity, not list index or complete event value.
+    // A revised velocity/FX still names the same hit; a different stable row
+    // (even at reused slots) must never borrow the old selection.
+    const Json selectionHint=before.document==document_&&sameIdentity(target,target_)&&selected_>=0&&size_t(selected_)<draft_.size()?
+      Json{{"position",draft_[size_t(selected_)].at("position")},{"note",draft_[size_t(selected_)].at("note")}}:Json();
     Pending pending(*this);const auto reply=request_("pattern.notes.get",{{"pattern",target.pattern}});
     auto next=prepare(before,target,reply,seed);const auto after=context_();
     require(after.document==before.document&&after.revision==before.revision&&generation_==oldGeneration&&resolve(after,target)==target,"Song, captured row or draft changed while loading precise notes");
     if(follow)require(after.selectionGeneration==before.selectionGeneration&&after.selected==before.selected,"Selection changed while loading precise notes");
-    adopt(std::move(next));
+    adopt(std::move(next),selectionHint);
   }
   void captureSelection(std::optional<Target> selected,bool allowEmpty){
     const auto before=context_();require(!before.busy&&!pending_&&!dragging_,"Wait for the current document operation");

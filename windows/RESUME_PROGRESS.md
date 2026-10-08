@@ -1,6 +1,22 @@
 # Windows continuation
 
-Latest Precise Notes checkpoint (2026-10-07): the retained native owner provides
+Stopping point requested by the user: Precise Notes editing parity is qualified;
+resume with the unintegrated Mixer strip proposal only after its recorded source
+review findings are resolved. See [PARITY_HANDOFF.md](PARITY_HANDOFF.md) for the
+prioritized remaining work and exact continuation locations.
+
+Latest candidate 3 adds fractional offsets, captured empty-row sound, same-row
+Reload selection/scroll/focus retention and readable focus titles. App SHA256:
+`7295FB90A4A27875E4E331A347DE7E57A324823F46EE87905CE4F1EC68FB1008`.
+Full run 1 passes **404/404 in 1,027.617 seconds**, focused run 2 **82/82 in 150.469
+seconds**, native **50/50 in 101.85 seconds**, and **18 reviewed 192-DPI views**.
+All final runners have strict outer success. See
+[PRECISE_NOTE_PARITY_PROGRESS.md](PRECISE_NOTE_PARITY_PROGRESS.md) for preserved
+failures and scope. Checkpoint destination:
+`bin/windows-checkpoints/precise-note-parity-20261007/`; the completed manifest and
+independent verifier establish publication. Full Windows/Mac parity stays open.
+
+Previous Precise Notes checkpoint (2026-10-07): the retained native owner provides
 Timeline, Hit, Tools and selectable Details pages with independent pin/target/Return,
 compact placement and V4 saved-layout restoration. Pattern and routing remain
 available beside its draft. Candidate2 App SHA256:
@@ -13,10 +29,9 @@ failed build/capture inputs and scoped limits. Checkpoint destination:
 `bin/windows-checkpoints/precise-note-host-20261007/`; its completed manifest and
 independent verifier establish immutable publication.
 
-Next-phase source-only proposals for fractions, Reload selection and selected-sound
-seeding are preserved separately and excluded from this checkpoint. They require
-integration and fresh qualification. Preserve the old matrix draft backup/stash
-until separately reconciled. The Windows/Mac parity goal stays open.
+The host checkpoint's separate proposals for fractions, Reload selection and
+selected-sound seeding are integrated and freshly qualified above. Preserve the
+old matrix draft backup/stash until separately reconciled.
 
 Previous Graph Curve checkpoint (2026-10-07): independent native editing, V3 layouts
 and retained Formula/Bank/Guide children. Candidate 7 SHA256:

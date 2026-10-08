@@ -139,6 +139,6 @@
         if(hasWorkspaceDock())drawWorkspaceRegionChrome();
 		s.fill(164,height-40,width-164,40,0x202834);s.line(164,height-40,width,height-40,0x344151);
 		s.fill(164,height-38,3,16,liveKeyboard ? gold : 0xb498de);
-		s.text(L"EDIT P"+std::to_wstring(patternIndex)+L" R"+std::to_wstring(row)+L" CH"+std::to_wstring(channel+1)+L" / "+(follow ? L"FOLLOW PLAYBACK" : L"DETACHED EDITING")+L" / FOCUS "+wide(displayedFocus)+(liveKeyboard?L" / LIVE KEYS":L""),174,height-38,width-184);
+		s.text(L"EDIT P"+std::to_wstring(patternIndex)+L" R"+std::to_wstring(row)+L" CH"+std::to_wstring(channel+1)+L" / "+(follow ? L"FOLLOW PLAYBACK" : L"DETACHED EDITING")+L" / FOCUS "+(isWorkspaceEditor(displayedFocus)?workspaceRegionTitle(displayedFocus):wide(displayedFocus))+(liveKeyboard?L" / LIVE KEYS":L""),174,height-38,width-184);
 		s.uiText(status,174,height-19,std::max(1.0f,width-362),muted);
 	}
