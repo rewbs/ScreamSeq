@@ -708,7 +708,19 @@ bindings without silently retargeting them. Writes require `expectedRevision`.
 The native FX and precise-note inspectors use these same transactions. A precise
 row draft captures its target and revision, preserves unrelated events, and saves
 through one `pattern.notes.set` transaction. `workspace.get.noteEditor` reports
-its target, selected event, count, pending/stale status and logical canvas bounds.
+its target, selected event, count, pending/stale status and owner-client DIP canvas
+bounds. The sole native editor is `workspace.panel {panel:"preciseNotes"}`;
+`notes` remains the read-only inspector with independent pin/origin. `preciseNotes`
+and compatibility `noteEditor` snapshots describe the same retained HWND, stable
+pattern/track IDs and raw fields; workspace polling omits the full row draft.
+The retained native pages are Timeline, Hit, Tools and read-only Details; Details
+shows captured timing and note-local effect guidance without changing the draft.
+Command 107 and the lower Notes alias open that sole owner. Editors preferences
+V4 strictly records all four native identities. Older bottom Notes selections
+migrate to preciseNotes bottom; seven-field Notes aliases reuse an existing
+placement and choose bottom only if hidden. Explicit V4 files use native
+placement rather than a Main `notes` identity. No song format or pattern.notes
+request semantics change.
 
 The native clipboard publishes Mac's `ScreamSeq Pattern 2` Unicode text format,
 including relative FX and only the referenced stable bindings. It also accepts

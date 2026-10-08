@@ -217,7 +217,7 @@
         if(id==pluginReconnect){if(selectedPluginSlot()<0)throw std::runtime_error("Select a VST3 plugin");openPluginPath({{"plugin",selectedPlugin}});return true;}
         if(id==pluginSavePreset||id==pluginLoadPreset){pluginPresetFile(id==pluginSavePreset);return true;}
         if(id==pluginAliases){openPluginInstruments();return true;}
-        if(id==pluginsCommand) {noteEditorOpen=false;effectEditorOpen=false;workspaceState.layout="Compose";workspaceState.active="notes";SetFocus(controls.at(pluginList));return true;}
+        if(id==pluginsCommand) {effectEditorOpen=false;workspaceState.layout="Compose";workspaceState.active="notes";SetFocus(controls.at(pluginList));return true;}
         if(id==pluginPage){if(pluginDraft){SendMessageW(controls.at(pluginPage),CB_SETCURSEL,pluginDetailPage,0);throw std::runtime_error("Apply the draft or press Escape before changing the detail page");}
             const auto page=SendMessageW(controls.at(pluginPage),CB_GETCURSEL,0,0);if(page>=0&&page<6){pluginDetailPage=int(page);pluginDetailsTarget.clear();}SetFocus(controls.at(pluginPage));return true;}
         if(id==pluginList) {

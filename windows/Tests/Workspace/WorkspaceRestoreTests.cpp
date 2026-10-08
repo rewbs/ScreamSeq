@@ -138,7 +138,7 @@ struct RestoreFixture {
     void cleanup()noexcept {
         if(app){
             app->beforeRead={};app->postedInput={};app->fault=RestoreApplication::Fault::none;
-            app->graphCurveWindow.reset();app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
+            app->preciseNoteWindow.reset();app->graphCurveWindow.reset();app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
         }
         if(root){DestroyWindow(root);root=nullptr;}
         if(app){app->window=nullptr;app.reset();}
@@ -148,9 +148,13 @@ struct RestoreFixture {
     ~RestoreFixture(){cleanup();}
     void close() {
         const auto owned=root;const auto children=app->controls;
-        app->graphCurveWindow.reset();app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
+        std::vector<HWND> tools;
+        for(const auto *id:{"automation","instruments","graphCurve","preciseNotes"})
+            if(auto *tool=app->workspaceEditorWindow(id))tools.push_back(tool->window());
+        app->preciseNoteWindow.reset();app->graphCurveWindow.reset();app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
         restoreCheck(DestroyWindow(owned)!=FALSE,"Destroy restore test owner");root=nullptr;app->window=nullptr;
         restoreCheck(!IsWindow(owned),"Restore owner survived destruction");
+        for(const auto tool:tools)restoreCheck(!IsWindow(tool),"Retained native owner survived explicit destruction");
         for(const auto &[id,control]:children){(void)id;restoreCheck(!IsWindow(control),"Restore child survived owner destruction");}
         cleanup();
     }
@@ -170,29 +174,36 @@ RestoreJson allControlState(const RestoreApplication &app) {
     for(const auto &[id,control]:app.controls)result[std::to_string(id)]=controlState(control);
     return result;
 }
+RestoreJson preciseOwnerState(const RestoreApplication &app) {
+    if(!app.preciseNoteWindow)return nullptr;
+    const auto owner=app.preciseNoteWindow->window();RestoreJson controls=RestoreJson::object();
+    for(const int id:{360,361,362,363,364,365,366,367,368,376,377}) {
+        const auto field=GetDlgItem(owner,id);restoreCheck(field!=nullptr,"Retained precise-note control missing");
+        controls[std::to_string(id)]=controlState(field);
+    }
+    return {{"window",reinterpret_cast<uintptr_t>(owner)},{"snapshot",app.preciseNoteWindow->snapshot()},{"controls",std::move(controls)}};
+}
 RestoreJson restoreState(const RestoreApplication &app) {
     return {{"guard",app.workspacePreparationGuard()},{"song",songState(app)},{"controls",allControlState(app)},
-        {"scroll",{app.firstRow,app.horizontalScroll}},{"notes",{{"events",app.noteEvents},{"draft",app.noteDraft},{"original",app.noteOriginal},
-            {"effects",app.noteEffects},{"density",app.noteDensity},{"document",app.noteDocument},{"revision",app.noteRevision}}},
+        {"scroll",{app.firstRow,app.horizontalScroll}},{"preciseNotes",preciseOwnerState(app)},
         {"fx",{{"choices",app.effectChoices},{"bindings",app.effectBindingChoices},{"selected",app.effectSelected}}},
         {"graph",{{"data",app.graphData},{"draft",app.graphDraft},{"plugins",app.graphPluginData}}},
         {"mixer",{{"data",app.mixerData},{"draft",app.mixerDraft}}}};
 }
 RestoreJson layoutFor(RestoreApplication &app,const char *editor,bool bothNative=false) {
+    const bool precise=std::string_view(editor)=="notes";
     auto result=app.layoutConfiguration();result["layout"]="Compose";result["active"]="notes";
-    result["lowerEditor"]=editor;result["lowerVisible"]=true;result["lowerHeight"]=360;
-    // V2/V3 store the Main selection in both the original layout and the region
-    // preferences; a native bottom selection remains independent of this value.
-    auto &editors=result["editors"];
-    if(editors.contains("version")&&ScreamSeq::WorkspaceRegions::mainBottom(editors.at("selected").at("bottom").get<std::string>()))
-        editors["selected"]["bottom"]=editor;
+    // Canonical V4 keeps its latent Main panel independent of native Notes.
+    // Plugins has no required initial read, so Notes-only failure tests reach
+    // exactly the prospective native read instead of another Main cache.
+    const char *main=precise?"plugins":editor;
+    result["lowerEditor"]=main;result["lowerVisible"]=true;result["lowerHeight"]=360;
+    auto &editors=result["editors"];restoreCheck(editors.at("version")==4,"Restore fixture requires editors V4");
     if(bothNative) {
-        if(editors["locations"].is_array())editors={{"locations",{"float","float"}},{"active","automation"},{"tracker",true}};
-        else {
-            editors["locations"]={{"automation","float"},{"instruments","float"},{"graphCurve","hide"}};
-            editors["selected"]={{"right",""},{"bottom",editor},{"secondary",""}};editors["compactSelection"]="pattern";
-        }
-    }
+        editors["locations"]={{"automation","float"},{"instruments","float"},{"graphCurve","hide"},{"preciseNotes","hide"}};
+        editors["selected"]={{"right",""},{"bottom",main},{"secondary",""}};editors["compactSelection"]="pattern";
+    } else if(ScreamSeq::WorkspaceRegions::mainBottom(editors.at("selected").at("bottom").get<std::string>()))editors["selected"]["bottom"]=main;
+    if(precise){editors["locations"]["preciseNotes"]="bottom";editors["selected"]["bottom"]="preciseNotes";}
     return result;
 }
 RestoreJson fields(const RestoreApplication &app,std::initializer_list<int> ids) {
@@ -207,9 +218,18 @@ RestoreJson fields(const RestoreApplication &app,std::initializer_list<int> ids)
     return result;
 }
 RestoreJson notesState(const RestoreApplication &app) {
-    return {{"target",{app.notePattern,app.noteRow,app.noteChannel}},{"draft",app.noteDraft},{"original",app.noteOriginal},
-        {"effects",app.noteEffects},{"moveLegacyEffect",app.noteMoveLegacyEffect},{"selected",app.noteSelected},{"density",app.noteDensity},
-        {"fields",fields(app,{notePitch,noteInstrument,noteVelocity,noteOffset,noteEffectControl,noteParameter,noteUnitControl,noteSnapControl})}};
+    restoreCheck(bool(app.preciseNoteWindow),"No precise-note owner to compare");
+    const auto snapshot=app.preciseNoteWindow->snapshot();RestoreJson result=RestoreJson::object();
+    // Compare public captured/derived values. Reload intentionally advances its
+    // generation; window geometry/focus are checked separately on retained state.
+    for(const auto *key:{"document","revision","patternID","trackID","pattern","row","channel","draft","selected","raw","tools","rowsPerBeat"})result[key]=snapshot.at(key);
+    RestoreJson fields=RestoreJson::array();
+    for(const int id:{361,362,363,364,365,366,367,368}) {
+        auto state=controlState(GetDlgItem(app.preciseNoteWindow->window(),id));
+        for(const auto *key:{"bounds","visible","enabled","selection","scroll"})state.erase(key);
+        fields.push_back(std::move(state));
+    }
+    result["fields"]=std::move(fields);return result;
 }
 RestoreJson effectsState(const RestoreApplication &app) {
     return {{"target",{app.effectDraftPattern,app.effectDraftRow,app.effectDraftChannel,app.effectDraftColumn}},
@@ -230,13 +250,19 @@ void createRestoreInstrument(RestoreApplication &app) {
 
 void firstRestoreMatchesOrdinaryOpen() {
     withRestoreFixture([](RestoreApplication &app) {
-        auto target=app.position();target["row"]=0;target["channel"]=0;
+        auto target=app.position();target["row"]=9;target["channel"]=1;
         auto &notes=app.workspaceState.panel("notes");notes.target=target;notes.origin=target;notes.opened=true;notes.pinned=true;
-        auto cursor=app.position();cursor["row"]=9;cursor["channel"]=1;cursor["following"]=false;app.navigate(cursor);
+        auto cursor=app.position();cursor["row"]=0;cursor["channel"]=0;cursor["following"]=false;app.navigate(cursor);
         const auto before=songState(app),position=app.position();const auto pinned=notes.target;
+        const bool nativePinned=app.workspaceEditors[app.workspaceEditorIndex("preciseNotes")].pinned;
         app.restoreLayoutConfiguration(layoutFor(app,"notes"));
-        restoreCheck(app.noteCaptured&&app.noteRow==0&&app.noteChannel==0&&app.noteDraft.size()>0,"First Notes restore ignored its pinned musical row");
-        const auto restored=notesState(app);app.openNoteEditor(true);
+        restoreCheck(app.preciseNoteWindow&&app.preciseNoteWindow->capturedTarget().has_value(),"First restore did not capture the native precise-note owner");
+        ScreamSeq::Tests::ownGuiWindow(app.preciseNoteWindow->window());
+        const auto captured=*app.preciseNoteWindow->capturedTarget();
+        restoreCheck(captured.row==0&&captured.channel==0&&app.preciseNoteWindow->snapshot().at("draftCount").get<size_t>()>0,"Native Notes borrowed the independently pinned inspector target");
+        restoreCheck(app.workspaceEditors[app.workspaceEditorIndex("preciseNotes")].pinned==nativePinned,"First native Notes capture changed its independent pin");
+        const auto restored=notesState(app);app.ordinaryReads.clear();app.preciseNoteWindow->reloadCaptured();
+        restoreCheck(std::count(app.ordinaryReads.begin(),app.ordinaryReads.end(),"pattern.notes.get")==1,"Adopted Notes retained its preparation callback or retried Reload");
         restoreCheck(notesState(app)==restored,"Staged Notes values differ from ordinary first-open derivation");
         restoreCheck(songState(app)==before&&app.position()==position&&notes.pinned&&notes.target==pinned,"Notes restore/open changed music, cursor, or pin");
     });
@@ -260,13 +286,13 @@ void requiredReadFailuresAreAtomic() {
     for(const auto &[editor,method]:std::array<std::pair<const char *,const char *>,3>{{{"notes","pattern.notes.get"},{"graph","graph.get"},{"mixer","mixer.get"}}})
         for(const auto fault:{RestoreApplication::Fault::read,RestoreApplication::Fault::malformed})withRestoreFixture([&](RestoreApplication &app) {
             const auto before=restoreState(app);const auto roots=restoreRoots();app.targetRead=method;app.fault=fault;
-            const auto error=restoreRejected([&]{app.restoreLayoutConfiguration(layoutFor(app,editor,true));});
+            const auto error=restoreRejected([&]{app.restoreLayoutConfiguration(layoutFor(app,editor,std::string_view(editor)!="notes"));});
             if(fault==RestoreApplication::Fault::read)restoreCheck(error.find("Injected required")!=std::string::npos,"Read failure was swallowed or replaced");
             restoreCheck(app.preparationReads==std::vector<std::string>{method},"Failed read continued into another editor or retried");
             restoreCheck(restoreState(app)==before&&restoreRoots()==roots,"Rejected Main preparation changed workspace/native controls or leaked hidden editors");
             restoreCheck(!app.preparingWorkspaceLayout&&!app.busy,"Rejected preparation left a transaction guard set");
             app.fault=RestoreApplication::Fault::none;app.restoreLayoutConfiguration(layoutFor(app,editor));
-            restoreCheck((std::string_view(editor)=="notes"&&app.noteCaptured)||(std::string_view(editor)=="graph"&&!app.graphDocument.empty())||(std::string_view(editor)=="mixer"&&!app.mixerDocument.empty()),"Failed first-open preparation poisoned a subsequent valid restore");
+            restoreCheck((std::string_view(editor)=="notes"&&(app.preciseNoteWindow&&app.preciseNoteWindow->capturedTarget().has_value()))||(std::string_view(editor)=="graph"&&!app.graphDocument.empty())||(std::string_view(editor)=="mixer"&&!app.mixerDocument.empty()),"Failed first-open preparation poisoned a subsequent valid restore");
         });
 }
 
@@ -277,7 +303,7 @@ void secondHiddenEditorFailureIsAtomic() {
         app.targetRead="instrument.get";app.fault=RestoreApplication::Fault::read;
         app.beforeRead=[&](const std::string &method) {
             if(method!="instrument.get")return;
-            restoreCheck(!app.noteCaptured&&!app.parameterAutomationWindow&&!app.instrumentEnvelopeWindow,"A candidate was adopted before all hidden reads succeeded");
+            restoreCheck(!(app.preciseNoteWindow&&app.preciseNoteWindow->capturedTarget().has_value())&&!app.parameterAutomationWindow&&!app.instrumentEnvelopeWindow,"A candidate was adopted before all hidden reads succeeded");
             for(const auto root:restoreRoots()) {
                 wchar_t type[96]{};GetClassNameW(root,type,96);
                 if(!_wcsicmp(type,L"ScreamSeq.ParameterAutomation")) {
@@ -290,12 +316,13 @@ void secondHiddenEditorFailureIsAtomic() {
         };
         const auto error=restoreRejected([&]{app.restoreLayoutConfiguration(layoutFor(app,"notes",true));});
         restoreCheck(error.find("Injected required")!=std::string::npos&&sawPreparedAutomation,"Second hidden editor failure was not exercised");
-        for(const auto *method:{"pattern.notes.get","automation.pattern.get","instrument.envelope.get","instrument.get"})
+        for(const auto *method:{"automation.pattern.get","instrument.envelope.get","instrument.get"})
             restoreCheck(std::count(app.preparationReads.begin(),app.preparationReads.end(),method)==1,"Second-tool fixture did not exercise each required read exactly once");
+        restoreCheck(std::count(app.preparationReads.begin(),app.preparationReads.end(),"pattern.notes.get")==0,"Second-owner failure proceeded into fourth-owner Notes preparation");
         restoreCheck(restoreState(app)==before&&restoreRoots()==roots,"Second hidden failure published earlier caches/placement/focus or leaked HWNDs");
         app.beforeRead={};app.fault=RestoreApplication::Fault::none;app.restoreLayoutConfiguration(layoutFor(app,"notes",true));
-        restoreCheck(app.noteCaptured&&app.parameterAutomationWindow&&app.instrumentEnvelopeWindow,"Valid retry did not adopt all prepared editors");
-        ScreamSeq::Tests::ownGuiWindow(app.parameterAutomationWindow->window());ScreamSeq::Tests::ownGuiWindow(app.instrumentEnvelopeWindow->window());
+        restoreCheck((app.preciseNoteWindow&&app.preciseNoteWindow->capturedTarget().has_value())&&app.parameterAutomationWindow&&app.instrumentEnvelopeWindow,"Valid retry did not adopt all prepared editors");
+        ScreamSeq::Tests::ownGuiWindow(app.parameterAutomationWindow->window());ScreamSeq::Tests::ownGuiWindow(app.instrumentEnvelopeWindow->window());ScreamSeq::Tests::ownGuiWindow(app.preciseNoteWindow->window());
         const auto reads=app.preparationReads.size();app.ordinaryReads.clear();
         SendMessageW(app.parameterAutomationWindow->window(),WM_COMMAND,MAKEWPARAM(4218,BN_CLICKED),reinterpret_cast<LPARAM>(GetDlgItem(app.parameterAutomationWindow->window(),4218)));
         restoreCheck(app.preparationReads.size()==reads&&std::find(app.ordinaryReads.begin(),app.ordinaryReads.end(),"automation.pattern.get")!=app.ordinaryReads.end(),"Adopted tool retained its preparation-only callback");
@@ -313,7 +340,7 @@ void pumpedInputWinsOverPreparedLayout() {
         };
         restoreRejected([&]{app.restoreLayoutConfiguration(layoutFor(app,"notes",true));});
         restoreCheck(app.dispatchedInput==1&&!afterInput.is_null(),"Posted context input was not pumped exactly once");
-        restoreCheck(restoreState(app)==afterInput&&songState(app)==song&&!app.noteCaptured,"Rejected restore rolled back newer cursor/focus or adopted a stale note row");
+        restoreCheck(restoreState(app)==afterInput&&songState(app)==song&&!(app.preciseNoteWindow&&app.preciseNoteWindow->capturedTarget().has_value()),"Rejected restore rolled back newer cursor/focus or adopted a stale note row");
     });
     withRestoreFixture([](RestoreApplication &app) {
         createRestoreInstrument(app);app.openInstrumentEnvelope();ScreamSeq::Tests::ownGuiWindow(app.instrumentEnvelopeWindow->window());
@@ -372,7 +399,7 @@ void compactRestoreAndResizeKeepVisibleFocus() {
         createRestoreInstrument(app);resizeRestoreClient(app,1000,720);
         auto layout=layoutFor(app,"graph");layout["hidden"]={true,true};
         ScreamSeq::WorkspaceRegions::Config regions;
-        regions.locations={ScreamSeq::WorkspaceRegions::Placement::secondary,ScreamSeq::WorkspaceRegions::Placement::right,ScreamSeq::WorkspaceRegions::Placement::hidden};
+        regions.locations={ScreamSeq::WorkspaceRegions::Placement::secondary,ScreamSeq::WorkspaceRegions::Placement::right,ScreamSeq::WorkspaceRegions::Placement::hidden,ScreamSeq::WorkspaceRegions::Placement::hidden};
         regions.selected={"instruments","graph","automation"};regions.compactSelection="graph";
         layout["editors"]=ScreamSeq::WorkspaceRegions::encode(regions);
         app.workspaceState.focus="pattern";SetFocus(app.window);const auto song=songState(app);
@@ -414,7 +441,7 @@ void compactRestoreAndResizeKeepVisibleFocus() {
         restoreCheck(app.parameterAutomationWindow->window()==automation&&app.instrumentEnvelopeWindow->window()==instrument&&nativeAfter==nativeBefore&&songState(app)==song,"Resize or explicit host selection replaced native windows, targets, drafts, or musical state");
     });
 }
-// V3 Graph curve restoration preserves the independent owner and its children.
+// Graph curve restoration retains all prior independent-owner/child cases under V4.
 struct RestoreCurveSource {
     std::string graph,node,otherNode,patternID;
     unsigned pattern=0,otherPattern=0;
@@ -442,10 +469,10 @@ RestoreJson curveRequest(const RestoreCurveSource &source) {
 RestoreJson curveLayout(RestoreApplication &app,bool allNative) {
     auto result=layoutFor(app,allNative?"notes":"graph",allNative);
     auto &editors=result["editors"];
-    restoreCheck(editors.at("version")==3,"Graph curve restore fixture requires strict editors V3");
-    if(!allNative)editors["locations"]={{"automation","hide"},{"instruments","hide"},{"graphCurve","float"}};
+    restoreCheck(editors.at("version")==4,"Graph curve restore fixture requires strict editors V4");
+    if(!allNative)editors["locations"]={{"automation","hide"},{"instruments","hide"},{"graphCurve","float"},{"preciseNotes","hide"}};
     else editors["locations"]["graphCurve"]="float";
-    editors["selected"]={{"right",""},{"bottom",allNative?"notes":"graph"},{"secondary",""}};
+    editors["selected"]={{"right",""},{"bottom",allNative?"preciseNotes":"graph"},{"secondary",""}};
     editors["compactSelection"]="pattern";
     return result;
 }
@@ -466,7 +493,7 @@ void thirdHiddenCurveFailureIsAtomic() {
         app.targetRead="graph.automation.get";app.fault=fault;app.preparationReads.clear();app.preparationRequests.clear();
         app.beforeRead=[&](const std::string &method) {
             if(method!="graph.automation.get")return;
-            restoreCheck(!app.noteCaptured&&!app.parameterAutomationWindow&&!app.instrumentEnvelopeWindow&&!app.graphCurveWindow,
+            restoreCheck(!(app.preciseNoteWindow&&app.preciseNoteWindow->capturedTarget().has_value())&&!app.parameterAutomationWindow&&!app.instrumentEnvelopeWindow&&!app.graphCurveWindow,
                 "Third hidden read saw an earlier candidate adopted");
             for(const auto root:restoreRoots()) {
                 wchar_t type[96]{};GetClassNameW(root,type,96);
@@ -486,8 +513,9 @@ void thirdHiddenCurveFailureIsAtomic() {
         const auto error=restoreRejected([&]{app.restoreLayoutConfiguration(curveLayout(app,true));});
         restoreCheck(sawAutomation&&sawInstrument&&sawCurve,"Third-editor fixture did not reach all three hidden candidates");
         restoreCheck(error.find(fault==RestoreApplication::Fault::read?"Injected required":"Invalid curve points reply")!=std::string::npos,"Curve failure was replaced by an unrelated rejection");
-        for(const auto *method:{"pattern.notes.get","automation.pattern.get","instrument.envelope.get","instrument.get","graph.automation.get"})
+        for(const auto *method:{"automation.pattern.get","instrument.envelope.get","instrument.get","graph.automation.get"})
             restoreCheck(std::count(app.preparationReads.begin(),app.preparationReads.end(),method)==1,"Third-editor fixture did not exercise each required read exactly once");
+        restoreCheck(std::count(app.preparationReads.begin(),app.preparationReads.end(),"pattern.notes.get")==0,"Failed third-owner read reached fourth-owner preparation");
         restoreCheck(app.preparationReads.back()=="graph.automation.get"&&app.preparationRequests.back().second==curveRequest(source),"Failed Curve read did not use the captured original target, or retried afterward");
         restoreCheck(restoreState(app)==before&&restoreRoots()==roots&&!app.preparingWorkspaceLayout&&!app.busy,
             "Failed third curve preparation adopted values/placement/focus or leaked native windows");
@@ -498,8 +526,8 @@ void successfulCurveAdoptionMatchesApi() {
         createRestoreInstrument(app);addRestoreGain(app);const auto source=createRestoreCurveSource(app);
         const auto saved=app.documentOperation("graph.automation.get",curveRequest(source));const auto before=songState(app);
         app.preparationReads.clear();app.preparationRequests.clear();app.restoreLayoutConfiguration(curveLayout(app,true));
-        restoreCheck(app.noteCaptured&&app.parameterAutomationWindow&&app.instrumentEnvelopeWindow&&app.graphCurveWindow,"Successful restore did not adopt all Main/native candidates");
-        for(auto *tool:{static_cast<ScreamSeq::NativeToolWindow *>(app.parameterAutomationWindow.get()),static_cast<ScreamSeq::NativeToolWindow *>(app.instrumentEnvelopeWindow.get()),static_cast<ScreamSeq::NativeToolWindow *>(app.graphCurveWindow.get())})ScreamSeq::Tests::ownGuiWindow(tool->window());
+        restoreCheck((app.preciseNoteWindow&&app.preciseNoteWindow->capturedTarget().has_value())&&app.parameterAutomationWindow&&app.instrumentEnvelopeWindow&&app.graphCurveWindow,"Successful restore did not adopt all Main/native candidates");
+        for(auto *tool:{static_cast<ScreamSeq::NativeToolWindow *>(app.parameterAutomationWindow.get()),static_cast<ScreamSeq::NativeToolWindow *>(app.instrumentEnvelopeWindow.get()),static_cast<ScreamSeq::NativeToolWindow *>(app.graphCurveWindow.get()),static_cast<ScreamSeq::NativeToolWindow *>(app.preciseNoteWindow.get())})ScreamSeq::Tests::ownGuiWindow(tool->window());
         checkRestoredCurve(app,source,saved);
         restoreCheck(std::count(app.preparationReads.begin(),app.preparationReads.end(),"graph.automation.get")==1,"Successful staged Curve did not perform one required read");
         const auto preparationCount=app.preparationReads.size();app.ordinaryReads.clear();
@@ -670,6 +698,118 @@ void guideOnlyRestoreRetainsChildThenInitializes() {
     });
 }
 
+void fourthHiddenNotesFailureIsAtomic() {
+    for(const auto fault:{RestoreApplication::Fault::read,RestoreApplication::Fault::malformed})withRestoreFixture([&](RestoreApplication &app) {
+        createRestoreInstrument(app);addRestoreGain(app);const auto source=createRestoreCurveSource(app);
+        const auto target=app.preciseNoteContext().selected;restoreCheck(target.has_value(),"Fourth-owner fixture has no selected row");
+        const auto before=restoreState(app);const auto roots=restoreRoots();std::set<std::wstring> initialized;bool sawNotes=false;
+        app.targetRead="pattern.notes.get";app.fault=fault;app.preparationReads.clear();app.preparationRequests.clear();
+        app.beforeRead=[&](const std::string &method) {
+            if(method!="pattern.notes.get")return;
+            restoreCheck(!app.parameterAutomationWindow&&!app.instrumentEnvelopeWindow&&!app.graphCurveWindow&&!app.preciseNoteWindow,"Fourth hidden read saw an earlier adopted owner");
+            for(const auto root:restoreRoots()) {
+                wchar_t type[96]{};GetClassNameW(root,type,96);
+                auto *base=reinterpret_cast<ScreamSeq::NativeToolWindow *>(GetWindowLongPtrW(root,GWLP_USERDATA));
+                if(!_wcsicmp(type,L"ScreamSeq.ParameterAutomation")) {
+                    restoreCheck(static_cast<ScreamSeq::ParameterAutomationWindow *>(base)->snapshot().at("generation").get<uint64_t>()>0,"Automation was not initialized before fourth read");initialized.insert(type);
+                } else if(!_wcsicmp(type,L"ScreamSeq.InstrumentEnvelope")) {
+                    restoreCheck(static_cast<ScreamSeq::InstrumentEnvelopeWindow *>(base)->snapshot().at("generation").get<uint64_t>()>0,"Instrument was not initialized before fourth read");initialized.insert(type);
+                } else if(!_wcsicmp(type,L"ScreamSeq.GraphCurve")) {
+                    restoreCheck(static_cast<ScreamSeq::GraphCurveWindow *>(base)->operationGuard().at("initialized").get<bool>(),"Curve was not initialized before fourth read");initialized.insert(type);
+                } else if(!_wcsicmp(type,L"ScreamSeq.PreciseNotes"))sawNotes=true;
+                else continue;
+                restoreCheck(!(GetWindowLongPtrW(root,GWL_STYLE)&WS_VISIBLE),"Prospective fourth-owner restore showed a candidate before validation");
+            }
+        };
+        const auto error=restoreRejected([&]{app.restoreLayoutConfiguration(curveLayout(app,true));});
+        restoreCheck(initialized.size()==3&&sawNotes,"Fourth-owner fixture did not reach all four hidden candidates");
+        if(fault==RestoreApplication::Fault::read)restoreCheck(error.find("Injected required")!=std::string::npos,"Fourth read failure was replaced");
+        else restoreCheck(error.find("Unexpected precise-note reply size")!=std::string::npos,"Malformed Notes data failed for an unrelated reason");
+        for(const auto *method:{"automation.pattern.get","instrument.envelope.get","instrument.get","graph.automation.get","pattern.notes.get"})
+            restoreCheck(std::count(app.preparationReads.begin(),app.preparationReads.end(),method)==1,"Fourth-owner failure omitted or retried a required read");
+        restoreCheck(app.preparationReads.back()=="pattern.notes.get"&&app.preparationRequests.back().second==RestoreJson{{"pattern",target->pattern}},"Fourth read lost its captured target or continued afterward");
+        restoreCheck(restoreState(app)==before&&restoreRoots()==roots&&!app.preparingWorkspaceLayout&&!app.busy,"Failed fourth owner changed song/placement/focus/controls or leaked HWNDs");
+        app.beforeRead={};app.fault=RestoreApplication::Fault::none;app.restoreLayoutConfiguration(curveLayout(app,true));
+        for(const auto *id:{"automation","instruments","graphCurve","preciseNotes"}) {
+            const auto *tool=app.workspaceEditorWindow(id);restoreCheck(tool!=nullptr,"Valid retry failed to adopt one of four native owners");ScreamSeq::Tests::ownGuiWindow(tool->window());
+        }
+        restoreCheck(app.preciseNoteWindow->capturedTarget()==target&&app.preciseNoteWindow->capturedCurrent(),"Retry rebound the fourth owner to another pattern/track/row");
+        const auto value=notesState(app);const auto reads=app.preparationReads.size();app.ordinaryReads.clear();app.preciseNoteWindow->reloadCaptured();
+        restoreCheck(notesState(app)==value&&app.preparationReads.size()==reads&&std::count(app.ordinaryReads.begin(),app.ordinaryReads.end(),"pattern.notes.get")==1,"Adopted fourth owner retained staged callbacks or changed row data");
+        restoreCheck(songState(app)==before.at("song"),"Fourth-owner retry/reload edited the song");
+    });
+}
+void preciseOwnerControlsAreLazyAndRetained() {
+    withRestoreFixture([](RestoreApplication &app) {
+        restoreCheck(!app.preciseNoteWindow,"Startup eagerly created the independent Notes owner");
+        for(int id=360;id<=377;++id)restoreCheck(!GetDlgItem(app.window,id)&&!app.controls.contains(id),"Removed editable Notes control remains on Main");
+        const auto song=songState(app);app.openNoteEditor();const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
+        const auto page=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::pageHit);
+        SendMessageW(owner,WM_COMMAND,MAKEWPARAM(ScreamSeq::PreciseNoteWindow::pageHit,BN_CLICKED),reinterpret_cast<LPARAM>(page));
+        const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
+        restoreCheck(field&&GetParent(field)==owner&&IsWindowVisible(field)&&IsWindowEnabled(field),"Precise-note field is not owned by the sole native window");
+        SetActiveWindow(owner);SetFocus(field);SendMessageW(field,EM_SETSEL,0,-1);SendMessageW(field,EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(L"-"));SendMessageW(field,EM_SETSEL,0,1);
+        restoreCheck(app.preciseNoteWindow->retainedDraft(),"Raw invalid native edit did not become a retained draft");
+        const auto guard=app.preciseNoteWindow->operationGuard(),values=notesState(app);
+        auto raw=controlState(field);for(const auto *key:{"bounds","visible","enabled"})raw.erase(key);
+        app.preciseNoteWindow->hide();restoreCheck(!IsWindowVisible(owner),"Hide did not hide the retained precise-note owner");
+        for(int id=360;id<=377;++id)restoreCheck(GetDlgItem(owner,id)&&!GetDlgItem(app.window,id),"Hidden owner lost native controls or Main gained a duplicate");
+        app.preciseNoteWindow->show();auto after=controlState(field);for(const auto *key:{"bounds","visible","enabled"})after.erase(key);
+        restoreCheck(app.preciseNoteWindow->window()==owner&&GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity)==field&&app.preciseNoteWindow->operationGuard()==guard&&notesState(app)==values&&after==raw,"Hide/show replaced HWNDs or rewrote captured row/raw text/caret");
+        restoreCheck(songState(app)==song,"Native control creation/hide/show edited music");
+    });
+}
+void fourOwnerLegacyLayoutContracts() {
+    withRestoreFixture([](RestoreApplication &app) {
+        createRestoreInstrument(app);addRestoreGain(app);createRestoreCurveSource(app);app.restoreLayoutConfiguration(curveLayout(app,true));
+        for(const auto *id:{"automation","instruments","graphCurve","preciseNotes"})ScreamSeq::Tests::ownGuiWindow(app.workspaceEditorWindow(id)->window());
+        app.workspaceEditorRequest({{"panel","preciseNotes"},{"focus",true}});
+        const auto owner=app.preciseNoteWindow->window();
+        SendMessageW(owner,WM_COMMAND,MAKEWPARAM(ScreamSeq::PreciseNoteWindow::pageHit,BN_CLICKED),reinterpret_cast<LPARAM>(GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::pageHit)));
+        const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
+        restoreCheck(field&&IsWindowVisible(field)&&IsWindowEnabled(field),"Retained Notes field is not in the selected visible host");SetFocus(field);
+        restoreCheck(GetFocus()==field,"Retained Notes fixture did not focus its actual native field");
+        SendMessageW(field,EM_SETSEL,0,-1);SendMessageW(field,EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(L"-"));SendMessageW(field,EM_SETSEL,0,1);
+        const auto song=songState(app),placement=app.workspaceDockConfiguration(),note=preciseOwnerState(app),editors=app.workspacePreparationGuard().at("editors");
+        // Each historical non-Notes Main page leaves the four-owner preference
+        // and actual retained native fields intact. First-open Main reads remain
+        // allowed; no native owner may reload in response to a seven-field layout.
+        for(const auto *main:{"plugins","samples","effects","mixer","graph"}) {
+            auto old=app.layoutConfiguration();old.erase("editors");old["lowerEditor"]=main;app.preparationReads.clear();app.restoreLayoutConfiguration(old);
+            for(const auto *method:{"pattern.notes.get","automation.pattern.get","instrument.envelope.get","instrument.get","graph.automation.get"})
+                restoreCheck(std::count(app.preparationReads.begin(),app.preparationReads.end(),method)==0,"Seven-field non-Notes layout reloaded a retained native owner");
+            restoreCheck(app.workspaceDockConfiguration()==placement&&app.workspacePreparationGuard().at("editors")==editors&&preciseOwnerState(app)==note,"Seven-field non-Notes layout changed four-owner state/draft/caret");
+        }
+        // A seven-field Notes request is the documented reveal exception. It
+        // changes only native placement/selection, never the legacy inspector.
+        const auto inspector=app.workspacePreparationGuard().at("inspectors");
+        app.workspaceEditorRequest({{"panel","preciseNotes"},{"placement","hide"},{"focus",false}});
+        const auto oldNative=app.preciseNoteWindow->operationGuard();const auto hiddenConfig=app.currentWorkspaceRegions();const auto latent=app.lowerEditorName();
+        auto old=app.layoutConfiguration();old.erase("editors");old["lowerEditor"]="notes";app.preparationReads.clear();app.restoreLayoutConfiguration(old);
+        const auto expected=ScreamSeq::WorkspaceRegions::placed(hiddenConfig,ScreamSeq::WorkspaceRegions::Panel::preciseNotes,ScreamSeq::WorkspaceRegions::Placement::bottom,latent);
+        auto expectedShown=expected;expectedShown.compactSelection="preciseNotes";
+        restoreCheck(app.currentWorkspaceRegions()==expectedShown&&app.lowerEditorName()==latent&&app.preparationReads.empty(),"Seven-field Notes did not reveal only the retained native alias");
+        restoreCheck(app.preciseNoteWindow->window()==owner&&app.preciseNoteWindow->operationGuard()==oldNative&&app.workspacePreparationGuard().at("inspectors")==inspector,"Seven-field Notes changed draft, target, origin, or inspector pin");
+        // Hand-authored V3/V2 carry only their historic keys; Notes alias is
+        // accepted there but V4 rejects it without first adopting any state.
+        for(const int version:{3,2}) {
+            auto legacy=app.layoutConfiguration();legacy["lowerEditor"]="notes";
+            legacy["editors"]={{"version",version},{"locations",{{"automation","secondary"},{"instruments","right"}}},
+                {"selected",{{"right","instruments"},{"bottom","notes"},{"secondary","automation"}}},
+                {"compactSelection","notes"},{"rightWidth",523},{"bottomHeight",411}};
+            if(version==3)legacy["editors"]["locations"]["graphCurve"]="float";
+            app.preparationReads.clear();app.restoreLayoutConfiguration(legacy);
+            const auto encoded=app.workspaceDockConfiguration();
+            restoreCheck(encoded.at("version")==4&&encoded.at("locations").size()==4&&encoded.at("locations").at("preciseNotes")=="bottom"&&encoded.at("selected").at("bottom")=="preciseNotes"&&encoded.at("compactSelection")=="preciseNotes","Historical Notes did not migrate to canonical V4 native identity");
+            restoreCheck(encoded.at("locations").at("graphCurve")==(version==3?"float":"hide")&&encoded.at("rightWidth")==523&&encoded.at("bottomHeight")==411,"V3/V2 migration borrowed live placement or lost desired sizes");
+            restoreCheck(app.preparationReads.empty()&&app.preciseNoteWindow->operationGuard()==oldNative&&app.workspacePreparationGuard().at("inspectors")==inspector,"Migration reloaded a retained owner or changed inspector intent");
+        }
+        const auto before=restoreState(app);auto invalid=app.layoutConfiguration();invalid["lowerEditor"]="notes";
+        restoreRejected([&]{app.restoreLayoutConfiguration(invalid);});restoreCheck(restoreState(app)==before,"Invalid V4 Main Notes alias changed live state");
+        restoreCheck(songState(app)==song,"Legacy/V4 migration edited song/history/playback");
+    });
+}
+
 void preparationReadScopeAndBusyGuard() {
     withRestoreFixture([](RestoreApplication &app) {
         const auto before=restoreState(app);
@@ -694,7 +834,7 @@ int wmain(int argc,wchar_t **argv) {
             const auto initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);ScreamSeq::check(initialized,"Initialize restore test COM");
             struct Com {~Com(){CoUninitialize();}} com;
             INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_LISTVIEW_CLASSES};restoreCheck(InitCommonControlsEx(&controls)!=FALSE,"Initialize restore native lists");
-            firstRestoreMatchesOrdinaryOpen();std::cout<<"PASS first restore: pinned Notes and FX binding equivalence\n";
+            firstRestoreMatchesOrdinaryOpen();std::cout<<"PASS first restore: independent Notes inspector/native target and FX binding equivalence\n";
             requiredReadFailuresAreAtomic();std::cout<<"PASS required reads: errors and malformed Notes/Graph/Mixer are atomic\n";
             secondHiddenEditorFailureIsAtomic();std::cout<<"PASS all-before-any: second hidden editor failure and normal adopted callbacks\n";
             pumpedInputWinsOverPreparedLayout();std::cout<<"PASS pumped input: newer cursor/focus and native draft retained\n";
@@ -705,6 +845,9 @@ int wmain(int argc,wchar_t **argv) {
             busyCurveSourcePickerRetainsPreparedTarget();std::cout<<"PASS Curve source picker: busy rejection restores native choice and retains drafts\n";
             pumpedCurvePatternChangeRejectsPreparedTarget();std::cout<<"PASS Curve context: permitted pattern navigation rejects original preparation\n";
             guideOnlyRestoreRetainsChildThenInitializes();std::cout<<"PASS Curve Guide: retained empty owner/child, explicit initialize and Return\n";
+            fourthHiddenNotesFailureIsAtomic();std::cout<<"PASS Notes staging: fourth hidden read/malformed data preserve all-before-any adoption\n";
+            preciseOwnerControlsAreLazyAndRetained();std::cout<<"PASS Notes native controls: lazy sole owner, hidden HWND/raw/caret retention\n";
+            fourOwnerLegacyLayoutContracts();std::cout<<"PASS V4 restore: seven-field exception and hand-authored V3/V2 aliases\n";
             preparationReadScopeAndBusyGuard();std::cout<<"PASS read scope: mutation rejection and busy/recovery pre-queue guards\n";
         });
         return 0;

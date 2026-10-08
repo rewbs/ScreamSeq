@@ -26,6 +26,7 @@
 #include "GraphCommandsWindow.hpp"
 #include "ParameterAutomationWindow.hpp"
 #include "GraphCurveWindow.hpp"
+#include "PreciseNoteWindow.hpp"
 #include "InstrumentEnvelopeWindow.hpp"
 #include "AbsoluteAutomationWindow.hpp"
 #include "SampleDetailWindow.hpp"
@@ -63,7 +64,8 @@
 namespace {
 namespace Regions = ScreamSeq::WorkspaceRegions;
 constexpr int connectedWorkspaceCommand=562,openGraphCurveCommand=563,dockGraphCurveCommand=564,
-    graphEditingWorkspaceCommand=565,editorGraphCurveTab=566,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
+    graphEditingWorkspaceCommand=565,editorGraphCurveTab=566,dockPreciseNotesCommand=567,
+    editorPreciseNotesTab=568,notesInspectorCommand=569,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
 constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
@@ -268,6 +270,7 @@ public:
         return view->samples.contains(cell.instrument) ? cell.instrument : 0;
     }
 	void updateInspector() {
+        notePreciseNoteSelection();
 		if(workspaceState.visible()) workspaceState.capture(workspaceState.active,position(),cursorSample());
 		followWorkspaceEditors();
 	}
@@ -281,7 +284,7 @@ public:
 		}
 		Json visible=Json::array(); if(workspaceState.visible()&&trackerWorkspaceVisible()) visible.push_back(workspaceState.active);
         const auto focus=workspacePresentationFocus();
-        for(const auto *id:{"automation","instruments","graphCurve"}) {
+        for(const auto *id:workspaceEditorNames) {
             const auto &p=workspaceEditors[workspaceEditorIndex(id)];auto *tool=workspaceEditorWindow(id);
             pins[id]=p.pinned;origins[id]=p.origin;locations[id]=p.location;
             const auto data=workspaceEditorSnapshot(id);
@@ -294,7 +297,7 @@ public:
 		return {{"geometry",{{"pattern",rect(g.pattern)},{"inspector",rect(g.inspector)},{"lowerTabs",rect(g.lowerTabs)},
 			{"verticalDivider",rect(g.verticalDivider)},{"horizontalDivider",rect(g.horizontalDivider)}}},
 			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},
-			{"panels",{"notes","samples","automation","instruments","graphCurve"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
+			{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
 			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",focus},{"editorDock",workspaceDockSnapshot()},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
 			{"locations",locations},{"liveKeyboard",liveKeyboard},{"musicalTyping",typingSnapshot()},
@@ -330,11 +333,7 @@ public:
             {"audition",auditionWindow?auditionWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
-            {"noteEditor",{{"visible",noteEditorVisible()},{"pattern",notePattern},{"row",noteRow},{"channel",noteChannel},
-                {"expectedRevision",noteRevision},{"stale",noteDocument!=documentId||noteRevision!=view->session.revision},
-                {"pending",notePending},{"draftCount",noteDraft.size()},{"selected",noteSelected},
-                {"selectedEvent",noteSelected>=0?noteDraft.at(size_t(noteSelected)):Json()},
-                {"timeline",rect(noteTimelineRect())},{"status",utf8Path(noteStatus)}}},
+            {"noteEditor",preciseNoteSnapshot()},{"preciseNotes",preciseNoteSnapshot()},
             {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
                 {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
                 {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
@@ -723,11 +722,6 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             if(LOWORD(wp)>=mixerName&&LOWORD(wp)<=mixerTiming){if(HIWORD(wp)==EN_CHANGE)app->mixerFieldChanged();return 0;}
             if(LOWORD(wp)==mixerOutput&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==mixerList&&HIWORD(wp)!=LBN_SELCHANGE)return 0;
-            if(LOWORD(wp)==noteInstrument||LOWORD(wp)==noteVelocity||LOWORD(wp)==noteOffset||LOWORD(wp)==noteParameter||LOWORD(wp)==noteRepeatCount||LOWORD(wp)==noteEndVelocity) {
-                if(HIWORD(wp)==EN_CHANGE)app->noteFieldChanged();return 0;
-            }
-            if((LOWORD(wp)==notePitch||LOWORD(wp)==noteUnitControl||LOWORD(wp)==noteSnapControl||LOWORD(wp)==noteEffectControl)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
-            if(LOWORD(wp)==noteList&&HIWORD(wp)!=LBN_SELCHANGE&&HIWORD(wp)!=LBN_DBLCLK)return 0;
             if(LOWORD(wp)==effectSearch){if(HIWORD(wp)==EN_CHANGE)app->filterEffects();return 0;}
             if(LOWORD(wp)>=effectValue&&LOWORD(wp)<=effectRange)return 0;
             if((LOWORD(wp)==effectKind||LOWORD(wp)==effectBinding)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
@@ -746,9 +740,9 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         case WM_ACTIVATEAPP:if(!wp)app->releaseTypedNotes();break;
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
-        case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->graphLaneClick(x,y,true))app->noteMouseDown(x,y,true);return 0;}
-		case WM_LBUTTONUP: app->graphMouseUp(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));app->noteMouseUp();app->dragging=0;ReleaseCapture();return 0;
-		case WM_CAPTURECHANGED:if(app->dragging>=6&&app->dragging<=9)app->graphCancelDrag();app->cancelWorkspaceRegionDrag();app->noteMouseUp();app->dragging=0;return 0;
+        case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);app->graphLaneClick(x,y,true);return 0;}
+		case WM_LBUTTONUP: app->graphMouseUp(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));app->dragging=0;ReleaseCapture();return 0;
+		case WM_CAPTURECHANGED:if(app->dragging>=6&&app->dragging<=9)app->graphCancelDrag();app->cancelWorkspaceRegionDrag();app->dragging=0;return 0;
 		case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{
             POINT at{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};ScreenToClient(window,&at);const float scale=96.0f/GetDpiForWindow(window),x=at.x*scale,y=at.y*scale;
             if(!app->trackerWorkspaceVisible()||!app->geometry().pattern.contains(x,y))return 0;

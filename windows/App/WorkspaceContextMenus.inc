@@ -56,7 +56,7 @@
     }
     Json workspaceMenuTarget(const std::string &surfaceName) {
         if(surfaceName=="pattern")return {{"position",position()},{"selection",selection()},{"selecting",selecting},
-            {"anchorRow",anchorRow},{"anchorChannel",anchorChannel},{"effectPrefix",effectPrefix},{"effectPrefixRevision",effectPrefixRevision}};
+            {"anchorRow",anchorRow},{"anchorChannel",anchorChannel},{"preciseNotes",preciseNoteOperationGuard()},{"preciseSource",preciseNoteSelectionGuard()},{"effectPrefix",effectPrefix},{"effectPrefixRevision",effectPrefixRevision}};
         if(surfaceName=="sample") {
             const auto range=sampleRange();
             return {{"sample",selectedSample()},{"id",selectedSampleId()},{"start",range.first},{"end",range.last},{"frames",range.frames},
