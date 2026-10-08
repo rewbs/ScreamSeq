@@ -12,6 +12,7 @@ using ScreamSeq::WorkspaceRect;
 void check(bool condition,const char *message){if(!condition)throw std::runtime_error(message);}
 bool close(float a,float b){return std::abs(a-b)<.001f;}
 bool same(WorkspaceRect a,WorkspaceRect b){return close(a.x,b.x)&&close(a.y,b.y)&&close(a.w,b.w)&&close(a.h,b.h);}
+constexpr std::array<std::string_view,6> historicalMainNames{"notes","samples","effects","plugins","mixer","graph"};
 Config fourPanes(){auto result=Regions::placed(Config{},Panel::automation,Placement::secondary);return Regions::placed(result,Panel::instruments,Placement::right);}
 void reject(const Json &value,const Config &current){
   const auto before=current;
@@ -24,17 +25,17 @@ void legacyMigration(){
   check(Regions::decodeEditors(nullptr,current,"samples",128)==current,"Seven-field layout changed current independent editor placements");
   unsigned cases=0;
   for(const auto a:{"right","float","hide"})for(const auto b:{"right","float","hide"})
-    for(const auto active:{"automation","instruments"})for(const bool tracker:{false,true})for(const auto lower:Regions::mainBottomNames){
+    for(const auto active:{"automation","instruments"})for(const bool tracker:{false,true})for(const auto lower:historicalMainNames){
       const Json old={{"locations",Json::array({a,b})},{"active",active},{"tracker",tracker}};
       const auto migrated=Regions::decodeEditors(&old,current,lower,128);
       const auto expected=std::string_view(active)=="automation"&&std::string_view(a)=="right"?"automation":
         std::string_view(active)=="instruments"&&std::string_view(b)=="right"?"instruments":
         std::string_view(a)=="right"?"automation":std::string_view(b)=="right"?"instruments":"";
-      check(migrated.locations==std::array{Regions::placement(a),Regions::placement(b),Placement::hidden},"Legacy placement changed or curve became visible");
-      check(migrated.selected[0]==expected&&migrated.selected[1]==lower&&migrated.selected[2].empty(),"Legacy active/lower selection migration changed effective tabs");
+      check(migrated.locations==std::array{Regions::placement(a),Regions::placement(b),Placement::hidden,lower=="notes"?Placement::bottom:Placement::hidden},"Legacy placement changed or curve became visible");
+      check(migrated.selected[0]==expected&&migrated.selected[1]==(lower=="notes"?"preciseNotes":lower)&&migrated.selected[2].empty(),"Legacy active/lower selection migration changed effective tabs");
       check(migrated.compactSelection==(tracker||std::string_view(expected).empty()?"pattern":expected),"Legacy tracker selection was lost");
       check(migrated.rightWidth==460&&migrated.bottomHeight==128,"Legacy short desired height was rejected or silently enlarged");
-      const auto encoded=Regions::encode(migrated);check(encoded.at("version")==3&&Regions::decodeEditors(&encoded,current)==migrated,"Migrated legacy configuration did not round-trip as V3");++cases;
+      const auto encoded=Regions::encode(migrated);check(encoded.at("version")==4&&Regions::decodeEditors(&encoded,current)==migrated,"Migrated legacy configuration did not round-trip as V4");++cases;
     }
   check(cases==216,"Legacy migration did not cover all 36 editor states and six lower editors");
   const Json bad={{"locations",Json::array({"bottom","hide"})},{"active","automation"},{"tracker",false}};reject(bad,current);
@@ -45,7 +46,7 @@ void legacyMigration(){
 // Deliberately encode the historical format directly, independent of the new
 // encoder. V2 must not accept a third location or borrow live curve placement.
 Json version2(const Config &config){
-  check(config.locations[2]==Placement::hidden,"V2 fixture unexpectedly contains a curve host");
+  check(config.locations[2]==Placement::hidden&&config.locations[3]==Placement::hidden,"V2 fixture unexpectedly contains a newer native host");
   return {{"version",2},{"locations",{{"automation",Regions::name(config.locations[0])},{"instruments",Regions::name(config.locations[1])}}},
     {"selected",{{"right",config.selected[0]},{"bottom",config.selected[1]},{"secondary",config.selected[2]}}},
     {"compactSelection",config.compactSelection},{"rightWidth",config.rightWidth},{"bottomHeight",config.bottomHeight}};
@@ -56,11 +57,11 @@ void version2Migration(){
   unsigned cases=0;
   for(const auto a:{Placement::right,Placement::bottom,Placement::secondary,Placement::floating,Placement::hidden})
     for(const auto b:{Placement::right,Placement::bottom,Placement::secondary,Placement::floating,Placement::hidden}){
-      Config previous;previous.locations={a,b,Placement::hidden};
+      Config previous;previous.locations={a,b,Placement::hidden,Placement::hidden};
       std::array<std::vector<std::string>,3> selections;
       for(size_t r=0;r<3;++r){
         const auto region=static_cast<Region>(r);
-        if(region==Region::bottom)for(const auto id:Regions::mainBottomNames)selections[r].emplace_back(id);
+        if(region==Region::bottom)for(const auto id:historicalMainNames)selections[r].emplace_back(id);
         for(size_t p=0;p<2;++p)if(previous.locations[p]==Regions::placement(region))selections[r].emplace_back(Regions::panelNames[p]);
         if(selections[r].empty())selections[r].push_back("");
       }
@@ -70,10 +71,12 @@ void version2Migration(){
         for(const auto &selected:compact)for(const auto sizes:{std::pair{440.f,128.f},std::pair{523.f,411.f},std::pair{1600.f,1600.f}}){
           previous.compactSelection=selected;previous.rightWidth=sizes.first;previous.bottomHeight=sizes.second;
           const auto encoded=version2(previous);const auto migrated=Regions::decodeEditors(&encoded,current);
-          check(migrated==previous,"V2 migration changed an existing placement, selected region, compact choice or desired split");
+          auto expected=previous;
+          if(bottom=="notes"){expected.locations[3]=Placement::bottom;expected.selected[1]="preciseNotes";if(selected=="notes")expected.compactSelection="preciseNotes";}
+          check(migrated==expected,"V2 migration changed data beyond the explicit Main Notes alias");
           check(migrated.locations[2]==Placement::hidden,"V2 migration adopted the live curve placement");
-          const auto v3=Regions::encode(migrated);check(v3.at("version")==3&&v3.at("locations").size()==3&&v3.at("locations").at("graphCurve")=="hide","V2 migration did not emit strict V3 with hidden curve");
-          check(Regions::decodeEditors(&v3,current)==migrated,"V2 to V3 round-trip changed migrated state");
+          const auto v4=Regions::encode(migrated);check(v4.at("version")==4&&v4.at("locations").size()==4&&v4.at("locations").at("graphCurve")=="hide"&&v4.at("locations").at("preciseNotes")== (bottom=="notes"?"bottom":"hide"),"V2 migration did not emit strict V4 with deliberate Notes alias only");
+          check(Regions::decodeEditors(&v4,current)==migrated,"V2 to V4 round-trip changed migrated state");
           ++cases;
         }
       }
@@ -84,11 +87,75 @@ void version2Migration(){
   bad=version2(fourPanes());bad["selected"]["secondary"]="graphCurve";reject(bad,current);
   bad=version2(fourPanes());bad["compactSelection"]="graphCurve";reject(bad,current);
 }
+// Historical V3 bytes are authored independently of the V4 encoder. Every
+// old placement survives; only the old Main Notes identity becomes native.
+Json version3(const Config &config){
+  check(config.locations[3]==Placement::hidden,"V3 fixture unexpectedly contains Precise Notes");
+  return {{"version",3},{"locations",{{"automation",Regions::name(config.locations[0])},{"instruments",Regions::name(config.locations[1])},{"graphCurve",Regions::name(config.locations[2])}}},
+    {"selected",{{"right",config.selected[0]},{"bottom",config.selected[1]},{"secondary",config.selected[2]}}},
+    {"compactSelection",config.compactSelection},{"rightWidth",config.rightWidth},{"bottomHeight",config.bottomHeight}};
+}
+void version3Migration(){
+  auto current=Regions::placed(fourPanes(),Panel::preciseNotes,Placement::right);
+  current.compactSelection="preciseNotes";current.rightWidth=611;current.bottomHeight=477;const auto before=current;
+  unsigned cases=0;
+  for(const auto a:{Placement::right,Placement::bottom,Placement::secondary,Placement::floating,Placement::hidden})
+    for(const auto b:{Placement::right,Placement::bottom,Placement::secondary,Placement::floating,Placement::hidden})
+      for(const auto c:{Placement::right,Placement::bottom,Placement::secondary,Placement::floating,Placement::hidden}) {
+        const auto base=Regions::placed(Regions::placed(Regions::placed(Config{},Panel::automation,a),Panel::instruments,b),Panel::graphCurve,c);
+        for(const auto lower:historicalMainNames)for(const bool compactLower:{false,true}) {
+          auto old=base;old.selected[1]=lower;old.compactSelection=compactLower?std::string(lower):"pattern";
+          old.rightWidth=523;old.bottomHeight=411;
+          const auto bytes=version3(old);auto expected=old;
+          if(lower=="notes") {expected.locations[3]=Placement::bottom;expected.selected[1]="preciseNotes";if(compactLower)expected.compactSelection="preciseNotes";}
+          const auto migrated=Regions::decodeEditors(&bytes,current);
+          check(migrated==expected,"V3 migration altered old placement/sizes or missed the exact Notes alias");
+          for(size_t i=0;i<3;++i)check(migrated.locations[i]==old.locations[i],"V3 migration moved an existing Automation/Instrument/Curve owner");
+          const auto encoded=Regions::encode(migrated);
+          check(encoded.at("version")==4&&encoded.at("locations").size()==4&&Regions::decodeEditors(&encoded,current)==expected,"V3 migration did not round-trip as strict V4");++cases;
+        }
+      }
+  check(cases==1500&&current==before,"V3 fixture coverage or immutable decode contract changed");
+  for(const auto makeOld:{2,3}) {
+    auto old=makeOld==2?version2(fourPanes()):version3(fourPanes());
+    auto bad=old;bad["locations"]["preciseNotes"]="hide";reject(bad,current);
+    for(const auto *region:{"right","bottom","secondary"}){bad=old;bad["selected"][region]="preciseNotes";reject(bad,current);}
+    bad=old;bad["compactSelection"]="preciseNotes";reject(bad,current);
+  }
+}
+void checkGeometry(WorkspaceRect work,const Regions::Geometry &geometry);
+void fourthPanelIdentityAndGeometry(){
+  static_assert(static_cast<size_t>(Panel::graphCurve)==2&&static_cast<size_t>(Panel::preciseNotes)==3);
+  check(Regions::panelNames.size()==4&&Regions::panelNames[3]=="preciseNotes"&&!Regions::mainBottom("notes")&&!Regions::mainBottom("preciseNotes"),"Inspector/Main/native Notes identities were conflated");
+  auto original=Regions::placed(fourPanes(),Panel::graphCurve,Placement::bottom);
+  for(const auto destination:{Placement::right,Placement::bottom,Placement::secondary,Placement::floating,Placement::hidden}) {
+    auto config=Regions::placed(original,Panel::preciseNotes,destination);
+    for(size_t i=0;i<3;++i)check(config.locations[i]==original.locations[i],"Fourth owner placement relocated an existing native owner");
+    if(destination==Placement::right||destination==Placement::bottom||destination==Placement::secondary)config.compactSelection="preciseNotes";
+    const auto before=config;const auto encoded=Regions::encode(config);
+    check(Regions::decodeEditors(&encoded,Config{})==config,"Fourth owner did not round-trip through V4");
+    for(const auto bounds:{WorkspaceRect{170,88,1262,686},WorkspaceRect{170,88,706,450}}) {
+      const auto geometry=Regions::solve(bounds,config);checkGeometry(bounds,geometry);
+      if(geometry.mode==Regions::Mode::tabs&&config.compactSelection=="preciseNotes") {
+        unsigned shown=0;for(const auto &host:geometry.hosts)if(host.visible){++shown;check(host.selected=="preciseNotes","Compact Notes revealed another owner");}
+        check(shown==1&&geometry.pattern.h==0,"Compact Notes lacks its sole independent host");
+      }
+    }
+    check(config==before,"Fourth owner geometry rewrote desired placement");
+    auto bad=encoded;bad["selected"]["bottom"]="notes";reject(bad,config);
+    bad=encoded;bad["compactSelection"]="notes";reject(bad,config);
+  }
+  auto selected=Regions::placed(original,Panel::preciseNotes,Placement::bottom);selected.compactSelection="preciseNotes";
+  const auto hidden=Regions::placed(selected,Panel::preciseNotes,Placement::hidden);
+  check(hidden.locations[2]==Placement::bottom&&hidden.selected[1]=="graph"&&hidden.compactSelection=="pattern","Hiding Notes changed retained Curve placement or kept an unavailable compact choice");
+  check(Regions::decodeEditors(nullptr,selected,"samples",128)==selected,"Absent editors rewrote four native owners");
+}
+
 void strictVersionAndMembership(){
   const auto current=fourPanes();const auto valid=Regions::encode(current);
   for(const auto *field:{"version","locations","selected","compactSelection","rightWidth","bottomHeight"}){auto bad=valid;bad.erase(field);reject(bad,current);}
   for(const auto *field:{"pins","targets","origin","drafts"}){auto bad=valid;bad[field]=Json::object();reject(bad,current);}
-  for(const auto value:{Json(1),Json(4),Json(2.0),Json(3.0),Json(true),Json("2"),Json("3"),Json(std::numeric_limits<uint64_t>::max())}){auto bad=valid;bad["version"]=value;reject(bad,current);}
+  for(const auto value:{Json(1),Json(5),Json(2.0),Json(3.0),Json(4.0),Json(true),Json("2"),Json("3"),Json("4"),Json(uint64_t(1)<<32|4),Json(std::numeric_limits<uint64_t>::max())}){auto bad=valid;bad["version"]=value;reject(bad,current);}
   for(const auto name:Regions::panelNames){auto bad=valid;bad["locations"].erase(std::string(name));reject(bad,current);}
   for(const auto value:{Json::array(),Json(),Json("right")}){auto bad=valid;bad["locations"]=value;reject(bad,current);}
   for(const auto *field:{"locations","selected"}){auto bad=valid;bad[field]["unknown"]="automation";reject(bad,current);}
@@ -103,11 +170,11 @@ void strictVersionAndMembership(){
   }
   for(const auto destination:{Placement::right,Placement::bottom,Placement::secondary,Placement::floating,Placement::hidden}){
     const auto moved=Regions::placed(current,Panel::automation,destination,"plugins");const auto encoded=Regions::encode(moved);
-    check(Regions::decodeEditors(&encoded,Config{})==moved,"V3 native placement did not round-trip");
+    check(Regions::decodeEditors(&encoded,Config{})==moved,"V4 native placement did not round-trip");
   }
   check(valid.size()==6&&!valid.contains("pins")&&!valid.contains("targets"),"Region preferences unexpectedly persist live editor state");
 }
-void thirdPanelSelectionAndStrictV3(){
+void thirdPanelSelectionAndStrictV4(){
   static_assert(static_cast<size_t>(Panel::graphCurve)==2);
   check(Regions::panelNames[2]=="graphCurve"&&!Regions::mainBottom("graphCurve"),"Curve identity was confused with the Main-owned graph");
   const auto original=fourPanes();
@@ -122,7 +189,7 @@ void thirdPanelSelectionAndStrictV3(){
   main=Regions::selected(main,Region::bottom,"graphCurve");main.compactSelection="graphCurve";
   for(const auto destination:{Placement::right,Placement::bottom,Placement::secondary,Placement::floating,Placement::hidden}){
     const auto moved=Regions::placed(main,Panel::graphCurve,destination);const auto encoded=Regions::encode(moved);
-    check(Regions::decodeEditors(&encoded,original)==moved,"Curve placement did not round-trip through strict V3");
+    check(Regions::decodeEditors(&encoded,original)==moved,"Curve placement did not round-trip through strict V4");
     auto bad=encoded;bad["locations"]["graphCurve"]="floating";reject(bad,config);
     bad=encoded;bad["locations"]["graphCurve"]=false;reject(bad,config);
   }
@@ -130,7 +197,7 @@ void thirdPanelSelectionAndStrictV3(){
   for(const auto *region:{"right","bottom"}){auto bad=valid;bad["selected"][region]="graphCurve";reject(bad,config);}
   auto unavailable=valid;unavailable["locations"]["graphCurve"]="float";reject(unavailable,config);
   auto unselected=valid;unselected["selected"]["secondary"]="automation";reject(unselected,config);
-  check(Regions::decodeEditors(nullptr,config,"samples",128)==config,"Absent editors changed a live V3 curve placement or selection");
+  check(Regions::decodeEditors(nullptr,config,"samples",128)==config,"Absent editors changed a live V4 curve placement or selection");
   check(original==fourPanes(),"Third-panel operations mutated their source configuration");
 }
 void independentSelections(){
@@ -191,7 +258,7 @@ void alignedGeometryAndFallback(){
 void absentAndMainOwnedNeighbors(){
   const WorkspaceRect work{170,88,1262,686};
   for(const auto a:{Placement::floating,Placement::hidden})for(const auto b:{Placement::floating,Placement::hidden})for(const auto c:{Placement::floating,Placement::hidden}){
-    Config config;config.locations={a,b,c};const auto result=Regions::solve(work,config);
+    Config config;config.locations={a,b,c,Placement::hidden};const auto result=Regions::solve(work,config);
     check(result.mode==Regions::Mode::none&&same(result.pattern,work)&&!result.hosts[0].visible&&!result.hosts[1].visible&&!result.hosts[2].visible,"No native dock incorrectly replaced legacy geometry");
   }
   auto config=Regions::placed(fourPanes(),Panel::automation,Placement::hidden);auto result=Regions::solve(work,config);
@@ -228,6 +295,6 @@ void simultaneousRoutingAndCurveGeometry(){
 }
 }
 int main(){try{
-  legacyMigration();version2Migration();strictVersionAndMembership();thirdPanelSelectionAndStrictV3();independentSelections();alignedGeometryAndFallback();absentAndMainOwnedNeighbors();simultaneousRoutingAndCurveGeometry();
-  std::cout<<"PASS workspace regions: legacy/V2 migration, strict V3 with independent graphCurve, immutable restore values, three-panel selections, aligned routing/curve hosts and compact fallback\n";return 0;
+  legacyMigration();version2Migration();version3Migration();fourthPanelIdentityAndGeometry();strictVersionAndMembership();thirdPanelSelectionAndStrictV4();independentSelections();alignedGeometryAndFallback();absentAndMainOwnedNeighbors();simultaneousRoutingAndCurveGeometry();
+  std::cout<<"PASS workspace regions: legacy/V2/V3 migration, strict V4 with independent graphCurve/preciseNotes, immutable restore values, three-panel selections, aligned routing/curve hosts and compact fallback\n";return 0;
 }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}

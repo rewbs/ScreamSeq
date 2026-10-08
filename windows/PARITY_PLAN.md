@@ -1,18 +1,24 @@
 # Windows / Mac parity plan
 
-Current Graph Curve checkpoint (2026-10-07): routing and its retained curve editor
-can stay visible beside Pattern and parameter Automation. V3 saved layouts,
-independent drafts, captured targets, native focus and retained Formula/Bank/Guide
-children are integrated. Candidate 7 passes **399/399 app cases**, **38/38 focused
-cases**, **49/49 native targets**, and review of **21 source-matched 192-DPI views**.
-See [Graph Curve evidence](GRAPH_CURVE_HOST_PROGRESS.md) for identities, earlier
-failures and scoped limits. Checkpoint destination:
-`bin/windows-checkpoints/graph-curve-host-20261007/`; its manifest confirms packaging.
+Current Precise Notes checkpoint (2026-10-07): one retained editor adds independent
+placement, captured targets, four compact pages and V4 saved-layout migration.
+Pattern, routing, Precise Notes and Graph Curve can remain visible together. Final
+candidate 2 passes **403/403 app cases**, **81/81 focused cases**, **50/50 native
+targets**, and two-reviewer inspection of **16 source-matched 192-DPI views**.
+See [Precise Notes evidence](PRECISE_NOTE_HOST_PROGRESS.md) for exact identities,
+retained failures and limits. Checkpoint destination:
+`bin/windows-checkpoints/precise-note-host-20261007/`; its completed manifest and
+independent verification receipt establish publication. Fractional offsets,
+Reload selection retention and empty-row sound seeding remain next-phase work.
+The Windows/Mac parity goal stays open.
 
-Precise Notes still shares Main's lower editor and is the next ownership/UI gap.
-Its separate retained-owner proposal is not yet implemented or qualified. Full
-Windows/Mac parity remains the goal; foreground/multiple-scale presentation,
-accessibility and reciprocal Mac runtime remain outside this checkpoint's evidence.
+Previous Graph Curve checkpoint (2026-10-07): routing and its retained curve editor
+can stay visible beside Pattern and parameter Automation. V3 saved layouts,
+independent drafts, captured targets, native focus and Formula/Bank/Guide children
+are integrated. Candidate 7 passes **399/399 app cases**, **38/38 focused cases**,
+**49/49 native targets**, and review of **21 source-matched 192-DPI views**.
+See [Graph Curve evidence](GRAPH_CURVE_HOST_PROGRESS.md). Immutable checkpoint:
+`bin/windows-checkpoints/graph-curve-host-20261007/`.
 
 Previous independent-docking checkpoint (2026-10-07): the Connected workspace
 shows Pattern, Graph, Instrument and Automation in independent native regions.

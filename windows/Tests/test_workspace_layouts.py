@@ -20,6 +20,11 @@ user.GetClassNameW.argtypes = [w.HWND, w.LPWSTR, ctypes.c_int]
 user.GetWindow.argtypes = [w.HWND, w.UINT]
 user.GetWindow.restype = w.HWND
 user.ClientToScreen.argtypes = [w.HWND, ctypes.POINTER(w.POINT)]
+user.FindWindowExW.argtypes = [w.HWND, w.HWND, w.LPCWSTR, w.LPCWSTR]
+user.FindWindowExW.restype = w.HWND
+user.GetParent.argtypes = [w.HWND]
+user.GetParent.restype = w.HWND
+user.GetWindowThreadProcessId.argtypes = [w.HWND, ctypes.POINTER(w.DWORD)]
 
 
 class WorkspaceLayoutTests(unittest.TestCase):
@@ -32,6 +37,19 @@ class WorkspaceLayoutTests(unittest.TestCase):
     navigate = test_workspace.WorkspaceTests.navigate
     resize_client = test_workspace.WorkspaceTests.resize_client
 
+    def precise_window(self):
+        # These cases open the default secondary dock, not a floating editor.
+        main = self.native_window()
+        owner = user.FindWindowExW(main, None, 'ScreamSeq.PreciseNotes', None)
+        self.assertTrue(owner, 'Missing retained Precise Notes dock owner')
+        self.assertFalse(user.FindWindowExW(main, owner, 'ScreamSeq.PreciseNotes', None),
+                         'More than one Precise Notes dock owner')
+        pid = w.DWORD()
+        self.assertTrue(user.GetWindowThreadProcessId(owner, ctypes.byref(pid)))
+        self.assertEqual(pid.value, self.process.pid)
+        self.assertEqual(user.GetParent(owner), main)
+        return owner
+
     def state(self):
         return self.client.call('workspace.get')['data']
 
@@ -39,7 +57,8 @@ class WorkspaceLayoutTests(unittest.TestCase):
         deadline = time.monotonic() + 8
         while time.monotonic() < deadline:
             state = self.state()
-            if not state['documentBusy'] and not state['pendingViewCommands']:
+            if (not state['documentBusy'] and not state['pendingViewCommands']
+                    and not state['noteEditor'].get('pending', False)):
                 return state
             time.sleep(.01)
         self.fail('Workspace did not finish its retained view request')
@@ -162,7 +181,7 @@ class WorkspaceLayoutTests(unittest.TestCase):
         for ident, editor, snapshot in (
                 (523, 'plugins', None), (524, 'mixer', 'mixerEditor'),
                 (525, 'graph', 'graphEditor'), (522, 'effects', 'effectEditor'),
-                (520, 'notes', 'noteEditor'), (521, 'samples', None)):
+                (521, 'samples', None)):
             with self.subTest(editor=editor):
                 state = self.press(ident)
                 self.assertEqual(state['lowerEditor'], editor)
@@ -184,6 +203,13 @@ class WorkspaceLayoutTests(unittest.TestCase):
         self.assertTrue(reopened['lowerVisible'])
         self.assertEqual(reopened['lowerEditor'], 'mixer')
         self.assertTrue(user.IsWindowVisible(self.control(524)))
+        # Notes is a native reveal alias; it must not select or expand Main.
+        latent = self.state()
+        notes = self.press(520)
+        self.assertTrue(notes['noteEditor']['visible'])
+        self.assertTrue(user.IsWindowVisible(self.precise_window()))
+        self.assertEqual(notes['lowerEditor'], latent['lowerEditor'])
+        self.assertEqual(notes['lowerVisible'], latent['lowerVisible'])
         self.assertEqual(self.client.call('context.get'), context)
         self.assert_song_unchanged(song)
 
@@ -214,17 +240,22 @@ class WorkspaceLayoutTests(unittest.TestCase):
         song = self.client.call('document.get')
         self.navigate(row=0, channel=0, following=False)
         self.press(520)
+        owner = self.precise_window()
+        add = self.control(369, owner)
         initial_count = self.state()['noteEditor']['draftCount']
-        self.press(369)  # Add a hit to the captured draft without applying it.
+        self.press(369, owner)  # Add a hit to the captured draft without applying it.
         draft = self.state()['noteEditor']
         self.assertEqual(draft['draftCount'], initial_count + 1)
-        self.layout('Save custom', savedName='Note detail')
+        saved = self.layout('Save custom', savedName='Note detail')
         self.navigate(row=24, channel=1, following=False)
-        self.press(525)
+        self.command(430)  # Reveal Main Graph even when the compact Notes host covers its tab.
         context = self.client.call('context.get')
         restored = self.layout('Restore custom', savedName='Note detail')
-        self.assertEqual(restored['lowerEditor'], 'notes')
+        self.assertEqual(restored['lowerEditor'], saved['lowerEditor'])
+        self.assertEqual(restored['editorDock']['configuration'], saved['editorDock']['configuration'])
         self.assertTrue(restored['noteEditor']['visible'])
+        self.assertEqual(self.precise_window(), owner)
+        self.assertEqual(self.control(369, owner), add)
         for field in ('pattern', 'row', 'channel', 'draftCount', 'selectedEvent', 'expectedRevision'):
             self.assertEqual(restored['noteEditor'][field], draft[field], field)
         self.assertEqual(self.client.call('context.get'), context)

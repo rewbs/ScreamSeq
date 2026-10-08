@@ -13,6 +13,7 @@ user.GetClientRect.argtypes = user.GetWindowRect.argtypes
 user.MapWindowPoints.argtypes = [w.HWND, w.HWND, ctypes.POINTER(w.POINT), w.UINT]
 user.GetDlgCtrlID.argtypes = [w.HWND]
 user.IsWindowEnabled.argtypes = [w.HWND]
+user.GetDpiForWindow.argtypes = [w.HWND]
 
 
 class WorkspaceRegionsUITests(unittest.TestCase):
@@ -247,7 +248,7 @@ class WorkspaceRegionsUITests(unittest.TestCase):
         self.resize_client(900, 620)
         before = self.doc()
         owner = self.native_window()
-        for command, selected, key in ((107, 'notes', 'noteEditor'), (108, 'samples', None),
+        for command, selected, key in ((108, 'samples', None),
                                        (340, 'effects', 'effectEditor'), (316, 'plugins', None),
                                        (400, 'mixer', 'mixerEditor'), (430, 'graph', 'graphEditor')):
             with self.subTest(editor=command):
@@ -266,6 +267,29 @@ class WorkspaceRegionsUITests(unittest.TestCase):
                     for page in range(6):
                         self.choose(owner, 318 if command == 316 else 443, page)
                         self.visible_geometry(owner)
+        # The Notes entry now reveals its native owner, leaving Main's page intact.
+        latent = self.ready()
+        state = self.command(107)
+        notes = self.native_window('ScreamSeq.PreciseNotes')
+        self.assertEqual(state['editorDock']['mode'], 'tabs')
+        self.assertEqual(state['editorDock']['compactSelection'], 'preciseNotes')
+        self.assertFalse(state['editorDock']['trackerVisible'])
+        self.assertEqual(state['locations']['preciseNotes'], 'secondary')
+        self.assertEqual(state['editorDock']['hosts']['secondary']['selected'], 'preciseNotes')
+        self.assertTrue(state['editorDock']['hosts']['secondary']['visible'])
+        self.assertTrue(state['preciseNotes']['visible'])
+        self.assertEqual(state['preciseNotes']['coordinateSpace'], 'ownerClientDIP')
+        self.assertEqual(state['lowerEditor'], latent['lowerEditor'])
+        self.assertEqual(state['lowerVisible'], latent['lowerVisible'])
+        self.assertEqual(user.GetParent(notes), owner)
+        for identifier in range(360, 378):
+            self.assertFalse(user.GetDlgItem(owner, identifier), identifier)
+            self.assertTrue(self.control(notes, identifier))
+        for page in range(9200, 9203):
+            self.click(notes, page)
+            self.visible_geometry(notes)
+            self.visible_geometry(owner)
+        self.assertEqual(self.native_window('ScreamSeq.PreciseNotes'), notes)
         self.assertEqual(self.doc(), before)
 
     def test_legacy_inspector_focus_and_return_reveal_pattern_from_native_tabs(self):
@@ -671,7 +695,7 @@ class WorkspaceRegionsUITests(unittest.TestCase):
             self.assertEqual(self.desktop.focus(owner), owner)
             return self.ready()
 
-        for panel, open_command, field_id in (('notes', 107, 364), ('samples', 108, 230)):
+        for panel, open_command, field_id in (('samples', 108, 230),):
             for placement in ('right', 'secondary'):
                 with self.subTest(panel=panel, placement=placement):
                     self.panel('automation', placement='hide')
@@ -777,6 +801,139 @@ class WorkspaceRegionsUITests(unittest.TestCase):
         self.assertEqual(state['focus'], 'automation')
         self.assertEqual(self.text(effect_field), effect_text)
         self.assertEqual(self.doc(), effect_document)
+
+    def test_precise_owner_and_legacy_inspector_keep_distinct_focus_through_placements(self):
+        self.add_gain()
+        self.navigate(row=0, channel=0, following=False)
+        main = self.native_window()
+        self.resize_client(1000, 720)
+        before = self.doc()
+        cursor = self.read('context.get')
+        self.command(107)
+        notes = self.native_window('ScreamSeq.PreciseNotes')
+        self.panel('preciseNotes', placement='bottom', focus=True)
+
+        def click_canvas(owner, rect, scale, x_fraction=.5, y_fraction=.5):
+            self.assertGreater(rect['width'], 0)
+            self.assertGreater(rect['height'], 0)
+            x = round((rect['x'] + rect['width'] * x_fraction) * scale)
+            y = round((rect['y'] + rect['height'] * y_fraction) * scale)
+            self.desktop.send(owner, 0x201, 1, x | (y << 16))
+            self.desktop.send(owner, 0x202, 0, x | (y << 16))
+            self.assertEqual(self.desktop.focus(owner), owner)
+            return self.ready()
+
+        def replace_raw(control, value):
+            self.assertTrue(user.IsWindowVisible(control))
+            self.assertTrue(user.IsWindowEnabled(control))
+            self.focus_control(control)
+            generation = self.ready()['preciseNotes']['generation']
+            text = ctypes.create_unicode_buffer(value)
+            self.desktop.send(control, 0xB1, 0, -1)
+            self.desktop.send(control, 0xC2, 1, ctypes.addressof(text))
+            self.assertEqual(self.text(control), value)
+            self.assertGreater(self.ready()['preciseNotes']['generation'], generation)
+
+        def captured_fields(state):
+            return {key: state['preciseNotes'][key] for key in (
+                'document', 'patternID', 'trackID', 'pattern', 'row', 'channel',
+                'expectedRevision', 'draftCount', 'selected', 'selectedEvent')}
+
+        for placement in ('right', 'secondary'):
+            with self.subTest(placement=placement):
+                self.panel('automation', placement='hide')
+                self.panel('preciseNotes', placement='hide')
+                state = self.panel('notes', focus=True, pinned=True)
+                self.assertEqual(state['editorDock']['mode'], 'none')
+                self.assertGreater(state['geometry']['inspector']['width'], 0)
+                state = click_canvas(main, state['geometry']['inspector'], state['dpi'] / 96)
+                self.assertEqual(state['focus'], 'notes')
+                inspector = state['inspection']['notes']
+                retained = captured_fields(state)
+                for key in (0x27, 0x2E):
+                    state = self.queued_key(main, key)
+                    self.assertEqual(captured_fields(state), retained)
+                    self.assertEqual(self.doc(), before)
+                state = self.panel('automation', placement=placement, focus=False)
+                self.assertEqual(state['editorDock']['mode'], 'tabs')
+                self.assertEqual(state['editorDock']['compactSelection'], 'pattern')
+                self.assertTrue(state['editorDock']['trackerVisible'])
+                self.assertGreater(state['geometry']['inspector']['width'], 0)
+                self.assertEqual(state['focus'], 'notes')
+                self.assertEqual(self.desktop.focus(main), main)
+                self.assertEqual(state['inspection']['notes'], inspector)
+                self.assertEqual(captured_fields(state), retained)
+
+                # The editable canvas belongs to another HWND and uses its own DPI.
+                # Bottom avoids a deliberate collision with either new Automation host.
+                self.panel('automation', placement='hide')
+                state = self.panel('preciseNotes', placement='bottom', focus=True)
+                self.click(notes, 9200)
+                state = self.ready()
+                self.assertEqual(state['preciseNotes']['coordinateSpace'], 'ownerClientDIP')
+                state = click_canvas(notes, state['preciseNotes']['timeline'],
+                                     user.GetDpiForWindow(notes) / 96, .85, .6)
+                self.assertEqual(state['focus'], 'preciseNotes')
+                retained = captured_fields(state)
+                state = self.panel('automation', placement=placement, focus=False)
+                self.assertEqual(state['editorDock']['mode'], 'tabs')
+                self.assertEqual(state['editorDock']['compactSelection'], 'preciseNotes')
+                self.assertFalse(state['editorDock']['trackerVisible'])
+                self.assertTrue(state['editorDock']['hosts']['bottom']['visible'])
+                self.assertEqual(state['editorDock']['hosts']['bottom']['selected'], 'preciseNotes')
+                self.assertEqual(state['focus'], 'preciseNotes')
+                self.assertEqual(self.desktop.focus(notes), notes)
+                self.assertEqual(captured_fields(state), retained)
+                self.assertEqual(state['inspection']['notes'], inspector)
+                self.assertEqual(self.doc(), before)
+
+                # A focused native offset keeps its exact text/caret/captured row.
+                self.panel('automation', placement='hide')
+                self.click(notes, 9201)
+                self.choose(notes, 360, 0, listbox=True)
+                field = self.control(notes, 364)
+                original = self.text(field)
+                replace_raw(field, '00--.125')
+                self.desktop.send(field, 0xB1, 2, 5)
+                captured = self.ready()
+                state = self.panel('automation', placement=placement, focus=False)
+                self.assertEqual(state['editorDock']['compactSelection'], 'preciseNotes')
+                self.assertFalse(state['editorDock']['trackerVisible'])
+                self.assertEqual(self.native_window('ScreamSeq.PreciseNotes'), notes)
+                self.assertEqual(self.control(notes, 364), field)
+                self.assertEqual(self.desktop.focus(notes), field)
+                self.assertTrue(user.IsWindowVisible(field))
+                self.assertEqual(self.text(field), '00--.125')
+                self.assertEqual(self.desktop.send(field, 0xB0), 2 | (5 << 16))
+                self.assertEqual(captured_fields(state), captured_fields(captured))
+                self.assertEqual(state['inspection']['notes'], inspector)
+                self.assertTrue(state['pins']['notes'])
+                self.resize_client(1440, 852)
+                state = self.ready()
+                self.assertEqual(state['editorDock']['mode'], 'regions')
+                self.assertEqual(self.desktop.focus(notes), field)
+                self.assertEqual(self.text(field), '00--.125')
+                self.assertEqual(self.desktop.send(field, 0xB0), 2 | (5 << 16))
+                self.assertEqual(captured_fields(state), captured_fields(captured))
+
+                # F6 is deliberately local to this native tool, not a Main alias.
+                state = self.queued_key(field, 0x75)
+                self.assertEqual(state['preciseNotes']['page'], 'timeline')
+                self.assertEqual(self.desktop.focus(notes), notes)
+                self.assertEqual(self.text(field), '00--.125')
+                self.assertEqual(captured_fields(state), captured_fields(captured))
+                replace_raw(field, original)
+                self.click(notes, 9202)
+                state = self.click(notes, 9204)  # Return reveals/focuses opening Pattern.
+                self.assertEqual(state['focus'], 'pattern')
+                self.assertEqual(self.desktop.focus(main), main)
+                self.assertEqual(self.read('context.get'), cursor)
+                state = self.queued_key(main, 0x75)
+                self.assertEqual(state['focus'], 'automation')
+                self.assertEqual(self.text(field), original)
+                self.resize_client(1000, 720)
+                self.assertEqual(self.doc(), before)
+                self.assertEqual(self.read('context.get'), cursor)
 
 if __name__ == '__main__':
     unittest.main()

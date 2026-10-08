@@ -13,10 +13,17 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'windows/Api'))
 from client import Client, ApiError, TransportError
 from private_desktop import PrivateDesktop
+from precise_note_native_support import PreciseNoteNativeMixin
 ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
 
 
 class GraphMixerAppTests(unittest.TestCase):
+    # Only non-TestCase helper methods; no inherited/duplicated test inventory.
+    note_windows = PreciseNoteNativeMixin.note_windows
+    note_hwnd = PreciseNoteNativeMixin.note_hwnd
+    note_idle = PreciseNoteNativeMixin.note_idle
+    resize_main = PreciseNoteNativeMixin.resize_main
+
     def setUp(self):
         self.folder = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='graph-mixer-', dir=os.environ['TMPDIR'])))
         self.catalogue = self.folder / 'catalogue' / 'envelope-catalogue-v1.json'
@@ -110,10 +117,37 @@ class GraphMixerAppTests(unittest.TestCase):
         self.assertEqual(next(b for b in self.read('mixer.get')['buses'] if b['id'] == group)['output'], '')
         self.command(404)  # Remove group.
         self.assertFalse(any(b['id'] == group for b in self.read('mixer.get')['buses']))
-        self.command(107)  # Notes and mixer retain separate captured drafts.
+        # Make the compact hiding condition explicit; native Notes can coexist
+        # with the same retained Mixer at a wide workstation size.
+        musical = self.doc()
+        state = self.resize_main(900, 620)
+        mixer = {key: state['mixerEditor'][key] for key in ('bus', 'draft', 'expectedRevision')}
+        root = self.desktop.hwnd(self.pid)
+        self.desktop.send(root, 0x111, 107)  # Public entry command; no permanent Main107 HWND.
+        state = self.note_idle()
+        notes = self.note_hwnd()
+        captured = {key: state['preciseNotes'][key] for key in (
+            'document', 'patternID', 'trackID', 'row', 'expectedRevision', 'draftCount', 'selectedEvent')}
+        self.assertEqual(state['editorDock']['mode'], 'tabs')
+        self.assertEqual(state['editorDock']['compactSelection'], 'preciseNotes')
+        self.assertTrue(state['preciseNotes']['visible'])
         self.assertFalse(self.read('workspace.get')['mixerEditor']['visible'])
         self.command(400)
+        state = self.note_idle()
+        self.assertEqual(state['editorDock']['compactSelection'], 'mixer')
+        self.assertFalse(state['preciseNotes']['visible'])
         self.assertTrue(self.read('workspace.get')['mixerEditor']['visible'])
+        state = self.resize_main(1440, 852)
+        self.assertEqual(state['editorDock']['mode'], 'regions')
+        self.assertTrue(state['editorDock']['trackerVisible'])
+        self.assertTrue(state['mixerEditor']['visible'])
+        self.assertTrue(state['preciseNotes']['visible'])
+        self.assertEqual(state['editorDock']['hosts']['bottom']['selected'], 'mixer')
+        self.assertEqual(state['editorDock']['hosts']['secondary']['selected'], 'preciseNotes')
+        self.assertEqual(self.note_hwnd(), notes)
+        self.assertEqual({key: state['mixerEditor'][key] for key in mixer}, mixer)
+        self.assertEqual({key: state['preciseNotes'][key] for key in captured}, captured)
+        self.assertEqual(self.doc(), musical)
 
     def test_native_mixer_controls_fit_small_window(self):
         user = ctypes.WinDLL('user32')

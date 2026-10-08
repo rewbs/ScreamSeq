@@ -9,16 +9,16 @@
 
 namespace ScreamSeq::WorkspaceRegions {
 using Json=Api::Json;
-enum class Panel { automation, instruments, graphCurve };
+enum class Panel { automation, instruments, graphCurve, preciseNotes };
 enum class Region { right, bottom, secondary };
 enum class Placement { right, bottom, secondary, floating, hidden };
 enum class Mode { none, regions, tabs };
-inline constexpr std::array<std::string_view,3> panelNames{"automation","instruments","graphCurve"};
+inline constexpr std::array<std::string_view,4> panelNames{"automation","instruments","graphCurve","preciseNotes"};
 inline constexpr std::array<std::string_view,3> regionNames{"right","bottom","secondary"};
-inline constexpr std::array<std::string_view,6> mainBottomNames{"notes","samples","effects","plugins","mixer","graph"};
+inline constexpr std::array<std::string_view,5> mainBottomNames{"samples","effects","plugins","mixer","graph"};
 
 struct Config {
-  std::array<Placement,3> locations{Placement::hidden,Placement::hidden,Placement::hidden};
+  std::array<Placement,4> locations{Placement::hidden,Placement::hidden,Placement::hidden,Placement::hidden};
   std::array<std::string,3> selected{"","graph",""};
   std::string compactSelection="pattern";
   // Desired DIPs, never rewritten by solve(). rightWidth is the native editor
@@ -101,37 +101,41 @@ inline Json encode(const Config &config) {
   validate(config);
   Json locations=Json::object();
   for(size_t i=0;i<panelNames.size();++i)locations[std::string(panelNames[i])]=name(config.locations[i]);
-  return {{"version",3},{"locations",std::move(locations)},
+  return {{"version",4},{"locations",std::move(locations)},
     {"selected",{{"right",config.selected[0]},{"bottom",config.selected[1]},{"secondary",config.selected[2]}}},
     {"compactSelection",config.compactSelection},{"rightWidth",config.rightWidth},{"bottomHeight",config.bottomHeight}};
 }
-// A missing editors member is the old seven-field layout. It must leave all
-// current editor presentation preferences exactly unchanged, with no creation.
-// The bounded saved-layout catalogue remains version 1; only editors is V3.
-// V2 and the legacy two-editor object initialize graphCurve as hidden, even if
-// the live curve is placed. Migrating a preference never captures a curve target.
+// V4 has four native owners and no editable Main Notes surface. V2/V3 and
+// legacy two-editor preferences migrate bottom Notes to the sole native owner.
+// Missing editors preserves current placement; the host handles an explicit
+// seven-field lowerEditor=notes reveal without replacing an existing placement.
 inline Config decodeEditors(const Json *editors,const Config &current,std::string_view legacyLowerEditor="graph",float legacyLowerHeight=210) {
-  if(!editors)return current;
-  const auto &value=*editors;Config result;
+  if(!editors)return current;const auto &value=*editors;Config result;bool legacy=true;
   if(value.is_object()&&!value.contains("version")){
-    keys(value,{"locations","active","tracker"});
-    need(value.at("locations").is_array()&&value.at("locations").size()==2);
+    keys(value,{"locations","active","tracker"});need(value.at("locations").is_array()&&value.at("locations").size()==2);
     for(size_t i=0;i<2;++i){const auto text=string(value.at("locations")[i]);need(text=="right"||text=="float"||text=="hide");result.locations[i]=placement(text);}
     const auto active=string(value.at("active"));need((active=="automation"||active=="instruments")&&value.at("tracker").is_boolean());
-    need(mainBottom(legacyLowerEditor));result.selected[1]=legacyLowerEditor;
+    need(legacyLowerEditor=="notes"||mainBottom(legacyLowerEditor));result.selected[1]=legacyLowerEditor;
     result.selected[0]=belongs(result,Region::right,active)?active:firstNative(result,Region::right);
-    result.compactSelection=value.at("tracker").get<bool>()||result.selected[0].empty()?"pattern":result.selected[0];
-    result.bottomHeight=legacyLowerHeight;
+    result.compactSelection=value.at("tracker").get<bool>()||result.selected[0].empty()?"pattern":result.selected[0];result.bottomHeight=legacyLowerHeight;
   }else{
     keys(value,{"version","locations","selected","compactSelection","rightWidth","bottomHeight"});
-    need(value.at("version").is_number_integer()&&(value.at("version")==2||value.at("version")==3));
-    const bool legacyV2=value.at("version")==2;
-    if(legacyV2)keys(value.at("locations"),{"automation","instruments"});
-    else keys(value.at("locations"),{"automation","instruments","graphCurve"});
-    keys(value.at("selected"),{"right","bottom","secondary"});
-    for(size_t i=0;i<(legacyV2?2:panelNames.size());++i)result.locations[i]=placement(string(value.at("locations").at(std::string(panelNames[i]))));
+    need(value.at("version").is_number_integer()&&(value.at("version")==2||value.at("version")==3||value.at("version")==4));
+    const auto version=value.at("version").get<int>();legacy=version<4;
+    if(version==2)keys(value.at("locations"),{"automation","instruments"});
+    else if(version==3)keys(value.at("locations"),{"automation","instruments","graphCurve"});
+    else keys(value.at("locations"),{"automation","instruments","graphCurve","preciseNotes"});
+    keys(value.at("selected"),{"right","bottom","secondary"});const size_t count=version==2?2:version==3?3:4;
+    for(size_t i=0;i<count;++i)result.locations[i]=placement(string(value.at("locations").at(std::string(panelNames[i]))));
     for(size_t i=0;i<3;++i)result.selected[i]=string(value.at("selected").at(std::string(regionNames[i])));
     result.compactSelection=string(value.at("compactSelection"));result.rightWidth=number(value.at("rightWidth"),440);result.bottomHeight=number(value.at("bottomHeight"),128);
+    // A new identity cannot be smuggled into an older version via selection.
+    if(legacy){need(result.compactSelection!="preciseNotes");for(const auto &id:result.selected)need(id!="preciseNotes");}
+    if(version==2)for(const auto &id:result.selected)need(id!="graphCurve");
+  }
+  if(legacy&&result.selected[1]=="notes"){
+    result.locations[index(Panel::preciseNotes)]=Placement::bottom;result.selected[1]="preciseNotes";
+    if(result.compactSelection=="notes")result.compactSelection="preciseNotes";
   }
   validate(result);return result;
 }

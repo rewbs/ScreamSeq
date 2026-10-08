@@ -131,7 +131,6 @@
         else if(mixerEditorVisible())drawMixerEditor();
         else if(sampleEditorVisible()) drawSampleEditor();
         else if(effectEditorVisible()) drawEffectEditor();
-        else if(noteEditorVisible()) drawNoteEditor();
         else if(pluginEditorVisible())drawPluginEditor();
         if(!hasWorkspaceDock()&&workspaceState.layout!="Pattern focus"&&workspaceState.lowerVisible){
 			s.fill(g.horizontalDivider.x,g.horizontalDivider.y,g.horizontalDivider.w,g.horizontalDivider.h,0x344151);

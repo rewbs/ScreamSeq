@@ -105,7 +105,7 @@
         return {{"command",id},{"keys",workspaceShortcuts->keys(id)}};
     }
     uint64_t workspaceShortcutContext() {
-        const auto identity=documentId+"|"+view->session.revision+"|"+std::to_string(contextRevision)+"|"+selection().dump()+"|"+workspaceState.focus+"|"+std::to_string(inspectorCanvasFocus)+"|"+std::to_string(reinterpret_cast<uintptr_t>(GetFocus()))+"|"+std::to_string(reinterpret_cast<uintptr_t>(GetActiveWindow()));
+        const auto identity=documentId+"|"+view->session.revision+"|"+std::to_string(contextRevision)+"|"+selection().dump()+"|"+workspaceState.focus+"|"+std::to_string(inspectorCanvasFocus)+"|"+std::to_string(reinterpret_cast<uintptr_t>(GetFocus()))+"|"+std::to_string(reinterpret_cast<uintptr_t>(GetActiveWindow()))+"|"+preciseNoteOperationGuard().dump();
         if(identity!=shortcutContextIdentity){shortcutContextIdentity=identity;++shortcutContextSerial;}
         return shortcutContextSerial;
     }

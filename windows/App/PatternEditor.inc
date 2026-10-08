@@ -147,7 +147,6 @@
         revealWorkspaceMainEditor("effects");
         graphEditorOpen=false;
         mixerEditorOpen=false;
-        noteEditorOpen=false;
         if(effectDraftExists&&!reload) {
             effectEditorOpen=true;
             workspaceState.show("notes",position(),cursorSample(),false);layoutControls();SetFocus(controls.at(effectValue));

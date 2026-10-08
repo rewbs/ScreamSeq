@@ -1,36 +1,16 @@
 """Native precise-note drafts, canvas and history in a private owned process."""
 import unittest
 import test_pattern_performance as support
+from precise_note_native_support import PreciseNoteNativeMixin
 
 
-class PreciseNoteEditorTests(unittest.TestCase):
+class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
     setUp = support.PatternPerformanceTests.setUp
     doc = support.PatternPerformanceTests.doc
     read = support.PatternPerformanceTests.read
     write = support.PatternPerformanceTests.write
     cells = support.PatternPerformanceTests.cells
     navigate = support.PatternPerformanceTests.navigate
-    control = support.PatternPerformanceTests.control
-    key = support.PatternPerformanceTests.key
-    command = support.PatternPerformanceTests.command
-    text = support.PatternPerformanceTests.text
-
-    def editor(self):
-        return self.read('workspace.get')['noteEditor']
-
-    def combo(self, control, index):
-        self.desktop.send(self.control(control), 0x14E, index)
-        self.command(control, 1)
-
-    def mouse(self, message, x, y, buttons=0):
-        scale = self.read('workspace.get')['dpi'] / 96
-        self.desktop.send(self.desktop.hwnd(self.pid), message, buttons,
-                          int(x * scale) | (int(y * scale) << 16))
-
-    def open_row(self, row=4, channel=0):
-        self.navigate(row=row, channel=channel, column=0)
-        self.command(107)
-        self.assertTrue(self.editor()['visible'])
 
     def test_retrigger_draft_local_fx_check_one_undo_and_reopen(self):
         local = next(e for e in self.read('pattern.notes.get', pattern=0)['effects'] if e['command'])
@@ -75,7 +55,7 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.write('pattern.notes.set', pattern=0, events=[dict(channel=0, position=4*65536, note=65)])
         self.open_row()
         self.text(363, '92')
-        self.command(109)  # Pin this inspector target.
+        self.native_panel(pinned=True)  # Pin the independent editable row owner.
         self.navigate(row=10, channel=1)
         self.command(316)  # Rack and return must preserve the captured row draft.
         self.command(107)
@@ -87,11 +67,11 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.assertEqual(self.doc(), before)
         self.assertTrue(self.editor()['stale'])
         self.assertEqual(self.editor()['selectedEvent']['velocity'], 92)
-        self.command(373)
+        self.command(9203)  # Explicit Reload captured, not Load selection.
         self.assertFalse(self.editor()['stale'])
         self.assertEqual(self.editor()['row'], 4)
         self.assertEqual(self.editor()['selectedEvent']['velocity'], 127)
-        self.command(110)  # Follow current cursor; explicit reload captures it.
+        self.native_panel(pinned=False)  # Unpin the native row owner, not the inspector.
         self.command(373)
         self.assertEqual((self.editor()['row'], self.editor()['channel']), (10, 1))
 
@@ -142,6 +122,7 @@ class PreciseNoteEditorTests(unittest.TestCase):
         self.assertEqual(self.editor()['selectedEvent']['position'], initial['position']+256)
         self.command(372)
         self.assertEqual(len(self.read('pattern.notes.get', pattern=0)['events']), 1)
+        self.focus_canvas()  # Delete must target the canvas after the native Apply action.
         self.key(0x2E)
         self.assertEqual(self.editor()['draftCount'], 0)
         self.command(372)

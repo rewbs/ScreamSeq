@@ -1,23 +1,30 @@
 # Windows continuation
 
-Latest Graph Curve checkpoint (2026-10-07): one retained native editor allows
-Pattern, routing, a graph curve and parameter Automation to remain visible
-together. V3 layout persistence, compact pages and independent captured drafts
-preserve keyboard focus and Formula/Bank/Guide children. Candidate 7 SHA256:
-`4AC1575B2783FEDDCD97D0E306A9440307E3652A0DF72D83A91F987A4401C20B`.
-Full run 3 passes **399/399 in 1,017.774 seconds**, focused run 8 **38/38 in
-171.953 seconds**, native **49/49 in 82.73 seconds**, and **21 source-matched views**
-pass review at 192 DPI. Final app runs have no failures or skips and strict outer
-success. Earlier failures, exact fixture migrations and visual limits remain in
-[GRAPH_CURVE_HOST_PROGRESS.md](GRAPH_CURVE_HOST_PROGRESS.md).
-Checkpoint destination: `bin/windows-checkpoints/graph-curve-host-20261007/`;
-its manifest is the authority for completed immutable packaging.
+Latest Precise Notes checkpoint (2026-10-07): the retained native owner provides
+Timeline, Hit, Tools and selectable Details pages with independent pin/target/Return,
+compact placement and V4 saved-layout restoration. Pattern and routing remain
+available beside its draft. Candidate2 App SHA256:
+`5D2AFC83DA9D08B1B6CBA1349693C73888EF9D184B4850CC2ABED9FA8C7C0142`.
+Full run 1 passes **403/403 in 1,028.969 seconds**, focused run 2 **81/81 in 148.854 seconds**, native
+**50/50 in 101.58 seconds**, and **16 reviewed source-matched views** pass at 192 DPI.
+All final runners have strict outer success. See
+[PRECISE_NOTE_HOST_PROGRESS.md](PRECISE_NOTE_HOST_PROGRESS.md), including preserved
+failed build/capture inputs and scoped limits. Checkpoint destination:
+`bin/windows-checkpoints/precise-note-host-20261007/`; its completed manifest and
+independent verifier establish immutable publication.
 
-Next: extract Precise Notes from Main into its own retained native owner, preserving
-existing musical API/Undo/persistence and independent read-only Notes inspection.
-Source-only proposals and their reviews are retained under ignored `bin/`; they
-have not been integrated or qualified. Preserve the old matrix draft backup/stash
+Next-phase source-only proposals for fractions, Reload selection and selected-sound
+seeding are preserved separately and excluded from this checkpoint. They require
+integration and fresh qualification. Preserve the old matrix draft backup/stash
 until separately reconciled. The Windows/Mac parity goal stays open.
+
+Previous Graph Curve checkpoint (2026-10-07): independent native editing, V3 layouts
+and retained Formula/Bank/Guide children. Candidate 7 SHA256:
+`4AC1575B2783FEDDCD97D0E306A9440307E3652A0DF72D83A91F987A4401C20B`.
+Full run 3 **399/399 in 1,017.774 seconds**, focused run 8 **38/38 in 171.953 seconds**, native
+**49/49 in 82.73 seconds**, and **21 reviewed views** at 192 DPI. See
+[GRAPH_CURVE_HOST_PROGRESS.md](GRAPH_CURVE_HOST_PROGRESS.md). Immutable checkpoint:
+`bin/windows-checkpoints/graph-curve-host-20261007/`.
 
 Previous independent-docking checkpoint (2026-10-07): Connected shows Pattern,
 Graph, Instrument and Automation together in independent native regions. Short
