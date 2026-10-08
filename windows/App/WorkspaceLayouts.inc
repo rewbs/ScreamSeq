@@ -32,12 +32,13 @@
             editorConfiguration=decodeWorkspaceDockConfiguration(v.at("editors"),editor,lower);
             need(!Regions::mainBottom(editorConfiguration->selected[1])||editorConfiguration->selected[1]==editor);
         }
-        if(busy||recoveryRestoring||preparingWorkspaceLayout||graphPending||mixerPending||notePending||curvePending)
+        if(busy||recoveryRestoring||preparingWorkspaceLayout||graphPending||mixerPending||notePending||graphCurvePending())
             throw ScreamSeq::Api::ApiError(-32002,"Wait for the current editor operation before restoring a layout");
         EditorPlacementGuard preparing(preparingWorkspaceLayout);
         const auto previousFocus=GetFocus();const auto previousPanel=workspaceState.focus;
         const bool previousInspector=inspectorCanvasFocus,previousMainControl=workspaceMainControl(previousFocus);
         const auto preparation=workspacePreparationGuard();
+        const auto curvePreparationContext=graphCurveContext();
         std::optional<InitialNotes> notes;
         std::optional<InitialEffects> effects;
         std::optional<PreparedInitialGraph> graph;
@@ -50,7 +51,7 @@
         if(editor=="graph"&&graphDocument.empty())graph=prepareInitialGraph(documentId,view->session.revision);
         if(editor=="mixer"&&mixerDocument.empty())mixer=prepareInitialMixer(documentId,view->session.revision);
         validateWorkspacePreparation(preparation);
-        if(editorConfiguration)editors=prepareWorkspaceDockConfiguration(*editorConfiguration,preparation);
+        if(editorConfiguration)editors=prepareWorkspaceDockConfiguration(*editorConfiguration,preparation,curvePreparationContext);
         validateWorkspacePreparation(preparation);
         if(notes)validateInitialNotes(*notes);
         if(effects)validateInitialEffects(*effects);
@@ -70,6 +71,8 @@
         workspaceState.layout=base;workspaceState.active=active;
         workspaceState.rightWidth=right;workspaceState.lowerHeight=lower;
         workspaceState.lowerVisible=v.at("lowerVisible").get<bool>();
+        // These remain the two legacy Notes/Samples inspector flags, unrelated
+        // to the three independent native editor placements in editors V3.
         for(size_t i=0;i<2;++i)workspaceState.panels[i].hidden=v["hidden"][i].get<bool>();
         if(editorConfiguration)restoreWorkspaceDockConfiguration(*editorConfiguration);
         layoutControls();

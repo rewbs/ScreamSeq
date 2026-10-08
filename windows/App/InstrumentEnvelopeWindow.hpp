@@ -287,6 +287,7 @@ private:
     place(apply,18,h-52,148,28);place(reload,174,h-52,118,28);place(fromCursor,300,h-52,126,28);place(audition,434,h-52,126,28);place(close,w-118,h-52,100,28);place(statusLabel,18,h-22,w-36,20);
   }
   void layout()override{
+    if(bank_)bank_->refreshSourceState();
     const auto focus=GetFocus();const auto [w,h]=size();const bool wasShort=shortDock_;compact_=w<1080||h<780;shortDock_=docked()&&h<500;
     if(shortDock_&&!wasShort){
       // The wide form exposes every section. Keep its focused field visible

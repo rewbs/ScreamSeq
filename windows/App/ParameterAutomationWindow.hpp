@@ -237,6 +237,8 @@ private:
     if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){RECT r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}RestoreDC(d.hDC,saved);
   }
   void layout()override{
+    if(bank_)bank_->refreshSourceState();
+    if(workbench_)workbench_->refreshSourceState();
     // Preserve the former 1040x760 outer-window layout after nonclient chrome;
     // use pages when the available client area becomes materially smaller.
     const auto [w,h]=size();const auto previousFocus=GetFocus();const bool wasShort=shortDock_;

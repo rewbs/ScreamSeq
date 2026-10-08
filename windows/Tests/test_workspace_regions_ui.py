@@ -448,7 +448,7 @@ class WorkspaceRegionsUITests(unittest.TestCase):
         self.assertEqual(self.doc(), before)
 
     def test_graph_curve_canvas_focus_survives_layout_fallback_and_native_placement(self):
-        """Visible curve focus belongs to its retained Main host."""
+        """Curve HWND focus survives unrelated placements and compact fallback."""
         self.add_gain()
         self.write('instrument.create', sample=1)
         graph = self.write('graph.create', name='Retained graph curve focus')['graph']
@@ -466,18 +466,22 @@ class WorkspaceRegionsUITests(unittest.TestCase):
                      if value['id'] == node)
         self.choose(owner, 442, index)
         self.choose(owner, 443, 5)
-        self.desktop.send(owner, 0x113, 5)  # Actual curve preview timer dispatch.
+        curve_owner = self.native_window('ScreamSeq.GraphCurve')
+        # The independent curve replaces the Main lower body only when placed
+        # there explicitly. Other native placements must retain this selection.
+        self.panel('graphCurve', placement='bottom', pinned=True, focus=True)
+        self.desktop.send(curve_owner, 0x113, 3)  # Retained owner's preview timer.
         state = self.ready()
         self.assertFalse(state['graphCurve']['pending'])
         self.assertGreater(state['graphCurve']['previewSamples'], 0)
         self.assertEqual(state['graphCurve']['points'], points)
-        self.assertEqual(state['editorDock']['mode'], 'none')
+        self.assertEqual(state['editorDock']['mode'], 'regions')
         before = self.doc()
         cursor = self.read('context.get')
         curve_identity = {key: state['graphCurve'][key]
-                          for key in ('graph', 'node', 'pattern', 'expectedRevision')}
+                          for key in ('graph', 'node', 'pattern', 'patternID', 'expectedRevision')}
 
-        def assert_curve(state, focus=owner):
+        def assert_curve(state, focus=curve_owner):
             self.assertTrue(state['graphCurve']['visible'])
             self.assertEqual(state['focus'], 'graphCurve')
             self.assertEqual(self.desktop.focus(owner), focus)
@@ -490,37 +494,38 @@ class WorkspaceRegionsUITests(unittest.TestCase):
         def click_first_point():
             state = self.ready()
             handle = state['graphCurve']['handles'][0]
-            scale = state['dpi'] / 96
+            user.GetDpiForWindow.argtypes = [w.HWND]
+            scale = user.GetDpiForWindow(curve_owner) / 96
             at = round(handle['x'] * scale) | (round(handle['y'] * scale) << 16)
-            self.desktop.send(owner, 0x201, 1, at)
-            self.desktop.send(owner, 0x202, 0, at)
+            self.desktop.send(curve_owner, 0x201, 1, at)
+            self.desktop.send(curve_owner, 0x202, 0, at)
             state = self.ready()
-            self.assertEqual(state['graphCurve']['selected'], 0)
+            self.assertEqual(state['graphCurve']['selectedPoint'], 0)
             assert_curve(state)
             return state
 
-        # Legacy layout has no native region, but mouse-up still runs the
-        # common layout/focus repair. Observe logical focus before any key.
+        # Native mouse-up and preview must keep the captured owner focused.
+        # Observe logical focus before dispatching any keyboard command.
         state = click_first_point()
-        self.desktop.send(owner, 0x113, 5)
+        self.desktop.send(curve_owner, 0x113, 3)
         assert_curve(self.ready())
         old = state['graphCurve']['points'][0]['position']
-        state = self.queued_key(owner, 0x27)  # Right: one curve snap step.
+        state = self.queued_key(curve_owner, 0x27)  # Right: one curve snap step.
         assert_curve(state)
         self.assertEqual(state['graphCurve']['points'][0]['position'], old + 256)
         self.assertFalse(state['graphEditor']['dirty'], 'Arrow moved a hidden routing node')
 
-        # Preserve the graph region AND its graphCurve subcanvas identity when
-        # the first native placement forces width-based fallback.
+        # An unrelated native placement may force compact fallback, but must
+        # retain the selected Curve region, its HWND and captured source.
         state = self.panel('automation', placement='right', focus=False)
         self.assertEqual(state['editorDock']['mode'], 'tabs')
-        self.assertEqual(state['editorDock']['compactSelection'], 'graph')
+        self.assertEqual(state['editorDock']['compactSelection'], 'graphCurve')
         assert_curve(state)
         retained_points = state['graphCurve']['points']
 
         # Invalid native curve text must retain its actual HWND/caret while
         # placement and dimension changes preserve the captured source.
-        raw = self.control(owner, 483)
+        raw = self.control(curve_owner, 483)
         self.focus_control(raw)
         self.desktop.send(raw, 0xB1, 0, -1)
         raw_text = ctypes.create_unicode_buffer('--.25')
@@ -548,13 +553,13 @@ class WorkspaceRegionsUITests(unittest.TestCase):
                                     (1440, 700, 'tabs'), (1440, 852, 'regions')):
             with self.subTest(client=(width, height)):
                 self.resize_client(width, height)
-                self.desktop.send(owner, 0x113, 5)
+                self.desktop.send(curve_owner, 0x113, 3)
                 state = self.ready()
                 self.assertEqual(state['editorDock']['mode'], mode)
                 assert_raw(state)
 
-        # A layout stores the Graph host, not a replacement curve target or
-        # field value. Restore must not relabel a visible curve as routing.
+        # A layout stores the independent Curve host, not a replacement target
+        # or field value. Restore must not relabel a visible curve as routing.
         self.client.call('workspace.layout', {'name': 'Save custom',
                                               'savedName': 'Retained graph curve'})
         saved_config = self.ready()['editorDock']['configuration']
@@ -576,43 +581,49 @@ class WorkspaceRegionsUITests(unittest.TestCase):
         self.focus_control(raw)
         self.queued_key(raw, 0x1B)
         click_first_point()
-        self.desktop.send(owner, 0x113, 5)
-        state = self.queued_key(owner, 0x27)
+        self.desktop.send(curve_owner, 0x113, 3)
+        state = self.queued_key(curve_owner, 0x27)
         assert_curve(state)
         self.assertEqual(state['graphCurve']['points'][0]['position'], old + 512)
-        state = self.queued_key(owner, 0x2E)  # Delete point, never source node.
+        state = self.queued_key(curve_owner, 0x2E)  # Delete point, never source node.
         assert_curve(state)
         self.assertEqual(len(state['graphCurve']['points']), 1)
         self.assertFalse(state['graphEditor']['dirty'])
         self.assertEqual(next(value for value in self.read('graph.get', includeState=False)['library']
                               if value['id'] == graph), definition)
 
-        # F6 enters the rendered subcanvas of the Graph region, then advances
-        # to the following region rather than treating graphCurve as unknown.
+        # Global region cycling includes the independent Curve after the
+        # other native editors. Native F6 stays local to Curve point controls.
         self.resize_client(1440, 852)
         self.command(113)
         state = self.queued_key(owner, 0x75)
-        assert_curve(state)
-        state = self.queued_key(owner, 0x75)
         self.assertEqual(state['focus'], 'instruments')
-        self.command(114)  # Host region command; native F6 remains editor-local.
+        self.assertEqual(self.command(114)['focus'], 'automation')
+        assert_curve(self.command(114))
+        assert_curve(self.queued_key(curve_owner, 0x75), raw)
+        assert_curve(self.queued_key(raw, 0x75))
         self.command(114)
         self.assertEqual(self.ready()['focus'], 'pattern')
-        assert_curve(self.queued_key(owner, 0x75))
+        self.assertEqual(self.queued_key(owner, 0x75)['focus'], 'instruments')
+        self.assertEqual(self.command(114)['focus'], 'automation')
+        assert_curve(self.command(114))
 
         # Resize itself must retain the visible curve, before another panel
         # request has any opportunity to repair the selected compact host.
         self.resize_client(1000, 720)
         state = self.ready()
         self.assertEqual(state['editorDock']['mode'], 'tabs')
-        self.assertEqual(state['editorDock']['compactSelection'], 'graph')
+        self.assertEqual(state['editorDock']['compactSelection'], 'graphCurve')
         assert_curve(state)
         self.resize_client(1440, 852)
         self.command(113)
-        assert_curve(self.queued_key(owner, 0x75))
+        self.assertEqual(self.queued_key(owner, 0x75)['focus'], 'instruments')
+        self.assertEqual(self.command(114)['focus'], 'automation')
+        assert_curve(self.command(114))
 
         # Keep the original graph-property raw-field case distinct from the
-        # curve fields: page changes must not confuse Main-body ownership.
+        # curve fields: explicitly reveal routing before its Main page changes.
+        self.command(430)
         self.choose(owner, 443, 0)
         self.choose(owner, 444, 1)
         graph_raw = self.control(owner, 445)

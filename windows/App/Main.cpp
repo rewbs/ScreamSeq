@@ -25,6 +25,7 @@
 #include "SongRoutingWindow.hpp"
 #include "GraphCommandsWindow.hpp"
 #include "ParameterAutomationWindow.hpp"
+#include "GraphCurveWindow.hpp"
 #include "InstrumentEnvelopeWindow.hpp"
 #include "AbsoluteAutomationWindow.hpp"
 #include "SampleDetailWindow.hpp"
@@ -61,7 +62,8 @@
 
 namespace {
 namespace Regions = ScreamSeq::WorkspaceRegions;
-constexpr int connectedWorkspaceCommand=562,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
+constexpr int connectedWorkspaceCommand=562,openGraphCurveCommand=563,dockGraphCurveCommand=564,
+    graphEditingWorkspaceCommand=565,editorGraphCurveTab=566,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
 constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
@@ -278,22 +280,21 @@ public:
 			targets[id]=p.opened ? "P"+std::to_string(p.target.value("pattern",0u))+" / R"+std::to_string(p.target.value("row",0u))+" / CH"+std::to_string(p.target.value("channel",0u)+1) : "Not opened";
 		}
 		Json visible=Json::array(); if(workspaceState.visible()&&trackerWorkspaceVisible()) visible.push_back(workspaceState.active);
-        std::string focus=workspaceState.focus;
-        for(const auto *id:{"automation","instruments"}) {
+        const auto focus=workspacePresentationFocus();
+        for(const auto *id:{"automation","instruments","graphCurve"}) {
             const auto &p=workspaceEditors[workspaceEditorIndex(id)];auto *tool=workspaceEditorWindow(id);
             pins[id]=p.pinned;origins[id]=p.origin;locations[id]=p.location;
-            const auto data=id==std::string("automation")?(parameterAutomationWindow?parameterAutomationWindow->snapshot():Json::object()):(instrumentEnvelopeWindow?instrumentEnvelopeWindow->snapshot():Json::object());
+            const auto data=workspaceEditorSnapshot(id);
             inspectionData[id]=data;
-            targets[id]=data.empty()?"Not opened":id==std::string("automation")?"Pattern "+std::to_string(data.value("pattern",0u)):"Instrument "+std::to_string(data.value("index",0u));
+            targets[id]=data.empty()?"Not opened":id==std::string("instruments")?"Instrument "+std::to_string(data.value("index",0u)):"Pattern "+std::to_string(data.value("pattern",0u));
             if(tool&&tool->visible())visible.push_back(id);
-            if(tool&&tool->owns(GetFocus()))focus=id;
         }
 		auto g=geometry();
 		auto rect=[](const ScreamSeq::WorkspaceRect &r)->Json {return {{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}};};
 		return {{"geometry",{{"pattern",rect(g.pattern)},{"inspector",rect(g.inspector)},{"lowerTabs",rect(g.lowerTabs)},
 			{"verticalDivider",rect(g.verticalDivider)},{"horizontalDivider",rect(g.horizontalDivider)}}},
 			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},
-			{"panels",{"notes","samples","automation","instruments"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
+			{"panels",{"notes","samples","automation","instruments","graphCurve"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
 			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",focus},{"editorDock",workspaceDockSnapshot()},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
 			{"locations",locations},{"liveKeyboard",liveKeyboard},{"musicalTyping",typingSnapshot()},
@@ -311,9 +312,9 @@ public:
             {"songTimingWindow",songTimingWindow?songTimingWindow->snapshot():Json{{"visible",false}}},
             {"graphEditor",graphEditorSnapshot()},
             {"graphCurve",graphCurveSnapshot()},
-            {"formulaWorkbench",formulaWorkbench?formulaWorkbench->snapshot():Json{{"visible",false}}},
-            {"formulaReference",formulaReference?formulaReference->snapshot():Json{{"visible",false}}},
-            {"envelopeBank",envelopeBank?envelopeBank->snapshot():Json{{"visible",false}}},
+            {"formulaWorkbench",curveFormulaWorkbenchSnapshot()},
+            {"formulaReference",curveFormulaReferenceSnapshot()},
+            {"envelopeBank",curveEnvelopeBankSnapshot()},
             {"pluginInstruments",pluginInstruments?pluginInstruments->snapshot():Json{{"visible",false}}},
             {"pluginLibrary",pluginLibraryWindow?pluginLibraryWindow->snapshot():Json{{"visible",false}}},
             {"pluginPath",pluginPathWindow?pluginPathWindow->snapshot():Json{{"visible",false}}},
@@ -337,7 +338,7 @@ public:
             {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
                 {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
                 {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
-            {"unavailable",{"arbitraryPanelDocking","simultaneousMainEditors","independentGraphCurveHost"}}};
+            {"unavailable",{"arbitraryPanelDocking","simultaneousMainEditors"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
@@ -350,7 +351,7 @@ public:
 			for(auto it=p.begin();it!=p.end();++it)require(it.key()=="name"||it.key()=="savedName","Unknown workspace layout field");
 			auto name=p["name"].get<std::string>();
 			const bool custom=name=="Save custom"||name=="Restore custom"||name=="Delete custom";
-			require(custom||name=="Reload saved"||name=="Compose" || name=="Pattern focus" || name=="Sound design"||name=="Connected","Choose Compose, Pattern focus, Sound design, Connected or a custom layout action");
+			require(custom||name=="Reload saved"||name=="Compose" || name=="Pattern focus" || name=="Sound design"||name=="Connected"||name=="Graph editing","Choose Compose, Pattern focus, Sound design, Connected, Graph editing or a custom layout action");
             require(!p.contains("savedName")||(custom&&p["savedName"].is_string()),"savedName is only valid for a custom layout action");
             if(name=="Reload saved") {if(!savedLayouts.reload())throw std::runtime_error(savedLayouts.diagnostic());}
             else if(custom) {
@@ -359,6 +360,7 @@ public:
                 else if(name=="Delete custom"){require(savedLayouts.get(saved)!=nullptr,"Saved layout not found");savedLayouts.remove(saved);status=L"Workspace layout deleted / "+wide(saved);}
                 else {const auto value=savedLayouts.get(saved);require(value!=nullptr,"Saved layout not found");const Json configuration=*value;restoreLayoutConfiguration(configuration);status=L"Workspace layout restored / "+wide(saved);}
             } else if(name=="Connected")openConnectedWorkspace();
+            else if(name=="Graph editing")openGraphEditingWorkspace();
             else {
                 workspaceState.layout=name;workspaceState.lowerVisible=true;
                 if(name=="Pattern focus") {workspaceState.focus="pattern";SetFocus(window);}
@@ -460,7 +462,7 @@ public:
     // exercise failed reads and pumped input; it is not an API or launch option.
     virtual Json workspacePreparationRead(const std::string &method,const Json &params) {
         static const std::set<std::string> reads={"pattern.notes.get","graph.get","mixer.get",
-            "automation.pattern.get","plugin.parameters.get","instrument.envelope.get","instrument.get"};
+            "automation.pattern.get","plugin.parameters.get","instrument.envelope.get","instrument.get","graph.automation.get"};
         if(!reads.contains(method))throw std::logic_error("Only initial editor reads may prepare a workspace");
         if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"Wait for the document before preparing a workspace");
         return await(controller->invoke(method,params));
@@ -699,7 +701,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             app->recoveryCloseRequested=false;if(!app->protectUnsaved())return 0;break;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
         case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
-        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==5)app->graphCurveTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
+        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
         case WM_DEVICECHANGE: app->midiRescanRequested=!app->midiSource.empty();return 0;
 		case WM_DPICHANGED: {
 			auto rect = reinterpret_cast<RECT *>(lp);
@@ -716,8 +718,6 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             SetTextColor(reinterpret_cast<HDC>(wp),RGB(212,224,235));SetBkColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));
             SetDCBrushColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
         case WM_COMMAND:
-            if(LOWORD(wp)==curveRow||LOWORD(wp)==curveValue||LOWORD(wp)==curveFormula){if(HIWORD(wp)==EN_CHANGE)app->curveFieldChanged();return 0;}
-            if((LOWORD(wp)==curvePattern||LOWORD(wp)==curveKind||LOWORD(wp)==curveSnap)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==graphPropertyValue||(LOWORD(wp)>=graphOutputPort&&LOWORD(wp)<=graphGain)||LOWORD(wp)==graphParameterValue||LOWORD(wp)==graphAmount||LOWORD(wp)==graphWet){if(HIWORD(wp)==EN_CHANGE)app->graphFieldChanged();return 0;}
             if((LOWORD(wp)==graphLibrary||LOWORD(wp)==graphKind||LOWORD(wp)==graphRack||LOWORD(wp)==graphNodePicker||LOWORD(wp)==graphPage||LOWORD(wp)==graphProperty||LOWORD(wp)==graphSource||LOWORD(wp)==graphDestination||LOWORD(wp)==graphWire||LOWORD(wp)==graphParameter||LOWORD(wp)==graphBus)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)>=mixerName&&LOWORD(wp)<=mixerTiming){if(HIWORD(wp)==EN_CHANGE)app->mixerFieldChanged();return 0;}
@@ -751,7 +751,6 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		case WM_CAPTURECHANGED:if(app->dragging>=6&&app->dragging<=9)app->graphCancelDrag();app->cancelWorkspaceRegionDrag();app->noteMouseUp();app->dragging=0;return 0;
 		case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{
             POINT at{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};ScreenToClient(window,&at);const float scale=96.0f/GetDpiForWindow(window),x=at.x*scale,y=at.y*scale;
-            if(app->curveWheel(x,y,GET_WHEEL_DELTA_WPARAM(wp),message==WM_MOUSEHWHEEL,(GET_KEYSTATE_WPARAM(wp)&MK_CONTROL)!=0))return 0;
             if(!app->trackerWorkspaceVisible()||!app->geometry().pattern.contains(x,y))return 0;
             if(message==WM_MOUSEHWHEEL)app->scrollHorizontal(GET_WHEEL_DELTA_WPARAM(wp));
             else if(GET_KEYSTATE_WPARAM(wp)&MK_SHIFT)app->scrollHorizontal(-GET_WHEEL_DELTA_WPARAM(wp));

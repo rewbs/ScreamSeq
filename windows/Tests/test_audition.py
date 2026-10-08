@@ -120,6 +120,36 @@ class AuditionTests(unittest.TestCase):
         time.sleep(.12)
         return self.read('transport.get')
 
+    def wait_sample_detail_waveform(self, before):
+        # First-show reflow can schedule a waveform read. Match its published
+        # cache to the current canvas; an outstanding matching timer is a no-op.
+        sample = next(s for s in before['data']['samples'] if s['index'] == 1)
+        identity = (before['documentId'], before['revision'])
+        deadline = time.monotonic() + 8
+        last = None
+        while time.monotonic() < deadline:
+            response = self.client.call('workspace.get')
+            self.assertEqual((response['documentId'], response['revision']), identity)
+            workspace = response['data']; local = workspace['sampleDetail']
+            last = dict(documentBusy=workspace['documentBusy'],
+                        pendingViewCommands=workspace['pendingViewCommands'], status=workspace['status'],
+                        sampleDetail={k: local.get(k) for k in ('visible', 'pending', 'stale', 'document',
+                            'expectedRevision', 'sample', 'id', 'viewStart', 'viewEnd', 'waveStart',
+                            'waveEnd', 'waveBins', 'canvas', 'status')}, peakCount=len(local.get('peaks', [])))
+            if local.get('visible'):
+                self.assertEqual((local['document'], local['expectedRevision'], local['sample'], local['id']),
+                                 (*identity, 1, sample['id']), last)
+                self.assertFalse(local['stale'], last)
+                span = local['viewEnd'] - local['viewStart']; width = local['canvas'][2]
+                wanted = min(span, int(max(1, min(4096, width))))
+                if (not workspace['documentBusy'] and not workspace['pendingViewCommands']
+                        and not local['pending'] and span > 0 and width > 0
+                        and local['waveStart'] == local['viewStart'] and local['waveEnd'] == local['viewEnd']
+                        and local['waveBins'] == wanted and len(local['peaks']) == 2 * wanted):
+                    return
+            time.sleep(.01)  # Poll backoff only; readiness is the cache/worker state above.
+        self.fail(f'Sample Detail waveform did not become ready: {last}')
+
     def test_validation_inspection_and_no_device_for_release(self):
         before = self.doc()
         for fields in [dict(), dict(sample=1,instrument=1), dict(sample=True),
@@ -292,6 +322,7 @@ class AuditionTests(unittest.TestCase):
     def test_sample_markers_preview_replay_and_idle_presentation(self):
         self.live();self.desktop.send(self.desktop.hwnd(self.pid),0x111,505)
         before=self.doc();params=dict(expectedRevision=before['revision'],sample=1,note=49,on=True)
+        self.wait_sample_detail_waveform(before)
         first=self.client.call('transport.note',params,request_id='preview-replay')
         playing=self.settled();self.assertTrue(playing['voicePositions'])
         generations=[p['generation'] for p in playing['voicePositions']]

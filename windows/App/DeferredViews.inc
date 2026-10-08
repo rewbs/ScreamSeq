@@ -10,6 +10,7 @@
         case effectsCommand:case mixerCommand:case mixerRouting:case graphCommand:
         case curveBank:case curveReference:case graphCommandsCommand:
         case parameterAutomationCommand:case absoluteAutomationCommand:
+        case openGraphCurveCommand:case dockGraphCurveCommand:case graphEditingWorkspaceCommand:case editorGraphCurveTab:
         case connectedWorkspaceCommand:case dockAutomationCommand:case dockInstrumentCommand:case editorAutomationTab:case editorInstrumentTab:
         case sampleDetailCommand:case sampleBrowseCommand:case audioSettingsCommand:case instrumentEnvelopeCommand:case auditionCommand:return true;
         default:return false;
@@ -17,13 +18,14 @@
     }
     Json viewCommandTarget(int id)const {
         if(id==mixerRouting||id==curveReference||id==pluginBrowse||id==sampleBrowseCommand||id==audioSettingsCommand)return Json::array();
-        if(id==curveBank)return Json::array({curveGraph,curveNode,curvePatternIndex,curveGeneration,curveFieldsDirty});
+        if(id==curveBank)return graphCurveOperationGuard();
+        if(id==openGraphCurveCommand||id==dockGraphCurveCommand||id==editorGraphCurveTab)return Json::array({graphID,graphNode,graphCurveSelectionSerial,patternIndex});
         if(id==graphCommand)return Json::array({graphID,graphNode,graphGeneration});
         if(id==mixerCommand)return Json::array({mixerTarget});
         return Json::array({patternIndex,row,channel,column,selectedSample(),typingSoundId,selectedPlugin,selectedParameter});
     }
     bool deferView(int id) {
-        if(!viewOpeningCommand(id)||(!busy&&!refreshingPlugins&&!refreshingMixer&&!refreshingGraph&&!mixerPending&&!graphPending&&!curvePending&&(drainingViews||deferredViews.empty())))return false;
+        if(!viewOpeningCommand(id)||(!busy&&!refreshingPlugins&&!refreshingMixer&&!refreshingGraph&&!mixerPending&&!graphPending&&!graphCurvePending()&&(drainingViews||deferredViews.empty())))return false;
         // Coalesce repeated activation of the same view, retaining latest order.
         std::erase_if(deferredViews,[&](const auto &v){return v.command==id;});
         if(deferredViews.size()>=32)throw std::runtime_error("Too many pending views");
@@ -31,7 +33,7 @@
         PostMessageW(window,deferredViewsMessage,0,0);frameRequested=true;return true;
     }
     void drainViews() {
-        if(busy||drainingViews||refreshingPlugins||refreshingMixer||refreshingGraph||mixerPending||graphPending||curvePending)return;
+        if(busy||drainingViews||refreshingPlugins||refreshingMixer||refreshingGraph||mixerPending||graphPending||graphCurvePending())return;
         drainingViews=true;
         struct Guard{bool &flag;~Guard(){flag=false;}}guard{drainingViews};
         for(unsigned n=0;n<32&&!deferredViews.empty();++n){

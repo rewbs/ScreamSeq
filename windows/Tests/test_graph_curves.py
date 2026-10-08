@@ -8,35 +8,18 @@ import shutil
 import subprocess
 import time
 import unittest
+from graph_curve_native_support import GraphCurveNativeMixin
 import test_graph_editor as support
 
 
-class GraphCurveTests(unittest.TestCase):
+class GraphCurveTests(GraphCurveNativeMixin, unittest.TestCase):
     setUp = support.GraphEditorTests.setUp
     doc = support.GraphEditorTests.doc
     read = support.GraphEditorTests.read
     write = support.GraphEditorTests.write
-    control = support.GraphEditorTests.control
-    command = support.GraphEditorTests.command
-    field = support.GraphEditorTests.field
-    select = support.GraphEditorTests.select
-    mouse = support.GraphEditorTests.mouse
-    point = support.GraphEditorTests.point
-    key = support.GraphEditorTests.key
     add_gain = support.GraphEditorTests.add_gain
 
-    def state(self):
-        return self.read('workspace.get')['graphCurve']
 
-    def settle(self):
-        self.desktop.send(self.desktop.hwnd(self.pid), 0x113, 5)
-        deadline = time.monotonic()+5
-        while time.monotonic()<deadline:
-            state = self.state()
-            if not state['pending'] and (state['previewSamples'] or not state['graph']):
-                return state
-            time.sleep(.02)
-        self.fail(str(self.state()))
 
     def setup_curve(self):
         graph = self.write('graph.create')['graph']
@@ -49,6 +32,7 @@ class GraphCurveTests(unittest.TestCase):
         return graph, node
 
     def saved(self, graph, node, pattern=0):
+        self.curve_api_idle()
         return self.read('graph.automation.get', graph=graph, node=node, pattern=pattern)
 
     def test_native_curve_points_rejection_history_other_pattern_and_reopen(self):
@@ -93,12 +77,12 @@ class GraphCurveTests(unittest.TestCase):
     def test_canvas_insert_drag_cancel_snap_and_keyboard(self):
         graph, node = self.setup_curve()
         self.command(490)
-        endpoint = self.state()['handles'][-1]
+        endpoint = self.curve_canvas()['handles'][-1]
         self.mouse(0x201, endpoint, 1)
         self.mouse(0x202, endpoint)
-        self.assertEqual(self.state()['selected'], 1)
+        self.assertEqual(self.state()['selectedPoint'], 1)
         self.command(491)
-        state = self.state()
+        state = self.curve_canvas()
         c = state['canvas']
         at = dict(x=c['x']+c['width']*.25, y=c['y']+c['height']*.4)
         self.mouse(0x201, at, 1)
@@ -130,6 +114,7 @@ class GraphCurveTests(unittest.TestCase):
         graph, node = self.setup_curve()
         self.command(490)
         retained = self.state()['points']
+        self.command(430)  # Reveal routing independently of the curve host.
         self.select(442, 0)  # Input selected; curve stays on its source.
         self.assertEqual(self.state()['node'], node)
         self.assertEqual(self.state()['points'], retained)
@@ -139,6 +124,7 @@ class GraphCurveTests(unittest.TestCase):
         self.assertEqual(self.doc(), before)
         self.assertTrue(self.state()['stale'])
         self.assertTrue(self.state()['dirty'])
+        self.command(430)
         self.select(442, 2)
         self.command(487)
         self.assertFalse(self.state()['dirty'])
@@ -193,31 +179,22 @@ class GraphCurveTests(unittest.TestCase):
 
     def test_native_curve_fields_focus_bounds_and_zoom(self):
         self.setup_curve()
-        user = ctypes.WinDLL('user32')
-        user.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
-        user.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-        user.IsWindowVisible.argtypes = [wintypes.HWND]
-        hwnd = self.desktop.hwnd(self.pid)
-        dpi = self.read('workspace.get')['dpi']/96
-        self.assertTrue(user.SetWindowPos(hwnd, None, 0, 0, int(900*dpi), int(620*dpi), 0x16))
-        frame = wintypes.RECT()
-        user.GetWindowRect(hwnd, ctypes.byref(frame))
+        self.resize_curve_client(440, 500)
+        hwnd = self.curve_hwnd()
         self.select(481, 8)
-        for identifier in range(480, 500):
-            control = self.control(identifier)
-            if user.IsWindowVisible(control):
-                with self.subTest(control=identifier):
-                    rect = wintypes.RECT()
-                    user.GetWindowRect(control, ctypes.byref(rect))
-                    self.assertGreater(rect.right, rect.left)
-                    self.assertGreaterEqual(rect.left, frame.left)
-                    self.assertLessEqual(rect.right, frame.right)
-                    self.assertLessEqual(rect.bottom, frame.bottom)
+        all_visible = set()
+        for page in range(3):
+            self.curve_page(page)
+            self.assert_curve_page_bounds()
+            all_visible.update(item['id'] for item in self.state()['controls'])
+        self.assertTrue(set(range(480, 500)).issubset(all_visible), all_visible)
+        self.curve_page(0)
         span = self.state()['end']-self.state()['start']
         self.command(493)
         self.assertEqual(self.state()['end']-self.state()['start'], span/2)
         self.command(492)
         self.assertEqual(self.state()['end']-self.state()['start'], span)
+        self.curve_page(1)
         field = self.control(485)
         self.desktop.send(field, 0x201, 1, 5 | (5 << 16))
         self.desktop.send(field, 0x202, 0, 5 | (5 << 16))

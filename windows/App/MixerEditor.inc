@@ -9,7 +9,7 @@
     void openSongRouting(){
         if(!songRoutingWindow)songRoutingWindow=std::make_unique<ScreamSeq::SongRoutingWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return std::pair(documentId,view->session.revision);},[this](const auto &node){
             if(busy)throw std::runtime_error("Document worker is busy");
-            if(!node.graph.empty()){if(graphDirty||graphFieldDirty||curveDraft())throw std::runtime_error("Apply or Reload the existing graph draft first");graphID=node.graph;command(graphCommand);}
+            if(!node.graph.empty()){if(graphDirty||graphFieldDirty)throw std::runtime_error("Apply or Reload the existing graph draft first");graphID=node.graph;command(graphCommand);}
             else if(!node.plugin.empty()){if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the captured plugin draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==node.plugin;}))throw std::runtime_error("This insert's plugin is unavailable; its route is retained");selectedPlugin=node.plugin;pluginDetailsTarget.clear();graphEditorOpen=mixerEditorOpen=false;command(pluginsCommand);armPluginTimer();}
             else if(!node.bus.empty()){if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the captured mixer draft first");mixerTarget=node.bus;command(mixerCommand);}
         });
@@ -173,5 +173,5 @@
         for(int i=0;i<6;++i)s.uiText(labels[i],x+float(i%3)*w,r.y+87+float(i/3)*49,w-8,0x8390a2);
         const auto selected=mixerSelected();if(selected>=0&&size_t(selected)<mixerMeters.size()){const auto &meter=mixerMeters[size_t(selected)];for(int i=0;i<2;++i){const float value=i?meter.right:meter.left;s.fill(r.x+8,r.y+r.h-27+i*5,180,3,0x283543);s.fill(r.x+8,r.y+r.h-27+i*5,180*std::clamp(value,0.0f,1.0f),3,value>1?0xe87c77:0x6edac5);}}
         const bool stale=mixerDocument!=documentId||mixerRevision!=view->session.revision;
-        s.uiText(stale&&mixerDirty?L"Song changed / draft retained — Reload before applying":mixerDirty?L"Captured bus draft / Apply to commit":mixerStatus,x,r.y+r.h-27,r.w-210,stale&&mixerDirty?0xe7bb79:0x8390a2);s.unclip();s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="mixer"?0x6edac5:0x303b49);
+        s.uiText(stale&&mixerDirty?L"Song changed / draft retained — Reload before applying":mixerDirty?L"Captured bus draft / Apply to commit":mixerStatus,x,r.y+r.h-27,r.w-210,stale&&mixerDirty?0xe7bb79:0x8390a2);s.unclip();s.outline(r.x,r.y,r.w,r.h,workspacePresentationFocus()=="mixer"?0x6edac5:0x303b49);
     }

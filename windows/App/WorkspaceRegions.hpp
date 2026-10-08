@@ -5,19 +5,20 @@
 #include <cmath>
 #include <initializer_list>
 #include <string_view>
+#include <utility>
 
 namespace ScreamSeq::WorkspaceRegions {
 using Json=Api::Json;
-enum class Panel { automation, instruments };
+enum class Panel { automation, instruments, graphCurve };
 enum class Region { right, bottom, secondary };
 enum class Placement { right, bottom, secondary, floating, hidden };
 enum class Mode { none, regions, tabs };
-inline constexpr std::array<std::string_view,2> panelNames{"automation","instruments"};
+inline constexpr std::array<std::string_view,3> panelNames{"automation","instruments","graphCurve"};
 inline constexpr std::array<std::string_view,3> regionNames{"right","bottom","secondary"};
 inline constexpr std::array<std::string_view,6> mainBottomNames{"notes","samples","effects","plugins","mixer","graph"};
 
 struct Config {
-  std::array<Placement,2> locations{Placement::hidden,Placement::hidden};
+  std::array<Placement,3> locations{Placement::hidden,Placement::hidden,Placement::hidden};
   std::array<std::string,3> selected{"","graph",""};
   std::string compactSelection="pattern";
   // Desired DIPs, never rewritten by solve(). rightWidth is the native editor
@@ -98,13 +99,17 @@ inline float number(const Json &value,double minimum) {
 }
 inline Json encode(const Config &config) {
   validate(config);
-  return {{"version",2},{"locations",{{"automation",name(config.locations[0])},{"instruments",name(config.locations[1])}}},
+  Json locations=Json::object();
+  for(size_t i=0;i<panelNames.size();++i)locations[std::string(panelNames[i])]=name(config.locations[i]);
+  return {{"version",3},{"locations",std::move(locations)},
     {"selected",{{"right",config.selected[0]},{"bottom",config.selected[1]},{"secondary",config.selected[2]}}},
     {"compactSelection",config.compactSelection},{"rightWidth",config.rightWidth},{"bottomHeight",config.bottomHeight}};
 }
 // A missing editors member is the old seven-field layout. It must leave all
 // current editor presentation preferences exactly unchanged, with no creation.
-// The bounded saved-layout catalogue remains version 1; only editors is V2.
+// The bounded saved-layout catalogue remains version 1; only editors is V3.
+// V2 and the legacy two-editor object initialize graphCurve as hidden, even if
+// the live curve is placed. Migrating a preference never captures a curve target.
 inline Config decodeEditors(const Json *editors,const Config &current,std::string_view legacyLowerEditor="graph",float legacyLowerHeight=210) {
   if(!editors)return current;
   const auto &value=*editors;Config result;
@@ -112,16 +117,19 @@ inline Config decodeEditors(const Json *editors,const Config &current,std::strin
     keys(value,{"locations","active","tracker"});
     need(value.at("locations").is_array()&&value.at("locations").size()==2);
     for(size_t i=0;i<2;++i){const auto text=string(value.at("locations")[i]);need(text=="right"||text=="float"||text=="hide");result.locations[i]=placement(text);}
-    const auto active=string(value.at("active"));need(nativePanel(active)&&value.at("tracker").is_boolean());
+    const auto active=string(value.at("active"));need((active=="automation"||active=="instruments")&&value.at("tracker").is_boolean());
     need(mainBottom(legacyLowerEditor));result.selected[1]=legacyLowerEditor;
     result.selected[0]=belongs(result,Region::right,active)?active:firstNative(result,Region::right);
     result.compactSelection=value.at("tracker").get<bool>()||result.selected[0].empty()?"pattern":result.selected[0];
     result.bottomHeight=legacyLowerHeight;
   }else{
     keys(value,{"version","locations","selected","compactSelection","rightWidth","bottomHeight"});
-    need(value.at("version").is_number_integer()&&value.at("version")==2);
-    keys(value.at("locations"),{"automation","instruments"});keys(value.at("selected"),{"right","bottom","secondary"});
-    for(size_t i=0;i<2;++i)result.locations[i]=placement(string(value.at("locations").at(std::string(panelNames[i]))));
+    need(value.at("version").is_number_integer()&&(value.at("version")==2||value.at("version")==3));
+    const bool legacyV2=value.at("version")==2;
+    if(legacyV2)keys(value.at("locations"),{"automation","instruments"});
+    else keys(value.at("locations"),{"automation","instruments","graphCurve"});
+    keys(value.at("selected"),{"right","bottom","secondary"});
+    for(size_t i=0;i<(legacyV2?2:panelNames.size());++i)result.locations[i]=placement(string(value.at("locations").at(std::string(panelNames[i]))));
     for(size_t i=0;i<3;++i)result.selected[i]=string(value.at("selected").at(std::string(regionNames[i])));
     result.compactSelection=string(value.at("compactSelection"));result.rightWidth=number(value.at("rightWidth"),440);result.bottomHeight=number(value.at("bottomHeight"),128);
   }

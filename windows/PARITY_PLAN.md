@@ -1,6 +1,20 @@
 # Windows / Mac parity plan
 
-Current independent-docking checkpoint (2026-10-07): the Connected workspace
+Current Graph Curve checkpoint (2026-10-07): routing and its retained curve editor
+can stay visible beside Pattern and parameter Automation. V3 saved layouts,
+independent drafts, captured targets, native focus and retained Formula/Bank/Guide
+children are integrated. Candidate 7 passes **399/399 app cases**, **38/38 focused
+cases**, **49/49 native targets**, and review of **21 source-matched 192-DPI views**.
+See [Graph Curve evidence](GRAPH_CURVE_HOST_PROGRESS.md) for identities, earlier
+failures and scoped limits. Checkpoint destination:
+`bin/windows-checkpoints/graph-curve-host-20261007/`; its manifest confirms packaging.
+
+Precise Notes still shares Main's lower editor and is the next ownership/UI gap.
+Its separate retained-owner proposal is not yet implemented or qualified. Full
+Windows/Mac parity remains the goal; foreground/multiple-scale presentation,
+accessibility and reciprocal Mac runtime remain outside this checkpoint's evidence.
+
+Previous independent-docking checkpoint (2026-10-07): the Connected workspace
 shows Pattern, Graph, Instrument and Automation in independent native regions.
 Short pages, compact fallback and guarded layout preparation retain editor HWNDs,
 raw fields, targets, caret and focus. Candidate 8 passes **393/393 app cases**,
@@ -10,10 +24,6 @@ historical failures and qualification limits. Checkpoint destination:
 `bin/windows-checkpoints/independent-dock-regions-20261007/`; its manifest is the
 authority for completed immutable packaging.
 
-Next is independent Graph curve ownership so routing and its curve remain visible
-together. Its ignored prototypes are unbuilt. Full Windows/Mac parity remains
-the goal; foreground/multiple-scale presentation, accessibility and reciprocal
-Mac runtime remain outside this checkpoint's evidence.
 
 Previous arrangement-matrix checkpoint (2026-10-07): a retained native matrix
 provides paged order-by-track density, exact occurrence navigation, captured

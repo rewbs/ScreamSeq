@@ -4,7 +4,12 @@
         Json origin=Json::object();
         bool pinned=false, configured=false;
     };
-    std::array<WorkspaceEditorPanel,2> workspaceEditors;
+    std::array<WorkspaceEditorPanel,3> workspaceEditors=[] {
+        std::array<WorkspaceEditorPanel,3> panels;
+        panels[2].preferred="secondary";
+        return panels;
+    }();
+    static constexpr std::array<const char *,3> workspaceEditorNames{"automation","instruments","graphCurve"};
     std::string activeWorkspaceEditor="automation";
     bool dockTrackerSelected=false, changingEditorPlacement=false, followingEditors=false;
     Regions::Config regionConfiguration;
@@ -28,27 +33,59 @@
     bool workspaceMainCanvasFocused(const std::string &id)const{
         return workspaceState.focus==id&&!workspaceInspectorCanvasIntent()&&workspaceMainEditorVisible(id);
     }
-    std::string workspaceMainCanvasIdentity(HWND target=nullptr)const{
-        const auto main=lowerEditorName();if(main!="graph"||graphPageIndex!=5)return main;
-        // Shared Graph controls keep their own native input. Entering the painted
-        // Main body or a curve-specific control belongs to the visible curve.
-        if(target&&target!=window){const auto id=GetDlgCtrlID(target);if(id<curvePattern||id>curveReference)return "graph";}
-        return "graphCurve";
+    // Visible native ownership affects presentation only. A source-free Guide
+    // may have a hidden owner and must retain its opening Main context. Keep the last Main
+    // canvas/inspector intent intact for its next keyboard focus restoration.
+    std::string workspacePresentationFocus()const {
+        const auto focus=GetFocus();
+        for(const auto *id:workspaceEditorNames)
+            if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible()&&tool->presentationOwns(focus))return id;
+        return workspaceState.focus;
     }
+    std::string workspaceMainCanvasIdentity(HWND=nullptr)const{return lowerEditorName();}
     struct EditorPlacementGuard {
         bool &flag;bool previous;
         explicit EditorPlacementGuard(bool &value):flag(value),previous(value){flag=true;}
         ~EditorPlacementGuard(){flag=previous;}
     };
-    static bool isWorkspaceEditor(const std::string &id){return id=="automation"||id=="instruments";}
+    static bool isWorkspaceEditor(const std::string &id){return Regions::nativePanel(id);}
     static size_t workspaceEditorIndex(const std::string &id){
-        if(id=="automation")return 0;if(id=="instruments")return 1;
-        throw ScreamSeq::Api::ApiError(-32602,"Choose automation or instruments");
+        if(id=="automation")return 0;if(id=="instruments")return 1;if(id=="graphCurve")return 2;
+        throw ScreamSeq::Api::ApiError(-32602,"Choose automation, instruments or graphCurve");
     }
     ScreamSeq::NativeToolWindow *workspaceEditorWindow(const std::string &id)const {
-        return id=="automation"?static_cast<ScreamSeq::NativeToolWindow *>(parameterAutomationWindow.get()):static_cast<ScreamSeq::NativeToolWindow *>(instrumentEnvelopeWindow.get());
+        switch(workspaceEditorIndex(id)) {
+        case 0:return parameterAutomationWindow.get();
+        case 1:return instrumentEnvelopeWindow.get();
+        case 2:return graphCurveWindow.get();
+        }
+        return nullptr;
+    }
+    Json workspaceEditorSnapshot(const std::string &id)const {
+        switch(workspaceEditorIndex(id)) {
+        case 0:return parameterAutomationWindow?parameterAutomationWindow->snapshot():Json::object();
+        case 1:return instrumentEnvelopeWindow?instrumentEnvelopeWindow->snapshot():Json::object();
+        case 2:return graphCurveWindow?graphCurveWindow->snapshot():Json::object();
+        }
+        return Json::object();
+    }
+    Json workspaceGraphCurveSourceGuard()const {
+        const auto source=graphCurveContext();Json target=nullptr;
+        if(source.selected)target={{"graph",source.selected->graph},{"node",source.selected->node},
+            {"patternID",source.selected->patternID},{"pattern",source.selected->pattern}};
+        return {{"document",source.document},{"revision",source.revision},
+            {"selectionGeneration",source.selectionGeneration},{"target",std::move(target)}};
+    }
+    bool workspaceEditorRetainedDraft(const std::string &id)const {
+        switch(workspaceEditorIndex(id)) {
+        case 0:return parameterAutomationWindow&&parameterAutomationWindow->retainedDraft();
+        case 1:return instrumentEnvelopeWindow&&instrumentEnvelopeWindow->retainedDraft();
+        case 2:return graphCurveWindow&&graphCurveWindow->retainedDraft();
+        }
+        return false;
     }
     static bool dockLocation(const std::string &location){return location=="right"||location=="bottom"||location=="secondary";}
+    static const char *defaultWorkspaceDockLocation(const std::string &id){return id=="graphCurve"?"secondary":"right";}
     Regions::Config currentWorkspaceRegions()const {
         auto value=regionConfiguration;
         for(size_t i=0;i<workspaceEditors.size();++i)value.locations[i]=Regions::placement(workspaceEditors[i].location);
@@ -89,8 +126,9 @@
         if(id=="pattern"||id=="graphLanes")return trackerWorkspaceVisible();
         if(inspectorFocusAlias(id))return inspector
             ?workspaceInspectorVisible()&&id==workspaceState.active:workspaceMainEditorVisible(id);
-        if(id=="graphCurve")return graphCurveVisible();
-        if(id=="graph")return graphEditorVisible()&&!graphCurveVisible();
+        // Native owners are never painted Main canvases, even when docked.
+        if(isWorkspaceEditor(id))return false;
+        if(id=="graph")return graphEditorVisible();
         if(Regions::mainBottom(id))return workspaceMainEditorVisible(id);
         return false;
     }
@@ -132,9 +170,9 @@
             if(((workspaceState.focus=="pattern"||workspaceState.focus=="graphLanes")&&completed.pattern)||
                 (workspaceInspectorCanvasIntent()&&completed.inspector))host="pattern";
             else if(!workspaceInspectorCanvasIntent()&&!completed.main.empty()&&completed.main==lowerEditorName()&&
-                (workspaceState.focus==completed.main||(completed.main=="graph"&&workspaceState.focus=="graphCurve")))host=completed.main;
+                workspaceState.focus==completed.main)host=completed.main;
         }else{
-            for(const auto *id:{"automation","instruments"})if(auto *tool=workspaceEditorWindow(id);
+            for(const auto *id:workspaceEditorNames)if(auto *tool=workspaceEditorWindow(id);
                 tool&&tool->docked()&&tool->visible()&&tool->owns(focused))host=id;
             if(host.empty()&&!completed.main.empty()&&completed.main==lowerEditorName()&&IsChild(window,focused)&&
                 !ScreamSeq::NativeToolWindow::belongsToTool(focused)&&
@@ -145,11 +183,11 @@
         }
     }
     std::string focusedWorkspaceRegion(HWND target)const{
-        for(const auto *id:{"automation","instruments"})if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible()&&tool->owns(target))return id;
+        for(const auto *id:workspaceEditorNames)if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible()&&tool->owns(target))return id;
         if(workspaceMainControl(target))return lowerEditorName();
         if(target!=window||!workspaceCanvasVisible(workspaceState.focus,inspectorCanvasFocus))return {};
         if(workspaceState.focus=="pattern"||workspaceState.focus=="graphLanes"||workspaceInspectorCanvasIntent())return "pattern";
-        return workspaceState.focus=="graphCurve"?"graph":workspaceState.focus;
+        return workspaceState.focus;
     }
     bool workspaceFocusVisible(HWND target)const {
         return target&&IsWindow(target)&&IsWindowVisible(target)&&IsWindowEnabled(target)&&
@@ -158,7 +196,7 @@
     void focusVisibleWorkspaceCanvas() {
         if(!trackerWorkspaceVisible()) {
             if(workspaceMainEditorVisible(lowerEditorName())){setWorkspaceCanvasFocus(workspaceMainCanvasIdentity());SetFocus(window);return;}
-            for(const auto *id:{"automation","instruments"})if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible()) {
+            for(const auto *id:workspaceEditorNames)if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible()) {
                 setWorkspaceCanvasFocus(id);SetFocus(tool->window());return;
             }
         }
@@ -198,18 +236,21 @@
     }
     bool editorWorkspaceKey(const std::string &id,WPARAM key,bool repeat) {
         const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,alt=(GetKeyState(VK_MENU)&0x8000)!=0;
-        if(ctrl&&alt&&key=='D'){if(!repeat)workspaceEditorRequest({{"panel",id},{"placement",workspaceEditorWindow(id)->docked()?"float":"right"},{"focus",true}});return true;}
+        if(ctrl&&alt&&key=='D'){if(!repeat)workspaceEditorRequest({{"panel",id},{"placement",workspaceEditorWindow(id)->docked()?"float":defaultWorkspaceDockLocation(id)},{"focus",true}});return true;}
         return false;
     }
     void configureWorkspaceEditor(const std::string &id) {
         auto &p=workspaceEditors[workspaceEditorIndex(id)];auto *tool=workspaceEditorWindow(id);if(!tool||p.configured)return;
         p.configured=true;
         tool->workspaceKeys([this,id](WPARAM key,bool repeat){return editorWorkspaceKey(id,key,repeat);});
-        tool->workspaceDockAction([this,id]{workspaceEditorRequest({{"panel",id},{"placement",workspaceEditorWindow(id)->docked()?"float":"right"},{"focus",true}});});
+        tool->focusPresentationChanged([this]{
+            frameRequested=true;if(window)InvalidateRect(window,nullptr,FALSE);
+        });
+        tool->workspaceDockAction([this,id]{workspaceEditorRequest({{"panel",id},{"placement",workspaceEditorWindow(id)->docked()?"float":defaultWorkspaceDockLocation(id)},{"focus",true}});});
         tool->placementChanged([this,id]{
             if(changingEditorPlacement)return;
             auto &state=workspaceEditors[workspaceEditorIndex(id)];auto *editor=workspaceEditorWindow(id);
-            if(editor->visible()){placeWorkspaceEditor(id,editor->docked()?(dockLocation(state.location)?state.location:"right"):"float");captureWorkspaceEditorOrigin(id);}
+            if(editor->visible()){placeWorkspaceEditor(id,editor->docked()?(dockLocation(state.location)?state.location:defaultWorkspaceDockLocation(id)):"float");captureWorkspaceEditorOrigin(id);}
             else {placeWorkspaceEditor(id,"hide");if(workspaceState.focus==id)workspaceState.focus="pattern";}
             layoutControls();
         });
@@ -224,18 +265,33 @@
         layoutControls();
     }
     void ensureWorkspaceEditor(const std::string &id) {
+        if(id=="graphCurve") {
+            // Guide can create an owner without ever opening/capturing a curve.
+            // Pointer existence alone must not skip the first actual openAt().
+            if(!graphCurveWindow||workspaceEditors[workspaceEditorIndex(id)].origin.empty()||
+                !graphCurveOperationGuard().value("initialized",false))openGraphCurve();
+            return;
+        }
         if(workspaceEditorWindow(id))return;
         if(id=="automation")openParameterAutomation();else openInstrumentEnvelope();
     }
     bool followWorkspaceEditor(const std::string &id) {
-        return id=="automation"?parameterAutomationWindow->followCursor():instrumentEnvelopeWindow->followCursor();
+        switch(workspaceEditorIndex(id)) {
+        case 0:return parameterAutomationWindow->followCursor();
+        case 1:return instrumentEnvelopeWindow->followCursor();
+        case 2:return graphCurveWindow->followSelection();
+        }
+        return false;
     }
     void followWorkspaceEditors() {
         if(followingEditors||changingEditorPlacement||busy)return;
         EditorPlacementGuard guard(followingEditors);
-        for(const auto *id:{"automation","instruments"}) {
+        for(const auto *id:workspaceEditorNames) {
             const auto &p=workspaceEditors[workspaceEditorIndex(id)];auto *tool=workspaceEditorWindow(id);
             if(p.pinned||!tool||!tool->visible()||tool->owns(GetFocus()))continue;
+            // A Guide-only owner restored into a region remains deliberately
+            // empty until an explicit opening or Load selection action.
+            if(id==std::string_view("graphCurve")&&!graphCurveOperationGuard().value("initialized",false))continue;
             try{followWorkspaceEditor(id);}catch(const std::exception &e){status=wide(e.what());}
         }
     }
@@ -251,7 +307,6 @@
         std::string retainedSurface;
         if(!p.value("focus",false)&&!p.value("return",false)) {
             retainedSurface=focusedWorkspaceRegion(previousFocus);
-            if(isWorkspaceEditor(retainedSurface))retainedSurface.clear();
         }
         const auto placement=p.value("placement",state.location=="hide"?state.preferred:state.location);
         // Hiding an unopened editor is a pure presentation operation.
@@ -272,6 +327,7 @@
                 if(!retainedSurface.empty()&&!sideWorkspaceDock()&&Regions::compactAvailable(currentWorkspaceRegions(),retainedSurface)){
                     regionConfiguration.compactSelection=retainedSurface;dockTrackerSelected=retainedSurface=="pattern";
                     if(previousFocus==window)setWorkspaceCanvasFocus(previousPanel,previousInspector);
+                    else if(isWorkspaceEditor(retainedSurface))setWorkspaceCanvasFocus(retainedSurface);
                     else if(retainedSurface!="pattern")setWorkspaceCanvasFocus(workspaceMainCanvasIdentity(previousFocus));
                 }
             }
@@ -305,13 +361,13 @@
     // never roll back a newer cursor, field edit, focus choice or arrangement.
     Json workspacePreparationGuard()const {
         Json editors=Json::array(),inspectors=Json::array();
-        for(const auto *id:{"automation","instruments"}) {
+        for(const auto *id:workspaceEditorNames) {
             const auto &state=workspaceEditors[workspaceEditorIndex(id)];
             auto *tool=workspaceEditorWindow(id);
             Json captured=Json::object();
             if(tool) {
-                const auto snapshot=id==std::string("automation")?parameterAutomationWindow->snapshot():instrumentEnvelopeWindow->snapshot();
-                for(const auto *key:{"generation","document","expectedRevision","pattern","patternID","plugin","parameter","instrument","index","page","selectedPoint","retainedDraft","pending"})
+                const auto snapshot=workspaceEditorSnapshot(id);
+                for(const auto *key:{"initialized","generation","document","expectedRevision","pattern","patternID","graph","node","plugin","parameter","instrument","index","page","selectedPoint","retainedDraft","pending"})
                     if(snapshot.contains(key))captured[key]=snapshot.at(key);
             }
             editors.push_back({{"identity",reinterpret_cast<uintptr_t>(tool)},
@@ -331,9 +387,7 @@
             {"plugin",selectedPlugin},{"parameter",selectedParameter},{"pluginDraft",pluginDraft},{"pluginPresetPending",pluginPresetPending},
             {"notes",{{"captured",noteCaptured},{"generation",noteDraftGeneration},{"pending",notePending}}},
             {"effects",effectDraftExists},
-            {"curve",{{"generation",curveGeneration},{"document",curveDocument},{"revision",curveRevision},
-                {"graph",curveGraph},{"node",curveNode},{"pattern",curvePatternIndex},
-                {"dirty",curveDirty},{"fieldDraft",curveFieldsDirty},{"pending",curvePending}}},
+            {"curve",graphCurveOperationGuard()},{"curveSource",workspaceGraphCurveSourceGuard()},
             {"graph",{{"document",graphDocument},{"revision",graphRevision},{"generation",graphGeneration},
                 {"id",graphID},{"node",graphNode},{"dirty",graphDirty},{"fieldDraft",graphFieldDirty},{"pending",graphPending}}},
             {"mixer",{{"document",mixerDocument},{"revision",mixerRevision},{"generation",mixerGeneration},
@@ -347,10 +401,13 @@
         std::shared_ptr<bool> preparing=std::make_shared<bool>(true);
         std::unique_ptr<ScreamSeq::ParameterAutomationWindow> automation;
         std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instruments;
+        std::unique_ptr<ScreamSeq::GraphCurveWindow> graphCurve;
     };
-    PreparedWorkspaceEditors prepareWorkspaceDockConfiguration(const Regions::Config &v,const Json &guard) {
+    PreparedWorkspaceEditors prepareWorkspaceDockConfiguration(const Regions::Config &v,const Json &guard,
+        const ScreamSeq::GraphCurveWindow::Context &curveContext) {
         PreparedWorkspaceEditors prepared;
-        // Capture both intended targets before the first pumped wait. These
+        // The caller captured the curve source before any main/native read.
+        // Capture the parameter target before this helper's first wait. These
         // windows remain unregistered, hidden and disconnected from placement.
         const auto [plugin,parameter]=initialParameterAutomationTarget();
         if(v.locations[0]!=Regions::Placement::hidden&&!parameterAutomationWindow) {
@@ -363,6 +420,14 @@
             prepared.instruments->initializeHidden();
             validateWorkspacePreparation(guard);
         }
+        if(v.locations[2]!=Regions::Placement::hidden&&!graphCurveWindow) {
+            prepared.graphCurve=makeGraphCurveWindow(prepared.preparing);
+            prepared.graphCurve->initializeHidden(curveContext.selected);
+            validateWorkspacePreparation(guard);
+        }
+        // An existing Guide-only owner and all its child HWNDs survive unchanged.
+        // It can remain empty until explicit open/Follow; no hidden read is
+        // performed into an already live native owner during restore.
         return prepared;
     }
     void adoptWorkspaceEditors(PreparedWorkspaceEditors &&prepared) {
@@ -377,11 +442,15 @@
             instrumentEnvelopeWindow=std::move(prepared.instruments);
             connectInstrumentEnvelopeTyping();configureWorkspaceEditor("instruments");captureWorkspaceEditorOrigin("instruments");
         }
+        if(prepared.graphCurve) {
+            graphCurveWindow=std::move(prepared.graphCurve);
+            configureWorkspaceEditor("graphCurve");captureWorkspaceEditorOrigin("graphCurve");
+        }
     }
     void restoreWorkspaceDockConfiguration(const Regions::Config &v) {
         EditorPlacementGuard guard(changingEditorPlacement);
         regionConfiguration=v;
-        for(size_t i=0;i<2;++i){workspaceEditors[i].location=Regions::name(v.locations[i]);if(workspaceEditors[i].location!="hide")workspaceEditors[i].preferred=workspaceEditors[i].location;}
+        for(size_t i=0;i<workspaceEditors.size();++i){workspaceEditors[i].location=Regions::name(v.locations[i]);if(workspaceEditors[i].location!="hide")workspaceEditors[i].preferred=workspaceEditors[i].location;}
         dockTrackerSelected=v.compactSelection=="pattern";
         if(isWorkspaceEditor(v.compactSelection))activeWorkspaceEditor=v.compactSelection;
     }
@@ -394,7 +463,7 @@
         // intentionally leave focus null until that tool completes its work.
         bool ownedWorkspaceFocus=focused&&(focused==window||
             (IsChild(window,focused)&&!ScreamSeq::NativeToolWindow::belongsToTool(focused)));
-        if(focused)for(const auto *id:{"automation","instruments"})if(auto *tool=workspaceEditorWindow(id);tool&&tool->owns(focused))ownedWorkspaceFocus=true;
+        if(focused)for(const auto *id:workspaceEditorNames)if(auto *tool=workspaceEditorWindow(id);tool&&tool->owns(focused))ownedWorkspaceFocus=true;
         std::map<int,ScreamSeq::WorkspaceRect> shown;
         auto place=[&](int id,float x,float y,float w,float h){shown[id]={x,y,w,h};};
         if(dock&&regions.mode==Regions::Mode::regions)for(size_t i=0;i<3;++i){
@@ -403,7 +472,7 @@
         }
         if(dock&&regions.mode==Regions::Mode::tabs){
             float x=regions.tabs.x+4;const auto y=regions.tabs.y+2;
-            for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{editorTrackerTab,80.f},{editorAutomationTab,96.f},{editorInstrumentTab,96.f}}){place(id,x,y,width,24);x+=width+4;}
+            for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{editorTrackerTab,80.f},{editorAutomationTab,96.f},{editorInstrumentTab,96.f},{editorGraphCurveTab,100.f}}){place(id,x,y,width,24);x+=width+4;}
             const auto mainButton=regionControlBase+regionControlStride;
             place(mainButton,x,y,116,24);ScreamSeq::NativeControls::text(controls.at(mainButton),workspaceRegionTitle(lowerEditorName())+L" ▾");x+=120;
             for(size_t i=0;i<3;++i)if(regions.hosts[i].visible&&isWorkspaceEditor(regions.hosts[i].selected)){
@@ -413,8 +482,9 @@
         }
         const auto placeOnce=[&](int id){const auto found=shown.find(id);if(found==shown.end())apply(id,0,0,1,1,false);else{const auto &r=found->second;apply(id,r.x,r.y,r.w,r.h,true);}};
         for(int id=editorTrackerTab;id<=editorReturnCommand;++id)placeOnce(id);
+        placeOnce(editorGraphCurveTab);
         for(int id=regionControlBase;id<=regionControlEnd;++id)if(controls.contains(id))placeOnce(id);
-        for(const auto *id:{"automation","instruments"}) {
+        for(const auto *id:workspaceEditorNames) {
             const auto &p=workspaceEditors[workspaceEditorIndex(id)];auto *tool=workspaceEditorWindow(id);if(!tool)continue;
             if(dockLocation(p.location)) {
                 if(!tool->docked())tool->dock(window);
@@ -423,10 +493,16 @@
                 if(show&&!tool->visible())tool->show();else if(!show&&tool->visible())tool->hide();
             } else if(p.location=="float") {if(tool->docked())tool->floatWindow();if(!tool->visible())tool->show();}
             else if(tool->visible())tool->hide();
+            // A pre-existing Guide-only curve receives only presentation state
+            // on restore. Capture Return when its body is first actually shown,
+            // without loading a target or changing the retained child windows.
+            if(id==std::string_view("graphCurve")&&tool->visible())captureWorkspaceEditorOrigin(id);
         }
-        for(int id:{editorTrackerTab,editorAutomationTab,editorInstrumentTab}){
-            const auto *tool=id==editorTrackerTab?nullptr:workspaceEditorWindow(id==editorAutomationTab?"automation":"instruments");
-            ScreamSeq::NativeControls::active(controls.at(id),id==editorTrackerTab?tracker:tool&&tool->visible());
+        ScreamSeq::NativeControls::active(controls.at(editorTrackerTab),tracker);
+        for(const auto &[button,panel]:std::array<std::pair<int,const char *>,3>{{
+            {editorAutomationTab,"automation"},{editorInstrumentTab,"instruments"},{editorGraphCurveTab,"graphCurve"}}}) {
+            const auto *tool=workspaceEditorWindow(panel);
+            ScreamSeq::NativeControls::active(controls.at(button),tool&&tool->visible());
         }
         const bool main=workspaceMainEditorVisible(lowerEditorName());
         if((previousPatternVisible&&!tracker)||(previousMainVisible&&!main))releaseTypedNotes();
@@ -435,14 +511,14 @@
         if(ownedWorkspaceFocus&&!workspaceFocusVisible(GetFocus()))focusVisibleWorkspaceCanvas();
     }
     static std::wstring workspaceRegionTitle(const std::string &id){
-        if(id=="automation")return L"Automation";if(id=="instruments")return L"Instrument";
+        if(id=="automation")return L"Automation";if(id=="instruments")return L"Instrument";if(id=="graphCurve")return L"Graph curve";
         if(id=="notes")return L"Notes";if(id=="samples")return L"Samples";if(id=="effects")return L"Pattern FX";
         if(id=="plugins")return L"Plugins";if(id=="mixer")return L"Mixer";if(id=="graph")return L"Graph";return L"Tracker";
     }
     bool workspaceEditorFollowHeld(const std::string &id)const {
         const auto &state=workspaceEditors[workspaceEditorIndex(id)];if(state.pinned)return false;
         const auto *tool=workspaceEditorWindow(id);if(!tool)return false;
-        return tool->owns(GetFocus())||(id=="automation"?parameterAutomationWindow->retainedDraft():instrumentEnvelopeWindow->retainedDraft());
+        return tool->owns(GetFocus())||workspaceEditorRetainedDraft(id);
     }
     void installWorkspaceRegionControls(){
         for(int region=0;region<3;++region)for(int action=0;action<5;++action){
@@ -522,7 +598,7 @@
         if(!hasWorkspaceDock())return false;std::vector<std::pair<std::string,HWND>> regions;
         if(trackerWorkspaceVisible())regions.emplace_back("pattern",window);
         if(workspaceMainEditorVisible(lowerEditorName()))regions.emplace_back(lowerEditorName(),window);
-        for(const auto *id:{"instruments","automation"})if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible())regions.emplace_back(id,tool->window());
+        for(const auto *id:{"instruments","automation","graphCurve"})if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible())regions.emplace_back(id,tool->window());
         if(regions.empty())return true;const auto focused=focusedWorkspaceRegion(GetFocus());
         auto current=std::find_if(regions.begin(),regions.end(),[&](const auto &item){return item.first==focused;});
         auto next=current==regions.end()||++current==regions.end()?regions.begin():current;
@@ -531,12 +607,23 @@
     void openConnectedWorkspace(){
         auto configuration=layoutConfiguration();configuration["layout"]="Compose";configuration["active"]="notes";
         configuration["hidden"]=Json::array({true,true});configuration["lowerVisible"]=true;configuration["lowerEditor"]="graph";
-        Regions::Config regions;regions.locations={Regions::Placement::secondary,Regions::Placement::right};
+        Regions::Config regions;regions.locations={Regions::Placement::secondary,Regions::Placement::right,Regions::Placement::hidden};
         regions.selected={"instruments","graph","automation"};regions.compactSelection="pattern";configuration["editors"]=Regions::encode(regions);
+        restoreLayoutConfiguration(configuration);
+    }
+    void openGraphEditingWorkspace(){
+        auto configuration=layoutConfiguration();configuration["layout"]="Compose";configuration["active"]="notes";
+        configuration["hidden"]=Json::array({true,true});configuration["lowerVisible"]=true;configuration["lowerEditor"]="graph";
+        Regions::Config regions;regions.locations={Regions::Placement::secondary,Regions::Placement::hidden,Regions::Placement::right};
+        regions.selected={"graphCurve","graph","automation"};regions.compactSelection="pattern";configuration["editors"]=Regions::encode(regions);
         restoreLayoutConfiguration(configuration);
     }
     bool workspaceEditorCommand(int id) {
         if(id==connectedWorkspaceCommand){openConnectedWorkspace();return true;}
+        if(id==graphEditingWorkspaceCommand){openGraphEditingWorkspace();return true;}
+        if(id==openGraphCurveCommand){openGraphCurve();return true;}
+        if(id==dockGraphCurveCommand){workspaceEditorRequest({{"panel","graphCurve"},{"placement","secondary"},{"focus",true}});return true;}
+        if(id==editorGraphCurveTab){const auto &state=workspaceEditors[workspaceEditorIndex("graphCurve")];workspaceEditorRequest({{"panel","graphCurve"},{"placement",state.location=="hide"?state.preferred:state.location},{"focus",true}});return true;}
         if(id>=regionControlBase&&id<=regionControlEnd){
             const auto region=size_t((id-regionControlBase)/regionControlStride);const auto action=(id-regionControlBase)%regionControlStride;
             if(action<2){workspaceRegionMenu(region,action==1);return true;}

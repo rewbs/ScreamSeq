@@ -1,6 +1,25 @@
 # Windows continuation
 
-Latest independent-docking checkpoint (2026-10-07): Connected shows Pattern,
+Latest Graph Curve checkpoint (2026-10-07): one retained native editor allows
+Pattern, routing, a graph curve and parameter Automation to remain visible
+together. V3 layout persistence, compact pages and independent captured drafts
+preserve keyboard focus and Formula/Bank/Guide children. Candidate 7 SHA256:
+`4AC1575B2783FEDDCD97D0E306A9440307E3652A0DF72D83A91F987A4401C20B`.
+Full run 3 passes **399/399 in 1,017.774 seconds**, focused run 8 **38/38 in
+171.953 seconds**, native **49/49 in 82.73 seconds**, and **21 source-matched views**
+pass review at 192 DPI. Final app runs have no failures or skips and strict outer
+success. Earlier failures, exact fixture migrations and visual limits remain in
+[GRAPH_CURVE_HOST_PROGRESS.md](GRAPH_CURVE_HOST_PROGRESS.md).
+Checkpoint destination: `bin/windows-checkpoints/graph-curve-host-20261007/`;
+its manifest is the authority for completed immutable packaging.
+
+Next: extract Precise Notes from Main into its own retained native owner, preserving
+existing musical API/Undo/persistence and independent read-only Notes inspection.
+Source-only proposals and their reviews are retained under ignored `bin/`; they
+have not been integrated or qualified. Preserve the old matrix draft backup/stash
+until separately reconciled. The Windows/Mac parity goal stays open.
+
+Previous independent-docking checkpoint (2026-10-07): Connected shows Pattern,
 Graph, Instrument and Automation together in independent native regions. Short
 retained pages, compact fallback, actual keyboard focus and guarded saved-layout
 preparation preserve targets, raw edits, caret and desired split sizes.
@@ -14,12 +33,6 @@ identities, earlier failed runs and scoped visual limits. Checkpoint destination
 `bin/windows-checkpoints/independent-dock-regions-20261007/`; its manifest is the
 authority for completed immutable packaging.
 
-Next is independent Graph curve ownership, allowing routing and its curve to
-remain visible together. Source-only owner, V3 layout, Main/API and test drafts
-are retained under ignored `bin/`; they are unbuilt and unqualified. The current
-checkpoint still hosts the curve inside Main's Graph page. Preserve the old
-matrix draft backup/stash until separately reconciled. The Windows/Mac parity
-goal stays open.
 
 Previous arrangement-matrix checkpoint (2026-10-07): native order-by-track pages,
 native-aware density, exact occurrence Open and captured Copy/Paste are connected.

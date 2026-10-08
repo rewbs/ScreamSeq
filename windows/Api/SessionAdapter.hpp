@@ -128,9 +128,9 @@ class SessionAdapter {
       {"revisionGuards",{{"transport.play",{"expectedRevision"}},{"transport.stop",{"expectedRevision"}},
         {"context.set",{"expectedRevision","expectedContext"}},
         {"workspace.panel",Json::array()},{"workspace.layout",Json::array()},{"workspace.shortcut.set",Json::array()}}},
-      {"workspaceSubset",{{"panels",{"notes","samples","automation","instruments"}},{"placements",{"right","hide"}},
-        {"editorPlacements",{{"automation",{"right","bottom","secondary","float","hide"}},{"instruments",{"right","bottom","secondary","float","hide"}}}},
-        {"layouts",{"Compose","Pattern focus","Sound design","Connected","Save custom","Restore custom","Delete custom","Reload saved"}},
+      {"workspaceSubset",{{"panels",{"notes","samples","automation","instruments","graphCurve"}},{"placements",{"right","hide"}},
+        {"editorPlacements",{{"automation",{"right","bottom","secondary","float","hide"}},{"instruments",{"right","bottom","secondary","float","hide"}},{"graphCurve",{"right","bottom","secondary","float","hide"}}}},
+        {"layouts",{"Compose","Pattern focus","Sound design","Connected","Graph editing","Save custom","Restore custom","Delete custom","Reload saved"}},
         {"namedLayouts",{{"optionalField","savedName"},{"default","Custom"},{"maximum",24},{"nameCharacters",64}}},
         {"schema","windows/Api/workspace.schema.json"}}},
       {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. Workspace operations accept neither revision token; unsupported parameters reject."}};

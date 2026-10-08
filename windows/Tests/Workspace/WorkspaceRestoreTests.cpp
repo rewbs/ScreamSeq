@@ -59,6 +59,7 @@ struct RestoreApplication final:Application {
     Fault fault=Fault::none;
     std::string targetRead;
     std::vector<std::string> preparationReads,ordinaryReads;
+    std::vector<std::pair<std::string,Json>> preparationRequests;
     std::function<void()> postedInput;
     std::function<void(const std::string &)> beforeRead;
     std::promise<RestoreJson> *inputCompletion=nullptr;
@@ -70,7 +71,7 @@ struct RestoreApplication final:Application {
         ordinaryReads.push_back(method);return Application::documentOperation(method,params);
     }
     Json workspacePreparationRead(const std::string &method,const Json &params)override {
-        preparationReads.push_back(method);if(beforeRead)beforeRead(method);
+        preparationReads.push_back(method);preparationRequests.emplace_back(method,params);if(beforeRead)beforeRead(method);
         if(method==targetRead&&fault==Fault::read)throw ScreamSeq::Api::ApiError(-32003,"Injected required workspace read failure");
         auto result=Application::workspacePreparationRead(method,params);
         if(method==targetRead&&postedInput) {
@@ -91,7 +92,8 @@ struct RestoreApplication final:Application {
             if(method=="pattern.notes.get")result["events"]=Json::object();
             else if(method=="graph.get")result["library"]=Json::object();
             else if(method=="mixer.get")result["buses"]=Json::object();
-            else throw std::logic_error("Malformed fixture target is not a Main editor read");
+            else if(method=="graph.automation.get")result["points"]=Json::object();
+            else throw std::logic_error("Malformed fixture target is not a supported staged editor read");
         }
         return result;
     }
@@ -136,7 +138,7 @@ struct RestoreFixture {
     void cleanup()noexcept {
         if(app){
             app->beforeRead={};app->postedInput={};app->fault=RestoreApplication::Fault::none;
-            app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
+            app->graphCurveWindow.reset();app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
         }
         if(root){DestroyWindow(root);root=nullptr;}
         if(app){app->window=nullptr;app.reset();}
@@ -146,7 +148,7 @@ struct RestoreFixture {
     ~RestoreFixture(){cleanup();}
     void close() {
         const auto owned=root;const auto children=app->controls;
-        app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
+        app->graphCurveWindow.reset();app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
         restoreCheck(DestroyWindow(owned)!=FALSE,"Destroy restore test owner");root=nullptr;app->window=nullptr;
         restoreCheck(!IsWindow(owned),"Restore owner survived destruction");
         for(const auto &[id,control]:children){(void)id;restoreCheck(!IsWindow(control),"Restore child survived owner destruction");}
@@ -179,7 +181,7 @@ RestoreJson restoreState(const RestoreApplication &app) {
 RestoreJson layoutFor(RestoreApplication &app,const char *editor,bool bothNative=false) {
     auto result=app.layoutConfiguration();result["layout"]="Compose";result["active"]="notes";
     result["lowerEditor"]=editor;result["lowerVisible"]=true;result["lowerHeight"]=360;
-    // V2 stores the Main selection in both the original layout and the region
+    // V2/V3 store the Main selection in both the original layout and the region
     // preferences; a native bottom selection remains independent of this value.
     auto &editors=result["editors"];
     if(editors.contains("version")&&ScreamSeq::WorkspaceRegions::mainBottom(editors.at("selected").at("bottom").get<std::string>()))
@@ -187,7 +189,7 @@ RestoreJson layoutFor(RestoreApplication &app,const char *editor,bool bothNative
     if(bothNative) {
         if(editors["locations"].is_array())editors={{"locations",{"float","float"}},{"active","automation"},{"tracker",true}};
         else {
-            editors["locations"]={{"automation","float"},{"instruments","float"}};
+            editors["locations"]={{"automation","float"},{"instruments","float"},{"graphCurve","hide"}};
             editors["selected"]={{"right",""},{"bottom",editor},{"secondary",""}};editors["compactSelection"]="pattern";
         }
     }
@@ -370,7 +372,7 @@ void compactRestoreAndResizeKeepVisibleFocus() {
         createRestoreInstrument(app);resizeRestoreClient(app,1000,720);
         auto layout=layoutFor(app,"graph");layout["hidden"]={true,true};
         ScreamSeq::WorkspaceRegions::Config regions;
-        regions.locations={ScreamSeq::WorkspaceRegions::Placement::secondary,ScreamSeq::WorkspaceRegions::Placement::right};
+        regions.locations={ScreamSeq::WorkspaceRegions::Placement::secondary,ScreamSeq::WorkspaceRegions::Placement::right,ScreamSeq::WorkspaceRegions::Placement::hidden};
         regions.selected={"instruments","graph","automation"};regions.compactSelection="graph";
         layout["editors"]=ScreamSeq::WorkspaceRegions::encode(regions);
         app.workspaceState.focus="pattern";SetFocus(app.window);const auto song=songState(app);
@@ -412,6 +414,262 @@ void compactRestoreAndResizeKeepVisibleFocus() {
         restoreCheck(app.parameterAutomationWindow->window()==automation&&app.instrumentEnvelopeWindow->window()==instrument&&nativeAfter==nativeBefore&&songState(app)==song,"Resize or explicit host selection replaced native windows, targets, drafts, or musical state");
     });
 }
+// V3 Graph curve restoration preserves the independent owner and its children.
+struct RestoreCurveSource {
+    std::string graph,node,otherNode,patternID;
+    unsigned pattern=0,otherPattern=0;
+};
+RestoreCurveSource createRestoreCurveSource(RestoreApplication &app) {
+    RestoreCurveSource source;
+    source.graph=app.edit("graph.create",RestoreJson::object()).at("graph").get<std::string>();
+    source.node=app.edit("graph.node.add",{{"graph",source.graph},{"kind","automation"}}).at("node").get<std::string>();
+    source.otherNode=app.edit("graph.node.add",{{"graph",source.graph},{"kind","automation"}}).at("node").get<std::string>();
+    source.pattern=app.patternIndex;
+    source.otherPattern=app.edit("pattern.create",{{"rows",32}}).at("pattern").get<unsigned>();
+    app.edit("graph.automation.set",{{"graph",source.graph},{"node",source.node},{"pattern",source.pattern},{"enabled",false},
+        {"points",RestoreJson::array({{{"position",64},{"value",.25},{"curve","smooth"}},{{"position",1024},{"value",.8},{"curve","linear"}}})}});
+    app.graphID=source.graph;app.graphNode=source.node;app.command(graphCommand);
+    const auto context=app.graphCurveContext();
+    restoreCheck(context.selected&&context.selected->graph==source.graph&&context.selected->node==source.node&&context.selected->pattern==source.pattern,
+        "Fixture did not publish the actual selected graph automation source");
+    source.patternID=context.selected->patternID;
+    restoreCheck(!app.graphCurveWindow,"Graph routing fixture opened Curve implicitly");
+    return source;
+}
+RestoreJson curveRequest(const RestoreCurveSource &source) {
+    return {{"graph",source.graph},{"node",source.node},{"pattern",source.pattern}};
+}
+RestoreJson curveLayout(RestoreApplication &app,bool allNative) {
+    auto result=layoutFor(app,allNative?"notes":"graph",allNative);
+    auto &editors=result["editors"];
+    restoreCheck(editors.at("version")==3,"Graph curve restore fixture requires strict editors V3");
+    if(!allNative)editors["locations"]={{"automation","hide"},{"instruments","hide"},{"graphCurve","float"}};
+    else editors["locations"]["graphCurve"]="float";
+    editors["selected"]={{"right",""},{"bottom",allNative?"notes":"graph"},{"secondary",""}};
+    editors["compactSelection"]="pattern";
+    return result;
+}
+void checkRestoredCurve(RestoreApplication &app,const RestoreCurveSource &source,const RestoreJson &saved) {
+    restoreCheck(bool(app.graphCurveWindow),"Curve owner was not adopted");
+    const auto state=app.graphCurveWindow->snapshot();
+    restoreCheck(state.at("initialized").get<bool>()&&state.at("document")==app.documentId&&state.at("expectedRevision")==app.view->session.revision,
+        "Adopted curve has no current captured document/revision");
+    restoreCheck(state.at("graph")==source.graph&&state.at("node")==source.node&&state.at("patternID")==source.patternID&&state.at("pattern")==source.pattern,
+        "Adopted curve changed its stable source target");
+    for(const auto *key:{"points","enabled","rows","rowsPerBeat"})restoreCheck(state.at(key)==saved.at(key),"Adopted curve differs from the worker API response");
+    restoreCheck(!state.at("dirty").get<bool>()&&!state.at("fieldDraft").get<bool>()&&!state.at("pending").get<bool>(),"Initial curve adoption created a draft or pending operation");
+}
+void thirdHiddenCurveFailureIsAtomic() {
+    for(const auto fault:{RestoreApplication::Fault::read,RestoreApplication::Fault::malformed})withRestoreFixture([&](RestoreApplication &app) {
+        createRestoreInstrument(app);addRestoreGain(app);const auto source=createRestoreCurveSource(app);
+        const auto before=restoreState(app);const auto roots=restoreRoots();bool sawAutomation=false,sawInstrument=false,sawCurve=false;
+        app.targetRead="graph.automation.get";app.fault=fault;app.preparationReads.clear();app.preparationRequests.clear();
+        app.beforeRead=[&](const std::string &method) {
+            if(method!="graph.automation.get")return;
+            restoreCheck(!app.noteCaptured&&!app.parameterAutomationWindow&&!app.instrumentEnvelopeWindow&&!app.graphCurveWindow,
+                "Third hidden read saw an earlier candidate adopted");
+            for(const auto root:restoreRoots()) {
+                wchar_t type[96]{};GetClassNameW(root,type,96);
+                if(!_wcsicmp(type,L"ScreamSeq.ParameterAutomation")) {
+                    sawAutomation=true;
+                    auto *tool=static_cast<ScreamSeq::ParameterAutomationWindow *>(reinterpret_cast<ScreamSeq::NativeToolWindow *>(GetWindowLongPtrW(root,GWLP_USERDATA)));
+                    restoreCheck(tool&&tool->snapshot().at("generation").get<uint64_t>()>0&&!(GetWindowLongPtrW(root,GWL_STYLE)&WS_VISIBLE),"Automation was not fully prepared and hidden before Curve read");
+                } else if(!_wcsicmp(type,L"ScreamSeq.InstrumentEnvelope")) {
+                    sawInstrument=true;
+                    auto *tool=static_cast<ScreamSeq::InstrumentEnvelopeWindow *>(reinterpret_cast<ScreamSeq::NativeToolWindow *>(GetWindowLongPtrW(root,GWLP_USERDATA)));
+                    restoreCheck(tool&&tool->snapshot().at("generation").get<uint64_t>()>0&&!(GetWindowLongPtrW(root,GWL_STYLE)&WS_VISIBLE),"Instrument was not fully prepared and hidden before Curve read");
+                } else if(!_wcsicmp(type,L"ScreamSeq.GraphCurve")) {
+                    sawCurve=true;restoreCheck(!(GetWindowLongPtrW(root,GWL_STYLE)&WS_VISIBLE),"Third curve candidate was shown before all reads succeeded");
+                }
+            }
+        };
+        const auto error=restoreRejected([&]{app.restoreLayoutConfiguration(curveLayout(app,true));});
+        restoreCheck(sawAutomation&&sawInstrument&&sawCurve,"Third-editor fixture did not reach all three hidden candidates");
+        restoreCheck(error.find(fault==RestoreApplication::Fault::read?"Injected required":"Invalid curve points reply")!=std::string::npos,"Curve failure was replaced by an unrelated rejection");
+        for(const auto *method:{"pattern.notes.get","automation.pattern.get","instrument.envelope.get","instrument.get","graph.automation.get"})
+            restoreCheck(std::count(app.preparationReads.begin(),app.preparationReads.end(),method)==1,"Third-editor fixture did not exercise each required read exactly once");
+        restoreCheck(app.preparationReads.back()=="graph.automation.get"&&app.preparationRequests.back().second==curveRequest(source),"Failed Curve read did not use the captured original target, or retried afterward");
+        restoreCheck(restoreState(app)==before&&restoreRoots()==roots&&!app.preparingWorkspaceLayout&&!app.busy,
+            "Failed third curve preparation adopted values/placement/focus or leaked native windows");
+    });
+}
+void successfulCurveAdoptionMatchesApi() {
+    withRestoreFixture([](RestoreApplication &app) {
+        createRestoreInstrument(app);addRestoreGain(app);const auto source=createRestoreCurveSource(app);
+        const auto saved=app.documentOperation("graph.automation.get",curveRequest(source));const auto before=songState(app);
+        app.preparationReads.clear();app.preparationRequests.clear();app.restoreLayoutConfiguration(curveLayout(app,true));
+        restoreCheck(app.noteCaptured&&app.parameterAutomationWindow&&app.instrumentEnvelopeWindow&&app.graphCurveWindow,"Successful restore did not adopt all Main/native candidates");
+        for(auto *tool:{static_cast<ScreamSeq::NativeToolWindow *>(app.parameterAutomationWindow.get()),static_cast<ScreamSeq::NativeToolWindow *>(app.instrumentEnvelopeWindow.get()),static_cast<ScreamSeq::NativeToolWindow *>(app.graphCurveWindow.get())})ScreamSeq::Tests::ownGuiWindow(tool->window());
+        checkRestoredCurve(app,source,saved);
+        restoreCheck(std::count(app.preparationReads.begin(),app.preparationReads.end(),"graph.automation.get")==1,"Successful staged Curve did not perform one required read");
+        const auto preparationCount=app.preparationReads.size();app.ordinaryReads.clear();
+        app.graphCurveWindow->reloadCaptured();
+        restoreCheck(app.preparationReads.size()==preparationCount&&std::count(app.ordinaryReads.begin(),app.ordinaryReads.end(),"graph.automation.get")==1,
+            "Adopted Curve retained its preparation-only callback");
+        checkRestoredCurve(app,source,saved);restoreCheck(songState(app)==before,"Curve restore/reload changed song/history/playback");
+        const auto curveState=app.graphCurveWindow->operationGuard();
+        app.setWorkspaceCanvasFocus("graph");SetFocus(app.window);app.frameRequested=false;
+        SetFocus(app.graphCurveWindow->window());
+        restoreCheck(app.workspacePresentationFocus()=="graphCurve"&&app.workspaceSnapshot().at("focus")=="graphCurve"&&app.frameRequested,
+            "Native Curve focus did not request Main paint or agree with displayed focus");
+        restoreCheck(app.workspaceState.focus=="graph"&&!app.inspectorCanvasFocus&&app.graphCurveWindow->operationGuard()==curveState,
+            "Presentation focus changed retained Main intent or Curve state");
+        app.setWorkspaceCanvasFocus("notes",true);app.frameRequested=false;
+        SetFocus(app.window);
+        restoreCheck(app.workspacePresentationFocus()=="notes"&&app.workspaceInspectorCanvasIntent()&&app.frameRequested,
+            "Returning to Main lost legacy inspector focus intent or did not repaint");
+        restoreCheck(songState(app)==before,"Focus presentation edited the song");
+    });
+}
+void busyCurveSourcePickerRetainsPreparedTarget() {
+    withRestoreFixture([](RestoreApplication &app) {
+        const auto source=createRestoreCurveSource(app);
+        const auto field=app.controls.at(graphPropertyValue);
+        restoreCheck(IsWindowVisible(field)&&IsWindowEnabled(field),"Graph raw field unavailable in busy-picker fixture");
+        SetFocus(field);SendMessageW(field,EM_SETSEL,0,-1);
+        SendMessageW(field,EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(L"Retained graph field / 音色"));
+        SendMessageW(field,EM_SETSEL,2,8);
+        restoreCheck(app.graphFieldDirty&&GetFocus()==field,"Busy-picker fixture did not create a real retained field draft");
+        const auto before=restoreState(app),song=songState(app),sourceBefore=app.workspaceGraphCurveSourceGuard();
+        const auto roots=restoreRoots();const auto selectedBefore=app.graphCurveContext();
+        const auto picker=app.controls.at(graphNodePicker);const auto pickerBefore=controlState(picker);
+        const auto &nodes=app.graphDraft.at("nodes");
+        const auto other=std::find_if(nodes.begin(),nodes.end(),[&](const auto &node){return node.at("id")==source.otherNode;});
+        restoreCheck(other!=nodes.end(),"Second automation source vanished from fixture");
+        const auto otherIndex=LRESULT(std::distance(nodes.begin(),other));
+        restoreCheck(SendMessageW(picker,CB_GETCURSEL,0,0)!=otherIndex,"Busy-picker fixture already selected the other source");
+        app.targetRead="graph.automation.get";app.preparationReads.clear();app.preparationRequests.clear();
+        app.postedInput=[&] {
+            restoreCheck(app.busy,"Source-picker action did not run inside the real pending-read gate");
+            restoreCheck(SendMessageW(picker,CB_SETCURSEL,WPARAM(otherIndex),0)==otherIndex,"Native picker did not accept the late selection notification");
+            (void)app.graphControlCommand(graphNodePicker);
+            throw std::runtime_error("Busy graph source-picker action was accepted");
+        };
+        bool rejected=false;
+        try{app.restoreLayoutConfiguration(curveLayout(app,false));}
+        catch(const ScreamSeq::Api::ApiError &error){
+            restoreCheck(error.code==-32002&&std::string(error.what())=="Graph editor is busy","Busy source picker returned an unrelated API rejection");
+            rejected=true;
+        }
+        restoreCheck(rejected&&app.dispatchedInput==1,"Busy source-picker fixture did not observe exactly one rejected action");
+        restoreCheck(app.preparationReads==std::vector<std::string>{"graph.automation.get"}&&app.preparationRequests.front().second==curveRequest(source),"Busy picker retargeted or retried the original required Curve read");
+        restoreCheck(controlState(picker)==pickerBefore&&app.graphNode==source.node&&
+            app.workspaceGraphCurveSourceGuard()==sourceBefore&&app.graphCurveContext().selectionGeneration==selectedBefore.selectionGeneration,
+            "Busy source picker changed the native choice, model target, or source generation");
+        restoreCheck(!app.graphCurveWindow&&!app.preparingWorkspaceLayout&&!app.busy&&
+            restoreState(app)==before&&restoreRoots()==roots&&songState(app)==song,
+            "Busy source picker adopted Curve, changed retained drafts/music/focus, or leaked native windows");
+    });
+}
+void pumpedCurvePatternChangeRejectsPreparedTarget() {
+    withRestoreFixture([](RestoreApplication &app) {
+        const auto source=createRestoreCurveSource(app);const auto song=songState(app);const auto roots=restoreRoots();
+        const auto selectedBefore=app.graphCurveContext();RestoreJson afterInput;uint64_t changedSelection=0;
+        app.targetRead="graph.automation.get";app.preparationReads.clear();app.preparationRequests.clear();
+        app.postedInput=[&] {
+            restoreCheck(app.busy,"Pattern navigation did not run inside the real pending-read gate");
+            auto next=app.position();next["pattern"]=source.otherPattern;next["row"]=0;next["following"]=false;app.navigate(next);
+            const auto selected=app.graphCurveContext();changedSelection=selected.selectionGeneration;
+            restoreCheck(selected.selected&&selected.selectionGeneration!=selectedBefore.selectionGeneration&&
+                selected.selected->pattern==source.otherPattern&&selected.selected->node==source.node,
+                "Pumped pattern navigation did not change the actual selected curve context");
+            afterInput=restoreState(app);
+        };
+        const auto error=restoreRejected([&]{app.restoreLayoutConfiguration(curveLayout(app,false));});
+        restoreCheck(error.find("Source selection changed")!=std::string::npos&&app.dispatchedInput==1&&changedSelection!=selectedBefore.selectionGeneration,"Staged Curve did not reject the pumped pattern-selection generation");
+        restoreCheck(app.preparationReads==std::vector<std::string>{"graph.automation.get"}&&app.preparationRequests.front().second==curveRequest(source),"Pumped pattern change retargeted/retried the original read");
+        restoreCheck(!app.graphCurveWindow&&restoreState(app)==afterInput&&restoreRoots()==roots&&songState(app)==song,"Rejected pattern preparation replaced newer context/focus or adopted/leaked a Curve owner");
+    });
+}
+void guideOnlyRestoreRetainsChildThenInitializes() {
+    // Test both explicit Tools / Load selection and the pinned-empty open path.
+    for(const bool pinned:{false,true})withRestoreFixture([&](RestoreApplication &app) {
+        const auto source=createRestoreCurveSource(app);const auto saved=app.documentOperation("graph.automation.get",curveRequest(source));
+        app.setWorkspaceCanvasFocus("pattern");SetFocus(app.window);
+        const auto openingFocus=app.workspaceSnapshot().at("focus");
+        const auto rootsBefore=restoreRoots();restoreCheck(app.graphCurveCommand(curveReference),"Guide command was not routed");
+        restoreCheck(app.graphCurveWindow&&!app.graphCurveWindow->visible()&&!app.graphCurveWindow->operationGuard().at("initialized").get<bool>()&&!app.graphCurveWindow->capturedTarget(),"Guide opening implicitly loaded/shown the Curve owner");
+        const auto curve=app.graphCurveWindow->window();HWND guide{};
+        for(const auto root:restoreRoots())if(!rootsBefore.contains(root)) {
+            wchar_t type[96]{};GetClassNameW(root,type,96);
+            if(!_wcsicmp(type,L"ScreamSeq.FormulaReference")){restoreCheck(!guide,"Guide fixture created duplicate reference windows");guide=root;}
+        }
+        restoreCheck(guide&&IsWindowVisible(guide),"Guide fixture did not create its actual native child tool");
+        ScreamSeq::Tests::ownGuiWindow(curve);ScreamSeq::Tests::ownGuiWindow(guide);
+        // Win32 may assign Main as GW_OWNER when created from a docked child.
+        // Preserve the observed owner rather than inventing a required HWND.
+        const auto guideOwner=GetWindow(guide,GW_OWNER);const auto search=GetDlgItem(guide,2002);
+        restoreCheck(search&&IsWindowVisible(search)&&IsWindowEnabled(search),"Guide search field unavailable");
+        SetActiveWindow(guide);SetFocus(search);SendMessageW(search,EM_SETSEL,0,-1);SendMessageW(search,EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(L"sin"));SendMessageW(search,EM_SETSEL,1,2);
+        restoreCheck(openingFocus=="pattern"&&GetFocus()==search&&app.graphCurveWindow->presentationOwns(search)
+            &&!app.graphCurveWindow->visible()&&!app.graphCurveWindow->operationGuard().at("initialized").get<bool>()
+            &&app.workspaceSnapshot().at("focus")==openingFocus&&app.workspaceState.focus=="pattern"&&!app.inspectorCanvasFocus,
+            "Standalone Guide focus changed its retained opening Pattern context before any Curve layout");
+        const auto raw=controlState(search);auto dockedRoots=restoreRoots();dockedRoots.erase(curve);const auto song=songState(app);
+        auto &placement=app.workspaceEditors[app.workspaceEditorIndex("graphCurve")];placement.pinned=pinned;
+        const auto opening=app.position();app.preparationReads.clear();app.ordinaryReads.clear();
+        auto restored=curveLayout(app,false);restored["editors"]["locations"]["graphCurve"]="secondary";
+        restored["editors"]["selected"]["secondary"]="graphCurve";restored["editors"]["compactSelection"]="graphCurve";
+        app.restoreLayoutConfiguration(restored);
+        restoreCheck(app.preparationReads.empty()&&std::count(app.ordinaryReads.begin(),app.ordinaryReads.end(),"graph.automation.get")==0,"Guide-only restore performed a target read into an existing owner");
+        restoreCheck(app.graphCurveWindow->window()==curve&&app.graphCurveWindow->visible()&&app.graphCurveWindow->docked()&&GetParent(curve)==app.window&&!app.graphCurveWindow->operationGuard().at("initialized").get<bool>()&&!app.graphCurveWindow->capturedTarget(),"Guide-only restore replaced or initialized the retained owner");
+        restoreCheck(placement.origin==opening&&placement.pinned==pinned,"First visible Guide-only layout did not retain its opening origin/pin");
+        restoreCheck(IsWindow(guide)&&GetWindow(guide,GW_OWNER)==guideOwner&&controlState(search)==raw&&GetFocus()==search&&restoreRoots()==dockedRoots,"Guide-only restore replaced the child, search, caret, focus, or native ownership");
+        restoreCheck(app.workspaceSnapshot().at("focus")=="graphCurve","Visible restored Curve did not own its Guide presentation");
+        SetFocus(app.window);app.followWorkspaceEditors();
+        restoreCheck(!app.graphCurveWindow->operationGuard().at("initialized").get<bool>()&&std::count(app.ordinaryReads.begin(),app.ordinaryReads.end(),"graph.automation.get")==0,"Automatic follow initialized a Guide-only owner");
+        app.ordinaryReads.clear();
+        if(pinned)app.openGraphCurve();
+        else {
+            const auto page=GetDlgItem(curve,ScreamSeq::GraphCurveWindow::pageTools);SendMessageW(curve,WM_COMMAND,MAKEWPARAM(ScreamSeq::GraphCurveWindow::pageTools,BN_CLICKED),reinterpret_cast<LPARAM>(page));
+            const auto load=GetDlgItem(curve,ScreamSeq::GraphCurveWindow::follow);restoreCheck(load&&IsWindowVisible(load)&&IsWindowEnabled(load),"Tools / Load selection action unavailable");
+            SendMessageW(curve,WM_COMMAND,MAKEWPARAM(ScreamSeq::GraphCurveWindow::follow,BN_CLICKED),reinterpret_cast<LPARAM>(load));
+        }
+        restoreCheck(std::count(app.ordinaryReads.begin(),app.ordinaryReads.end(),"graph.automation.get")==1&&app.preparationReads.empty(),"Explicit Guide-only open did not use one ordinary source read");
+        checkRestoredCurve(app,source,saved);
+        restoreCheck(app.graphCurveWindow->window()==curve&&IsWindow(guide)&&GetWindow(guide,GW_OWNER)==guideOwner&&controlState(search)==raw&&restoreRoots()==dockedRoots,"Explicit initialization replaced Guide HWND/search/caret or Curve owner");
+        auto away=app.position();away["row"]=9;away["following"]=false;app.navigate(away);
+        const auto toolsPage=GetDlgItem(curve,ScreamSeq::GraphCurveWindow::pageTools);
+        SendMessageW(curve,WM_COMMAND,MAKEWPARAM(ScreamSeq::GraphCurveWindow::pageTools,BN_CLICKED),reinterpret_cast<LPARAM>(toolsPage));
+        const auto button=GetDlgItem(curve,ScreamSeq::GraphCurveWindow::returnPattern);restoreCheck(button&&IsWindowVisible(button)&&IsWindowEnabled(button),"Curve Return button unavailable");
+        SendMessageW(curve,WM_COMMAND,MAKEWPARAM(ScreamSeq::GraphCurveWindow::returnPattern,BN_CLICKED),reinterpret_cast<LPARAM>(button));
+        auto expected=opening;expected["following"]=false;
+        restoreCheck(app.position()==expected&&GetFocus()==app.window&&app.trackerWorkspaceVisible()&&app.workspaceState.focus=="pattern","Guide-only origin did not support Return after explicit initialization");
+        restoreCheck(songState(app)==song&&IsWindow(guide)&&controlState(search)==raw,"Guide restore/open/Return changed music or retained child text");
+        if(!pinned){
+            // Return can hide Curve in compact tabs. Explicitly reveal the same
+            // captured owner before testing visible-editor child presentation.
+            const auto beforeShow=app.graphCurveWindow->operationGuard();
+            app.workspaceEditorRequest({{"panel","graphCurve"},{"focus",true}});
+            restoreCheck(app.graphCurveWindow->visible()&&app.graphCurveWindow->docked()&&app.graphCurveWindow->operationGuard()==beforeShow,
+                "Explicit Curve reveal recaptured or replaced the retained owner");
+            // Real Formula window created from the docked Curve: Win32 may
+            // normalize GW_OWNER to Main, but presentation follows owner_.
+            const auto curveState=app.graphCurveWindow->operationGuard();
+            const auto creationRoot=GetAncestor(curve,GA_ROOT);
+            ScreamSeq::FormulaWorkbenchWindow formulaWindow(curve,L"Owned focus formula", "mix(start,end,t)",
+                RestoreJson{{"points",saved.at("points")},{"rows",saved.at("rows")},{"rowsPerBeat",saved.at("rowsPerBeat")}},0,
+                [&](const std::string &method,const RestoreJson &params){return app.documentOperation(method,params);},
+                []{return true;},[](const std::string &){return false;});
+            const auto formula=formulaWindow.window();ScreamSeq::Tests::ownGuiWindow(formula);formulaWindow.show();
+            const auto code=GetDlgItem(formula,2001);restoreCheck(code&&IsWindowVisible(code)&&GetWindow(formula,GW_OWNER)==creationRoot,"Actual Formula child or creation-time owner unavailable");
+            CHARRANGE range{2,7};SendMessageW(code,EM_EXSETSEL,0,reinterpret_cast<LPARAM>(&range));
+            const auto codeBefore=controlState(code);app.setWorkspaceCanvasFocus("graph");
+            SetFocus(search);app.frameRequested=false;SetFocus(code);
+            restoreCheck(GetFocus()==code&&!app.graphCurveWindow->owns(code)&&app.graphCurveWindow->presentationOwns(code)
+                &&app.workspacePresentationFocus()=="graphCurve"&&app.workspaceSnapshot().at("focus")=="graphCurve"&&app.frameRequested,
+                "Formula focus did not propagate through its logical Curve owner");
+            app.frameRequested=false;SetFocus(search);
+            restoreCheck(GetFocus()==search&&app.workspacePresentationFocus()=="graphCurve"&&app.frameRequested,
+                "Child-to-child focus did not repaint the shared logical Curve owner");
+            CHARRANGE retainedRange{};SendMessageW(code,EM_EXGETSEL,0,reinterpret_cast<LPARAM>(&retainedRange));
+            restoreCheck(retainedRange.cpMin==2&&retainedRange.cpMax==7&&app.workspaceState.focus=="graph"&&app.graphCurveWindow->operationGuard()==curveState
+                &&controlState(code)==codeBefore&&controlState(search)==raw&&songState(app)==song,
+                "Presentation owner traversal changed input intent, draft, caret, target or music");
+        }
+    });
+}
+
 void preparationReadScopeAndBusyGuard() {
     withRestoreFixture([](RestoreApplication &app) {
         const auto before=restoreState(app);
@@ -442,6 +700,11 @@ int wmain(int argc,wchar_t **argv) {
             pumpedInputWinsOverPreparedLayout();std::cout<<"PASS pumped input: newer cursor/focus and native draft retained\n";
             sevenFieldLegacyRetainsExistingEditors();std::cout<<"PASS legacy: seven-field layouts preserve native drafts, pins and placement\n";
             compactRestoreAndResizeKeepVisibleFocus();std::cout<<"PASS region focus: compact restore/resize and retained native headers\n";
+            thirdHiddenCurveFailureIsAtomic();std::cout<<"PASS Curve staging: third hidden read/malformed points leave all candidates unadopted\n";
+            successfulCurveAdoptionMatchesApi();std::cout<<"PASS Curve adoption: worker values and normal callbacks retained\n";
+            busyCurveSourcePickerRetainsPreparedTarget();std::cout<<"PASS Curve source picker: busy rejection restores native choice and retains drafts\n";
+            pumpedCurvePatternChangeRejectsPreparedTarget();std::cout<<"PASS Curve context: permitted pattern navigation rejects original preparation\n";
+            guideOnlyRestoreRetainsChildThenInitializes();std::cout<<"PASS Curve Guide: retained empty owner/child, explicit initialize and Return\n";
             preparationReadScopeAndBusyGuard();std::cout<<"PASS read scope: mutation rejection and busy/recovery pre-queue guards\n";
         });
         return 0;

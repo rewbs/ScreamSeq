@@ -1,6 +1,7 @@
 // Draw only current shared-document data; unavailable editors have no fake curves/wires.
 	void drawWorkspace(const Tracker::Telemetry &playback) {
 		const auto g=geometry();auto &s=*surface;float width=s.width(),height=s.height();
+        const auto displayedFocus=workspacePresentationFocus();
 		constexpr UINT32 bg=0x141922,panelBg=0x1a202a,muted=0x94a1b3,accent=0x6edac5,gold=0xdcb971;
 		const bool playing=device.running() && !auditionOnly;
 		s.fill(0,0,width,height,bg);s.fill(0,0,width,44,0x222a35);
@@ -63,7 +64,7 @@
 				if(selecting && rr>=std::min(row,anchorRow) && rr<=std::max(row,anchorRow) && c>=std::min(channel,anchorChannel) && c<=std::max(channel,anchorChannel)) s.fill(x-2,y,channelWidth(c)-1,rowHeight,0x304359);
 				if(rr==row && c==channel) {
 					s.fill(x+fieldStart(column)-1,y,fieldWidth(column)+2,rowHeight,0x56416f);
-					s.outline(x-2,y,channelWidth(c)-1,rowHeight,workspaceState.focus=="pattern" ? 0x9f85c8 : 0x6b627d);
+					s.outline(x-2,y,channelWidth(c)-1,rowHeight,displayedFocus=="pattern" ? 0x9f85c8 : 0x6b627d);
 				}
                 const auto v=view->displayCell(patternIndex,rr,c);
                 const auto precise=view->notesAt(patternIndex,rr,c);
@@ -81,7 +82,7 @@
 			}
 			s.unclip();
 		}
-		s.unclip();s.outline(r.x,r.y,r.w,r.h,workspaceState.focus=="pattern" ? 0x56858b : 0x303b49);
+		s.unclip();s.outline(r.x,r.y,r.w,r.h,displayedFocus=="pattern" ? 0x56858b : 0x303b49);
         drawGraphLanes(playback);
         }
 		if(workspaceInspectorVisible()) {
@@ -120,7 +121,7 @@
 				s.uiText(data.value("loop",false) ? L"Normal loop: "+std::to_wstring(data.value("loopStart",0u))+L" -> "+std::to_wstring(data.value("loopEnd",0u)) : L"Normal loop: off",x,y,w,gold);y+=22;
 				s.uiText(data.value("sustainLoop",false) ? L"Sustain loop: "+std::to_wstring(data.value("sustainStart",0u))+L" -> "+std::to_wstring(data.value("sustainEnd",0u)) : L"Sustain loop: off",x,y,w,0xb5a0e8);
 			}
-			s.unclip();s.outline(p.x,p.y,p.w,p.h,workspaceInspectorCanvasIntent()&&workspaceState.focus==workspaceState.active ? accent : 0x303b49);
+			s.unclip();s.outline(p.x,p.y,p.w,p.h,workspaceInspectorCanvasIntent()&&displayedFocus==workspaceState.active ? accent : 0x303b49);
 		}
 		if(!hasWorkspaceDock()&&workspaceState.layout!="Pattern focus") {
 			s.fill(g.lowerTabs.x,g.lowerTabs.y,g.lowerTabs.w,g.lowerTabs.h,0x202834);
@@ -139,6 +140,6 @@
         if(hasWorkspaceDock())drawWorkspaceRegionChrome();
 		s.fill(164,height-40,width-164,40,0x202834);s.line(164,height-40,width,height-40,0x344151);
 		s.fill(164,height-38,3,16,liveKeyboard ? gold : 0xb498de);
-		s.text(L"EDIT P"+std::to_wstring(patternIndex)+L" R"+std::to_wstring(row)+L" CH"+std::to_wstring(channel+1)+L" / "+(follow ? L"FOLLOW PLAYBACK" : L"DETACHED EDITING")+L" / FOCUS "+wide(workspaceState.focus)+(liveKeyboard?L" / LIVE KEYS":L""),174,height-38,width-184);
+		s.text(L"EDIT P"+std::to_wstring(patternIndex)+L" R"+std::to_wstring(row)+L" CH"+std::to_wstring(channel+1)+L" / "+(follow ? L"FOLLOW PLAYBACK" : L"DETACHED EDITING")+L" / FOCUS "+wide(displayedFocus)+(liveKeyboard?L" / LIVE KEYS":L""),174,height-38,width-184);
 		s.uiText(status,174,height-19,std::max(1.0f,width-362),muted);
 	}

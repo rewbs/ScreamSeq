@@ -3,11 +3,12 @@ import ctypes
 from ctypes import wintypes
 import time
 import unittest
+from graph_curve_native_support import GraphCurveNativeMixin
 import private_desktop
 import test_graph_curves as support
 
 
-class EnvelopeBankUITests(unittest.TestCase):
+class EnvelopeBankUITests(GraphCurveNativeMixin, unittest.TestCase):
     setUp = support.GraphCurveTests.setUp
     doc = support.GraphCurveTests.doc
     read = support.GraphCurveTests.read
@@ -28,19 +29,7 @@ class EnvelopeBankUITests(unittest.TestCase):
         return self.read('workspace.get')['envelopeBank']
 
     def bank_hwnd(self):
-        found = []
-        @private_desktop.callback
-        def visit(hwnd, _):
-            owner = wintypes.DWORD()
-            private_desktop.user.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
-            name = ctypes.create_unicode_buffer(128)
-            private_desktop.user.GetClassNameW(hwnd, name, 128)
-            if owner.value == self.pid and name.value == 'ScreamSeq.EnvelopeBank':
-                found.append(hwnd)
-            return True
-        private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop, visit, 0))
-        self.assertEqual(len(found), 1, found)
-        return found[0]
+        return self.logical_child('curve.bank')
 
     def bcontrol(self, identifier):
         control = private_desktop.user.GetDlgItem(self.bank_hwnd(), identifier)
@@ -49,7 +38,13 @@ class EnvelopeBankUITests(unittest.TestCase):
 
     def bcommand(self, identifier, notification=0):
         self.idle()
-        self.desktop.send(self.bank_hwnd(), 0x111, identifier | (notification << 16), self.bcontrol(identifier))
+        action = lambda: self.desktop.send(self.bank_hwnd(), 0x111,
+            identifier | (notification << 16), self.bcontrol(identifier))
+        if identifier in (1026, 1027):
+            role, klass = ('bank.formula', 'ScreamSeq.FormulaWorkbench') if identifier == 1026 else ('bank.reference', 'ScreamSeq.FormulaReference')
+            self.observe_child_open(role, klass, self.bank_hwnd, action)
+        else:
+            action()
         self.idle()
 
     def idle(self):
@@ -77,7 +72,7 @@ class EnvelopeBankUITests(unittest.TestCase):
         self.bcommand(identifier, 1)
 
     def bmouse(self, message, point, buttons=0):
-        self.desktop.send(self.bank_hwnd(), message, buttons, self.point(point))
+        self.desktop.send(self.bank_hwnd(), message, buttons, self.native_point(point, self.bank_hwnd()))
 
     def select_first_point(self):
         self.idle()
@@ -210,7 +205,7 @@ class EnvelopeBankUITests(unittest.TestCase):
         self.field(484, '60')
         # Reload leaves no point selected; select the existing first handle.
         self.key(0x1B)
-        handle = self.state()['handles'][0]
+        handle = self.curve_canvas()['handles'][0]
         self.mouse(0x201, handle, 1)
         self.mouse(0x202, handle)
         self.field(484, '60')
@@ -239,8 +234,10 @@ class EnvelopeBankUITests(unittest.TestCase):
         self.assertTrue(self.bank()['dirty'])
         self.bcommand(1014)  # Explicitly discard the closed document's bank draft.
         self.assertFalse(self.bank()['visible'])
+        self.command(430)  # Reveal routing before its native Reload.
         self.command(441)
-        self.command(487)
+        # Reload captured must not rebind across documents; explicit Load selection does.
+        self.command(9103)
         self.command(497)
         self.assertTrue(self.bank()['visible'])
         self.assertFalse(self.bank()['dirty'])
