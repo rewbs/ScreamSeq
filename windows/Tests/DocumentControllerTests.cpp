@@ -226,12 +226,16 @@ void patternClipboardTests(const std::filesystem::path &directory) {
     {"cells",Json::array({Json::array({65,1,1,40,0,0})})},
     {"effects",Json::array({{{"channel",0},{"position",16384},{"column",7},{"kind","parameter-set"},{"binding",23},{"value",0.25}}})},
     {"bindings",Json::array({{{"id",23},{"plugin","Preserved missing plugin"},{"parameter",456},{"name","Timbre Ω"}}})}});
+  invoke(c,"pattern.notes.set",{{"pattern",0},{"events",Json::array({{{"channel",1},{"position",4*65536+123},{"note",65},{"instrument",1},{"velocity",90}},
+    {{"channel",1},{"position",4*65536+32769},{"note",255}},{{"channel",1},{"position",5*65536},{"note",62}}})}});
   auto snapshot=c.view();const auto text=patternClipboardText(*snapshot,0,4,4,1,1);
   need(text.starts_with("ScreamSeq Pattern 2\n"),"Native clipboard must use Mac's text header");
   const auto payload=parsePatternClipboard(text);
   need(payload.at("cells")[0]==Json::array({65,1,1,40,0,0}),"Clipboard changed six-field tracker bytes");
   need(payload.at("effects")[0].at("channel")==0&&payload.at("effects")[0].at("position")==16384&&payload.at("effects")[0].at("column")==7,"Clipboard lost relative native FX coordinates");
   need(payload.at("bindings").size()==1&&payload.at("bindings")[0].size()==4,"Clipboard must include only referenced stable binding fields");
+  need(payload.at("notes").size()==2&&payload.at("notes")[0].at("channel")==0&&payload.at("notes")[0].at("position")==123&&payload.at("notes")[0].at("velocity")==90&&
+    payload.at("notes")[1].at("position")==32769&&payload.at("notes")[1].at("note")==255,"Clipboard lost exact precise on/off coordinates or included the end boundary");
   need(parsePatternClipboard("ScreamSeq Pattern 2\r\n"+payload.dump())==payload,"Windows newline clipboard is not portable");
   const auto legacy=parsePatternClipboard("Resonance Pattern 1\r\n3D,01,01,40,00,00\tFF,00,00,00,00,00\r\n00,00,00,00,00,00\tFE,00,00,00,00,00");
   need(legacy.at("rows")==2&&legacy.at("channels")==2&&legacy.at("cells")[1][0]==255&&legacy.at("cells")[3][0]==254,"Legacy text import changed dimensions or special notes");
@@ -241,6 +245,17 @@ void patternClipboardTests(const std::filesystem::path &directory) {
   bool rejected=false;try{parsePatternClipboard(std::string(maximumPatternClipboardBytes+1,'x'));}catch(const std::exception &){rejected=true;}need(rejected,"Oversized clipboard accepted");
   auto request=payload;request["pattern"]=0;request["startRow"]=10;request["startChannel"]=2;
   invoke(c,"pattern.paste",request);need(c.view()->effectColumns[2]==8&&c.view()->effect(0,10,2,7)->position==10*65536+16384,"Copied text did not restore FX 8");
+  const auto pasted=call(c,"pattern.notes.get",{{"pattern",0}});
+  need(c.view()->notesAt(0,10,2).size()==2&&c.view()->notesAt(0,10,2)[0].note.position==10*65536+123,"Copied text did not restore exact native note offsets");
+  invoke(c,"history.undo",{{"domain","document"}});need(c.view()->notesAt(0,10,2).empty(),"Clipboard Undo retained pasted native notes");
+  invoke(c,"history.redo",{{"domain","document"}});need(call(c,"pattern.notes.get",{{"pattern",0}})==pasted,"Clipboard Redo changed native note payload");
+  unsigned checked=0,applied=0;auto current=[&]{++checked;return true;};auto apply=[&]{++applied;};
+  need(guardedPatternCut([]{return false;},current,apply)==PatternCutResult::NotCopied&&!checked&&!applied,"Failed clipboard publication attempted to clear the pattern");
+  bool copyThrew=false;try{guardedPatternCut([]()->bool{throw std::runtime_error("Clipboard busy");},current,apply);}catch(const std::runtime_error &){copyThrew=true;}
+  need(copyThrew&&!checked&&!applied,"Clipboard exception attempted to clear the pattern");
+  need(guardedPatternCut([]{return true;},[]{return false;},apply)==PatternCutResult::Stale&&!applied,"Changed song after copy was cut");
+  need(guardedPatternCut([]{return true;},current,apply)==PatternCutResult::Applied&&checked==1&&applied==1,"Current published clipboard did not cut exactly once");
+  need(call(c,"pattern.notes.get",{{"pattern",0}})==pasted,"Clipboard failure/guard tests changed the document");
   invoke(c,"pattern.notes.set",{{"pattern",0},{"events",Json::array({{{"channel",2},{"position",10*65536+20},{"note",61}},{{"channel",2},{"position",10*65536+30000},{"note",255}},{{"channel",2},{"position",11*65536},{"note",62}}})}});
   need(c.view()->notesAt(0,10,2).size()==2&&c.view()->notesAt(0,11,2).size()==1&&c.view()->notesAt(0,10,1).empty()&&c.view()->notesAt(1,10,2).empty(),"Sparse note lookup crossed a row, channel or pattern");
   need(snapshot->notesAt(0,10,2).empty(),"Note cache mutated an older view");
@@ -278,6 +293,29 @@ void programDryRunTests(const std::filesystem::path &scanner,const std::filesyst
 
 #include "MixerIntegrationTests.inc"
 void graphRecipeRenderTests(const std::filesystem::path &directory) {
+  {
+    bool running=false,audition=false;unsigned stops=0;PlaybackHooks hooks;
+    hooks.feedback=[&]{PlaybackFeedback f;f.playing=running;f.audioActive=running||audition;return f;};
+    DocumentController guarded({},"recipe-bypass",[&]{++stops;running=audition=false;},[](const auto &){},{},64u*1024u*1024u,{},std::move(hooks));
+    const auto graph=invoke(guarded,"graph.create",Json::object()).at("graph");
+    const auto node=invoke(guarded,"graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",{{"format","Built-in"},{"classID","resonance.gainer.v1"}}},{"insertEdge",0}}).at("node");
+    const auto before=guarded.view();const auto beforeStops=stops;running=true;
+    invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true},{"dryRun",true}});
+    need(guarded.view()==before&&running&&stops==beforeStops,"Bypass preview stopped playback or changed history");
+    bool rejected=false;try{invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});}catch(const Api::ApiError &e){rejected=e.code==-32002;}
+    need(rejected&&running&&stops==beforeStops&&guarded.view()==before,"Windows bypass must reject unsupported live edit without stopping or committing");
+    running=false;audition=true;rejected=false;try{invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});}catch(const Api::ApiError &e){rejected=e.code==-32002;}
+    need(rejected&&audition&&stops==beforeStops,"Independent audition has the same explicit bypass limitation");
+    audition=false;invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});
+    need(call(guarded,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("bypass")==true,"Recipe metadata lost requested host bypass");
+    const auto changed=guarded.view();const auto afterStops=stops;running=true;
+    invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});
+    need(guarded.view()==changed&&stops==afterStops&&running,"Identical bypass is a live no-op");
+    rejected=false;try{invoke(guarded,"history.undo",Json::object());}catch(const Api::ApiError &e){rejected=e.code==-32002;}
+    need(rejected&&guarded.view()==changed&&running&&stops==afterStops,"Unsupported live bypass Undo must preserve history and transport");
+    running=false;invoke(guarded,"history.undo",Json::object());need(call(guarded,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("bypass")==false,"Stopped bypass Undo lost baseline");
+    invoke(guarded,"history.redo",Json::object());need(call(guarded,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("bypass")==true,"Stopped bypass Redo lost flag");
+  }
   DocumentController c({},"graph-recipes",[]{},[](const auto &){});
   const auto library=call(c,"plugin.discover",{{"format","Built-in"}});const auto gain=std::find_if(library.begin(),library.end(),[](const auto &p){return p.at("classID")=="resonance.gainer.v1";});need(gain!=library.end(),"Gainer missing");
   invoke(c,"plugin.add",{{"descriptor",*gain}});invoke(c,"mixer.enable",Json::object());
@@ -292,6 +330,11 @@ void graphRecipeRenderTests(const std::filesystem::path &directory) {
   double maximumDelta=0;
   for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u,8193u}){const auto pcm=render(rate,block);double energy=0;for(size_t i=0;i<pcm.size();++i){maximumDelta=std::max(maximumDelta,std::abs(double(pcm[i])-baseline[rate][i]*std::pow(10.0,-12.0/20)));energy+=std::abs(pcm[i]);}need(energy>1,"Graph fixture is silent");}
   need(maximumDelta<1e-6,"Graph recipe gain or partition comparison failed");
+  const auto manual=call(c,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("parameters");
+  invoke(c,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});
+  need(call(c,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("parameters")==manual,"Recipe bypass rewrote parameters");
+  const auto dry=render(48000,128);double bypassDelta=0;for(size_t i=0;i<dry.size();++i)bypassDelta=std::max(bypassDelta,std::abs(double(dry[i])-baseline[48000][i]));need(bypassDelta<1e-6,"Initial recipe bypass is not dry pass-through");
+  invoke(c,"history.undo",Json::object());
   const auto path=directory/"graph-recipe-render.screamseq";invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});
   invoke(c,"history.undo",{{"domain","document"}});need(render(48000,128)==baseline[48000],"Graph plugin Undo did not restore exact PCM");
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});const auto restored=render(48000,128);double delta=0;for(size_t i=0;i<restored.size();++i)delta=std::max(delta,std::abs(double(restored[i])-baseline[48000][i]*std::pow(10.0,-12.0/20)));need(delta<1e-6,"Reopened graph plugin PCM changed");
@@ -324,14 +367,122 @@ void graphPatternViewTests() {
 #include "ArrangementControllerTests.inc"
 #include "AnnotationControllerTests.inc"
 #include "MatrixControllerTests.inc"
+void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
+  unsigned stops=0;bool rejectStop=false;
+  DocumentController c({},"unified-plugin-history",[&]{if(rejectStop)throw std::runtime_error("controlled stop rejection");++stops;},[](const auto &){});
+  const auto catalogue=call(c,"plugin.discover",{{"format","Built-in"}});
+  const auto foundGain=std::find_if(catalogue.begin(),catalogue.end(),[](const auto &p){return p.at("classID")=="resonance.gainer.v1";});
+  need(foundGain!=catalogue.end(),"Built-in gain fixture is unavailable");const auto gain=*foundGain;
+  auto graph=[&]{return call(c,"graph.get",{{"includeState",false},{"includeImplicitMixer",true}});};
+  const auto target=graph().at("mixer").at("buses")[0].at("id");
+  auto add=[&](Json extra=Json::object()){extra["descriptor"]=gain;return invoke(c,"plugin.add",std::move(extra));};
+  auto rack=[&]{return c.view()->session.document.at("nativePlugins");};
+  auto plugin=[&](size_t slot){return rack().at(slot).at("instanceID");};
+  auto undo=[&](const char *domain="all"){invoke(c,"history.undo",{{"domain",domain}});};
+  auto redo=[&](const char *domain="all"){invoke(c,"history.redo",{{"domain",domain}});};
+  auto note=[&](unsigned value){invoke(c,"pattern.apply",{{"cells",Json::array({{{"pattern",0},{"row",3},{"channel",0},{"note",value}}})}});};
+  auto stale=[&](const char *method,Json parameters){
+    const auto before=c.view();const auto oldGraph=graph();const auto oldStops=stops;bool rejected=false;
+    parameters["expectedRevision"]="stale";
+    try{call(c,method,std::move(parameters));}catch(const Api::ApiError &){rejected=true;}
+    need(rejected&&c.view()==before&&graph()==oldGraph&&stops==oldStops,"Stale plugin/history revision changed music, history or playback");
+  };
+  const auto initial=c.view();const auto initialGraph=graph();
+  stale("plugin.add",{{"descriptor",gain},{"target",target}});
+  add({{"target",target},{"position",{{"x",50},{"y",75}}},{"dryRun",true}});
+  need(c.view()==initial&&stops==0&&graph()==initialGraph,"Targeted add dry run changed history, routing or playback");
+  rejectStop=true;bool rejected=false;
+  try{add({{"target",target}});}catch(const std::runtime_error &){rejected=true;}
+  rejectStop=false;
+  need(rejected&&c.view()==initial&&rack().empty()&&graph()==initialGraph,"Failed targeted add partially published native or rack state");
+  add({{"target",target},{"position",{{"x",50},{"y",75}}}});const auto first=plugin(0);
+  const auto group=invoke(c,"graph.song.group.create",{{"name","Rack group"},{"nodes",Json::array({"plugin:"+first.get<std::string>()})}}).at("group");
+  const auto grouped=graph();
+  add({{"target",target},{"before",first},{"parent",group},{"position",{{"x",280},{"y",75}}}});const auto second=plugin(1);
+  const auto added=graph();
+  const auto &inserts=added.at("mixer").at("buses")[0].at("inserts");
+  need(inserts==Json::array({second,first}),"Target/before did not place the real new processor in the insert chain");
+  need(added.at("groups")[0].at("nodes").size()==2,"Add inside a song group lost its membership");
+  stale("plugin.remove",{{"plugins",Json::array({first,second})}});
+  stale("history.undo",{{"domain","plugins"}});
+  note(61);const auto baseline=call(c,"plugin.state.get",{{"slot",1}});
+  invoke(c,"plugin.parameters.set",{{"slot",1},{"values",Json::array({{{"id",1},{"value",-12}}})}});
+  const auto changed=call(c,"plugin.state.get",{{"slot",1}});
+  invoke(c,"mixer.bus.set",{{"bus",target},{"name","Edited channel"}});
+  undo("plugins");need(graph().at("mixer").at("buses")[0].at("name")==added.at("mixer").at("buses")[0].at("name")&&call(c,"plugin.state.get",{{"slot",1}})==changed,"Plugin history alias skipped a newer document edit");
+  undo("document");need(call(c,"plugin.state.get",{{"slot",1}})==baseline&&c.view()->cell(0,3,0).note==61,"Document history alias skipped a newer plugin edit");
+  undo();need(rack().size()==2&&graph()==added,"Undo of interleaved note changed plugin routing metadata");
+  rejectStop=true;rejected=false;const auto beforeUndo=c.view();
+  try{undo();}catch(const std::runtime_error &){rejected=true;}
+  rejectStop=false;need(rejected&&c.view()==beforeUndo&&graph()==added,"Rejected grouped Undo applied one half of a rack/routing edit");
+  undo();need(rack().size()==1&&graph()==grouped,"One Undo must remove the inserted rack slot, position and group membership");
+  stale("history.redo",{{"domain","document"}});
+  rejectStop=true;rejected=false;const auto beforeRedo=c.view();
+  try{redo();}catch(const std::runtime_error &){rejected=true;}
+  rejectStop=false;need(rejected&&c.view()==beforeRedo&&graph()==grouped,"Rejected grouped Redo applied one half of a rack/routing edit");
+  redo("plugins");need(rack().size()==2&&plugin(1)==second&&graph()==added,"One Redo must restore the same processor identity and native placement");
+  // A third, retained plugin verifies stable identity and absolute-lane remapping
+  // when two earlier rack slots disappear together.
+  add();const auto third=plugin(2);
+  invoke(c,"automation.replaceLane",{{"slot",2},{"id",1},{"points",Json::array({{{"frame",0},{"value",-6}}})}});
+  const auto beforeRemove=graph();const auto beforeRemoveView=c.view();
+  invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})},{"dryRun",true}});
+  need(c.view()==beforeRemoveView&&graph()==beforeRemove,"Batch removal dry run changed native history");
+  rejected=false;try{invoke(c,"plugin.remove",{{"plugins",Json::array({first,"absent"})}});}catch(const Api::ApiError &){rejected=true;}
+  need(rejected&&c.view()==beforeRemoveView,"Invalid batch removal deleted an earlier valid member");
+  invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})}});
+  auto removed=graph();need(rack().size()==1&&plugin(0)==third&&removed.at("groups").empty()&&removed.at("mixer").at("buses")[0].at("inserts").empty(),"Batch removal retained dead insert or empty group references");
+  need(call(c,"automation.get",Json::object()).at("points")[0].at("slot")==0,"Batch removal lost/remapped the retained plugin's recorded automation incorrectly");
+  undo("document");need(rack().size()==3&&graph()==beforeRemove,"Grouped removal Undo failed to restore exact routing and plugin identities");
+  redo("plugins");need(rack().size()==1&&graph()==removed,"Grouped removal Redo did not restore the exact disconnected native state");
+  undo();note(64);need(!c.view()->session.document.at("canRedo").get<bool>()&&!c.view()->session.document.at("canRedoPlugins").get<bool>(),"A document edit failed to fork the shared plugin redo branch");
+  const auto forked=c.view();redo();need(c.view()==forked,"Expired plugin redo resurrected after an interleaved document edit");
+  const auto saved=graph();const auto path=directory/"unified-plugin-history.screamseq";
+  invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});
+  invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
+  need(graph()==saved&&rack().size()==3&&c.view()->cell(0,3,0).note==64,"Unified routing history did not survive native save/reopen");
+  unsigned limitedStops=0;
+  DocumentController limited({},"limited-plugin-history",[&]{++limitedStops;},[](const auto &){},{},initial->cacheBytes+512);
+  const auto limitedBefore=limited.view();rejected=false;
+  try{invoke(limited,"plugin.add",{{"descriptor",gain},{"target",target}});}catch(const Api::ApiError &){rejected=true;}
+  need(rejected&&limited.view()==limitedBefore&&limitedStops==0,"Plugin add exceeded view budget after publishing or stopping playback");
+  // A host completion may fail after moving native history. Prepared rack
+  // publication must still finish, leaving a coherent, reversible group.
+  auto document=Tracker::Document::demo();auto project=Project::newProjectState(*document);
+  PluginOperations operations(*document,project,[]{});
+  const auto originalNative=document->native();auto destination=originalNative;destination.ensureMixer();
+  operations.invoke("plugin.add",{{"descriptor",gain},{"target","n"+std::to_string(destination.mixer.buses.front().id)}});
+  const auto placedNative=document->native();const auto placedRack=project.preserved.at("plugins");
+  bool reachedGroupedApply=false;rejected=false;
+  try {operations.history(false,[&](bool,bool){reachedGroupedApply=true;},[](const auto &){throw Api::ApiError(-32602,"controlled grouped native admission refusal");});}
+  catch(const Api::ApiError &e){rejected=e.code==-32602;}
+  need(rejected&&!reachedGroupedApply&&document->native()==placedNative&&project.preserved.at("plugins")==placedRack&&operations.canUndo()&&!operations.canRedo(),
+    "Grouped admission refusal consumed document/rack history before validation");
+  for(bool redoDirection:{false,true}){
+    rejected=false;
+    try{operations.history(redoDirection,[&](bool redo,bool stopped){need(stopped,"Grouped history repeated the transport stop");if(redo)document->redo();else document->undo();throw std::runtime_error("controlled postcommit callback failure");});}
+    catch(const std::runtime_error &){rejected=true;}
+    need(rejected&&document->native()==(redoDirection?placedNative:originalNative),"Postcommit failure left the wrong native history state");
+    need(project.preserved.at("plugins")== (redoDirection?placedRack:Json::array()),"Postcommit failure left rack and native history split");
+    need(redoDirection?operations.canUndo():operations.canRedo(),"Postcommit completion damaged the grouped history heads");
+  }
+  operations.history(false,[&](bool redo,bool){if(redo)document->redo();else document->undo();});
+  need(document->native()==originalNative&&project.preserved.at("plugins").empty(),"History could not be used after a postcommit callback failure");
+  std::cout<<"PASS chronological aliases, targeted/grouped plugin add/remove, dry-run/stale/stop/postcommit rejection, cache guard, interleaved edits, recorded-lane remapping, redo forks and persistence\n";
+}
+#include "ParameterActivityControllerTests.inc"
+#include "LiveNativeControllerTests.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--parameter-activity") {parameterActivityControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==2 && std::string(argv[1])=="--live-native") {liveNativeControllerTests();liveLoopControllerTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--matrix") {matrixControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--annotations") {annotationControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--arrangement") {arrangementControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--recording") {recordingControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--recovery") {recoveryControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==5 && std::string(argv[1])=="--recovery-manual") {recoveryManualEditorTests(std::filesystem::u8path(argv[2]),std::filesystem::u8path(argv[3]),std::filesystem::u8path(argv[4]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--unified-plugin-history") {unifiedPluginHistoryTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==2 && std::string(argv[1])=="--graph-pattern-view") {graphPatternViewTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--graph-recipes") {graphRecipeRenderTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--mixer-integration") {mixerIntegrationTests(std::filesystem::u8path(argv[2]));return 0;}

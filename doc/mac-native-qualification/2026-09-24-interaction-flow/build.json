@@ -1,0 +1,8 @@
+{
+  "head": "d5d376fa0ced527cc901d8555076cadbf98d75d4",
+  "sourceFingerprint": "fcaa69752062ac12b746951c2536150ca1cafb43083b7df24b6757773f764d87",
+  "executableSHA256": "7362a484a7a19d186db3f13e8d68c694f4d2165bcc0d68a68249e58a3446ee93",
+  "fingerprintScope": "Sorted paths and contents of C++/Objective-C++/Swift/Python files in editor, mac/App, mac/Bridge, mac/Audio, mac/Plugins and mac/Tests; includes pre-existing changes.",
+  "build": "/Users/rewbs/code/openmpt/bin/mac-interaction-flow/ScreamSeq.app",
+  "performanceCoverage": "Performance runs precede final graph-menu command-catalog availability and interface-test assertions; no render/audio changes followed the performance runs."
+}

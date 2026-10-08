@@ -13,6 +13,8 @@
             {dockToggle,L"Workspace / Toggle lower dock",L"Ctrl+J"},
             {liveKeysCommand,L"Keyboard / Toggle live musical typing",L"Ctrl+Alt+L"},
             {graphCommand,L"Graph / Open reusable routing and modulation canvas",L""},
+            {graphWorkflowCommand,L"Graph / Groups, modulation, visual layout and signal inspection",L""},
+            {parameterActivityCommand,L"Automation / Effective parameter activity and sources",L""},
             {mixerCommand,L"Mix / Open mixer controls and routing",L""},
             {mixerRouting,L"Mix / Song routing overview, inserts, sends and sidechains",L""},
             {graphCommandsCommand,L"Pattern / Graph command editor",L"Enter on a graph lane"},

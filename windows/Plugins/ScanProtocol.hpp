@@ -4,6 +4,12 @@
 #include <stdexcept>
 namespace Tracker::WindowsVST3 {
 using JSON=nlohmann::json;
+// The registry's quarantine rename. It lives in this header, not Registry.cpp,
+// so a test that redefines MoveFileExW around its included Registry.cpp cannot
+// intercept it: this header is already parsed (and guarded) by then.
+inline bool renameReplacing(const std::filesystem::path &from,const std::filesystem::path &to) noexcept {
+ return ::MoveFileExW(from.c_str(),to.c_str(),MOVEFILE_REPLACE_EXISTING)!=FALSE;
+}
 inline JSON encodeScan(const Scan &s){JSON v={{"version",1},{"path",s.file.path},{"sha256",s.file.sha256},{"machine",s.file.machine},{"classes",JSON::array()}};for(auto &d:s.classes)v["classes"].push_back({{"id",d.classID},{"name",d.name},{"instrument",d.instrument}});return v;}
 inline Scan decodeScan(const JSON &v){
  Scan s;if(!v.is_object()||v.at("version")!=1)throw std::runtime_error("Invalid VST3 scan version");

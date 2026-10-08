@@ -1,0 +1,15 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start  7: pattern-performance
+1/5 Test  #7: pattern-performance ..............   Passed    1.96 sec
+    Start 53: mixer-publication
+2/5 Test #53: mixer-publication ................   Passed    0.14 sec
+    Start 63: musical-automation
+3/5 Test #63: musical-automation ...............   Passed    1.57 sec
+    Start 74: signal-graph-session
+4/5 Test #74: signal-graph-session .............   Passed    0.49 sec
+    Start 83: unified-history
+5/5 Test #83: unified-history ..................   Passed    0.44 sec
+
+100% tests passed, 0 tests failed out of 5
+
+Total Test time (real) =   4.62 sec

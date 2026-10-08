@@ -16,7 +16,7 @@ void writeTree(const std::filesystem::path &path,const Json &tree) {writeProject
 #include "RecoveryTests.hpp"
 void promotion(const std::filesystem::path &dir) {
   for(unsigned version:{3u,4u}) {
-    auto doc=Document::demo();auto n=doc->native();auto master=n.makeEntity().id;
+    auto doc=Document::demo();auto n=doc->native();auto master=n.masterID;
     for(const auto &[index,e]:n.tracks) n.mixer.buses.push_back({e.id,master,MixerBusKind::Track,"Track"});
     n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});doc->restoreNative(n);
     auto tree=nativeProjectTree(*doc,newProjectState(*doc));auto &meta=tree["native"];

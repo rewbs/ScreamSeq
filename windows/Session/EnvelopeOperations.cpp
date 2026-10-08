@@ -310,8 +310,12 @@ std::optional<EnvelopeTarget> target(NativeSong &n,const OpenMPT::CSoundFile &so
   const auto index=uint16_t(integer(field(v,"pattern"),0,UINT16_MAX));
   require(song.Patterns.IsValidPat(index)&&n.patterns.contains(index),"Pattern no longer exists"); const auto pattern=n.patterns.at(index).id;
   if(kind=="graph") {
-    keys(v,{"kind","graph","node","pattern"}); const auto graph=identity(field(v,"graph")),node=identity(field(v,"node"));
-    for(auto &g:n.signal.library) if(g.id==graph) for(auto &item:g.nodes) if(item.id==node&&item.kind==SignalNodeKind::Automation) {
+    keys(v,{"kind","graph","node","pattern"}); const auto graph=field(v,"graph").is_null()?0:identity(v.at("graph")),node=identity(field(v,"node"));
+    SignalNode *source=nullptr;
+    if(!graph) {for(auto &s:n.signal.songSources)if(s.node.id==node)source=&s.node;}
+    else for(auto &g:n.signal.library)if(g.id==graph)for(auto &item:g.nodes)if(item.id==node)source=&item;
+    if(source&&source->kind==SignalNodeKind::Automation) {
+      auto &item=*source;
       auto e=std::find_if(item.envelopes.begin(),item.envelopes.end(),[&](const auto &e){return e.pattern==pattern;});
       if(e==item.envelopes.end()) {
         if(!create) return {};
@@ -452,10 +456,18 @@ Json EnvelopeOperations::invoke(const std::string &method,const Json &p) {
     }
     bool changed=next!=document_.native();
     for(const auto &[t,e]:baked) changed|=!sameInstrumentEnvelope(instrument(next,song,t),e);
+    if(changed&&host_.validateCandidate)host_.validateCandidate(next);
     if(changed&&!dry) {
-      if(stopPlayback_) stopPlayback_();
-      if(baked.empty()) document_.annotate([&](NativeSong &n){n=next;});
-      else document_.transaction([&](OpenMPT::CSoundFile &s,NativeSong &n){n=next;for(const auto &[t,e]:baked) instrument(n,s,t)=e;});
+      if(baked.empty()) {
+        const auto &before=document_.native();
+        const bool audible=!sameSignalProcessing(before.signal,next.signal)||before.automation!=next.automation;
+        std::function<void()> publish;
+        if(audible)publish=host_.prepareNativeUpdate?host_.prepareNativeUpdate(before,next):stopPlayback_;
+        document_.annotate([&](NativeSong &n){n=next;},publish);
+      } else {
+        if(stopPlayback_)stopPlayback_();
+        document_.transaction([&](OpenMPT::CSoundFile &s,NativeSong &n){n=next;for(const auto &[t,e]:baked) instrument(n,s,t)=e;});
+      }
     }
     return {{"id",id(affected)},{"dryRun",dry},{"wouldChange",changed}};
   } catch(const std::invalid_argument &e) { throw Api::ApiError(-32602,e.what()); }

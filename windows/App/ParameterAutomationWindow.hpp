@@ -77,10 +77,11 @@ private:
     SendMessageW(controls_.at(plugin),CB_RESETCONTENT,0,0);i=0;for(const auto &p:plugins_){auto name=wide(p.at("name").get<std::string>());SendMessageW(controls_.at(plugin),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(p.at("instanceID")==pluginID_)choose(plugin,i);++i;}
     setting_=false;filter();
   }
-  void load(bool follow,std::string wantedPlugin={},std::optional<uint32_t> wantedParameter={},std::optional<unsigned> wantedPattern={},bool allowMissingPlugin=false){
+  void load(bool follow,std::string wantedPlugin={},std::optional<uint32_t> wantedParameter={},std::optional<unsigned> wantedPattern={},bool allowMissingPlugin=false,bool strictTarget=false){
     if(pending_)return;const auto now=context_();require(follow||now.document==captured_.document,"Document changed / use From cursor to capture the new song");
     unsigned index=follow?now.pattern:captured_.pattern;
     if(wantedPattern)index=*wantedPattern;else if(!follow){auto found=std::find_if(now.patterns.begin(),now.patterns.end(),[&](const auto &p){return p.at("id")==patternID_;});require(found!=now.patterns.end(),"Captured pattern was removed / use From cursor");index=found->at("index");}
+    if(strictTarget){require(!wantedPlugin.empty()&&wantedParameter&&std::any_of(now.plugins.begin(),now.plugins.end(),[&](const auto &p){return p.at("instanceID")==wantedPlugin;}),"Captured source plugin is unavailable");require(std::any_of(now.patterns.begin(),now.patterns.end(),[&](const auto &p){return p.at("index")==index;}),"Captured source pattern is unavailable");}
     const auto token=generation_;const bool sameSong=now.document==captured_.document;
     auto wanted=wantedPlugin.empty()&&sameSong?pluginID_:wantedPlugin;auto wantedID=wantedParameter?wantedParameter:sameSong&&wantedPlugin.empty()?parameter_:std::optional<uint32_t>{};
     auto selectedPosition=selected_>=0&&size_t(selected_)<points_.size()?std::optional<uint32_t>(points_[size_t(selected_)].at("position").get<uint32_t>()):std::nullopt;
@@ -91,10 +92,11 @@ private:
       if(chosen==plugins.end()){require(follow||wanted.empty()||allowMissingPlugin,"Captured plugin was removed / use From cursor or another plugin");chosen=plugins.begin();}
       Json catalog=Json::array();std::wstring catalogueError;
       if(chosen!=plugins.end()){
-        wanted=chosen->at("instanceID");if(!chosen->value("unavailable",false))try{catalog=request_("plugin.parameters.get",{{"slot",size_t(chosen-plugins.begin())}});}catch(const std::exception &e){catalogueError=wide(e.what());}
+        wanted=chosen->at("instanceID");if(!chosen->value("unavailable",false))try{catalog=request_("plugin.parameters.get",{{"slot",size_t(chosen-plugins.begin())}});}catch(const std::exception &e){if(strictTarget)throw;catalogueError=wide(e.what());}
         for(const auto &l:data.at("lanes"))if(l.at("plugin")==wanted&&std::none_of(catalog.begin(),catalog.end(),[&](const auto &p){return p.at("id")==l.at("parameter");}))catalog.push_back({{"id",l.at("parameter")},{"name","Unavailable parameter "+std::to_string(l.at("parameter").get<uint32_t>())},{"unavailable",true}});
       }else wanted.clear();
       const auto after=context_();require(after.document==now.document&&after.revision==now.revision&&token==generation_,"Song or draft changed while loading / captured editor retained");
+      if(strictTarget)require(std::any_of(catalog.begin(),catalog.end(),[&](const auto &p){return p.at("id")==*wantedParameter&&!p.value("unavailable",false);}),"Captured source parameter is unavailable");
       const bool samePattern=sameSong&&data.at("patternID")==patternID_;captured_=now;captured_.pattern=index;patternID_=data.at("patternID");rows_=data.at("rows");rowsPerBeat_=data.at("rowsPerBeat");plugins_=std::move(plugins);pluginID_=wanted;lanes_=data.at("lanes");catalog_=std::move(catalog);
       if(!samePattern){canvas_.fit(rows_);selectedPosition.reset();setting_=true;set(rangeStart,L"0");set(rangeEnd,std::to_wstring(rows_));setting_=false;}else if(canvas_.end>rows_*256)canvas_.fit(rows_);
       parameter_.reset();if(!catalog_.empty()){auto p=std::find_if(catalog_.begin(),catalog_.end(),[&](const auto &v){return wantedID&&v.at("id")==*wantedID;});if(p==catalog_.end())p=catalog_.begin();selectParameter(p->at("id"),selectedPosition);}
@@ -404,6 +406,7 @@ public:
     load(true,std::move(plugin),parameter);
   }
   void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||retainedDraft();show();if(!retain){load(true,std::move(plugin),parameter);if(compact_&&!parameter_){compactPage_=0;layout();}}if(previewNeeded_)SetTimer(window_,3,120,nullptr);focusPage();}
+  void openSourceAt(std::string plugin,uint32_t parameter){require(!retainedDraft()&&!pending_,"Apply or Reload the existing parameter curve draft before opening a source");load(true,std::move(plugin),parameter,{ },false,true);show();if(previewNeeded_)SetTimer(window_,3,120,nullptr);focusPage();}
   Json snapshot()const{
     Json handles=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});const auto r=canvas_.viewport;
     return {{"visible",visible()},{"compact",compact_},{"shortDock",shortDock_},{"page",std::array<const char *,4>{"target","curve","formula","tools"}[size_t(compactPage_)]},{"canvasVisible",canvasVisible_},{"toolFieldDraft",toolFieldsDirty_},{"retainedDraft",retainedDraft()},{"generation",generation_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"pattern",captured_.pattern},{"patternID",patternID_},{"plugin",pluginID_},{"parameter",parameter_?Json(*parameter_):Json()},{"lane",laneID_},{"dirty",dirty_},{"fieldDraft",pointFields_},{"pending",pending_},{"stale",!current()},{"enabled",enabled_},{"points",points_},{"selectedPoint",selected_},{"parameterCount",catalog_.size()},{"filteredCount",filtered_.size()},{"start",canvas_.start},{"end",canvas_.end},{"valueLow",canvas_.valueLow},{"valueHigh",canvas_.valueHigh},{"previewSamples",canvas_.curve.size()},{"handles",handles},{"canvas",{r.x,r.y,r.w,r.h}},{"status",utf8(status_)},{"envelopeBank",bank_?bank_->snapshot():Json{{"visible",false}}},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}}};

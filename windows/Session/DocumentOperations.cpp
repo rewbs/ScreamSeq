@@ -88,6 +88,11 @@ bool presentationOnly(const NativeSong &before,const NativeSong &after) {
   // Normalize only the explicitly supported presentation fields. Whole-song
   // equality below keeps new musical fields conservative without another list.
   auto normalized=after;
+  // Bank definitions and links describe reuse; their audible materialization
+  // lives in automation, graph sources or instrument data. Those fields remain
+  // in the equality check, so a linked shape edit still publishes or stops.
+  normalized.envelopeBank=before.envelopeBank;
+  normalized.envelopeLinks=before.envelopeLinks;
   auto entity=[](const NativeEntity &a,NativeEntity &b) {
     if(a.id!=b.id)return false;
     b.name=a.name;b.annotation=a.annotation;b.color=a.color;return true;
@@ -109,9 +114,10 @@ bool presentationOnly(const NativeSong &before,const NativeSong &after) {
 DocumentOperations::DocumentOperations(Tracker::Document &document, std::function<void()> stopPlayback,
     std::function<void(const std::vector<Tracker::Edit>&)> publishEdits,
     std::function<void(Tracker::Document&)> validateCandidate,
-    std::function<void(const Tracker::NativeSong&)> validateNativeCandidate)
+  std::function<void(const Tracker::NativeSong&)> validateNativeCandidate,
+  std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> prepareNativeUpdate)
   : document_(document), stopPlayback_(std::move(stopPlayback)), publishEdits_(std::move(publishEdits)),
-    validateCandidate_(std::move(validateCandidate)),validateNativeCandidate_(std::move(validateNativeCandidate)) {}
+    validateCandidate_(std::move(validateCandidate)),validateNativeCandidate_(std::move(validateNativeCandidate)),prepareNativeUpdate_(std::move(prepareNativeUpdate)) {}
 Json DocumentOperations::entityInfo(const Tracker::NativeEntity &entity) {
   return {{"id","n"+std::to_string(entity.id)},{"name",entity.name},{"annotation",entity.annotation},{"color",entity.color}};
 }
@@ -393,8 +399,13 @@ Json DocumentOperations::invoke(const std::string &method, const Json &p) {
       validateCandidate_(*candidate);
     }
     if(nativeChange&&!structureChange&&validateNativeCandidate_)validateNativeCandidate_(target);
-    if((structural || (nativeChange&&!presentationOnly(document_.native(),target))) && stopPlayback_) stopPlayback_();
-    const auto applied=redo ? document_.redo() : document_.undo();
+    std::function<void()> publish;
+    if(structural || (nativeChange&&!presentationOnly(document_.native(),target))) {
+      if(document_.historyNativeOnly(redo))
+        publish=prepareNativeUpdate_?prepareNativeUpdate_(document_.native(),target):stopPlayback_;
+      else if(stopPlayback_)stopPlayback_();
+    }
+    const auto applied=redo ? document_.redo(publish) : document_.undo(publish);
     if(!applied.empty() && publishEdits_) publishEdits_(applied);
     return Json::object();
   }

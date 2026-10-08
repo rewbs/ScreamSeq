@@ -17,7 +17,7 @@ std::unique_ptr<Document> richDocument() {
   auto id = [&] { return n.makeEntity().id; };
   n.patterns.begin()->second.name = "Pattern \xE2\x99\xAB";
   n.patterns.begin()->second.annotation = "line one\nline two"; n.patterns.begin()->second.color = 0xabcdef;
-  const auto master = id(), group = id(), ret = id();
+  const auto master = n.masterID, group = id(), ret = id();
   for (const auto &[index,e] : n.tracks) n.mixer.buses.push_back({e.id,index < 2 ? group : master,MixerBusKind::Track,"Track"});
   n.mixer.buses.push_back({group,master,MixerBusKind::Group,"Group"});
   n.mixer.buses.push_back({ret,master,MixerBusKind::Return,"Return"});

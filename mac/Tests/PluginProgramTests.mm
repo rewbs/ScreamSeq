@@ -1,4 +1,5 @@
 #import "../Bridge/TrackerSession.h"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioUnitHost.hpp"
 #include <cmath>
 #include <dlfcn.h>
@@ -7,7 +8,7 @@ using namespace Tracker;
 std::vector<PluginDescriptor> registerFixtureAUs();
 static void check(bool value,const char *message){if(!value)throw std::runtime_error(message);}
 static NSDictionary *dictionary(const PluginDescriptor &d){return @{@"type":@(d.type),@"subtype":@(d.subtype),@"manufacturer":@(d.manufacturer),@"name":@(d.name.c_str()),@"format":@(d.format.c_str()),@"path":@(d.path.c_str()),@"classID":@(d.classID.c_str()),@"isInstrument":@(d.instrument)};}
-int main(int argc,char **argv){@autoreleasepool{
+int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{
  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".resonance"]];
  try {
   check(argc==2,"Local fixture path required");auto vst=NativePlugin::discoverVST3(argv[1]);auto au=registerFixtureAUs();
@@ -28,6 +29,15 @@ int main(int argc,char **argv){@autoreleasepool{
       plugin.loadProgram(program);
       if(isVst){plugin.loadProgram("vst3:7:18:1");check(std::abs(plugin.parameters()[0].value-.75)<1e-7,"Program refreshes host parameter baseline after processor changes");}
       const auto countBeforeCapture=selections();auto state=plugin.state();
+      if(descriptor.instrument) {
+        auto silent=state;silent.bypass=true;NativePlugin held(silent,rate);check(held.midi(0x90,60,100),"Note-on reaches a bypassed instrument");
+        std::array<float,8192> audio{};check(held.process(audio.data(),4096,0),"Bypassed instrument continues processing");
+        check(std::all_of(audio.begin(),audio.end(),[](float v){return v==0;}),"Bypassed instrument has no dry audio");
+        held.bypass(false);check(held.process(audio.data(),4096,4096)&&audio.back()!=0,"Held note becomes audible after restoring instrument");
+        held.bypass(true);check(held.midi(0x80,60,0),"Note-off reaches bypassed instrument");
+        check(held.process(audio.data(),4096,8192),"Release renders while bypassed");held.bypass(false);
+        check(held.process(audio.data(),4096,12288)&&audio.back()==0,"Restoring bypass does not resurrect a released note");
+      }
       check(selections()==countBeforeCapture,"Saving VST3 state never re-sends unchanged program selectors");
       for(uint32_t block:{1u,17u,128u,4096u}) {
         NativePlugin recalled(state,rate);if(descriptor.instrument)check(recalled.midi(0x90,60,100),"Start private AU fixture note");

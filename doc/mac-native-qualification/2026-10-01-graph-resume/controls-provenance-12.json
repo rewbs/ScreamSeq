@@ -1,0 +1,47 @@
+{
+  "changed": false,
+  "data": {
+    "offset": 0,
+    "rule": "These are existing base-value controls, not additive modulation. Enabled envelopes, pattern parameter commands and recorded automation are mutually exclusive. Song modulation adds to the chosen baseline and clamps once.",
+    "sampleRate": 48000,
+    "sources": [
+      {
+        "binding": 255,
+        "channel": 0,
+        "column": 1,
+        "commands": [
+          {
+            "duration": 1048576,
+            "kind": "pattern-slide",
+            "position": 1048576,
+            "value": 0.4
+          }
+        ],
+        "count": 1,
+        "enabled": true,
+        "endPosition": 1048576,
+        "key": "pattern:n1:n2:1:255",
+        "kind": "pattern-commands",
+        "omittedCommands": 0,
+        "omittedOrders": 0,
+        "orders": [
+          {
+            "order": 0,
+            "sequence": 0
+          }
+        ],
+        "parameter": 12,
+        "pattern": 0,
+        "patternID": "n1",
+        "plugin": "85A95A61-F293-479E-899D-E1D9ADD585B4",
+        "position": 1048576,
+        "track": "n2"
+      }
+    ],
+    "total": 1,
+    "unitsPerRow": 65536
+  },
+  "documentId": "DB8C9BA7-AAD9-4FBB-A50A-80275882B3BD",
+  "playbackStopped": false,
+  "revision": "DB8C9BA7-AAD9-4FBB-A50A-80275882B3BD:8:4:0"
+}

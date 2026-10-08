@@ -45,6 +45,28 @@ static void multisampleTests(const std::string &first,const std::string &second,
     }
   }
 }
+// Ogg Vorbis files often carry tags or padding after the last page. Trailing
+// bytes must not discard audio which has already been decoded.
+static void vorbisTrailingData(const std::filesystem::path &root) {
+  const auto source=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()/"windows/Tests/Assets/Fixtures/mono-24000.ogg";
+  std::ifstream in(source,std::ios::binary);const std::string clean{std::istreambuf_iterator<char>(in),std::istreambuf_iterator<char>()};
+  check(clean.size()>64&&clean.compare(0,4,"OggS")==0,"Vorbis fixture is available");
+  NSError *error=nil;
+  NSDictionary *reference=[TrackerSession inspectSampleFile:@(source.string().c_str()) error:&error];
+  check(reference&&[reference[@"channels"] intValue]==1&&[reference[@"rate"] intValue]==24000&&[reference[@"frames"] intValue]>0,"Clean Vorbis fixture decodes");
+  std::string tag(128,'\0');tag.replace(0,3,"TAG");std::string noise(777,'\0');uint32_t random=99;for(auto &c:noise){random=random*1664525u+1013904223u;c=char(random>>24);}
+  int index=0;
+  for(const auto &trailer:{tag,noise,std::string(1,'x'),std::string("OggS")}) {
+    const auto path=(root/("trailing"+std::to_string(index++)+".ogg")).string();
+    {std::ofstream out(path,std::ios::binary);out<<clean<<trailer;}
+    NSDictionary *decoded=[TrackerSession inspectSampleFile:@(path.c_str()) error:&error];
+    check(decoded!=nil,"Trailing bytes after the last Vorbis page do not reject the sample");
+    check([decoded[@"frames"] isEqual:reference[@"frames"]]&&[decoded[@"rate"] isEqual:reference[@"rate"]]&&[decoded[@"channels"] isEqual:reference[@"channels"]]&&[decoded[@"pcm"] isEqual:reference[@"pcm"]],"Trailing bytes leave decoded Vorbis audio unchanged");
+  }
+  const auto headerOnly=(root/"header-only.ogg").string();
+  {std::ofstream out(headerOnly,std::ios::binary);out<<clean.substr(0,40);}
+  check(![TrackerSession inspectSampleFile:@(headerOnly.c_str()) error:&error],"A Vorbis file without decodable audio still fails");
+}
 int main(){@autoreleasepool{try {
   const std::filesystem::path root=std::filesystem::temp_directory_path()/NSUUID.UUID.UUIDString.UTF8String;
   std::filesystem::create_directory(root);
@@ -52,6 +74,7 @@ int main(){@autoreleasepool{try {
   const auto first=(root/"Kick one.wav").string(),second=(root/"Stereo snare.wav").string(),broken=(root/"Broken.wav").string();
   wave(first,24000,1);wave(second,48000,2);std::ofstream(broken)<<"not audio";
   multisampleTests(first,second,broken);
+  vorbisTrailingData(root);
   auto doc=Document::demo();const auto before=doc->snapshotData();const auto revision=doc->revision;const int samples=doc->song().GetNumSamples();
   const auto preview=doc->importSamples({first,second},true,true);
   check(doc->revision==revision&&doc->snapshotData()==before&&preview.size()==2,"Dry run decodes all files without changing the song");

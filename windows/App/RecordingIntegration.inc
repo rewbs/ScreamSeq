@@ -108,7 +108,7 @@
     void releaseMidiNote(unsigned key) {
         const auto found=midiNotes.find(key);if(found==midiNotes.end())return;
         const auto held=found->second;midiNotes.erase(found);
-        if(!held.started||!typingTargetExists(held)||(!held.pending&&held.epoch!=stopGeneration)||held.voice!=auditionVoices[held.note])return;
+        if(!held.started||!typingTargetExists(held)||(!held.pending&&held.epoch!=stopGeneration)||held.voice!=auditionVoice(held.note,held.channel))return;
         if(!sharedInputVoice(held))auditionOperation("transport.note",typedParameters(held,false));
     }
     void releaseMidiNotes()noexcept {
@@ -122,7 +122,7 @@
         if(const auto shared=sharedInputVoice(held)){
             held.token=++typingToken;held.started=true;held.pending=shared->pending;held.epoch=shared->epoch;held.voice=shared->voice;midiNotes.emplace(key,std::move(held));return;
         }
-        held.token=++typingToken;held.started=true;held.pending=true;held.voice=auditionVoices[note]+1;
+        held.token=++typingToken;held.started=true;held.pending=true;held.voice=auditionVoice(note,held.channel)+1;
         const auto voice=held.voice;midiNotes.emplace(key,held);
         try {
             auto p=typedParameters(held,true);p["velocity"]=velocity;auditionOperation("transport.note",p);

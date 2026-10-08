@@ -1,0 +1,25 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+      Start 26: sample-project
+ 1/10 Test #26: sample-project ...................   Passed    1.18 sec
+      Start 42: dynamics
+ 2/10 Test #42: dynamics .........................   Passed    1.11 sec
+      Start 44: bus-compressor
+ 3/10 Test #44: bus-compressor ...................   Passed    1.13 sec
+      Start 53: mixer-publication
+ 4/10 Test #53: mixer-publication ................   Passed    0.17 sec
+      Start 55: native-mixer
+ 5/10 Test #55: native-mixer .....................   Passed    3.80 sec
+      Start 56: sidechains
+ 6/10 Test #56: sidechains .......................   Passed    0.03 sec
+      Start 57: multi-bus
+ 7/10 Test #57: multi-bus ........................   Passed    1.02 sec
+      Start 62: plugin-latency
+ 8/10 Test #62: plugin-latency ...................   Passed    0.08 sec
+      Start 75: signal-graph-session
+ 9/10 Test #75: signal-graph-session .............   Passed    0.10 sec
+      Start 84: unified-history
+10/10 Test #84: unified-history ..................   Passed    0.42 sec
+
+100% tests passed, 0 tests failed out of 10
+
+Total Test time (real) =   9.05 sec

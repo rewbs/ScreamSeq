@@ -23,7 +23,21 @@ class HostedProjectPlayback final {
   std::unique_ptr<Tracker::Renderer> renderer_; // Dies before its borrowed chain.
   std::shared_ptr<RecordingTimeline> timeline_;
   std::uint32_t rate_=0;
+  uint64_t nativeUpdateGeneration_=0; // Serialized control owner only.
 public:
+  // Owns all preparation until the document's beforeCommit callback publishes
+  // it. Rendering never owns this wrapper and no live Document is retained.
+  struct PreparedNativeUpdate {
+    enum class Kind { GraphControls, Routing };
+    Kind kind() const noexcept {return controls_?Kind::GraphControls:Kind::Routing;}
+  private:
+    friend class HostedProjectPlayback;
+    HostedProjectPlayback *owner_=nullptr;
+    uint64_t generation_=0;
+    bool published_=false;
+    std::unique_ptr<Tracker::GraphControlPlan> controls_;
+    std::unique_ptr<Tracker::MixerTransition::Plan> routing_;
+  };
   HostedProjectPlayback(Tracker::Document &,const Project::ProjectState &,uint32_t rate,
     HostedPlaybackSettings settings={},bool offline=false);
   ~HostedProjectPlayback();
@@ -33,6 +47,15 @@ public:
   HostedProjectPlayback& operator=(HostedProjectPlayback&&)=delete;
   Tracker::Renderer &renderer() noexcept {return *renderer_;}
   Tracker::PluginChain &chain() noexcept {return *chain_;}
+  uint32_t sampleRate() const noexcept {return rate_;}
+  // Control-owner preparation, outside audio processing. Null is an unsupported
+  // live edit; the caller preserves active playback and asks for a stopped edit.
+  // Graph topology/physical port/latency changes retain the shared restrictions.
+  std::unique_ptr<PreparedNativeUpdate> prepareNativeUpdate(
+    const Tracker::NativeSong &before,const Tracker::NativeSong &next);
+  // Invoke only after the host rechecks the same playback identity/generation.
+  // A refusal publishes nothing and must abort the enclosing document commit.
+  bool publishNativeUpdate(PreparedNativeUpdate &);
   // Same bounded processing sequence for offline qualification and WASAPI.
   // Preparation and destruction remain on a stopped control owner.
   bool render(float *stereo,uint32_t frames) noexcept;

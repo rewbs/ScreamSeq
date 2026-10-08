@@ -272,7 +272,7 @@ class CommandPalette {
 		if(!p)return DefWindowProcW(h,m,w,l);
 		switch(m) {
 		case WM_CLOSE:p->close();return 0;
-		case WM_NCDESTROY:p->window_=nullptr;break;
+		case WM_NCDESTROY:p->window_=nullptr;p->edit_=nullptr;p->list_=nullptr;p->heading_=nullptr;p->status_=nullptr;p->detail_=nullptr;p->runButton_=nullptr;p->setButton_=nullptr;p->sequenceButton_=nullptr;p->clearButton_=nullptr;p->resetButton_=nullptr;SetWindowLongPtrW(h,GWLP_USERDATA,0);break;
 		case WM_SIZE:if(p->runButton_)p->layout();return 0;
 		case WM_GETMINMAXINFO: {
 			RECT bounds{0,0,p->pixels(580),p->pixels(p->configurable()?340:260)};
@@ -317,7 +317,7 @@ public:
 		for(auto &command:next)command.shortcut=keyLabel(readShortcut_(command.id));
 		commands_.swap(next);rebuildEntries();explicitSelection_=true;filter(true);
 	}
-	~CommandPalette(){if(window_)DestroyWindow(window_);if(font_)DeleteObject(font_);if(smallFont_)DeleteObject(smallFont_);if(headingFont_)DeleteObject(headingFont_);}
+	~CommandPalette(){if(window_&&IsWindow(window_))DestroyWindow(window_);if(font_)DeleteObject(font_);if(smallFont_)DeleteObject(smallFont_);if(headingFont_)DeleteObject(headingFont_);}
 	void show() {
 		if(window_&&IsWindowVisible(window_)){SetActiveWindow(window_);SetFocus(edit_);return;}
 		message_.clear();suppressCharacters_=false;

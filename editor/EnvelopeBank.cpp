@@ -8,7 +8,11 @@ namespace Tracker {
 namespace {
 void need(bool ok,const char *message){if(!ok)throw std::invalid_argument(message);}
 const auto &findLane(const NativeSong &n,const EnvelopeTarget &t){auto i=std::find_if(n.automation.begin(),n.automation.end(),[&](const auto &l){return l.id==t.owner;});need(i!=n.automation.end(),"Envelope lane no longer exists");return *i;}
-const SignalPatternEnvelope &findGraph(const NativeSong &n,const EnvelopeTarget &t){for(const auto &d:n.signal.library)for(const auto &node:d.nodes)if(node.id==t.owner&&node.kind==SignalNodeKind::Automation)for(const auto &e:node.envelopes)if(e.pattern==t.pattern)return e;throw std::invalid_argument("Graph envelope no longer exists");}
+const SignalPatternEnvelope &findGraph(const NativeSong &n,const EnvelopeTarget &t){
+  for(const auto &d:n.signal.library)for(const auto &node:d.nodes)if(node.id==t.owner&&node.kind==SignalNodeKind::Automation)for(const auto &e:node.envelopes)if(e.pattern==t.pattern)return e;
+  for(const auto &source:n.signal.songSources)if(source.node.id==t.owner&&source.node.kind==SignalNodeKind::Automation)for(const auto &e:source.node.envelopes)if(e.pattern==t.pattern)return e;
+  throw std::invalid_argument("Graph envelope no longer exists");
+}
 const OpenMPT::InstrumentEnvelope &findInstrument(const NativeSong &n,const OpenMPT::CSoundFile &s,const EnvelopeTarget &t){for(const auto &[slot,i]:n.instruments)if(i.id==t.owner&&s.Instruments[slot]){const auto &i=*s.Instruments[slot];if(t.kind==EnvelopeTargetKind::Volume)return i.VolEnv;if(t.kind==EnvelopeTargetKind::Pan)return i.PanEnv;if(t.kind==EnvelopeTargetKind::Pitch)return i.PitchEnv;}throw std::invalid_argument("Instrument envelope no longer exists");}
 uint64_t patternID(const NativeSong &n,const EnvelopeTarget &t){return t.kind==EnvelopeTargetKind::Parameter?findLane(n,t).pattern:t.pattern;}
 uint32_t scaled(uint32_t position,uint32_t from,uint32_t to){return from<=1?0:uint32_t(std::llround(double(position)*(to-1)/(from-1)));}

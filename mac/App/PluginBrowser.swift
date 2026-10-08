@@ -6,7 +6,7 @@ final class PluginBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
   let showHidden = NSButton(checkboxWithTitle: "Show hidden", target: nil, action: nil)
   let favorite = NSButton(checkboxWithTitle: "Favorite", target: nil, action: nil)
   let hiddenToggle = NSButton(checkboxWithTitle: "Hide from browser", target: nil, action: nil)
-  let categoryField = NSTextField(string: ""), table = NSTableView()
+  let categoryField = NSTextField(string: ""), table = DirectActionTable()
   let status = Theme.label("", size: 12, color: Theme.muted)
   let detail = Theme.label("Select a plugin", size: 12)
   private(set) var plugins = [[String: Any]](), visible = [[String: Any]](), libraryRevision = "", pending = false
@@ -26,6 +26,8 @@ final class PluginBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     for button in [favoritesOnly, showHidden] { button.target = self; button.action = #selector(filterChanged) }
     format.fixed(width: 115); kind.fixed(width: 185); category.fixed(width: 180)
     table.headerView = nil; table.rowHeight = 29; table.dataSource = self; table.delegate = self
+    table.activate = { [weak self] in self?.choose() }
+    search.target = self; search.action = #selector(chooseFirst); search.sendsWholeSearchString = true
     let name = NSTableColumn(identifier: .init("name")); name.width = 350; name.minWidth = 160
     let type = NSTableColumn(identifier: .init("kind")); type.width = 160; type.minWidth = 125; type.maxWidth = 180
     let group = NSTableColumn(identifier: .init("category")); group.width = 140; group.minWidth = 70
@@ -41,6 +43,9 @@ final class PluginBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     status.preferredMaxLayoutWidth = 690; status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     status.heightAnchor.constraint(greaterThanOrEqualToConstant: 42).isActive = true
     saveButton = ActionButton("Save preferences") { [weak self] in self?.savePreferences() }
+    favorite.target = self; favorite.action = #selector(preferencesChanged)
+    hiddenToggle.target = self; hiddenToggle.action = #selector(preferencesChanged)
+    categoryField.delegate = self; categoryField.target = self; categoryField.action = #selector(preferencesChanged)
     addButton = ActionButton("Add plugin") { [weak self] in self?.choose() }
     var reload: [NSView] = [ActionButton("Reload list") { [weak self] in self?.load() }]
     if !builtInOnly { reload.append(ActionButton("Rescan installed plugins") { [weak self] in self?.load(rescan: true) }) }
@@ -48,7 +53,7 @@ final class PluginBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
       stack(.horizontal, [search] + reload), stack(.horizontal, [format, kind, category, NSView()]),
       stack(.horizontal, [favoritesOnly, showHidden, NSView()]), list, detail,
       stack(.horizontal, [favorite, hiddenToggle, NSView()]),
-      stack(.horizontal, [Theme.label("Category", size: 12), categoryField, saveButton]),
+      stack(.horizontal, [Theme.label("Category", size: 12), categoryField]),
       stack(.horizontal, [addButton, NSView()]), status], spacing: 12)
     content.stretchAcrossAxis(); content.fill(self, inset: 20); selectionChanged()
   }
@@ -82,7 +87,13 @@ final class PluginBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     if let previous, let index = names.firstIndex(of: previous) { category.selectItem(at: index + 1) }
   }
   @objc func filterChanged() { filter(keeping: selected?["catalogID"] as? String) }
-  func controlTextDidChange(_ notification: Notification) { filterChanged() }
+  func controlTextDidChange(_ notification: Notification) { if notification.object as? NSSearchField === search { filterChanged() } }
+  func controlTextDidEndEditing(_ notification: Notification) { if notification.object as? NSTextField === categoryField { savePreferences() } }
+  @objc private func preferencesChanged() { savePreferences() }
+  @objc private func chooseFirst() {
+    if selected == nil && !visible.isEmpty { table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false) }
+    choose()
+  }
   func filter(keeping id: String? = nil) {
     let query = search.stringValue, chosenFormat = format.titleOfSelectedItem ?? "All formats"
     visible = plugins.filter { entry in

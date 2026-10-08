@@ -1,8 +1,10 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioExport.hpp"
 #import "../Bridge/TrackerSession.h"
 #include "editor/TrackerDocument.hpp"
 #include "editor/TrackLayout.hpp"
+#include "ModuleFixture.hpp"
 #include "soundlib/ModInstrument.h"
 #include "soundlib/plugins/PlugInterface.h"
 #include <iostream>
@@ -36,7 +38,7 @@ static std::vector<float> render(Document &doc, uint32_t rate, uint32_t block, b
 static double difference(const std::vector<float> &a, const std::vector<float> &b) {
   double error = 0; for (size_t i = 0; i < a.size(); ++i) error = std::max(error, std::abs(double(a[i]) - b[i])); return error;
 }
-int main(int argc, char **argv) { @autoreleasepool { try {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleasepool { try {
   check(argc == 2, "Fixture bundle path required");
   const std::array<uint16_t, 3> columns{0, 1, 2};
   auto doc = Document::demo(); const auto original = doc->native();
@@ -159,7 +161,7 @@ int main(int argc, char **argv) { @autoreleasepool { try {
     check(bool(file) && difference(expected,actual) < 2e-7,"Actual offline WAV export applies shared grouping and persistent column mutes");
   }
   for (auto type : {MOD_TYPE_MOD, MOD_TYPE_XM, MOD_TYPE_S3M, MOD_TYPE_IT, MOD_TYPE_MPT}) {
-    auto source = Document::demo(type); NSString *module = [folder stringByAppendingPathComponent:@"source.module"]; source->save(module.UTF8String);
+    NSString *module = [folder stringByAppendingPathComponent:@"source.module"]; Test::writeDemoModule(type, module.UTF8String);
     auto session = [TrackerSession new]; NSError *error = nil;
     check([session openPath:module error:&error], "Open fixture module");
     auto call = [&](NSString *method, NSDictionary *params) -> NSDictionary * {

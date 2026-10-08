@@ -5,6 +5,7 @@
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <windowsx.h>
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <system_error>
@@ -12,6 +13,22 @@
 namespace ScreamSeq {
 inline constexpr wchar_t workspaceShortcutProperty[]=L"ScreamSeq.WorkspaceShortcutHandler";
 using WorkspaceShortcutHandler=std::function<bool(WPARAM,bool,bool)>;
+// Musical typing follows key positions, not letters, so QWERTZ and AZERTY keep
+// the same two piano rows. Returns the US-layout virtual key of the physical
+// key that produced `key` in the active layout, or 0 outside the typing rows.
+// Text entry and shortcuts keep their layout-dependent virtual keys.
+inline WPARAM physicalMusicalKey(WPARAM key){
+  if(!((key>='0'&&key<='9')||(key>='A'&&key<='Z')||(key>=VK_OEM_1&&key<=VK_OEM_102)))return 0;
+  const UINT scan=MapVirtualKeyExW(UINT(key),MAPVK_VK_TO_VSC_EX,GetKeyboardLayout(0));
+  if(!scan)return key<128?key:0; // No translation available: keep the letter.
+  if(scan>0xFF)return 0;         // Extended keys are never piano keys.
+  static const char digits[]="1234567890",top[]="QWERTYUIOP",home[]="ASDFGHJKL",bottom[]="ZXCVBNM";
+  if(scan>=0x02&&scan<=0x0B)return WPARAM(digits[scan-0x02]);
+  if(scan>=0x10&&scan<=0x19)return WPARAM(top[scan-0x10]);
+  if(scan>=0x1E&&scan<=0x26)return WPARAM(home[scan-0x1E]);
+  if(scan>=0x2C&&scan<=0x32)return WPARAM(bottom[scan-0x2C]);
+  return 0;
+}
 // Modeless native editor shell. Repaint is requested by edits and window events;
 // a hidden or unchanged tool has no running presentation timer.
 class NativeToolWindow {
@@ -193,7 +210,26 @@ protected:
   std::pair<float,float> size()const{RECT r{};GetClientRect(window_,&r);const auto scale=96.0f/GetDpiForWindow(window_);return {r.right*scale,r.bottom*scale};}
   void requestPaint(){if(window_&&IsWindowVisible(window_))InvalidateRect(window_,nullptr,FALSE);}
   void layoutAll(){if(!ready_||relocating_)return;const auto dpi=GetDpiForWindow(window_);if(fontDpi_!=dpi){auto scale=dpi/96.0f;auto font=CreateFontW(-int(13*scale),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");for(auto [id,h]:controls_)SendMessageW(h,WM_SETFONT,reinterpret_cast<WPARAM>(font),TRUE);if(font_)DeleteObject(font_);font_=font;fontDpi_=dpi;fontsChanged();}layout();requestPaint();}
-  void render(){if(!ready_||!IsWindowVisible(window_)||IsIconic(window_))return;if(WaitForSingleObject(surface_->ready(),0)!=WAIT_OBJECT_0){SetTimer(window_,2,16,nullptr);return;}surface_->begin();paint(*surface_);surface_->finishDrawing();check(surface_->present(),"Present editor tool");}
+  unsigned renderFailures_=0;ULONGLONG renderRetry_=0;
+  // A failed or lost frame retries through timer 2 with a back-off. WM_PAINT
+  // has already validated the window, so the failure cannot repaint itself
+  // into an endless WM_PAINT -> throw -> invalidate loop.
+  void renderFailed(){renderFailures_=std::min(renderFailures_+1,20u);const UINT delay=std::min(100u*renderFailures_,2000u);renderRetry_=GetTickCount64()+delay;if(window_)SetTimer(window_,2,delay,nullptr);}
+  void render(){
+    if(!ready_||!IsWindowVisible(window_)||IsIconic(window_))return;
+    if(renderFailures_){const auto now=GetTickCount64();if(now<renderRetry_){SetTimer(window_,2,UINT(renderRetry_-now)+1,nullptr);return;}}
+    if(WaitForSingleObject(surface_->ready(),0)!=WAIT_OBJECT_0){SetTimer(window_,2,16,nullptr);return;}
+    try{
+      surface_->begin();
+      // A failed paint must still end the D2D draw and pop its clips.
+      try{paint(*surface_);}catch(...){surface_->abandon();throw;}
+      if(surface_->finishDrawing())check(surface_->present(),"Present editor tool");
+    }catch(...){renderFailed();throw;}
+    // Device removed/reset: the surface discarded its resources and recreates
+    // them on the next frame.
+    if(surface_->lost()){renderFailed();return;}
+    renderFailures_=0;
+  }
   virtual void layout()=0;
   virtual void fontsChanged(){}
   // UI-thread presentation work may have been deferred while this retained
@@ -272,7 +308,13 @@ protected:
       case WM_KEYUP:case WM_SYSKEYUP:if((self->musicalRelease_&&self->musicalRelease_(w))||self->keyUp(w))return 0;break;
       case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT p{GET_X_LPARAM(l),GET_Y_LPARAM(l)};ScreenToClient(h,&p);const float scale=96.0f/GetDpiForWindow(h);if(self->wheel(m,p.x*scale,p.y*scale,w))return 0;break;}
       case WM_LBUTTONDBLCLK:case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_MOUSEMOVE:case WM_CAPTURECHANGED:{const float scale=96.0f/GetDpiForWindow(h);self->mouse(m,GET_X_LPARAM(l)*scale,GET_Y_LPARAM(l)*scale,w);self->requestPaint();return 0;}
-    }}catch(const std::exception &e){self->error(e);}return DefWindowProcW(h,m,w,l);
+    }}catch(const std::exception &e){
+      // A failed close must not reach the default handler, which destroys the
+      // window while its owner still refers to it.
+      try{self->error(e);}catch(...){}
+      if(m==WM_CLOSE)return 0;
+    }catch(...){if(m==WM_CLOSE)return 0;}
+    return DefWindowProcW(h,m,w,l);
   }
   explicit NativeToolWindow(HWND owner):owner_(owner){}
   void create(const wchar_t *className,const wchar_t *title,int width=960,int height=680,bool doubleClicks=false){WNDCLASSW wc{};wc.style=doubleClicks?CS_DBLCLKS:0;wc.lpfnWndProc=proc;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=className;wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&wc);RECT owner{};GetWindowRect(owner_,&owner);const auto scale=GetDpiForWindow(owner_)/96.0f;window_=CreateWindowExW(WS_EX_TOOLWINDOW,className,title,WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,owner.left+int(35*scale),owner.top+int(35*scale),int(width*scale),int(height*scale),owner_,nullptr,wc.hInstance,this);if(!window_)throw std::runtime_error("Cannot create editor window");const BOOL dark=TRUE;DwmSetWindowAttribute(window_,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));surface_=std::make_unique<RenderSurface>(window_);}

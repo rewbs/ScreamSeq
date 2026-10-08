@@ -7,6 +7,8 @@
 #include <map>
 #include <set>
 #include <chrono>
+#include <string>
+#include <utility>
 namespace ScreamSeq {
 // Serial document-worker owner. Baseline/editor instances never receive song
 // automation. Rendering uses the independent prepared HostedProjectPlayback.
@@ -15,8 +17,18 @@ class PluginOperations {
   Project::ProjectState &project_;
   std::function<void()> stop_;
   std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters_;
-  struct History {Json plugins,automation;size_t bytes=0;};
+  std::function<void(size_t,bool)> liveBypass_;
+  std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> prepareNativeUpdate_;
+  std::optional<std::pair<size_t,bool>> bypassOnly(const Json &,const Json &) const;
+  struct History {Json plugins,automation;size_t bytes=0;uint64_t sequence=0;};
   std::deque<History> undo_,redo_;
+  std::vector<std::pair<uint64_t,uint64_t>> historyGroups_;
+  uint64_t knownHistorySequence_=0,historyFloor_=0;
+  void synchronizeHistory();
+  bool nextHistoryIsPlugin(bool redo) const;
+  uint64_t historyHead(bool redo) const;
+  void restoreHistory(bool redo,bool alreadyStopped=false);
+  void trimHistory();
   std::map<std::string,std::unique_ptr<Tracker::NativePlugin>> editors_;
   std::unique_ptr<Tracker::NativePlugin> graphEditor_;
   Tracker::GraphPluginRecipe graphEditorRecipe_;
@@ -32,31 +44,45 @@ class PluginOperations {
   Plugins::PluginLibrary library_;
   History snapshot() const;
   void commit(Json plugins,Json automation,bool keepEditors=false,bool parameterOnly=false,
-    std::span<const Tracker::ParameterChange> changes={});
+    std::span<const Tracker::ParameterChange> changes={},const Tracker::NativeSong *native=nullptr);
   size_t slot(const Json &) const;
   Tracker::NativePlugin &editor(size_t);
+  // A failed or unflushable editor instance is closed and dropped. The rack
+  // keeps the last state captured from it; the warning is reported once.
+  std::string editorWarning_;
+  void dropEditor(const std::string &instance,const std::string &reason) noexcept;
 public:
   PluginOperations(Tracker::Document &,Project::ProjectState &,std::function<void()> stop,
     std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={},
     std::optional<std::filesystem::path> libraryPath={});
   ~PluginOperations();
+  void liveBypass(std::function<void(size_t,bool)> callback) {liveBypass_=std::move(callback);}
+  void nativeUpdates(std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> callback) {prepareNativeUpdate_=std::move(callback);}
   static std::vector<std::string> reads();
   static std::vector<std::string> writes();
   Json invoke(const std::string &,const Json &);
   Json invokeAutomation(const std::string &,const Json &);
   Json invokeLibrary(const std::string &,const Json &);
   Json invokePath(const std::string &,const Json &);
-  Json invokeGraph(const std::string &,const Json &,unsigned sampleRate);
+  Json invokeGraph(const std::string &,const Json &,unsigned sampleRate,bool audioActive=false);
   bool flushEditors(bool force=false); // Debounce gestures; save/close forces capture.
   // Copy manual rack editor state into an independent recovery project only.
   // Does not consume notifications, commit history, stop playback or apply the
   // graph recipe editor's explicit-Apply draft.
   bool overlayRecoveryState(Project::ProjectState &copy) const;
+  void editorWarning(std::string text){editorWarning_=std::move(text);}
+  std::string takeEditorWarning(){return std::exchange(editorWarning_,std::string{});}
   std::vector<GraphRackRecord> graphRack() const;
   GraphRackClone cloneRackSlot(uint32_t);
   std::vector<Tracker::PluginAudioBus> audioBuses(size_t,bool required=false);
-  bool canUndo() const {return !undo_.empty();}
-  bool canRedo() const {return !redo_.empty();}
+  std::vector<Tracker::PluginParameter> parameterMetadata(const std::string &identity);
+  // Both API domain names and all UI Undo entry points share chronological
+  // history. The callback applies one document entry; alreadyStopped prevents
+  // repeating a fallible transport hook halfway through a grouped operation.
+  void history(bool redo,const std::function<void(bool,bool)> &documentHistory,
+    const std::function<void(const Tracker::NativeSong &)> &validateNative={});
+  bool canUndo() {synchronizeHistory();return historyHead(false)!=0;}
+  bool canRedo() {synchronizeHistory();return historyHead(true)!=0;}
   size_t openEditorCount() const {return openEditors_.size()+size_t(graphEditorWindowOpen_);}
 };
 }

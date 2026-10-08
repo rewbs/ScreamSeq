@@ -32,11 +32,11 @@ void bankHistory() {
   auto preview=f.api.invoke("envelope.bank.save",p);
   CHECK(preview["wouldChange"]==true); CHECK(f.doc->native()==original); CHECK(!f.doc->canUndo()); CHECK(f.stops==0);
   p.erase("dryRun"); auto saved=f.api.invoke("envelope.bank.save",p);
-  CHECK(saved["id"]==preview["id"]); CHECK(f.stops==1); CHECK(f.doc->revision==1);
+  CHECK(saved["id"]==preview["id"]); CHECK(f.stops==0); CHECK(f.doc->revision==1);
   auto read=f.api.invoke("envelope.bank.list",Json::object()); CHECK(read["entries"].size()==1);
   CHECK(read["entries"][0]["name"]=="First"); CHECK(read["entries"][0]["shape"]["markers"][4]==UINT32_MAX);
   auto changed=f.doc->native(); p["id"]=saved["id"];
-  CHECK(f.api.invoke("envelope.bank.save",p)["wouldChange"]==false); CHECK(f.doc->revision==1); CHECK(f.stops==1);
+  CHECK(f.api.invoke("envelope.bank.save",p)["wouldChange"]==false); CHECK(f.doc->revision==1); CHECK(f.stops==0);
   f.doc->undo(); auto undone=original; undone.nextID=changed.nextID; CHECK(f.doc->native()==undone);
   const auto undoRevision=f.doc->revision,undoHistory=f.doc->historyBytes();
   auto again=p;again.erase("id");again["dryRun"]=true;f.api.invoke("envelope.bank.save",again);
@@ -98,6 +98,56 @@ void linkedUses() {
   }
   CHECK(f.doc->native().envelopeLinks.empty()); f.api.invoke("envelope.bank.remove",{{"id",master}});
   CHECK(f.doc->native().envelopeBank.empty()); f.doc->undo(); CHECK(f.doc->native().envelopeBank.size()==1);
+}
+void metadataPublication() {
+  Fixture f;const auto t=targets(f);unsigned prepared=0,published=0,admitted=0;bool refuse=false;
+  ScreamSeq::EnvelopeHostHooks hooks;
+  hooks.prepareNativeUpdate=[&](const NativeSong &before,const NativeSong &next) -> std::function<void()> {
+    ++prepared;CHECK(before==f.doc->native());CHECK(!sameSignalProcessing(before.signal,next.signal)||before.automation!=next.automation);
+    return [&]{++published;};
+  };
+  hooks.validateCandidate=[&](const NativeSong &next){++admitted;CHECK(next!=f.doc->native());if(refuse)throw ScreamSeq::Api::ApiError(-32602,"Refused candidate admission");};
+  ScreamSeq::EnvelopeOperations api(*f.doc,[&]{++f.stops;},hooks);
+  const auto initial=f.doc->native();const auto revision=f.doc->revision,history=f.doc->historyBytes();
+  refuse=true;bool rejected=false;try{api.invoke("envelope.bank.save",{{"name","Metadata"},{"shape",shape()}});}catch(const ScreamSeq::Api::ApiError &e){rejected=e.code==-32602;}CHECK(rejected);
+  CHECK(f.doc->native()==initial&&f.doc->revision==revision&&f.doc->historyBytes()==history);
+  CHECK(admitted==1&&prepared==0&&published==0&&f.stops==0);refuse=false;
+  const auto master=api.invoke("envelope.bank.save",{{"name","Metadata"},{"shape",shape()}}).at("id");
+  CHECK(prepared==0&&published==0&&f.stops==0);
+  api.invoke("envelope.bank.apply",{{"template",master},{"target",t[0]},{"linked",true}});
+  CHECK(prepared==1&&published==1&&f.stops==0);
+  const auto linked=f.doc->native();const auto linkedRevision=f.doc->revision;
+  api.invoke("envelope.bank.save",{{"id",master},{"name","Renamed"},{"shape",shape()}});
+  CHECK(f.doc->revision==linkedRevision+1&&f.doc->native().automation==linked.automation);
+  CHECK(prepared==1&&published==1&&f.stops==0);const auto renamed=f.doc->native();
+  f.doc->undo();CHECK(f.doc->native()==linked);f.doc->redo();CHECK(f.doc->native()==renamed);
+  api.invoke("envelope.bank.unlink",{{"target",t[0]}});
+  CHECK(f.doc->native().envelopeLinks.empty()&&f.doc->native().automation==linked.automation);
+  CHECK(prepared==1&&published==1&&f.stops==0);
+  api.invoke("envelope.bank.remove",{{"id",master}});
+  CHECK(f.doc->native().envelopeBank.empty()&&prepared==1&&published==1&&f.stops==0);
+  CHECK(ScreamSeq::Project::decodeNativeMetadata(ScreamSeq::Project::encodeNativeMetadata(f.doc->native()))==f.doc->native());
+}
+void songGraphTargets() {
+  Fixture f;f.doc->annotate([](NativeSong &n){SignalSongSource s;s.node.id=n.makeEntity().id;s.node.kind=SignalNodeKind::Automation;s.node.name="Song curve";n.signal.songSources.push_back(s);});
+  const Json target={{"kind","graph"},{"graph",nullptr},{"node",nid(f.doc->native().signal.songSources[0].node.id)},{"pattern",0}};
+  CHECK(!f.api.invoke("envelope.bank.list",{{"target",target}}).contains("shape"));
+  const auto master=f.api.invoke("envelope.bank.save",{{"name","Song template"},{"shape",shape()}})["id"];
+  Json apply={{"template",master},{"target",target},{"linked",true},{"dryRun",true}};
+  const auto before=f.doc->native();f.api.invoke("envelope.bank.apply",apply);CHECK(f.doc->native()==before);
+  apply.erase("dryRun");f.api.invoke("envelope.bank.apply",apply);CHECK(f.doc->native().envelopeLinks.size()==1);
+  auto read=f.api.invoke("envelope.bank.list",{{"target",target}});CHECK(read["linkedTemplate"]==master);
+  CHECK(f.doc->native().signal.songSources[0].node.envelopes[0].points[0].value==.25);
+  const auto linked=f.doc->native();f.api.invoke("envelope.bank.save",{{"id",master},{"name","Reversed"},{"shape",shape(1,0)}});
+  CHECK(f.doc->native().signal.songSources[0].node.envelopes[0].points[0].value==1);
+  f.doc->undo();CHECK(f.doc->native()==linked);f.doc->redo();
+  const auto encoded=ScreamSeq::Project::encodeNativeMetadata(f.doc->native());CHECK(ScreamSeq::Project::decodeNativeMetadata(encoded)==f.doc->native());
+  f.api.invoke("envelope.bank.unlink",{{"target",target}});CHECK(f.doc->native().envelopeLinks.empty());
+  const auto independent=f.doc->native().signal.songSources[0].node.envelopes;
+  f.api.invoke("envelope.bank.save",{{"id",master},{"name","Separate"},{"shape",shape(.4,.6)}});CHECK(f.doc->native().signal.songSources[0].node.envelopes==independent);
+  const auto copy=f.api.invoke("envelope.bank.save",{{"name","Captured song curve"},{"target",target}})["id"];CHECK(copy!=master);
+  auto invalid=apply;invalid["target"].erase("graph");rejected(f,"envelope.bank.apply",invalid);
+  invalid=apply;invalid["target"]["node"]="n999999";rejected(f,"envelope.bank.apply",invalid);
 }
 std::filesystem::path testScratch() {
   std::filesystem::path root;
@@ -415,17 +465,19 @@ void catalogueWriters(bool binary=false) {
   }
   const auto catalogueID=initial.invoke("envelope.catalogue.publish",{{"template",master},{"expectedCatalogueRevision",initial.invoke("envelope.catalogue.list",Json::object())["revision"]}})["id"].get<std::string>();
   const auto revision=initial.invoke("envelope.catalogue.list",Json::object())["revision"].get<std::string>();
-  const auto bytes=readProjectBytes(files.path);const auto before=f.doc->native();unsigned stopped=0;
+  const auto bytes=readProjectBytes(files.path);const auto before=f.doc->native();unsigned admitted=0,stopped=0;
   // Import retains the catalogue lock through its commit. A real second process
-  // tries to publish during the stop callback, not a same-thread recursive lock.
-  ScreamSeq::EnvelopeOperations api(*f.doc,[&]{
-    ++stopped;CHECK(f.doc->native()==before);runWriter(files.path,revision,catalogueID,true);
+  // tries to publish during candidate admission, not a same-thread recursive
+  // lock. Import is metadata-only and must not request an audio stop.
+  ScreamSeq::EnvelopeHostHooks hooks;hooks.validateCandidate=[&](const NativeSong &next){
+    ++admitted;CHECK(f.doc->native()==before);CHECK(next.envelopeBank.size()==before.envelopeBank.size()+1);runWriter(files.path,revision,catalogueID,true);
     runWriter(files.path.parent_path()/L"."/files.path.filename(),revision,catalogueID,true);
     auto folded=files.path.native();for(auto &c:folded) if(c>=L'a'&&c<=L'z') c-=L'a'-L'A';
     runWriter(folded,revision,catalogueID,true);
-  },{},files.path);
+  };
+  ScreamSeq::EnvelopeOperations api(*f.doc,[&]{++stopped;},hooks,files.path);
   api.invoke("envelope.catalogue.import",{{"catalogueID",catalogueID},{"expectedCatalogueRevision",revision}});
-  CHECK(stopped==1);CHECK(readProjectBytes(files.path)==bytes);CHECK(f.doc->native().envelopeBank.size()==2);
+  CHECK(admitted==1&&stopped==0);CHECK(readProjectBytes(files.path)==bytes);CHECK(f.doc->native().envelopeBank.size()==2);
   runWriter(files.path,revision,catalogueID,false);
   const auto changed=initial.invoke("envelope.catalogue.list",Json::object());CHECK(changed["revision"]!=revision);CHECK(changed["entries"][0]["id"]==catalogueID);CHECK(changed["entries"][0]["name"]=="Child copy");
   CHECK(f.doc->native().envelopeBank.back().name=="Parent copy");
@@ -476,8 +528,9 @@ int wmain(int argc,wchar_t **argv) {
     if(scenario=="busyWriter"||scenario=="writer") {
       CHECK(argc==5);childWriter(argv[2],ascii(argv[3]),ascii(argv[4]),scenario=="busyWriter");return 0;
     }
-    if(scenario=="bankHistory") bankHistory();
+    if(scenario=="bankHistory") {bankHistory();metadataPublication();}
     else if(scenario=="linkedUses") linkedUses();
+    else if(scenario=="songGraphTargets") songGraphTargets();
     else if(scenario=="catalogueCopies") catalogueCopies();
     else if(scenario=="strictShapesAndTargets") strictShapesAndTargets();
     else if(scenario=="parameterHooks") parameterHooks();

@@ -75,9 +75,9 @@ HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const P
   require(rate>=8000 && rate<=384000,"Unsupported hosted playback sample rate");
   native_=document.native();native_.validate(document.song());auto states=projectPluginStates(project);
   Tracker::validatePluginCapacity(states,native_.mixer.buses.size());auto automation=projectAbsoluteAutomation(project);
-  // Match Mac's stopped audition: paused pattern clock, sample/instrument
-  // envelopes and the saved plugin rack, without song mixer/graph commands.
-  const auto *musical=settings.audition?nullptr:&native_;
+  // Audition pauses the pattern clock but retains prepared channel routing.
+  // Each PreviewNote explicitly chooses its channel or independent inspector path.
+  const auto *musical=&native_;
   renderer_=std::make_unique<Tracker::Renderer>(document.snapshotData(),rate,settings.order,settings.audition,document.sourcePath(),document.song().Order.GetCurrentSequenceIndex(),settings.region,musical);
   timeline_=std::make_shared<RecordingTimeline>(renderer_->recordingClockSnapshot());
   const auto start=uint64_t(double(renderer_->telemetry().frames)*48000/rate);
@@ -88,6 +88,36 @@ HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const P
   chain_->attachInstruments(*renderer_,musical);if(musical)chain_->attachMusicalAutomation(*renderer_,*musical);
 }
 HostedProjectPlayback::~HostedProjectPlayback(){renderer_.reset();chain_.reset();}
+std::unique_ptr<HostedProjectPlayback::PreparedNativeUpdate> HostedProjectPlayback::prepareNativeUpdate(
+    const Tracker::NativeSong &before,const Tracker::NativeSong &next) {
+  // These native fields also describe renderer-owned schedules or identities.
+  // Updating them needs a separate prepared renderer contract, not a graph plan.
+  if(before.patterns!=next.patterns || before.tracks!=next.tracks || before.samples!=next.samples ||
+     before.instruments!=next.instruments || before.sequences!=next.sequences || before.masterID!=next.masterID ||
+     before.performance!=next.performance || before.preciseNotes!=next.preciseNotes ||
+     before.noteTracks!=next.noteTracks || before.columnMutes!=next.columnMutes)return {};
+  if(nativeUpdateGeneration_==UINT64_MAX)throw std::runtime_error("Live update generation exhausted");
+  auto prepared=std::make_unique<PreparedNativeUpdate>();
+  prepared->owner_=this;prepared->generation_=nativeUpdateGeneration_;
+  // Graph control publication does not update mixer routing. Never let an
+  // otherwise compatible graph swallow a simultaneous mixer edit.
+  if(before.mixer==next.mixer && before.signal.songSources==next.signal.songSources &&
+     before.signal.songModulation==next.signal.songModulation)
+    prepared->controls_=chain_->prepareGraphControls(next);
+  if(!prepared->controls_) {
+    auto routed=next;routed.ensureMixer();
+    prepared->routing_=chain_->prepareMixerRouting(routed);
+  }
+  if(!prepared->controls_&&!prepared->routing_)return {};
+  return prepared;
+}
+bool HostedProjectPlayback::publishNativeUpdate(PreparedNativeUpdate &prepared) {
+  if(prepared.owner_!=this || prepared.generation_!=nativeUpdateGeneration_ || prepared.published_)return false;
+  const bool accepted=prepared.controls_?chain_->publishGraphControls(std::move(prepared.controls_)):
+    prepared.routing_&&chain_->publishMixerRouting(prepared.routing_);
+  if(accepted){prepared.published_=true;++nativeUpdateGeneration_;}
+  return accepted;
+}
 bool HostedProjectPlayback::failed() const noexcept {return renderer_->faulted() || chain_->failed();}
 Json HostedProjectPlayback::failureDiagnostics() const {
   Json plugins=Json::array();

@@ -6,7 +6,10 @@
     size_t pendingAuditionCount=0;
     uint64_t auditionDropped=0;
     bool auditionWasAnimating=false;
-    std::array<uint64_t,121> auditionVoices{},pianoVoices{};
+    std::array<uint64_t,128*193> auditionVoices{};
+    std::array<uint64_t,121> pianoVoices{};
+    uint64_t &auditionVoice(unsigned note,unsigned channel=UINT16_MAX){return auditionVoices.at(note+128*(channel==UINT16_MAX?0:channel+1));}
+    uint64_t auditionVoice(unsigned note,unsigned channel=UINT16_MAX)const{return auditionVoices.at(note+128*(channel==UINT16_MAX?0:channel+1));}
     bool auditionAnimating()const {
         if(!device.running()||!renderer)return false;const auto t=renderer->telemetry();
         return t.voices||t.left>1e-6f||t.right>1e-6f;
@@ -26,7 +29,7 @@
     Json auditionOperation(const std::string &method,const Json &p) {
         const auto require=[](bool yes,const char *why){if(!yes)throw ScreamSeq::Api::ApiError(-32602,why);};
         require(p.is_object(),"Expected audition parameters");
-        for(auto i=p.begin();i!=p.end();++i)require(i.key()=="expectedRevision"||(method=="transport.note"&&(i.key()=="note"||i.key()=="sample"||i.key()=="instrument"||i.key()=="velocity"||i.key()=="on")),"Unknown audition parameter");
+        for(auto i=p.begin();i!=p.end();++i)require(i.key()=="expectedRevision"||(method=="transport.note"&&(i.key()=="note"||i.key()=="sample"||i.key()=="instrument"||i.key()=="velocity"||i.key()=="on"||i.key()=="channel")),"Unknown audition parameter");
         require(p.contains("expectedRevision")&&p.at("expectedRevision").is_string(),"expectedRevision is required");
         if(p.at("expectedRevision")!=view->session.revision)throw ScreamSeq::Api::ApiError(-32001,"Song changed / refresh the audition target");
         auto result=[&](bool queued){return Json{{"queued",queued},{"audioActive",device.running()},{"playing",device.running()&&!auditionOnly},{"audition",device.running()&&auditionOnly},{"epoch",stopGeneration}};};
@@ -43,16 +46,17 @@
         const auto &catalog=view->session.document.at(sample?"samples":"instruments");const auto target=std::find_if(catalog.begin(),catalog.end(),[&](const auto &v){return v.at("index")==slot;});
         require(target!=catalog.end(),"Audition target does not exist");
         if(on&&velocity&&sample)require(target->at("frames").get<unsigned>()>0,"The selected sample is empty");
-        Tracker::PreviewNote event{uint8_t(note),uint16_t(sample?0:slot),uint8_t(velocity),on,uint16_t(sample?slot:0)};
+        const auto channel=p.contains("channel")?integer("channel",0,0,view->session.document.at("channels").get<unsigned>()-1):UINT16_MAX;
+        Tracker::PreviewNote event{uint8_t(note),uint16_t(sample?0:slot),uint8_t(velocity),on,uint16_t(sample?slot:0),uint16_t(channel)};
         if(auditionPreparing){
             if(pendingAuditionCount==pendingAudition.size()){++auditionDropped;panicAudition();++stopGeneration;throw ScreamSeq::Api::ApiError(-32003,"Audition preparation queue full / notes released");}
-            if(on&&velocity)++auditionVoices[note];
+            if(on&&velocity)++auditionVoice(note,channel);
             pendingAudition[pendingAuditionCount++]=event;return result(true);
         }
         if(!on||!velocity){if(!device.running()||!renderer)return result(false);if(!renderer->preview(event)){++auditionDropped;throw ScreamSeq::Api::ApiError(-32003,"Audition queue full / preview voices released");}frameRequested=true;return result(true);}
         if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy / note not queued");
         if(inspection)throw ScreamSeq::Api::ApiError(-32003,"Inspection mode: hardware output disabled");
-        ++auditionVoices[note];
+        ++auditionVoice(note,channel);
         if(!device.running()){
             auditionPreparing=true;pendingAuditionCount=1;pendingAudition[0]=event;
             try{startPlayback(Json::object(),true);auditionPreparing=false;}
@@ -65,8 +69,8 @@
     Json pianoOperation(const std::string &method,const Json &p) {
         if(method=="transport.note") {
             const auto note=p.at("note").get<unsigned>();
-            if(p.at("on")==true)pianoVoices.at(note)=auditionVoices.at(note)+1;
-            else if(pianoVoices.at(note)!=auditionVoices.at(note))return {{"queued",false}};
+            if(p.at("on")==true)pianoVoices.at(note)=auditionVoice(note)+1;
+            else if(pianoVoices.at(note)!=auditionVoice(note))return {{"queued",false}};
         }
         return documentOperation(method,p);
     }

@@ -138,6 +138,7 @@
         for(int id:{liveKeysCommand,composeCommand,patternCommand,soundCommand,notesInspectorCommand,samplesCommand,dockNotes,dockSamples,dockEffects,dockPlugins,dockMixer,dockGraph})
             ScreamSeq::NativeControls::active(controls.at(id),controlActive(id));
         rememberCompletedWorkspaceLayout();
+        layoutPatternNudgeEditor();
 	}
 	void installControls() {
 		auto add=[&](int id,const std::wstring &label) {
@@ -209,6 +210,8 @@
             if(id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==graphCommand||id==mixerCommand)workspaceState.lowerVisible=true;
             if(id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==soundCommand){mixerEditorOpen=false;graphEditorOpen=false;}
             if(graphCurveCommand(id) || graphControlCommand(id) || mixerControlCommand(id) || noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
+            else if(id==graphWorkflowCommand){openGraphWorkflow();return;}
+            else if(id==parameterActivityCommand){openParameterActivity();return;}
             else if(id==graphCommandsCommand){openGraphCommands(workspaceState.focus=="graphLanes");return;}
             else if(id==parameterAutomationCommand){openParameterAutomation();return;}
             else if(id==absoluteAutomationCommand){openAbsoluteAutomation();return;}
@@ -246,7 +249,7 @@
             }
             else if(id==octaveChooser || id==stepChooser) {
                 auto value=SendMessageW(controls.at(id),CB_GETCURSEL,0,0);
-                if(value!=CB_ERR) {if(id==octaveChooser) octave=unsigned(value);else editStep=unsigned(value);}
+                if(value!=CB_ERR) {if(id==octaveChooser){if(octave!=unsigned(value))++contextRevision;octave=unsigned(value);}else editStep=unsigned(value);}
             }
             else if(id==patternChooser || id==orderChooser) {
                 auto chosen=SendMessageW(controls.at(id),CB_GETCURSEL,0,0);
@@ -278,18 +281,30 @@
             if(GetFocus()==window&&!workspaceFocusedCanvasVisible())focusVisibleWorkspaceCanvas();
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
+    // True when right Alt is held on a layout that uses it as AltGr.
+    static bool altGraphActive() {
+        if(!(GetKeyState(VK_RMENU)&0x8000)) return false;
+        const auto layout=GetKeyboardLayout(0);
+        const auto graph=[&](wchar_t c){const SHORT s=VkKeyScanExW(c,layout);return s!=-1&&(HIBYTE(s)&6)==6;};
+        if(graph(L'\u20ac')) return true;
+        for(wchar_t c=0x20;c<0x250;++c) if(graph(c)) return true;
+        return false;
+    }
     bool handleKey(WPARAM code,bool repeat=false) {
         try {return key(code,repeat);} catch(const std::exception &e) {status=wide(e.what());return true;}
     }
 	bool key(WPARAM key,bool repeat=false) {
         frameRequested=true;
 		const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,alt=(GetKeyState(VK_MENU)&0x8000)!=0,shift=(GetKeyState(VK_SHIFT)&0x8000)!=0;
+        if(handlePatternNudgeKey(key))return true;
         if(workspaceShortcutKey(key,repeat,true))return true;
         if((liveKeyboard||workspaceFocusedCanvasVisible())&&workspaceMusicalKey(key,repeat))return true;
         if(GetFocus()!=window && IsChild(window,GetFocus())) {
             if(key==VK_TAB) {auto next=GetNextDlgTabItem(window,GetFocus(),shift);if(next) SetFocus(next);return true;}
             wchar_t klass[32]{};GetClassNameW(GetFocus(),klass,32);
             if(key==VK_RETURN && _wcsicmp(klass,L"Button")==0) {command(GetDlgCtrlID(GetFocus()));return true;}
+            // Space presses the focused button; it is not the transport key here.
+            if(key==VK_SPACE && !ctrl && !alt && _wcsicmp(klass,L"Button")==0) return false;
         }
         if(sampleEditorVisible()&&(GetFocus()==controls.at(sampleStartField) || GetFocus()==controls.at(sampleEndField))) {
             if(key==VK_RETURN) {command(sampleRangeCommand);return true;}
@@ -328,7 +343,7 @@
         }
 		if(ctrl || alt) return false;
 		if(workspaceState.focus!="pattern"||!trackerWorkspaceVisible()) return false;
-		if(key==VK_RETURN) { command(column>=3?effectsCommand:notesCommand);return true; }
+		if(key==VK_RETURN) { if(beginPatternNudgeEdit())return true;command(column>=3?effectsCommand:notesCommand);return true; }
         if(key==VK_INSERT) {command(patternInsertRows);return true;}
 		auto n=position();unsigned r=row,c=channel,col=column;
 		const unsigned rows=patternRows(),channels=view->channels;

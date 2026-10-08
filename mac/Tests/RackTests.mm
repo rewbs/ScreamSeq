@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "soundlib/ModInstrument.h"
 #import "../Bridge/TrackerSession.h"
@@ -23,7 +24,7 @@ static std::unique_ptr<Document> fixture() {
     for (int i = 0; i < 10; ++i) { auto &cell = *song.Patterns[0].GetpModCommand(0, i); cell.note = 61; cell.instr = uint8_t(i + 1); }
   });
   doc->annotate([](NativeSong &n) {
-    const auto master = n.makeEntity().id;
+    const auto master = n.masterID;
     for (const auto &[index, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
     while (n.mixer.buses.size() < 239) n.mixer.buses.push_back({n.makeEntity().id, master, MixerBusKind::Group, "Group"});
     n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
@@ -100,20 +101,23 @@ static void capacityAPI(Document &doc, std::vector<PluginState> states) {
   for (int i = 0; i < 112; ++i) call(@"mixer.bus.add", @{@"kind": @"group"});
   call(@"document.patch", @{@"channels": @126});
   call(@"plugin.assign", @{@"slot": @0, @"instrument": @11});
-  check(!session.canUndo, "Native Undo disables a pending graph incompatible with current instrument assignments");
-  call(@"history.undo", @{@"domain": @"document"}, true);
+  check(session.canUndo, "Chronological Undo can release the latest instrument assignment before the larger graph");
   call(@"mixer.bus.add", @{@"kind": @"group"}, true);
   call(@"document.patch", @{@"channels": @127}, true);
-  call(@"plugin.assign", @{@"slot": @0, @"instrument": @0});
-  check(session.canUndo, "Releasing an instrument restores native Undo availability");
   call(@"history.undo", @{@"domain": @"document"});
+  check([session snapshot:0][@"nativePlugins"][0][@"instrumentAssignments"] && [[session snapshot:0][@"nativePlugins"][0][@"instrumentAssignments"] count]==0,
+        "Legacy domain name uses chronological history and releases the assignment first");
+  call(@"history.undo", @{});
   call(@"plugin.assign", @{@"slot": @0, @"instrument": @11}, true);
   const auto aliasRequest=@{@"plugin":@(states[0].instanceID.c_str()),@"assignments":@[@{@"instrument":@11,@"channel":@4}],@"dryRun":@YES};
   call(@"plugin.instruments.set", aliasRequest, true);
-  call(@"history.undo", @{@"domain": @"plugins"}, true);
+  call(@"history.redo", @{});
+  call(@"history.redo", @{});
+  check([[session snapshot:0][@"nativePlugins"][0][@"instrumentAssignments"] count]==1,
+        "Redo restores the smaller graph before its instrument assignment within joint capacity");
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
 }
-int main(int argc, char **argv) { @autoreleasepool { try {
+int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleasepool { try {
   check(argc == 2, "Fixture VST3 path required"); auto doc = fixture();
   PluginState source{NativePlugin::discoverVST3(argv[1]).at(1)};
   NativePlugin quiet(source, 48000, true); quiet.parameter(7, .05); source = quiet.state();

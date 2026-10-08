@@ -134,8 +134,11 @@ static void hostingAndMeters() {
     };
     const auto baseline=render(128,false);for(uint32_t block:{17u,512u,4096u})check(baseline==render(block,true),"Host input and automation are exact across live/offline partitions");
     NativePlugin missing(state,rate);float zero[]{1,1};check(missing.process(zero,1,0)&&zero[0]==0&&zero[1]==0,"Activated but unrouted external input is silent");
-    auto disabled=state;disabled.auxiliaryInputs.clear();NativePlugin inactive(disabled,rate);float buffer[]{1,1},key[]{1,1};PluginAudioInput source{1,key};check(!inactive.process(buffer,1,0,{&source,1}),"Inactive auxiliary input rejects supplied buffers");
-    check(inactive.process(buffer,1,0)&&buffer[0]==0&&buffer[1]==0,"External selection with disabled bus remains silent, never silently falls back");
+    auto disabled=state;disabled.auxiliaryInputs.clear();NativePlugin inactive(disabled,rate),unrouted(disabled,rate);float buffer[]{1,1},key[]{1,1};PluginAudioInput source{1,key};
+    check(!inactive.buses().back().active && (inactive.preparedAuxiliaryInputs()&2),"Logical input activation is independent of immutable prepared detector capacity");
+    check(inactive.process(buffer,1,0,{&source,1}),"Prepared builtin detector can accept a first live cable without mutating vendor configuration");
+    source.bus=2;check(!inactive.process(buffer,1,1,{&source,1}),"Unprepared detector bus still rejects supplied buffers");
+    check(unrouted.process(buffer,1,0)&&buffer[0]==0&&buffer[1]==0,"Explicit external selection with no routed buffer remains silent, never silently falls back");
   }
   for(const char *id:{Compressor,"resonance.gainer.v1"}) {
     PluginState bad{descriptor(id)};bad.auxiliaryInputs={2};bool rejected=false;try{NativePlugin p(bad,48000);}catch(const std::invalid_argument &){rejected=true;}check(rejected,"Invalid builtin detector bus rejects");
@@ -275,6 +278,14 @@ static void spectralAndWarm() {
   std::cout<<"Compressor steady 1 kHz non-fundamental ratio "<<distortion<<'\n';
 }
 int main() { @autoreleasepool { try {
+  for(const char *id:{Compressor,Gate,Bus}) for(uint32_t rate:{44100u,48000u,96000u}) {
+    NativeEffect automatic(id,rate),external(id,rate),internal(id,rate),dryAuto(id,rate);
+    check(automatic.value(9)==2,"New dynamics choose Auto detector");external.parameter(9,1);internal.parameter(9,0);
+    for(uint32_t n=0;n<4096;++n){float a[]{.2f,.3f},b[]{.2f,.3f},c[]{.2f,.3f},d[]{.2f,.3f},key[]{float(.8*std::sin(n*.1)),.5f};
+      tracker_audit_begin();bool okay=automatic.process(a,1,key)&&external.process(b,1,key)&&internal.process(c,1)&&dryAuto.process(d,1);audited(okay);
+      check(a[0]==b[0]&&a[1]==b[1]&&c[0]==d[0]&&c[1]==d[1],"Auto follows a connected detector and exactly matches internal processing when unconnected");
+    }
+  }
   curvesAndTime();rmsAndLink();gates();filteredAndBypass();hostingAndMeters();extremesAndTail();apiAndExport();graphSidechains();spectralAndWarm();
   std::cout<<"PASS Compressor/Gate/Bus shared integration and Compressor/Gate independent curves, envelope timing, RMS, stereo linking, hysteresis/hold/duck, detector filters, native sidechains/offsets, meters, extremes/tails and realtime audit\n";return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;} } }

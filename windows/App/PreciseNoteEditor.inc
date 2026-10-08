@@ -12,7 +12,8 @@
         // Match musical typing's module representation. Never reinterpret a
         // selected sample slot as an instrument with the same number.
         const bool sample=source->instruments==0;
-        if(typingDocument==value.document&&typingSample==sample&&!typingSoundId.empty()){
+        if(inputInstrumentOverride)value.insertionInstrument=*inputInstrumentOverride;
+        else if(typingDocument==value.document&&typingSample==sample&&!typingSoundId.empty()){
             const auto &catalog=source->session.document.at(sample?"samples":"instruments");
             const auto sound=std::find_if(catalog.begin(),catalog.end(),[&](const auto &item){return item.at("id")==typingSoundId;});
             if(sound!=catalog.end())value.insertionInstrument=sound->at("index").get<unsigned>();

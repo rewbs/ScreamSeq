@@ -1,0 +1,476 @@
+-- Configuring done (0.1s)
+-- Generating done (0.3s)
+-- Build files have been written to: /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+[  7%] Built target TrackerFLAC
+[  8%] Built target plugin-preset-tests
+[  9%] Built target RealtimeAudit
+[ 10%] Built target ResonanceFixture
+[ 10%] Built target plugin-inventory-tests
+[ 11%] Built target plugin-library-tests
+[ 12%] Built target realtime-transition-tests
+[ 46%] Built target OpenMPTCore
+[ 55%] Built target TrackerEditor
+[ 56%] Built target tracker-core-tests
+[ 57%] Built target instrument-envelope-tests
+[ 58%] Built target song-timing-tests
+[ 61%] Built target TrackerHosted
+[ 62%] Built target native-reverse-loop-tests
+[ 62%] Built target sample-crossfade-tests
+[ 62%] Built target sample-snap-tests
+[ 62%] Built target sample-drawing-tests
+[ 62%] Built target sample-copy-tests
+[ 63%] Built target sample-clipboard-tests
+[ 63%] Built target sample-archive-tests
+[ 64%] Built target sample-processing-tests
+[ 64%] Built target automation-tools-tests
+[ 64%] Built target pattern-tools-tests
+[ 65%] Built target pattern-commands-tests
+[ 65%] Built target render-audit
+[ 65%] Building OBJCXX object CMakeFiles/plugin-tests.dir/Tests/PluginTests.mm.o
+[ 66%] Built target filter-tests
+[ 67%] Built target oversampling-tests
+[ 67%] Built target stress-tests
+[ 68%] Built target routing-prototype-tests
+[ 69%] Built target mixer-graph-tests
+[ 69%] Built target mixer-runtime-tests
+[ 70%] Built target mixer-transition-tests
+[ 70%] Built target mixer-publication-tests
+[ 70%] Built target sidechain-tests
+[ 70%] Built target qualification-fixture
+[ 70%] Building OBJCXX object CMakeFiles/plugin-lifecycle-tests.dir/Tests/PluginLifecycleTests.mm.o
+[ 70%] Linking CXX executable plugin-tests
+[ 70%] Linking CXX executable plugin-lifecycle-tests
+[ 70%] Built target plugin-tests
+[ 70%] Built target signal-graph-tests
+[ 70%] Built target effect-auxiliary-tests
+[ 70%] Built target plugin-lifecycle-tests
+[ 70%] Built target playback-region-tests
+[ 70%] Built target curve-formula-tests
+[ 71%] Built target windows-graph-document-tests
+[ 71%] Built target plugin-scanner
+[ 73%] Built target TrackerMac
+[ 73%] Building OBJCXX object CMakeFiles/precise-ramp-tests.dir/Tests/PreciseRampTests.mm.o
+[ 73%] Building OBJCXX object CMakeFiles/precise-note-tests.dir/Tests/PreciseNoteTests.mm.o
+[ 73%] Building OBJCXX object CMakeFiles/precise-ramp-tests.dir/Tests/FixtureAU.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PreciseNoteTests.mm:274:89: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+  274 |   auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+      |                                                                                         ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PreciseNoteTests.mm:276:3: warning: 'auto' deduced as 'id' in declaration of 'patternBefore' [-Wauto-var-id]
+  276 |   auto patternBefore=call(@"pattern.get",@{@"pattern":@0})[@"data"];
+      |   ^~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PreciseNoteTests.mm:278:58: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+  278 |   auto creation=@{@"empty":@YES,@"name":@"Lead trigger"};auto preview=[creation mutableCopy];preview[@"dryRun"]=@YES;
+      |                                                          ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PreciseNoteTests.mm:279:3: warning: 'auto' deduced as 'id' in declaration of 'index' [-Wauto-var-id]
+  279 |   auto index=call(@"instrument.create",preview,true)[@"data"][@"instrument"];
+      |   ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PreciseNoteTests.mm:282:9: warning: 'auto' deduced as 'id' in declaration of 'info' [-Wauto-var-id]
+  282 |   const auto info=call(@"instrument.get",@{@"instrument":index})[@"data"];
+      |   ~~~~~~^~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PreciseNoteTests.mm:293:3: warning: 'auto' deduced as 'id' in declaration of 'dry' [-Wauto-var-id]
+  293 |   auto dry=[request mutableCopy];dry[@"dryRun"]=@YES;revision=session.automationRevision;call(@"pattern.performance.set",dry,true);
+      |   ^~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PreciseNoteTests.mm:295:55: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+  295 |   call(@"pattern.performance.set",request,true);const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+      |                                                 ~~~~~~^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PreciseNoteTests.mm:298:5: warning: 'auto' deduced as 'id' in declaration of 'c' [-Wauto-var-id]
+  298 |     auto c=[command mutableCopy];[c addEntriesFromDictionary:bad];auto r=[request mutableCopy];r[@"commands"]=@[c];r[@"expectedRevision"]=session.automationRevision;revision=session.automationRevision;
+      |     ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PreciseNoteTests.mm:298:67: warning: 'auto' deduced as 'id' in declaration of 'r' [-Wauto-var-id]
+  298 |     auto c=[command mutableCopy];[c addEntriesFromDictionary:bad];auto r=[request mutableCopy];r[@"commands"]=@[c];r[@"expectedRevision"]=session.automationRevision;revision=session.automationRevision;
+      |                                                                   ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PreciseNoteTests.mm:309:3: warning: 'auto' deduced as 'id' in declaration of 'project' [-Wauto-var-id]
+  309 |   auto project=[NSPropertyListSerialization propertyListWithData:[session serializedData] options:NSPropertyListMutableContainers format:nil error:&error];
+      |   ^~~~~~~~~~~~
+[ 74%] Linking CXX executable precise-ramp-tests
+[ 74%] Built target precise-ramp-tests
+[ 74%] Building OBJCXX object CMakeFiles/pattern-pitch-tests.dir/Tests/PatternPitchTests.mm.o
+10 warnings generated.
+[ 75%] Building OBJCXX object CMakeFiles/precise-note-tests.dir/Tests/FixtureAU.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PatternPitchTests.mm:38:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   38 |     auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPitchTests.mm:44:47: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+   44 |   NSString *before=session.automationRevision;auto preview=[request mutableCopy];preview[@"dryRun"]=@YES;
+      |                                               ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPitchTests.mm:47:9: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   47 |   const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPitchTests.mm:50:5: warning: 'auto' deduced as 'id' in declaration of 'command' [-Wauto-var-id]
+   50 |     auto command=[bend mutableCopy];[command addEntriesFromDictionary:invalid];
+      |     ^~~~~~~~~~~~
+[ 75%] Linking CXX executable precise-note-tests
+[ 75%] Built target precise-note-tests
+[ 75%] Building OBJCXX object CMakeFiles/pattern-pitch-tests.dir/Tests/FixtureAU.mm.o
+4 warnings generated.
+[ 75%] Linking CXX executable record-nudge-tests
+[ 75%] Built target record-nudge-tests
+[ 75%] Linking CXX executable unified-effects-tests
+[ 75%] Built target unified-effects-tests
+[ 75%] Building OBJCXX object CMakeFiles/pattern-performance-tests.dir/Tests/PatternPerformanceTests.mm.o
+[ 76%] Linking CXX executable pattern-pitch-tests
+[ 76%] Built target pattern-pitch-tests
+[ 76%] Building OBJCXX object CMakeFiles/plugin-program-tests.dir/Tests/PluginProgramTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:22:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   22 |     auto request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+      |     ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:31:49: warning: 'auto' deduced as 'id' in declaration of 'preview' [-Wauto-var-id]
+   31 |   NSString *revision=session.automationRevision;auto preview=[set mutableCopy];preview[@"dryRun"]=@YES;
+      |                                                 ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:34:9: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   34 |   const auto expected=call(@"pattern.performance.get",@{@"pattern":@0})[@"data"];
+      |   ~~~~~~^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PatternPerformanceTests.mm:39:5: warning: 'auto' deduced as 'id' in declaration of 'request' [-Wauto-var-id]
+   39 |     auto request=[params mutableCopy];request[@"expectedRevision"]=session.automationRevision;NSString *before=session.automationRevision;
+      |     ^~~~~~~~~~~~
+[ 77%] Building OBJCXX object CMakeFiles/plugin-program-tests.dir/Tests/FixtureAU.mm.o
+4 warnings generated.
+[ 77%] Linking CXX executable pattern-performance-tests
+[ 77%] Built target pattern-performance-tests
+[ 77%] Building OBJCXX object CMakeFiles/plugin-preset-session-tests.dir/Tests/PluginPresetSessionTests.mm.o
+[ 77%] Linking CXX executable plugin-program-tests
+[ 77%] Built target plugin-program-tests
+[ 77%] Linking CXX executable recovery-session-tests
+[ 78%] Built target recovery-session-tests
+[ 78%] Linking CXX executable instrument-envelope-session-tests
+[ 78%] Built target instrument-envelope-session-tests
+[ 78%] Building OBJCXX object CMakeFiles/plugin-alias-tests.dir/Tests/PluginAliasTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:52:9: warning: 'auto' deduced as 'id' in declaration of 'inspected' [-Wauto-var-id]
+   52 |         auto inspected = call(@"plugin.preset.inspect", @{@"path": path})[@"data"];
+      |         ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:58:11: warning: 'auto' deduced as 'id' in declaration of 'instrument' [-Wauto-var-id]
+   58 |           auto instrument = call(@"instrument.create", @{}, true)[@"data"][@"instrument"];
+      |           ^~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:64:9: warning: 'auto' deduced as 'id' in declaration of 'envelope' [-Wauto-var-id]
+   64 |         auto envelope = call(@"automation.pattern.get", @{@"pattern": @0})[@"data"];
+      |         ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:66:9: warning: 'auto' deduced as 'id' in declaration of 'beforePorts' [-Wauto-var-id]
+   66 |         auto beforePorts = call(@"plugin.buses.get", @{@"slot": @0})[@"data"];
+      |         ^~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:67:9: warning: 'auto' deduced as 'id' in declaration of 'touched' [-Wauto-var-id]
+   67 |         auto touched = call(@"automation.target.get", @{})[@"data"][@"token"];
+      |         ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:82:9: warning: 'auto' deduced as 'id' in declaration of 'stale' [-Wauto-var-id]
+   82 |         auto stale = [load mutableCopy]; stale[@"expectedRevision"] = revision;
+      |         ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginPresetSessionTests.mm:91:9: warning: 'auto' deduced as 'id' in declaration of 'neighbor' [-Wauto-var-id]
+   91 |         auto neighbor = call(@"plugin.parameters.get", @{@"slot": @0})[@"data"];
+      |         ^~~~~~~~~~~~~
+7 warnings generated.
+[ 78%] Linking CXX executable plugin-preset-session-tests
+[ 78%] Built target plugin-preset-session-tests
+[ 78%] Linking CXX executable song-timing-session-tests
+[ 78%] Built target song-timing-session-tests
+[ 78%] Linking CXX executable sample-loop-tests
+[ 78%] Built target sample-loop-tests
+[ 79%] Linking CXX executable sample-crossfade-project-tests
+[ 79%] Built target sample-crossfade-project-tests
+[ 80%] Building OBJCXX object CMakeFiles/plugin-alias-tests.dir/Tests/FixtureAU.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:72:7: warning: 'auto' deduced as 'id' in declaration of 'root' [-Wauto-var-id]
+   72 |       auto root=[[NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil] mutableCopy];
+      |       ^~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:73:7: warning: 'auto' deduced as 'id' in declaration of 'item' [-Wauto-var-id]
+   73 |       auto item=[dictionary(descriptor) mutableCopy];const auto captured=probe.state();item[@"state"]=[NSData dataWithBytes:captured.state.data() length:captured.state.size()];
+      |       ^~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:81:78: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   81 |     auto call=[&](NSString *method,NSDictionary *values,bool mutation=false){auto p=[values mutableCopy];if(mutation)p[@"expectedRevision"]=session.automationRevision;
+      |                                                                              ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:88:5: warning: 'auto' deduced as 'id' in declaration of 'routing' [-Wauto-var-id]
+   88 |     auto routing=call(@"plugin.instruments.get",@{@"plugin":identity})[@"data"];
+      |     ^~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:129:5: warning: 'auto' deduced as 'id' in declaration of 'broken' [-Wauto-var-id]
+  129 |     auto broken=[root mutableCopy];broken[@"version"]=@4;[[NSPropertyListSerialization dataWithPropertyList:broken format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:file atomically:YES];
+      |     ^~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:132:7: warning: 'auto' deduced as 'id' in declaration of 'malformed' [-Wauto-var-id]
+  132 |       auto malformed=[root mutableCopy];auto plugin=[root[@"plugins"][0] mutableCopy];
+      |       ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/PluginAliasTests.mm:132:41: warning: 'auto' deduced as 'id' in declaration of 'plugin' [-Wauto-var-id]
+  132 |       auto malformed=[root mutableCopy];auto plugin=[root[@"plugins"][0] mutableCopy];
+      |                                         ^~~~~~~~~~~
+7 warnings generated.
+[ 80%] Linking CXX executable plugin-alias-tests
+[ 80%] Linking CXX executable sample-project-tests
+[ 80%] Built target plugin-alias-tests
+[ 80%] Built target sample-project-tests
+[ 81%] Linking CXX executable sample-session-tests
+[ 81%] Linking CXX executable sample-import-tests
+[ 81%] Built target sample-session-tests
+[ 82%] Built target sample-import-tests
+[ 82%] Building OBJCXX object CMakeFiles/native-effects-tests.dir/Tests/NativeEffectsTests.mm.o
+[ 82%] Building OBJCXX object CMakeFiles/eq-effects-tests.dir/Tests/EQEffectsTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/NativeEffectsTests.mm:146:5: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  146 |     auto p = [params mutableCopy]; if (write) p[@"expectedRevision"] = session.automationRevision;
+      |     ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/NativeEffectsTests.mm:165:3: warning: 'auto' deduced as 'id' in declaration of 'state' [-Wauto-var-id]
+  165 |   auto state = call(@"plugin.state.get", @{@"slot": @0})[@"data"];
+      |   ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/EQEffectsTests.mm:162:3: warning: 'auto' deduced as 'id' in declaration of 'state' [-Wauto-var-id]
+  162 |   auto state = call(@"plugin.state.get", @{@"slot": @0})[@"data"];
+      |   ^~~~~~~~~~
+2 warnings generated.
+[ 82%] Linking CXX executable native-effects-tests
+1 warning generated.
+[ 82%] Linking CXX executable eq-effects-tests
+[ 82%] Built target native-effects-tests
+[ 82%] Built target eq-effects-tests
+[ 82%] Building OBJCXX object CMakeFiles/comb-tests.dir/Tests/CombTests.mm.o
+[ 82%] Building OBJCXX object CMakeFiles/distortion-tests.dir/Tests/DistortionTests.mm.o
+[ 82%] Linking CXX executable comb-tests
+[ 82%] Built target comb-tests
+[ 82%] Building OBJCXX object CMakeFiles/lofi-tests.dir/Tests/LofiMatTests.mm.o
+[ 82%] Linking CXX executable lofi-tests
+[ 82%] Linking CXX executable distortion-tests
+[ 82%] Built target lofi-tests
+[ 83%] Building OBJCXX object CMakeFiles/cabinet-tests.dir/Tests/CabinetTests.mm.o
+[ 83%] Built target distortion-tests
+[ 83%] Building OBJCXX object CMakeFiles/dynamics-tests.dir/Tests/DynamicsTests.mm.o
+[ 84%] Linking CXX executable dynamics-tests
+[ 84%] Built target dynamics-tests
+[ 84%] Building OBJCXX object CMakeFiles/maximizer-tests.dir/Tests/MaximizerTests.mm.o
+[ 84%] Linking CXX executable cabinet-tests
+[ 84%] Built target cabinet-tests
+[ 84%] Linking CXX executable bus-compressor-tests
+[ 84%] Built target bus-compressor-tests
+/Users/rewbs/code/openmpt/mac/Tests/MaximizerTests.mm:200:3: warning: 'auto' deduced as 'id' in declaration of 'state' [-Wauto-var-id]
+  200 |   auto state=call(@"plugin.state.get",@{@"slot":@0})[@"data"];
+      |   ^~~~~~~~~~
+[ 85%] Linking CXX executable session-tests
+[ 85%] Built target session-tests
+[ 85%] Linking CXX executable native-song-tests
+[ 86%] Built target native-song-tests
+[ 86%] Building CXX object CMakeFiles/device-tests.dir/Tests/DeviceTests.cpp.o
+1 warning generated.
+[ 86%] Linking CXX executable maximizer-tests
+[ 86%] Built target maximizer-tests
+[ 86%] Building CXX object CMakeFiles/loopback-tests.dir/Tests/LoopbackTests.cpp.o
+[ 87%] Linking CXX executable device-tests
+[ 87%] Built target device-tests
+[ 88%] Linking CXX executable midi-tests
+[ 88%] Built target midi-tests
+[ 88%] Building OBJCXX object CMakeFiles/export-tests.dir/Tests/ExportTests.mm.o
+[ 89%] Linking CXX executable loopback-tests
+[ 89%] Built target loopback-tests
+[ 90%] Built target native-mixer-tests
+[ 90%] Building OBJCXX object CMakeFiles/multi-bus-tests.dir/Tests/MultiBusTests.mm.o
+[ 90%] Linking CXX executable export-tests
+[ 90%] Built target export-tests
+[ 90%] Building OBJCXX object CMakeFiles/multi-bus-tests.dir/Tests/FixtureAU.mm.o
+[ 90%] Building OBJCXX object CMakeFiles/rack-tests.dir/Tests/RackTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:183:7: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  183 |       auto p = [params mutableCopy]; if (write) p[@"expectedRevision"] = session.automationRevision;
+      |       ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:189:51: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+  189 |       auto revision = session.automationRevision; auto p = [params mutableCopy]; p[@"expectedRevision"] = revision;
+      |                                                   ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:194:5: warning: 'auto' deduced as 'id' in declaration of 'info' [-Wauto-var-id]
+  194 |     auto info = call(@"plugin.buses.get", @{@"slot": @0})[@"data"];
+      |     ^~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:196:5: warning: 'auto' deduced as 'id' in declaration of 'id' [-Wauto-var-id]
+  196 |     auto id = info[@"plugin"];
+      |     ^~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:209:5: warning: 'auto' deduced as 'id' in declaration of 'graph' [-Wauto-var-id]
+  209 |     auto graph = call(@"mixer.get", @{})[@"data"]; auto bus = graph[@"buses"][1][@"id"];
+      |     ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:209:52: warning: 'auto' deduced as 'id' in declaration of 'bus' [-Wauto-var-id]
+  209 |     auto graph = call(@"mixer.get", @{})[@"data"]; auto bus = graph[@"buses"][1][@"id"];
+      |                                                    ^~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/MultiBusTests.mm:229:5: warning: 'auto' deduced as 'id' in declaration of 'inactivePreview' [-Wauto-var-id]
+  229 |     auto inactivePreview=[side mutableCopy];inactivePreview[@"dryRun"]=@YES;check([call(@"mixer.sidechains.set",inactivePreview,true)[@"data"][@"wouldChange"] boolValue],"Supported inactive detector is directly routable");
+      |     ^~~~~~~~~~~~~~~~~~~~
+7 warnings generated.
+[ 91%] Linking CXX executable multi-bus-tests
+[ 91%] Built target multi-bus-tests
+[ 91%] Building OBJCXX object CMakeFiles/mixer-device-tests.dir/Tests/MixerDeviceTests.mm.o
+[ 91%] Linking CXX executable rack-tests
+[ 91%] Built target rack-tests
+[ 91%] Building OBJCXX object CMakeFiles/native-plugin-tests.dir/Tests/NativePluginTests.mm.o
+[ 91%] Linking CXX executable mixer-device-tests
+[ 91%] Built target mixer-device-tests
+[ 92%] Building OBJCXX object CMakeFiles/plugin-latency-tests.dir/Tests/PluginLatencyTests.mm.o
+[ 92%] Linking CXX executable native-plugin-tests
+[ 92%] Built target native-plugin-tests
+[ 92%] Building OBJCXX object CMakeFiles/musical-automation-tests.dir/Tests/MusicalAutomationTests.mm.o
+[ 92%] Linking CXX executable plugin-latency-tests
+[ 92%] Built target plugin-latency-tests
+[ 93%] Linking CXX executable automation-tests
+[ 93%] Built target automation-tests
+/Users/rewbs/code/openmpt/mac/Tests/MusicalAutomationTests.mm:244:9: warning: 'auto' deduced as 'id' in declaration of 'actual' [-Wauto-var-id]
+  244 |         auto actual = call(@"automation.pattern.get", @{@"pattern":@0})[@"data"];
+      |         ^~~~~~~~~~~
+[ 93%] Building OBJCXX object CMakeFiles/plugin-shutdown-tests.dir/Tests/PluginShutdownTests.mm.o
+[ 94%] Linking CXX executable plugin-shutdown-tests
+1 warning generated.
+[ 94%] Linking CXX executable musical-automation-tests
+[ 94%] Built target plugin-shutdown-tests
+[ 94%] Building OBJCXX object CMakeFiles/note-track-tests.dir/Tests/NoteTrackTests.mm.o
+[ 94%] Built target musical-automation-tests
+[ 94%] Linking CXX executable automation-target-tests
+[ 94%] Built target automation-target-tests
+[ 94%] Building OBJCXX object CMakeFiles/native-signal-graph-tests.dir/Tests/NativeSignalGraphTests.mm.o
+[ 94%] Linking CXX executable note-track-tests
+[ 94%] Built target note-track-tests
+[ 94%] Linking CXX executable native-signal-graph-tests
+[ 94%] Building OBJCXX object CMakeFiles/signal-graph-session-tests.dir/Tests/SignalGraphSessionTests.mm.o
+[ 94%] Built target native-signal-graph-tests
+[ 95%] Building OBJCXX object CMakeFiles/signal-routing-tests.dir/Tests/SignalRoutingTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:9:93: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+    9 |   auto call=[&](NSString *method,NSDictionary *parameters,bool write=false)->NSDictionary *{auto p=[parameters mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;auto response=[session automationMethod:method params:p error:&error];if(!response)throw std::runtime_error(error.localizedDescription.UTF8String);return response;};
+      |                                                                                             ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:11:3: warning: 'auto' deduced as 'id' in declaration of 'empty' [-Wauto-var-id]
+   11 |   auto empty=data();NSString *revision=session.automationRevision;
+      |   ^~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:28:3: warning: 'auto' deduced as 'id' in declaration of 'metadata' [-Wauto-var-id]
+   28 |   auto metadata=call(@"graph.plugin.get",@{@"graph":graph,@"node":node})[@"data"];
+      |   ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:34:3: warning: 'auto' deduced as 'id' in declaration of 'parameters' [-Wauto-var-id]
+   34 |   auto parameters=call(@"graph.plugin.get",@{@"graph":graph,@"node":node})[@"data"][@"parameters"];
+      |   ^~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:36:9: warning: 'auto' deduced as 'id' in declaration of 'parameterState' [-Wauto-var-id]
+   36 |   const auto parameterState=data();revision=session.automationRevision;
+      |   ~~~~~~^~~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:44:34: warning: 'auto' deduced as 'id' in declaration of 'dragState' [-Wauto-var-id]
+   44 |   call(@"history.redo",@{},true);auto dragState=data();
+      |                                  ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:45:97: warning: 'auto' deduced as 'id' in declaration of 'interleavedState' [-Wauto-var-id]
+   45 |   call(@"graph.layout.set",@{@"positions":@[@{@"node":@"gesture-break",@"x":@1,@"y":@2}]},true);auto interleavedState=data();
+      |                                                                                                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:69:3: warning: 'auto' deduced as 'id' in declaration of 'modulatedDefinition' [-Wauto-var-id]
+   69 |   auto modulatedDefinition=[data()[@"library"][0] mutableCopy];
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:70:3: warning: 'auto' deduced as 'id' in declaration of 'graphParameters' [-Wauto-var-id]
+   70 |   auto graphParameters=call(@"graph.plugin.get",@{@"graph":graph,@"node":node})[@"data"][@"parameters"];
+      |   ^~~~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:80:3: warning: 'auto' deduced as 'id' in declaration of 'expected' [-Wauto-var-id]
+   80 |   auto expected=data();revision=session.automationRevision;
+      |   ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:81:62: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   81 |   auto reject=[&](NSString *method,NSDictionary *parameters){auto p=[parameters mutableCopy];p[@"expectedRevision"]=session.automationRevision;NSError *failure=nil;check(![session automationMethod:method params:p error:&failure],"Invalid graph edit accepted");check([revision isEqual:session.automationRevision]&&[expected isEqual:data()],"Rejected graph edit partially committed");};
+      |                                                              ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:93:68: warning: 'auto' deduced as 'id' in declaration of 'copied' [-Wauto-var-id]
+   93 |   call(@"graph.clone",@{@"graph":graph,@"name":@"Echo copy"},true);auto copied=data()[@"library"][1];check(![copied[@"id"] isEqual:graph]&&![copied[@"nodes"][0][@"id"] isEqual:expected[@"library"][0][@"nodes"][0][@"id"]],"Cloned graph reused identities");
+      |                                                                    ^~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:95:3: warning: 'auto' deduced as 'id' in declaration of 'patchBefore' [-Wauto-var-id]
+   95 |   auto patchBefore=data();revision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:97:3: warning: 'auto' deduced as 'id' in declaration of 'patchPreview' [-Wauto-var-id]
+   97 |   auto patchPreview=[patch mutableCopy];patchPreview[@"dryRun"]=@YES;call(@"graph.nodes.insert",patchPreview,true);
+      |   ^~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:99:42: warning: 'auto' deduced as 'id' in declaration of 'patchAfter' [-Wauto-var-id]
+   99 |   call(@"graph.nodes.insert",patch,true);auto patchAfter=data();
+      |                                          ^~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:103:3: warning: 'auto' deduced as 'id' in declaration of 'badPatch' [-Wauto-var-id]
+  103 |   auto badPatch=[patch mutableCopy];badPatch[@"expectedRevision"]=session.automationRevision;badPatch[@"edge"]=@255;NSError *patchError=nil;
+      |   ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:108:125: warning: 'auto' deduced as 'id' in declaration of 'detached' [-Wauto-var-id]
+  108 |   call(@"graph.nodes.detach",@{@"graph":graph,@"nodes":@[extra],@"positions":@[@{@"node":extra,@"x":@600,@"y":@300}]},true);auto detached=data();
+      |                                                                                                                             ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:116:3: warning: 'auto' deduced as 'id' in declaration of 'addBefore' [-Wauto-var-id]
+  116 |   auto addBefore=data();auto addRevision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:118:3: warning: 'auto' deduced as 'id' in declaration of 'newPreview' [-Wauto-var-id]
+  118 |   auto newPreview=[insertNew mutableCopy];newPreview[@"dryRun"]=@YES;call(@"graph.node.add",newPreview,true);
+      |   ^~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:121:3: warning: 'auto' deduced as 'id' in declaration of 'addAfter' [-Wauto-var-id]
+  121 |   auto addAfter=data(),oldEdge=addBefore[@"library"][0][@"audio"][0],newEdge=addAfter[@"library"][0][@"audio"][0];
+      |   ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:121:3: warning: 'auto' deduced as 'id' in declaration of 'oldEdge' [-Wauto-var-id]
+  121 |   auto addAfter=data(),oldEdge=addBefore[@"library"][0][@"audio"][0],newEdge=addAfter[@"library"][0][@"audio"][0];
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:121:3: warning: 'auto' deduced as 'id' in declaration of 'newEdge' [-Wauto-var-id]
+  121 |   auto addAfter=data(),oldEdge=addBefore[@"library"][0][@"audio"][0],newEdge=addAfter[@"library"][0][@"audio"][0];
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:125:3: warning: 'auto' deduced as 'id' in declaration of 'invalidAdd' [-Wauto-var-id]
+  125 |   auto invalidAdd=[insertNew mutableCopy];invalidAdd[@"insertEdge"]=@255;invalidAdd[@"expectedRevision"]=session.automationRevision;NSError *addError=nil;
+      |   ^~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:128:3: warning: 'auto' deduced as 'id' in declaration of 'connectBefore' [-Wauto-var-id]
+  128 |   auto connectBefore=data();
+      |   ^~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:130:3: warning: 'auto' deduced as 'id' in declaration of 'source' [-Wauto-var-id]
+  130 |   auto source=call(@"graph.node.add",newSource,true)[@"data"][@"node"];
+      |   ^~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:131:3: warning: 'auto' deduced as 'id' in declaration of 'connected' [-Wauto-var-id]
+  131 |   auto connected=data();auto mod=[connected[@"library"][0][@"modulation"] lastObject];
+      |   ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:131:25: warning: 'auto' deduced as 'id' in declaration of 'mod' [-Wauto-var-id]
+  131 |   auto connected=data();auto mod=[connected[@"library"][0][@"modulation"] lastObject];
+      |                         ^~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:134:3: warning: 'auto' deduced as 'id' in declaration of 'returnBefore' [-Wauto-var-id]
+  134 |   auto returnBefore=data();auto send=call(@"mixer.bus.add",@{@"kind":@"return",@"sendFrom":target,@"position":@{@"x":@800,@"y":@120}},true)[@"data"][@"bus"];
+      |   ^~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:134:28: warning: 'auto' deduced as 'id' in declaration of 'send' [-Wauto-var-id]
+  134 |   auto returnBefore=data();auto send=call(@"mixer.bus.add",@{@"kind":@"return",@"sendFrom":target,@"position":@{@"x":@800,@"y":@120}},true)[@"data"][@"bus"];
+      |                            ^~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:135:3: warning: 'auto' deduced as 'id' in declaration of 'returnAfter' [-Wauto-var-id]
+  135 |   auto returnAfter=data();NSArray *sends=returnAfter[@"mixer"][@"buses"][0][@"sends"];
+      |   ^~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:138:3: warning: 'auto' deduced as 'id' in declaration of 'groupingBefore' [-Wauto-var-id]
+  138 |   auto groupingBefore=data();NSString *groupingRevision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:142:3: warning: 'auto' deduced as 'id' in declaration of 'groupingAfter' [-Wauto-var-id]
+  142 |   auto groupingAfter=data();
+      |   ^~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:147:3: warning: 'auto' deduced as 'id' in declaration of 'nestedAfter' [-Wauto-var-id]
+  147 |   auto nestedAfter=data();groupingRevision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:154:3: warning: 'auto' deduced as 'id' in declaration of 'groupedCopy' [-Wauto-var-id]
+  154 |   auto groupedCopy=[data()[@"library"] lastObject];
+      |   ^~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:158:3: warning: 'auto' deduced as 'id' in declaration of 'remaining' [-Wauto-var-id]
+  158 |   auto remaining=data()[@"library"][0][@"groups"];
+      |   ^~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:164:3: warning: 'auto' deduced as 'id' in declaration of 'exportBefore' [-Wauto-var-id]
+  164 |   auto exportBefore=data();revision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:168:3: warning: 'auto' deduced as 'id' in declaration of 'exportAfter' [-Wauto-var-id]
+  168 |   auto exportAfter=data();auto exported=[exportAfter[@"library"] lastObject];
+      |   ^~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:168:27: warning: 'auto' deduced as 'id' in declaration of 'exported' [-Wauto-var-id]
+  168 |   auto exportAfter=data();auto exported=[exportAfter[@"library"] lastObject];
+      |                           ^~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:177:3: warning: 'auto' deduced as 'id' in declaration of 'songGroupBefore' [-Wauto-var-id]
+  177 |   auto songGroupBefore=data();revision=session.automationRevision;
+      |   ^~~~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:179:3: warning: 'auto' deduced as 'id' in declaration of 'groupPreview' [-Wauto-var-id]
+  179 |   auto groupPreview=[groupRequest mutableCopy];groupPreview[@"dryRun"]=@YES;call(@"graph.song.group.create",groupPreview,true);
+      |   ^~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:182:3: warning: 'auto' deduced as 'id' in declaration of 'songGroupAfter' [-Wauto-var-id]
+  182 |   auto songGroupAfter=data();check([songGroupAfter[@"groups"] count]==1&&[songGroupAfter[@"plugins"] isEqual:songGroupBefore[@"plugins"]]&&[songGroupAfter[@"mixer"] isEqual:songGroupBefore[@"mixer"]],"Song group wraps existing rack identities without changing their routing");
+      |   ^~~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:186:3: warning: 'auto' deduced as 'id' in declaration of 'songGroupMoved' [-Wauto-var-id]
+  186 |   auto songGroupMoved=data();bool moved=false;for(NSDictionary *position in songGroupMoved[@"layout"])if([position[@"node"] isEqual:rackKey])moved=[position[@"x"] doubleValue]==400&&[position[@"y"] doubleValue]==200;check(moved,"Song boundary move retains relative processor positions");
+      |   ^~~~~~~~~~~~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/SignalGraphSessionTests.mm:187:63: warning: 'auto' deduced as 'id' in declaration of 'songGroupExported' [-Wauto-var-id]
+  187 |   call(@"graph.song.group.export",@{@"group":songGroup},true);auto songGroupExported=data();check([[songGroupExported[@"library"] lastObject][@"nodes"] count]==3,"Song group exports a real independent recipe");
+      |                                                               ^~~~~~~~~~~~~~~~~~~~~~
+43 warnings generated.
+[ 95%] Linking CXX executable signal-graph-session-tests
+[ 95%] Built target signal-graph-session-tests
+[ 95%] Building OBJCXX object CMakeFiles/signal-graph-performance.dir/Tests/SignalGraphPerformance.mm.o
+[ 95%] Linking CXX executable signal-routing-tests
+[ 95%] Built target signal-routing-tests
+[ 95%] Linking CXX executable curve-formula-session-tests
+[ 96%] Built target curve-formula-session-tests
+[ 97%] Linking CXX executable envelope-bank-tests
+[ 97%] Built target envelope-bank-tests
+[ 98%] Linking CXX executable playback-display-tests
+[ 99%] Linking CXX executable signal-graph-performance
+[ 99%] Built target playback-display-tests
+[ 99%] Building OBJCXX object CMakeFiles/parameter-activity-tests.dir/Tests/ParameterActivityTests.mm.o
+[ 99%] Built target signal-graph-performance
+[100%] Linking CXX executable unified-history-tests
+[100%] Built target unified-history-tests
+/Users/rewbs/code/openmpt/mac/Tests/ParameterActivityTests.mm:59:89: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   59 |   auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;auto r=[session automationMethod:method params:p error:&error];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);return r;};
+      |                                                                                         ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/ParameterActivityTests.mm:64:3: warning: 'auto' deduced as 'id' in declaration of 'dry' [-Wauto-var-id]
+   64 |   auto dry=[edit mutableCopy];dry[@"dryRun"]=@YES;call(@"automation.recorded.edit",dry,true);check([revision isEqual:session.automationRevision],"Recorded dry run changes song");call(@"automation.recorded.edit",edit,true);
+      |   ^~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/ParameterActivityTests.mm:67:3: warning: 'auto' deduced as 'id' in declaration of 'invalid' [-Wauto-var-id]
+   67 |   auto invalid=[edit mutableCopy];invalid[@"value"]=@999;invalid[@"expectedRevision"]=session.automationRevision;check(![session automationMethod:@"automation.recorded.edit" params:invalid error:&error]&&[lane() count]==1,"Invalid value partially replaced recording");
+      |   ^~~~~~~~~~~~
+3 warnings generated.
+[100%] Linking CXX executable parameter-activity-tests
+[100%] Built target parameter-activity-tests
+/Users/rewbs/code/openmpt/bin/mac-graph-fluency/ScreamSeq.app/Contents/MacOS/plugin-scanner: replacing existing signature
+/Users/rewbs/code/openmpt/bin/mac-graph-fluency/ScreamSeq.app: replacing existing signature
+Built /Users/rewbs/code/openmpt/bin/mac-graph-fluency/ScreamSeq.app

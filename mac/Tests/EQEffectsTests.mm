@@ -112,7 +112,7 @@ static void chainTails() {
   check(absolute.tail() >= grown, "Absolute automation prepares the rack tail before rendering");
   auto doc = Document::demo();
   doc->annotate([](NativeSong &n) {
-    auto master = n.makeEntity().id;
+    auto master = n.masterID;
     for (const auto &[index, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
     n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"}); n.mixer.buses.back().inserts = {"equalizer"};
     n.automation.push_back({n.makeEntity().id, n.patterns.at(0).id, "equalizer", 11, true, {{0, 1, AutomationCurve::Step}}});

@@ -20,6 +20,9 @@ public:
   virtual void transport(const PluginTransport &) noexcept = 0;
   virtual bool midi(uint8_t status, uint8_t a, uint8_t b) noexcept = 0;
   virtual const std::vector<PluginAudioBus> &buses() const = 0;
+  // Immutable render capacity, distinct from the logical enabled-port list.
+  // Most hosts prepare only active inputs. AU prepares all supported inputs.
+  virtual uint64_t preparedAuxiliaryInputs() const {uint64_t mask=0;for(const auto &bus:buses())if(bus.input&&bus.index&&bus.index<64&&bus.supported&&bus.active)mask|=uint64_t(1)<<bus.index;return mask;}
   virtual const float *auxiliaryOutput(uint32_t bus) const noexcept = 0;
   virtual std::vector<PluginParameter> parameters() const = 0;
   virtual std::vector<PluginProgram> programs() const = 0;

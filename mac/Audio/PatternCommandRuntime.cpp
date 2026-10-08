@@ -35,7 +35,7 @@ PatternCommandRuntime::PatternCommandRuntime(const NativeSong &native,const std:
     auto &target=targets_[index->second];
     const auto pattern=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &p){return p.second.id==command.pattern;});
     const auto track=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &p){return p.second.id==command.track;});
-    target.patterns[pattern->first].push_back({command.position,command.duration,track->first,command.column,command.value});
+    target.patterns[pattern->first].push_back({command.position,command.duration,track->first,command.column,command.value,command.binding,command.kind==PatternCommandKind::ParameterSlide});
     const auto value=float(target.minimum+(target.maximum-target.minimum)*command.value);target.plugin->includeParameterRange(target.parameter,value,value);
   }
   if(targets_.size()>255)throw std::invalid_argument("Pattern commands exceed 255 parameter targets");
@@ -64,6 +64,7 @@ bool PatternCommandRuntime::render(const OpenMPT::PlayState &state,uint32_t fram
         const auto &event=(*target.events)[target.next++];if(muted(event.channel))continue;
         const auto current=target.curve.at(event.position);
         target.curve={current,event.value,double(event.position),double(event.position)+event.duration};target.activeChannel=event.channel;target.used=true;
+        target.source={event.slide?ParameterOrigin::PatternSlide:ParameterOrigin::PatternSet,0,pattern_,event.position,event.channel,event.binding,event.column};
       }
       uint32_t count=frames-offset;
       auto boundary=[&](double position){if(position<=at+1e-8)return;const double sample=std::ceil((position-tickPosition)/unitsPerSample-1e-9)-samplesIntoTick;
@@ -72,7 +73,7 @@ bool PatternCommandRuntime::render(const OpenMPT::PlayState &state,uint32_t fram
       boundary(target.curve.end);
       if(target.used){const auto from=target.minimum+(target.maximum-target.minimum)*target.curve.at(at);
         const auto to=target.minimum+(target.maximum-target.minimum)*target.curve.at(musical(offset+count-1));
-        if(!target.plugin->scheduleRamp(target.parameter,from,to,absoluteFrame+offset,count-1))return false;}
+        if(!target.plugin->scheduleRamp(target.parameter,from,to,absoluteFrame+offset,count-1,target.source))return false;}
       offset+=count;
     }
     target.current=target.curve.at(musical(frames));

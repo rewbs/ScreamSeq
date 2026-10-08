@@ -49,7 +49,7 @@
             throw std::runtime_error("The inspected FX cell no longer exists / choose another target");
         initial.choices=initial.source->commands.at("effect");
         for(auto [kind,display,name]:std::initializer_list<std::tuple<const char *,const char *,const char *>>{
-            {"parameter-set","PS","Parameter set"},{"parameter-slide","PL","Parameter slide"},{"pitch-set","BS","Pitch set"},{"pitch-slide","BL","Pitch slide"},{"note-cut","NC","Precise note cut"}})
+            {"parameter-set","PS","Parameter set"},{"parameter-slide","PL","Parameter slide"},{"pitch-set","BS","Pitch set"},{"pitch-slide","BL","Pitch slide"},{"note-cut","NC","Precise note cut"},{"nudge-forward","NF","Nudge record forward"},{"nudge-reverse","NR","Nudge record reverse"}})
             initial.choices.push_back({{"kind",kind},{"displayCode",display},{"name",name}});
         const auto current=initial.source->effect(initial.pattern,initial.row,initial.channel,initial.column);
         std::wstring currentCode=L"..";
@@ -62,6 +62,7 @@
                 else swprintf_s(display,L"0%c",initial.source->effectLetters[current->effect]);break;
             case Kind::ParameterSet:wcscpy_s(display,L"PS");break;case Kind::ParameterSlide:wcscpy_s(display,L"PL");break;
             case Kind::PitchSet:wcscpy_s(display,L"BS");break;case Kind::PitchSlide:wcscpy_s(display,L"BL");break;case Kind::NoteCut:wcscpy_s(display,L"NC");break;
+            case Kind::NudgeForward:wcscpy_s(display,L"NF");break;case Kind::NudgeReverse:wcscpy_s(display,L"NR");break;
             }
             currentCode=display;
         }
@@ -73,9 +74,9 @@
         const bool same=current&&(code.empty()||wide(code)==currentCode);
         const auto kind=initial.choices.at(initial.selected).value("kind",std::string("tracker"));
         const auto number=[](double value){std::wostringstream text;text<<std::setprecision(12)<<value;return text.str();};
-        initial.fields[0]=number(same?(kind=="tracker"?current->parameter:current->value):kind=="tracker"?initial.choices.at(initial.selected).at("suggestedParameter").get<double>():0);
+        initial.fields[0]=number(same?(kind=="tracker"?current->parameter:current->value):kind=="tracker"?initial.choices.at(initial.selected).at("suggestedParameter").get<double>():kind=="nudge-forward"||kind=="nudge-reverse"?.75:0);
         initial.fields[1]=number(same?current->position%Tracker::performanceUnitsPerRow:0);
-        initial.fields[2]=number(same?current->duration:(kind=="parameter-slide"||kind=="pitch-slide"?Tracker::performanceUnitsPerRow:0));
+        initial.fields[2]=number(same?current->duration:(kind=="parameter-slide"||kind=="pitch-slide"||kind=="nudge-forward"||kind=="nudge-reverse"?Tracker::performanceUnitsPerRow:0));
         initial.fields[3]=number(same?current->pitchRange:2);initial.fields[4]=L"";
         for(const auto &[id,binding]:initial.source->nativePattern->performance.bindings){
             if(same&&current->binding==id)initial.selectedBinding=int(initial.bindings.size());
@@ -158,7 +159,7 @@
         effectChoices=view->commands.at("effect");
         for(auto [kind,code,name]:std::initializer_list<std::tuple<const char *,const char *,const char *>>{
             {"parameter-set","PS","Parameter set"},{"parameter-slide","PL","Parameter slide"},
-            {"pitch-set","BS","Pitch set"},{"pitch-slide","BL","Pitch slide"},{"note-cut","NC","Precise note cut"}})
+            {"pitch-set","BS","Pitch set"},{"pitch-slide","BL","Pitch slide"},{"note-cut","NC","Precise note cut"},{"nudge-forward","NF","Nudge record forward"},{"nudge-reverse","NR","Nudge record reverse"}})
             effectChoices.push_back({{"kind",kind},{"displayCode",code},{"name",name}});
         const auto current=view->effect(patternIndex,row,channel,effectDraftColumn);
         const auto currentCode=current?effectText(current).first:L"..";
@@ -167,10 +168,10 @@
         settingEffectFields=true;SetWindowTextW(controls.at(effectSearch),L"");settingEffectFields=false;filterEffects();
         const bool same=current&&(code.empty()||wide(code)==currentCode);
         const auto kind=effectChoices.at(effectSelected).value("kind",std::string("tracker"));
-        const double value=same?(kind=="tracker"?current->parameter:current->value):kind=="tracker"?effectChoices.at(effectSelected).at("suggestedParameter").get<double>():0;
+        const double value=same?(kind=="tracker"?current->parameter:current->value):kind=="tracker"?effectChoices.at(effectSelected).at("suggestedParameter").get<double>():kind=="nudge-forward"||kind=="nudge-reverse"?.75:0;
         auto set=[&](int id,double n){std::wostringstream out;out<<std::setprecision(12)<<n;SetWindowTextW(controls.at(id),out.str().c_str());};
         set(effectValue,value);set(effectOffset,same?current->position%Tracker::performanceUnitsPerRow:0);
-        set(effectDuration,same?current->duration:(kind=="parameter-slide"||kind=="pitch-slide"?Tracker::performanceUnitsPerRow:0));
+        set(effectDuration,same?current->duration:(kind=="parameter-slide"||kind=="pitch-slide"||kind=="nudge-forward"||kind=="nudge-reverse"?Tracker::performanceUnitsPerRow:0));
         set(effectRange,same?current->pitchRange:2);
         effectBindingChoices=Json::array();SendMessageW(controls.at(effectBinding),CB_RESETCONTENT,0,0);int selectedBinding=-1;
         for(const auto &[id,binding]:view->nativePattern->performance.bindings) {
@@ -205,7 +206,8 @@
                 effectSelected=int(visibleEffectChoices[size_t(selected)]);const auto &choice=effectChoices.at(effectSelected);
                 const auto kind=choice.value("kind",std::string("tracker"));
                 SetWindowTextW(controls.at(effectValue),std::to_wstring(choice.value("suggestedParameter",0)).c_str());
-                SetWindowTextW(controls.at(effectDuration),(kind=="parameter-slide"||kind=="pitch-slide")?L"65536":L"0");
+                if(kind=="nudge-forward"||kind=="nudge-reverse")SetWindowTextW(controls.at(effectValue),L"0.75");
+                SetWindowTextW(controls.at(effectDuration),(kind=="parameter-slide"||kind=="pitch-slide"||kind=="nudge-forward"||kind=="nudge-reverse")?L"65536":L"0");
                 SetWindowTextW(controls.at(effectOffset),L"0");SetWindowTextW(controls.at(effectRange),L"2");
             }
         }
@@ -221,12 +223,13 @@
                 }
                 else {
                     command["offset"]=unsigned(effectNumber(effectOffset,0,65535,true));
-                    if(kind=="parameter-slide"||kind=="pitch-slide")command["duration"]=unsigned(effectNumber(effectDuration,1,UINT32_MAX,true));
+                    if(kind=="parameter-slide"||kind=="pitch-slide"||kind=="nudge-forward"||kind=="nudge-reverse")command["duration"]=unsigned(effectNumber(effectDuration,1,UINT32_MAX,true));
                     if(kind=="parameter-set"||kind=="parameter-slide") {
                         const auto selected=SendMessageW(controls.at(effectBinding),CB_GETCURSEL,0,0);
                         if(selected<0||size_t(selected)>=effectBindingChoices.size())throw std::runtime_error("Choose a parameter binding, or select a parameter in Plugins first");
                         binding=effectBindingChoices.at(size_t(selected));command["binding"]=binding.at("id");command["value"]=effectNumber(effectValue,0,1);
-                    } else if(kind=="pitch-set"||kind=="pitch-slide") {command["value"]=effectNumber(effectValue,-96,96);command["pitchRange"]=unsigned(effectNumber(effectRange,1,96,true));}
+                    } else if(kind=="nudge-forward"||kind=="nudge-reverse") {command["value"]=effectNumber(effectValue,0,1);}
+                    else if(kind=="pitch-set"||kind=="pitch-slide") {command["value"]=effectNumber(effectValue,-96,96);command["pitchRange"]=unsigned(effectNumber(effectRange,1,96,true));}
                 }
                 Json params={{"expectedRevision",effectDraftRevision},{"pattern",effectDraftPattern},{"row",effectDraftRow},{"channel",effectDraftChannel},{"column",effectDraftColumn},{"command",command}};
                 if(binding.is_object()&&binding.contains("plugin")) {
@@ -261,6 +264,6 @@
         for(auto [label,offset]:std::initializer_list<std::pair<const wchar_t *,float>>{{L"Value",0.0f},{L"Offset units",104.0f},{L"Slide units",198.0f},{L"Range st",302.0f},{L"Parameter binding",376.0f}})
             s.uiText(label,x+offset,r.y+80,offset==376?r.w-400:100,0x91a0b2);
         s.uiText(effectDraftRevision==view->session.revision?effectEditorStatus:L"Document changed / draft retained. Use cursor to reload before applying",x,r.y+132,r.w-24,0xe0bc75);
-        s.uiText(L"Value: tracker 0–255 / parameter 0–1 / pitch in semitones. Timing: 65536 units per row.",x,r.y+153,r.w-24,0x91a0b2);
+        s.uiText(L"Value: tracker 0–255 / parameter or nudge 0–1 / pitch in semitones. Timing: 65536 units per row. Opposing nudges >0.5 reverse samples.",x,r.y+153,r.w-24,0x91a0b2);
         s.unclip();s.outline(r.x,r.y,r.w,r.h,0x56858b);
     }

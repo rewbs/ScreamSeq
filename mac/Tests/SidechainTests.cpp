@@ -80,7 +80,7 @@ int main() { try {
   auto bad = g; bad.sidechains[0].source = 1; rejects([&] { bad.validate({1, 2, 3}); });
   bad = g; bad.sidechains.push_back({1, "long", 1, 0, false, false}); rejects([&] { bad.validate({1, 2, 3}); });
   bad = g; bad.sidechains.push_back(bad.sidechains.front()); rejects([&] { bad.validate({1, 2, 3}); });
-  bad = g; bad.sidechains[0].input = 0; rejects([&] { bad.validate({1, 2, 3}); });
+  bad = g; bad.sidechains[0].input = 64; rejects([&] { bad.validate({1, 2, 3}); });
   p[1].activeInputs = 0; check(compileMixer(g, {1, 2, 3}, p, 48000).sidechains.empty(), "Disabled auxiliary inputs retain dormant routes");
   p = processors(); p[1].bypass = true; check(compileMixer(g, {1, 2, 3}, p, 48000).sidechains.empty(), "Bypass removes sidechain processing and latency");
   p = processors(); p.erase(p.begin() + 1); check(compileMixer(g, {1, 2, 3}, p, 48000).sidechains.empty(), "Unavailable processors retain opaque sidechain routes");

@@ -13,7 +13,7 @@ Independent OpenMPT derivative; macOS 14+ build target. Measured locally on an A
 | Instruments | ITI/XI import, volume/pan/pitch/filter envelopes, sustain/loop ranges, keymaps, new-note/duplicate-note settings | Node tick/value editing, keyboard adjustment and deletion checked; ITI/XI fixtures tested; SFZ/PAT import uses engine support but is not separately qualified |
 | MIDI | CoreMIDI source/virtual input, audition, velocity, step and live row recording, panic, bounded multi-producer input | Virtual-source loopback, running status, note release and disconnect tested; overflow quarantines stale events and releases held notes. Row quantization; no timestamp-corrected sub-row recording or MIDI clock sync |
 | Recovery | Three generations per document; newest valid recovery; failed-write retention; document-scoped cleanup | Recover is explicit via the File menu; unsaved discarded sessions can remain recoverable |
-| Project | Versioned `.resonance` file containing native module bytes, AU/VST3 state, instrument assignments, automation and selected sequence | Module-only save refuses to discard native plugins; malformed metadata is rejected; missing plugins are preserved and repairable; saving while playing keeps transport running |
+| Project | Versioned `.resonance` file containing native module bytes, AU/VST3 state, instrument assignments, automation and selected sequence | Module-only save refuses to discard native plugins; malformed metadata is rejected; missing plugins are preserved and repairable; a stored VST3 path is only a hint and loads solely from a standard VST3 folder, the scanned inventory or a bundle the user added in this process, otherwise the plugin is treated as missing; saving while playing keeps transport running |
 | Sequences | Select existing sequences in Arrange; chosen sequence survives native/project saving and governs playback/export; two-sequence reference renders at three rates | Sequence creation/renaming is not exposed |
 
 ## Native plugins
@@ -80,6 +80,25 @@ The plugin expansion was inspected in the running application: the rack showed t
 ## Reproduce
 
 Run `bash mac/test.sh`; use `--device` for a brief device test, or `--soak 300` for the five-minute audio-only workload. `bash mac/sanitize.sh` runs memory/undefined-behavior checks separately from timing. Fidelity results are in `bin/mac-native/audio-test-results.json`; stock tests are in `bin/mac-native/stock-test-results.log`.
+
+The stock playback oracle is pinned to original OpenMPT commit
+`f83cedb0cd5446e4dfaa83ac97e3087107e26767`. `mac/test.sh` calls
+`bash mac/build-reference.sh`, which extracts that commit from retained local Git
+history into `<build>/reference-source/<commit>`, including its original licenses,
+fixtures and Makefile. It rebuilds the stock library, runs its `libopenmpt_test`
+suite from the archived source directory, and links `reference-renderer` using
+only the archived headers and library. No removed upstream files from the current
+ScreamSeq tree or network access are needed. A shallow clone without the pinned
+commit receives an explicit fetch command; the script never fetches automatically.
+
+Both scripts accept `SCREAMSEQ_BUILD_DIR` and `SCREAMSEQ_BUILD_JOBS`, with the
+legacy `RESONANCE_BUILD_DIR` and `RESONANCE_BUILD_JOBS` aliases. For example,
+`SCREAMSEQ_BUILD_DIR=bin/mac-reference SCREAMSEQ_BUILD_JOBS=2 bash mac/build-reference.sh`
+builds just the oracle and runs its stock suite. The selected build directory
+receives `reference-build.log`, `stock-test-results.log`, `reference-source.json`
+(the pin and binary hashes), and `reference-renderer`. The full native test script
+then runs `mac/test_audio.py` against that executable; its exact sample/frame
+comparison requirements are unchanged.
 
 With the display unlocked, run `bash mac/ui-test.sh 600`, then `bash mac/ui-test.sh 1800 --no-build` for the longer combined gate. Reports are saved under `bin/mac-native/qualification/`. Build the ZIP with `bash mac/package.sh`. Hardware loopback, additional devices/displays/OS versions and a broader real-song/plugin corpus remain unqualified.
 

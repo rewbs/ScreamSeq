@@ -14,6 +14,12 @@ final class KeyboardSettings {
     let value = UserDefaults.standard.float(forKey: "patternRowHeight")
     return value >= 18 && value <= 34 ? value : 22
   }
+  // One rule for every musical/data typing path (notes, instrument, volume,
+  // FX codes and values): Command, Control and Option chords are shortcuts.
+  static func isDataTyping(_ flags: NSEvent.ModifierFlags) -> Bool {
+    flags.intersection([.command, .control, .option]).isEmpty
+  }
+  static func isDataTyping(_ event: NSEvent) -> Bool { isDataTyping(event.modifierFlags) }
   static func note(for key: String) -> Int? {
     if let index = Array(lowKeys).firstIndex(where: { String($0) == key }) { return index }
     if let index = Array(highKeys).firstIndex(where: { String($0) == key }) { return index + 12 }

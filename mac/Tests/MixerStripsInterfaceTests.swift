@@ -15,6 +15,13 @@ extension InterfaceTests {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 650), styleMask: [.titled], backing: .buffered, defer: false)
     window.contentView = editor; window.setContentSize(NSSize(width: 1040, height: 650))
     editor.revision = "song:0"; editor.update(["active": true, "buses": buses]); editor.layoutSubtreeIfNeeded()
+    var navigationReply:(([String:Any])->Void)?
+    editor.onRequest={_,_,reply in navigationReply=reply}
+    editor.load();editor.navigate(to:"bus3")
+    try require(editor.loading && editor.selectedID=="bus0","Navigation waits for the requested mixer snapshot")
+    navigationReply?(["result":["revision":"song:0","data":["active":true,"buses":buses]]])
+    try require(editor.selectedID=="bus3" && editor.viewMode.selectedSegment==1,"Graph-to-mixer bridge selects its stable bus after load")
+    _=editor.selectBus("bus0");editor.viewMode.selectedSegment=0;editor.changeViewMode();editor.onRequest=nil
     let strips = editor.strips
     try require(editor.bounds.width == 1040 && strips.visible[0]?.busID == "bus0", "Mixer uses a real constrained compact viewport")
     try require(strips.visible.count >= 6 && strips.visible.count <= 9 && strips.createdCount <= 9, "Maximum graph only allocates visible controls and neighboring strips")
@@ -63,6 +70,8 @@ extension InterfaceTests {
     strip.width.doubleValue = 1.7; strip.slide(strip.width)
     replies.removeFirst()(["error": ["message": "Song changed; reload"]])
     try require(strip.width.doubleValue == 1 && strip.fader.doubleValue == -6 && editor.status.stringValue.contains("Song changed"), "Rejected gesture restores saved controls without losing prior commits")
+    try require(calls.last?.1["preview"] as? Bool == true && calls.last?.1["width"] as? Double == 1, "Rejected gesture previews the saved value so the engine matches the document")
+    answer("song:3")
     editor.load(); let count = calls.count
     strip.pan.doubleValue = 0.9; strip.slide(strip.pan)
     try require(calls.count == count && strip.pan.doubleValue == -0.5, "A pending graph reload rejects control changes and restores displayed values")
@@ -71,6 +80,10 @@ extension InterfaceTests {
     strip.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: strip.preGain))
     try require(calls.last?.1["preGainDB"] as? Double == -9.5 && calls.last?.1["bus"] as? String == "bus0", "Typed strip gain reaches the same revision-checked API")
     answer("song:5")
+    let beforeUntouched = calls.count
+    strip.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: strip.preGain))
+    strip.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: strip.gain))
+    try require(calls.count == beforeUntouched, "Ending a strip gain edit without typing commits nothing and adds no Undo step")
     strip.preGain.stringValue = "NaN"; let beforeInvalid = calls.count
     strip.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: strip.preGain))
     try require(calls.count == beforeInvalid && strip.preGain.stringValue == "-9.5", "Invalid numeric input restores the saved gain")

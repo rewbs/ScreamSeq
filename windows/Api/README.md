@@ -1,5 +1,23 @@
 # Windows local API subset
 
+Parameter activity uses the shared prepared processor monitor: `parameter.activity.targets`,
+`.parameters`, `.sources` and `.get` read actual host values and controlling sources.
+`parameter.activity.watch` is a transient replay-cached write without a song revision
+guard or musical Undo. Processor keys include the document identity; a replaced song
+cannot reuse a previous song's monitor. Read points after a cursor, resetting it when
+the token changes. No processor values are fabricated before playback preparation.
+
+`automation.recorded.get` pages absolute 48 kHz automation by stable plugin identity
+and parameter. `automation.recorded.edit` adds, moves, updates or removes one point
+with `expectedRevision`, complete prevalidation, `dryRun`, one chronological Undo and
+native project persistence. Enabled parameter envelopes and pattern commands exclude
+new recorded points. See [parameter-activity.schema.json](parameter-activity.schema.json).
+
+`workspace.input` changes the selected typing instrument and/or octave using both
+`expectedRevision` and `expectedContext`; it changes context only, with no musical
+Undo or transport stop. Other workspace operations keep their existing unguarded
+presentation-only contracts.
+
 This directory provides a private transport and a control-thread session adapter,
 not full macOS API parity. The attached host determines document-operation support;
 query the running instance's `api.describe` for its current method catalog. Do not
@@ -121,7 +139,9 @@ device fields report actual negotiation. See `../AUDIO_SETTINGS_PROGRESS.md`.
 
 The application supports revision-guarded `transport.note` and `transport.panic`
 using the shared renderer's preview queue. See `mac/AUTOMATION.md` for note,
-sample/instrument, velocity and release semantics. Stopped audition prepares a
+sample/instrument, velocity and release semantics. Optional zero-based `channel`
+selects pattern-channel routing for sample-backed previews; omit it for an
+independent inspector preview and repeat the same context on release. Stopped audition prepares a
 paused renderer; `transport.get` distinguishes `playing`, `audioActive` and
 `audition`. Native piano input has independent held-key ownership and guards
 against late releases from an earlier playback preparation. Windows responses
@@ -187,6 +207,14 @@ Parameter/port writes validate the whole candidate before stopping playback.
 Editor open returns a token; commit requires that token, captured graph/node
 and unchanged recipe. Closing the native window retains its uncommitted draft
 until explicit API close or document replacement. Commit supports dry run.
+`graph.plugin.bypass {graph,node,bypass,expectedRevision,dryRun?}` changes the
+saved host-bypass flag for one recipe processor in all uses. Getter metadata
+includes `bypass`; parameters and opaque preset data are preserved, as are
+clone/group-export copies. A changed flag is one document Undo; identical values
+and dry runs are no-ops. Windows currently requires stopped playback and audition
+for this action and its Undo/Redo. Active changes return `-32002` without stopping
+transport or changing history. The live shared-engine path exists, but Windows
+publication/history-hook integration and native qualification remain pending.
 `workspace.get.graphEditor` exposes the reusable canvas's captured revision,
 draft flags, selection and retained hit-test geometry. The contextual workspace
 panel API is unchanged.
@@ -1007,3 +1035,35 @@ Injected driver messages traverse the production queue and timestamp conversion.
 Its optional `after` barrier invokes actual `apiStop` or `nativeStop` before timer
 servicing to test pending batches. Normal sessions never expose this method.
 This fixture does not qualify physical MIDI drivers, hotplug or hardware latency.
+
+Graph interaction parity (30 September 2026): `graph.node.add` supports `insertEdge` or `connect`; modulation Add initializes zero depth and a shared target base. `graph.nodes.detach` preserves internal/sidechain connections and heals a unique serial Main path, with optional `remove` and saved `positions`. These changes use the shared graph validation and one transaction. Rack parameter/bus/bypass APIs accept a persistent `plugin` ID instead of `slot` (exactly one). The new GraphOperations regression scenario is `cableInsertionAndDetachment`; this Mac checkout has not executed the Windows binary.
+
+### Shared song processing groups
+
+`graph.song.group.create/update/remove/export` mirrors the Mac API in
+`mac/AUTOMATION.md`. `graph.get.groups` persists nested presentation boundaries
+around `plugin:<instanceID>` rack members. Grouping, moving and ungrouping keep
+rack ownership, real mixer cables, stable parameter targets and DSP unchanged.
+`graph.layout.set.groups` batches boundary movement with ordinary node positions.
+Export uses the host's saved baseline-state hook and creates a fresh independent
+library recipe from consecutive enabled effects on one bus. Missing/bypassed
+members and unsupported topology fail before editing. All operations support
+revision guards, strict input, dry runs, no-op history and Undo/Redo. The portable
+adapter and codecs are tested on macOS; this does not claim native Windows UI
+interaction or device qualification.
+
+
+`graph.signal.get` now exposes exact adopted mixer-route contributions alongside
+physical audio ports. A route reading carries
+`route:{kind,source,target,plugin,input,output,tap,gainDB,preFader}`; unused IDs
+are empty strings and unused numbers zero. `compensation` is its route delay.
+The captured contribution is after route gain/delay and before destination
+summing. Serial inserts use `tap:"main-path"` before auxiliary Main-in summing;
+Master's processor output uses `tap:"pre-master-fader"`. Other routes use
+`tap:"post-gain"`. Plugin/recipe auxiliary outputs do not imply a bus-fader tap.
+Use the returned opaque key for Scope/Listen and keep route observations out of
+physical socket indices. Missing or ambiguous route observations are unavailable,
+not the source's output meter. Gain and tap metadata describe the adopted plan,
+including while another plan is preparing. Shared host tests cover route PCM;
+the Windows JSON adapter remains subject to a native Windows execution check.
+Reusable recipe internals are outside this initial route-observation slice.

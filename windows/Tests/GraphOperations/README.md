@@ -33,8 +33,8 @@ auto data = operations.invoke(method, paramsWithoutExpectedRevision);
 The implementation copies a candidate NativeSong, applies the operation, calls
 shared `reconcileEnvelopeLinks` and `NativeSong::validate` (including graph DAG
 and mixer routing validation), and commits one annotation. Complex JSON fields
-reuse the existing complete metadata-14 codec with strict recursive API-key
-validation in front; the persistence codec itself is unchanged. Omitted existing
+reuse the current native metadata codec with strict recursive API-key
+validation in front. Omitted existing
 recipe state is retained. Temporarily removing links only during codec parsing
 allows the shared reconciler to prune deleted targets; restored links still
 reject writes through a linked envelope. Clone allocates graph/node IDs through
@@ -57,9 +57,13 @@ from the actual pattern override or song default.
 `GraphOperations::writes()` (all accept `dryRun`):
 
 - `graph.create`, `graph.clone`, `graph.update`, `graph.remove`
-- `graph.node.add`, `graph.node.remove`
+- `graph.group.create`, `graph.group.update`, `graph.group.remove`, `graph.group.export`
+- `graph.node.add`, `graph.node.remove`, `graph.nodes.insert`, `graph.nodes.detach`
+- `graph.song.source.add`, `graph.song.source.update`, `graph.song.source.remove`
+- `graph.song.modulation.set`, `graph.song.modulation.remove`
+- `graph.song.group.create/update/remove/export`
 - `graph.assign`, `graph.instrument.assign`
-- `graph.routes.set`, `graph.layout.set`, `graph.commands.set`
+- `graph.routes.set`, `graph.connections.remove`, `graph.layout.set`, `graph.commands.set`
 - `graph.automation.set`
 
 `graph.node.add` supports independent plugin recipes without a host. Its `slot`
@@ -79,6 +83,9 @@ prepared processors, isolated plugin instances, or UI ownership, not stubs.
 - `std::function<std::vector<Tracker::SignalActivity>()> activity`
 - `std::vector<Tracker::SignalActivity> cachedActivity`
 - `std::function<GraphRackClone(uint32_t)> cloneRackSlot`
+- `std::function<std::vector<Tracker::PluginParameter>(const std::string &)> parameters`
+- `std::map<std::string,std::vector<Tracker::PluginParameter>> cachedParameters`
+- `std::function<void(const Tracker::NativeSong &)> validateCandidate`
 
 Callbacks supersede their respective caches. Default empty caches describe an
 actual **offline empty rack / no playback** fixture; an application with plugins
@@ -143,3 +150,28 @@ Pending outside this component: app/session routing and advertised schema subset
 real host hook wiring, prepared renderer publication, plugin/controller/editor
 methods, actual NativeProject container integration/save/reopen and Mac-app
 interchange. The metadata/model roundtrip here does not claim those integrations.
+
+Processing boundaries preserve flat DSP identities and do not stop playback. Movement translates all descendants. Export allocates independent node/group identities and remaps envelope-bank uses; references outside the boundary are validated before commit. Unused library edits do not invalidate active processing.
+
+
+## Song modulation parity (2026-10-01)
+
+Song sources use stable document identities; parameter edges use stable rack and
+parameter identities. `graph.song.modulation.set` optionally accepts
+`replace:{source,plugin,parameter}` for atomic endpoint rerouting. It preserves
+unspecified range/mode settings, rejects stale endpoints and destination
+collisions, and changes one Undo entry. Parameter connections require an actual
+writable catalog entry. Stepped parameters require explicit quantized mode;
+quantized mode requires a valid step size. The controller wires the catalog
+provider to its native plugin host using the persistent instance ID.
+
+`graph.automation.get/set` uses explicit `graph:null` for song automation sources.
+It preserves other patterns and linked template protection. Song-source removal
+prunes dependent edges, layout and bank-use links in the same edit. Envelope
+bank operations accept the same song graph target through `EnvelopeOperations`.
+
+Portable graph document and native metadata tests passed on macOS, including
+all source kinds, atomic validation, zero-depth creation, endpoint rerouting,
+Undo/Redo, codec roundtrips and song curve bank links. This verifies the actual
+Windows document adapter and codec, not the Windows native UI or audio host.
+The Win32 controller and envelope bank integration cases remain unexecuted here.

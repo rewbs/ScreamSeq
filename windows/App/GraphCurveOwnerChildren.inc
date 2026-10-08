@@ -49,7 +49,7 @@
       }
       return result;
     };
-    Json bankTarget={{"kind","graph"},{"graph",target.graph},{"node",target.node},{"pattern",target.pattern}},shape;
+    Json bankTarget={{"kind","graph"},{"graph",target.graph.empty()?Json(nullptr):Json(target.graph)},{"node",target.node},{"pattern",target.pattern}},shape;
     if(!points_.empty())shape={{"span",uint64_t(rows_)*256},{"rowsPerBeat",rowsPerBeat_},{"points",points_}};
     OpeningChild opening(*this);
     auto next=std::make_unique<EnvelopeBankWindow>(window_,std::move(bankTarget),std::move(shape),document,revision_,

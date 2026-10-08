@@ -1,0 +1,607 @@
+[
+  {
+    "label": "Pattern sample, silent channel 1",
+    "peak": 0,
+    "telemetry": {
+      "audioActive": true,
+      "audition": true,
+      "callbacks": 193,
+      "fault": false,
+      "frames": 24704,
+      "graphActivity": [
+        {
+          "graph": "n21",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n24",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        }
+      ],
+      "left": 0,
+      "loop": false,
+      "maxMicros": 154.75,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 160,
+      "pattern": 0,
+      "playing": false,
+      "pluginFailure": false,
+      "pluginLatency": 0,
+      "region": {},
+      "right": 0,
+      "row": 0,
+      "voicePositions": [
+        {
+          "channel": 8,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 1,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 166
+        }
+      ],
+      "voices": 1
+    }
+  },
+  {
+    "label": "Pattern sample, channel 2 via Master",
+    "peak": 0.0471014678478241,
+    "telemetry": {
+      "audioActive": true,
+      "audition": true,
+      "callbacks": 495,
+      "fault": false,
+      "frames": 63360,
+      "graphActivity": [
+        {
+          "graph": "n21",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n24",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        }
+      ],
+      "left": 0.04709786921739578,
+      "loop": false,
+      "maxMicros": 154.75,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 160,
+      "pattern": 0,
+      "playing": false,
+      "pluginFailure": false,
+      "pluginLatency": 0,
+      "region": {},
+      "right": 0.04709786921739578,
+      "row": 0,
+      "voicePositions": [
+        {
+          "channel": 9,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 1,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 132
+        }
+      ],
+      "voices": 1
+    }
+  },
+  {
+    "label": "Sample inspector, independent",
+    "peak": 0.058872342109680176,
+    "telemetry": {
+      "audioActive": true,
+      "audition": true,
+      "callbacks": 794,
+      "fault": false,
+      "frames": 101632,
+      "graphActivity": [
+        {
+          "graph": "n21",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n24",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        }
+      ],
+      "left": 0.058872342109680176,
+      "loop": false,
+      "maxMicros": 154.75,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 160,
+      "pattern": 0,
+      "playing": false,
+      "pluginFailure": false,
+      "pluginLatency": 0,
+      "region": {},
+      "right": 0.058872342109680176,
+      "row": 0,
+      "voicePositions": [
+        {
+          "channel": 10,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 1,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 75
+        }
+      ],
+      "voices": 1
+    }
+  },
+  {
+    "label": "Pattern instrument, silent channel 1",
+    "peak": 0,
+    "telemetry": {
+      "audioActive": true,
+      "audition": true,
+      "callbacks": 1090,
+      "fault": false,
+      "frames": 139520,
+      "graphActivity": [
+        {
+          "graph": "n21",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n24",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        }
+      ],
+      "left": 0,
+      "loop": false,
+      "maxMicros": 154.75,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 80,
+      "pattern": 0,
+      "playing": false,
+      "pluginFailure": false,
+      "pluginLatency": 0,
+      "region": {},
+      "right": 0,
+      "row": 0,
+      "voicePositions": [
+        {
+          "channel": 11,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 1,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 63
+        }
+      ],
+      "voices": 1
+    }
+  },
+  {
+    "label": "Instrument inspector, own half-gain graph",
+    "peak": 0.029438413679599762,
+    "telemetry": {
+      "audioActive": true,
+      "audition": true,
+      "callbacks": 1390,
+      "fault": false,
+      "frames": 177920,
+      "graphActivity": [
+        {
+          "graph": "n21",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n24",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n20"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n27",
+          "instrument": "n16",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        }
+      ],
+      "left": 0.029436171054840088,
+      "loop": false,
+      "maxMicros": 154.75,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 80,
+      "pattern": 0,
+      "playing": false,
+      "pluginFailure": false,
+      "pluginLatency": 0,
+      "region": {},
+      "right": 0.029436171054840088,
+      "row": 0,
+      "voicePositions": [
+        {
+          "channel": 12,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 1,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 254
+        }
+      ],
+      "voices": 1
+    }
+  }
+]

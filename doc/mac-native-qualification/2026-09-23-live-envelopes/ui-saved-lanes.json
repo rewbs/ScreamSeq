@@ -1,0 +1,50 @@
+[
+  {
+    "enabled": true,
+    "id": "n16",
+    "maximum": 1,
+    "minimum": 0,
+    "name": "Gain",
+    "parameter": 7,
+    "pattern": "n1",
+    "plugin": "D040009E-BB23-4249-95F9-87D68B23B69D",
+    "points": [
+      {
+        "curve": "smooth",
+        "position": 0,
+        "value": 0.2
+      },
+      {
+        "curve": "linear",
+        "position": 9216,
+        "value": 0.684400826446281
+      },
+      {
+        "curve": "linear",
+        "position": 16383,
+        "value": 0.2
+      }
+    ],
+    "resolved": true,
+    "slot": 0
+  },
+  {
+    "enabled": true,
+    "id": "n17",
+    "maximum": 24,
+    "minimum": -24,
+    "name": "Output gain",
+    "parameter": 2,
+    "pattern": "n1",
+    "plugin": "E2523CF2-E093-4B8A-9E2F-09D9F4F7D82C",
+    "points": [
+      {
+        "curve": "linear",
+        "position": 4096,
+        "value": 0.6
+      }
+    ],
+    "resolved": true,
+    "slot": 1
+  }
+]

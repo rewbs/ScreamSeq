@@ -5,7 +5,10 @@ static void ioFailure(const std::string &mode,const std::string &scannerExe,cons
  if(mode=="locked"){
   Handle lock(CreateFileW(cacheFile.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr));need(lock.h!=INVALID_HANDLE_VALUE,"lock destination");reject([&]{rescan(fixture);},"actual sharing-denied cache replacement");
  }else if(mode=="stage"){
-  auto temp=cacheFile;temp+=L"."+std::to_wstring(GetCurrentProcessId())+L".tmp";put(temp,"foreign staging owner");reject([&]{rescan(fixture);},"exclusive staging collision");need(bytes(temp)=="foreign staging owner","removed someone else's staging file");fs::remove(temp);
+  // Staging names are unique per attempt: a foreign or leftover staging file
+  // is neither reused nor removed, and it cannot block publication.
+  auto temp=cacheFile;temp+=L"."+std::to_wstring(GetCurrentProcessId())+L".tmp";put(temp,"foreign staging owner");rescan(fixture);need(bytes(temp)=="foreign staging owner","touched someone else's staging file");fs::remove(temp);
+  need(JSON::parse(bytes(cacheFile)).size()==2,"publication beside a foreign staging file");restart(cacheFile,descriptors(platformPluginBackendFactory().discover()));noTemps(dir);std::cout<<mode<<" coexistence PASS\n";return;
  }else{reject([&]{rescan(fixture);},"injected "+mode);need(ReviewIO::calls==1,"injection not reached exactly once");}
  ReviewIO::fault=ReviewIO::Fault::none;
  need(recordSnapshot()==memory,"I/O failure changed complete records");need(bytes(cacheFile)==original,"I/O failure replaced readable bytes");need(descriptors(platformPluginBackendFactory().discover())==before,"I/O failure changed in-memory records");restart(cacheFile,before);noTemps(dir);

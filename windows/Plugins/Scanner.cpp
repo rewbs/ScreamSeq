@@ -21,6 +21,9 @@ Scan scanChild(const std::string &exe,const std::string &path,uint32_t timeoutMs
  else if(WaitForSingleObject(pi.hProcess,0)==WAIT_OBJECT_0)break;
  else WaitForSingleObject(pi.hProcess,2);
  need(GetTickCount64()<deadline,"VST3 scanner timeout (isolated child terminated)");}
+ // The child may write between the last poll and its exit. It has exited and
+ // our write end is closed, so read until the pipe is empty or broken.
+ for(;;){DWORD available=0;if(!PeekNamedPipe(rd,nullptr,0,nullptr,&available,nullptr)||!available)break;DWORD n=0;if(!ReadFile(rd,data.data(),std::min<DWORD>(available,DWORD(data.size())),&n,nullptr)||!n)break;need(output.size()+n<=1024*1024,"Scanner output exceeded 1 MiB");output.append(data.data(),n);}
  DWORD code=0;need(GetExitCodeProcess(pi.hProcess,&code)&&code==0,"VST3 scanner crashed or rejected module");
  auto scan=decodeScan(JSON::parse(output,[](int depth,JSON::parse_event_t,JSON&){if(depth>16)throw std::runtime_error("Scanner response nesting exceeds limit");return true;}));need(scan.file.path==before.path&&scan.file.sha256==before.sha256&&scan.file.machine==before.machine,"Scanner identity changed or invalid response");auto after=fingerprint(path);need(after.sha256==before.sha256,"VST3 changed while scanning");return scan;
 }

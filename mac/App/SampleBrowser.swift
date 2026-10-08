@@ -117,12 +117,13 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
       root: roots.indices.contains(root.indexOfSelectedItem - 1) ? roots[root.indexOfSelectedItem - 1] : nil,
       tagText: tagSearch.stringValue)
   }
-  func requestSearch(append: Bool = false) {
+  func requestSearch(append: Bool = false, loadWhenReady: Bool = false) {
     debounce?.cancel(); searchGeneration += 1; let generation = searchGeneration
     var query = query; query.offset = append ? entries.count : 0
     onSearch?(query) { [weak self] result in
       guard let self, self.searchGeneration == generation else { return }
       self.updateResults(result, append: append)
+      if loadWhenReady { self.loadSelection() }
     }
   }
   func updateResults(_ results: SampleLibraryResults, append: Bool = false) {
@@ -144,6 +145,9 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(120), execute: item)
   }
   func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+    if control === search, selector == #selector(NSResponder.insertNewline(_:)) {
+      requestSearch(loadWhenReady: true); return true
+    }
     if control === search, selector == #selector(NSResponder.moveDown(_:)), !entries.isEmpty {
       window?.makeFirstResponder(table); table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false); inspect(audible: autoPreview.state == .on); return true
     }

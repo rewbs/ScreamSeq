@@ -1,0 +1,2 @@
+{"rate":48000,"framesPerCallback":128,"seconds":30,"scratchTracks":16,"callbacks":11250,"meanMicros":464.474,"p99Micros":3356,"maxMicros":37436.5,"deadlineMicros":2666.67,"overruns":168}
+{"rate":96000,"framesPerCallback":128,"seconds":30,"scratchTracks":16,"callbacks":22500,"meanMicros":787.136,"p99Micros":10655,"maxMicros":80088,"deadlineMicros":1333.33,"overruns":1865}

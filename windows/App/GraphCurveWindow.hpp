@@ -57,11 +57,11 @@ private:
   std::unique_ptr<FormulaWorkbenchWindow> workbench_,reference_;
 
   static void require(bool ok,const char *message){if(!ok)throw std::runtime_error(message);}
-  bool hasTarget()const{return !target_.graph.empty()&&!target_.node.empty()&&!target_.patternID.empty();}
+  bool hasTarget()const{return !target_.node.empty()&&!target_.patternID.empty();}
   bool draft()const{return dirty_||pointFields_;}
   static bool sameIdentity(const Target &a,const Target &b){return a.graph==b.graph&&a.node==b.node&&a.patternID==b.patternID;}
   static Target resolve(const Context &context,Target target){
-    require(!target.graph.empty()&&!target.node.empty()&&!target.patternID.empty(),"Choose a graph automation source and pattern");
+    require(!target.node.empty()&&!target.patternID.empty(),"Choose a graph automation source and pattern");
     const auto found=std::find_if(context.patterns.begin(),context.patterns.end(),[&](const auto &p){return p.at("id")==target.patternID;});
     require(found!=context.patterns.end(),"Captured pattern was removed / Follow selection to choose another target");
     target.pattern=found->at("index").template get<unsigned>();return target;
@@ -147,6 +147,12 @@ public:
     // The first explicit open still captures a source into that same HWND.
     if(!retain||(!hasTarget()&&!retainedDraft()))captureSelection(std::move(target),!initialized_);
     show();focusPage();
+  }
+  // Explicit graph-workflow navigation uses this sole owner, including song sources.
+  void openTarget(Target target){
+    if(hasTarget()&&sameIdentity(target_,target)){openAt();return;}
+    require(!retainedDraft(),"Finish the captured curve or child draft before choosing another source");
+    captureSelection(std::move(target),false);show();focusPage();
   }
   bool followSelection(){
     if(retainedDraft())return false;const auto now=context_();if(now.busy)return false;

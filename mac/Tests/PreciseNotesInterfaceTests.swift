@@ -34,6 +34,7 @@ extension InterfaceTests {
     editor.onContext={(PatternModel(["rows":64,"channels":4]),0,0,2)}
     editor.onRequest={method,params,reply in calls.append((method,params));replies.append(reply)}
     editor.capture();editor.capture();try require(calls.count==1 && editor.pending,"Only one precise-note request while pending")
+    try require(!editor.note.isEnabled && !editor.addButton.isEnabled,"An asynchronous note read still disables edits to its previous target")
     replies.removeFirst()(["result":["revision":"notes:1","data":preciseData]])
     try require(editor.draft.count==2 && editor.note.selectedTag()==61 && editor.velocity.stringValue=="93","Row editor reads onset and release with exact velocity")
     // Typing a value and clicking Check/Apply must include the visible fields,
@@ -82,7 +83,19 @@ extension InterfaceTests {
       if method=="pattern.notes.get" {reply(["result":["revision":"mini:1","data":["pattern":0,"rowsPerBeat":4,"effects":fx,"events":[["channel":0,"position":5*65536,"note":61,"instrument":2,"velocity":100,"effect":9,"parameter":128],["channel":1,"position":5*65536,"note":65,"instrument":2,"velocity":70]]]]])}
       else {sent=params;reply(["result":["revision":"mini:2","data":[:]]])}
     }
-    mini.capture();mini.offset.stringValue="1/8";mini.put(replacing:true)
+    mini.capture()
+    let originalEffectItem=mini.effect.itemArray[1]
+    mini.capture()
+    try require(mini.effect.itemArray[1] === originalEffectItem && mini.effect.indexOfSelectedItem==1,
+      "Recapturing a note preserves the native effect menu and selects its actual effect")
+    let blank=PreciseNotesEditor(frame:.zero)
+    var blankEvents:[[String:Any]]=[["channel":0,"position":0,"note":61,"instrument":1,"effect":9,"parameter":128]]
+    blank.onContext={(PatternModel(["rows":64,"channels":1]),0,0,1)}
+    blank.onRequest={_,_,reply in reply(["result":["revision":"blank:1","data":["pattern":0,"effects":fx,"events":blankEvents]]])}
+    blank.capture();blankEvents=[];blank.capture()
+    try require(blank.draft.isEmpty && blank.effect.indexOfSelectedItem==0 && blank.parameter.stringValue=="00",
+      "A blank row clears the previous hit's effect even when its catalogue is reused")
+    mini.offset.stringValue="1/8";mini.put(replacing:true)
     try require(mini.draft[0]["position"] as? Int==5*65536+32768,"Beat fraction enters a precise onset halfway through the captured row")
     mini.units.selectItem(at:1);mini.changeUnits();try require(mini.offset.stringValue=="0.5","Switching units preserves musical position")
     mini.units.selectItem(at:0);mini.changeUnits();try require(mini.offset.stringValue=="0.125","Switching back shows beats without quantization")
@@ -127,6 +140,25 @@ extension InterfaceTests {
     dragCanvas.mouseDown(with:mouse(.leftMouseDown,dragCanvas.point(dragCanvas.events[0])))
     dragCanvas.mouseDragged(with:mouse(.leftMouseDragged,NSPoint(x:dragCanvas.plot.minX-50,y:dragCanvas.plot.minY),.shift))
     try require(moves.last?.0==0 && moves.last?.1==1,"Shift-drag preserves volume while clamping the start boundary")
+    // Automatic saves must not acknowledge a newer draft with an older reply.
+    let live=preciseNotesFixture();var writes=[[String:Any]](),acks=[([String:Any])->Void]()
+    live.onRequest={method,params,reply in writes.append(params);acks.append(reply)}
+    try require(live.editCell(0,"beats","1/16"),"Inline fractional beat edit accepted")
+    func awaitWrites(_ count:Int) {
+      let deadline=Date().addingTimeInterval(2)
+      while writes.count<count && Date()<deadline {RunLoop.current.run(until:Date().addingTimeInterval(0.01))}
+    }
+    awaitWrites(1)
+    try require(writes.count==1 && live.pending && live.table.isEnabled,"Typing saves automatically while keeping the table editable: writes=\(writes.count), pending=\(live.pending), enabled=\(live.table.isEnabled), draft=\(live.hasDraft), status=\(live.status.stringValue), events=\(live.draft)")
+    try require(live.editCell(live.draft.firstIndex{$0["note"] as? Int==61}!,"velocity","71"),"Typing continues during a save")
+    acks.removeFirst()(["result":["revision":"notes:2","data":[:]]])
+    try require(live.hasDraft && live.draft.first{$0["note"] as? Int==61}?["velocity"] as? Int==71,"Older save acknowledgement preserves newer draft")
+    awaitWrites(2)
+    try require(writes.count==2 && writes[1]["expectedRevision"] as? String=="notes:2","Queued edit uses the acknowledged revision")
+    acks.removeFirst()(["result":["revision":"notes:3","data":[:]]])
+    try require(!live.hasDraft && live.applyButton.superview==nil,"Automatic save settles with no Apply button")
+    try require(!live.editCell(0,"beats","1/4"),"Inline offset rejects the next row boundary")
+    RunLoop.current.run(until:Date().addingTimeInterval(0.25));try require(writes.count==2,"Invalid cell never saves")
     let grid=PatternView();grid.model=PatternModel(["channels":4,"rows":64,"preciseNotes":preciseData["events"]!]);grid.frame=NSRect(x:0,y:0,width:800,height:400)
     var opened=0,cleared=[Int]();grid.onPreciseNotes={opened += 1};grid.onClearPreciseNotes={cleared=[$0,$1]}
     key(grid,36,"\r");key(grid,51,"");try require(opened==1 && cleared==[0,0] && grid.currentCommandHelp.contains("2 precise"),"Precise row keyboard editing and deletion use native events")

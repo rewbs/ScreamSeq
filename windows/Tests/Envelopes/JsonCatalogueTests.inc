@@ -29,7 +29,7 @@ void jsonCompatibility(const std::string &operation) {
     auto imported=api.invoke("envelope.catalogue.import",{{"catalogueID",root["entries"][0]["id"]},{"expectedCatalogueRevision",byteRevision(bytes)}});
     CHECK(imported["wouldChange"]==true);CHECK(f.doc->native().envelopeBank.size()==1);CHECK(f.doc->native().envelopeLinks.empty());
     CHECK(api.invoke("envelope.bank.list",Json::object())["entries"][0]["shape"]==root["entries"][0]["shape"]);
-    CHECK(readProjectBytes(files.path)==bytes);CHECK(std::filesystem::last_write_time(files.path)==time);CHECK(f.stops==1);
+    CHECK(readProjectBytes(files.path)==bytes);CHECK(std::filesystem::last_write_time(files.path)==time);CHECK(f.stops==0);
   } else {
     const auto master=api.invoke("envelope.bank.save",{{"name","更新 🎶"},{"shape",root["entries"][0]["shape"]}})["id"];
     const auto revision=f.doc->revision,history=f.doc->historyBytes();const auto stops=f.stops;

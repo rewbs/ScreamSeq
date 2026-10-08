@@ -63,7 +63,9 @@ private:
   bool key(WPARAM value,bool ctrl,bool)override{
     if(value==VK_ESCAPE){releaseAll();return true;}if(value==VK_F6){SetFocus(GetFocus()==window_?controls_.at(note):window_);return true;}
     if(ctrl||GetKeyState(VK_MENU)&0x8000||GetFocus()!=window_)return false;
-    if(value==VK_SPACE){begin(value,integer(note,1,120));return true;}const std::string lower="ZSXDCVGBHNJM",upper="Q2W3ER5T6Y7UI";const auto low=lower.find(char(value)),high=upper.find(char(value));
+    if(value==VK_SPACE){begin(value,integer(note,1,120));return true;}// Piano rows are physical key positions; held_ stays keyed by the message's own key.
+    const auto physical=physicalMusicalKey(value);if(!physical||physical>127)return false;
+    const std::string lower="ZSXDCVGBHNJM",upper="Q2W3ER5T6Y7UI";const auto low=lower.find(char(physical)),high=upper.find(char(physical));
     if(low!=std::string::npos){begin(value,std::min(120u,firstNote_+unsigned(low)));return true;}if(high!=std::string::npos){begin(value,std::min(120u,firstNote_+12+unsigned(high)));return true;}return false;
   }
   bool keyUp(WPARAM key)override{if(!held_.contains(key))return false;release(key);return true;}

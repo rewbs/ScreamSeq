@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ScreamSeq Windows workspace requests",
-  "description": "Workspace presentation, inspected context and application shortcut preferences only; no song revision, musical Undo or playback stop. These methods accept neither expectedRevision nor expectedContext. Editor placement retains existing native fields and drafts. Inspection and audio qualification modes store named layouts and shortcuts in memory only.",
+  "description": "Workspace presentation and input context only; no musical Undo or playback stop. workspace.input requires expectedRevision and expectedContext; other workspace methods accept neither token. Editor placement retains existing fields and drafts.",
   "type": "object",
   "properties": {
     "jsonrpc": {
@@ -18,7 +18,8 @@
         "workspace.panel",
         "workspace.layout",
         "workspace.commands.get",
-        "workspace.shortcut.set"
+        "workspace.shortcut.set",
+        "workspace.input"
       ]
     },
     "params": {
@@ -87,6 +88,51 @@
         },
         "params": {
           "$ref": "#/$defs/shortcut"
+        }
+      }
+    },
+    {
+      "properties": {
+        "method": {
+          "const": "workspace.input"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string"
+            },
+            "expectedContext": {
+              "type": "string"
+            },
+            "instrument": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "octave": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "expectedContext"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "instrument"
+              ]
+            },
+            {
+              "required": [
+                "octave"
+              ]
+            }
+          ],
+          "additionalProperties": false
         }
       }
     }

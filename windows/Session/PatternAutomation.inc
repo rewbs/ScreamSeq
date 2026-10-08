@@ -19,6 +19,12 @@ Json patternAutomation(Tracker::Document &document,const std::string &method,con
   using namespace Tracker;
   try{
     const auto &song=document.song();auto indexOf=[&]{auto index=uint16_t(integer(field(p,"pattern"),0,UINT16_MAX));need(song.Patterns.IsValidPat(index),"Pattern does not exist");return index;};
+    auto commit=[&](NativeSong &next){
+      // Preparation cannot publish or mutate the document. The shared native
+      // transaction invokes publication only after history allocation succeeds.
+      auto publish=host.prepareNativeUpdate?host.prepareNativeUpdate(document.native(),next):stop;
+      document.annotate([&](NativeSong &native){native=std::move(next);},publish);
+    };
     auto slotOf=[&](const std::string &id){return size_t(std::find(host.plugins.begin(),host.plugins.end(),id)-host.plugins.begin());};
     std::map<size_t,Json> catalogs;auto parameters=[&](size_t slot)->const Json &{if(!catalogs.contains(slot))catalogs[slot]=host.parameters?host.parameters(slot):Json::array();return catalogs.at(slot);};
     if(method=="automation.pattern.get"){
@@ -57,11 +63,11 @@ Json patternAutomation(Tracker::Document &document,const std::string &method,con
       else if(tool.operation=="paste"||tool.operation=="insert"){keys(options,{"clip","repeats"});need(!p.contains("end"),"Paste/insert extent comes from clipboard span and repetitions; omit end");tool.repeats=uint32_t(integer(options.value("repeats",Json(1)),1,4096));const auto &clip=field(options,"clip");keys(clip,{"span","points","unitsPerRow"});if(clip.contains("unitsPerRow"))integer(clip.at("unitsPerRow"),256,256);tool.clip.span=uint32_t(integer(field(clip,"span"),1,1048576));tool.clip.points=automationPoints(field(clip,"points"),tool.clip.span);}
       else need(false,"Unknown automation operation");
       const bool dry=flag(p,"dryRun");const auto before=lane->points;auto transformed=transformAutomationPoints(before,length,tool);lane->points=transformed.points;next.validate(song);
-      const bool changed=next!=document.native();if(host.validateCandidate)host.validateCandidate(next);if(!dry&&changed){if(stop)stop();document.annotate([&](NativeSong &native){native=std::move(next);});}
+      const bool changed=next!=document.native();if(host.validateCandidate)host.validateCandidate(next);if(!dry&&changed)commit(next);
       return {{"lane",automationID(identifier)},{"dryRun",dry},{"wouldChange",changed},{"before",automationPointObjects(before)},{"after",automationPointObjects(transformed.points)},{"clippedValues",transformed.clipped}};
     }
     reconcileEnvelopeLinks(next,song);next.validate(song);if(host.validateCandidate)host.validateCandidate(next);const bool dry=flag(p,"dryRun"),changed=next!=document.native();
-    if(!dry&&changed){if(stop)stop();document.annotate([&](NativeSong &native){native=std::move(next);});}return {{"lane",automationID(identifier)},{"dryRun",dry},{"wouldChange",changed}};
+    if(!dry&&changed)commit(next);return {{"lane",automationID(identifier)},{"dryRun",dry},{"wouldChange",changed}};
   }catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}catch(const Json::exception &e){throw Api::ApiError(-32602,e.what());}
 }
 }

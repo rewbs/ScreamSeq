@@ -3,13 +3,14 @@
 #include "editor/SignalRuntime.hpp"
 #include "editor/NativeSong.hpp"
 namespace Tracker {
-struct SignalSampleSource {uint64_t target=0;const OpenMPT::ModInstrument *instrument=nullptr;uint16_t channel=0,channels=0;};
+struct SignalSampleSource {uint64_t target=0;const OpenMPT::ModInstrument *instrument=nullptr;uint16_t channel=0,channels=0;uint64_t instrumentID=0;};
 // Prepared on the control thread; owns all independent subgraph instances.
 class NativeSignalGraph {
   struct Instance;
   struct Bus;
   std::vector<std::unique_ptr<Bus>> buses_;
   double rate_;
+  bool offline_=false;
   size_t storageBytes_=0,processors_=0;
   std::map<uint16_t,uint64_t> patternIDs_;
   MixerGraph routedMixer_;
@@ -18,13 +19,19 @@ class NativeSignalGraph {
   std::array<std::atomic<uint8_t>,128> controllers_{};
   std::array<uint8_t,128> appliedControllers_{};
 public:
-  NativeSignalGraph(const NativeSong &,double sampleRate,bool offline,std::span<const SignalSampleSource> sampleSources={},size_t storageLimit=256*1024*1024,size_t processorLimit=256);
+  NativeSignalGraph(const NativeSong &,double sampleRate,bool offline,std::span<const SignalSampleSource> sampleSources={},size_t storageLimit=256*1024*1024,size_t processorLimit=256,ParameterActivity *activity=nullptr);
   ~NativeSignalGraph();
   size_t storageBytes() const {return storageBytes_;}
   size_t processors() const {return processors_;}
   void compile(MixerGraph &,std::vector<MixerProcessorInfo> &);
+  // Control thread reads only immutable membership, never live note watches.
+  bool sameNoteMembership(const NativeSong &) const;
+  void prepareParameters(const SignalGraph &,GraphControlPlan &,const GraphControlPlan *previous=nullptr) const;
   void begin(const OpenMPT::PlayState &,uint32_t frames,uint64_t position,PluginTransport,uint32_t patternRows=64) noexcept;
   void tail() noexcept;
+  uint64_t tailFrames(size_t) const noexcept; // Audio owner.
+  double tailGrowth() const noexcept;
+  uint64_t tailRevision() const noexcept;
   std::vector<SignalActivity> activity() const;
   std::span<const uint32_t> outputs(size_t index) const noexcept;
   const float *output(size_t index,uint32_t port) const noexcept;

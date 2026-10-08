@@ -6,12 +6,7 @@ namespace {
 void require(bool value, const char *message) { if (!value) throw std::invalid_argument(message); }
 }
 void ensureNativeMixer(NativeSong &native) {
-  if (native.mixer.active()) return;
-  const auto master = native.makeEntity().id;
-  for (const auto &[channel, track] : native.tracks)
-    native.mixer.buses.push_back({track.id, master, MixerBusKind::Track,
-      track.name.empty() ? "Track " + std::to_string(channel + 1) : track.name, track.color});
-  native.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
+  native.ensureMixer();
 }
 uint64_t groupNoteColumns(NativeSong &native, std::span<const uint16_t> channels,
                           const std::string &name, std::optional<uint64_t> output) {

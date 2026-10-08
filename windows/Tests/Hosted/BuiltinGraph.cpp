@@ -33,7 +33,7 @@ int main(){try{
       renderer.reset();return audio;
     };
     uint64_t master=0;
-    doc->annotate([&](NativeSong &n){master=n.makeEntity().id;for(const auto &[channel,track]:n.tracks)n.mixer.buses.push_back({track.id,master,MixerBusKind::Track,"Track"});n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});});
+    doc->annotate([&](NativeSong &n){master=n.masterID;for(const auto &[channel,track]:n.tracks)n.mixer.buses.push_back({track.id,master,MixerBusKind::Track,"Track"});n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});});
     auto dry=render(128);
     doc->annotate([&](NativeSong &n){const auto id=n.makeEntity().id,in=n.makeEntity().id,fx=n.makeEntity().id,out=n.makeEntity().id;
       SignalDefinition d;d.id=id;d.number=1;d.name="Built-in master";d.nodes={{in,SignalNodeKind::Input,"Input"},{fx,SignalNodeKind::Plugin,"Gain"},{out,SignalNodeKind::Output,"Output"}};

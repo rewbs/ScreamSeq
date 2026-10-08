@@ -11,12 +11,21 @@ final class UIQualification {
   var measurementStarted = false
   var activity: NSObjectProtocol?
   var priorWindowLevel: NSWindow.Level?
+  private var priorGraphWindowLevel:NSWindow.Level?
   private let reporter = DispatchQueue(label: "org.resonance.qualification-report", qos: .utility)
   private var nextProgress = 0.0
   private var visibleSince: Double?
   private var readyDeadline = CFAbsoluteTimeGetCurrent() + 60
   var requestedForeground = false
   var usesVST3 = false
+  let existingGraph = CommandLine.arguments.contains("--ui-test-existing-graph")
+  let floatingGraph = CommandLine.arguments.contains("--ui-test-float-graph")
+  var soundingChannels = 0
+  private var minimumGraphCards=Int.max
+  private var windowStateObservers=[NSObjectProtocol]()
+  private var windowStates=[(timestamp:Double,flags:UInt8)]()
+  private var windowStateDropped=0,windowStateSamples=0,inactiveSamples=0,noKeyWindowSamples=0,missingActivitySamples=0
+  private var measurementClockStart=0.0,measurementClockEnd=0.0
   let duration: Double
   let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
     "resonance-ui-qualification-" + UUID().uuidString)
@@ -36,6 +45,11 @@ final class UIQualification {
     if !requestedForeground {
       requestedForeground = true
       priorWindowLevel = app.window.level
+      // Directly launched QA bundles may otherwise remain on an inactive Space,
+      // even after activation. Expose only this disposable test window across
+      // Spaces; the visible-frame gates below still require real presentation.
+      app.window.collectionBehavior.remove(.moveToActiveSpace)
+      app.window.collectionBehavior.formUnion([.canJoinAllSpaces,.fullScreenAuxiliary])
       app.window.level = .floating
       app.window.makeKeyAndOrderFront(nil)
       NSApp.activate(ignoringOtherApps:true)
@@ -55,7 +69,13 @@ final class UIQualification {
       fail(error)
       return
     }
-    app.window.setContentSize(NSSize(width: 1360, height: 850))
+    // Use the available display for the dense workload. A fixed small window
+    // plus the restored secondary dock can leave only six tiny card fragments
+    // visible; that is not a valid graph performance/legibility workload.
+    let available=app.window.screen?.visibleFrame.size ?? NSSize(width:1360,height:900)
+    let chrome=app.window.frame.height-app.window.contentLayoutRect.height
+    app.window.setContentSize(NSSize(width:min(existingGraph ? 1600:1360,available.width),
+      height:min(existingGraph ? 1000:850,max(500,available.height-chrome))))
     app.window.center()
     app.window.level = .floating
     activity = ProcessInfo.processInfo.beginActivity(
@@ -68,12 +88,12 @@ final class UIQualification {
         try self.app.session.configureDevice(id,buffer:512)
       }
       // Extend the built-in demo if no long fixture was supplied.
-      if self.app.model.orders.count == 1 {
+      if !self.existingGraph && self.app.model.orders.count == 1 {
         for _ in 0..<Int(ceil(self.duration / 7)) {
           _ = try self.app.session.addPattern(64, duplicate: true, source: 0)
         }
       }
-      if let index = CommandLine.arguments.firstIndex(of: "--ui-test-vst3"),
+      if !self.existingGraph, let index = CommandLine.arguments.firstIndex(of: "--ui-test-vst3"),
         index + 1 < CommandLine.arguments.count
       {
         try self.app.session.addPlugin([
@@ -83,16 +103,33 @@ final class UIQualification {
         ])
         self.usesVST3 = true
       }
-      try self.app.session.addPlugin([
+      if !self.existingGraph {try self.app.session.addPlugin([
         "type": 0x6175_6678, "subtype": 0x6c70_6173,
         "manufacturer": 0x6170_706c, "name": "Apple: AULowpass",
-      ])
-      if CommandLine.arguments.contains("--ui-test-graph"){try self.prepareGraph()}
+      ])}
+      if self.existingGraph {
+        guard self.app.model.channels>=16 else{throw NSError(domain:"Qualification",code:3,userInfo:[NSLocalizedDescriptionKey:"Existing-graph qualification requires a supplied 16+ channel song"])}
+        self.app.session.setPlaybackLoop(true)
+      } else if CommandLine.arguments.contains("--ui-test-graph"){try self.prepareGraph()}
     }) {
       self.app.refreshAll()
       self.app.model.pattern = self.app.model.orders.first ?? 0
       self.app.refreshPattern()
       self.app.showEditor(0)
+      if self.existingGraph {
+        self.app.workspace?.place("graph",at:self.floatingGraph ? "float":"bottom",select:true)
+        self.app.workspace?.right.isHidden=true
+        self.app.workspace?.secondary.isHidden=true
+        if self.floatingGraph {self.app.workspace?.lower.isHidden=true}
+        self.app.workspace?.layoutSubtreeIfNeeded()
+        if self.floatingGraph {self.positionFloatingGraph()}
+        else if let workspace=self.app.workspace {workspace.vertical.setPosition(max(200,workspace.vertical.bounds.height*0.3),ofDividerAt:0)}
+      }
+      if CommandLine.arguments.contains("--ui-test-parameter-activity"),self.usesVST3,
+        let plugin=self.app.model.nativePlugins.first?["instanceID"] as? String {
+        self.app.workspace?.place("parameterActivity",at:"right",select:true)
+        self.app.showParameterActivity(plugin:plugin,parameter:7)
+      }
       self.beginMeasurementWhenVisible()
     }
   }
@@ -102,12 +139,12 @@ final class UIQualification {
     _ = try call("mixer.enable")
     let graph=try call("graph.create",["name":"Qualification motion"])["graph"] as! String
     var data=try call("graph.get",write:false)
-    let definition=(data["library"] as! [[String:Any]])[0],input=(definition["nodes"] as! [[String:Any]])[0]["id"] as! String
+    let definition=(data["library"] as! [[String:Any]]).first{$0["id"] as? String==graph}!,input=(definition["nodes"] as! [[String:Any]]).first{$0["kind"] as? String=="input"}!["id"] as! String
     let plugin=try call("graph.node.add",["graph":graph,"kind":"plugin","plugin":["format":"Built-in","classID":"resonance.gainer.v1"],"insertAfter":input])["node"] as! String
     let source=try call("graph.node.add",["graph":graph,"kind":"automation","name":"Pattern motion"])["node"] as! String
     data=try call("graph.get",write:false)
     for pattern in data["patterns"] as! [[String:Any]]{_ = try call("graph.automation.set",["graph":graph,"node":source,"pattern":pattern["index"]!,"points":[["position":0,"value":0.2,"curve":"smooth"],["position":8192,"value":0.8,"curve":"linear"]]])}
-    var changed=(try call("graph.get",write:false)["library"] as! [[String:Any]])[0]
+    var changed=(try call("graph.get",write:false)["library"] as! [[String:Any]]).first{$0["id"] as? String==graph}!
     changed["modulation"]=[["source":source,"target":plugin,"parameter":1,"minimum":0.7,"maximum":0.8]]
     _ = try call("graph.update",["definition":changed])
     _ = try call("graph.instrument.assign",["instrument":1,"graph":graph])
@@ -121,7 +158,7 @@ final class UIQualification {
       finish()
       return
     }
-    if NSApp.isActive && app.window.occlusionState.contains(.visible) {
+    if NSApp.isActive && app.window.occlusionState.contains(.visible) && (!floatingGraph || app.signalGraphEditor.window?.occlusionState.contains(.visible)==true) {
       if visibleSince == nil { visibleSince = now }
     } else {
       visibleSince = nil
@@ -130,16 +167,115 @@ final class UIQualification {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.beginMeasurementWhenVisible() }
       return
     }
+    if existingGraph {
+      let graph=app.signalGraphEditor
+      guard !graph.loading,!graph.canvas.nodes.isEmpty else {
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.1){self.beginMeasurementWhenVisible()};return
+      }
+      app.workspace?.layoutSubtreeIfNeeded()
+      prepareDenseViewport()
+      require(graph.scroll.contentSize.height>=180,"Dense graph viewport is too short to inspect")
+      require(denseGraphCards>=8,
+        "Dense graph must display at least eight actual cards")
+      require(visiblePatternHeight>=180,"Dense graph workload must keep at least 180 points of the pattern visible")
+      // Do not spend a minute measuring a workload known to be invalid. Keep
+      // the screenshot-able setup and report its actual scale/card count.
+      guard denseGraphCards>=8,graph.scroll.contentSize.height>=180,visiblePatternHeight>=180 else{finish();return}
+    }
     operation({ try self.app.session.playOrder(0) }) {
       self.app.patternView.resetMetrics()
+      self.app.signalGraphEditor.canvas.resetDrawStatistics()
+      UIWorkTrace.active?.reset()
       self.app.lastFrameCount = 0
       self.app.lastStatusUpdate = CFAbsoluteTimeGetCurrent()
       self.start = CFAbsoluteTimeGetCurrent()
       self.measurementStarted = true
+      self.startWindowStateTrace()
       self.app.patternView.isFollowing = false
       self.timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in self?.tick() }
       RunLoop.main.add(self.timer!, forMode: .common)
     }
+  }
+  private func startWindowStateTrace() {
+    measurementClockStart=CACurrentMediaTime();windowStates.reserveCapacity(4096)
+    for name in [NSApplication.didBecomeActiveNotification,NSApplication.didResignActiveNotification,
+      NSWindow.didBecomeKeyNotification,NSWindow.didResignKeyNotification,NSWindow.didChangeOcclusionStateNotification] {
+      windowStateObservers.append(NotificationCenter.default.addObserver(forName:name,object:nil,queue:.main){[weak self] _ in self?.sampleWindowState()})
+    }
+    sampleWindowState()
+  }
+  private func sampleWindowState() {
+    guard measurementStarted,!finished else{return}
+    let graph=app.signalGraphEditor.window
+    // Record transitions as well as every workload tick. Visibility alone does
+    // not establish foreground/key status or that the App Nap activity is held.
+    let flags:UInt8=(NSApp.isActive ? 1:0) | (app.window.isKeyWindow ? 2:0) |
+      (graph?.isKeyWindow==true ? 4:0) |
+      (app.window.isVisible && app.window.occlusionState.contains(.visible) ? 8:0) |
+      (graph?.isVisible==true && graph?.occlusionState.contains(.visible)==true ? 16:0) |
+      (activity != nil ? 32:0) | (NSApp.keyWindow != nil ? 64:0)
+    windowStateSamples+=1
+    if flags & 1 == 0 {inactiveSamples+=1}
+    if flags & 64 == 0 {noKeyWindowSamples+=1}
+    if flags & 32 == 0 {missingActivitySamples+=1}
+    if windowStates.last?.flags != flags {
+      if windowStates.count<4096 {windowStates.append((CACurrentMediaTime(),flags))}
+      else {windowStateDropped+=1}
+    }
+  }
+  private var denseGraphCards:Int {
+    let graph=app.signalGraphEditor,visible=graph.scroll.documentVisibleRect.insetBy(dx:-0.5,dy:-0.5)
+    return graph.canvas.nodes.filter{visible.contains($0.rect)}.count
+  }
+  private var visiblePatternHeight:CGFloat {
+    let pattern=app.patternView
+    guard let window=pattern.window else{return 0}
+    let rect=window.convertToScreen(pattern.convert(pattern.bounds,to:nil))
+    guard floatingGraph,let graphWindow=app.signalGraphEditor.window,graphWindow !== window,
+      graphWindow.frame.intersects(rect) else{return rect.height}
+    // The single-screen floating fixture leaves an unobscured top strip of
+    // the real tracker. A second-screen graph never intersects this rectangle.
+    return max(0,rect.maxY-max(rect.minY,graphWindow.frame.maxY))
+  }
+  private func positionFloatingGraph() {
+    guard let window=app.signalGraphEditor.window,window !== app.window,let mainScreen=app.window.screen else{return}
+    priorGraphWindowLevel=window.level
+    window.collectionBehavior.remove(.moveToActiveSpace)
+    window.collectionBehavior.formUnion([.canJoinAllSpaces,.fullScreenAuxiliary]);window.level = .floating
+    // A reported secondary display can belong to another Space or be a
+    // headless/virtual surface. Qualify an independent window on the display
+    // whose main window has already passed the actual visibility check.
+    let available=mainScreen.visibleFrame
+    app.window.contentView?.layoutSubtreeIfNeeded()
+    let pattern=app.patternView
+    let rect=app.window.convertToScreen(pattern.convert(pattern.bounds,to:nil))
+    let top=min(available.maxY,rect.maxY-220)
+    window.setFrame(NSRect(x:available.minX,y:available.minY,width:min(1600,available.width),height:max(400,top-available.minY)),display:true)
+    window.contentView?.layoutSubtreeIfNeeded();window.makeKeyAndOrderFront(nil)
+  }
+  private func prepareDenseViewport() {
+    let graph=app.signalGraphEditor
+    app.window.contentView?.layoutSubtreeIfNeeded();graph.window?.contentView?.layoutSubtreeIfNeeded()
+    let rects=graph.canvas.nodes.map(\.rect)
+    // Use the musician's real zoom/scroll path, with a legibility floor. Do not
+    // fit the entire sparse song into tiny cards, rearrange it, or hide nodes.
+    // Native screenshots must additionally qualify text/ports at this scale.
+    for scale in [1.0,0.9,0.8] {
+      graph.scroll.magnification=scale
+      graph.layoutSubtreeIfNeeded();graph.scroll.layoutSubtreeIfNeeded()
+      let size=graph.scroll.documentVisibleRect.size
+      let xs=Set(rects.flatMap{[max(0,$0.minX-12),max(0,$0.maxX-size.width+12)]})
+      let ys=Set(rects.flatMap{[max(0,$0.minY-12),max(0,$0.maxY-size.height+12)]})
+      var best=NSPoint.zero,bestCount = -1
+      for y in ys.sorted(){for x in xs.sorted(){let visible=NSRect(origin:NSPoint(x:x,y:y),size:size)
+        let count=rects.filter{visible.contains($0)}.count
+        if count>bestCount{bestCount=count;best=visible.origin}
+      }}
+      graph.canvas.frame.size=NSSize(width:max(graph.canvas.frame.width,best.x+size.width),height:max(graph.canvas.frame.height,best.y+size.height))
+      graph.scroll.contentView.scroll(to:best);graph.scroll.reflectScrolledClipView(graph.scroll.contentView)
+      if denseGraphCards>=8{break}
+    }
+    minimumGraphCards=denseGraphCards
   }
   func operation(_ work: @escaping () throws -> Void, done: @escaping () -> Void) {
     app.busy = true
@@ -159,7 +295,11 @@ final class UIQualification {
     }
   }
   func tick() {
-    guard !finished, !app.busy else { return }
+    let trace=UIWorkTrace.active,started=UIWorkTrace.active == nil ? 0:CACurrentMediaTime()
+    defer{trace?.finish(.qualificationTick,start:started)}
+    guard !finished else { return }
+    sampleWindowState()
+    guard !app.busy else { return }
     let elapsed = CFAbsoluteTimeGetCurrent() - start
     if elapsed >= nextProgress {
       nextProgress = elapsed + 10
@@ -182,6 +322,13 @@ final class UIQualification {
       return
     }
     require(app.editorMode == 0, "Pattern view was hidden during measurement")
+    if existingGraph {
+      require(app.workspace?.visibleIDs.contains("graph")==true,"Graph panel was hidden during the dense workload")
+      require(app.signalGraphEditor.window?.occlusionState.contains(.visible)==true,"Graph window was not visible during the dense workload")
+      require(visiblePatternHeight>=180,"Floating graph obscured the pattern during measurement")
+      minimumGraphCards=min(minimumGraphCards,denseGraphCards)
+      require(denseGraphCards>=8,"Dense graph lost its eight readable cards during measurement")
+    }
     let grid = app.patternView
     let graphWidth = app.patternGraphHost.lanes.isHidden ? 0 : app.patternGraphHost.lanes.bounds.width
     require(grid.bounds.width > 100 && abs(grid.bounds.width + graphWidth - app.patternGraphHost.bounds.width) < 1,
@@ -242,7 +389,17 @@ final class UIQualification {
   // Copy only constant-size telemetry on the main thread. Serialization and disk
   // I/O stay off it; sorting the growing frame arrays is reserved for the final report.
   func writeProgress(_ elapsed: Double) {
+    let trace=UIWorkTrace.active,started=UIWorkTrace.active == nil ? 0:CACurrentMediaTime()
+    defer{trace?.finish(.qualificationProgress,start:started)}
     var progress = app.session.telemetry()
+    if existingGraph {
+      var error:NSError?
+      if let result=app.session.automationMethod("mixer.get",params:[:],error:&error),let data=result["data"] as? [String:Any] {
+        let tracks=Set((data["buses"] as? [[String:Any]] ?? []).filter{$0["kind"] as? String=="track"}.compactMap{$0["id"] as? String})
+        let sounding=(data["meters"] as? [[String:Any]] ?? []).filter{tracks.contains($0["bus"] as? String ?? "") && max($0["left"] as? Double ?? 0,$0["right"] as? Double ?? 0)>1e-7}.count
+        soundingChannels=max(soundingChannels,sounding);progress["soundingTrackMeters"]=sounding
+      }
+    }
     progress["processID"] = ProcessInfo.processInfo.processIdentifier
     progress["elapsedSeconds"] = elapsed
     progress["requestedSeconds"] = duration
@@ -264,9 +421,13 @@ final class UIQualification {
   }
   func finish() {
     guard !finished else { return }
+    sampleWindowState();measurementClockEnd=CACurrentMediaTime()
     finished = true
+    for observer in windowStateObservers {NotificationCenter.default.removeObserver(observer)}
+    windowStateObservers.removeAll()
     timer?.invalidate()
     if let priorWindowLevel { app.window.level = priorWindowLevel }
+    if let priorGraphWindowLevel {app.signalGraphEditor.window?.level=priorGraphWindowLevel}
     if let activity {
       ProcessInfo.processInfo.endActivity(activity)
       self.activity = nil
@@ -285,6 +446,8 @@ final class UIQualification {
       require(
         (report["p99CPUFrameMS"] as? Double ?? 100) < 6, "CPU frame preparation p99 exceeded 6 ms")
       require((report["p99GPUFrameMS"] as? Double ?? 100) < 4, "GPU execution p99 exceeded 4 ms")
+      require((report["maxGeometrySnapshotAgeMS"] as? Double ?? 100) < 34,
+        "Presented pattern geometry became stale for more than two periods")
       require(
         (report["maxMainThreadDrawMS"] as? Double ?? 100) < 34,
         "Main-thread drawing or drawable acquisition stalled for more than two periods")
@@ -297,7 +460,31 @@ final class UIQualification {
       require((report["pluginFailure"] as? Bool ?? true) == false, "Audio Unit failure")
       require(edits > 0 && undos > 0 && saves > 0, "Edit/undo/save workload did not execute")
     }
-    report["usesGraph"] = CommandLine.arguments.contains("--ui-test-graph")
+    if existingGraph && measurementStarted {require(soundingChannels>=16,"Fewer than 16 sounding track meters were observed")}
+    report["usesGraph"] = existingGraph || CommandLine.arguments.contains("--ui-test-graph")
+    report["usesExistingGraph"] = existingGraph
+    report["graphWindowMode"] = floatingGraph ? "floating":"docked"
+    report["maximumSoundingTrackMeters"] = soundingChannels
+    report["graphVisible"] = app.workspace?.visibleIDs.contains("graph")==true
+    report["graphViewportHeight"] = app.signalGraphEditor.scroll.contentSize.height
+    report["graphVisibleNodes"] = app.signalGraphEditor.canvas.nodes.filter{$0.rect.intersects(app.signalGraphEditor.scroll.documentVisibleRect)}.count
+    report["graphFullyVisibleNodes"] = denseGraphCards
+    report["graphMinimumFullyVisibleNodes"] = minimumGraphCards==Int.max ? 0:minimumGraphCards
+    report["graphMagnification"] = app.signalGraphEditor.scroll.magnification
+    report["graphDrawStatistics"] = app.signalGraphEditor.canvas.drawStatistics
+    report["graphViewportWidth"] = app.signalGraphEditor.scroll.contentSize.width
+    report["visiblePatternHeight"] = visiblePatternHeight
+    report["graphEditorHeight"] = app.signalGraphEditor.bounds.height
+    report["workspaceHeight"] = app.workspace?.bounds.height
+    report["workspaceUpperHeight"] = app.workspace?.upper.bounds.height
+    report["workspaceLowerHeight"] = app.workspace?.lower.bounds.height
+    report["graphWindowVisible"] = app.signalGraphEditor.window?.occlusionState.contains(.visible)==true
+    func rectangle(_ value:NSRect)->[String:Double]{["x":value.minX,"y":value.minY,"width":value.width,"height":value.height]}
+    func display(_ screen:NSScreen?)->[String:Any]{guard let screen else{return [:]};return ["id":screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] ?? NSNull(),"frame":rectangle(screen.frame),"visibleFrame":rectangle(screen.visibleFrame),"backingScale":screen.backingScaleFactor]}
+    report["mainWindowFrame"]=rectangle(app.window.frame)
+    report["graphWindowFrame"]=app.signalGraphEditor.window.map{rectangle($0.frame)} ?? [:]
+    report["mainDisplay"]=display(app.window.screen)
+    report["graphDisplay"]=display(app.signalGraphEditor.window?.screen)
     report["usesVST3"] = usesVST3
     report["requestedVST3"] = CommandLine.arguments.contains("--ui-test-vst3")
     report["automationPoints"] = app.session.snapshot(app.model.pattern)["automationPoints"]
@@ -310,6 +497,66 @@ final class UIQualification {
     report["failures"] = failures
     report["passed"] = failures.isEmpty
     report["artifacts"] = directory.path
+    report["windowStateSamples"]=windowStateSamples
+    report["inactiveWindowStateSamples"]=inactiveSamples
+    report["noKeyWindowStateSamples"]=noKeyWindowSamples
+    report["missingActivityWindowStateSamples"]=missingActivitySamples
+    report["windowStateTransitionsDropped"]=windowStateDropped
+    report["measurementClockStart"]=measurementClockStart
+    report["measurementClockEnd"]=measurementStarted ? measurementClockEnd:0
+    report["activityOptions"]=["userInitiated","idleDisplaySleepDisabled"]
+    if measurementStarted {
+      let values:[[String:Any]]=windowStates.map { state in
+        ["timestamp":state.timestamp,"appActive":state.flags & 1 != 0,"mainWindowKey":state.flags & 2 != 0,
+         "graphWindowKey":state.flags & 4 != 0,"mainWindowVisible":state.flags & 8 != 0,
+         "graphWindowVisible":state.flags & 16 != 0,"activityHeld":state.flags & 32 != 0,
+         "applicationHasKeyWindow":state.flags & 64 != 0]
+      }
+      let path=directory.appendingPathComponent("window-state-timeline.json")
+      if let data=try? JSONSerialization.data(withJSONObject:values,options:[.sortedKeys]),(try? data.write(to:path,options:.atomic)) != nil {report["windowStateTimeline"]=path.path}
+    }
+    if let trace=UIWorkTrace.active,measurementStarted {
+      let entries=trace.snapshot()
+      let values:[[String:Any]]=entries.map{["sequence":$0.sequence,"phase":$0.phase.rawValue,"start":$0.start,"end":$0.end]}
+      let path=directory.appendingPathComponent("ui-work-timeline.json")
+      if let data=try? JSONSerialization.data(withJSONObject:values,options:[.sortedKeys]),(try? data.write(to:path,options:.atomic)) != nil {
+        report["uiWorkTimeline"]=path.path
+      }
+      report["uiWorkTimelineSamples"]=entries.count;report["uiWorkTimelineOverwritten"]=trace.overwritten
+      var phases=[String:Any]()
+      for phase in UIWorkTrace.Phase.allCases {
+        let durations=entries.filter{$0.phase==phase}.map(\.durationMS)
+        if !durations.isEmpty {phases[phase.rawValue]=["samples":durations.count,"maxMS":durations.max() ?? 0,"p99MS":app.patternView.percentile(durations,0.99)]}
+      }
+      report["uiWorkPhases"]=phases
+    }
+    if QualificationRunLoopTrace.enabled {
+      var values=[[String:Any]](),dropped=[String:Int]()
+      for (name,trace) in [("main",UIWorkTrace.active?.runLoopTrace),("render",app.patternView.qualificationRunLoopTrace)] {
+        guard let trace else{continue};let snapshot=trace.snapshot();dropped[name]=snapshot.overwritten
+        values += snapshot.entries.map{["loop":name,"sequence":$0.sequence,"timestamp":$0.timestamp,"activity":$0.activity,"depth":$0.depth]}
+      }
+      let path=directory.appendingPathComponent("runloop-timeline.json")
+      if let bytes=try? JSONSerialization.data(withJSONObject:values,options:[.sortedKeys]),(try? bytes.write(to:path,options:.atomic)) != nil {report["runLoopTimeline"]=path.path}
+      report["runLoopTimelineOverwritten"]=dropped
+      report["measurementClass"]="instrumented-runloop-diagnostic"
+      report["cleanQualificationEligible"]=false
+    }
+    let frames=app.patternView.qualificationFrameTrace
+    if !frames.isEmpty {
+      let values=frames.map{entry in ["sequence":Double(entry.sequence),"callback":entry.callback,"deadline":entry.deadline,
+        "presentationTarget":entry.presentationTarget,"geometryPrepared":entry.geometryPrepared,"committed":entry.committed,
+        "scheduled":entry.scheduled,"gpuStart":entry.gpuStart,"gpuEnd":entry.gpuEnd,"completed":entry.completed,
+        "presented":entry.presented,"presentationCallback":entry.presentationCallback]}
+      let path=directory.appendingPathComponent("frame-timeline.json")
+      if let data=try? JSONSerialization.data(withJSONObject:values,options:[.sortedKeys]),(try? data.write(to:path,options:.atomic)) != nil {
+        report["frameTimeline"]=path.path
+      }
+      report["frameTimelineSamples"]=frames.count
+      report["framesCommittedAfterDeadline"]=frames.filter{$0.committed>$0.deadline}.count
+      report["framesGPUEndedAfterPresentationTarget"]=frames.filter{$0.gpuEnd>$0.presentationTarget}.count
+      report["p99PresentationTargetErrorMS"]=app.patternView.percentile(frames.filter{$0.presented>0}.map{($0.presented-$0.presentationTarget)*1000},0.99)
+    }
     if let data = try? JSONSerialization.data(
       withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
     {

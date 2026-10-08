@@ -1,7 +1,11 @@
 #pragma once
 #include "editor/hosted/PluginBackend.hpp"
 #include <chrono>
+#include <stdexcept>
 namespace Tracker::WindowsVST3 {
+// The private UI owner could not accept a call right now (its message queue is
+// full). Transient: retry later; the plugin and its editor are unaffected.
+struct UiOwnerBusy final:std::runtime_error {using std::runtime_error::runtime_error;};
 // Control owner only. Never call discovery/rescan/configuration from rendering.
 // Configure before first use; cache can be absent, but never silently rescanned.
 void configure(std::string scannerExecutable, std::string cacheFile);

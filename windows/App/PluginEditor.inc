@@ -21,7 +21,7 @@
         choice.lpstrTitle=save?L"Save plugin preset":L"Load plugin preset";
         choice.lpstrFilter=L"ScreamSeq plugin preset\0*.screamseq-preset;*.resonance-preset\0\0";
         choice.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_DONTADDTORECENT|OFN_PATHMUSTEXIST|(save?OFN_OVERWRITEPROMPT:OFN_FILEMUSTEXIST);
-        const bool chosen=save?GetSaveFileNameW(&choice)!=FALSE:GetOpenFileNameW(&choice)!=FALSE;
+        bool chosen=false;{ModalScope modal(modalDepth);chosen=save?GetSaveFileNameW(&choice)!=FALSE:GetOpenFileNameW(&choice)!=FALSE;}
         if(!chosen){if(CommDlgExtendedError())throw std::runtime_error("Could not open the preset file dialog");return;}
         const auto check=[&]{if(documentId!=document||view->session.revision!=revision)throw ScreamSeq::Api::ApiError(-32001,"Document changed while choosing a preset; choose the preset again");};
         check();const std::filesystem::path path(file.data());
@@ -29,7 +29,7 @@
         if(save){params["name"]=utf8Path(path.stem());params["overwrite"]=true;}
         else{auto info=documentOperation("plugin.preset.inspect",{{"path",utf8Path(path)}});check();params["expectedPresetRevision"]=info.at("presetRevision");}
         documentOperation(save?"plugin.preset.save":"plugin.preset.load",params);
-        status=save?L"Plugin preset saved":L"Plugin preset loaded / plugin Undo available";
+        status=save?L"Plugin preset saved":L"Plugin preset loaded / Undo available";
     }
     std::map<std::string,std::string> pendingPluginTriggers; // Plugin ID -> created instrument ID awaiting assignment.
     uint32_t selectedParameter=0,pluginDraftParameter=0;
@@ -60,7 +60,7 @@
     void installPluginControls() {
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
             {pluginAdd,L"Add"},{pluginRescan,L"Rescan"},{pluginEditor,L"Editor"},{pluginBypass,L"Bypass"},
-            {pluginRemove,L"Remove"},{pluginUp,L"Up"},{pluginDown,L"Down"},{pluginUndo,L"Undo FX"},{pluginRedo,L"Redo FX"},
+            {pluginRemove,L"Remove"},{pluginUp,L"Up"},{pluginDown,L"Down"},{pluginUndo,L"Undo"},{pluginRedo,L"Redo"},
             {pluginApply,L"Apply"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"},{pluginNewInstrument,L"New trigger"},
             {pluginLoadProgram,L"Load program"},{pluginTogglePort,L"Enable port"},{pluginAliases,L"Assigned instruments…"},{pluginSavePreset,L"Save preset…"},{pluginLoadPreset,L"Load preset…"},{pluginBrowse,L"Browse…"},{pluginReconnect,L"Reconnect plugin…"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
@@ -283,7 +283,7 @@
         auto r=workspaceMainEditorRect();auto &s=*surface;s.fill(r.x,r.y,r.w,r.h,0x171f29);s.fill(r.x,r.y,r.w,32,0x232e3b);
         s.uiText(L"PLUGINS  /  "+std::to_wstring(listedPlugins.size())+L" in rack",r.x+12,r.y+8,210,0x72dcc6);
         if(listedPlugins.empty())s.uiText(L"Add an effect or instrument",r.x+18,r.y+76,194,0x8fa8ba);
-        if(r.h>=161 && pluginDetailPage!=0)s.uiText(pluginExtrasError?pluginDetailStatus:pluginDraft?L"Program selection / Load applies / Escape discards":pluginDetailPage==1?L"Factory settings replace the saved state in one plugin Undo step":pluginDetailPage==2?L"Enable auxiliary ports here; routing remains a separate assignment":pluginDetailPage==3?L"Share one plugin across tracker instruments and MIDI channels":pluginDetailPage==4?L"Save and load sounds / routing and instrument assignments stay in the song":L"Reconnect a moved or Mac-origin VST3 to its matching Windows module",r.x+230,r.y+134,r.w-242,pluginDraft||pluginExtrasError?0xe2b86c:0x8fa8ba);
+        if(r.h>=161 && pluginDetailPage!=0)s.uiText(pluginExtrasError?pluginDetailStatus:pluginDraft?L"Program selection / Load applies / Escape discards":pluginDetailPage==1?L"Factory settings replace the saved state in one Undo step":pluginDetailPage==2?L"Enable auxiliary ports here; routing remains a separate assignment":pluginDetailPage==3?L"Share one plugin across tracker instruments and MIDI channels":pluginDetailPage==4?L"Save and load sounds / routing and instrument assignments stay in the song":L"Reconnect a moved or Mac-origin VST3 to its matching Windows module",r.x+230,r.y+134,r.w-242,pluginDraft||pluginExtrasError?0xe2b86c:0x8fa8ba);
         else if(r.h>=161 && (selectedPluginSlot()<0 || !view->session.document.at("nativePlugins")[selectedPluginSlot()].value("isInstrument",false)))
             s.uiText(pluginDraft?L"Parameter draft / Enter applies / Escape discards":pluginDetailStatus,r.x+230,r.y+134,r.w-242,pluginDraft?0xe2b86c:0x8fa8ba);
     }

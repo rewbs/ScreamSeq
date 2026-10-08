@@ -1,0 +1,55 @@
+{
+  "note": "Only regenerable object files in this task private snapshots and sanitizer build; source, executables, archives, fixtures, reports and screenshots retained.",
+  "roots": [
+    {
+      "objectRoot": "/Users/rewbs/code/openmpt/bin/mac-sanitized/CMakeFiles",
+      "removedGeneratedObjects": 326,
+      "logicalBytes": 573921880
+    },
+    {
+      "objectRoot": "/Users/rewbs/code/openmpt/bin/mac-sanitized/hosted/CMakeFiles",
+      "removedGeneratedObjects": 16,
+      "logicalBytes": 56709576
+    },
+    {
+      "objectRoot": "/private/tmp/screamseq-graph-polish-20261001/bin/graph-polish-qa/CMakeFiles",
+      "removedGeneratedObjects": 346,
+      "logicalBytes": 26032744
+    },
+    {
+      "objectRoot": "/private/tmp/screamseq-graph-polish-20261001/bin/graph-polish-qa/hosted/CMakeFiles",
+      "removedGeneratedObjects": 16,
+      "logicalBytes": 1171672
+    },
+    {
+      "objectRoot": "/private/tmp/screamseq-graph-controls-20261001/bin/graph-controls-qa/CMakeFiles",
+      "removedGeneratedObjects": 345,
+      "logicalBytes": 25760800
+    },
+    {
+      "objectRoot": "/private/tmp/screamseq-graph-controls-20261001/bin/graph-controls-qa/hosted/CMakeFiles",
+      "removedGeneratedObjects": 16,
+      "logicalBytes": 1158784
+    },
+    {
+      "objectRoot": "/private/tmp/screamseq-graph-review-20261001/bin/graph-review-qa/CMakeFiles",
+      "removedGeneratedObjects": 345,
+      "logicalBytes": 25721160
+    },
+    {
+      "objectRoot": "/private/tmp/screamseq-graph-review-20261001/bin/graph-review-qa/hosted/CMakeFiles",
+      "removedGeneratedObjects": 16,
+      "logicalBytes": 1155632
+    },
+    {
+      "objectRoot": "/private/tmp/screamseq-graph-resume-coherent-20261001/bin/graph-resume-qa/CMakeFiles",
+      "removedGeneratedObjects": 342,
+      "logicalBytes": 25344608
+    },
+    {
+      "objectRoot": "/private/tmp/screamseq-graph-resume-coherent-20261001/bin/graph-resume-qa/hosted/CMakeFiles",
+      "removedGeneratedObjects": 15,
+      "logicalBytes": 1119312
+    }
+  ]
+}

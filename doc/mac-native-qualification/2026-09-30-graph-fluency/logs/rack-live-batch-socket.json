@@ -1,0 +1,316 @@
+{
+  "fixture": "work-fixture.screamseq",
+  "pid": 48007,
+  "sampleRate": 48000,
+  "bufferFrames": 512,
+  "before": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 107988,
+      "fault": false,
+      "frames": 55289856,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.1155446395277977,
+      "loop": true,
+      "maxMicros": 3123.625,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 2990,
+      "pattern": 0,
+      "patternPosition": 14706.630816959669,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "loop": true,
+        "pattern": 0
+      },
+      "right": 0.11490335315465927,
+      "row": 57,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 2383,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 54
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 596,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 128
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 1192,
+          "instrument": 0,
+          "sample": 3,
+          "sampleFrame": 4200
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 2382,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 10002
+        }
+      ],
+      "voices": 4
+    },
+    "documentId": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2",
+    "playbackStopped": false,
+    "revision": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2:0:3:0"
+  },
+  "edit": {
+    "changed": true,
+    "data": {},
+    "documentId": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2",
+    "playbackStopped": false,
+    "revision": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2:0:4:0"
+  },
+  "after": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 108002,
+      "fault": false,
+      "frames": 55297024,
+      "graphActivity": [
+        {
+          "graph": "n26",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n2"
+        }
+      ],
+      "left": 0.11867430061101913,
+      "loop": true,
+      "maxMicros": 3123.625,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 2990,
+      "pattern": 0,
+      "patternPosition": 15022.90244743192,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0.001875,
+      "region": {
+        "loop": true,
+        "pattern": 0
+      },
+      "right": 0.11879520118236542,
+      "row": 58,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 2383,
+          "instrument": 0,
+          "sample": 1,
+          "sampleFrame": 23
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 596,
+          "instrument": 0,
+          "sample": 2,
+          "sampleFrame": 184
+        },
+        {
+          "channel": 2,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 1192,
+          "instrument": 0,
+          "sample": 3,
+          "sampleFrame": 7784
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 2383,
+          "instrument": 0,
+          "sample": 4,
+          "sampleFrame": 1982
+        }
+      ],
+      "voices": 4
+    },
+    "documentId": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2",
+    "playbackStopped": false,
+    "revision": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2:0:4:0"
+  },
+  "actual": {
+    "changed": false,
+    "data": [
+      {
+        "canSlide": false,
+        "choices": [
+          "Off",
+          "On"
+        ],
+        "displayScale": "linear",
+        "id": 0,
+        "max": 1,
+        "min": 0,
+        "name": "Enabled",
+        "step": 0,
+        "unit": 2,
+        "unitLabel": "",
+        "value": 1,
+        "writable": true
+      },
+      {
+        "canSlide": true,
+        "choices": [],
+        "displayScale": "linear",
+        "id": 1,
+        "max": 36,
+        "min": 0,
+        "name": "Drive",
+        "step": 0,
+        "unit": 13,
+        "unitLabel": "dB",
+        "value": 9,
+        "writable": true
+      },
+      {
+        "canSlide": false,
+        "choices": [
+          "Soft clip",
+          "Hard clip",
+          "Fold",
+          "Wrap"
+        ],
+        "displayScale": "linear",
+        "id": 2,
+        "max": 3,
+        "min": 0,
+        "name": "Mode",
+        "step": 0,
+        "unit": 1,
+        "unitLabel": "",
+        "value": 0,
+        "writable": true
+      },
+      {
+        "canSlide": true,
+        "choices": [],
+        "displayScale": "linear",
+        "id": 3,
+        "max": 100,
+        "min": -100,
+        "name": "Tone",
+        "step": 0,
+        "unit": 3,
+        "unitLabel": "%",
+        "value": 10,
+        "writable": true
+      },
+      {
+        "canSlide": true,
+        "choices": [],
+        "displayScale": "linear",
+        "id": 4,
+        "max": 100,
+        "min": 0,
+        "name": "Dry mix",
+        "step": 0,
+        "unit": 3,
+        "unitLabel": "%",
+        "value": 0,
+        "writable": true
+      },
+      {
+        "canSlide": true,
+        "choices": [],
+        "displayScale": "linear",
+        "id": 5,
+        "max": 100,
+        "min": 0,
+        "name": "Wet mix",
+        "step": 0,
+        "unit": 3,
+        "unitLabel": "%",
+        "value": 100,
+        "writable": true
+      },
+      {
+        "canSlide": true,
+        "choices": [],
+        "displayScale": "linear",
+        "id": 6,
+        "max": 24,
+        "min": -24,
+        "name": "Output gain",
+        "step": 0,
+        "unit": 13,
+        "unitLabel": "dB",
+        "value": -6,
+        "writable": true
+      }
+    ],
+    "documentId": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2",
+    "playbackStopped": false,
+    "revision": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2:0:4:0"
+  },
+  "restore": {
+    "changed": true,
+    "data": {},
+    "documentId": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2",
+    "playbackStopped": false,
+    "revision": "53EAE2E6-A232-4AFE-A94F-952CE206EEC2:0:5:0"
+  }
+}

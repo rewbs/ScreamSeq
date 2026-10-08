@@ -66,6 +66,11 @@ static void identity(const std::string &scannerExe,const std::string &fixture,co
  // Project descriptors are separate: prevalidate then compare SDK canonical ID,
  // without rewriting the original descriptor, name or path.
  source.descriptor.classID=lower(id);source.descriptor.name="Retained source recipe name";original=descriptors({source.descriptor});{auto plugin=platformPluginBackendFactory().create(source,48000,true);need(bool(plugin),"lowercase source descriptor creation");}need(descriptors({source.descriptor})==original,"source descriptor silently repaired");
+ // A malformed cache stays an error for cache-only discovery, but an explicit
+ // rescan quarantines it and rebuilds the registry from the scanned module.
+ put(cacheFile,"{ not a cache");configure(scannerExe,u8(cacheFile));reject([&]{platformPluginBackendFactory().discover();},"malformed cache discovery");
+ need(descriptors(rescan(fixture))==descriptors(s.classes),"rescan did not repair a malformed cache");need(JSON::parse(bytes(cacheFile)).size()==1,"repaired cache content");
+ bool quarantined=false;for(auto &e:fs::directory_iterator(dir))quarantined=quarantined||e.path().filename().native().find(L".corrupt-")!=std::wstring::npos;need(quarantined,"malformed cache was not quarantined");
  restart(cacheFile,descriptors(s.classes));noTemps(dir);std::cout<<"canonical cache/source identity PASS\n";
 }
 #include "AdditionalCases.hpp"

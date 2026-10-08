@@ -173,46 +173,51 @@ void annotationStructuralHistoryBudgetTests(const std::filesystem::path &directo
     });
     Project::saveNativeProject(*fixture.document,fixture.state,path,true);
   }
-  // Plugin history is independent of document history. It can increase the
-  // publication size after a structural state was previously admitted, so
-  // remembering that a past document once fitted is not a sufficient guard.
+  // Chronological history cannot skip a newer plugin edit to restore an older
+  // document entry. The old "independent plugin growth" over-budget fixture is
+  // therefore invalid. Keep exact-fit restoration here; the earlier native
+  // sequence test retains the real one-byte-short admission boundary. Inject a
+  // buildView refusal to exercise structural admission before any history moves.
+  {
+    auto fixture=Project::openNativeProject(path);
+    PluginOperations plugins(*fixture.document,fixture.state,[]{});
+    const auto catalogue=plugins.invoke("plugin.discover",{{"format","Built-in"}});
+    need(!catalogue.empty(),"Structural history needs an owned built-in plugin");
+    plugins.invoke("plugin.add",{{"descriptor",catalogue.at(0)}});
+    Project::saveNativeProject(*fixture.document,fixture.state,path,true);
+  }
   for(const bool redo:{false,true}) {
-    auto prepare=[&](DocumentController &c) {
-      if(redo){invoke(c,"pattern.create",{{"source",0},{"rows",64}});invoke(c,"history.undo",{{"domain","document"}});}
+    const auto prepare=[&](DocumentController &c) {
+      if(redo){invoke(c,"pattern.create",{{"source",0},{"rows",64}});invoke(c,"history.undo",{{"domain","plugins"}});}
       else invoke(c,"order.edit",{{"order",1},{"operation","remove"}});
-      const auto reducedView=c.view();const auto plugins=call(c,"plugin.discover",{{"format","Built-in"}});
-      need(!plugins.empty(),"Structural annotation history needs an owned built-in plugin");
-      invoke(c,"plugin.add",{{"descriptor",plugins.at(0)}});
-      need(c.view()->cacheBytes>reducedView->cacheBytes&&c.view()->session.document.at("nativePlugins").size()==1,"Independent plugin did not increase publication size");
-      for(const auto *key:{"patterns","orderMetadata","canUndo","canRedo"})
-        need(c.view()->session.document.at(key)==reducedView->session.document.at(key),"Plugin fixture changed document structure or consumed document history");
     };
-    const auto method=redo?"history.redo":"history.undo";size_t targetBytes=0,smallBytes=0;Json targetOrders,targetPatterns;
+    const auto method=redo?"history.redo":"history.undo";
+    size_t targetBytes=0;Json targetOrders,targetPatterns,pluginState;
     {
       DocumentController measured(path,"annotation-structural-history-budget",[]{},[](const auto &){});
-      prepare(measured);smallBytes=measured.view()->cacheBytes;invoke(measured,method,{{"domain","document"}});
+      prepare(measured);const auto smallBytes=measured.view()->cacheBytes;invoke(measured,method,{{"domain","all"}});
       targetBytes=measured.view()->cacheBytes;targetOrders=measured.view()->session.document.at("orderMetadata");targetPatterns=measured.view()->session.document.at("patterns");
+      pluginState=measured.view()->session.document.at("nativePlugins");
       need(targetBytes>smallBytes+annotationText(1365).size(),"Structural history fixture did not restore a large annotated entity");
     }
-    for(const auto budget:{targetBytes-1,targetBytes}) {
-      unsigned stops=0;DocumentController c(path,"annotation-structural-history-budget",[&]{++stops;},[](const auto &){},{},budget);
-      prepare(c);const auto before=c.view();const auto beforeStops=stops;const auto pluginState=before->session.document.at("nativePlugins");bool rejected=false;
-      try{invoke(c,method,{{"domain","document"}});}catch(const Api::ApiError &error){rejected=error.code==-32602&&std::string(error.what()).find("headroom")!=std::string::npos;}
-      if(budget<targetBytes) {
-        need(rejected&&c.view()==before&&stops==beforeStops&&!c.publicationPending(),"One-byte-short structural history committed, stopped playback, or stranded publication");
-        need(c.view()->session.document.at("nativePlugins")==pluginState,"Rejected document history changed independent plugin state");
-        // Recover headroom in the independent domain, then prove the rejected
-        // request left the exact document Undo/Redo entry available.
-        invoke(c,"history.undo",{{"domain","plugins"}});invoke(c,method,{{"domain","document"}});
-        need(c.view()->session.document.at("nativePlugins").empty(),"Plugin history did not recover independent headroom");
-      } else {
-        need(!rejected&&c.view()->cacheBytes==targetBytes&&stops==beforeStops+1,"Exact-fit structural history did not publish after one stop");
-        need(c.view()->session.document.at("nativePlugins")==pluginState,"Structural history replaced independent plugin state");
-      }
-      need(c.view()->session.document.at("orderMetadata")==targetOrders&&c.view()->session.document.at("patterns")==targetPatterns,"Structural history restored different annotation identities or fields");
-    }
+    bool refuse=false;unsigned refused=0,stops=0;
+    DocumentController c(path,"annotation-structural-history-budget",[&]{++stops;},[](const auto &){},[&]{
+      if(refuse){++refused;throw Api::ApiError(-32602,"Edit needs more document view cache headroom / controlled admission refusal");}
+    },targetBytes);
+    prepare(c);const auto before=c.view();const auto beforeStops=stops;bool rejected=false;refuse=true;
+    try{invoke(c,method,{{"domain","document"}});}catch(const Api::ApiError &error){rejected=error.code==-32602&&std::string(error.what()).find("headroom")!=std::string::npos;}
+    need(rejected&&refused==1&&c.view()==before&&stops==beforeStops&&!c.publicationPending(),"Structural admission refusal committed, stopped playback, or stranded publication");
+    need(c.view()->session.document.at("nativePlugins")==pluginState,"Rejected structural history changed the rack");
+    refuse=false;invoke(c,method,{{"domain","plugins"}});
+    need(c.view()->cacheBytes==targetBytes&&stops==beforeStops+1,"Exact-fit retry did not publish the same structural history after one stop");
+    need(c.view()->session.document.at("nativePlugins")==pluginState,"Structural retry replaced plugin identities");
+    need(c.view()->session.document.at("orderMetadata")==targetOrders&&c.view()->session.document.at("patterns")==targetPatterns,"Structural history restored different annotation identities or fields");
+    const auto nativeBefore=c.view()->session.document;invoke(c,"plugin.bypass",{{"slot",0},{"bypass",true}});
+    invoke(c,"history.undo",{{"domain","document"}});
+    need(c.view()->session.document.at("nativePlugins")==pluginState,"Document alias skipped the newest plugin Undo");
+    need(c.view()->session.document.at("orderMetadata")==nativeBefore.at("orderMetadata")&&c.view()->session.document.at("patterns")==nativeBefore.at("patterns"),"Newest plugin Undo consumed an older structural entry");
   }
-  std::cout<<"PASS structural annotation history after independent plugin growth, exact-fit admission and atomic one-byte-short rejection\n";
+  std::cout<<"PASS chronological structural history, exact-fit admission, atomic prepublication refusal/retry and stable rack/entity identities\n";
 }
 }
 void annotationControllerTests(const std::filesystem::path &directory) {

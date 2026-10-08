@@ -168,7 +168,7 @@ Document::PreparedSampleProcess Document::prepareSampleLoops(int index,
   if (p.hasChanges()) p.plan_.result.historyBytes = sizeof(SampleUndo);
   return p;
 }
-SampleProcessResult Document::applySampleProcess(PreparedSampleProcess prepared) {
+SampleProcessResult Document::applySampleProcess(PreparedSampleProcess prepared, const std::function<void()> &beforeCommit) {
   if (prepared.owner_ != this || prepared.revision_ != revision)
     throw std::runtime_error("Song changed; prepare the sample edit again");
   if (!editable())
@@ -194,9 +194,10 @@ SampleProcessResult Document::applySampleProcess(PreparedSampleProcess prepared)
       SampleUndo{uint16_t(prepared.sample_), plan.totalFrames, plan.bits, plan.channels, std::move(plan.chunks), std::move(prepared.geometry_)};
   undo_.reserve(undo_.size() + 1);
   validateSampleUndo(*entry.sample, true);
+  if (beforeCommit) beforeCommit();
   applySampleUndo(*entry.sample, true); // Everything that can allocate/throw precedes mutation.
   undo_.push_back(std::move(entry));
-  redo_.clear();
+  committedHistory();
   ++revision;
   trimHistory();
   return result;

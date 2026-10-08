@@ -6,7 +6,11 @@
 #include <algorithm>
 #include <cstring>
 static std::atomic<bool> fixtureAUChannelWeights{false};
-static bool fixtureAUPitchMode=false;
+static bool fixtureAUPitchMode=false,fixtureAUStepped=false;
+void setFixtureAUStepped(bool enabled){fixtureAUStepped=enabled;}
+static float fixtureAUHiddenGain=1;static uint64_t fixtureAUCreated=0;
+void setFixtureAUHiddenGain(float value){fixtureAUHiddenGain=value;}
+uint64_t fixtureAUCreatedCount(){return fixtureAUCreated;}
 void setFixtureAUPitchMode(bool enabled){fixtureAUPitchMode=enabled;}
 void setFixtureAUChannelWeights(bool enabled) { fixtureAUChannelWeights.store(enabled); }
 namespace {
@@ -14,7 +18,7 @@ struct FixtureAU {
   AudioComponentPlugInInterface interface{}; // Must be first for the AU C interface.
   bool instrument = false;
   std::array<uint16_t, 16 * 128> notes{};
-  float gain = .5f;
+  float gain = .5f,hiddenGain=fixtureAUHiddenGain;
   std::array<uint16_t,16> pitchWheels{};
   std::array<AURenderCallbackStruct, 2> callbacks{};
   std::array<AudioStreamBasicDescription, 2> inputs{};
@@ -23,7 +27,7 @@ struct FixtureAU {
   UInt32 lastFrames = 0;
   uint64_t rendered = 0;
   explicit FixtureAU(bool synth) : instrument(synth) {
-    pitchWheels.fill(8192);
+    ++fixtureAUCreated;pitchWheels.fill(8192);
     interface.Open = [](void *, AudioComponentInstance) -> OSStatus { return noErr; };
     interface.Close = [](void *self) -> OSStatus { delete static_cast<FixtureAU *>(self); return noErr; };
     interface.Lookup = lookup;
@@ -60,7 +64,7 @@ struct FixtureAU {
       case kAudioUnitProperty_ParameterInfo: {
         if (bus != 7) return kAudioUnitErr_InvalidParameter;
         auto &p = *static_cast<AudioUnitParameterInfo *>(out); p = {};
-        std::strcpy(p.name, "Gain"); p.minValue = 0; p.maxValue = 1; p.defaultValue = .5;
+        std::strcpy(p.name, "Gain"); p.minValue = 0; p.maxValue = 1; p.defaultValue = .5;p.unit=fixtureAUStepped?kAudioUnitParameterUnit_Boolean:kAudioUnitParameterUnit_Generic;
         p.flags = kAudioUnitParameterFlag_IsWritable | kAudioUnitParameterFlag_IsReadable; break;
       }
       case kAudioUnitProperty_FactoryPresets: {
@@ -69,7 +73,7 @@ struct FixtureAU {
         *static_cast<CFArrayRef *>(out)=CFArrayCreate(nullptr,items,3,nullptr);break;
       }
       case kAudioUnitProperty_ClassInfo: {
-        NSDictionary *value = @{@"gain": @(s.gain)};
+        NSDictionary *value = @{@"gain": @(s.gain),@"hidden":@(s.hiddenGain)};
         *static_cast<CFPropertyListRef *>(out) = CFBridgingRetain(value); break;
       }
       default: return kAudioUnitErr_InvalidProperty;
@@ -99,7 +103,7 @@ struct FixtureAU {
         if (size != sizeof(CFPropertyListRef)) return kAudioUnitErr_InvalidPropertyValue;
         NSDictionary *value = (__bridge NSDictionary *)*static_cast<const CFPropertyListRef *>(data);
         if (![value isKindOfClass:NSDictionary.class] || ![value[@"gain"] isKindOfClass:NSNumber.class]) return kAudioUnitErr_InvalidPropertyValue;
-        s.gain = [value[@"gain"] floatValue]; break;
+        s.gain = [value[@"gain"] floatValue];s.hiddenGain=value[@"hidden"]?[value[@"hidden"] floatValue]:1; break;
       }
       case kAudioUnitProperty_MaximumFramesPerSlice: case kAudioUnitProperty_OfflineRender: case kAudioUnitProperty_HostCallbacks: break;
       default: return kAudioUnitErr_InvalidProperty;
@@ -149,6 +153,7 @@ struct FixtureAU {
       auto &dest = out->mBuffers[channel]; if (!dest.mData || dest.mDataByteSize < frames * 4) return kAudioUnitErr_TooManyFramesToProcess;
       for (UInt32 i = 0; i < frames; ++i) {
         float value = s.instrument ? (any ? .2f * s.gain * weight : 0) : static_cast<float *>(input.data[channel].mData)[i] * s.gain * (1 + static_cast<float *>(side.data[0].mData)[i]);
+        value*=s.hiddenGain;
         if (bus) value *= float(bus + 1) * (channel ? -.5f : 1);
         static_cast<float *>(dest.mData)[i] = value;
       }

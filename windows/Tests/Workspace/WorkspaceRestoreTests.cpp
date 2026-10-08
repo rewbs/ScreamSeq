@@ -64,16 +64,28 @@ struct RestoreApplication final:Application {
     std::function<void(const std::string &)> beforeRead;
     std::promise<RestoreJson> *inputCompletion=nullptr;
     unsigned dispatchedInput=0;
+    bool pumpOrdinaryReads=false;
 
     explicit RestoreApplication(const std::filesystem::path &folder)
         :Application({},true,folder/L"envelope-catalogue.json",folder/L"plugin-library.json"){}
     Json documentOperation(const std::string &method,const Json &params)override {
-        ordinaryReads.push_back(method);return Application::documentOperation(method,params);
+        ordinaryReads.push_back(method);auto result=Application::documentOperation(method,params);if(pumpOrdinaryReads)pumpInputAfterRead(method);return result;
     }
     Json workspacePreparationRead(const std::string &method,const Json &params)override {
         preparationReads.push_back(method);preparationRequests.emplace_back(method,params);if(beforeRead)beforeRead(method);
         if(method==targetRead&&fault==Fault::read)throw ScreamSeq::Api::ApiError(-32003,"Injected required workspace read failure");
         auto result=Application::workspacePreparationRead(method,params);
+        pumpInputAfterRead(method);
+        if(method==targetRead&&fault==Fault::malformed) {
+            if(method=="pattern.notes.get")result["events"]=Json::object();
+            else if(method=="graph.get")result["library"]=Json::object();
+            else if(method=="mixer.get")result["buses"]=Json::object();
+            else if(method=="graph.automation.get")result["points"]=Json::object();
+            else throw std::logic_error("Malformed fixture target is not a supported staged editor read");
+        }
+        return result;
+    }
+    void pumpInputAfterRead(const std::string &method) {
         if(method==targetRead&&postedInput) {
             // A gate makes the genuine Application::await message pump execute
             // exactly one posted input, independent of worker scheduling speed.
@@ -88,14 +100,6 @@ struct RestoreApplication final:Application {
             restoreCheck(PostMessageW(window,restoreInputMessage,0,0)!=FALSE,"Post owned restore input");
             (void)await(gate.get_future());
         }
-        if(method==targetRead&&fault==Fault::malformed) {
-            if(method=="pattern.notes.get")result["events"]=Json::object();
-            else if(method=="graph.get")result["library"]=Json::object();
-            else if(method=="mixer.get")result["buses"]=Json::object();
-            else if(method=="graph.automation.get")result["points"]=Json::object();
-            else throw std::logic_error("Malformed fixture target is not a supported staged editor read");
-        }
-        return result;
     }
     void deliverInput()noexcept {
         if(!inputCompletion)return;
@@ -280,6 +284,22 @@ void firstRestoreMatchesOrdinaryOpen() {
         restoreCheck(effectsState(app)==restored,"Staged FX bindings/values differ from ordinary opening");
         restoreCheck(songState(app)==before&&app.position()==position,"FX restore/open changed song/history or cursor");
     });
+    for(const auto &[kind,code]:std::array<std::pair<const char *,const char *>,2>{{{"nudge-forward","NF"},{"nudge-reverse","NR"}}})
+        for(const bool saved:{false,true})withRestoreFixture([&](RestoreApplication &app) {
+            if(saved)app.edit("pattern.effect.set",{{"pattern",0},{"row",2},{"channel",0},{"column",0},
+                {"command",{{"kind",kind},{"value",.375},{"offset",32768},{"duration",123456}}}});
+            auto cursor=app.position();cursor["pattern"]=0;cursor["row"]=2;cursor["channel"]=0;cursor["column"]=3;cursor["following"]=false;app.navigate(cursor);
+            const auto before=songState(app),position=app.position();
+            if(saved)app.restoreLayoutConfiguration(layoutFor(app,"effects"));
+            else app.adoptInitialEffects(app.prepareInitialEffects(code));
+            const auto restored=effectsState(app);
+            restoreCheck(app.effectChoices.at(app.effectSelected).at("kind").get<std::string>()==kind,"Staged nudge selected the wrong command");
+            restoreCheck(app.effectField(effectValue)==(saved?L"0.375":L"0.75")&&app.effectField(effectOffset)==(saved?L"32768":L"0")&&
+                app.effectField(effectDuration)==(saved?L"123456":L"65536"),"Staged nudge lost saved timing or new-command defaults");
+            app.openEffectEditor(saved?"":code,true);
+            restoreCheck(effectsState(app)==restored,"Staged nudge values/catalogue differ from ordinary opening");
+            restoreCheck(songState(app)==before&&app.position()==position,"Nudge restore/open changed song/history or cursor");
+        });
 }
 
 void requiredReadFailuresAreAtomic() {
@@ -825,6 +845,61 @@ void preparationReadScopeAndBusyGuard() {
         }
     });
 }
+
+void provenanceNavigationUsesCapturedTargets() {
+    withRestoreFixture([](RestoreApplication &app) {
+        const auto first=addRestoreGain(app),second=addRestoreGain(app);
+        app.edit("automation.pattern.set",{{"pattern",0},{"plugin",second},{"parameter",1},{"points",RestoreJson::array({{{"position",0},{"value",.5}}})}});
+        app.openParameterAutomation(first,1);const auto window=app.parameterAutomationWindow->window();
+        auto source=RestoreJson{{"kind","envelope"},{"plugin",second},{"parameter",1},{"pattern",0},{"position",0}};
+        app.inspectParameterSource(source);
+        restoreCheck(app.parameterAutomationWindow->window()==window&&app.parameterAutomationWindow->snapshot().at("plugin")==second,"Source navigation reused the visible editor's wrong plugin");
+        SendMessageW(window,WM_TIMER,3,0); // Finish the existing read-only curve preview before comparing retained state.
+        const auto cleanCurve=app.parameterAutomationWindow->snapshot(),cleanCursor=app.position();
+        for(const auto &missing:std::array<std::pair<std::string,uint32_t>,2>{{{"missing-source-plugin",1},{second,UINT32_MAX}}}){
+            restoreRejected([&]{app.parameterAutomationWindow->openSourceAt(missing.first,missing.second);});
+            auto invalid=source;invalid["plugin"]=missing.first;invalid["parameter"]=missing.second;restoreRejected([&]{app.inspectParameterSource(invalid);});
+            restoreCheck(app.parameterAutomationWindow->snapshot()==cleanCurve&&app.position()==cleanCursor,"Unavailable curve source retargeted the existing editor or cursor");
+        }
+        auto invalidPattern=source;invalidPattern["patternID"]="missing-pattern-id";restoreRejected([&]{app.inspectParameterSource(invalidPattern);});
+        restoreCheck(app.parameterAutomationWindow->snapshot()==cleanCurve&&app.position()==cleanCursor,"Changed stable pattern identity retargeted a source");
+        auto field=GetDlgItem(window,4208);restoreCheck(field!=nullptr,"Parameter value field missing");SetWindowTextW(field,L"0.123456");
+        const auto draft=app.parameterAutomationWindow->snapshot(),cursor=app.position();source["plugin"]=first;
+        restoreRejected([&]{app.inspectParameterSource(source);});
+        restoreCheck(app.parameterAutomationWindow->snapshot()==draft&&app.position()==cursor&&restoreText(field)==L"0.123456","Source navigation overwrote a retained curve draft or moved its cursor");
+        app.openAbsoluteAutomation(first,1);const auto absolute=app.absoluteAutomationWindow->window();
+        app.inspectParameterSource({{"kind","recorded"},{"plugin",second},{"parameter",1}});
+        restoreCheck(app.absoluteAutomationWindow->window()==absolute&&app.absoluteAutomationWindow->snapshot().at("plugin")==second,"Recorded source retained the wrong visible plugin lane");
+        const auto cleanAbsolute=app.absoluteAutomationWindow->snapshot();
+        for(const auto &missing:std::array<std::pair<std::string,uint32_t>,2>{{{"missing-source-plugin",1},{second,UINT32_MAX}}}){
+            restoreRejected([&]{app.absoluteAutomationWindow->openSourceAt(missing.first,missing.second);});
+            restoreRejected([&]{app.inspectParameterSource({{"kind","recorded"},{"plugin",missing.first},{"parameter",missing.second}});});
+            restoreCheck(app.absoluteAutomationWindow->snapshot()==cleanAbsolute,"Unavailable recorded source retargeted the existing editor");
+        }
+        auto value=GetDlgItem(absolute,4609);restoreCheck(value!=nullptr,"Absolute value field missing");SetWindowTextW(value,L"-3.125");const auto absoluteDraft=app.absoluteAutomationWindow->snapshot();
+        restoreRejected([&]{app.inspectParameterSource({{"kind","recorded"},{"plugin",first},{"parameter",1}});});
+        restoreCheck(app.absoluteAutomationWindow->snapshot()==absoluteDraft&&restoreText(value)==L"-3.125","Recorded source navigation overwrote point fields");
+        app.absoluteAutomationWindow.reset();
+    });
+    withRestoreFixture([](RestoreApplication &app) {
+        app.openGraphCommands();const auto original=app.graphCommandsWindow->snapshot();
+        restoreRejected([&]{app.graphCommandsWindow->openSourceAt("missing-source-bus",0);});
+        restoreCheck(app.graphCommandsWindow->snapshot()==original,"Unavailable graph command bus silently fell back to another bus");
+        restoreRejected([&]{app.graphCommandsWindow->openSourceAt(original.at("target").get<std::string>(),8);});
+        restoreCheck(app.graphCommandsWindow->snapshot()==original,"Invalid source lane silently clamped to another lane");
+        app.graphCommandsWindow.reset();
+    });
+    withRestoreFixture([](RestoreApplication &app) {
+        const auto plugin=addRestoreGain(app);app.edit("pattern.create",{{"rows",64}});
+        const auto other=std::find_if(app.view->patterns.begin(),app.view->patterns.end(),[](const auto &p){return p.first!=0;});restoreCheck(other!=app.view->patterns.end(),"Second pattern fixture unavailable");
+        const auto before=songState(app);auto newer=app.position();newer["pattern"]=other->first;newer["row"]=7;newer["following"]=false;
+        app.targetRead="automation.pattern.get";app.pumpOrdinaryReads=true;app.postedInput=[&]{app.navigate(newer);};
+        const auto error=restoreRejected([&]{app.inspectParameterSource({{"kind","envelope"},{"plugin",plugin},{"parameter",1},{"pattern",0},{"position",0}});});
+        restoreCheck(app.dispatchedInput==1&&error.find("cursor changed")!=std::string::npos,"First source open did not observe the permitted pumped navigation");
+        restoreCheck(app.position()==newer&&app.parameterAutomationWindow->snapshot().at("pattern")==0,"Second source capture redirected the editor to the newer cursor");
+        restoreCheck(songState(app)==before,"Source navigation changed song/history during a pumped cursor move");
+    });
+}
 }
 
 int wmain(int argc,wchar_t **argv) {
@@ -849,6 +924,7 @@ int wmain(int argc,wchar_t **argv) {
             preciseOwnerControlsAreLazyAndRetained();std::cout<<"PASS Notes native controls: lazy sole owner, hidden HWND/raw/caret retention\n";
             fourOwnerLegacyLayoutContracts();std::cout<<"PASS V4 restore: seven-field exception and hand-authored V3/V2 aliases\n";
             preparationReadScopeAndBusyGuard();std::cout<<"PASS read scope: mutation rejection and busy/recovery pre-queue guards\n";
+            provenanceNavigationUsesCapturedTargets();std::cout<<"PASS source navigation: clean retained owners retarget explicitly; drafts retain exact fields\n";
         });
         return 0;
     }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}

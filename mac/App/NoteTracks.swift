@@ -14,8 +14,15 @@ final class NoteTrackEditor: NSView {
     super.init(frame: .zero)
     nameField.placeholderString = "Track name"; nameField.setAccessibilityLabel("Track name")
     countField.fixed(width: 64); countField.setAccessibilityLabel("Number of note columns")
-    destination.addItem(withTitle: "Keep current destination")
-    for bus in model.trackDestinations { destination.addItem(withTitle: bus["name"] as? String ?? "Mixer bus") }
+    // addItem(withTitle:) removes an earlier item with the same title, so two
+    // buses sharing a name would shift every later index. Carry the stable ID.
+    destination.removeAllItems()
+    destination.menu?.addItem(NSMenuItem(title: "Keep current destination", action: nil, keyEquivalent: ""))
+    for bus in model.trackDestinations {
+      let item = NSMenuItem(title: bus["name"] as? String ?? "Mixer bus", action: nil, keyEquivalent: "")
+      item.representedObject = bus["id"]; destination.menu?.addItem(item)
+    }
+    destination.selectItem(at: 0)
     destination.setAccessibilityLabel("Shared track output")
     target.stringValue = creating ? "Append empty note columns to all patterns." : "Group columns \((channels.first ?? 0) + 1)–\((channels.last ?? 0) + 1). Existing notes stay in place."
     target.maximumNumberOfLines = 2; target.lineBreakMode = .byWordWrapping
@@ -54,7 +61,10 @@ final class NoteTrackEditor: NSView {
       params["columns"] = count
     } else { params["channels"] = channels }
     if destination.indexOfSelectedItem > 0 {
-      params["output"] = model.trackDestinations[destination.indexOfSelectedItem - 1]["id"]
+      guard let output = destination.selectedItem?.representedObject else {
+        status.stringValue = "This destination is unavailable. Choose another output."; return
+      }
+      params["output"] = output
     }
     pending = true; applyButton?.isEnabled = false; status.stringValue = "Updating track…"
     onRequest(creating ? "track.create" : "track.group", params) { [weak self] response in

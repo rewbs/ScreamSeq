@@ -3,6 +3,7 @@
     uint64_t listedCatalog=UINT64_MAX;
     std::string inspectionClipboard;
     std::string effectPrefix,effectPrefixRevision;
+    #include "PatternNudgeEditor.inc"
     std::pair<std::wstring,std::wstring> effectText(const std::optional<Tracker::PatternCommand> &command) const {
         if(!command)return {L"..",L"...."};
         const auto &c=*command;wchar_t code[4]{},value[24]{};
@@ -17,6 +18,8 @@
             wcscpy_s(code,c.kind==K::ParameterSet?L"PS":L"PL");swprintf_s(value,L"%02X:%04X",unsigned(c.binding),unsigned(std::lround(c.value*65535)));break;
         case K::PitchSet:case K::PitchSlide:
             wcscpy_s(code,c.kind==K::PitchSet?L"BS":L"BL");swprintf_s(value,L"%+.3f",c.value);break;
+        case K::NudgeForward:case K::NudgeReverse:
+            wcscpy_s(code,c.kind==K::NudgeForward?L"NF":L"NR");swprintf_s(value,L"%.3g/%.3g",100*c.value,double(c.duration)/65536.);break;
         case K::NoteCut:wcscpy_s(code,L"NC");swprintf_s(value,L"%04X",c.position%Tracker::performanceUnitsPerRow);break;
         }
         return {code,value};
@@ -59,6 +62,8 @@
         const int digit=key>='0'&&key<='9'?int(key-'0'):key>='A'&&key<='F'?int(key-'A'+10):-1;
         auto current=view->effect(patternIndex,row,channel,(column-3)/2);
         if(column%2==0) {
+            if(current&&(current->kind==Tracker::PatternCommandKind::NudgeForward||current->kind==Tracker::PatternCommandKind::NudgeReverse))
+                return beginPatternNudgeEdit({},key>='0'&&key<='9'?std::wstring(1,wchar_t(key)):key==VK_DECIMAL||key==VK_OEM_PERIOD?L".":L"");
             if(current && current->kind!=Tracker::PatternCommandKind::TrackerEffect) {openEffectEditor();return true;}
             if(digit<0)return false;
             const unsigned effect=current?current->effect:0,old=current?current->parameter:0;
@@ -75,6 +80,7 @@
             effectPrefix.clear();setTrackerEffect(entry.at("command"),mask?(old&~mask)|value:old);
             auto n=position();n["column"]=column+1;navigate(n);return true;
         }
+        if(candidate=="NF"||candidate=="NR"){effectPrefix.clear();return beginPatternNudgeEdit(candidate=="NF"?"nudge-forward":"nudge-reverse");}
         for(auto code:{"PS","PL","BS","BL","NC"})if(candidate==code){effectPrefix.clear();openEffectEditor(candidate);return true;}
         const bool prefix=std::any_of(view->commands.at("effect").begin(),view->commands.at("effect").end(),[&](const auto &entry){return entry.at("displayCode").template get<std::string>().starts_with(candidate);}) || candidate=="P" || candidate=="B" || candidate=="N";
         if(candidate.size()==1&&prefix){effectPrefix=candidate;effectPrefixRevision=view->session.revision;status=L"Effect "+wide(candidate)+L"_ / type the second character";return true;}
@@ -136,21 +142,32 @@
         edit("pattern.apply",{{"cells",Json::array({cell})}});
         if(column==0) advance();return true;
     }
-    void copyCells() {
+    bool copyCells() {
         const auto region=selection();const auto clipboardSequence=inspection?0:GetClipboardSequenceNumber();
         auto data=await(std::async(std::launch::async,[snapshot=view,p=patternIndex,region]{return ScreamSeq::patternClipboardText(*snapshot,p,
             region.at("startRow"),region.at("endRow"),region.at("startChannel"),region.at("endChannel"));}));
-        if(inspection){inspectionClipboard=std::move(data);status=L"Pattern selection copied";return;}
-        if(GetClipboardSequenceNumber()!=clipboardSequence){status=L"Clipboard changed while preparing the selection / copy cancelled";return;}
+        if(inspection){inspectionClipboard=std::move(data);status=L"Pattern selection copied";return true;}
+        if(GetClipboardSequenceNumber()!=clipboardSequence){status=L"Clipboard changed while preparing the selection / copy cancelled";return false;}
         const auto text=wide(data);const auto bytes=(text.size()+1)*sizeof(wchar_t);
         auto memory=GlobalAlloc(GMEM_MOVEABLE,bytes);if(!memory) throw std::bad_alloc();
         auto target=GlobalLock(memory);if(!target) {GlobalFree(memory);throw std::runtime_error("Cannot allocate clipboard data");}
         memcpy(target,text.c_str(),bytes);GlobalUnlock(memory);
         if(!OpenClipboard(window)) {GlobalFree(memory);throw std::runtime_error("Clipboard busy");}
-        if(GetClipboardSequenceNumber()!=clipboardSequence){CloseClipboard();GlobalFree(memory);status=L"Clipboard changed / copy cancelled";return;}
+        if(GetClipboardSequenceNumber()!=clipboardSequence){CloseClipboard();GlobalFree(memory);status=L"Clipboard changed / copy cancelled";return false;}
         const bool published=EmptyClipboard() && SetClipboardData(CF_UNICODETEXT,memory);
         CloseClipboard();if(!published) {GlobalFree(memory);throw std::runtime_error("Cannot publish pattern clipboard");}
-        status=L"Pattern selection copied / all FX columns and bindings";
+        status=L"Pattern selection copied / precise notes and all FX columns";return true;
+    }
+    void cutCells(){
+        const auto identity=documentId,revision=view->session.revision;const auto target=patternIndex;const auto region=selection();
+        const auto result=ScreamSeq::guardedPatternCut([&]{return copyCells();},
+            [&]{return documentId==identity&&view->session.revision==revision&&patternIndex==target;},[&]{
+                documentOperation("pattern.transform",{{"expectedRevision",revision},{"operation","clear"},{"scope","selection"},{"pattern",target},
+                    {"startRow",region.at("startRow")},{"rowCount",region.at("endRow").get<unsigned>()-region.at("startRow").get<unsigned>()+1},
+                    {"startChannel",region.at("startChannel")},{"channelCount",region.at("endChannel").get<unsigned>()-region.at("startChannel").get<unsigned>()+1}});
+            });
+        if(result==ScreamSeq::PatternCutResult::Stale)status=L"Copied / cut cancelled because the song or pattern changed";
+        else if(result==ScreamSeq::PatternCutResult::Applied)status=L"Pattern selection cut / document Undo available";
     }
     void pasteCells(const std::string &mode="overwrite") {
         const auto origin=position();const auto revision=view->session.revision;
@@ -180,26 +197,33 @@
         choice.lpstrFile=path.data();choice.nMaxFile=DWORD(path.size());choice.lpstrDefExt=L"screamseq";
         choice.lpstrFilter=save ? L"ScreamSeq project\0*.screamseq;*.resonance\0\0" : L"Projects and tracker modules\0*.screamseq;*.resonance;*.mod;*.xm;*.s3m;*.it;*.mptm\0All files\0*.*\0\0";
         choice.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_DONTADDTORECENT|OFN_PATHMUSTEXIST|(save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+        ModalScope modal(modalDepth);
         bool selected=save ? GetSaveFileNameW(&choice)!=FALSE : GetOpenFileNameW(&choice)!=FALSE;
         return selected ? std::filesystem::path(path.data()) : std::filesystem::path{};
     }
     bool saveFile(bool saveAs=false) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         if(!protectRecordingTake())return false;
+        pluginEditorWarning.clear();
         documentOperation("flushPluginEditors",{{"force",true}});
         auto revision=view->session.revision;auto path=view->path;
         auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),towlower);
         if(saveAs || path.empty() || (ext!=L".screamseq" && ext!=L".resonance")) path=chooseFile(true);
         if(path.empty()) return false;
         documentOperation("document.save",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}});
-        status=L"Native project saved atomically";return true;
+        status=L"Native project saved atomically";
+        if(!pluginEditorWarning.empty()) {status+=L" / "+pluginEditorWarning;pluginEditorWarning.clear();}
+        return true;
     }
+    bool unsavedChecked=false; // The last protectUnsaved() got as far as knowing whether the song is dirty.
     bool protectUnsaved() {
+        unsavedChecked=false;
         if(!protectRecordingTake())return false;
         documentOperation("flushPluginEditors",{{"force",true}});
+        unsavedChecked=true;
         if(!view->dirty) return true;
         auto revision=view->session.revision;
-        int choice=MessageBoxW(window,L"Save changes before leaving this document?\nYes: Save    No: Discard    Cancel: Keep editing",L"Unsaved ScreamSeq project",MB_YESNOCANCEL|MB_ICONWARNING|MB_DEFBUTTON3);
+        int choice=modalMessage(L"Save changes before leaving this document?\nYes: Save    No: Discard    Cancel: Keep editing",L"Unsaved ScreamSeq project",MB_YESNOCANCEL|MB_ICONWARNING|MB_DEFBUTTON3);
         if(choice==IDCANCEL) return false;
         if(view->session.revision!=revision) throw ScreamSeq::Api::ApiError(-32001,"Document changed during the prompt; review changes again");
         return choice==IDNO || saveFile();

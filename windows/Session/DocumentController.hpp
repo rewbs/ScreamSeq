@@ -97,6 +97,7 @@ class DocumentController {
   std::unique_ptr<AssetOperations> assets_;
   std::unique_ptr<PluginOperations> plugins_;
   std::unique_ptr<HostedProjectPlayback> playback_;
+  uint64_t playbackDocumentGeneration_=0;
   Project::ProjectState project_;
   std::unique_ptr<RecordingTake> recording_;
   std::string identity_;
@@ -129,6 +130,8 @@ class DocumentController {
   void preflightGrowth(const std::string &method,const Json &params);
   void validateAssetCandidate(const Tracker::Document &candidate) const;
   void validateGraphViewGrowth(const Tracker::NativeSong &candidate) const;
+  void validateDocumentCandidate(Tracker::Document &candidate);
+  void validateNativeCandidate(const Tracker::NativeSong &candidate) const;
   PlaybackFeedback playbackFeedback();
   void open(const std::filesystem::path &path);
   void installCandidate(Project::OpenedProject candidate,std::function<void()> beforeCommit={});
@@ -140,6 +143,8 @@ class DocumentController {
   void overlayRecording(Project::ProjectState &,const RecordingTake &,bool closeHeld=true);
   void installRecording(std::unique_ptr<RecordingTake>,bool removePreserved=false);
   Json recordingOperation(const std::string &method,const Json &params);
+  Json parameterActivityOperation(const std::string &method,const Json &params);
+  std::function<void()> prepareNativeUpdate(const Tracker::NativeSong &before,const Tracker::NativeSong &next);
   std::string revision() const;
   Json operation(const std::string &method,Json params);
 public:

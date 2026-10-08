@@ -1,0 +1,416 @@
+[
+  {
+    "phase": "before",
+    "journey": "G01",
+    "kind": "click",
+    "value": 138
+  },
+  {
+    "phase": "before",
+    "journey": "G01",
+    "kind": "type",
+    "value": "AUReverb2"
+  },
+  {
+    "phase": "before",
+    "journey": "G01",
+    "kind": "click",
+    "value": 815,
+    "options": {
+      "clickCount": 2
+    }
+  },
+  {
+    "phase": "before",
+    "journey": "G01",
+    "kind": "key",
+    "value": "super+alt+g"
+  },
+  {
+    "phase": "before",
+    "journey": "G02",
+    "kind": "click",
+    "value": 6
+  },
+  {
+    "phase": "before",
+    "journey": "G02",
+    "kind": "type",
+    "value": "EQ5"
+  },
+  {
+    "phase": "before",
+    "journey": "G02",
+    "kind": "click",
+    "value": 715,
+    "options": {
+      "clickCount": 2
+    }
+  },
+  {
+    "phase": "before",
+    "journey": "G02",
+    "kind": "key",
+    "value": "super+alt+g"
+  },
+  {
+    "phase": "before",
+    "journey": "G02",
+    "kind": "drag",
+    "value": [
+      [
+        1630,
+        360
+      ],
+      [
+        955,
+        440
+      ]
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "G03",
+    "kind": "drag",
+    "value": [
+      [
+        141,
+        470
+      ],
+      [
+        174,
+        395
+      ]
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "G03",
+    "kind": "key",
+    "value": "super+z"
+  },
+  {
+    "phase": "before",
+    "journey": "G03",
+    "kind": "key",
+    "value": "plus"
+  },
+  {
+    "phase": "before",
+    "journey": "G03",
+    "kind": "key",
+    "value": "plus"
+  },
+  {
+    "phase": "before",
+    "journey": "G03",
+    "kind": "key",
+    "value": "plus"
+  },
+  {
+    "phase": "before",
+    "journey": "G03",
+    "kind": "key",
+    "value": "plus"
+  },
+  {
+    "phase": "before",
+    "journey": "G03",
+    "kind": "scroll",
+    "value": "up two pages"
+  },
+  {
+    "phase": "before",
+    "journey": "G03",
+    "kind": "drag",
+    "value": [
+      [
+        238,
+        709
+      ],
+      [
+        307,
+        554
+      ]
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "G04",
+    "kind": "click",
+    "value": 75
+  },
+  {
+    "phase": "before",
+    "journey": "G04",
+    "kind": "click",
+    "value": 8
+  },
+  {
+    "phase": "before",
+    "journey": "G04",
+    "kind": "click",
+    "value": 84
+  },
+  {
+    "phase": "before",
+    "journey": "G04",
+    "kind": "drag",
+    "value": [
+      [
+        902,
+        872
+      ],
+      [
+        515,
+        570
+      ]
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "G04",
+    "kind": "key",
+    "value": "alt+shift+Tab"
+  },
+  {
+    "phase": "before",
+    "journey": "G04",
+    "kind": "click",
+    "value": 94
+  },
+  {
+    "phase": "before",
+    "journey": "G04",
+    "kind": "key",
+    "value": "super+a"
+  },
+  {
+    "phase": "before",
+    "journey": "G04",
+    "kind": "type",
+    "value": "0.25"
+  },
+  {
+    "phase": "before",
+    "journey": "G04",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "before",
+    "journey": "G05",
+    "kind": "key",
+    "value": "super+k"
+  },
+  {
+    "phase": "before",
+    "journey": "G05",
+    "kind": "type",
+    "value": "add return"
+  },
+  {
+    "phase": "before",
+    "journey": "G05",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "before",
+    "journey": "G05",
+    "kind": "click",
+    "value": 86
+  },
+  {
+    "phase": "before",
+    "journey": "G05",
+    "kind": "click",
+    "value": 393
+  },
+  {
+    "phase": "before",
+    "journey": "G05",
+    "kind": "click",
+    "value": 596
+  },
+  {
+    "phase": "before",
+    "journey": "G05",
+    "kind": "click",
+    "value": 611
+  },
+  {
+    "phase": "before",
+    "journey": "G05",
+    "kind": "click",
+    "value": 601
+  },
+  {
+    "phase": "before",
+    "journey": "G05",
+    "kind": "key",
+    "value": "super+alt+g"
+  },
+  {
+    "phase": "before",
+    "journey": "G06",
+    "kind": "key",
+    "value": "super+k"
+  },
+  {
+    "phase": "before",
+    "journey": "G06",
+    "kind": "type",
+    "value": "trace silence"
+  },
+  {
+    "phase": "before",
+    "journey": "G06",
+    "kind": "key",
+    "value": "Escape"
+  },
+  {
+    "phase": "before",
+    "journey": "G07",
+    "kind": "key",
+    "value": "super+k"
+  },
+  {
+    "phase": "before",
+    "journey": "G07",
+    "kind": "type",
+    "value": "overload"
+  },
+  {
+    "phase": "before",
+    "journey": "G07",
+    "kind": "key",
+    "value": "Escape"
+  },
+  {
+    "phase": "before",
+    "journey": "G08",
+    "kind": "key",
+    "value": "super+k"
+  },
+  {
+    "phase": "before",
+    "journey": "G08",
+    "kind": "type",
+    "value": "group selection"
+  },
+  {
+    "phase": "before",
+    "journey": "G08",
+    "kind": "key",
+    "value": "Escape"
+  },
+  {
+    "phase": "before",
+    "journey": "G10",
+    "kind": "drag",
+    "value": [
+      [
+        926,
+        940
+      ],
+      [
+        432,
+        1212
+      ]
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 8
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 59
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 61
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 33
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 4
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 59
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": [
+      645,
+      460
+    ]
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 68
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 76
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 69
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "key",
+    "value": "super+a"
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "type",
+    "value": "800"
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "key",
+    "value": "Return"
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 3
+  },
+  {
+    "phase": "before",
+    "journey": "G09",
+    "kind": "click",
+    "value": 76
+  }
+]

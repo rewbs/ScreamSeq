@@ -141,6 +141,109 @@ class PatternPerformanceTests(unittest.TestCase):
         self.assertEqual(self.read('pattern.effects.get', pattern=0)['bindings'], [])
         self.assertEqual(len(self.doc()['data']['nativePlugins']), 1)
 
+    def test_inline_nudge_decimal_fields_commit_once_history_and_persistence(self):
+        self.navigate(row=4, channel=0, column=3, following=False)
+        main = self.desktop.hwnd(self.pid)
+        self.desktop.send(main, 0x111, 113)  # Focus the grid before its local F key.
+        self.assertEqual(self.desktop.focus(main), main)
+        before = self.doc()
+        self.key('N')
+        self.key('F')
+        draft = self.read('workspace.get')['nudgeEditor']
+        self.assertTrue(draft['active'] and draft['visible'])
+        self.assertEqual((draft['kind'], draft['strength'], draft['duration']), ('nudge-forward', '75', '1'))
+        self.assertEqual(self.doc(), before)
+        self.text(9800, '25.5')
+        self.text(9801, '1.375')
+        self.key(9)  # Tab is local to the two decimal fields.
+        draft = self.read('workspace.get')['nudgeEditor']
+        self.assertTrue(next(c for c in draft['controls'] if c['id'] == 9801)['focused'])
+        self.assertEqual((draft['strength'], draft['duration']), ('25.5', '1.375'))
+        self.key(13)
+        self.assertFalse(self.read('workspace.get')['nudgeEditor']['active'])
+        command = next(c for c in self.read('pattern.effects.get', pattern=0)['commands'] if c['kind'] == 'nudge-forward')
+        self.assertEqual((command['channel'], command['column'], command['position'], command['duration']), (0, 0, 4*65536, 90112))
+        self.assertAlmostEqual(command['value'], .255)
+        self.assertEqual(self.read('context.get')['row'], 5)
+        saved = self.read('pattern.effects.get', pattern=0)
+        self.write('history.undo', domain='document')
+        self.assertFalse(any(c['kind'] == 'nudge-forward' for c in self.read('pattern.effects.get', pattern=0)['commands']))
+        self.write('history.redo', domain='document')
+        self.assertEqual(self.read('pattern.effects.get', pattern=0), saved)
+        path = self.folder / 'inline-nudge.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.read('pattern.effects.get', pattern=0), saved)
+
+    def test_inline_nudge_retains_invalid_and_stale_draft_and_exact_existing_value(self):
+        original = .12345678901234567
+        self.write('pattern.effect.set', pattern=0, row=6, channel=1, column=0,
+                   command=dict(kind='nudge-reverse', value=original, duration=123456, offset=32768))
+        self.navigate(row=6, channel=1, column=4, following=False)
+        before = self.doc()
+        self.key(13)
+        draft = self.read('workspace.get')['nudgeEditor']
+        self.assertTrue(draft['active'])
+        self.assertEqual((draft['kind'], draft['offset']), ('nudge-reverse', 32768))
+        self.key(13)  # Rounded display text must not round the stored strength.
+        self.assertEqual(self.doc(), before)
+        self.assertEqual(next(c for c in self.read('pattern.effects.get', pattern=0)['commands'] if c['kind'] == 'nudge-reverse')['value'], original)
+        self.navigate(row=6, channel=1, column=4)
+        self.key('5')  # First typed value replaces the selected strength.
+        self.assertEqual(self.read('workspace.get')['nudgeEditor']['strength'], '5')
+        self.text(9800, '100.1')
+        self.text(9801, '0')
+        self.key(13)
+        invalid = self.read('workspace.get')['nudgeEditor']
+        self.assertTrue(invalid['active'])
+        self.assertEqual((invalid['strength'], invalid['duration']), ('100.1', '0'))
+        self.assertEqual(self.doc(), before)
+        self.text(9800, '37.5')
+        self.text(9801, '.5')
+        self.desktop.send(self.control(9800), 0xB1, 1, 3)  # Retain exact caret/selection over navigation/reflow.
+        self.navigate(row=8, channel=2, column=0)
+        retained = self.read('workspace.get')['nudgeEditor']
+        self.assertEqual((retained['row'], retained['channel']), (6, 1))
+        self.assertEqual(next(c for c in retained['controls'] if c['id'] == 9800)['selection'], [1, 3])
+        self.write('document.patch', title='stale inline draft')
+        changed = self.doc()
+        self.key(13)
+        retained = self.read('workspace.get')['nudgeEditor']
+        self.assertTrue(retained['active'] and retained['stale'])
+        self.assertEqual((retained['strength'], retained['duration']), ('37.5', '.5'))
+        self.assertEqual(self.doc(), changed)
+        self.key(27)
+        self.assertFalse(self.read('workspace.get')['nudgeEditor']['active'])
+        self.assertEqual((self.read('context.get')['row'], self.read('context.get')['channel']), (8, 2))
+
+    def test_native_cut_and_paste_preserve_precise_note_offsets_and_history(self):
+        events = [dict(channel=1, position=4*65536+123, note=65, instrument=1, velocity=90),
+                  dict(channel=1, position=4*65536+32769, note=255),
+                  dict(channel=1, position=5*65536, note=62, instrument=1)]
+        self.write('pattern.notes.set', pattern=0, events=events)
+        before = self.read('pattern.notes.get', pattern=0)
+        self.navigate(row=4, channel=1, column=0, following=False)
+        self.desktop.send(self.desktop.hwnd(self.pid), 0x111, 542)  # Cut focused selection; inspection clipboard is private.
+        cut = self.read('pattern.notes.get', pattern=0)
+        self.assertEqual([e['position'] for e in cut['events']], [5*65536])
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), before)
+        self.write('history.redo', domain='document')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), cut)
+        self.navigate(row=10, channel=2, column=0)
+        self.desktop.send(self.desktop.hwnd(self.pid), 0x111, 125)  # Paste is a command, not a child control.
+        pasted = self.read('pattern.notes.get', pattern=0)
+        target = [e for e in pasted['events'] if e['channel'] == 2]
+        self.assertEqual([(e['position'], e['note']) for e in target], [(10*65536+123, 65), (10*65536+32769, 255)])
+        self.assertEqual((target[0]['instrument'], target[0]['velocity']), (1, 90))
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), cut)
+        self.write('history.redo', domain='document')
+        path = self.folder / 'precise-native-cut.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), pasted)
+
     def test_native_precise_fx_draft_search_captured_target_stale_and_reopen(self):
         self.write('pattern.effects.set', pattern=0, columns=[dict(channel=0, count=8)])
         self.navigate(row=8, channel=0, column=17)
@@ -186,7 +289,9 @@ class PatternPerformanceTests(unittest.TestCase):
         self.write('pattern.effects.set', pattern=0, columns=[dict(channel=0, count=8)], commands=[
             dict(channel=0, position=65536+12345, duration=0, column=7, kind='note-cut'),
             dict(channel=1, position=2*65536, column=0, kind='pitch-set', value=3)])
-        self.write('pattern.notes.set', pattern=0, events=[dict(channel=0, position=65536+500, note=61)])
+        self.write('pattern.notes.set', pattern=0, events=[
+            dict(channel=0, position=65536+500, note=61),
+            dict(channel=1, position=65536+700, note=65)])
         before = self.read('pattern.effects.get', pattern=0)
         before_cells = self.cells()
         notes = self.read('pattern.notes.get', pattern=0)
@@ -199,18 +304,23 @@ class PatternPerformanceTests(unittest.TestCase):
         after = self.read('pattern.effects.get', pattern=0)
         self.assertEqual(next(c['position'] for c in after['commands'] if c['column'] == 7), 2*65536+12345)
         self.assertEqual([c for c in before['commands'] if c['channel'] == 1], [c for c in after['commands'] if c['channel'] == 1])
-        self.assertEqual(self.read('pattern.notes.get', pattern=0), notes)
+        transformed_notes = dict(notes, events=[dict(e, position=2*65536+500) if e['channel'] == 0 else e
+                                               for e in notes['events']])
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), transformed_notes)
         self.write('history.undo', domain='document')
         self.assertEqual(self.read('pattern.effects.get', pattern=0), before)
         self.assertEqual(self.cells(), before_cells)
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), notes)
         self.write('history.redo', domain='document')
+        self.assertEqual(self.read('pattern.effects.get', pattern=0), after)
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), transformed_notes)
         doc = self.doc()
         with self.assertRaises(ApiError):
             self.write('pattern.transform', **dict(fields, operation='expand'), amount=3)
         self.assertEqual(self.doc(), doc)
         self.write('pattern.transform', operation='clear', scope='song', fields=['effect'])
         self.assertEqual(self.read('pattern.effects.get', pattern=0)['commands'], [])
-        self.assertEqual(self.read('pattern.notes.get', pattern=0), notes)
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), transformed_notes)
 
     def test_all_fx_columns_atomic_cell_edits_history_and_reopen(self):
         original_cells = self.cells()
@@ -407,6 +517,8 @@ class PatternPerformanceTests(unittest.TestCase):
                        command=dict(kind='parameter-slide', binding=7, value=.2, duration=65536))
         self.assertEqual(self.doc(), before)
         self.write('history.undo', domain='plugins')
+        self.assertFalse(self.read('pattern.effects.get', pattern=0)['bindings'][0]['resolved'])
+        self.write('history.undo', domain='all')
         self.assertTrue(self.read('pattern.effects.get', pattern=0)['bindings'][0]['resolved'])
 
     def test_precise_note_offsets_local_effects_order_noop_clear_and_reopen(self):

@@ -70,7 +70,7 @@
     std::vector<WorkspaceMenuItem> patternContextItems() const {
         const bool enabled=!busy;
         return {{0,L"Pattern / row "+std::to_wstring(row)+L" / channel "+std::to_wstring(channel+1)},
-            {copyCommand,L"&Copy selection\tCtrl+C",enabled},{pasteCommand,L"&Paste\tCtrl+V",enabled},
+            {copyCommand,L"&Copy selection\tCtrl+C",enabled},{cutFocusedCommand,L"Cu&t selection\tCtrl+X",enabled},{pasteCommand,L"&Paste\tCtrl+V",enabled},
             {0,L"Paste special",enabled,false,{{patternPasteMix,L"Mix into empty fields",enabled},{patternPasteMerge,L"Merge nonempty fields",enabled}}},
             {clearCommand,L"&Clear selection\tDelete",enabled},{0,L""},
             {0,L"Transform selection",enabled,false,{{patternReverse,L"Reverse rows",enabled},{patternRotate,L"Rotate rows down",enabled},
@@ -124,6 +124,7 @@
             items.push_back({graphDeleteWire,L"Delete wire in draft",targetReady&&current&&!graphFieldDirty&&graphWireIndex>=0});
             items.push_back({0,L""});
         }
+        items.push_back({graphWorkflowCommand,L"Groups, visual layout and signal tools…",idle});
         items.push_back({graphAddSource,L"Add selected source kind",clean&&!graphID.empty()});
         items.push_back({graphAddEffect,L"Add selected rack effect",clean&&!graphID.empty()&&SendMessageW(controls.at(graphRack),CB_GETCURSEL,0,0)>=0});
         items.push_back({graphFit,L"Fit graph\tHome",idle&&!graphID.empty()});

@@ -217,6 +217,25 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.command(372)
         self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'][0]['position'], 5*65536+40960)
 
+    def test_empty_row_captures_explicit_empty_input_slot(self):
+        self.write('pattern.apply', cells=[dict(pattern=0, row=5, channel=0,
+            note=0, instrument=0, volumeCommand=0, volume=0, effect=0, parameter=0)])
+        before = self.doc()
+        self.client.call('workspace.input', dict(expectedRevision=before['revision'],
+            expectedContext=self.read('context.get')['contextRevision'], instrument=255))
+        self.open_row(row=5)
+        self.assertEqual(self.editor()['draftCount'], 0)
+        self.assertEqual(self.editor()['raw']['instrument'], '255')
+        self.assertEqual(self.doc(), before)
+        self.command(369)
+        self.assertEqual(self.editor()['selectedEvent']['instrument'], 255)
+        self.command(372)
+        events = self.read('pattern.notes.get', pattern=0)['events']
+        hit = next(e for e in events if e['channel'] == 0 and e['position'] == 5*65536)
+        self.assertEqual(hit['instrument'], 255)
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], [])
+
     def test_empty_row_captures_selected_sample_and_instrument_with_history(self):
         def choose_sound(slot):
             control = self.main_control(135)

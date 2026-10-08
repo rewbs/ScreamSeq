@@ -2,6 +2,7 @@
 #include "editor/TrackerDocument.hpp"
 #include "editor/SampleArchive.hpp"
 #include "editor/ArrangementTools.hpp"
+#include "ModuleFixture.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace Tracker;
@@ -48,6 +49,13 @@ int main() {
   @autoreleasepool {
     try {
       Document doc;
+      const auto masterIdentity=doc.native().masterID;
+      check(masterIdentity>0 && masterIdentity<doc.native().nextID && !doc.native().mixer.active(),"Master identity is reserved before routing is materialized");
+      const auto initialNative=doc.native();auto projected=initialNative;projected.ensureMixer();
+      check(projected.nextID==initialNative.nextID && projected.mixer.buses.back().id==masterIdentity && doc.native()==initialNative,"Implicit graph projection never allocates or changes the document");
+      doc.annotate([](NativeSong &n){n.ensureMixer();});doc.undo();
+      check(doc.native().masterID==masterIdentity && !doc.native().mixer.active(),"Undo materialization retains the reserved Master");
+      doc.redo();check(doc.native().mixer.buses.back().id==masterIdentity,"Redo reuses Master identity");doc.undo();
       auto firstID = doc.native().sequences[0].orders[0].id;
       auto patternID = doc.native().patterns.at(0).id;
       doc.annotate([](NativeSong &n) { n.sequences[0].orders[0].name = "Intro"; n.patterns.at(0).annotation = "Shared notes"; });
@@ -104,13 +112,68 @@ int main() {
       blocks->annotate([](NativeSong &n) { n.tracks.at(0).name = "Changed"; });
       try { applyArrangementCopy(*blocks, plan); check(false, "Reject stale prepared block"); }
       catch (const std::invalid_argument &) {}
+      {
+        // Duplicates and independent block copies keep the pattern's own settings.
+        auto timed = Document::demo();
+        timed->transaction([](CSoundFile &s) {
+          auto &pattern = s.Patterns[0];
+          TempoSwing swing; swing.resize(3, TempoSwing::Unity); swing[0] += TempoSwing::Unity / 4; swing.Normalize();
+          check(pattern.SetSignature(3, 12) && pattern.SetName("Verse"), "Pattern settings fixture");
+          pattern.SetTempoSwing(swing); pattern.SetColor(0x336699);
+        });
+        auto same = [&](int copy, int rows) {
+          const auto &s = timed->song(); const auto &a = s.Patterns[0], &b = s.Patterns[copy];
+          return b.GetNumRows() == ROWINDEX(rows) && b.GetOverrideSignature() && b.GetRowsPerBeat() == 3 && b.GetRowsPerMeasure() == 12 &&
+            b.HasTempoSwing() && b.GetTempoSwing() == a.GetTempoSwing() && b.GetName() == "Verse" && b.GetColor() == 0x336699 &&
+            timed->cell(copy, 0, 0) == timed->cell(0, 0, 0) && timed->cell(copy, 16, 1) == timed->cell(0, 16, 1);
+        };
+        const auto duplicate = timed->addPattern(64, true, 0), shorter = timed->addPattern(32, true, 0);
+        check(same(duplicate, 64) && timed->song().Patterns[duplicate] == timed->song().Patterns[0], "Pattern duplicate keeps signature, tempo swing, name and colour");
+        check(same(shorter, 32), "Shorter pattern duplicate keeps settings and overlapping rows");
+        timed->undo(); timed->undo();
+        timed->editOrder(0, 0, "after");
+        ArrangementCopy block{0, 1, 0, 4};
+        auto unique = prepareArrangementCopy(*timed, block);
+        check(unique.clone, "Shared pattern requires an independent copy");
+        applyArrangementCopy(*timed, unique);
+        check(same(unique.targetPattern, 64), "Independent block copy keeps signature, tempo swing, name and colour");
+      }
+      {
+        // A copied source-format effect replaces FX 1's precise command, as Document::edit does.
+        auto fx = Document::demo();
+        fx->edit({Edit{0, 0, 0, {}, {49, 1, VOLCMD_VOLUME, 38, CMD_VIBRATO, 0x34}}});
+        fx->editOrder(0, 0, "after");
+        fx->annotate([](NativeSong &n) {
+          const auto p = n.patterns.at(0).id, t = n.tracks.at(4).id;
+          n.performance.columns[t] = 2;
+          n.performance.commands = {{p, t, 100, 0, 0, PatternCommandKind::PitchSet, 0, 1.0},
+            {p, t, 65536, 0, 0, PatternCommandKind::PitchSet, 0, 2.0}, {p, t, 0, 0, 1, PatternCommandKind::PitchSet, 0, 3.0}};
+        });
+        auto commands = [&](int pattern) {
+          std::vector<double> values; const auto &n = fx->native();
+          for (const auto &c : n.performance.commands) if (c.pattern == n.patterns.at(pattern).id) values.push_back(c.value);
+          std::sort(values.begin(), values.end()); return values;
+        };
+        ArrangementCopy block{0, 1, 0, 4};
+        for (bool unique : {true, false}) {
+          block.makeUnique = unique;
+          const auto plan = prepareArrangementCopy(*fx, block);
+          check(plan.clone == unique, "Block copy fixture");
+          applyArrangementCopy(*fx, plan);
+          check(fx->cell(plan.targetPattern, 0, 4).effect == CMD_VIBRATO && commands(plan.targetPattern) == std::vector<double>{2.0, 3.0},
+                "Block copy replaces the conflicting FX 1 precise command and keeps other rows and columns");
+          if (unique) check(commands(0) == std::vector<double>{1.0, 2.0, 3.0}, "Independent block copy leaves the shared pattern's commands");
+          fx->native().validate(fx->song());
+          fx->undo();
+          check(commands(0) == std::vector<double>{1.0, 2.0, 3.0} && fx->cell(0, 0, 4) == Cell{}, "One Undo restores the replaced precise command");
+        }
+      }
       auto folder = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
       [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
       matrixAPITests(folder);
       for (auto type : {MOD_TYPE_MOD, MOD_TYPE_XM, MOD_TYPE_S3M, MOD_TYPE_IT, MOD_TYPE_MPT}) {
-        auto source = Document::demo(type);
         NSString *input = [folder stringByAppendingPathComponent:@"source.module"];
-        source->save(input.UTF8String);
+        Test::writeDemoModule(type, input.UTF8String);
         TrackerSession *session = [TrackerSession new];
         NSError *error = nil;
         check([session openPath:input error:&error], "Open supported module");
@@ -121,8 +184,21 @@ int main() {
           if (!response) throw std::runtime_error(error.localizedDescription.UTF8String);
           return response[@"data"];
         };
+        {
+          // Deleting plain cells changes no native data, so it need not stop playback.
+          NSDictionary *preview = call(@"pattern.transform", @{@"operation": @"clear", @"scope": @"pattern", @"pattern": @0, @"dryRun": @YES}, true);
+          check([preview[@"changedCells"] intValue] > 0 && ![preview[@"effectsChanged"] boolValue], "Delete over plain cells reports unchanged native data");
+        }
         auto arrangement = call(@"arrangement.get", @{});
         auto original = [session snapshot:0];
+        auto readMaster=[&]() -> NSString * {return [(NSArray *)call(@"mixer.get",@{@"includeImplicit":@YES})[@"buses"] lastObject][@"id"];};
+        NSString *reservedMaster=readMaster(),*readRevision=session.automationRevision;
+        auto graphView=call(@"graph.get",@{@"includeImplicitMixer":@YES});
+        check([[(NSArray *)graphView[@"mixer"][@"buses"] lastObject][@"id"] isEqual:reservedMaster] && [readRevision isEqual:session.automationRevision],"Mixer and graph implicit reads agree without editing history");
+        call(@"graph.create",@{},true);
+        check([readMaster() isEqual:reservedMaster],"Unrelated graph allocations cannot change the displayed implicit Master");
+        call(@"history.undo",@{@"domain":@"document"},true);
+        check([readMaster() isEqual:reservedMaster],"Undo and further read projections preserve Master");
         NSString *slot = arrangement[@"orders"][0][@"id"];
         call(@"song.annotate", @{@"id": slot, @"name": @"Intro 🎹", @"color": @0x52cdb4}, true);
         NSString *revision = session.automationRevision;
@@ -136,6 +212,7 @@ int main() {
         auto before = [session snapshot:0];
         check([session openPath:path error:&error], error.localizedDescription.UTF8String ?: "Reopen native metadata");
         auto after = [session snapshot:0];
+        check([readMaster() isEqual:reservedMaster],"Reserved implicit Master persists through native save/reopen");
         for (NSString *key in @[@"orderMetadata", @"patterns", @"tracks", @"samples", @"instruments", @"cells"])
           check([before[key] isEqual:after[key]], "Project metadata/identities/cells survive reopen");
         NSArray *sections = call(@"arrangement.get", @{})[@"sections"];
@@ -167,6 +244,7 @@ int main() {
           check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Historical native metadata is rejected atomically");
         }
         call(@"mixer.enable", @{}, true);
+        check([readMaster() isEqual:reservedMaster],"First routing edit materializes the same Master shown in the implicit view");
         NSString *busID = call(@"mixer.get", @{})[@"buses"][0][@"id"];
         call(@"mixer.bus.set", @{@"bus": busID, @"prePan": @0.375}, true);
         check([session savePath:path error:&error] && [session openPath:path error:&error], "Input balance saves/reopens over every source format");
@@ -177,6 +255,25 @@ int main() {
         call(@"mixer.bus.set", @{@"bus": busID, @"prePan": @0}, true);
         auto compatible = [NSPropertyListSerialization propertyListWithData:[session serializedData] options:0 format:nil error:nil];
         check([compatible[@"native"][@"version"] intValue] == 17, "Clearing input balance retains the same current metadata format");
+        check([compatible[@"native"][@"masterID"] isEqual:reservedMaster],"Current native metadata stores the reserved Master explicitly");
+        auto conflicting=[compatible mutableCopy];auto conflictingNative=[compatible[@"native"] mutableCopy];
+        conflictingNative[@"masterID"]=busID;conflicting[@"native"]=conflictingNative;write(conflicting);revision=session.automationRevision;
+        check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Conflicting saved Master identity is rejected atomically");
+        auto currentWithoutField=[compatible mutableCopy];auto missingNative=[compatible[@"native"] mutableCopy];
+        [missingNative removeObjectForKey:@"masterID"];currentWithoutField[@"native"]=missingNative;write(currentWithoutField);
+        check([session openPath:path error:&error]&&[readMaster() isEqual:reservedMaster],"Current metadata without the optional field derives the existing Master identity");
+        auto songControls=[compatible mutableCopy];auto controlsNative=[compatible[@"native"] mutableCopy];auto controlsGraph=[controlsNative[@"signalGraph"] mutableCopy];
+        const auto sourceNumber=[controlsNative[@"nextID"] unsignedLongLongValue];NSString *sourceID=[NSString stringWithFormat:@"n%llu",sourceNumber];
+        controlsNative[@"nextID"]=@(sourceNumber+1);
+        controlsGraph[@"songSources"]=@[@{@"id":sourceID,@"kind":@"lfo",@"name":@"Rack motion",@"rate":@.5,@"phase":@.125,@"amount":@.75}];
+        controlsGraph[@"songModulation"]=@[@{@"source":sourceID,@"plugin":@"unresolved-stable-target",@"parameter":@17,@"minimum":@(-.2),@"maximum":@.3,@"quantized":@YES}];
+        controlsNative[@"signalGraph"]=controlsGraph;songControls[@"native"]=controlsNative;write(songControls);
+        check([session openPath:path error:&error],"Current project loads song-level control metadata independently of reusable recipes");
+        auto controlsBefore=call(@"graph.get",@{});check([controlsBefore[@"songSources"] count]==1&&[controlsBefore[@"songModulation"] count]==1,"Song-level source/target metadata appears in the graph projection");
+        check([session savePath:path error:&error]&&[session openPath:path error:&error],"Song-level control metadata saves and reopens");
+        auto controlsAfter=call(@"graph.get",@{});check([controlsBefore[@"songSources"] isEqual:controlsAfter[@"songSources"]]&&[controlsBefore[@"songModulation"] isEqual:controlsAfter[@"songModulation"]],"Song-level controls retain stable IDs, ranges and explicit quantization through persistence");
+        auto duplicate=[controlsGraph mutableCopy];duplicate[@"songSources"]=@[controlsGraph[@"songSources"][0],controlsGraph[@"songSources"][0]];controlsNative[@"signalGraph"]=duplicate;songControls[@"native"]=controlsNative;write(songControls);revision=session.automationRevision;
+        check(![session openPath:path error:&error]&&[revision isEqual:session.automationRevision],"Duplicate song control identities reject without replacing the document");
       }
       [[NSFileManager defaultManager] removeItemAtPath:folder error:nil];
       std::cout << "PASS native song identities, metadata, order/section history, no-op/invalid atomicity, all five module formats, current project roundtrip, historical version rejection and loss prevention\n";

@@ -233,7 +233,7 @@ class PluginAppTests(unittest.TestCase):
                 descriptor=descriptor, instrument=assigned, pluginID=plugin_id,
                 emptyKeymap=True, nativeButton=True, independentHistory=True, exactBaselineReopened=True), indent=2))
 
-    def test_discovery_guards_atomic_parameters_and_independent_histories(self):
+    def test_discovery_guards_atomic_parameters_and_chronological_history_aliases(self):
         methods = self.client.call('api.describe')['data']
         self.assertIn('plugin.parameters.set', methods['writes'])
         before = self.doc()
@@ -274,7 +274,10 @@ class PluginAppTests(unittest.TestCase):
         self.write('history.redo', domain='plugins')
         self.assertEqual(self.state(), changed)
         self.write('history.undo', domain='document')
-        self.assertEqual(self.state(), changed)
+        self.assertEqual(self.state(), original)
+        self.assertEqual(self.doc()['data']['title'], 'Independent document edit')
+        self.write('history.undo', domain='all')
+        self.assertEqual(self.state(), original)
         self.assertNotEqual(self.doc()['data']['title'], 'Independent document edit')
 
     def test_move_remove_state_restore_and_save_reopen(self):

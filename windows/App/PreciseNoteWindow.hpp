@@ -34,7 +34,8 @@ public:
     // Reload captured can address a row that is no longer under the cursor.
     std::function<SeedCell(unsigned,unsigned,unsigned)> cell;
     std::vector<std::wstring> noteNames;
-    // Snapshot of the selected module sound, resolved by stable catalogue ID.
+    // Snapshot of the selected module sound, resolved by stable catalogue ID,
+    // or the explicit workspace.input slot (which may currently be empty).
     // Zero means no compatible current selection. Only an empty row uses it;
     // ordinary/precise events keep their own instrument, including zero.
     unsigned insertionInstrument=0;

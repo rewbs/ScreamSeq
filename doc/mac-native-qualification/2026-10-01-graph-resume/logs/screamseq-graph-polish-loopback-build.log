@@ -1,0 +1,11 @@
+-- Configuring done (0.1s)
+-- Generating done (0.3s)
+-- Build files have been written to: /private/tmp/screamseq-graph-polish-20261001/bin/graph-polish-qa
+[ 12%] Built target TrackerFLAC
+[ 72%] Built target OpenMPTCore
+[ 88%] Built target TrackerEditor
+[ 94%] Built target TrackerHosted
+[ 98%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/loopback-tests.dir/Tests/LoopbackTests.cpp.o
+[100%] Linking CXX executable loopback-tests
+[100%] Built target loopback-tests

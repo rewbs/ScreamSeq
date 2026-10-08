@@ -65,9 +65,11 @@ struct Library::Impl {
     publish();nextScan=Scan{1,true,currentRoots};
     ownerThread=std::thread([this]{ownerLoop();});
     try{scanThread=std::thread([this]{scanLoop();});}
-    catch(...){closing=true;ownerWake.notify_all();ownerThread.join();throw;}
+    catch(...){{std::lock_guard lock(ownerMutex);closing=true;}ownerWake.notify_all();ownerThread.join();throw;}
   }
-  ~Impl(){closing=true;generation.fetch_add(1);ownerWake.notify_all();scanWake.notify_all();if(scanThread.joinable())scanThread.join();if(ownerThread.joinable())ownerThread.join();}
+  // Publish the flag under each waiter's mutex: a worker that has tested its
+  // predicate but not yet blocked would otherwise miss the wake-up and hang join().
+  ~Impl(){{std::lock_guard lock(ownerMutex);closing=true;}{std::lock_guard lock(scanMutex);}generation.fetch_add(1);ownerWake.notify_all();scanWake.notify_all();if(scanThread.joinable())scanThread.join();if(ownerThread.joinable())ownerThread.join();}
   void publish(){
     Json warnings=index?Json(index->warnings()):Json::array();if(!preferencesWarning.empty())warnings.push_back(preferencesWarning);
     published.store(std::make_shared<const Json>(Json{{"roots",currentRoots},{"count",index?index->count():0},{"indexing",indexing},{"ready",bool(index)},{"libraryRevision",version},{"error",error.empty()?Json():Json(error)},{"indexedAt",index?Json(index->indexedAt()):Json()},{"warnings",std::move(warnings)},{"extensions",LibraryIndex::extensions()}}),std::memory_order_release);

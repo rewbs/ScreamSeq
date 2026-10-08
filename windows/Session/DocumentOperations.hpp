@@ -20,12 +20,14 @@ class DocumentOperations {
   std::function<void(const std::vector<Tracker::Edit>&)> publishEdits_;
   std::function<void(Tracker::Document&)> validateCandidate_;
   std::function<void(const Tracker::NativeSong&)> validateNativeCandidate_;
+  std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> prepareNativeUpdate_;
 public:
   explicit DocumentOperations(Tracker::Document &document,
     std::function<void()> stopPlayback = {},
     std::function<void(const std::vector<Tracker::Edit>&)> publishEdits = {},
     std::function<void(Tracker::Document&)> validateCandidate = {},
-    std::function<void(const Tracker::NativeSong&)> validateNativeCandidate = {});
+    std::function<void(const Tracker::NativeSong&)> validateNativeCandidate = {},
+    std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> prepareNativeUpdate = {});
   // Shared presentation projection and validated, uncommitted annotation patch.
   // Validation callbacks may reject by throwing; they run before live changes.
   // The document callback receives a private candidate. The native callback

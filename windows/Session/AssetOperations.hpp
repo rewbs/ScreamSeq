@@ -17,6 +17,7 @@ class AssetOperations {
   Tracker::Document &document_;
   std::function<void()> stopPlayback_;
   std::function<void(const Tracker::Document &)> validateImport_;
+  std::function<std::function<void()>(unsigned,const Tracker::SampleEditGeometry &)> prepareSampleLoops_;
   const std::thread::id owner_=std::this_thread::get_id();
   std::optional<Tracker::SampleClipboard> clipboard_;
   std::string clipboardId_;
@@ -32,6 +33,7 @@ public:
     std::function<void(const Tracker::Document &)> validateImport={});
   AssetOperations(const AssetOperations &)=delete;
   AssetOperations &operator=(const AssetOperations &)=delete;
+  void sampleLoops(std::function<std::function<void()>(unsigned,const Tracker::SampleEditGeometry &)> callback) {prepareSampleLoops_=std::move(callback);}
   Json invoke(const std::string &method,const Json &params);
   static std::vector<std::string> reads();
   static std::vector<std::string> writes();

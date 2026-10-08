@@ -92,12 +92,14 @@ NSDictionary *encodeMixer(const MixerGraph &graph) {
     @"target": source.target ? nativeID(source.target) : @"", @"output": @(source.output)}];
   for (const auto &side : graph.sidechains) [sidechains addObject:@{@"source": nativeID(side.source), @"plugin": @(side.plugin.c_str()),
     @"input": @(side.input), @"gainDB": @(side.gainDB), @"preFader": @(side.preFader), @"enabled": @(side.enabled)}];
-  return @{@"buses": buses, @"instruments": instruments, @"sidechains": sidechains};
+  NSMutableArray *detached=[NSMutableArray array];for(const auto &plugin:graph.detached)[detached addObject:@(plugin.c_str())];
+  return @{@"buses": buses, @"instruments": instruments, @"sidechains": sidechains, @"detached":detached};
 }
 MixerGraph decodeMixer(id raw) {
   using namespace Automation;
-  auto value = object(raw); keys(value, @[@"buses", @"instruments", @"sidechains"]);
+  auto value = object(raw); keys(value, @[@"buses", @"instruments", @"sidechains", @"detached"]);
   MixerGraph graph;
+  for(id raw:array(value[@"detached"]?:@[],240))graph.detached.push_back(string(raw,128).UTF8String);
   for (id rawBus in array(value[@"buses"], 240)) {
     auto v = object(rawBus);
     keys(v, @[@"id", @"kind", @"name", @"color", @"output", @"preGainDB", @"prePan", @"gainDB", @"pan", @"width", @"timingMS", @"mute", @"solo", @"inserts", @"sends"]);
@@ -122,7 +124,7 @@ MixerGraph decodeMixer(id raw) {
   for (id rawSide in array(value[@"sidechains"], 128)) {
     auto side = object(rawSide); keys(side, @[@"source", @"plugin", @"input", @"gainDB", @"preFader", @"enabled"]);
     graph.sidechains.push_back({decodeNativeID(side[@"source"]), string(side[@"plugin"], 128).UTF8String,
-      uint32_t(integer(side[@"input"], 1, 63)), number(side[@"gainDB"], -96, 12), boolean(side[@"preFader"]), boolean(side[@"enabled"])});
+      uint32_t(integer(side[@"input"], 0, 63)), number(side[@"gainDB"], -96, 12), boolean(side[@"preFader"]), boolean(side[@"enabled"])});
   }
   return graph;
 }
@@ -155,7 +157,7 @@ NSDictionary *encodeNativeSong(const NativeSong &native) {
     [noteTracks addObject:@{@"bus": nativeID(track.bus), @"columns": columns}];
   }
   for (const auto &[id, muted] : native.columnMutes) [mutes addObject:@[nativeID(id), @(muted)]];
-  NSMutableDictionary *result = [@{@"version": @17, @"nextID": @(native.nextID), @"patterns": map(native.patterns),
+  NSMutableDictionary *result = [@{@"version": @17, @"nextID": @(native.nextID), @"masterID": nativeID(native.masterID), @"patterns": map(native.patterns),
            @"tracks": map(native.tracks), @"samples": map(native.samples), @"instruments": map(native.instruments),
            @"sequences": sequences, @"automation": automation, @"mixer": encodeMixer(native.mixer)} mutableCopy];
   result[@"envelopeBank"]=encodeEnvelopeBank(native);
@@ -174,10 +176,11 @@ NSDictionary *encodeNativeSong(const NativeSong &native) {
 NativeSong decodeNativeSong(id raw) {
   using namespace Automation;
   auto value = object(raw);
-  keys(value, @[@"version", @"nextID", @"patterns", @"tracks", @"samples", @"instruments", @"sequences", @"automation", @"mixer", @"noteTracks", @"columnMutes", @"performance", @"preciseNotes", @"signalGraph", @"envelopeBank"]);
+  keys(value, @[@"version", @"nextID", @"masterID", @"patterns", @"tracks", @"samples", @"instruments", @"sequences", @"automation", @"mixer", @"noteTracks", @"columnMutes", @"performance", @"preciseNotes", @"signalGraph", @"envelopeBank"]);
   integer(value[@"version"], 17, 17);
   NativeSong result;
   result.nextID = integer(value[@"nextID"], 1, NativeSong::maximumID);
+  if(value[@"masterID"])result.masterID=decodeNativeID(value[@"masterID"]);
   auto map = [&](NSString *key, auto &out) {
     for (id item in array(value[key], 65536)) {
       auto pair = array(item, 2);
@@ -218,5 +221,6 @@ NativeSong decodeNativeSong(id raw) {
   result.signal=decodeSignalGraph(value[@"signalGraph"]);
   decodeEnvelopeBank(result,value[@"envelopeBank"]);
   result.performance=decodePatternPerformance(value[@"performance"]);
+  result.reserveMasterIdentity();
   return result;
 }

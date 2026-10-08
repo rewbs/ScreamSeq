@@ -259,7 +259,10 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p) {
     const bool dry=dryRun(p);const auto &[before,after]=*prepared.geometry();
     Json r={{"sample",index},{"dryRun",dry},{"before",encode(before)},{"after",encode(after)},
       {"loopsChanged",prepared.hasChanges()},{"patchBytes",prepared.result().historyBytes}};
-    if(!dry&&prepared.hasChanges()){stop();document_.applySampleProcess(std::move(prepared));}return r;
+    if(!dry&&prepared.hasChanges()){
+      auto publish=prepareSampleLoops_?prepareSampleLoops_(index,after):stopPlayback_;
+      document_.applySampleProcess(std::move(prepared),publish);
+    }return r;
   }
   if(method=="sample.draw") {
     keys(p,{"sample","points","channels","interpolation","dryRun"});const auto index=sampleIndex();const auto frames=song.GetSample(index).nLength;

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <optional>
 #include <string>
 #include <vector>
 #include "editor/MixerRuntime.hpp"
@@ -24,6 +25,7 @@ struct PluginDescriptor {
   std::string name;
   std::string format = "AU", path, classID;
   bool instrument = false;
+  bool operator==(const PluginDescriptor &) const = default;
 };
 struct PluginParameter {
   uint32_t id;
@@ -36,6 +38,7 @@ struct PluginParameter {
   float step = 0;
   bool writable = true;
   bool continuous = true; // False for enumerated, read-only and program-selector controls.
+  std::optional<double> manualValue; // Control-owned manual/preset base; value remains latest effective value.
 };
 struct PluginInstrumentAlias {
   uint32_t instrument = 0, channel = 1; // One-based tracker instrument and MIDI channel.
@@ -54,6 +57,7 @@ struct PluginState {
   std::vector<uint32_t> auxiliaryInputs, auxiliaryOutputs; // Native bus indices; main bus 0 is always enabled.
   uint32_t midiChannel = 1;
   std::vector<PluginInstrumentAlias> aliases;
+  bool operator==(const PluginState &) const = default;
 };
 std::vector<PluginInstrumentAlias> pluginAssignments(const PluginState &);
 void setPluginAssignments(PluginState &, const std::vector<PluginInstrumentAlias> &);
@@ -78,5 +82,6 @@ struct ParameterChange {
   uint32_t slot, id;
   float value;
   uint64_t frame;
+  bool operator==(const ParameterChange &) const = default;
 };
 } // namespace Tracker

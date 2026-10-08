@@ -1,0 +1,564 @@
+{
+  "changed": false,
+  "data": {
+    "activity": [],
+    "assignments": [
+      {
+        "amount": 1,
+        "graph": "n26",
+        "target": "n2",
+        "wet": 1
+      }
+    ],
+    "commands": [],
+    "implicitMixer": false,
+    "inputs": [],
+    "instrumentAssignments": [
+      {
+        "amount": 1,
+        "graph": "n26",
+        "target": "n30",
+        "wet": 1
+      }
+    ],
+    "instruments": [
+      {
+        "id": "n30",
+        "index": 1,
+        "name": "Warm pulse",
+        "plugin": false
+      },
+      {
+        "id": "n31",
+        "index": 2,
+        "name": "Sub bass",
+        "plugin": false
+      },
+      {
+        "id": "n32",
+        "index": 3,
+        "name": "Soft kick",
+        "plugin": false
+      },
+      {
+        "id": "n33",
+        "index": 4,
+        "name": "Closed hat",
+        "plugin": false
+      }
+    ],
+    "lanes": [],
+    "layout": [],
+    "library": [
+      {
+        "audio": [
+          {
+            "gain": 1,
+            "input": 0,
+            "output": 0,
+            "source": "n29",
+            "target": "n28"
+          },
+          {
+            "gain": 1,
+            "input": 0,
+            "output": 0,
+            "source": "n27",
+            "target": "n29"
+          }
+        ],
+        "id": "n26",
+        "modulation": [],
+        "name": "Filter movement",
+        "nodes": [
+          {
+            "attack": 0.01,
+            "controller": 1,
+            "id": "n27",
+            "kind": "input",
+            "name": "Input",
+            "phase": 0,
+            "rate": 1,
+            "release": 0.1,
+            "x": 40,
+            "y": 100
+          },
+          {
+            "attack": 0.01,
+            "controller": 1,
+            "id": "n28",
+            "kind": "output",
+            "name": "Output",
+            "phase": 0,
+            "rate": 1,
+            "release": 0.1,
+            "x": 620,
+            "y": 100
+          },
+          {
+            "attack": 0.01,
+            "controller": 1,
+            "id": "n29",
+            "kind": "plugin",
+            "name": "Digital Filter",
+            "phase": 0,
+            "plugin": {
+              "classID": "resonance.digital-filter.v1",
+              "format": "Built-in",
+              "inputs": [],
+              "manufacturer": 0,
+              "name": "Digital Filter",
+              "outputs": [],
+              "path": "",
+              "subtype": 0,
+              "type": 0
+            },
+            "rate": 1,
+            "release": 0.1,
+            "x": 280,
+            "y": 80
+          }
+        ],
+        "number": 1
+      }
+    ],
+    "mixer": {
+      "buses": [
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n2",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 1",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n3",
+          "inserts": [
+            "3837CCDE-0CB4-459A-A660-FCE7CF77CD1D"
+          ],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 2",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n4",
+          "inserts": [
+            "2D9DE253-62C4-444A-A57D-66B12DE0C16D"
+          ],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 3",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n5",
+          "inserts": [
+            "5C7C53DF-146B-43C8-B916-E34797F24441"
+          ],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 4",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n6",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 5",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n7",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 6",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n8",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 7",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n9",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Track 8",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 24,
+          "id": "n16",
+          "inserts": [],
+          "kind": "master",
+          "mute": false,
+          "name": "Master",
+          "output": "",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n17",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Column 9",
+          "output": "n25",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n18",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Column 10",
+          "output": "n25",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n19",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Column 11",
+          "output": "n25",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n20",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Column 12",
+          "output": "n25",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n21",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Column 13",
+          "output": "n25",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n22",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Column 14",
+          "output": "n25",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n23",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Column 15",
+          "output": "n25",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n24",
+          "inserts": [],
+          "kind": "track",
+          "mute": false,
+          "name": "Column 16",
+          "output": "n25",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        },
+        {
+          "color": 0,
+          "gainDB": 0,
+          "id": "n25",
+          "inserts": [],
+          "kind": "group",
+          "mute": false,
+          "name": "Layer",
+          "output": "n16",
+          "pan": 0,
+          "preGainDB": 0,
+          "prePan": 0,
+          "sends": [],
+          "solo": false,
+          "timingMS": 0,
+          "width": 1
+        }
+      ],
+      "instruments": [],
+      "sidechains": []
+    },
+    "outputs": [],
+    "patterns": [
+      {
+        "id": "n1",
+        "index": 0,
+        "name": "",
+        "rows": 64,
+        "rowsPerBeat": 4
+      }
+    ],
+    "plugins": [
+      {
+        "audioBuses": [
+          {
+            "active": true,
+            "channels": 2,
+            "direction": "input",
+            "index": 0,
+            "name": "Input 1",
+            "supported": true
+          },
+          {
+            "active": true,
+            "channels": 2,
+            "direction": "output",
+            "index": 0,
+            "name": "Output 1",
+            "supported": true
+          }
+        ],
+        "bypass": false,
+        "classID": "",
+        "format": "AU",
+        "id": "2D9DE253-62C4-444A-A57D-66B12DE0C16D",
+        "instruments": [],
+        "isInstrument": false,
+        "manufacturer": 1634758764,
+        "name": "Apple: AUReverb2",
+        "path": "",
+        "slot": 0,
+        "subtype": 1920361010,
+        "type": 1635083896
+      },
+      {
+        "audioBuses": [
+          {
+            "active": true,
+            "channels": 2,
+            "direction": "input",
+            "index": 0,
+            "name": "Stereo input",
+            "supported": true
+          },
+          {
+            "active": true,
+            "channels": 2,
+            "direction": "output",
+            "index": 0,
+            "name": "Stereo output",
+            "supported": true
+          }
+        ],
+        "bypass": false,
+        "classID": "resonance.distortion.v1",
+        "format": "Built-in",
+        "id": "5C7C53DF-146B-43C8-B916-E34797F24441",
+        "instruments": [],
+        "isInstrument": false,
+        "manufacturer": 0,
+        "name": "Distortion",
+        "path": "",
+        "slot": 1,
+        "subtype": 0,
+        "type": 0
+      },
+      {
+        "audioBuses": [
+          {
+            "active": true,
+            "channels": 2,
+            "direction": "input",
+            "index": 0,
+            "name": "Stereo input",
+            "supported": true
+          },
+          {
+            "active": true,
+            "channels": 2,
+            "direction": "output",
+            "index": 0,
+            "name": "Stereo output",
+            "supported": true
+          },
+          {
+            "active": false,
+            "channels": 2,
+            "direction": "input",
+            "index": 1,
+            "name": "Detector sidechain",
+            "supported": true
+          }
+        ],
+        "bypass": false,
+        "classID": "resonance.compressor.v1",
+        "format": "Built-in",
+        "id": "3837CCDE-0CB4-459A-A660-FCE7CF77CD1D",
+        "instruments": [],
+        "isInstrument": false,
+        "manufacturer": 0,
+        "name": "Compressor",
+        "path": "",
+        "slot": 2,
+        "subtype": 0,
+        "type": 0
+      }
+    ],
+    "unitsPerRow": 65536
+  },
+  "documentId": "08B3B32C-A673-4E03-B294-D57E2A454D9C",
+  "playbackStopped": false,
+  "revision": "08B3B32C-A673-4E03-B294-D57E2A454D9C:4:0:0"
+}

@@ -10,7 +10,16 @@
         if([@[@"volume",@"pan",@"pitch"] containsObject:kind]){keys(v,@[@"kind",@"instrument"]);EnvelopeTarget t{EnvelopeTargetKind(2+[@[@"volume",@"pan",@"pitch"] indexOfObject:kind]),decodeNativeID(v[@"instrument"]),0};require(envelopeTargetExists(next,song,t),"Instrument envelope no longer exists");return t;}
         require([kind isEqual:@"parameter"]||[kind isEqual:@"graph"],"Unknown envelope target kind");
         const auto index=uint16_t(integer(v[@"pattern"],0,UINT16_MAX));require(song.Patterns.IsValidPat(index),"Pattern no longer exists");const auto pattern=next.patterns.at(index).id;
-        if([kind isEqual:@"graph"]){keys(v,@[@"kind",@"graph",@"node",@"pattern"]);auto graph=decodeNativeID(v[@"graph"]),node=decodeNativeID(v[@"node"]);for(auto &d:next.signal.library)if(d.id==graph)for(auto &n:d.nodes)if(n.id==node&&n.kind==SignalNodeKind::Automation){auto e=std::find_if(n.envelopes.begin(),n.envelopes.end(),[&](const auto &e){return e.pattern==pattern;});if(e==n.envelopes.end()){if(!create)return {};n.envelopes.push_back({pattern,true,{{0,0}}});std::sort(n.envelopes.begin(),n.envelopes.end(),[](const auto &a,const auto &b){return a.pattern<b.pattern;});}return EnvelopeTarget{EnvelopeTargetKind::Graph,node,pattern};}throw Error(-32602,"Automation source no longer exists");}
+        if([kind isEqual:@"graph"]) {
+          keys(v,@[@"kind",@"graph",@"node",@"pattern"]);require(v[@"graph"]!=nil,"Specify a subgraph identity or null for a song source");
+          const auto graph=v[@"graph"]==NSNull.null?0:decodeNativeID(v[@"graph"]),node=decodeNativeID(v[@"node"]);SignalNode *source=nullptr;
+          if(graph){for(auto &d:next.signal.library)if(d.id==graph)for(auto &n:d.nodes)if(n.id==node)source=&n;}
+          else {for(auto &s:next.signal.songSources)if(s.node.id==node)source=&s.node;}
+          require(source&&source->kind==SignalNodeKind::Automation,"Automation source no longer exists");
+          auto e=std::find_if(source->envelopes.begin(),source->envelopes.end(),[&](const auto &e){return e.pattern==pattern;});
+          if(e==source->envelopes.end()){if(!create)return {};source->envelopes.push_back({pattern,true,{{0,0}}});std::sort(source->envelopes.begin(),source->envelopes.end(),[](const auto &a,const auto &b){return a.pattern<b.pattern;});}
+          return EnvelopeTarget{EnvelopeTargetKind::Graph,node,pattern};
+        }
         keys(v,@[@"kind",@"pattern",@"plugin",@"parameter"]);std::string plugin=string(v[@"plugin"],128).UTF8String;auto parameter=uint32_t(integer(v[@"parameter"],0,UINT32_MAX));
         auto e=std::find_if(next.automation.begin(),next.automation.end(),[&](const auto &l){return l.pattern==pattern&&l.plugin==plugin&&l.parameter==parameter;});if(e!=next.automation.end())return EnvelopeTarget{EnvelopeTargetKind::Parameter,e->id,0};if(!create)return {};
         auto host=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &x){return x.instanceID==plugin;});require(host!=_plugins.end(),"Plugin no longer exists");auto slot=size_t(host-_plugins.begin());auto parameters=_audio->pluginParameters(slot);require(std::any_of(parameters.begin(),parameters.end(),[&](const auto &v){return v.id==parameter;}),"Plugin parameter is unavailable");require(!next.performance.controls(plugin,parameter)&&std::none_of(_automation.begin(),_automation.end(),[&](const auto &l){return l.slot==slot&&l.id==parameter;}),"Remove conflicting parameter automation before loading an envelope");auto id=next.makeEntity().id;next.automation.push_back({id,pattern,plugin,parameter,true,{{0,0}}});return EnvelopeTarget{EnvelopeTargetKind::Parameter,id,0};
@@ -32,7 +41,24 @@
         // Instrument data is prepared separately so dryRun never touches live voices.
         auto checked=next;std::erase_if(checked.envelopeLinks,[&](const auto &l){return std::any_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.first==l.target;});});checked.validate(song);
         bool changed=next!=_document->native();for(const auto &[t,e]:instruments){auto before=captureEnvelope(_document->native(),song,t);changed|=before!=captureInstrumentEnvelope(e);}
-        if(changed&&!dry){_audio->stop();if(instruments.empty())_document->annotate([&](NativeSong &n){n=next;});else _document->transaction([&](CSoundFile &s,NativeSong &n){n=next;for(const auto &[t,e]:instruments)for(const auto &[slot,i]:n.instruments)if(i.id==t.owner)instrumentEnvelope(*s.Instruments[slot],@[@"volume",@"pan",@"pitch"][uint8_t(t.kind)-2])=e;});}
+        if(changed&&!dry){
+          if(instruments.empty()){
+            const bool processing=!sameSignalProcessing(next.signal,_document->native().signal);
+            const bool automation=next.automation!=_document->native().automation;
+            // Combined graph sources and ordinary parameter lanes travel in one
+            // prepared control/routing plan and become audible at the same boundary.
+            auto controls=processing?_audio->prepareGraphControls(next):nullptr;
+            auto routing=processing&&!controls?_audio->prepareMixerRouting(next):nullptr;
+            const bool combined=automation&&(bool(controls)||bool(routing));
+            if(processing&&!controls&&!routing){if(_audio->active())throw Error(-32002,"This envelope change cannot yet be prepared during playback; stop playback and retry");_audio->stop();}
+            _document->annotate([&](NativeSong &n){n=next;},[&]{
+              if(controls)require(_audio->publishGraphControls(std::move(controls)),"Graph parameter queue is busy; retry the envelope edit");
+              if(routing&&!_audio->publishMixerRouting(routing))throw Error(-32002,"Routing transition is busy; retry the same revision");
+              if(automation&&!combined)_audio->updateMusicalAutomation(next);
+            });
+          }
+          else {_audio->stop();_document->transaction([&](CSoundFile &s,NativeSong &n){n=next;for(const auto &[t,e]:instruments)for(const auto &[slot,i]:n.instruments)if(i.id==t.owner)instrumentEnvelope(*s.Instruments[slot],@[@"volume",@"pan",@"pitch"][uint8_t(t.kind)-2])=e;});}
+        }
         result=@{@"id":affected,@"dryRun":@(dry),@"wouldChange":@(changed)};
       }
       } catch(const std::invalid_argument &e) { throw Error(-32602,e.what()); }

@@ -1,5 +1,6 @@
 // Separate process: the stock library and editable engine have different ABIs.
-#include "libopenmpt/libopenmpt.hpp"
+// build-reference.sh supplies only the pinned upstream archive's include root.
+#include <libopenmpt/libopenmpt.hpp>
 #include <array>
 #include <fstream>
 #include <iostream>

@@ -1,0 +1,11 @@
+{
+  "baseRevision": "d5d376fa0ced527cc901d8555076cadbf98d75d4",
+  "builtAtUTC": "2026-09-22T14:23:05.405377+00:00",
+  "sourceFingerprint": "40e8656b049e2167bf2f55e154a4ac6d0f05cd718798f7e512618b8ed9028a1c",
+  "executableSHA256": "c6a0595f81e967e2c9bc95ebc2482c53e7740c41c80d7b05ba95c7d2c7bdc686",
+  "app": "/Users/rewbs/code/openmpt/bin/mac-2026-09-23/ScreamSeq.app",
+  "coreTests": 76,
+  "interfaceSuite": "passed",
+  "socketTest": "passed",
+  "liveUI": "Final packaged code: inline fields, saved fractional values, cancel, fixed-wire owner navigation, modulation edits, Delete and Undo verified."
+}

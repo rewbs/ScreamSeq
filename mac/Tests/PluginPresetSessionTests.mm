@@ -1,4 +1,5 @@
 #import "../Bridge/TrackerSession.h"
+#include "FixtureTrust.hpp"
 #include "../Audio/AudioUnitHost.hpp"
 #include <cmath>
 #include <iostream>
@@ -8,7 +9,7 @@ static NSDictionary *describe(const PluginDescriptor &d) {
   return @{@"format": @(d.format.c_str()), @"name": @(d.name.c_str()), @"type": @(d.type), @"subtype": @(d.subtype),
     @"manufacturer": @(d.manufacturer), @"path": @(d.path.c_str()), @"classID": @(d.classID.c_str()), @"isInstrument": @(d.instrument)};
 }
-int main(int argc, const char **argv) {
+int main(int argc, const char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool {
     NSString *folder = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
     try {

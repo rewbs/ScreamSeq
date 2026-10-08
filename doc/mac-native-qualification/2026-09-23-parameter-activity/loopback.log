@@ -1,0 +1,8 @@
+Dry virtual loopback: 96000 stereo frames, 48000 Hz / 512 frames, max error 0, RMS error 0, alignment 8704 capture frames, callback overruns 0
+AU effect virtual loopback: 96000 stereo frames, 48000 Hz / 512 frames, max error 0, RMS error 0, alignment 9216 capture frames, callback overruns 0
+VST3 effect + automation virtual loopback: 96000 stereo frames, 48000 Hz / 512 frames, max error 0, RMS error 0, alignment 11776 capture frames, callback overruns 0
+VST3 instrument + automation virtual loopback: 96000 stereo frames, 48000 Hz / 512 frames, max error 0, RMS error 0, alignment 14848 capture frames, callback overruns 0
+AU instrument virtual loopback: 96000 stereo frames, 48000 Hz / 512 frames, max error 0, RMS error 0, alignment 20992 capture frames, callback overruns 0
+Graph copies + fractional pattern commands virtual loopback: 96000 stereo frames, 48000 Hz / 512 frames, max error 0, RMS error 0, alignment 30208 capture frames, callback overruns 0
+PASS actual Core Audio output/capture continuity and PCM fidelity, all requested plugin configurations
+Virtual routing does not measure physical DAC latency or speaker sound.

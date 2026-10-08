@@ -44,9 +44,10 @@ private:
     set(heading,L"Pattern "+std::to_wstring(captured_.pattern)+L" · Graph commands / captured target");
     setting_=false;dirty_=false;++generation_;layout();
   }
-  void load(bool fromCursor,std::string preferred={},unsigned preferredLane=0){
+  void load(bool fromCursor,std::string preferred={},unsigned preferredLane=0,bool strictTarget=false){
     if(pending_)return;const auto now=context_();auto chosen=fromCursor?now:captured_;
     if(!fromCursor&&now.document!=captured_.document)throw std::runtime_error("Document changed / use From cursor to capture the new song");
+    if(strictTarget&&(preferred.empty()||preferredLane>7))throw std::runtime_error("Captured graph command target or lane is unavailable");
     auto selectedBus=fromCursor?(preferred.empty()?now.target:std::move(preferred)):bus_;const auto selectedColumn=fromCursor?std::min(7u,preferredLane):column_;
     pending_=true;layout();const auto token=generation_;
     try{auto data=request_("graph.get",{{"includeState",false}});const auto after=context_();
@@ -55,7 +56,8 @@ private:
       if(found==patterns.end())throw std::runtime_error("Captured pattern is unavailable / use From cursor");
       const auto available=data.at("mixer").at("buses");
       if(std::none_of(available.begin(),available.end(),[&](const auto &b){return b.at("id")==selectedBus;})){
-        if(!fromCursor&&!selectedBus.empty())throw std::runtime_error("Captured bus is unavailable / use From cursor");selectedBus=available.empty()?"":available.front().at("id").get<std::string>();}
+        if(strictTarget||(!fromCursor&&!selectedBus.empty()))throw std::runtime_error("Captured bus is unavailable / use From cursor");selectedBus=available.empty()?"":available.front().at("id").get<std::string>();}
+      if(strictTarget&&chosen.row>=found->at("rows").get<unsigned>())throw std::runtime_error("Captured graph command row is unavailable");
       chosen.pattern=found->at("index");rows_=found->at("rows");chosen.row=std::min(chosen.row,rows_-1);patternID_=found->at("id");
       chosen.document=now.document;chosen.revision=now.revision;captured_=chosen;data_=std::move(data);bus_=std::move(selectedBus);column_=selectedColumn;
       choices();cell();pending_=false;status(bus_.empty()?L"Enable the mixer to add graph lanes":L"Ready / Apply uses document Undo; the pattern cursor stays independent");
@@ -128,6 +130,7 @@ public:
     data_["library"]=Json::array();finish();
   }
   void openAt(std::string target={},unsigned column=0){const bool retain=visible()||dirty_;show();if(!retain)load(true,std::move(target),column);SetFocus(controls_.at(row));}
+  void openSourceAt(std::string target,unsigned column){if(dirty_||pending_)throw std::runtime_error("Apply or Reload the existing graph command draft before opening a source");load(true,std::move(target),column,true);show();SetFocus(controls_.at(row));}
   Json snapshot()const{return {{"visible",visible()},{"document",captured_.document},{"expectedRevision",captured_.revision},{"pattern",captured_.pattern},{"patternID",patternID_},{"row",captured_.row},{"target",bus_},{"column",column_},{"draft",dirty_},{"pending",pending_},{"stale",!current()},{"status",utf8(status_)}};}
 };
 }

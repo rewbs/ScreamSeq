@@ -19,6 +19,21 @@ static std::vector<float> render(Renderer &r,size_t total,size_t block) {
   return result;
 }
 int main() { try {
+  {
+    auto owner=Document::demo();auto &d=*owner;
+    const auto before=d.snapshotData();const auto native=d.native();const auto revision=d.revision;
+    const auto undo=d.canUndo(),redo=d.canRedo();const auto bytes=d.historyBytes();unsigned callbacks=0;
+    const SampleLoopSettings loop{1,8,true,false,true};
+    rejects([&]{d.applySampleProcess(d.prepareSampleLoops(1,loop,std::nullopt),[&]{++callbacks;throw std::runtime_error("Playback epoch changed");});});
+    check(callbacks==1&&d.snapshotData()==before&&d.native()==native&&d.revision==revision&&d.canUndo()==undo&&d.canRedo()==redo&&d.historyBytes()==bytes,
+      "Rejected live-loop publication preserves exact sample, revision and history");
+    d.applySampleProcess(d.prepareSampleLoops(1,loop,std::nullopt),[&]{++callbacks;check(d.revision==revision&&d.snapshotData()==before,"Live-loop callback sees uncommitted song");});
+    check(callbacks==2&&d.revision==revision+1&&d.song().GetSample(1).nativeReverseLoops==1,"Accepted live-loop publication commits once");
+    d.applySampleProcess(d.prepareSampleLoops(1,loop,std::nullopt),[&]{++callbacks;});
+    check(callbacks==2&&d.revision==revision+1,"No-op loop does not publish or advance history");
+    d.undo();check(d.snapshotData()==before,"Published loop Undo restores sample exactly");d.redo();
+    check(d.song().GetSample(1).nativeReverseLoops==1,"Published loop Redo retains reverse mode");
+  }
   size_t phaseCases=0;
   for(uint32_t start:{0,1,129,100000})for(uint32_t length:{1,2,7,257,100000}) {
     NativeReverseLoopState state;const auto end=start+length;

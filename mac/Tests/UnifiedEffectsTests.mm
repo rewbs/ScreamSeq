@@ -68,6 +68,33 @@ static void combinations() {
   plain->native().prepareEffects(plain->song());pc->native().prepareEffects(pc->song());
   check(plain->song().GetLength(eNoAdjust,{}).back().duration==pc->song().GetLength(eNoAdjust,{}).back().duration,"Timeline includes additional speed/tempo beside imported PC notes");
 }
+// A background (NNA) voice must not inherit the row effects of its pattern channel.
+static void backgroundVoices() {
+  auto d=fixture();
+  d->transaction([](CSoundFile &s){
+    check(s.AllocateInstrument(1,2)!=nullptr,"Instrument");s.Instruments[1]->nNNA=NewNoteAction::Continue;
+    for(unsigned row:{0u,4u}){auto &c=*s.Patterns[0].GetpModCommand(row,0);c.instr=1;c.command=CMD_PANNING8;c.param=64;}
+  });
+  d->annotate([](NativeSong &n){auto t=n.tracks.at(0).id,p=n.patterns.at(0).id;n.performance.columns[t]=3;
+    for(unsigned row:{0u,4u})for(auto [column,effect,param]:{std::tuple{1,CMD_ARPEGGIO,0x37},std::tuple{2,CMD_TREMOR,0x11}}){PatternCommand c{p,t,row*performanceUnitsPerRow,0,uint8_t(column),PatternCommandKind::TrackerEffect};c.effect=effect;c.parameter=param;n.performance.commands.push_back(c);}});
+  Renderer r(d->snapshotData(),48000,0,false,{},0,{},&d->native());std::vector<float> audio(2*512);
+  unsigned voices=0;
+  while(r.song().m_PlayState.m_nRow<5&&!voices) {
+    r.render(audio.data(),512);const auto &s=r.song();
+    if(s.m_PlayState.m_nRow<4)continue;
+    check(s.m_PlayState.Chn[0].HasRowEffect(CMD_ARPEGGIO),"Pattern channel keeps its own additional FX");
+    for(CHANNELINDEX i=s.GetNumChannels();i<s.m_PlayState.Chn.size();++i) {
+      const auto &chn=s.m_PlayState.Chn[i];if(chn.nMasterChn!=1||!chn.nLength)continue;
+      ++voices;
+      check(!chn.HasRowEffect(CMD_ARPEGGIO)&&!chn.HasRowEffect(CMD_TREMOR)&&!chn.HasActiveEffect(CMD_ARPEGGIO)&&!chn.HasActiveEffect(CMD_TREMOR),"Background voices do not keep arpeggio or tremor from their pattern channel");
+      check(std::all_of(chn.nativeExtraEffects.begin(),chn.nativeExtraEffects.end(),[](const auto &e){return e.command==CMD_NONE;}),"Background voices carry no additional FX");
+    }
+  }
+  check(voices==1,"New note action keeps the previous voice in the background");
+  ModChannel reset=r.song().m_PlayState.Chn[0];reset.nativeArpeggio=reset.nativeTremor=true;
+  reset.Reset(ModChannel::resetTotal,r.song(),0,CHN_MUTE);
+  check(!reset.HasRowEffect(CMD_ARPEGGIO)&&!reset.HasActiveEffect(CMD_ARPEGGIO)&&!reset.HasActiveEffect(CMD_TREMOR),"Channel reset clears additional FX state");
+}
 static void api() {
   TrackerSession *session=[TrackerSession new];NSError *error=nil;
   auto call=[&](NSString *method,NSDictionary *p,bool write=false)->NSDictionary *{auto q=[p mutableCopy];if(write)q[@"expectedRevision"]=session.automationRevision;auto reply=[session automationMethod:method params:q error:&error];if(!reply)throw std::runtime_error(error.localizedDescription.UTF8String);return reply[@"data"];};
@@ -129,4 +156,4 @@ static void clipboardBindings() {
   call(@"history.undo",@{@"domain":@"document"},true);check([before isEqual:call(@"pattern.effects.get",@{@"pattern":@0})],"Paste Undo removes its new binding too");
 }
 
-int main(){@autoreleasepool{try{for(auto type:{MOD_TYPE_MPT,MOD_TYPE_IT,MOD_TYPE_XM,MOD_TYPE_S3M,MOD_TYPE_MOD})movedEffects(type);combinations();std::cout<<"Combinations passed\n";api();clipboardBindings();std::cout<<"PASS unified FX: catalog equivalence, ordering, note onset, precision, RT audit, API atomicity/history, current-format persistence\n";return 0;}catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}}
+int main(){@autoreleasepool{try{for(auto type:{MOD_TYPE_MPT,MOD_TYPE_IT,MOD_TYPE_XM,MOD_TYPE_S3M,MOD_TYPE_MOD})movedEffects(type);combinations();backgroundVoices();std::cout<<"Combinations passed\n";api();clipboardBindings();std::cout<<"PASS unified FX: catalog equivalence, ordering, note onset, precision, RT audit, API atomicity/history, current-format persistence\n";return 0;}catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}}

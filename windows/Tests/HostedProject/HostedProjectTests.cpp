@@ -74,6 +74,7 @@ static std::vector<float> audition(Tracker::Document &doc,const Project::Project
   check(std::all_of(output.begin()+rate*2,output.end(),[](float x){return std::abs(x)<1e-6f;}),"sample note-off terminates preview");
   return output;
 }
+#include "PreparedNativeUpdates.inc"
 int main(){try{
   {AudioAudit::Scope scope;auto p=::operator new(8);::operator delete(p);
     auto aligned=::operator new(64,std::align_val_t{64});::operator delete(aligned,std::align_val_t{64});}
@@ -99,6 +100,7 @@ int main(){try{
   state.preserved["automation"]=Json::array({Json::array({0,1,-12,48000})});
   auto automation=projectAbsoluteAutomation(state);check(automation.size()==1&&automation[0].frame==48000,"canonical 48-kHz automation not rescaled twice");
   state.preserved["automation"]=Json::array();
+  preparedNativeUpdates(state);
   recordingTiming(*doc,state);
   for(unsigned rate:{44100u,48000u,96000u}){
     const auto original=doc->snapshotData();auto baseline=audition(*doc,state,rate,128);double worst=0;
@@ -191,7 +193,7 @@ int main(){try{
   }
   {
     auto local=Tracker::Document::demo();auto conflicting=state;auto native=local->native();
-    auto master=native.makeEntity().id;native.mixer.buses.push_back({master,0,Tracker::MixerBusKind::Master,"Master"});
+    auto master=native.masterID;native.mixer.buses.push_back({master,0,Tracker::MixerBusKind::Master,"Master"});
     for(const auto &[index,track]:native.tracks)native.mixer.buses.push_back({track.id,master,Tracker::MixerBusKind::Track,"Track"});
     native.mixer.buses[0].inserts={"native-project-rack"};Tracker::MusicalAutomationLane lane;
     lane.id=native.makeEntity().id;lane.pattern=native.patterns.begin()->second.id;lane.plugin="native-project-rack";lane.parameter=1;lane.points={{0,.5}};

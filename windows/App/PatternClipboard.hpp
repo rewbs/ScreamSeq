@@ -6,6 +6,15 @@
 namespace ScreamSeq {
 inline constexpr size_t maximumPatternClipboardBytes=16u*1024u*1024u;
 inline constexpr std::string_view patternClipboardPrefix="ScreamSeq Pattern 2\n";
+enum class PatternCutResult { NotCopied, Stale, Applied };
+// Clipboard publication may pump UI messages. Never clear until publication
+// succeeded and the caller rechecked its captured song/pattern/revision.
+template<class Copy,class Current,class Apply>
+PatternCutResult guardedPatternCut(Copy &&copy,Current &&current,Apply &&apply){
+    if(!copy())return PatternCutResult::NotCopied;
+    if(!current())return PatternCutResult::Stale;
+    apply();return PatternCutResult::Applied;
+}
 
 // Immutable view input only. Called on a background task, never while drawing.
 inline std::string patternClipboardText(const DocumentView &view,unsigned pattern,
@@ -14,12 +23,12 @@ inline std::string patternClipboardText(const DocumentView &view,unsigned patter
         throw std::runtime_error("Invalid pattern copy selection");
     const auto rows=lastRow-firstRow+1,channels=lastChannel-firstChannel+1;
     if(size_t(rows)*channels>Tracker::maximumPatternToolCells)throw std::runtime_error("Copy at most 262144 pattern cells");
-    Json cells=Json::array(),effects=Json::array(),bindings=Json::array();
+    Json cells=Json::array(),effects=Json::array(),bindings=Json::array(),notes=Json::array();
     cells.get_ref<Json::array_t &>().reserve(size_t(rows)*channels);
     for(unsigned row=firstRow;row<=lastRow;++row)for(unsigned channel=firstChannel;channel<=lastChannel;++channel) {
         const auto c=view.cell(pattern,row,channel);cells.push_back({c.note,c.instrument,c.volumeCommand,c.volume,c.effect,c.parameter});
     }
-    const std::array<const char *,6> names={"parameter-set","parameter-slide","pitch-set","pitch-slide","note-cut","tracker"};
+    const std::array<const char *,8> names={"parameter-set","parameter-slide","pitch-set","pitch-slide","note-cut","tracker","nudge-forward","nudge-reverse"};
     std::set<uint16_t> used;
     for(const auto &entry:view.nativePattern->effects) {
         const auto &c=entry.command;const auto row=c.position/Tracker::performanceUnitsPerRow;
@@ -33,7 +42,13 @@ inline std::string patternClipboardText(const DocumentView &view,unsigned patter
         const auto &b=view.nativePattern->performance.bindings.at(id);
         bindings.push_back({{"id",id},{"plugin",b.plugin},{"parameter",b.parameter},{"name",b.name}});
     }
-    Json payload={{"rows",rows},{"channels",channels},{"cells",std::move(cells)},{"effects",std::move(effects)},{"bindings",std::move(bindings)}};
+    for(const auto &entry:view.nativePattern->notes){
+        const auto &note=entry.note;const auto row=note.position/Tracker::performanceUnitsPerRow;
+        if(entry.pattern!=pattern||entry.channel<firstChannel||entry.channel>lastChannel||row<firstRow||row>lastRow)continue;
+        notes.push_back({{"channel",entry.channel-firstChannel},{"position",note.position-firstRow*Tracker::performanceUnitsPerRow},
+            {"note",note.note},{"instrument",note.instrument},{"velocity",note.velocity},{"effect",note.effect},{"parameter",note.parameter}});
+    }
+    Json payload={{"rows",rows},{"channels",channels},{"cells",std::move(cells)},{"effects",std::move(effects)},{"bindings",std::move(bindings)},{"notes",std::move(notes)}};
     auto result=std::string(patternClipboardPrefix)+payload.dump();
     if(result.size()>maximumPatternClipboardBytes)throw std::runtime_error("Pattern clipboard exceeds 16 MiB");
     return result;
@@ -47,7 +62,7 @@ inline Json parsePatternClipboard(std::string_view text) {
     if(prefix) {
         auto payload=Json::parse(text.substr(prefix));
         if(!payload.is_object())throw std::runtime_error("Invalid pattern clipboard object");
-        const std::set<std::string> keys={"rows","channels","cells","effects","bindings"};
+        const std::set<std::string> keys={"rows","channels","cells","effects","bindings","notes"};
         for(auto i=payload.begin();i!=payload.end();++i)if(!keys.contains(i.key()))throw std::runtime_error("Invalid pattern clipboard field");
         return payload;
     }

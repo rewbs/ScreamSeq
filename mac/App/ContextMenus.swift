@@ -1,10 +1,25 @@
 import AppKit
 
+/// One disclosure for secondary actions, shared by the panel, context menu and ⌘K.
+final class ActionMenuButton: NSButton {
+  var actions: () -> NSMenu
+  init(_ title: String = "More…", actions: @escaping () -> NSMenu) {
+    self.actions = actions
+    super.init(frame: .zero)
+    self.title = title; bezelStyle = .rounded; target = self; action = #selector(openActions)
+    toolTip = "Secondary actions · also available with ⌘K"
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  @objc private func openActions() { actions().popUp(positioning: nil, at: NSPoint(x: 0, y: bounds.maxY), in: self) }
+}
+
 final class ContextAction: NSMenuItem {
   private let run: () -> Void
-  init(_ title:String, key:String="", modifiers:NSEvent.ModifierFlags=[], enabled:Bool=true, run:@escaping()->Void) {
-    self.run=run;super.init(title:title,action:nil,keyEquivalent:key)
+  let commandID:String?
+  init(_ title:String, id:String?=nil, key:String="", modifiers:NSEvent.ModifierFlags=[], enabled:Bool=true, run:@escaping()->Void) {
+    self.run=run;commandID=id;super.init(title:title,action:nil,keyEquivalent:key)
     target=self;action=#selector(invoke);keyEquivalentModifierMask=modifiers;isEnabled=enabled
+    if let id {identifier=NSUserInterfaceItemIdentifier(id)}
   }
   required init(coder:NSCoder){fatalError()}
   @objc private func invoke(){run()}
@@ -16,6 +31,9 @@ enum ContextActions {
   static func controls(in root:NSView,title:String="Panel actions") -> NSMenu {
     let menu=NSMenu(title:title);menu.autoenablesItems=false
     func visit(_ view:NSView,into target:NSMenu) {
+      if let button = view as? ActionMenuButton {
+        appendMenu(button.actions(), to: target, title: button.title); return
+      }
       if let section=view as? ToolSection {
         let child=controls(in:section.content,title:section.toggle.title)
         if !child.items.isEmpty {let item=NSMenuItem(title:child.title,action:nil,keyEquivalent:"");item.submenu=child;target.addItem(item)}
@@ -23,7 +41,8 @@ enum ContextActions {
       }
       if view is NSTableView {return} // Row actions must capture a specific row.
       if let button=view as? NSButton,!(button is NSPopUpButton),!button.title.isEmpty {
-        let item=ContextAction(button.title,enabled:button.isEnabled){[weak button] in button?.performClick(nil)}
+        let commandID=button.identifier?.rawValue.hasPrefix("graph.")==true ? button.identifier?.rawValue:nil
+        let item=ContextAction(button.title,id:commandID,enabled:button.isEnabled){[weak button] in button?.performClick(nil)}
         item.toolTip=button.toolTip
         if button.state == .on {item.state = .on}
         if let source=matchingCommand(button.title) {item.keyEquivalent=source.keyEquivalent;item.keyEquivalentModifierMask=source.keyEquivalentModifierMask}

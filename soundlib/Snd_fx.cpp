@@ -2484,6 +2484,11 @@ CHANNELINDEX CSoundFile::CheckNNA(CHANNELINDEX nChn, uint32 instr, int note, boo
 		StopOldNNA(chn, nnaChn);
 		// Copy Channel
 		chn = srcChn;
+#ifdef OPENMPT_EDITOR_CORE
+		// Row effects belong to the pattern channel, not to its background voice.
+		chn.nativeExtraEffects = {};
+		chn.nativeArpeggio = chn.nativeTremor = false;
+#endif
 		chn.dwFlags.reset(CHN_VIBRATO | CHN_TREMOLO | CHN_MUTE | CHN_PORTAMENTO);
 		chn.nPanbrelloOffset = 0;
 		chn.nMasterChn = nChn + 1;
@@ -2667,6 +2672,11 @@ CHANNELINDEX CSoundFile::CheckNNA(CHANNELINDEX nChn, uint32 instr, int note, boo
 	StopOldNNA(chn, nnaChn);
 	// Copy Channel
 	chn = srcChn;
+#ifdef OPENMPT_EDITOR_CORE
+	// Row effects belong to the pattern channel, not to its background voice.
+	chn.nativeExtraEffects = {};
+	chn.nativeArpeggio = chn.nativeTremor = false;
+#endif
 	chn.dwFlags.reset(CHN_VIBRATO | CHN_TREMOLO | CHN_PORTAMENTO);
 	chn.nPanbrelloOffset = 0;
 

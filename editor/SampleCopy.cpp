@@ -171,7 +171,7 @@ int Document::applySampleCopy(PreparedSampleCopy prepared) {
   applySampleSlot(edit, true, std::move(prepared.allocation_));
   native_ = std::move(metadata);
   undo_.push_back(std::move(prepared.entry_));
-  redo_.clear();
+  committedHistory();
   ++revision;
   trimHistory();
   return result;

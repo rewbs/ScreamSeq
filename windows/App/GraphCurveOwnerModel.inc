@@ -28,8 +28,8 @@
     require(!before.busy,"Wait for the document before loading a curve");
     const auto token=generation_;const auto previousTarget=target_;const auto previousDocument=document_;
     Pending pending(*this);
-    auto data=request_("graph.automation.get",{{"graph",target.graph},{"node",target.node},{"pattern",target.pattern}});
-    require(data.at("graph")==target.graph&&data.at("node")==target.node&&data.at("patternID")==target.patternID&&data.at("pattern")==target.pattern,"Curve reply does not match its captured target");
+    auto data=request_("graph.automation.get",{{"graph",target.graph.empty()?Json(nullptr):Json(target.graph)},{"node",target.node},{"pattern",target.pattern}});
+    require(data.at("graph")== (target.graph.empty()?Json(nullptr):Json(target.graph))&&data.at("node")==target.node&&data.at("patternID")==target.patternID&&data.at("pattern")==target.pattern,"Curve reply does not match its captured target");
     const auto rows=data.at("rows").get<unsigned>(),beat=data.at("rowsPerBeat").get<unsigned>();
     require(rows>0&&rows<=65535&&beat>0&&data.at("unitsPerRow")==256,"Invalid curve timing reply");
     auto points=data.at("points");require(points.is_array()&&points.size()<=4096,"Invalid curve points reply");
@@ -83,7 +83,7 @@
     requireCurrent();require(!pointFields_,"Use Set point before applying the curve");
     const auto before=context_();const auto target=resolve(before,target_);const auto token=generation_;
     const auto document=document_,revision=revision_;
-    Json params={{"expectedRevision",revision},{"graph",target.graph},{"node",target.node},{"pattern",target.pattern},{"enabled",enabled_},{"points",points_}};
+    Json params={{"expectedRevision",revision},{"graph",target.graph.empty()?Json(nullptr):Json(target.graph)},{"node",target.node},{"pattern",target.pattern},{"enabled",enabled_},{"points",points_}};
     Pending pending(*this);request_("graph.automation.set",params);
     const auto after=context_();
     if(after.document!=document||document_!=document||!sameIdentity(target_,target)){status(L"Earlier curve applied / another captured target retained");return;}

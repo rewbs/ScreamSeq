@@ -1,0 +1,59 @@
+[
+  {
+    "pid": 39535,
+    "bundle": "ScreamSeq Graph Before.app"
+  },
+  {
+    "pid": 41526,
+    "bundle": "ScreamSeq Graph After.app"
+  },
+  {
+    "pid": 48007,
+    "bundle": "ScreamSeq Graph Work.app"
+  },
+  {
+    "pid": 53265,
+    "bundle": "ScreamSeq Graph Meters.app"
+  },
+  {
+    "pid": 56127,
+    "bundle": "ScreamSeq Graph Controls.app"
+  },
+  {
+    "pid": 72559,
+    "bundle": "ScreamSeq Graph Bypass Refined.app"
+  },
+  {
+    "pid": 78758,
+    "bundle": "ScreamSeq Graph Commands.app"
+  },
+  {
+    "pid": 80223,
+    "bundle": "ScreamSeq Graph Commands Cold.app",
+    "retiredAtUTC": "2026-09-30T02:26:58.738176+00:00",
+    "stoppedBeforeRetirement": true
+  },
+  {
+    "pid": 85720,
+    "bundle": "ScreamSeq Graph History.app",
+    "retiredAtUTC": "2026-09-30T02:33:48.153213+00:00",
+    "stoppedBeforeRetirement": true
+  },
+  {
+    "pid": 88193,
+    "command": "bin/mac-graph-fluency/ScreamSeq Graph History Layout.app/Contents/MacOS/ScreamSeq bin/mac-graph-fluency/dense-graph-fixture.screamseq --inspection --automation",
+    "reason": "Stopped QA playback before replacing the test build with Live Router"
+  },
+  {
+    "pid": 94492,
+    "command": "bin/mac-graph-fluency/ScreamSeq Live Router.app/Contents/MacOS/ScreamSeq --inspection --automation",
+    "stopped": true,
+    "reason": "Replaced by graph role/state QA build"
+  },
+  {
+    "pid": 98093,
+    "command": "bin/mac-graph-fluency/ScreamSeq Graph Roles.app/Contents/MacOS/ScreamSeq --inspection --automation",
+    "stopped": true,
+    "reason": "Idle for isolated dense performance run"
+  }
+]

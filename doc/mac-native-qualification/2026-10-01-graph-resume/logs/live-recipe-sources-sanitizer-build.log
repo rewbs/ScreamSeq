@@ -1,0 +1,87 @@
+[ 14%] Built target TrackerFLAC
+[ 79%] Built target OpenMPTCore
+[ 79%] Building CXX object CMakeFiles/TrackerEditor.dir/Users/rewbs/code/openmpt/editor/SignalRuntime.cpp.o
+[ 79%] Linking CXX static library libTrackerEditor.a
+[ 97%] Built target TrackerEditor
+[100%] Linking CXX executable signal-graph-tests
+[100%] Built target signal-graph-tests
+[  5%] Built target ResonanceFixture
+[ 14%] Built target TrackerFLAC
+[ 74%] Built target OpenMPTCore
+[ 90%] Built target TrackerEditor
+[ 96%] Built target TrackerHosted
+[ 96%] Building OBJCXX object CMakeFiles/TrackerMac.dir/Bridge/TrackerSession.mm.o
+/Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:946:5: warning: 'auto' deduced as 'id' in declaration of 'entry' [-Wauto-var-id]
+  946 |     auto entry=[@{@"key":@(port.key.c_str()),@"node":@(port.node.c_str()),@"name":@(port.name.c_str()),
+      |     ^~~~~~~~~~
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:2349:
+/Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:116:9: warning: 'auto' deduced as 'id' in declaration of 'command' [-Wauto-var-id]
+  116 |         auto command=[object(p[@"command"]) mutableCopy];
+      |         ^~~~~~~~~~~~
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:2349:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:316:
+/Users/rewbs/code/openmpt/mac/Bridge/MixerAPI.inc:153:30: warning: 'auto' deduced as 'id' in declaration of 'raw' [-Wauto-var-id]
+  153 |         if(p[@"targets"])for(auto raw:array(p[@"targets"],128)){auto id=findBus(raw).id;require(std::find(targets.begin(),targets.end(),id)==targets.end(),"Duplicate output destination");targets.push_back(id);}
+      |                              ^
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:2349:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:318:
+/Users/rewbs/code/openmpt/mac/Bridge/SignalGraphAPI.inc:31:13: warning: 'auto' deduced as 'id' in declaration of 'port' [-Wauto-var-id]
+   31 |       const auto port=observation&&capture.token&&capture.token<=observation->ports.size()?@(observation->ports[capture.token-1].key.c_str()):(id)NSNull.null;
+      |       ~~~~~~^~~~~~~~~
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:2349:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:318:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/SignalGraphAPI.inc:77:
+/Users/rewbs/code/openmpt/mac/Bridge/SongModulationAPI.inc:35:54: warning: 'auto' deduced as 'id' in declaration of 'spec' [-Wauto-var-id]
+   35 |           allowed(@[@"source",@"connect",@"dryRun"]);auto spec=[object(p[@"source"]) mutableCopy];
+      |                                                      ^~~~~~~~~
+/Users/rewbs/code/openmpt/mac/Bridge/SongModulationAPI.inc:44:11: warning: 'auto' deduced as 'id' in declaration of 'spec' [-Wauto-var-id]
+   44 |           auto spec=[encodeSongSource(s) mutableCopy];[spec addEntriesFromDictionary:patch];auto updated=decodeSongSource(spec);validateScope(updated);s=std::move(updated);
+      |           ^~~~~~~~~
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSession.mm:2349:
+In file included from /Users/rewbs/code/openmpt/mac/Bridge/TrackerSessionAPI.inc:980:
+/Users/rewbs/code/openmpt/mac/Bridge/InstrumentEnvelopeToolsAPI.inc:13:57: warning: 'auto' deduced as 'id' in declaration of 'value' [-Wauto-var-id]
+   13 |       auto info=[&](const InstrumentEnvelope &envelope){auto value=[instrumentEnvelopeInfo(envelope,maximum) mutableCopy];
+      |                                                         ^~~~~~~~~~
+7 warnings generated.
+[ 96%] Linking CXX static library libTrackerMac.a
+[100%] Built target TrackerMac
+[100%] Linking CXX executable native-signal-graph-tests
+[100%] Built target native-signal-graph-tests
+[ 12%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 71%] Built target OpenMPTCore
+[ 87%] Built target TrackerEditor
+[ 92%] Built target TrackerHosted
+[ 92%] Linking CXX executable plugin-scanner
+[ 96%] Built target TrackerMac
+[ 98%] Built target plugin-scanner
+[ 98%] Linking CXX executable native-mixer-tests
+[100%] Built target native-mixer-tests
+[ 12%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 72%] Built target OpenMPTCore
+[ 89%] Built target TrackerEditor
+[ 94%] Built target TrackerHosted
+[ 96%] Built target plugin-scanner
+[100%] Built target TrackerMac
+[100%] Linking CXX executable plugin-latency-tests
+[100%] Built target plugin-latency-tests
+[ 12%] Built target TrackerFLAC
+[ 14%] Built target ResonanceFixture
+[ 74%] Built target OpenMPTCore
+[ 90%] Built target TrackerEditor
+[ 96%] Built target TrackerHosted
+[100%] Built target TrackerMac
+[100%] Building OBJCXX object CMakeFiles/parameter-activity-tests.dir/Tests/ParameterActivityTests.mm.o
+/Users/rewbs/code/openmpt/mac/Tests/ParameterActivityTests.mm:67:89: warning: 'auto' deduced as 'id' in declaration of 'p' [-Wauto-var-id]
+   67 |   auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;auto r=[session automationMethod:method params:p error:&error];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);return r;};
+      |                                                                                         ^~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/ParameterActivityTests.mm:72:3: warning: 'auto' deduced as 'id' in declaration of 'dry' [-Wauto-var-id]
+   72 |   auto dry=[edit mutableCopy];dry[@"dryRun"]=@YES;call(@"automation.recorded.edit",dry,true);check([revision isEqual:session.automationRevision],"Recorded dry run changes song");call(@"automation.recorded.edit",edit,true);
+      |   ^~~~~~~~
+/Users/rewbs/code/openmpt/mac/Tests/ParameterActivityTests.mm:75:3: warning: 'auto' deduced as 'id' in declaration of 'invalid' [-Wauto-var-id]
+   75 |   auto invalid=[edit mutableCopy];invalid[@"value"]=@999;invalid[@"expectedRevision"]=session.automationRevision;check(![session automationMethod:@"automation.recorded.edit" params:invalid error:&error]&&[lane() count]==1,"Invalid value partially replaced recording");
+      |   ^~~~~~~~~~~~
+3 warnings generated.
+[100%] Linking CXX executable parameter-activity-tests
+[100%] Built target parameter-activity-tests

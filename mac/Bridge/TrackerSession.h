@@ -13,6 +13,9 @@ NS_ASSUME_NONNULL_BEGIN
                                       error:(NSError **)error __attribute__((swift_error(none)));
 - (NSDictionary *)snapshot:(NSInteger)pattern;
 - (NSDictionary *)telemetry;
+- (NSDictionary *)signalTelemetry;
+- (NSDictionary *)routingTelemetry;
+- (NSDictionary *)listenTelemetry;
 - (NSArray<NSDictionary *> *)mixerMeters;
 - (NSArray<NSDictionary *> *)devices;
 - (BOOL)configureDevice:(NSUInteger)device buffer:(NSUInteger)buffer error:(NSError **)error;
@@ -37,6 +40,8 @@ NS_ASSUME_NONNULL_BEGIN
               error:(NSError **)error;
 - (void)undo;
 - (void)redo;
+- (BOOL)historyUndo:(BOOL)redo error:(NSError **)error;
+- (void)parameterGesture:(BOOL)active;
 - (void)muteChannel:(NSInteger)channel muted:(BOOL)muted;
 - (BOOL)editCells:(NSArray<NSDictionary *> *)edits error:(NSError **)error;
 - (NSInteger)addPattern:(NSInteger)rows
@@ -72,11 +77,34 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSDictionary *> *)builtInPlugins;
 - (NSArray<NSDictionary *> *)availablePluginsRescan:(BOOL)rescan
                                               error:(NSError **)error __attribute__((swift_error(nonnull_error)));
+/// Adds a plugin chosen by the user or an agent. A VST3 descriptor names its
+/// bundle directly; after validation that bundle is trusted for this process
+/// and recorded in the app's private per-user trust store for later launches.
 - (BOOL)addPlugin:(NSDictionary *)descriptor error:(NSError **)error;
+/// Trusts one .vst3 bundle, or every bundle inside a folder, until the process
+/// exits. Nothing is written to the persistent trust store. Call only for a location the user chose explicitly (or a test fixture).
+/// VST3 paths stored in projects, recovery files and graph recipes are hints:
+/// they load only from a standard VST3 folder, the scanned inventory or a
+/// location trusted here; otherwise the plugin is kept as missing with its state.
+/// Returns NO when the location does not exist.
++ (BOOL)trustPluginLocation:(NSString *)path;
+/// Missing VST3 plugins of the open document whose stored bundle exists on this
+/// Mac outside the trusted locations: name, classID, storedPath, canonicalPath
+/// and kind ("rack" or "graph"). Nothing is loaded. Ask the user before trusting.
+@property(nonatomic, readonly) NSArray<NSDictionary *> *unresolvedPluginLocations;
+/// Trusts canonical paths the user approved from unresolvedPluginLocations,
+/// remembers them for later launches and resolves the waiting rack and graph
+/// plugins in place, keeping their saved state. Never call without consent.
+- (BOOL)trustPluginLocations:(NSArray<NSString *> *)canonicalPaths error:(NSError **)error;
+- (BOOL)addPlugin:(NSDictionary *)descriptor target:(nullable NSString *)target error:(NSError **)error;
+- (BOOL)addPlugin:(NSDictionary *)descriptor target:(nullable NSString *)target before:(nullable NSString *)before position:(nullable NSDictionary *)position error:(NSError **)error;
+- (BOOL)addPlugin:(NSDictionary *)descriptor target:(nullable NSString *)target before:(nullable NSString *)before position:(nullable NSDictionary *)position parent:(nullable NSString *)parent error:(NSError **)error;
+- (BOOL)addPlugin:(NSDictionary *)descriptor target:(nullable NSString *)target before:(nullable NSString *)before position:(nullable NSDictionary *)position parent:(nullable NSString *)parent detached:(BOOL)detached error:(NSError **)error;
 - (BOOL)assignPlugin:(NSInteger)slot instrument:(NSInteger)instrument error:(NSError **)error;
 - (BOOL)showPluginEditor:(NSInteger)slot error:(NSError **)error;
 - (NSInteger)collectPluginEdits:(BOOL)record error:(NSError **)error;
 - (BOOL)removePlugin:(NSInteger)slot error:(NSError **)error;
+- (BOOL)removePlugins:(NSArray<NSString *> *)identifiers error:(NSError **)error;
 - (BOOL)movePlugin:(NSInteger)slot direction:(NSInteger)direction error:(NSError **)error;
 - (BOOL)bypassPlugin:(NSInteger)slot bypass:(BOOL)bypass error:(NSError **)error;
 - (NSArray<NSDictionary *> *)pluginParameters:(NSInteger)slot;
@@ -100,6 +128,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, readonly, nullable) NSString *recordingTakeID;
 - (BOOL)prepareAudition:(NSError **)error;
 - (BOOL)note:(NSInteger)note instrument:(NSInteger)instrument velocity:(NSInteger)velocity on:(BOOL)on;
+- (BOOL)note:(NSInteger)note instrument:(NSInteger)instrument velocity:(NSInteger)velocity on:(BOOL)on channel:(NSInteger)channel;
+- (BOOL)sampleNote:(NSInteger)note sample:(NSInteger)sample velocity:(NSInteger)velocity on:(BOOL)on channel:(NSInteger)channel;
 - (void)panic;
 - (NSData *)serializedData;
 + (BOOL)exportData:(NSData *)data path:(NSString *)path error:(NSError **)error;

@@ -15,7 +15,7 @@ using namespace OpenMPT;
 static void check(bool b, const char *why) { if (!b) throw std::runtime_error(why); }
 static void enable(Document &doc) {
   doc.annotate([](NativeSong &n) {
-    auto master = n.makeEntity().id;
+    auto master = n.masterID;
     for (const auto &[ch, t] : n.tracks) n.mixer.buses.push_back({t.id,master,MixerBusKind::Track,"Track"});
     n.mixer.buses.push_back({master,0,MixerBusKind::Master,"Master"});
   });

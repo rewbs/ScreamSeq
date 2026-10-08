@@ -8,6 +8,8 @@
 #include "../Plugins/PluginPreset.hpp"
 #include "AutomationValidation.hpp"
 #include "editor/PatternTools.hpp"
+#include "editor/ParameterProvenance.hpp"
+#include "editor/ParameterBaseline.hpp"
 #include "editor/AutomationTools.hpp"
 #include "editor/InstrumentEnvelopeTools.hpp"
 #include "editor/PatternCommands.hpp"
@@ -22,7 +24,9 @@
 #include "soundlib/NativeNoteEffects.h"
 #include <CommonCrypto/CommonDigest.h>
 #include <chrono>
+#include <cerrno>
 #include <cmath>
+#include <cstdio>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <limits>
@@ -188,7 +192,7 @@ std::vector<PluginState> decodePlugins(NSDictionary *root) {
       throw std::runtime_error("Audio Unit state exceeds 16 MB");
     if (item[@"bypass"] && ![item[@"bypass"] isKindOfClass:NSNumber.class])
       throw std::runtime_error("Invalid Audio Unit bypass value");
-    PluginState state{descriptor(item), {}, [item[@"bypass"] boolValue]};
+    PluginState state{descriptor(item), {}, bool([item[@"bypass"] boolValue])};
     state.instanceID = Automation::string(item[@"instanceID"], 128).UTF8String;
     if (state.instanceID.empty() || !instanceIDs.insert(state.instanceID).second)
       throw std::runtime_error("Invalid or duplicate plugin instance identity");
@@ -220,6 +224,80 @@ std::vector<PluginState> decodePlugins(NSDictionary *root) {
   }
   validatePluginAssignments(states);
   return states;
+}
+// A bundle location stored in a project, recovery file or graph recipe is only
+// a hint. In memory a VST3 names the canonical location that was checked, or
+// nothing when it could not be resolved, so no host code can load the stored
+// string. The stored hint returns unchanged when the project is saved.
+struct PluginPathHint {
+  std::string classID, path; // As stored in the project.
+  std::string loaded;        // In-memory location; empty while the plugin is missing.
+  bool applies(const std::string &format, const std::string &currentPath, const std::string &currentClass) const {
+    return format == "VST3" && currentClass == classID && (currentPath.empty() || currentPath == loaded);
+  }
+};
+struct PluginPathHints {
+  std::map<std::string, PluginPathHint> rack;                        // By plugin instance ID.
+  std::map<std::pair<uint64_t, uint64_t>, PluginPathHint> graph;     // By subgraph and node ID.
+  void clear() { rack.clear(); graph.clear(); }
+};
+std::string missingPlugin(const std::string &name, const std::string &path) {
+  return "Plugin \"" + name + "\" is unavailable: its VST3 bundle " +
+         (path.empty() ? std::string("has no known location")
+                       : "\"" + path + "\" is missing or outside the trusted plugin locations") +
+         ". Its saved state is preserved. Install it in a VST3 folder or add it from the plugin browser, then reopen the project.";
+}
+NSString *pathString(const std::string &value) {
+  return [NSString stringWithUTF8String:value.c_str()];
+}
+// Returns an empty string when every VST3 resolved; otherwise one line per missing plugin.
+std::string resolvePluginLocations(std::vector<PluginState> &plugins, NativeSong *native, NSArray<NSDictionary *> *inventory,
+                                   PluginPathHints &hints) {
+  std::string issue;
+  auto resolve = [&](std::string &path, const std::string &classID, const std::string &name) {
+    PluginPathHint hint{classID, path, {}};
+    if (NSString *found = PluginTrust::resolve(pathString(path), pathString(classID), inventory))
+      hint.loaded = found.UTF8String;
+    else
+      issue += (issue.empty() ? "" : "\n") + missingPlugin(name, path);
+    path = hint.loaded;
+    return hint;
+  };
+  for (auto &plugin : plugins) {
+    auto &d = plugin.descriptor;
+    if (d.format == "VST3")
+      hints.rack[plugin.instanceID] = resolve(d.path, d.classID, d.name);
+  }
+  if (native)
+    for (auto &definition : native->signal.library)
+      for (auto &node : definition.nodes) {
+        auto &r = node.plugin;
+        if (node.kind == SignalNodeKind::Plugin && r.format == "VST3")
+          hints.graph[{definition.id, node.id}] = resolve(r.path, r.classID, r.name.empty() ? node.name : r.name);
+      }
+  return issue;
+}
+// Load-site check for recipes that reached the document by any route.
+std::string pluginLocationIssue(const PluginDescriptor &d, const PluginPathHint *hint, NSArray<NSDictionary *> *inventory) {
+  if (d.format != "VST3" || (!d.path.empty() && PluginTrust::trusted(pathString(d.path), inventory)))
+    return {};
+  return missingPlugin(d.name, d.path.empty() && hint && hint->applies(d.format, d.path, d.classID) ? hint->path : d.path);
+}
+std::string graphLocationIssue(const NativeSong &native, const PluginPathHints &hints, NSArray<NSDictionary *> *inventory,
+                               bool unresolvedOnly = false) {
+  std::string issue;
+  for (const auto &definition : native.signal.library)
+    for (const auto &node : definition.nodes) {
+      const auto &r = node.plugin;
+      if (node.kind != SignalNodeKind::Plugin || r.format != "VST3" || (unresolvedOnly && !r.path.empty()))
+        continue;
+      const auto hint = hints.graph.find({definition.id, node.id});
+      const auto text = pluginLocationIssue({r.type, r.subtype, r.manufacturer, r.name.empty() ? node.name : r.name, r.format, r.path, r.classID, false},
+                                            hint == hints.graph.end() ? nullptr : &hint->second, inventory);
+      if (!text.empty())
+        issue += (issue.empty() ? "" : "\n") + text;
+    }
+  return issue;
 }
 std::vector<ParameterChange> decodeAutomation(NSDictionary *root) {
   std::vector<ParameterChange> result;
@@ -257,9 +335,12 @@ NSString *songString(const CSoundFile &song, const std::string &value) {
 }
 struct EffectSnapshot {
   std::vector<PluginState> plugins;
-  std::vector<ParameterChange> automation;
+  std::vector<ParameterChange> automation, manual;
+  uint64_t sequence = 0;
+  std::string bypassTarget; // A delta, so save/state capture cannot turn Undo into a rack rebuild.
+  std::vector<ParameterChange> parameterValues; // Historical manual scalars, never effective modulation output.
   size_t bytes() const {
-    size_t result = automation.size() * sizeof(ParameterChange);
+    size_t result = (automation.size() + manual.size() + parameterValues.size()) * sizeof(ParameterChange) + bypassTarget.size();
     for (const auto &plugin : plugins)
       result += plugin.state.size() + plugin.descriptor.name.size() + sizeof(PluginState) + plugin.aliases.size() * sizeof(PluginInstrumentAlias);
     return result;
@@ -277,6 +358,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 } // namespace
 @implementation TrackerSession {
   BOOL _playbackLoop, _isolatedSamplePreview;
+  NSInteger _isolatedPreviewSample;
   NSDictionary *_playbackRegion;
   std::unique_ptr<Document> _document;
   std::unique_ptr<AudioDevice> _audio;
@@ -287,11 +369,21 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   std::vector<ParameterChange> _automation;
   std::vector<ParameterChange> _manualParameters;
   std::vector<EffectSnapshot> _effectUndo, _effectRedo;
+  std::vector<std::pair<uint64_t,uint64_t>> _historyGroups;
+  uint64_t _knownHistorySequence, _parameterGestureSequence;
+  BOOL _parameterGesture;
+  NSInteger _parameterGestureSlot, _parameterGestureID;
+  std::chrono::steady_clock::time_point _lastParameterEdit;
   std::string _pluginError;
+  std::string _pluginWarning; // Non-blocking; reported with the document issues.
+  PluginPathHints _pluginPathHints;
   std::unique_ptr<NativePlugin> _graphEditorPlugin;
   GraphPluginRecipe _graphEditorRecipe;
   uint64_t _graphEditorGraph, _graphEditorNode;
   NSString *_graphEditorID,*_graphEditorDocument;
+  NSString *_graphParameterGesture,*_graphParameterGestureDocument;
+  uint64_t _graphParameterGestureSequence,_graphParameterGestureGraph,_graphParameterGestureNode;
+  uint32_t _graphParameterGestureID;
   NSString *_automationDocumentID;
   uint64_t _pluginRevision;
   std::string _lastTouchedPlugin;
@@ -319,13 +411,33 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (BOOL)playing {
   return _audio->playing();
 }
+- (void)synchronizeHistory {
+  if (_knownHistorySequence == _document->historySequence()) return;
+  // A document edit forks the same redo branch as a plugin edit.
+  _effectRedo.clear();
+  _knownHistorySequence = _document->historySequence();
+  _parameterGestureSequence = 0;
+}
+- (BOOL)nextHistoryIsPlugin:(BOOL)redo {
+  const auto &history = redo ? _effectRedo : _effectUndo;
+  const auto document = _document->historyHead(redo);
+  return !history.empty() && (!document || (redo ? history.back().sequence < document : history.back().sequence > document));
+}
 - (BOOL)canUndo {
+  [self synchronizeHistory];
+  if ([self nextHistoryIsPlugin:NO]) return YES;
   try { validatePluginCapacity(_plugins, _document->historyNative(false).mixer.buses.size()); } catch (...) { return NO; }
   return _document->canUndo();
 }
 - (BOOL)canRedo {
+  [self synchronizeHistory];
+  if ([self nextHistoryIsPlugin:YES]) return YES;
   try { validatePluginCapacity(_plugins, _document->historyNative(true).mixer.buses.size()); } catch (...) { return NO; }
   return _document->canRedo();
+}
+- (void)parameterGesture:(BOOL)active {
+  _parameterGesture = active;
+  _parameterGestureSequence = 0;
 }
 - (double)sampleRate {
   return _audio->sampleRate();
@@ -333,14 +445,26 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (NSUInteger)bufferSize {
   return _audio->bufferSize();
 }
++ (BOOL)trustPluginLocation:(NSString *)path {
+  return PluginTrust::trust(path);
+}
 - (void)newSong:(BOOL)demo {
+  // The bridge method cannot refuse, so a replaced document discards its take
+  // instead of leaving it attached to a song it was not recorded against.
+  _recording.reset();
+  _recordingID = nil;
+  _recordingRevision = nil;
   _audio->setPlugins({});
   _plugins.clear();
   _automation.clear();
   _manualParameters.clear();
   _effectUndo.clear();
   _effectRedo.clear();
+  _historyGroups.clear();
+  _knownHistorySequence = _parameterGestureSequence = 0; _parameterGesture = NO;
   _pluginError.clear();
+  _pluginWarning.clear();
+  _pluginPathHints.clear();
   _document = demo ? Document::demo() : std::make_unique<Document>();
   _automationDocumentID = NSUUID.UUID.UUIDString;
   _graphEditorPlugin.reset();_graphEditorID=nil;
@@ -354,6 +478,8 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     std::vector<ParameterChange> automation;
     std::unique_ptr<NoteRecording> recoveredTake;
     bool recoveredTakeCompatible = false;
+    PluginPathHints hints;
+    std::string missing;
     if ([@[@"screamseq", @"resonance"] containsObject:path.pathExtension.lowercaseString]) {
       auto attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil];
       if ([attributes fileSize] > 600 * 1024 * 1024)
@@ -366,8 +492,10 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
           throw std::runtime_error("The selected sequence is missing from this project.");
         next->song().Order.SetSequence(SEQUENCEINDEX(sequence));
       }
-      next->restoreNative(decodeNativeSong(root[@"native"]));
+      auto native = decodeNativeSong(root[@"native"]);
       plugins = decodePlugins(root);
+      missing = resolvePluginLocations(plugins, &native, _pluginInventory->cached(), hints);
+      next->restoreNative(std::move(native));
       automation = decodeAutomation(root);
       if (root[@"recoveryTake"]) {
         using namespace Automation;
@@ -399,7 +527,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     validatePluginCapacity(plugins, next->native().mixer.buses.size());
     _audio->stop();
     _pluginError.clear();
+    _pluginWarning.clear();
+    _pluginPathHints = std::move(hints);
     try {
+      // Missing or untrusted rack plugins are never instantiated.
+      if (const auto issue = [self rackLocationIssue:plugins]; !issue.empty())
+        throw std::runtime_error(issue);
       _audio->setPlugins(plugins, automation);
     } catch (const std::exception &e) {
       _audio->setPlugins({});
@@ -410,6 +543,8 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     _manualParameters.clear();
     _effectUndo.clear();
     _effectRedo.clear();
+    _historyGroups.clear();
+    _knownHistorySequence = _parameterGestureSequence = 0; _parameterGesture = NO;
     _graphEditorPlugin.reset();_graphEditorID=nil;
     _document = std::move(next);
     _automationDocumentID = NSUUID.UUID.UUIDString;
@@ -426,24 +561,195 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 // Fold manual parameter edits into the saved baseline without baking the current
 // playback automation values into it. Runs on the control worker while UI writes
 // are suspended; the live parameter queue remains bounded and cheap.
+- (std::string)rackLocationIssue:(const std::vector<PluginState> &)states {
+  std::string issue;
+  NSArray *inventory = nil;
+  bool loaded = false;
+  for (const auto &state : states) {
+    if (state.descriptor.format != "VST3")
+      continue;
+    if (!loaded) { inventory = _pluginInventory->cached(); loaded = true; }
+    const auto hint = _pluginPathHints.rack.find(state.instanceID);
+    const auto text = pluginLocationIssue(state.descriptor, hint == _pluginPathHints.rack.end() ? nullptr : &hint->second, inventory);
+    if (!text.empty())
+      issue += (issue.empty() ? "" : "\n") + text;
+  }
+  return issue;
+}
+- (void)requireGraphPluginLocations:(const NativeSong &)native {
+  if (const auto issue = graphLocationIssue(native, _pluginPathHints, _pluginInventory->cached()); !issue.empty())
+    throw std::runtime_error(issue);
+}
+// Missing plugins whose stored bundle exists on this Mac but is not trusted.
+// Nothing is loaded or trusted here; the caller must ask the user.
+- (NSArray<NSDictionary *> *)unresolvedPluginLocations {
+  NSMutableArray *result = [NSMutableArray array];
+  auto add = [&](const PluginPathHint &hint, const std::string &format, const std::string &path, const std::string &classID,
+                 const std::string &name, NSString *kind, bool instrument = false) {
+    if (!path.empty() || !hint.applies(format, path, classID))
+      return;
+    NSString *real = PluginTrust::canonical(pathString(hint.path));
+    BOOL directory = NO;
+    if (!real || ![real.pathExtension.lowercaseString isEqual:@"vst3"] ||
+        ![NSFileManager.defaultManager fileExistsAtPath:real isDirectory:&directory] || !directory)
+      return;
+    [result addObject:@{@"name" : pathString(name) ?: @"Plugin", @"classID" : pathString(classID) ?: @"",
+                        @"storedPath" : pathString(hint.path) ?: @"", @"canonicalPath" : real, @"kind" : kind,
+                        @"isInstrument" : @(instrument)}];
+  };
+  for (const auto &plugin : _plugins)
+    if (const auto hint = _pluginPathHints.rack.find(plugin.instanceID); hint != _pluginPathHints.rack.end())
+      add(hint->second, plugin.descriptor.format, plugin.descriptor.path, plugin.descriptor.classID, plugin.descriptor.name, @"rack",
+          plugin.descriptor.instrument || plugin.descriptor.type == kAudioUnitType_MusicDevice);
+  for (const auto &definition : _document->native().signal.library)
+    for (const auto &node : definition.nodes)
+      if (const auto hint = _pluginPathHints.graph.find({definition.id, node.id});
+          node.kind == SignalNodeKind::Plugin && hint != _pluginPathHints.graph.end())
+        add(hint->second, node.plugin.format, node.plugin.path, node.plugin.classID,
+            node.plugin.name.empty() ? node.name : node.plugin.name, @"graph");
+  return result;
+}
+// The user approved these exact canonical locations. Each must be one this
+// document is waiting for; it is validated in the isolated scanner, trusted,
+// remembered, and the waiting plugins resolve in place with their saved state.
+- (BOOL)trustPluginLocations:(NSArray<NSString *> *)paths error:(NSError **)error {
+  try {
+    if (![paths isKindOfClass:NSArray.class] || !paths.count || paths.count > maximumNativePlugins + 64)
+      throw std::invalid_argument("Name the canonical plugin locations to trust");
+    NSArray *waiting = [self unresolvedPluginLocations];
+    NSMutableSet *approved = [NSMutableSet set];
+    for (id path in paths) {
+      if (![path isKindOfClass:NSString.class] || ![PluginTrust::canonical(path) isEqual:path])
+        throw std::invalid_argument("Plugin locations must be canonical paths of existing bundles");
+      bool expected = false;
+      for (NSDictionary *entry in waiting)
+        if ([entry[@"canonicalPath"] isEqual:path]) {
+          expected = true;
+          if (![approved containsObject:@[path, entry[@"classID"]]]) {
+            const bool known = PluginTrust::trusted(path, nil);
+            PluginTrust::trust(path); // The scanner result is only meaningful for a loadable bundle.
+            try {
+              runScanner(@[ @"--validate-vst3", path, entry[@"classID"], [entry[@"isInstrument"] boolValue] ? @"1" : @"0" ]);
+            } catch (...) {
+              if (!known) PluginTrust::revoke(path);
+              throw;
+            }
+            [approved addObject:@[path, entry[@"classID"]]];
+          }
+        }
+      if (!expected)
+        throw std::invalid_argument("This document is not waiting for that plugin location");
+    }
+    _audio->stop();
+    auto plugins = _plugins;
+    auto hints = _pluginPathHints;
+    auto native = _document->native();
+    auto accept = [&](PluginPathHint &hint, const std::string &format, std::string &path, const std::string &classID) {
+      if (!path.empty() || !hint.applies(format, path, classID))
+        return;
+      NSString *real = PluginTrust::canonical(pathString(hint.path));
+      if (real && [approved containsObject:@[real, pathString(classID) ?: @""]])
+        path = hint.loaded = real.UTF8String;
+    };
+    for (auto &plugin : plugins)
+      if (auto hint = hints.rack.find(plugin.instanceID); hint != hints.rack.end())
+        accept(hint->second, plugin.descriptor.format, plugin.descriptor.path, plugin.descriptor.classID);
+    bool graphChanged = false;
+    for (auto &definition : native.signal.library)
+      for (auto &node : definition.nodes)
+        if (auto hint = hints.graph.find({definition.id, node.id}); node.kind == SignalNodeKind::Plugin && hint != hints.graph.end()) {
+          const auto before = node.plugin.path;
+          accept(hint->second, node.plugin.format, node.plugin.path, node.plugin.classID);
+          graphChanged = graphChanged || before != node.plugin.path;
+        }
+    if (graphChanged)
+      _document->restoreNative(std::move(native)); // Resolution is not an edit: no Undo step, no revision.
+    _pluginPathHints = std::move(hints);
+    for (NSArray *entry in approved)
+      PluginTrust::persist(entry[0]);
+    std::string issue;
+    try {
+      if (const auto location = [self rackLocationIssue:plugins]; !location.empty())
+        throw std::runtime_error(location);
+      _audio->setPlugins(plugins, _automation);
+    } catch (const std::exception &e) {
+      issue = e.what();
+      _audio->setPlugins({});
+    }
+    _plugins = std::move(plugins);
+    _pluginError = std::move(issue);
+    _graphEditorPlugin.reset();_graphEditorID=nil;
+    ++_pluginRevision;
+    return YES;
+  } catch (const std::exception &e) {
+    failure(error, e);
+    return NO;
+  }
+}
+// File- or API-supplied graph recipes name a bundle only as a hint.
+- (void)resolveGraphRecipe:(GraphPluginRecipe &)recipe {
+  if (recipe.format != "VST3" || recipe.path.empty())
+    return; // An empty path is a preserved missing plugin; it cannot be loaded.
+  NSString *found = PluginTrust::resolve(pathString(recipe.path), pathString(recipe.classID), _pluginInventory->cached());
+  if (!found)
+    throw Automation::Error(-32602, ("Graph plugin \"" + recipe.name + "\" names a VST3 bundle outside the trusted plugin locations. "
+                                     "Add it with plugin.add or install it in a VST3 folder first.").c_str());
+  recipe.path = found.UTF8String;
+}
+// Fold manual parameter edits into the saved baseline without baking the current
+// playback automation values into it. Runs on the control worker while UI writes
+// are suspended; the live parameter queue remains bounded and cheap.
+// This runs inside Save, recovery and Play, so it never throws and never keeps
+// an entry: values a plugin refuses are dropped and reported as a warning.
 - (void)commitManualParameters {
   if (_manualParameters.empty())
     return;
-  auto states = _plugins;
-  for (size_t slot = 0; slot < states.size(); ++slot) {
-    if (std::none_of(_manualParameters.begin(), _manualParameters.end(), [&](const auto &p) { return p.slot == slot; }))
-      continue;
-    NativePlugin plugin(states[slot], _audio->sampleRate());
-    for (const auto &point : _manualParameters)
-      if (point.slot == slot && !plugin.parameter(point.id, point.value))
-        throw std::runtime_error("Plugin rejected a saved parameter value");
-    auto state = plugin.state();
-    state.bypass = states[slot].bypass;
-    state.instrument = states[slot].instrument;
-    states[slot] = std::move(state);
-  }
-  _plugins = std::move(states);
+  const auto pending = std::move(_manualParameters);
   _manualParameters.clear();
+  auto states = _plugins;
+  size_t dropped = 0;
+  std::string detail;
+  for (size_t slot = 0; slot < states.size(); ++slot) {
+    const auto count = size_t(std::count_if(pending.begin(), pending.end(), [&](const auto &p) { return p.slot == slot; }));
+    if (!count)
+      continue;
+    size_t rejected = 0;
+    try {
+      if (const auto issue = [self rackLocationIssue:std::vector<PluginState>{states[slot]}]; !issue.empty())
+        throw std::runtime_error(issue);
+      NativePlugin plugin(states[slot], _audio->sampleRate());
+      for (const auto &point : pending) {
+        if (point.slot != slot || plugin.parameter(point.id, point.value))
+          continue;
+        // A full host queue is drained by capturing state; then retry once.
+        (void)plugin.state();
+        if (!plugin.parameter(point.id, point.value))
+          ++rejected;
+      }
+      auto state = plugin.state();
+      state.bypass = states[slot].bypass;
+      state.instrument = states[slot].instrument;
+      states[slot] = std::move(state);
+    } catch (const std::exception &e) {
+      // Keep the previously saved state of this slot.
+      rejected = count;
+      detail = e.what();
+    }
+    if (rejected) {
+      dropped += rejected;
+      detail = "\"" + states[slot].descriptor.name + "\"" + (detail.empty() ? "" : " (" + detail + ")");
+    }
+  }
+  for (const auto &point : pending)
+    if (point.slot >= states.size())
+      ++dropped;
+  _plugins = std::move(states);
+  if (dropped) {
+    _pluginWarning = std::to_string(dropped) + " manual plugin parameter edit" + (dropped == 1 ? " was" : "s were") +
+                     " not stored in the saved plugin state" + (detail.empty() ? "" : ": " + detail) + ".";
+    NSLog(@"ScreamSeq: %s", _pluginWarning.c_str());
+  } else
+    _pluginWarning.clear();
 }
 - (NSData *)projectData {
   return [self projectDataForRecovery:NO];
@@ -460,6 +766,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   const int projectVersion = nativeProjectVersion;
   for (auto &plugin : _plugins) {
     NSMutableDictionary *item = [descriptorDictionary(plugin.descriptor) mutableCopy];
+    if (const auto hint = _pluginPathHints.rack.find(plugin.instanceID); hint != _pluginPathHints.rack.end() &&
+        hint->second.applies(plugin.descriptor.format, plugin.descriptor.path, plugin.descriptor.classID))
+      item[@"path"] = pathString(hint->second.path) ?: @""; // Projects keep the location they stored.
     item[@"bypass"] = @(plugin.bypass);
     item[@"instrument"] = @(plugin.instrument);
     item[@"instrumentAssignments"] = encodePluginAssignments(plugin);
@@ -474,9 +783,23 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   auto automation = [NSMutableArray array];
   for (auto &point : _automation)
     [automation addObject:@[ @(point.slot), @(point.id), @(point.value), @(point.frame) ]];
+  NSDictionary *nativeMetadata = nil;
+  if (_pluginPathHints.graph.empty())
+    nativeMetadata = encodeNativeSong(_document->native());
+  else {
+    auto native = _document->native();
+    for (auto &definition : native.signal.library)
+      for (auto &node : definition.nodes) {
+        const auto hint = _pluginPathHints.graph.find({definition.id, node.id});
+        if (hint != _pluginPathHints.graph.end() && node.kind == SignalNodeKind::Plugin &&
+            hint->second.applies(node.plugin.format, node.plugin.path, node.plugin.classID))
+          node.plugin.path = hint->second.path;
+      }
+    nativeMetadata = encodeNativeSong(native);
+  }
   NSMutableDictionary *root = [@{
     @"version" : @(projectVersion),
-    @"native" : encodeNativeSong(_document->native()),
+    @"native" : nativeMetadata,
     @"sequence" : @(_document->song().Order.GetCurrentSequenceIndex()),
     @"module" : [NSData dataWithBytes:bytes.data() length:bytes.size()],
     @"plugins" : plugins,
@@ -566,6 +889,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     if(_recording&&_recording->capturing&&!_recording->events.empty())throw std::runtime_error("Stop and commit or discard the current recording before restarting playback.");
     if (!_pluginError.empty())
       throw std::runtime_error(_pluginError);
+    [self requireGraphPluginLocations:_document->native()];
     [self commitManualParameters];
     if ((_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState())))
       _plugins = _audio->pluginStates();
@@ -613,6 +937,45 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   }
   return result;
 }
+- (NSDictionary *)listenTelemetry {
+  NSDictionary *listen=@{@"port":NSNull.null,@"gainDB":@0,@"available":@YES,@"pending":@NO,@"transitionFrames":@0};
+  if(const auto *observation=_audio->signalObservation()) {
+    const auto target=observation->listen.requested();
+    listen=@{@"port":target.token&&target.token<=observation->ports.size()?@(observation->ports[target.token-1].key.c_str()):(id)NSNull.null,
+      @"gainDB":@(20*std::log10(target.gain)),@"available":@(!target.token||observation->available(target.token)),@"pending":@(observation->listen.pending()),@"transitionFrames":@(observation->listen.transitionFrames())};
+  }
+  return listen;
+}
+- (NSDictionary *)signalTelemetry {
+  auto ports=[NSMutableArray array];
+  if(const auto *observation=_audio->signalObservation())for(size_t i=0;i<observation->ports.size();++i) {
+    const auto &port=observation->ports[i];const auto value=observation->read(uint32_t(i+1));if(!value.available)continue;
+    auto entry=[@{@"key":@(port.key.c_str()),@"node":@(port.node.c_str()),@"name":@(port.name.c_str()),
+      @"direction":port.output?@"output":@"input",@"port":@(port.port),@"channels":@(port.channels),
+      @"processorLatency":value.processorLatency<0?(id)NSNull.null:@(value.processorLatency),
+      @"compensation":value.compensation<0?(id)NSNull.null:@(value.compensation),
+      @"available":@(value.available),@"fresh":@(value.fresh),@"measured":@(value.measured),@"peak":@[@(value.peakLeft),@(value.peakRight)],
+      @"rms":@[@(value.rmsLeft),@(value.rmsRight)],@"through":@(value.through),@"lastSignal":@(value.lastSignal),
+      @"clipped":@(value.clipped),@"nonFinite":@(value.nonFinite)} mutableCopy];
+    if(port.route) {
+      const auto &route=*port.route;
+      entry[@"route"]=@{@"kind":@(route.kind.c_str()),@"source":@(route.source.c_str()),@"target":@(route.target.c_str()),
+        @"plugin":@(route.plugin.c_str()),@"input":@(route.input),@"output":@(route.output),@"tap":@(route.tap.c_str()),
+        @"gainDB":std::isfinite(value.routeGain)&&value.routeGain>0?(id)@(20*std::log10(value.routeGain)):NSNull.null,@"preFader":@(value.preFader)};
+    }
+    [ports addObject:entry];
+  }
+  return @{@"ports":ports,@"listen":[self listenTelemetry],@"routing":[self routingTelemetry],@"active":@(_audio->active()),@"playing":@(self.playing),@"sampleRate":@(_audio->sampleRate()),
+    @"freshnessFrames":@4096,@"peakDecaySeconds":@0.2,@"silenceThreshold":@1e-7,@"scope":@"Host mixer/rack ports and adopted route contributions; reusable graph internals are not included"};
+}
+- (NSDictionary *)routingTelemetry {
+  const auto reading=_audio->mixerRoutingReading();
+  const bool active=_audio->active();
+  return @{@"available":@(reading.requested!=0),@"active":@(active),
+    @"requestedPlan":@(reading.requested),@"renderedPlan":@(reading.rendered),@"failedPlan":@(reading.failed),
+    @"state":!active?@"stopped":reading.rejected()?@"failed":reading.preparing()?@"preparing":@"stable",
+    @"latencyPending":@(active && _audio->pluginLatencyChanged())};
+}
 - (NSDictionary *)telemetry {
   auto t = _audio->telemetry();
   auto positions=[NSMutableArray array];
@@ -623,7 +986,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     @"playing": @(self.playing), @"loop": @(_playbackLoop), @"region": _playbackRegion ?: @{},
     @"order" : @(t.order),
     @"pattern" : @(t.pattern),
-    @"row" : @(t.row),
+    @"row" : @(t.row), @"patternPosition":@(t.patternPosition),
     @"voices" : @(t.voices),
     @"left" : @(t.left),
     @"right" : @(t.right),
@@ -635,6 +998,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     @"pluginFailure" : @(_audio->pluginFailed()),
     @"pluginLatency" : @(_audio->pluginLatency()),
     @"graphActivity" : encodeSignalActivity(_audio->graphActivity()),
+    @"routing": [self routingTelemetry],
     @"fault" : @(_audio->renderer() && _audio->renderer()->faulted())
   };
 }
@@ -737,6 +1101,10 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
                                   @"External sample %u could not be loaded. Replace it before saving or playback.", i]];
   if (!_pluginError.empty())
     [issues addObject:@(_pluginError.c_str())];
+  if (const auto issue = graphLocationIssue(native, _pluginPathHints, nil, true); !issue.empty())
+    [issues addObject:@(issue.c_str())];
+  if (!_pluginWarning.empty())
+    [issues addObject:@(_pluginWarning.c_str())];
   const char *format = s.GetType() == MOD_TYPE_MPT   ? "MPTM"
                        : s.GetType() == MOD_TYPE_IT  ? "IT"
                        : s.GetType() == MOD_TYPE_XM  ? "XM"
@@ -806,24 +1174,109 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     return NO;
   }
 }
-- (void)undo {
-  if (!self.canUndo) return;
-  if (_document->undoChangesStructure() || _document->undoChangesAutomation() || _document->undoChangesMixer())
+- (void)undoDocument {
+  if (!_document->canUndo()) return;
+  const auto &next = _document->historyNative(false);
+  std::unique_ptr<MixerTransition::Plan> routing;
+  std::unique_ptr<GraphControlPlan> parameters;
+  if (_document->undoChangesStructure() ||
+      next.performance != _document->native().performance || next.preciseNotes != _document->native().preciseNotes)
     _audio->stop();
-  auto e = _document->undo();
+  else if (_document->undoChangesMixer() && next.automation!=_document->native().automation) {
+    // A linked bank edit can affect both the song graph and pattern lanes.
+    // Carry their snapshots in one routing publication at one audio boundary.
+    parameters=_audio->prepareGraphControls(next);
+    if(!parameters)routing=_audio->prepareMixerRouting(next);
+    if(!parameters && !routing && _audio->active())throw std::runtime_error("This combined graph/automation Undo requires a stopped transport; playback was preserved");
+  }
+  else if (_document->undoChangesMixer() && next.mixer==_document->native().mixer) {
+    parameters=_audio->prepareGraphControls(next);if(!parameters){routing=_audio->prepareMixerRouting(next);if(_audio->active()&&!routing)throw std::runtime_error("This routing Undo needs a stopped transport; playback was preserved");}
+  }
+  else if (_document->undoChangesMixer()) {
+    if(!_audio->mixerRoutingReady())throw std::runtime_error("Routing transition is still preparing; retry Undo");
+    routing=_audio->prepareMixerRouting(next);if(!routing && _audio->active())throw std::runtime_error("This routing Undo needs a stopped transport; playback was preserved");
+  }
+  else if (_document->undoChangesAutomation()) {
+    try { _audio->updateMusicalAutomation(next); } catch (...) { _audio->stop(); }
+  }
+  auto publish=[&]{if(parameters && !_audio->publishGraphControls(std::move(parameters)))throw std::runtime_error("Graph parameter publication is busy; retry Undo");if(routing && !_audio->publishMixerRouting(routing))throw std::runtime_error("Routing publication is busy; retry Undo");};
+  auto e = routing||parameters?_document->undo(publish):_document->undo();
   if (_audio->renderer()) _audio->renderer()->applyColumnMutes(_document->native(), _document->song());
   if (_audio->playing() && !_audio->renderer()->enqueue(e))
     _audio->stop();
 }
-- (void)redo {
-  if (!self.canRedo) return;
-  if (_document->redoChangesStructure() || _document->redoChangesAutomation() || _document->redoChangesMixer())
+- (void)redoDocument {
+  if (!_document->canRedo()) return;
+  const auto &next = _document->historyNative(true);
+  std::unique_ptr<MixerTransition::Plan> routing;
+  std::unique_ptr<GraphControlPlan> parameters;
+  if (_document->redoChangesStructure() ||
+      next.performance != _document->native().performance || next.preciseNotes != _document->native().preciseNotes)
     _audio->stop();
-  auto e = _document->redo();
+  else if (_document->redoChangesMixer() && next.automation!=_document->native().automation) {
+    // A linked bank edit can affect both the song graph and pattern lanes.
+    // Carry their snapshots in one routing publication at one audio boundary.
+    parameters=_audio->prepareGraphControls(next);
+    if(!parameters)routing=_audio->prepareMixerRouting(next);
+    if(!parameters && !routing && _audio->active())throw std::runtime_error("This combined graph/automation Redo requires a stopped transport; playback was preserved");
+  }
+  else if (_document->redoChangesMixer() && next.mixer==_document->native().mixer) {
+    parameters=_audio->prepareGraphControls(next);if(!parameters){routing=_audio->prepareMixerRouting(next);if(_audio->active()&&!routing)throw std::runtime_error("This routing Redo needs a stopped transport; playback was preserved");}
+  }
+  else if (_document->redoChangesMixer()) {
+    if(!_audio->mixerRoutingReady())throw std::runtime_error("Routing transition is still preparing; retry Redo");
+    routing=_audio->prepareMixerRouting(next);if(!routing && _audio->active())throw std::runtime_error("This routing Redo needs a stopped transport; playback was preserved");
+  }
+  else if (_document->redoChangesAutomation()) {
+    try { _audio->updateMusicalAutomation(next); } catch (...) { _audio->stop(); }
+  }
+  auto publish=[&]{if(parameters && !_audio->publishGraphControls(std::move(parameters)))throw std::runtime_error("Graph parameter publication is busy; retry Redo");if(routing && !_audio->publishMixerRouting(routing))throw std::runtime_error("Routing publication is busy; retry Redo");};
+  auto e = routing||parameters?_document->redo(publish):_document->redo();
   if (_audio->renderer()) _audio->renderer()->applyColumnMutes(_document->native(), _document->song());
   if (_audio->playing() && !_audio->renderer()->enqueue(e))
     _audio->stop();
 }
+- (BOOL)historyUndo:(BOOL)redo error:(NSError **)error {
+  try {
+    [self synchronizeHistory];
+    _parameterGestureSequence = 0;
+    auto head = [&]() -> uint64_t { const auto &history=redo?_effectRedo:_effectUndo; return [self nextHistoryIsPlugin:redo] ? history.back().sequence : _document->historyHead(redo); };
+    const auto first=head();if(!first)return YES;
+    auto range=std::pair{first,first};
+    for(const auto &group:_historyGroups)if(first>=group.first&&first<=group.second){range=group;break;}
+    auto &effectSource=redo?_effectRedo:_effectUndo;
+    if(_audio->active() && range.first!=range.second && !effectSource.empty() &&
+       effectSource.back().sequence==range.first && _document->historyHead(redo)==range.second) {
+      if((redo?_document->redoChangesStructure():_document->undoChangesStructure()))
+        throw std::runtime_error("This grouped edit changes source adapters; stop playback before restoring it");
+      const auto &saved=effectSource.back();const auto &native=_document->historyNative(redo);
+      if(native.preciseNotes!=_document->native().preciseNotes)
+        throw std::runtime_error("This grouped edit changes note timing; stop playback before restoring it");
+      auto prepared=[self prepareLivePlugins:saved.plugins automation:saved.automation native:native];
+      auto nextPlugins=saved.plugins;auto nextAutomation=saved.automation;auto nextManual=saved.manual;
+      auto &destination=redo?_effectUndo:_effectRedo;
+      EffectSnapshot current{_plugins,_automation,_manualParameters,saved.sequence,saved.bypassTarget};
+      destination.reserve(destination.size()+1);
+      // Document::undo/redo stages every allocation before modifying history.
+      // This group is native-only, so there are no engine cell edits to enqueue.
+      auto publish=[&]{if(!_audio->publishLiveRack(prepared))throw std::runtime_error("Prepared rack publication was rejected; history and playback were preserved");};
+      if(redo)_document->redo(publish);else _document->undo(publish);
+      _plugins.swap(nextPlugins);_automation.swap(nextAutomation);_manualParameters.swap(nextManual);++_pluginRevision;
+      destination.push_back(std::move(current));effectSource.pop_back();trimEffectHistory(destination);
+      return YES;
+    }
+    do {
+      if ([self nextHistoryIsPlugin:redo]) { if(![self restoreEffectHistory:redo error:error]) return NO; }
+      else {
+        validatePluginCapacity(_plugins, _document->historyNative(redo).mixer.buses.size());
+        if (redo) [self redoDocument]; else [self undoDocument];
+      }
+    } while(head()>=range.first && head()<=range.second);
+    return YES;
+  } catch (const std::exception &e) { failure(error, e); return NO; }
+}
+- (void)undo { [self historyUndo:NO error:nil]; }
+- (void)redo { [self historyUndo:YES error:nil]; }
 - (NSArray<NSDictionary *> *)mixerMeters {
   NSMutableArray *result = [NSMutableArray array];
   const auto levels = _audio->mixerMeters(); const auto &buses = _document->native().mixer.buses;
@@ -1180,7 +1633,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     auto &m = *s.Patterns[0].GetpModCommand(0, 0);
     m.note = uint8_t(std::clamp(note, NSInteger(1), NSInteger(120))); m.instr = 1;
     s.Patterns[0].GetpModCommand(16, 0)->note = NOTE_NOTECUT;
-    _audio->play(preview.snapshotData()); _isolatedSamplePreview=YES;
+    _audio->play(preview.snapshotData(),0,false,{},0,nullptr,{},true); _isolatedSamplePreview=YES; _isolatedPreviewSample=sample;
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);
@@ -1232,18 +1685,47 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     return nil;
   }
 }
+// Live topology edits preserve authoritative vendor instances. Parameter/preset
+// replacement is a different operation and must not silently discard editor state.
+- (std::unique_ptr<AudioDevice::LiveRackPlan>)prepareLivePlugins:(const std::vector<PluginState> &)states
+              automation:(const std::vector<ParameterChange> &)automation native:(const NativeSong &)native {
+  const bool topology=states.size()!=_plugins.size() || !std::equal(states.begin(),states.end(),_plugins.begin(),[](const auto &a,const auto &b){return a.instanceID==b.instanceID;});
+  if(!topology && native.mixer==_document->native().mixer)
+    throw std::runtime_error("Replacing plugin state requires a stopped transport; playback was preserved");
+  // Recorded automation is attached to stable processors. A topology edit may
+  // remap rack indexes or remove targets, but cannot replace a retained timeline.
+  for(const auto &state:states) {
+    const auto old=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==state.instanceID;});
+    if(old==_plugins.end())continue;
+    const auto oldSlot=size_t(old-_plugins.begin()),newSlot=size_t(&state-states.data());
+    std::vector<ParameterChange> a,b;
+    for(auto p:_automation)if(p.slot==oldSlot){p.slot=0;a.push_back(p);}
+    for(auto p:automation)if(p.slot==newSlot){p.slot=0;b.push_back(p);}
+    if(a!=b)throw std::runtime_error("Replacing recorded automation requires a stopped transport; playback was preserved");
+  }
+  return _audio->prepareLiveRack(states,automation,native);
+}
 // Editing an unresolved project must still allow removing missing effects one by one.
 // Keep its graph inactive and all remaining opaque states intact until it can instantiate.
 - (void)restorePluginGraph:(const std::vector<PluginState> &)states
                 automation:(const std::vector<ParameterChange> &)automation {
+  [self restorePluginGraph:states automation:automation native:_document->native()];
+}
+- (void)restorePluginGraph:(const std::vector<PluginState> &)states
+                automation:(const std::vector<ParameterChange> &)automation native:(const NativeSong &)native {
   validatePluginCapacity(states, _document->native().mixer.buses.size());
   auto nextPlugins = states;
   auto nextAutomation = automation;
   std::string issue;
   try {
-    _audio->setPlugins(states, automation);
+    if (const auto location = [self rackLocationIssue:states]; !location.empty())
+      throw std::runtime_error(location);
+    if(_audio->active()) {
+      auto prepared=[self prepareLivePlugins:states automation:automation native:native];
+      if(!_audio->publishLiveRack(prepared))throw std::runtime_error("Prepared rack publication was rejected; playback was preserved");
+    } else _audio->setPlugins(states, automation);
   } catch (const std::exception &e) {
-    if (_pluginError.empty())
+    if (_pluginError.empty() || _audio->active())
       throw;
     issue = e.what();
     _audio->setPlugins({});
@@ -1255,12 +1737,30 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (void)applyPluginGraph:(const std::vector<PluginState> &)states
               automation:(const std::vector<ParameterChange> &)automation {
-  EffectSnapshot before{_plugins, _automation};
+  [self applyPluginGraph:states automation:automation native:_document->native()];
+}
+- (void)applyPluginGraph:(const std::vector<PluginState> &)states
+              automation:(const std::vector<ParameterChange> &)automation native:(const NativeSong &)native {
+  [self synchronizeHistory];
+  EffectSnapshot before{_plugins, _automation, _manualParameters};
   _effectUndo.reserve(_effectUndo.size() + 1);
-  [self restorePluginGraph:states automation:automation];
+  [self restorePluginGraph:states automation:automation native:native];
+  before.sequence = _document->externalHistoryEdit();
+  _knownHistorySequence = before.sequence; _parameterGestureSequence = 0;
   _effectUndo.push_back(std::move(before));
   _effectRedo.clear();
   trimEffectHistory(_effectUndo);
+}
+// A custom interface edit has already changed the host catalogue when harvested.
+// Its previous manual value is the queued override or the saved opaque baseline.
+- (float)manualValueForHistory:(uint32_t)slot identifier:(uint32_t)identifier alreadyApplied:(BOOL)alreadyApplied {
+  for(const auto &point:_manualParameters)if(point.slot==slot&&point.id==identifier)return point.value;
+  if(!alreadyApplied)for(const auto &parameter:_audio->pluginParameters(slot))
+    if(parameter.id==identifier&&parameter.manualValue)return float(*parameter.manualValue);
+  if(slot>=_plugins.size())throw std::runtime_error("Historical parameter processor is unavailable");
+  NativePlugin baseline(_plugins[slot],_audio->sampleRate());
+  for(const auto &parameter:baseline.parameters())if(parameter.id==identifier)return parameter.value;
+  throw std::runtime_error("Historical manual parameter value is unavailable");
 }
 - (BOOL)restoreEffectHistory:(BOOL)redo error:(NSError **)error {
   try {
@@ -1268,14 +1768,57 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     auto &destination = redo ? _effectUndo : _effectRedo;
     if (source.empty())
       return YES;
-    [self commitManualParameters];
-    EffectSnapshot current{_plugins, _automation};
+    EffectSnapshot current{_plugins, _automation, _manualParameters, source.back().sequence, source.back().bypassTarget};
     destination.reserve(destination.size() + 1);
+    const auto &saved=source.back();
+    if(_pluginError.empty()&&!saved.bypassTarget.empty()) {
+      const auto old=std::find_if(saved.plugins.begin(),saved.plugins.end(),[&](const auto &p){return p.instanceID==saved.bypassTarget;});
+      const auto target=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==saved.bypassTarget;});
+      if(old==saved.plugins.end()||target==_plugins.end()||!_audio->pluginBypass(size_t(target-_plugins.begin()),old->bypass))
+        throw std::runtime_error("Prepared plugin bypass target is unavailable");
+      target->bypass=old->bypass;++_pluginRevision;
+      destination.push_back(std::move(current));source.pop_back();trimEffectHistory(destination);return YES;
+    }
+    if(_pluginError.empty()&&!saved.parameterValues.empty()) {
+      // Numeric history must not replace a playing processor or lose its LFO,
+      // tail, recorded timeline, custom interface, or autosave-folded baseline.
+      if(saved.automation!=_automation)throw std::runtime_error("Recorded automation changed; retry parameter history after restoring its timeline");
+      std::vector<ParameterChange> changes;auto nextManual=_manualParameters;
+      changes.reserve(saved.parameterValues.size());current.parameterValues.reserve(saved.parameterValues.size());
+      nextManual.reserve(nextManual.size()+saved.parameterValues.size());
+      for(const auto &point:saved.parameterValues) {
+        if(point.slot>=saved.plugins.size())throw std::runtime_error("Historical parameter processor is unavailable");
+        const auto &old=saved.plugins[point.slot];const auto target=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==old.instanceID;});
+        if(target==_plugins.end()||target->descriptor!=old.descriptor||target->bypass!=old.bypass||target->instrument!=old.instrument||target->midiChannel!=old.midiChannel||target->aliases!=old.aliases||target->auxiliaryInputs!=old.auxiliaryInputs||target->auxiliaryOutputs!=old.auxiliaryOutputs)
+          throw std::runtime_error("Historical parameter processor changed; restore its routing before its values");
+        const auto slot=uint32_t(target-_plugins.begin());
+        const auto value=[self manualValueForHistory:slot identifier:point.id alreadyApplied:NO];
+        current.parameterValues.push_back({slot,point.id,value,0});changes.push_back({slot,point.id,point.value,0});
+        const auto previous=std::find_if(nextManual.begin(),nextManual.end(),[&](const auto &p){return p.slot==slot&&p.id==point.id;});
+        if(previous==nextManual.end())nextManual.push_back(changes.back());else previous->value=point.value;
+      }
+      // All allocation and history staging precedes the all-or-nothing queue.
+      if(!_audio->pluginParameterBatch(changes))throw std::runtime_error("Plugin parameter queue is busy; retry history (song and playback preserved)");
+      _manualParameters.swap(nextManual);++_pluginRevision;
+      destination.push_back(std::move(current));source.pop_back();trimEffectHistory(destination);return YES;
+    }
     // Missing effects remain opaque and repairable when restoring history too.
     const auto previousError = _pluginError;
     _pluginError = "Restoring effect history";
     try {
-      [self restorePluginGraph:source.back().plugins automation:source.back().automation];
+      auto states = source.back().plugins;
+      for (size_t slot = 0; slot < states.size(); ++slot) {
+        if (std::none_of(source.back().manual.begin(), source.back().manual.end(), [&](const auto &p) { return p.slot == slot; })) continue;
+        NativePlugin plugin(states[slot], _audio->sampleRate());
+        for (const auto &point : source.back().manual) if (point.slot == slot && !plugin.parameter(point.id, point.value))
+          throw std::runtime_error("Plugin rejected a restored parameter value");
+        auto restored = plugin.state();
+        restored.bypass = states[slot].bypass;
+        restored.instrument = states[slot].instrument;
+        states[slot] = std::move(restored);
+      }
+      [self restorePluginGraph:states automation:source.back().automation];
+      _manualParameters.clear();
     } catch (...) {
       _pluginError = previousError;
       throw;
@@ -1290,25 +1833,86 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   }
 }
 - (BOOL)undoEffectChange:(NSError **)error {
-  return [self restoreEffectHistory:NO error:error];
+  return [self historyUndo:NO error:error];
 }
 - (BOOL)redoEffectChange:(NSError **)error {
-  return [self restoreEffectHistory:YES error:error];
+  return [self historyUndo:YES error:error];
 }
 - (BOOL)addPlugin:(NSDictionary *)item error:(NSError **)error {
+  return [self addPlugin:item target:nil error:error];
+}
+- (BOOL)addPlugin:(NSDictionary *)item target:(NSString *)target error:(NSError **)error {
+  return [self addPlugin:item target:target before:nil position:nil error:error];
+}
+- (BOOL)addPlugin:(NSDictionary *)item target:(NSString *)target before:(NSString *)before position:(NSDictionary *)position error:(NSError **)error {
+  return [self addPlugin:item target:target before:before position:position parent:nil error:error];
+}
+- (BOOL)addPlugin:(NSDictionary *)item target:(NSString *)target before:(NSString *)before position:(NSDictionary *)position parent:(NSString *)parent error:(NSError **)error {
+  return [self addPlugin:item target:target before:before position:position parent:parent detached:NO error:error];
+}
+- (BOOL)addPlugin:(NSDictionary *)item target:(NSString *)target before:(NSString *)before position:(NSDictionary *)position parent:(NSString *)parent detached:(BOOL)detached error:(NSError **)error {
+  NSString *chosen = nil;
+  bool newlyTrusted = false;
   try {
+    if(detached&&(target||before||parent))throw std::invalid_argument("An unconnected effect cannot have an insertion destination");
+    if((before || parent || (position&&!detached)) && !target) throw std::invalid_argument("Insertion needs an effect destination");
     [self commitManualParameters];
     auto d = descriptor(item);
     if (d.format == "VST3")
+    {
+      // The user or an agent chose this bundle explicitly; the isolated scanner
+      // has validated it, so this process may load it.
       runScanner(@[ @"--validate-vst3", @(d.path.c_str()), @(d.classID.c_str()), d.instrument ? @"1" : @"0" ]);
+      chosen = PluginTrust::canonical(pathString(d.path));
+      newlyTrusted = chosen && !PluginTrust::trusted(chosen, nil);
+      if (!chosen || !PluginTrust::trust(chosen))
+        throw std::runtime_error("The VST3 bundle no longer exists");
+    }
     else if (d.format == "AU")
       runScanner(
           @[ @"--validate", [@(d.type) stringValue], [@(d.subtype) stringValue], [@(d.manufacturer) stringValue] ]);
-    auto states = (_pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
+    auto states = (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
     states.push_back({d, {}, false, 0, NSUUID.UUID.UUIDString.UTF8String});
-    [self applyPluginGraph:states automation:_automation];
+    if (target || detached) {
+      if(d.instrument || d.type==kAudioUnitType_MusicDevice) throw std::invalid_argument("Instrument plugins use instrument assignments");
+      auto next=_document->native();
+      if(detached)next.mixer.detached.push_back(states.back().instanceID);
+      else {
+      next.ensureMixer();
+      const auto id=decodeNativeID(target);
+      auto bus=std::find_if(next.mixer.buses.begin(),next.mixer.buses.end(),[&](const auto &b){return b.id==id;});
+      if(bus==next.mixer.buses.end())throw std::invalid_argument("Effect destination no longer exists");
+      auto point=before ? std::find(bus->inserts.begin(),bus->inserts.end(),std::string(before.UTF8String)) : bus->inserts.end();
+      if(before && point==bus->inserts.end()) throw std::invalid_argument("Insertion point is not on the destination bus");
+      bus->inserts.insert(point,states.back().instanceID);
+      }
+      if(parent) {
+        const auto groupID=decodeNativeID(parent);
+        auto group=std::find_if(next.signal.groups.begin(),next.signal.groups.end(),[&](const auto &g){return g.id==groupID;});
+        if(group==next.signal.groups.end())throw std::invalid_argument("Song processing group no longer exists");
+        group->nodes.push_back("plugin:"+states.back().instanceID);
+      }
+      if(position) {
+        const double x=[position[@"x"] doubleValue],y=[position[@"y"] doubleValue];
+        if(!std::isfinite(x)||!std::isfinite(y)||x<0||y<0||x>100000||y>100000)throw std::invalid_argument("Invalid graph position");
+        next.signal.layout["plugin:"+states.back().instanceID]={x,y};
+      }
+      next.validate(_document->song());validatePluginCapacity(states,next.mixer.buses.size());
+      _historyGroups.reserve(_historyGroups.size()+1);
+      const auto first=_document->historySequence()+1;
+      // Document::annotate rolls back its prepared snapshot if hosting fails.
+      _document->annotate([&](NativeSong &native){native=next;},[&]{[self applyPluginGraph:states automation:_automation native:next];});
+      _historyGroups.emplace_back(first,_document->historySequence());
+      if(_historyGroups.size()>512)_historyGroups.erase(_historyGroups.begin());
+      _knownHistorySequence=_document->historySequence();
+    } else [self applyPluginGraph:states automation:_automation];
+    // Only a plugin that was really added is remembered for later launches.
+    if (chosen)
+      PluginTrust::persist(chosen);
     return YES;
   } catch (const std::exception &e) {
+    if (newlyTrusted)
+      PluginTrust::revoke(chosen);
     failure(error, e);
     return NO;
   }
@@ -1321,7 +1925,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     if (instrument < 0 || instrument > _document->song().GetNumInstruments())
       throw std::runtime_error("Create or select an existing tracker instrument");
     [self commitManualParameters];
-    auto states = (_pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
+    auto states = (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
     // Legacy single-assignment control replaces the primary entry, retaining
     // other aliases. Explicit unassignment clears the complete list.
     if (instrument) {
@@ -1363,20 +1967,37 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   return count;
 }
 - (BOOL)removePlugin:(NSInteger)slot error:(NSError **)error {
+  if(slot<0 || slot>=_plugins.size()) {failure(error,std::runtime_error("Select an effect"));return NO;}
+  return [self removePlugins:@[@(_plugins[slot].instanceID.c_str())] error:error];
+}
+- (BOOL)removePlugins:(NSArray<NSString *> *)identifiers error:(NSError **)error {
   try {
+    std::set<std::string> removed;
+    for(NSString *raw in identifiers) {
+      const auto id=std::string(raw.UTF8String);
+      if(!removed.insert(id).second || std::none_of(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==id;}))
+        throw std::invalid_argument("Select distinct existing plugins");
+    }
+    if(removed.empty())throw std::invalid_argument("Select at least one plugin");
     [self commitManualParameters];
-    if (slot < 0 || slot >= _plugins.size())
-      throw std::runtime_error("Select an effect");
-    auto states = (_pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
-    states.erase(states.begin() + slot);
+    auto states = (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
+    auto next=_document->native();
+    for(const auto &id:removed)next.removePluginRoutes(id);
+    std::vector<size_t> slots(states.size(),SIZE_MAX);size_t index=0;
+    for(size_t i=0;i<states.size();++i)if(!removed.contains(states[i].instanceID))slots[i]=index++;
+    std::erase_if(states,[&](const auto &p){return removed.contains(p.instanceID);});
     auto automation = _automation;
-    automation.erase(
-        std::remove_if(automation.begin(), automation.end(), [&](const auto &point) { return point.slot == slot; }),
-        automation.end());
-    for (auto &point : automation)
-      if (point.slot > slot)
-        --point.slot;
-    [self applyPluginGraph:states automation:automation];
+    std::erase_if(automation,[&](const auto &point){return point.slot>=slots.size() || slots[point.slot]==SIZE_MAX;});
+    for(auto &point:automation)point.slot=uint32_t(slots[point.slot]);
+    if(next!=_document->native()) {
+      next.validate(_document->song());
+      _historyGroups.reserve(_historyGroups.size()+1);
+      const auto first=_document->historySequence()+1;
+      _document->annotate([&](NativeSong &native){native=next;},[&]{[self applyPluginGraph:states automation:automation native:next];});
+      _historyGroups.emplace_back(first,_document->historySequence());
+      if(_historyGroups.size()>512)_historyGroups.erase(_historyGroups.begin());
+      _knownHistorySequence=_document->historySequence();
+    } else [self applyPluginGraph:states automation:automation];
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);
@@ -1389,14 +2010,17 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     auto target = slot + direction;
     if (slot < 0 || target < 0 || slot >= _plugins.size() || target >= _plugins.size())
       return YES;
-    auto states = (_pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
-    std::swap(states[slot], states[target]);
+    if (target == slot) return YES;
+    auto states = (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
+    auto moved = std::move(states[slot]);
+    states.erase(states.begin() + slot);
+    states.insert(states.begin() + target, std::move(moved));
     auto automation = _automation;
     for (auto &point : automation) {
       if (point.slot == slot)
         point.slot = uint32_t(target);
-      else if (point.slot == target)
-        point.slot = uint32_t(slot);
+      else if (target > slot && point.slot > slot && point.slot <= target) --point.slot;
+      else if (target < slot && point.slot >= target && point.slot < slot) ++point.slot;
     }
     [self applyPluginGraph:states automation:automation];
     return YES;
@@ -1407,12 +2031,15 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)bypassPlugin:(NSInteger)slot bypass:(BOOL)bypass error:(NSError **)error {
   try {
-    [self commitManualParameters];
     if (slot < 0 || slot >= _plugins.size())
       throw std::runtime_error("Select an effect");
-    auto states = (_pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
-    states[slot].bypass = bypass;
-    [self applyPluginGraph:states automation:_automation];
+    if(_plugins[slot].bypass==bool(bypass))return YES;
+    if(!_pluginError.empty()) {auto states=_plugins;states[slot].bypass=bypass;[self applyPluginGraph:states automation:_automation];return YES;}
+    [self synchronizeHistory];EffectSnapshot before{_plugins,_automation,_manualParameters};before.bypassTarget=_plugins[slot].instanceID;_effectUndo.reserve(_effectUndo.size()+1);
+    if(!_audio->pluginBypass(size_t(slot),bypass))throw std::runtime_error("Prepared plugin bypass target is unavailable");
+    _plugins[slot].bypass=bypass;++_pluginRevision;
+    before.sequence=_document->externalHistoryEdit();_knownHistorySequence=before.sequence;_parameterGestureSequence=0;
+    _effectUndo.push_back(std::move(before));_effectRedo.clear();trimEffectHistory(_effectUndo);
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);
@@ -1441,6 +2068,8 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
         @"min" : @(p.min),
         @"max" : @(p.max),
         @"value" : @(p.value),
+        @"manualValue" : @(p.manualValue.value_or(p.value)),
+        @"effectiveValue" : @(p.value), @"valueRole": @"effective",
         @"unit" : @(p.unit), @"unitLabel": @(p.unitLabel.c_str()), @"choices": choices,
         @"displayScale": p.logarithmic ? @"logarithmic" : @"linear", @"step": @(p.step), @"canSlide": @(p.continuous), @"writable": @(p.writable)
       }];
@@ -1510,6 +2139,19 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       throw std::runtime_error("Remove pattern commands for this parameter before recording absolute automation.");
     if (recording && _automation.size() >= 100000)
       throw std::runtime_error("Automation reached 100,000 points.");
+    [self synchronizeHistory];
+    const auto now = std::chrono::steady_clock::now();
+    const bool continued = _parameterGestureSequence == _document->historySequence() && _parameterGestureSequence &&
+      _parameterGestureSlot == slot && _parameterGestureID == identifier &&
+      (_parameterGesture || (alreadyApplied && now - _lastParameterEdit < std::chrono::milliseconds(400)));
+    std::optional<EffectSnapshot> before;
+    if (!continued) {
+      before.emplace(EffectSnapshot{_plugins, _automation, _manualParameters});
+      if(!recording)before->parameterValues.push_back({uint32_t(slot),uint32_t(identifier),[self manualValueForHistory:uint32_t(slot) identifier:uint32_t(identifier) alreadyApplied:alreadyApplied],0});
+      _effectUndo.reserve(_effectUndo.size() + 1);
+    }
+    if (recording) _automation.reserve(_automation.size() + 1);
+    else _manualParameters.reserve(_manualParameters.size() + 1);
     if (!alreadyApplied && !_audio->pluginParameter(uint32_t(slot), uint32_t(identifier), float(value)))
       throw std::runtime_error("The plugin parameter queue is full or unavailable.");
     if (recording) {
@@ -1525,6 +2167,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       else
         found->value = float(value);
     }
+    if (before) {
+      before->sequence = _document->externalHistoryEdit();
+      _knownHistorySequence = _parameterGestureSequence = before->sequence;
+      _effectUndo.push_back(std::move(*before)); _effectRedo.clear(); trimEffectHistory(_effectUndo);
+    }
+    _parameterGestureSlot = slot; _parameterGestureID = identifier; _lastParameterEdit = now;
     ++_pluginRevision;
     [self rememberParameterTouch:size_t(slot) identifier:uint32_t(identifier) source:alreadyApplied ? @"plugin-editor" : @"native-control"];
     return YES;
@@ -1616,7 +2264,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     if(_isolatedSamplePreview) { _audio->stop(); _isolatedSamplePreview=NO; }
     if (!_audio->active())
       _audio->play(_document->playbackData(), 0, true, _document->sourcePath(),
-                   _document->song().Order.GetCurrentSequenceIndex());
+                   _document->song().Order.GetCurrentSequenceIndex(), &_document->native());
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);
@@ -1624,16 +2272,24 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   }
 }
 - (BOOL)note:(NSInteger)note instrument:(NSInteger)instrument velocity:(NSInteger)velocity on:(BOOL)on {
+  return [self note:note instrument:instrument velocity:velocity on:on channel:-1];
+}
+- (BOOL)note:(NSInteger)note instrument:(NSInteger)instrument velocity:(NSInteger)velocity on:(BOOL)on channel:(NSInteger)channel {
+  if(channel < -1 || channel >= _document->song().GetNumChannels()) return NO;
   if (!_audio->active() || _isolatedSamplePreview)
     return NO;
   return _audio->renderer()->preview({uint8_t(std::clamp(note, NSInteger(1), NSInteger(120))),
                                       uint16_t(std::clamp(instrument, NSInteger(0), NSInteger(UINT16_MAX))),
-                                      uint8_t(std::clamp(velocity, NSInteger(0), NSInteger(127))), bool(on)});
+                                      uint8_t(std::clamp(velocity, NSInteger(0), NSInteger(127))), bool(on), 0, uint16_t(channel)});
 }
 - (BOOL)sampleNote:(NSInteger)note sample:(NSInteger)sample velocity:(NSInteger)velocity on:(BOOL)on {
+  return [self sampleNote:note sample:sample velocity:velocity on:on channel:-1];
+}
+- (BOOL)sampleNote:(NSInteger)note sample:(NSInteger)sample velocity:(NSInteger)velocity on:(BOOL)on channel:(NSInteger)channel {
+  if(channel < -1 || channel >= _document->song().GetNumChannels()) return NO;
   if (!_audio->active() || _isolatedSamplePreview || sample < 1 || sample > _document->song().GetNumSamples()) return NO;
   return _audio->renderer()->preview({uint8_t(std::clamp(note, NSInteger(1), NSInteger(120))), 0,
-    uint8_t(std::clamp(velocity, NSInteger(0), NSInteger(127))), bool(on), uint16_t(sample)});
+    uint8_t(std::clamp(velocity, NSInteger(0), NSInteger(127))), bool(on), uint16_t(sample), uint16_t(channel)});
 }
 - (void)panic {
   if (_audio->renderer())
@@ -1663,6 +2319,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
         Document validation(byteVector(module));
         native->validate(validation.song());
       }
+      PluginPathHints hints;
+      if (const auto missing = resolvePluginLocations(states, &*native, PluginInventory().cached(), hints); !missing.empty())
+        throw std::runtime_error(missing);
       if (root[@"sequence"])
         sequence = uint32_t(unsignedInteger(root[@"sequence"], UINT8_MAX, "Invalid sequence selection"));
     }

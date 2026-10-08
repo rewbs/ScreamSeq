@@ -232,11 +232,90 @@ namespace Tracker {
 NativeSong prepareEffectTransform(const Document &doc,const std::vector<PatternRegion> &regions,const PatternTransform &t) {
   NativeSong next=doc.native();
   const bool move=t.operation=="clear"||t.operation=="reverse"||t.operation=="rotate"||t.operation=="expand"||t.operation=="shrink"||t.operation=="insertRows"||t.operation=="deleteRows";
-  if(!move || !(t.fields&PatternEffect)) return next;
+  // FX columns follow the effect field and precise notes the note field. Graph
+  // lanes belong to a whole row, so they follow only a transform of every field.
+  // Pattern-wide data (automation curves, graph commands of buses that are not
+  // selected columns) follows when such a transform also spans every channel.
+  // Clearing cells is the ordinary Delete key: it never edits pattern-wide curves.
+  const bool effects=t.fields&PatternEffect,notes=t.fields&PatternNote,whole=t.fields==PatternAll;
+  if(!move || (!effects&&!notes)) return next;
+  const int amount=int(t.amount);
+  // Maps a position inside the region, keeping its offset within the row, as
+  // the cells move. Returns false when the event is removed.
+  auto relocate=[&](const PatternRegion &region,uint32_t &position,const char *loss) {
+    if(t.operation=="clear")return false;
+    const int row=int(position/performanceUnitsPerRow)-region.firstRow;int target=row;
+    if(t.operation=="reverse")target=region.rows-1-row;
+    else if(t.operation=="rotate")target=(row+amount%region.rows+region.rows)%region.rows;
+    else if(t.operation=="insertRows")target+=amount;
+    else if(t.operation=="deleteRows")target-=amount;
+    else if(t.operation=="expand")target*=amount;
+    else if(t.operation=="shrink"){if(row%amount)target=-1;else target/=amount;}
+    if(target<0||target>=region.rows){if(!t.allowDataLoss)throw std::invalid_argument(loss);return false;}
+    position=uint32_t(region.firstRow+target)*performanceUnitsPerRow+position%performanceUnitsPerRow;return true;
+  };
+  // Curves are continuous: expand and shrink scale their time inside the region.
+  auto curve=[&](const PatternRegion &region,std::vector<AutomationPoint> points,bool linked) {
+    const int64_t start=int64_t(region.firstRow)*256,length=int64_t(region.rows)*256;
+    std::vector<AutomationPoint> result;result.reserve(points.size());bool changed=false;
+    auto lose=[&]{if(!t.allowDataLoss)throw std::invalid_argument("This row edit would discard automation points; enlarge the selection or allow data loss explicitly");changed=true;};
+    for(auto point:points) {
+      const int64_t offset=int64_t(point.position)-start;
+      if(offset<0||offset>=length){result.push_back(std::move(point));continue;}
+      const int64_t row=offset/256,fraction=offset%256;int64_t target=offset;
+      if(t.operation=="reverse")target=(region.rows-1-row)*256+fraction;
+      else if(t.operation=="rotate")target=((row+amount%region.rows+region.rows)%region.rows)*256+fraction;
+      else if(t.operation=="insertRows")target+=int64_t(amount)*256;
+      else if(t.operation=="deleteRows")target-=int64_t(amount)*256;
+      else if(t.operation=="expand")target*=amount;
+      else if(t.operation=="shrink")target/=amount;
+      if(target<0||target>=length){lose();continue;}
+      changed=changed||target!=offset;point.position=uint32_t(start+target);result.push_back(std::move(point));
+    }
+    if(!changed)return points;
+    if(linked) {
+      // A linked envelope is its template fitted to the pattern; it cannot move.
+      // Reverse and rotate lose nothing and have no loss option, so they skip it.
+      if(!t.allowDataLoss&&t.operation!="reverse"&&t.operation!="rotate")throw std::invalid_argument("This row edit would move a linked envelope; make it independent in the Envelope Bank or allow data loss explicitly");
+      return points;
+    }
+    std::stable_sort(result.begin(),result.end(),[](const auto &a,const auto &b){return a.position<b.position;});
+    for(size_t i=1;i<result.size();)if(result[i].position==result[i-1].position){lose();result.erase(result.begin()+i);}else ++i;
+    return result;
+  };
   for(const auto &region:regions) {
     const auto pattern=next.patterns.at(region.pattern).id;
     std::set<uint64_t> tracks;
     for(uint16_t ch=region.firstChannel;ch<region.firstChannel+region.channels;++ch)tracks.insert(next.tracks.at(ch).id);
+    const auto inside=[&](uint32_t position){const auto row=position/performanceUnitsPerRow;return row>=region.firstRow&&row<uint32_t(region.firstRow)+region.rows;};
+    if(notes) {
+      std::vector<PreciseNote> moved;moved.reserve(next.preciseNotes.size());
+      for(auto note:next.preciseNotes) {
+        if(note.pattern!=pattern||!tracks.contains(note.track)||!inside(note.position)||
+           relocate(region,note.position,"This row edit would discard precise notes; enlarge the selection or allow data loss explicitly"))moved.push_back(note);
+      }
+      next.preciseNotes=std::move(moved);
+    }
+    if(whole) {
+      const bool everyChannel=region.firstChannel==0&&region.channels==doc.song().GetNumChannels();
+      std::vector<SignalCommand> moved;moved.reserve(next.signal.commands.size());
+      for(auto command:next.signal.commands) {
+        if(command.pattern!=pattern||!(everyChannel||tracks.contains(command.target))||!inside(command.position)||
+           relocate(region,command.position,"This row edit would discard graph commands; enlarge the selection or allow data loss explicitly"))moved.push_back(command);
+      }
+      next.signal.commands=std::move(moved);
+      if(everyChannel&&t.operation!="clear") {
+        auto linked=[&](EnvelopeTargetKind kind,uint64_t owner,uint64_t linkPattern){return std::any_of(next.envelopeLinks.begin(),next.envelopeLinks.end(),[&](const auto &l){return l.target.kind==kind&&l.target.owner==owner&&l.target.pattern==linkPattern;});};
+        for(auto &lane:next.automation)if(lane.pattern==pattern)lane.points=curve(region,std::move(lane.points),linked(EnvelopeTargetKind::Parameter,lane.id,0));
+        // A lane or graph curve without points does not exist.
+        std::erase_if(next.automation,[](const auto &lane){return lane.points.empty();});
+        for(auto &definition:next.signal.library)for(auto &node:definition.nodes) {
+          for(auto &lane:node.envelopes)if(lane.pattern==pattern)lane.points=curve(region,std::move(lane.points),linked(EnvelopeTargetKind::Graph,node.id,pattern));
+          std::erase_if(node.envelopes,[](const auto &lane){return lane.points.empty();});
+        }
+      }
+    }
+    if(!effects)continue;
     std::vector<PatternCommand> commands;
     commands.reserve(next.performance.commands.size());
     for(auto c:next.performance.commands) {
@@ -262,5 +341,35 @@ NativeSong prepareEffectTransform(const Document &doc,const std::vector<PatternR
     next.performance.commands=std::move(commands);
   }
   next.validate(doc.song());return next;
+}
+}
+
+namespace Tracker {
+void preparePreciseNotePaste(const Document &doc,NativeSong &next,const PatternRegion &r,const std::vector<ClipboardNote> &source,uint8_t fields,const std::string &mode,bool clip) {
+  require(fields==PatternAll,"Precise-note clipboard data requires all fields");
+  require(mode=="overwrite"||mode=="mix"||mode=="merge","Unknown paste mode");
+  const auto pattern=next.patterns.at(r.pattern).id;
+  const auto before=next.preciseNotes;
+  std::set<uint64_t> tracks;
+  for(unsigned ch=r.firstChannel;ch<std::min(unsigned(r.firstChannel)+r.channels,unsigned(doc.song().GetNumChannels()));++ch)tracks.insert(next.tracks.at(ch).id);
+  auto inside=[&](const PreciseNote &n){return n.pattern==pattern&&tracks.contains(n.track)&&n.position/performanceUnitsPerRow>=r.firstRow&&n.position/performanceUnitsPerRow<unsigned(r.firstRow)+r.rows;};
+  if(mode=="overwrite")std::erase_if(next.preciseNotes,inside);
+  std::set<std::tuple<uint16_t,uint32_t,bool>> occupied;
+  for(const auto &input:source) {
+    auto n=input.event;
+    require(input.channel<r.channels&&n.position<uint64_t(r.rows)*performanceUnitsPerRow,"Precise note outside clipboard region");
+    require(occupied.emplace(input.channel,n.position,n.note<128).second,"Duplicate clipboard precise note");
+    const auto ch=unsigned(r.firstChannel)+input.channel;
+    const auto position=uint64_t(r.firstRow)*performanceUnitsPerRow+n.position;
+    if(ch>=doc.song().GetNumChannels()||position>=uint64_t(doc.song().Patterns[r.pattern].GetNumRows())*performanceUnitsPerRow){require(clip,"Precise note outside destination pattern");continue;}
+    n.pattern=pattern;n.track=next.tracks.at(ch).id;n.position=uint32_t(position);
+    auto same=[&](const PreciseNote &e){return e.pattern==n.pattern&&e.track==n.track&&e.position==n.position&&(e.note<128)==(n.note<128);};
+    if(mode=="mix"&&(doc.cell(r.pattern,uint16_t(position/performanceUnitsPerRow),uint16_t(ch)).note||std::any_of(next.preciseNotes.begin(),next.preciseNotes.end(),same)))continue;
+    std::erase_if(next.preciseNotes,same);next.preciseNotes.push_back(n);
+  }
+  std::vector<PreciseNote> replacement;
+  for(const auto &n:next.preciseNotes)if(n.pattern==pattern)replacement.push_back(n);
+  next.preciseNotes=before;replacePreciseNotesForPattern(next.preciseNotes,pattern,std::move(replacement));
+  next.validate(doc.song());
 }
 }

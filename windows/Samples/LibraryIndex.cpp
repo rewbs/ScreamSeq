@@ -122,17 +122,26 @@ std::shared_ptr<const LibraryIndex> LibraryIndex::scan(const std::vector<std::st
     if(!std::filesystem::is_directory(base,error)){warn("Folder is unavailable: "+root);continue;}
     std::filesystem::recursive_directory_iterator iterator(base,std::filesystem::directory_options::skip_permission_denied,error),end;
     if(error){warn("Cannot read "+root);continue;}
-    while(iterator!=end){cancel();const auto file=iterator->path();WIN32_FILE_ATTRIBUTE_DATA info{};const bool available=GetFileAttributesExW(file.c_str(),GetFileExInfoStandard,&info)!=0;const auto name=file.filename().native();
+    while(iterator!=end){cancel();
+      // One name that cannot be represented (unpaired surrogate, over-long
+      // path) is skipped with a warning; it must not abort the whole scan.
+      try{
+      const auto file=iterator->path();WIN32_FILE_ATTRIBUTE_DATA info{};const bool available=GetFileAttributesExW(file.c_str(),GetFileExInfoStandard,&info)!=0;const auto name=file.filename().native();
       const auto extension=fold(pathText(file.extension()));const bool package=extension==".vst3"||extension==".app"||extension==".component";
       const bool skip=!available||name==L"__MACOSX"||name.starts_with(L'.')||package||(info.dwFileAttributes&(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM|FILE_ATTRIBUTE_REPARSE_POINT));
       if(skip)iterator.disable_recursion_pending();
       else if(!(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_DEVICE))&&extension.size()>1&&std::binary_search(extensions().begin(),extensions().end(),extension.substr(1))){
-        const auto filePath=pathText(file);if(seen.insert(pathKey(filePath)).second){LibraryEntry entry;entry.path=filePath;entry.root=root;entry.name=utf8(name);entry.folders.push_back(rootLabel(base));
-          for(const auto &folder:file.lexically_relative(base).parent_path())entry.folders.push_back(pathText(folder));
+        const auto filePath=pathText(file);const auto key=pathKey(filePath);
+        // Convert every field before recording anything about this file.
+        LibraryEntry entry;entry.path=filePath;entry.root=root;entry.name=utf8(name);entry.folders.push_back(rootLabel(base));
+        for(const auto &folder:file.lexically_relative(base).parent_path()){entry.folders.push_back(pathText(folder));(void)fold(entry.folders.back());}
+        (void)fold(entry.name);
+        if(seen.insert(key).second){
           entry.bytes=(uint64_t(info.nFileSizeHigh)<<32)|info.nFileSizeLow;ULARGE_INTEGER time{};time.LowPart=info.ftLastWriteTime.dwLowDateTime;time.HighPart=info.ftLastWriteTime.dwHighDateTime;entry.modified=(double(time.QuadPart)-116444736000000000.)/10000000.;entries.push_back(std::move(entry));
-          need(entries.size()<maximumFiles,"Library exceeds 250,000 files. Choose smaller sample folders.");
         }
       }
+      }catch(const std::invalid_argument &){warn("Skipped an entry whose name or path cannot be indexed in "+root);iterator.disable_recursion_pending();}
+      need(entries.size()<maximumFiles,"Library exceeds 250,000 files. Choose smaller sample folders.");
       iterator.increment(error);if(error){warn("Cannot read part of "+root);error.clear();}
     }
   }

@@ -13,7 +13,19 @@ final class WaveformView: NSView {
     if frames != oldValue { cancelStroke(); clampViewport() }
     needsDisplay = true
   } }
-  var loopStart = 0, loopEnd = 0
+  var loopStart = 0, loopEnd = 0, sustainStart = 0, sustainEnd = 0
+  enum LoopMarker: Int, CaseIterable {case start, end, sustainStart, sustainEnd}
+  var selectedLoopMarker: LoopMarker?, draggingLoop = false
+  var onLoopMarker: ((LoopMarker, Int, Bool) -> Void)?
+  func markerFrame(_ marker:LoopMarker)->Int { [loopStart,loopEnd,sustainStart,sustainEnd][marker.rawValue] }
+  var loopMarkers:[LoopMarker] {LoopMarker.allCases.filter{$0.rawValue<2 ? loopEnd>loopStart : sustainEnd>sustainStart}}
+  func markerLocation(_ marker:LoopMarker)->NSPoint {NSPoint(x:max(5,min(bounds.width-5,x(Double(markerFrame(marker))))),y:marker.rawValue<2 ? bounds.height-7 : 7)}
+  func moveLoopMarker(_ marker:LoopMarker,to frame:Int,finished:Bool) {
+    let start=marker.rawValue<2 ? loopStart:sustainStart,end=marker.rawValue<2 ? loopEnd:sustainEnd
+    let value=marker.rawValue%2==0 ? max(0,min(end-1,frame)):max(start+1,min(frames,frame))
+    switch marker {case .start:loopStart=value;case .end:loopEnd=value;case .sustainStart:sustainStart=value;case .sustainEnd:sustainEnd=value}
+    needsDisplay=true;onLoopMarker?(marker,value,finished)
+  }
   private(set) var viewport: Range<Int>?
   var visibleRange: Range<Int> { viewport ?? 0..<max(0, frames) }
   var selection: ClosedRange<Int>? { didSet { needsDisplay = true; onSelection?(selection) } }
@@ -137,11 +149,15 @@ final class WaveformView: NSView {
         Theme.gold.setFill();NSBezierPath(ovalIn:NSRect(x:point.x-2,y:point.y-2,width:4,height:4)).fill()
       };path.stroke()
     }
-    if loopEnd>loopStart && frames>0 {
-      Theme.gold.setStroke()
-      for frame in [loopStart,loopEnd] where frame>=visibleRange.lowerBound && frame<=visibleRange.upperBound {
-        let path=NSBezierPath(),position=x(Double(frame));path.move(to:.init(x:position,y:0));path.line(to:.init(x:position,y:bounds.height));path.stroke()
-      }
+    for marker in loopMarkers where markerFrame(marker)>=visibleRange.lowerBound && markerFrame(marker)<=visibleRange.upperBound {
+      let color=marker.rawValue<2 ? Theme.gold:Theme.accent,location=markerLocation(marker)
+      color.setStroke();color.setFill()
+      let line=NSBezierPath();line.move(to:.init(x:location.x,y:0));line.line(to:.init(x:location.x,y:bounds.height));line.stroke()
+      let handle=NSBezierPath(roundedRect:NSRect(x:location.x-5,y:location.y-6,width:10,height:12),xRadius:2,yRadius:2)
+      handle.fill();if selectedLoopMarker==marker {Theme.text.setStroke();handle.lineWidth=2;handle.stroke()}
+      let label=["L start","L end","S start","S end"][marker.rawValue]
+      let width=(label as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:10)]).width
+      label.draw(at:.init(x:max(12,min(bounds.width-width-12,location.x+8)),y:marker.rawValue<2 ? bounds.height-16:4),withAttributes:[.font:NSFont.systemFont(ofSize:10),.foregroundColor:color])
     }
     Theme.text.withAlphaComponent(0.9).setFill()
     for frame in playbackFrames where frame>=Double(visibleRange.lowerBound) && frame<=Double(visibleRange.upperBound) {
@@ -152,14 +168,19 @@ final class WaveformView: NSView {
   }
   override func mouseDown(with event:NSEvent) {
     window?.makeFirstResponder(self)
+    let point=convert(event.locationInWindow,from:nil)
+    selectedLoopMarker=loopMarkers.filter{markerFrame($0)>=visibleRange.lowerBound && markerFrame($0)<=visibleRange.upperBound}.first{abs(markerLocation($0).x-point.x)<=9 && abs(markerLocation($0).y-point.y)<=13}
+    if selectedLoopMarker != nil {draggingLoop=true;needsDisplay=true;return}
     if drawing { _=beginStroke(samplePoint(event)); return }
     anchor=frameAt(x:convert(event.locationInWindow,from:nil).x); selection=anchor...anchor
   }
   override func mouseDragged(with event:NSEvent) {
+    if draggingLoop,let marker=selectedLoopMarker {moveLoopMarker(marker,to:frameAt(x:convert(event.locationInWindow,from:nil).x),finished:false);return}
     if drawing { extendStroke(samplePoint(event));return }
     let end=frameAt(x:convert(event.locationInWindow,from:nil).x);selection=min(anchor,end)...max(anchor,end)
   }
   override func mouseUp(with event:NSEvent) {
+    if draggingLoop,let marker=selectedLoopMarker {draggingLoop=false;moveLoopMarker(marker,to:frameAt(x:convert(event.locationInWindow,from:nil).x),finished:true);return}
     if drawing { extendStroke(samplePoint(event));finishStroke() }
     else { onFinishSelection?() }
   }
@@ -177,16 +198,24 @@ final class WaveformView: NSView {
   @objc func cut(_ sender:Any?){onClipboard?("cut")}
   @objc func paste(_ sender:Any?){onClipboard?("paste")}
   override func keyDown(with event:NSEvent) {
-    if event.keyCode==53 { cancelStroke() }
+    if event.keyCode==48,!loopMarkers.isEmpty {
+      let list=loopMarkers,step=event.modifierFlags.contains(.shift) ? list.count-1:1
+      selectedLoopMarker=list[((selectedLoopMarker.flatMap{list.firstIndex(of:$0)} ?? (list.count-1))+step)%list.count];needsDisplay=true;return
+    }
+    if let marker=selectedLoopMarker,[123,124].contains(event.keyCode) {
+      moveLoopMarker(marker,to:markerFrame(marker)+(event.keyCode==123 ? -1:1)*(event.modifierFlags.contains(.shift) ? 64:1),finished:true);return
+    }
+    if event.keyCode==53 { cancelStroke();selectedLoopMarker=nil;needsDisplay=true }
     else if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers=="a" { selection=0...frames }
     else if event.modifierFlags.contains(.command),let key=event.charactersIgnoringModifiers,let action=["c":"copy","x":"cut","v":"paste"][key]{onClipboard?(action)}
     else if event.keyCode==51 || event.keyCode==117 { onClipboard?("delete") }
     else { super.keyDown(with:event) }
   }
   override func accessibilityValue()->Any? {
-    let region="Visible frames \(visibleRange.lowerBound) to \(visibleRange.upperBound)"
+    let marker=selectedLoopMarker.map{". Selected loop marker \($0) at frame \(markerFrame($0))"} ?? ""
+    let region="Visible frames \(visibleRange.lowerBound) to \(visibleRange.upperBound)\(marker)"
     if let selection { return "\(region). Selected frames \(selection.lowerBound) to \(selection.upperBound)" };return region
   }
-  override init(frame:NSRect){super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.image);setAccessibilityLabel("Sample waveform");setAccessibilityHelp("Drag to select audio. Zoom to individual frames to draw. Escape cancels a stroke. Command A selects all.")}
+  override init(frame:NSRect){super.init(frame:frame);setAccessibilityElement(true);setAccessibilityRole(.image);setAccessibilityLabel("Sample waveform");setAccessibilityHelp("Drag gold normal-loop or green sustain-loop handles to edit immediately. Tab selects handles; arrows move one frame, Shift-arrows move 64. Drag elsewhere to select audio. Zoom to draw.")}
   required init?(coder:NSCoder){fatalError()}
 }

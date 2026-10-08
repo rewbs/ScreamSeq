@@ -24,12 +24,39 @@ extension AppController {
     patternGraphHost.lanes.onEdit = {[weak self] target,column,row in self?.openGraphCommand(target:target,column:column,row:row)}
     patternGraphHost.lanes.onClear = {[weak self] target,column,row in self?.clearGraphCommand(target:target,column:column,row:row)}
     signalGraphEditor.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
+    signalGraphEditor.onReveal = {[weak self] in self?.workspace?.show("graph")}
+    signalGraphEditor.onSourceReference = {[weak self] source in
+      guard let self else{return};self.openParameterSource(source)
+      let kind=source["kind"] as? String ?? "",panel=kind=="envelope" ? "automation":kind=="recorded" ? "parameterActivity":"graph"
+      self.workspace?.panels[panel]?.onBack={[weak self] in self?.signalGraphEditor.returnToProvenance()}
+      if kind=="pattern-set" || kind=="pattern-slide"{self.statusLabel.stringValue+=" · ⌘K → Back to graph source"}
+    }
+    signalGraphEditor.onAddSongEffect = { [weak self] target in self?.addPlugin(target: target) }
+    signalGraphEditor.rackControls.onGesture={[weak self] active in self?.session.parameterGesture(active)}
+    signalGraphEditor.rackControls.onAutomate={[weak self] id,parameter in self?.automateParameter(plugin:id,parameter:Int(parameter))}
+    signalGraphEditor.rackControls.onActivity={[weak self] id,parameter in self?.showParameterActivity(plugin:id,parameter:Int(parameter))}
     signalGraphEditor.onPlugin = {[weak self] id in self?.openWorkspacePlugin(id)}
-    signalGraphEditor.onBus = {[weak self] id in guard let self else{return};self.showMixer();self.mixerEditor.selectBus(id)}
+    signalGraphEditor.onShowPattern = {[weak self] id in
+      guard let self else{return}
+      if let channel=self.model.tracks.first(where:{$0["id"] as? String==id})?["index"] as? Int {
+        self.patternView.cursorChannel=channel;self.patternView.revealCursor();self.patternView.needsDisplay=true
+      }
+      self.focusPattern()
+    }
+    signalGraphEditor.onBus = {[weak self] id in guard let self else{return};self.showMixer();self.mixerEditor.navigate(to:id)}
     signalGraphEditor.onChoosePlugin = {[weak self] choose in guard let self else{return};self.graphPluginBrowser.kind.selectItem(at:1);self.graphPluginBrowser.onChoose = {[weak self] descriptor in guard descriptor["isInstrument"] as? Bool != true else{return};choose(descriptor);self?.workspace?.show("graph")};self.workspace?.show("graphPlugins");self.graphPluginBrowser.load()}
     graphPluginBrowser.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
+    add("parameterActivity","Parameter activity",parameterActivity,"secondary",600)
+    installParameterActivity()
     workspaceAutomation.configureDocked()
+    workspaceAutomation.addRecordingControls(pluginEditor.record) { [weak self] in self?.pluginEditor.onClearAutomation?() }
     add("automation","Pattern automation",workspaceAutomation,"secondary",340)
+    workspaceAutomation.onPluginSelection = { [weak self] id in
+      guard let self,let slot=self.model.nativePlugins.firstIndex(where:{$0["instanceID"] as? String==id}) else{return}
+      self.pluginEditor.selected=slot
+      self.workspaceContextTokens["automation"]="\(self.model.pattern):\(slot):\(self.model.revisionToken)"
+    }
+    workspaceNotes.inputOctave = {[weak self] in self?.patternView.octave ?? 4}
     workspaceNotes.onContext = {[weak self] in guard let self else{return(PatternModel([:]),0,0,1)};return(self.model,self.patternView.cursorRow,self.patternView.cursorChannel,self.patternView.instrument)}
     workspaceNotes.onRequest = {[weak self] method,params,reply in
       guard let self else{return}
@@ -48,16 +75,18 @@ extension AppController {
       guard let self else{return}
       if self.workspaceReturnPoints[id] == nil {self.workspaceReturnPoints[id]=self.patternView.navigation}
       if id=="samples" {self.editorMode=1} else if id=="instruments" {self.editorMode=2} else if id=="plugins" {self.editorMode=3}
-      self.followWorkspacePanel(id,force:false)
+      self.followWorkspacePanel(id,force:false,opening:true)
     }
     workspaceInputMonitor=NSEvent.addLocalMonitorForEvents(matching:[.keyDown,.keyUp]){[weak self] event in
       guard let self else{return event}
       if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.sequences.handle(event){return nil}
+      if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.handleAdditionalShortcut(event) { return nil }
       if self.handlePlaybackKey(event) || self.handleInspectorNote(event) { return nil }
       guard self.liveKeyboard,NSApp.isActive,self.commandPalette.window?.isVisible != true,
         NSApp.modalWindow == nil,self.window.attachedSheet == nil else{return event}
       if let text=self.focusedView(event) as? NSTextView,text.isEditable,event.type == .keyDown{return event}
       if self.focusedView(event) is NSTextField,event.type == .keyDown{return event}
+      if self.focusedView(event) is PreciseNoteTable,event.type == .keyDown{return event}
       if event.type == .keyUp,let note=self.workspaceHeldKeys.removeValue(forKey:event.keyCode){self.audition(note:note,on:false);return nil}
       guard event.modifierFlags.intersection([.command,.control,.option]).isEmpty,
         let key=event.charactersIgnoringModifiers?.lowercased(),let offset=KeyboardSettings.note(for:key) else{return event}
@@ -66,6 +95,18 @@ extension AppController {
     }
     NotificationCenter.default.addObserver(forName:NSApplication.didResignActiveNotification,object:nil,queue:.main){[weak self] _ in self?.releaseWorkspaceKeys();self?.releaseInspectorKeys();self?.commandPalette.sequences.cancel()}
     commandPalette.sequences.onHint = {[weak self] hint in self?.window.subtitle=hint}
+    commandPalette.shortcutAllowed = {[weak self] id in
+      id==GraphCommand.returnFromSource.id || !id.hasPrefix("graph.") || NSApp.keyWindow?.firstResponder === self?.signalGraphEditor.canvas
+    }
+    commandPalette.additionalMenus = { [weak self] in
+      guard let self, let dock = self.workspace else { return [] }
+      return InspectorTabs.items.compactMap { item in
+        guard let panel = dock.panels[item.id] else { return nil }
+        let menu = ContextActions.controls(in: panel.content, title: panel.title)
+        ContextActions.appendMenu(panel.actionMenu(), to: menu)
+        return menu
+      } + [ContextActions.controls(in: self.orderEditor, title: "Arrangement")]
+    }
     commandPalette.collect()
     for tabs in [dock.right,dock.bottom,dock.secondary] {
       tabs.shortcutLabel = {[weak self] id in
@@ -84,6 +125,7 @@ extension AppController {
   }
   func configureWorkspaceMixer(){
     mixerEditor.onRequest = {[weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply)}
+    mixerEditor.onAddPlugin = { [weak self] id in self?.addPlugin(target: id) }
     mixerEditor.onSidechains = {[weak self] in self?.showSidechains()}
     mixerEditor.onConfigurePlugin = {[weak self] slot in self?.showPluginPorts(slot)}
     mixerEditor.onPluginControls = {[weak self] id in self?.inspectWorkspacePlugin(id)}
@@ -98,11 +140,11 @@ extension AppController {
     guard let slot=model.nativePlugins.firstIndex(where:{$0["instanceID"] as? String==id}) else{return}
     pluginEditor.selected=slot;showEditor(3)
     if workspace?.panels["automation"]?.pinned != true && !workspaceAutomation.hasDraft {
-      workspaceAutomationModel=model;workspaceAutomation.pluginIndex=slot;workspaceAutomation.load()
+      workspaceAutomationModel=model;workspaceAutomation.selectedPluginID=id;workspaceAutomation.pluginIndex=slot;workspaceAutomation.load()
     }
   }
-  func followWorkspacePanel(_ id:String,force:Bool){
-    guard !busy,let dock=workspace,let panel=dock.panels[id],force || workspaceContextTokens[id] == nil || (!panel.pinned && !dock.containsFocus(id)) else{return}
+  func followWorkspacePanel(_ id:String,force:Bool,opening:Bool=false){
+    guard !busy,let dock=workspace,let panel=dock.panels[id],id=="graph" || force || workspaceContextTokens[id] == nil || (!panel.pinned && (opening || !dock.containsFocus(id))) else{return}
     let position=patternView.navigation
     if workspaceReturnPoints[id]==nil {workspaceReturnPoints[id]=position}
     let cursor="P\(model.pattern) · R\(position.row) · CH\(position.channel+1)"
@@ -121,7 +163,7 @@ extension AppController {
       if id=="samples" {
         if !model.instruments.isEmpty {
           handleAutomation("instrument.get",params:["instrument":instrument]){[weak self] reply in
-            guard let self,self.workspaceContextTokens[id]==token,let data=(reply["result"] as? [String:Any])?["data"] as? [String:Any],let mapping=data["mapping"] as? [Int] else{return}
+            guard let self,self.workspaceContextTokens[id]==token,force || !self.sampleEditor.hasDraft,let data=(reply["result"] as? [String:Any])?["data"] as? [String:Any],let mapping=data["mapping"] as? [Int] else{return}
             let key=max(0,min(127,Int(cell[0])-1));let mapped=mapping.indices.contains(key) ? mapping[key] : 0
             if mapped>0 {self.sampleEditor.index=mapped;self.workspace?.panels[id]?.target.stringValue="Sample \(mapped)";self.refreshWorkspaceAsset(id)}
           };return
@@ -133,7 +175,9 @@ extension AppController {
       guard !workspaceAutomation.loading,!workspaceAutomation.hasDraft || force else{panel.target.stringValue="Draft held";return}
       let token="\(model.pattern):\(pluginEditor.selected):\(model.revisionToken)"
       guard force || workspaceContextTokens[id] != token else{return};workspaceContextTokens[id]=token
-      workspaceAutomationModel=model;workspaceAutomation.pluginIndex=max(0,pluginEditor.selected);panel.target.stringValue="Pattern \(model.pattern)";workspaceAutomation.load()
+      workspaceAutomationModel=model;workspaceAutomation.selectedPluginID=model.nativePlugins.indices.contains(pluginEditor.selected) ? model.nativePlugins[pluginEditor.selected]["instanceID"] as? String:nil;workspaceAutomation.pluginIndex=max(0,pluginEditor.selected);panel.target.stringValue="Pattern \(model.pattern)";workspaceAutomation.load()
+    case "parameterActivity":
+      if force || workspaceContextTokens[id]==nil {workspaceContextTokens[id]="loaded";parameterActivity.reloadTargets()}
     case "plugins":
       let token="\(pluginEditor.selected):\(model.revisionToken)";guard force || workspaceContextTokens[id] != token else{return};workspaceContextTokens[id]=token;refreshPlugins()
     case "graphCommands":
@@ -143,7 +187,7 @@ extension AppController {
     case "graph":
       guard force || !signalGraphEditor.hasDraft else{panel.target.stringValue="Draft held · shared graph";return}
       if force || workspaceContextTokens[id] != model.revisionToken {workspaceContextTokens[id]=model.revisionToken;signalGraphEditor.load()}
-      panel.target.stringValue="Shared song graph"
+      if panel.target.stringValue != "Shared song graph" {panel.target.stringValue="Shared song graph"}
     case "mixer":if force || workspaceContextTokens[id]==nil {workspaceContextTokens[id]="loaded";mixerEditor.load()}
     default:break
     }
@@ -155,7 +199,7 @@ extension AppController {
   func returnToPanel(_ id:String){
     guard let target=workspaceReturnPoints[id],model.patterns.contains(where:{$0["index"] as? Int==target.pattern}) else{return}
     if target.pattern != model.pattern {model.pattern=target.pattern;refreshPattern()}
-    var destination=target;destination.following=false;patternView.navigate(destination,clearSelection:true);window.makeFirstResponder(patternView)
+    var destination=target;destination.following=false;patternView.navigate(destination,clearSelection:true);window.makeKeyAndOrderFront(nil);window.makeFirstResponder(patternView)
   }
   func openGraphCommand(target:String?=nil,column:Int=0,row:Int?=nil){
     workspaceContextTokens["graphCommands"]="\(model.pattern):\(patternView.cursorRow):\(patternView.cursorChannel):\(model.revisionToken)";workspace?.show("graphCommands",focus:true)
@@ -194,6 +238,20 @@ extension AppController {
   func handleWorkspaceAutomation(_ method:String,params:[String:Any],reply:@escaping AutomationServer.Reply)->Bool{
     guard method.hasPrefix("workspace.") else{return false}
     func fail(_ message:String){reply(AutomationServer.error(-32602,message))}
+    if method=="workspace.input" {
+      guard Set(params.keys).isSubset(of:["expectedRevision","expectedContext","instrument","octave"]),params["instrument"] != nil || params["octave"] != nil else {fail("Supply instrument and/or octave with revision and context guards");return true}
+      guard let revision=params["expectedRevision"] as? String,let context=params["expectedContext"] as? String else{fail("Supply expectedRevision and expectedContext");return true}
+      guard !busy else{reply(AutomationServer.error(-32002,"The document is busy"));return true}
+      guard revision==session.automationRevision,context==patternView.contextToken else{reply(AutomationServer.error(-32001,"Song or input context changed; read context.get again"));return true}
+      var instrument=patternView.instrument,octave=patternView.octave
+      for (key,range) in [("instrument",1...255),("octave",0...8)] {
+        guard let raw=params[key] else{continue}
+        guard let value=raw as? NSNumber,CFGetTypeID(value) != CFBooleanGetTypeID(),value.doubleValue.isFinite,value.doubleValue.rounded()==value.doubleValue,Double(range.lowerBound)<=value.doubleValue,value.doubleValue<=Double(range.upperBound) else {fail("Invalid \(key)");return true}
+        if key=="instrument" {instrument=value.intValue} else {octave=value.intValue}
+      }
+      patternView.instrument=instrument;patternView.octave=octave
+      reply(["result":["revision":session.automationRevision,"data":["instrument":instrument,"octave":octave,"contextRevision":patternView.contextToken],"changed":false,"playbackStopped":false]]);return true
+    }
     if method=="workspace.ruler" {
       guard Set(params.keys)==["mode"],let name=params["mode"] as? String,let mode=PatternPositionMode(rawValue:name) else{reply(AutomationServer.error(-32602,"Choose rows, beats, patternTime or songTime"));return true}
       patternView.positionMode=mode

@@ -25,14 +25,15 @@ Document::PreparedSampleEdit Document::prepareSamplePaste(int sample, const Samp
   const auto pcm = samplePCM(sample);
   require(!song_->GetSample(sample).uFlags[CHN_ADLIB], "Cannot paste PCM into an OPL instrument");
   return prepareSampleSplice(
-      sample, planSamplePaste(pcm, song_->GetSample(sample).GetSampleRate(song_->GetType()), clipboard, options));
+      sample, planSamplePaste(pcm, song_->GetSample(sample).GetSampleRate(song_->GetType()), clipboard, options),
+      options.mode == SamplePasteMode::Overwrite || options.mode == SamplePasteMode::Mix);
 }
 Document::PreparedSampleEdit Document::prepareSampleErase(int sample, uint32_t first, uint32_t last) const {
   const auto pcm = samplePCM(sample);
   require(!song_->GetSample(sample).uFlags[CHN_ADLIB], "Cannot delete PCM from an OPL instrument");
   return prepareSampleSplice(sample, planSampleErase(pcm, first, last));
 }
-Document::PreparedSampleEdit Document::prepareSampleSplice(int sample, SampleSplicePlan plan) const {
+Document::PreparedSampleEdit Document::prepareSampleSplice(int sample, SampleSplicePlan plan, bool keepPoints) const {
   require(editable(), "This document is read-only");
   PreparedSampleEdit prepared;
   prepared.owner_ = this;
@@ -56,7 +57,8 @@ Document::PreparedSampleEdit Document::prepareSampleSplice(int sample, SampleSpl
     after.frames = result.resultFrames;
     const auto first = result.first, last = first + result.removedFrames, inserted = result.insertedFrames;
     auto point = [&](uint32_t p, bool end) {
-      if (p > before.frames)
+      // Overwrite/Mix past the end only append; existing audio keeps its place.
+      if (keepPoints || p > before.frames)
         return p;
       if (!result.removedFrames)
         return p < first || (end && p == first) ? p : p + inserted;
@@ -174,7 +176,7 @@ SampleSpliceResult Document::applySampleEdit(PreparedSampleEdit prepared) {
   if (entry.splice)
     applySpliceUndo(*entry.splice, true, std::move(prepared.replacement_));
   undo_.push_back(std::move(entry));
-  redo_.clear();
+  committedHistory();
   ++revision;
   trimHistory();
   return std::move(prepared.result_);

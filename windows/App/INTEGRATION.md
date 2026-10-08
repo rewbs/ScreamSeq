@@ -116,6 +116,18 @@ existing project wrapper and plugin history. Paginated reads recheck captured
 identity/revision; dense drawing aggregates transitions by display column and
 retains exact values independently. See `../ABSOLUTE_AUTOMATION_PROGRESS.md`.
 
+Document and plugin edits now use one chronological Undo/Redo sequence in
+`DocumentController` and `PluginOperations`; `all`, `document` and `plugins` are
+API aliases for that same history. A new edit in either area forks both redo
+branches. Adding a rack effect with `target` / `before` / `position` / `parent`
+and removing a batch of stable plugin IDs group the rack state and native
+routing/group metadata into one operation. Grouped history validates and
+allocates both sides before stopping, then publishes the native edit and
+prepared rack together. Removed-plugin pattern bindings and musical automation
+remain unresolved until Undo restores the original identity. The Windows
+`document-controller-unified-plugin-history` regression covers these paths;
+this change still requires a Windows-native build/run qualification.
+
 `SampleDetailWindow.hpp` connects the sample dock and command palette to the
 existing sample operations. Its stable captured target/revision and generation
 guard waveform reads and edits. It retains at most 4096 peak bins and 4096
@@ -507,3 +519,35 @@ hardware was opened. Precise-note/curve/graph UI, VST3 frontend, MIDI,
 recovery, accessibility and complete keyboard customization remain separate
 work. No current Mac binary reopen or sustained presentation qualification is
 claimed. All task-owned QA processes were closed.
+
+## Review fixes: close, shutdown, device loss and keyboard layout
+
+These changes were written on a Mac and have **not** been compiled or run on
+Windows yet; qualify them with `windows/build.ps1 -Test` and the desktop suites.
+
+- `Application::canClose()` is the one unsaved-work decision for `WM_CLOSE` and
+  `WM_QUERYENDSESSION`. It never throws. A failed save keeps the window and the
+  song and leaves the reason in the status line. When unsaved work cannot even
+  be checked (the editor flush fails), it asks whether to close anyway, default
+  No. While a message box or file chooser is showing (`modalActive()`), it
+  declines without a second prompt. `WM_ENDSESSION` stops audio and takes the
+  normal shutdown path, except under a worker wait or a nested modal loop.
+- `RenderSurface` separates device-independent resources (factories, text
+  formats, retained text layouts) from device-dependent ones. On
+  `D2DERR_RECREATE_TARGET` and the DXGI device removed/reset/hung/driver-error
+  codes it discards the latter, reports `lost()`, and recreates them in the
+  next `begin()`. `abandon()` ends a frame that failed part-way. The main loop
+  counts a frame only when it was presented; a lost or failed frame retries
+  (immediately once, then with a back-off up to 2 s) and, in an attended
+  session, offers Save after three consecutive failures. Tool windows
+  retry through timer 2 with a back-off.
+- The UI thread owns an apartment-threaded COM apartment for shell dialogs.
+- Musical typing maps keys by position (`physicalMusicalKey`), so QWERTZ and
+  AZERTY keep both piano rows. Shortcuts and text keep layout-dependent keys.
+  AltGr is not Ctrl+Alt+L, Space presses a focused button, and the graph editor
+  cycles wires with Ctrl+Tab.
+- A vendor editor instance that cannot be flushed is closed and dropped. The rack
+  keeps its last captured state, and `flushPluginEditors` / `document.save`
+  replies carry `pluginEditorWarning`. A busy UI owner (`UiOwnerBusy`) is
+  transient: the editor stays open and its capture is postponed to the next
+  flush.

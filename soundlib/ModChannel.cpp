@@ -60,6 +60,10 @@ void ModChannel::Reset(ResetFlags resetMask, const CSoundFile &sndFile, CHANNELI
 		isPaused = false;
 		portaTargetReached = false;
 		rowCommand.Clear();
+#ifdef OPENMPT_EDITOR_CORE
+		nativeExtraEffects = {};
+		nativeArpeggio = nativeTremor = false;
+#endif
 		mpt::reconstruct(synthState);
 	}
 
@@ -67,6 +71,7 @@ void ModChannel::Reset(ResetFlags resetMask, const CSoundFile &sndFile, CHANNELI
 	{
 #ifdef OPENMPT_EDITOR_CORE
 		nativeReverseLoop.Reset();
+		nativeNudgeInterpolating = false;
 #endif
 		increment = SamplePosition(0);
 		nPeriod = 0;

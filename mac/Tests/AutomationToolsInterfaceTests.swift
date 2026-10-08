@@ -1,6 +1,7 @@
 import AppKit
 extension InterfaceTests {
   static func automationToolsChecks() throws {
+    try liveAutomationEditorChecks()
     let editor = PatternAutomationEditor(frame: NSRect(x:0,y:0,width:960,height:620))
     editor.model = PatternModel(["nativePlugins":[["name":"Gain", "instanceID":"gain"]]])
     editor.revision = "source"; editor.laneID = "n1"; editor.parameterID = 7
@@ -52,5 +53,46 @@ extension InterfaceTests {
     let pattern=PatternView();pattern.model=PatternModel(["rows":64,"channels":8])
     try require(pattern.playbackSelection==nil,"A cursor alone is not a playback selection")
     pattern.selectRegion(from:(9,2),to:(4,0));try require(pattern.playbackSelection==(4..<10),"Playback selection has sorted, exclusive row bounds")
+  }
+}
+
+extension InterfaceTests {
+  static func liveAutomationEditorChecks() throws {
+    let editor=PatternAutomationEditor(frame:NSRect(x:0,y:0,width:1000,height:620))
+    let model=PatternModel(["pattern":2,"rows":64,"nativePlugins":[["name":"First","instanceID":"stable-A"],["name":"Second","instanceID":"stable-B"]]])
+    editor.onContext={model}
+    var calls=[(String,[String:Any])](),replies=[([String:Any])->Void]()
+    editor.onRequest={method,params,reply in calls.append((method,params));replies.append(reply)}
+    func answer(_ data:Any,_ revision:String="r0"){replies.removeFirst()(["result":["revision":revision,"data":data]])}
+    func waitForSave(){let deadline=Date(timeIntervalSinceNow:0.25);while Date()<deadline {_ = RunLoop.main.run(mode:.default,before:deadline)}}
+    editor.load()
+    replies.removeFirst()(["error":["code":-32002,"message":"Busy"]]);waitForSave()
+    try require(calls.count==2 && editor.loading,"Busy automation loads retry without making stale parameters editable")
+    answer(["rows":64,"lanes":[]])
+    answer([["id":7,"name":"Gain","value":0.5]])
+    try require(editor.parameterID==7 && editor.canvas.allowsEditing,"Initial parameter is selected even at table row zero")
+    editor.search.stringValue="Gain";editor.filter()
+    editor.plugin.selectItem(at:1);editor.selectPlugin()
+    try require(editor.parameterID==nil && editor.filtered.isEmpty && !editor.canvas.allowsEditing && calls.last?.1["slot"] as? Int==1,"Switch clears stale parameters and disables editing while the new catalogue loads")
+    answer([["id":93,"name":"Cutoff","value":0.2]])
+    try require(editor.parameterID==93 && editor.filtered.count==1 && editor.selectedPluginID=="stable-B","Changing plugin refreshes row-zero selection by stable parameter identity and clears the previous search")
+    editor.canvas.points=[EnvelopePoint(position:0,value:0.2,curve:"linear")];editor.markDraft();waitForSave()
+    try require(calls.last?.0=="automation.pattern.set" && calls.last?.1["plugin"] as? String=="stable-B" && calls.last?.1["parameter"] as? Int==93,"Graph edits save automatically to the selected stable plugin/parameter")
+    editor.canvas.points[0].value=0.7;editor.markDraft()
+    editor.plugin.selectItem(at:0);editor.selectPlugin()
+    try require(editor.pluginIndex==1 && editor.pendingPluginID=="stable-A","Plugin changes wait for the current envelope save")
+    answer(["lane":"n20"],"r1");waitForSave()
+    try require(calls.last?.1["expectedRevision"] as? String=="r1" && calls.last?.1["plugin"] as? String=="stable-B" &&
+      (calls.last?.1["points"] as? [[String:Any]])?.first?["value"] as? Double==0.7,"A newer drag is resubmitted with the saved revision and original target")
+    answer(["lane":"n20"],"r2")
+    try require(editor.pluginIndex==0 && calls.last?.0=="plugin.parameters.get","Deferred plugin switch proceeds only after the latest edit saves")
+    answer([["id":7,"name":"Gain"]],"r2")
+    editor.showPositions(editPattern:2,row:3,playPattern:2,position:825.5)
+    try require(editor.canvas.editPosition==768 && editor.canvas.playbackPosition==825.5,"Edit and playback cursors retain independent fractional positions")
+    editor.canvas.zoom(4);editor.showPositions(editPattern:9,row:3,playPattern:nil,position:nil)
+    try require(editor.canvas.editPosition==nil && editor.canvas.playbackPosition==nil,"Unrelated patterns and stopped playback do not show misleading cursors")
+    editor.search.stringValue="missing";editor.filter()
+    try require(editor.parameterID==nil && !editor.canvas.allowsEditing,"Filtering out a parameter clears its editing target")
+    editor.autoSaveWork?.cancel();editor.formulaPreviewWork?.cancel();editor.onRequest=nil
   }
 }

@@ -1,6 +1,8 @@
 import AppKit
 extension AppController {
   @objc func showSongTiming() {
+    // A visible editor may hold an unapplied draft: raise it instead of rebuilding.
+    if let open=songTimingWindow,open.isVisible,open.contentView is SongTimingEditor {open.makeKeyAndOrderFront(nil);return}
     guard !busy,model.editable else{return}
     let editor=SongTimingEditor(frame:.zero)
     editor.onRequest = { [weak self] method,params,reply in self?.handleAutomation(method,params:params,reply:reply) }

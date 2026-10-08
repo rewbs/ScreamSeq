@@ -15,6 +15,8 @@ struct PatternCommand {
     ["label":"PL","name":"Slide plugin parameter","kind":"parameter-slide","description":"Glide from the current parameter value to a precise target over a duration, with sample-resolution timing."],
     ["label":"BS","name":"Set pitch bend","kind":"pitch-set","description":"Set an absolute pitch offset in semitones. Native samples or a plugin MIDI pitch wheel."],
     ["label":"BL","name":"Slide pitch bend","kind":"pitch-slide","description":"Glide to an absolute pitch offset over a duration, with fractional row timing."],
+    ["label":"NF","name":"Nudge record forward","kind":"nudge-forward","description":"Push sample playback forward with a smooth per-sample speed curve. Strength 0–100%; an opposing push above 50% reverses playback temporarily. Duration includes recovery."],
+    ["label":"NR","name":"Nudge record reverse","kind":"nudge-reverse","description":"Pull sample playback backward with an elastic scratching curve. Below 50% slows forward playback; above 50% reverses it. Samples only; duration includes recovery."],
     ["label":"NC","name":"Precise note cut / plugin note-off","kind":"note-cut","description":"Cut the current sample or send plugin note-offs at a precise row/beat offset. Plugin release envelopes remain active; other tracks are unaffected."]
   ].map { PatternCommand($0.merging(["family":"precise"]){first,_ in first}) }
   init(_ data: [String: Any]) {
@@ -54,7 +56,14 @@ final class PatternCommandCatalog {
 
 extension PatternView {
   var currentCommandHelp: String {
+    if nudgeEditor != nil {return PatternNudgeEditor.help}
     let precise=model.notes(cursorRow,cursorChannel)
+    if column==1 {
+      let number=Int(model.cell(cursorRow,cursorChannel)[1]);let chosen=number>0 ? number:precise.first(where:{$0.instrument>0})?.instrument ?? 0
+      let assets=model.instruments.isEmpty ? model.samples:model.instruments
+      let name=assets.first{($0["index"] as? Int)==chosen}?["name"] as? String ?? ""
+      return chosen>0 ? "Instrument \(chosen) · \(name) · Return uses it for new notes":"No instrument · Option–Up/Down changes the active instrument"
+    }
     if column<=2 && !precise.isEmpty {return "\(precise.count) precise note events · Return or double-click to edit fractional timing"}
     if column>=3 {
       guard let fx=model.nativeCommand(cursorRow,cursorChannel,effectColumn) else{return "FX \(effectColumn+1) · all effects supported · ? finds effects · Return edits"}

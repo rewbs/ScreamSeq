@@ -252,11 +252,36 @@ class AnnotationTests(unittest.TestCase):
         # Musical timing still uses the stop-and-publish path.
         self.write('document.patch', tempo=151)
         self.assertFalse(self.read('transport.get')['playing'])
+        original_performance = self.read('pattern.performance.get', pattern=0)
         self.write('pattern.performance.set', pattern=0, columns=[dict(channel=0, count=2)])
+        changed_performance = self.read('pattern.performance.get', pattern=0)
+        self.assertNotEqual(changed_performance, original_performance)
         self.write('transport.play')
-        self.assertTrue(self.read('transport.get')['playing'])
+        before_undo = self.doc()
+        playing = self.read('transport.get')
+        self.assertTrue(playing['playing'] and playing['audioActive'])
+        # Renderer-owned performance layouts cannot be replaced live. Refusal
+        # preserves playback and history until the musician explicitly stops.
+        self.reject(-32002, 'history.undo', expectedRevision=before_undo['revision'], domain='document')
+        self.assertEqual(self.doc(), before_undo)
+        self.assertEqual(self.read('pattern.performance.get', pattern=0), changed_performance)
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            transport = self.read('transport.get')
+            self.assertTrue(transport['playing'] and transport['audioActive'], transport)
+            self.assertFalse(transport['fault'], transport)
+            self.assertEqual(transport['playbackEpoch'], playing['playbackEpoch'])
+            if transport['callbacks'] > playing['callbacks'] + 2 and transport['frames'] > playing['frames']:
+                break
+            time.sleep(.02)
+        else:
+            self.fail('Playback did not advance after unsupported live history was refused')
+        self.write('transport.stop')
         self.write('history.undo', domain='document')
-        self.assertFalse(self.read('transport.get')['playing'], 'Musical native history must still stop playback')
+        self.assertEqual(self.read('pattern.performance.get', pattern=0), original_performance)
+        self.write('history.redo', domain='document')
+        self.assertEqual(self.read('pattern.performance.get', pattern=0), changed_performance)
+        self.assertFalse(self.read('transport.get')['playing'])
 
 
 class AnnotationControllerTests(unittest.TestCase):
@@ -268,7 +293,7 @@ class AnnotationControllerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         for marker in ('PASS annotation catalogs,', 'PASS four-target Unicode cache accounting,',
                        'PASS inactive sequence metadata growth,', 'PASS annotated pattern duplicates',
-                       'PASS structural annotation history after independent plugin growth,'):
+                       'PASS chronological structural history, exact-fit admission, atomic prepublication refusal/retry and stable rack/entity identities'):
             self.assertIn(marker, result.stdout)
 
 

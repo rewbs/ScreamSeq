@@ -19,8 +19,9 @@ void validateMetadataReferences(const NativeSong &n) {
   }
   need(pointCount <= 65536,"Automation exceeds 65536 points");
   const std::vector<uint64_t> trackIDs(tracks.begin(),tracks.end()); n.mixer.validate(trackIDs);
+  identity(n.masterID);
   std::map<uint64_t,const MixerBus *> buses;
-  for (const auto &b : n.mixer.buses) { if (b.kind != MixerBusKind::Track) identity(b.id); buses.emplace(b.id,&b); }
+  for (const auto &b : n.mixer.buses) { if(b.kind==MixerBusKind::Master)need(b.id==n.masterID,"Mixer Master differs from its reserved song identity");else if (b.kind != MixerBusKind::Track) identity(b.id); buses.emplace(b.id,&b); }
   std::set<uint64_t> groups, columns;
   for (const auto &t : n.noteTracks) {
     need(buses.contains(t.bus) && buses.at(t.bus)->kind == MixerBusKind::Group && groups.insert(t.bus).second && !t.columns.empty(),"Note tracks need distinct existing groups and columns");
@@ -37,11 +38,12 @@ void validateMetadataReferences(const NativeSong &n) {
   std::set<uint64_t> pitchTracks;
   for (const auto &c : n.performance.commands) {
     const bool parameter = c.kind == PatternCommandKind::ParameterSet || c.kind == PatternCommandKind::ParameterSlide;
-    const bool slide = c.kind == PatternCommandKind::ParameterSlide || c.kind == PatternCommandKind::PitchSlide;
+    const bool slide = c.kind == PatternCommandKind::ParameterSlide || c.kind == PatternCommandKind::PitchSlide || isNudge(c.kind);
     need(patterns.contains(c.pattern) && tracks.contains(c.track) && c.column < (n.performance.columns.contains(c.track) ? n.performance.columns.at(c.track) : 1),"Unknown performance pattern, track or column");
     need(commandCells.emplace(c.pattern,c.track,c.position/performanceUnitsPerRow,c.column).second,"Duplicate performance cell");
     need(parameter ? (n.performance.bindings.contains(c.binding) && c.value >= 0 && c.value <= 1 && c.pitchRange == 2) : c.binding == 0,"Invalid performance binding or parameter value");
-    need(slide ? c.duration > 0 : c.duration == 0,"Invalid command duration"); if (c.kind==PatternCommandKind::PitchSet || c.kind==PatternCommandKind::PitchSlide) pitchTracks.insert(c.track);
+    need(!isNudge(c.kind) || (c.value>=0 && c.value<=1 && c.pitchRange==2),"Invalid record nudge strength");
+    need(slide ? c.duration > 0 : c.duration == 0,"Invalid command duration"); if (c.kind==PatternCommandKind::PitchSet || c.kind==PatternCommandKind::PitchSlide || isNudge(c.kind)) pitchTracks.insert(c.track);
     const bool tracker=c.kind==PatternCommandKind::TrackerEffect,cut=c.kind==PatternCommandKind::NoteCut;
     need((!tracker || (c.column && !(c.position%performanceUnitsPerRow) && c.effect<OpenMPT::MAX_EFFECTS)) &&
       (!cut || c.pitchRange==2) && (!(tracker||cut) || (!c.value && !c.binding)) && (tracker || (!c.effect && !c.parameter)),"Invalid unified FX metadata");
@@ -55,8 +57,14 @@ void validateMetadataReferences(const NativeSong &n) {
     need(OpenMPT::NativeNoteEffectSupported(p.effect,p.parameter),"Unsupported precise-note effect");
     need(notePositions.emplace(p.pattern,p.track,p.position,on).second,"Duplicate precise-note event");
   }
-  for (const auto &d : n.signal.library) { identity(d.id); for (const auto &node : d.nodes) identity(node.id); }
+  for(const auto &group:n.signal.groups)identity(group.id);
+  for(const auto &source:n.signal.songSources)identity(source.node.id);
+  for (const auto &d : n.signal.library) { identity(d.id); for (const auto &node : d.nodes) identity(node.id); for(const auto &group:d.groups)identity(group.id); }
   std::vector<uint64_t> busIDs; for (const auto &b : n.mixer.buses) busIDs.push_back(b.id);
+  if(!n.mixer.active()) {
+    for(const auto &[index,track]:n.tracks)busIDs.push_back(track.id);
+    if(n.masterID)busIDs.push_back(n.masterID);
+  }
   // No snapshot is available here. UINT32_MAX rows defers only row bounds, not
   // references or graph compilation; restoreNative performs the real row check.
   std::map<uint64_t,uint32_t> patternRows; for (auto id : patterns) patternRows[id] = UINT32_MAX;
@@ -71,6 +79,7 @@ void validateMetadataReferences(const NativeSong &n) {
     else if (t.kind == EnvelopeTargetKind::Graph) {
       bool found = false;
       for (const auto &d : n.signal.library) for (const auto &node : d.nodes) if (node.id == t.owner && node.kind == SignalNodeKind::Automation) for (const auto &e : node.envelopes) if (e.pattern == t.pattern) found = true;
+      for(const auto &source:n.signal.songSources)if(source.node.id==t.owner&&source.node.kind==SignalNodeKind::Automation)for(const auto &e:source.node.envelopes)if(e.pattern==t.pattern)found=true;
       need(found,"Unknown linked graph envelope");
     } else need(instruments.contains(t.owner),"Unknown linked instrument envelope");
   }

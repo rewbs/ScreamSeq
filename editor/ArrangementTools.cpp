@@ -1,5 +1,6 @@
 #include "ArrangementTools.hpp"
 #include "soundlib/mod_specifications.h"
+#include <algorithm>
 #include <map>
 #include <set>
 #include <stdexcept>

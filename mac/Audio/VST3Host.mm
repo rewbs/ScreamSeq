@@ -1,6 +1,7 @@
 #include "VST3Host.hpp"
 #include "PluginMainThread.hpp"
 #include "PluginWindow.hpp"
+#include "../Plugins/PluginInventory.hpp"
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/base/ipluginbase.h"
 #include "pluginterfaces/gui/iplugview.h"
@@ -16,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -50,6 +52,13 @@ bool same(const TUID a, const FUID &b) {
     *out = nullptr;                                                                                                    \
     return kNoInterface;                                                                                               \
   }
+// Factory strings are fixed-size arrays which a vendor may fill completely,
+// leaving no terminator. Never read them as C strings.
+template<size_t N> std::string bounded(const char (&value)[N]) {
+  return std::string(value, strnlen(value, N));
+}
+// Sentinel for "no editor value waiting"; compared by bit pattern.
+constexpr float noPendingEdit = std::numeric_limits<float>::quiet_NaN();
 template<size_t N> std::string utf8(const TChar (&value)[N]) {
   return [[NSString alloc] initWithCharacters:reinterpret_cast<const unichar *>(value)
                                        length:std::find(value,value+N,TChar{})-value]
@@ -199,9 +208,15 @@ struct Module {
   IPluginFactory *factory = nullptr;
   bool entered = false;
   explicit Module(const std::string &path) {
-    NSURL *url = [NSURL fileURLWithPath:@(path.c_str())];
-    if (![url.pathExtension.lowercaseString isEqual:@"vst3"])
+    NSString *requested = [NSString stringWithUTF8String:path.c_str()];
+    if (![requested.pathExtension.lowercaseString isEqual:@"vst3"])
       throw std::runtime_error("Select a macOS VST3 bundle");
+    // The only place plugin code is loaded. Whatever the caller checked, load
+    // the bundle's real location and only when that location is trusted.
+    NSString *trusted = PluginTrust::loadable(requested);
+    if (!trusted)
+      throw std::runtime_error("VST3 is missing or outside the trusted plugin locations: " + path);
+    NSURL *url = [NSURL fileURLWithPath:trusted isDirectory:YES];
     bundle = CFBundleCreate(nullptr, (__bridge CFURLRef)url);
     if (!bundle || !CFBundleLoadExecutable(bundle)) {
       if (bundle)
@@ -352,13 +367,51 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   std::unique_ptr<std::atomic<float>[]> values;
   std::array<std::array<ParamID, 130>, 16> midiMap{};
   std::array<std::array<uint16_t, 128>, 16> notes{};
+  // Note-offs owed by an all-notes-off that did not fit the bounded event list.
+  // They carry no note identity, so one delivered after a newer note-on of the
+  // same channel and pitch would release that new note. midi() therefore
+  // delivers a pitch's owed releases immediately before any new note-on for it.
+  std::array<std::array<uint16_t, 128>, 16> releases{};
+  bool releasesPending = false;
+  // Note-ons discarded because their owed releases could not precede them.
+  std::atomic<uint64_t> droppedNotes{0};
+  void release(int ch, int pitch) noexcept {
+    Event e{};
+    e.flags = Event::kIsLive;
+    e.type = Event::kNoteOffEvent;
+    e.noteOff = {int16(ch), int16(pitch), 0, -1, 0};
+    events.addEvent(e);
+  }
+  // Leaves room for ordinary events in a block that also releases many notes.
+  static constexpr int32 releaseEventLimit = 384;
+  void emitReleases() noexcept {
+    if (!releasesPending) return;
+    for (int ch = 0; ch < 16; ++ch)
+      for (int pitch = 0; pitch < 128; ++pitch)
+        for (auto &owed = releases[ch][pitch]; owed; --owed) {
+          if (events.count >= releaseEventLimit) return; // Continued by the next process call.
+          release(ch, pitch);
+        }
+    releasesPending = false;
+  }
   struct Edit {
     uint32_t id;
     float value;
   };
-  // Separate SPSC paths keep audible edits independent of UI bookkeeping.
-  std::array<Edit, 8192> edits{}, audioEdits{};
-  std::atomic<uint32_t> audioWrite{0}, audioRead{0};
+  // UI bookkeeping is a bounded SPSC queue. Audible edits are independent of it
+  // and coalesced per parameter: every host point for an editor gesture lands at
+  // offset 0, so only the newest value of a parameter can reach the processor.
+  // A queue cannot be coalesced safely (the consumer may already have read the
+  // newest published slot), whereas one atomic per parameter can: the editor
+  // thread stores, rendering takes the value with a single exchange. A long
+  // gesture while the transport is stopped therefore cannot overflow.
+  std::array<Edit, 8192> edits{};
+  std::unique_ptr<std::atomic<float>[]> pendingEdits;
+  std::atomic<uint32_t> pendingGeneration{0};
+  uint32_t appliedGeneration = 0; // Render owner only.
+  bool pendingCarry = false;      // Render owner only: deferred by a full change list.
+  // Invalid or unknown editor values and UI-queue overflow; never a failure.
+  std::atomic<uint64_t> droppedEdits{0};
   std::atomic<uint32_t> editWrite{0}, editRead{0};
   std::atomic<bool> failed{false};
   std::atomic<bool> latencyChanged{false};
@@ -374,22 +427,28 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   tresult PLUGIN_API beginEdit(ParamID) override { return kResultOk; }
   tresult PLUGIN_API endEdit(ParamID) override { return kResultOk; }
   tresult PLUGIN_API performEdit(ParamID id, ParamValue value) override {
-    auto w = editWrite.load(std::memory_order_relaxed), r = editRead.load(std::memory_order_acquire);
-    auto aw = audioWrite.load(std::memory_order_relaxed), ar = audioRead.load(std::memory_order_acquire);
-    if (w - r >= edits.size() || aw - ar >= audioEdits.size() || !std::isfinite(value)) {
-      failed = true;
+    // A vendor editor may report non-finite, out-of-range or unknown values.
+    // None of them may stop rendering: drop and count, or clamp.
+    auto p = std::lower_bound(metadata.begin(), metadata.end(), id, [](auto &p, uint32_t key) { return p.id < key; });
+    if (!std::isfinite(value) || !values || !pendingEdits || p == metadata.end() || p->id != id ||
+        size_t(p - metadata.begin()) >= controllerValues.size()) {
+      droppedEdits.fetch_add(1, std::memory_order_relaxed);
       return kResultFalse;
     }
-    auto p = std::lower_bound(metadata.begin(), metadata.end(), id, [](auto &p, uint32_t key) { return p.id < key; });
-    if (values && p != metadata.end() && p->id == id && size_t(p - metadata.begin()) < controllerValues.size()) {
-      auto index = p - metadata.begin();
-      values[index].store(float(value), std::memory_order_relaxed);
-      controllerValues[index] = float(value);
+    const auto index = p - metadata.begin();
+    const float normalized = float(std::clamp(value, 0., 1.));
+    values[index].store(normalized, std::memory_order_relaxed);
+    controllerValues[index] = normalized;
+    pendingEdits[index].store(normalized, std::memory_order_release);
+    pendingGeneration.fetch_add(1, std::memory_order_release);
+    auto w = editWrite.load(std::memory_order_relaxed), r = editRead.load(std::memory_order_acquire);
+    if (w - r >= edits.size()) {
+      // Only the UI notification is lost; parameters() still reports the value.
+      droppedEdits.fetch_add(1, std::memory_order_relaxed);
+      return kResultOk;
     }
-    edits[w % edits.size()] = {id, float(value)};
+    edits[w % edits.size()] = {id, normalized};
     editWrite.store(w + 1, std::memory_order_release);
-    audioEdits[aw % audioEdits.size()] = {id, float(value)};
-    audioWrite.store(aw + 1, std::memory_order_release);
     return kResultOk;
   }
   tresult PLUGIN_API restartComponent(int32 flags) override {
@@ -403,7 +462,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     // invalid audio. The device pauses at a block boundary; the control thread
     // reactivates the processor and rebuilds delays before rendering resumes.
     if (flags & kLatencyChanged) latencyChanged.store(true, std::memory_order_release);
-    if (controller && (flags & kParamValuesChanged))
+    if (controller && values && (flags & kParamValuesChanged))
       for (size_t i = 0; i < metadata.size(); ++i) {
         auto value = controller->getParamNormalized(metadata[i].id);
         if (value != values[i].load())
@@ -486,8 +545,12 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     }
     if (controller) {
       controller->setComponentHandler(this);
-      component->queryInterface(IConnectionPoint::iid, (void **)&componentConnection);
-      controller->queryInterface(IConnectionPoint::iid, (void **)&controllerConnection);
+      // A single-component plugin is its own controller: connecting it would
+      // connect the object to itself.
+      if (separateController) {
+        component->queryInterface(IConnectionPoint::iid, (void **)&componentConnection);
+        controller->queryInterface(IConnectionPoint::iid, (void **)&controllerConnection);
+      }
       if (componentConnection && controllerConnection) {
         componentConnection->connect(controllerConnection);
         controllerConnection->connect(componentConnection);
@@ -587,16 +650,21 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
         if (controller->getParameterInfo(i, p) != kResultOk)
           continue;
         metadata.push_back({p.id, utf8(p.title), 0, 1, float(controller->getParamNormalized(p.id)), 0});
+        if(p.stepCount<0)throw std::runtime_error("Invalid VST3 parameter step count");
+        metadata.back().step=p.stepCount?1.f/p.stepCount:0.f;
         metadata.back().writable = !(p.flags & ParameterInfo::kIsReadOnly);
         metadata.back().continuous = p.stepCount == 0 && !(p.flags & (ParameterInfo::kIsReadOnly | ParameterInfo::kIsProgramChange));
       }
     }
     std::sort(metadata.begin(), metadata.end(), [](auto &a, auto &b) { return a.id < b.id; });
     values = std::make_unique<std::atomic<float>[]>(metadata.size());
+    auto pending = std::make_unique<std::atomic<float>[]>(metadata.size());
     for (size_t i = 0; i < metadata.size(); ++i) {
       values[i] = metadata[i].value;
+      pending[i] = noPendingEdit;
       controllerValues.push_back(metadata[i].value);
     }
+    pendingEdits = std::move(pending);
     for (auto &channel : midiMap)
       channel.fill(kNoParamId);
     IMidiMapping *mapping = nullptr;
@@ -613,6 +681,30 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     active = true;
     require(processor->setProcessing(true), "Cannot start VST3 processing");
     processing = true;
+    if (processor->getLatencySamples() > rate * 2)
+      throw std::runtime_error("VST3 latency exceeds two seconds");
+    // Latency announced while restoring state, configuring or activating is not
+    // a change: the host reads the settled value only after create() returns.
+    latencyChanged.store(false, std::memory_order_release);
+  }
+  // Render owner. Editor values never fail rendering; a full change list defers
+  // the remainder to the next block unless a newer value arrives first.
+  void applyPendingEdits() noexcept {
+    const auto generation = pendingGeneration.load(std::memory_order_acquire);
+    if (!pendingCarry && generation == appliedGeneration) return;
+    pendingCarry = false;
+    for (size_t i = 0; i < metadata.size(); ++i) {
+      if (std::isnan(pendingEdits[i].load(std::memory_order_relaxed))) continue;
+      const float value = pendingEdits[i].exchange(noPendingEdit, std::memory_order_acq_rel);
+      if (std::isnan(value) || setParameter(metadata[i].id, value, 0)) continue;
+      float expected = noPendingEdit;
+      pendingEdits[i].compare_exchange_strong(expected, value, std::memory_order_acq_rel);
+      pendingCarry = true;
+    }
+    appliedGeneration = generation;
+  }
+  bool editsPending() const noexcept {
+    return pendingCarry || pendingGeneration.load(std::memory_order_acquire) != appliedGeneration;
   }
   bool setParameter(uint32_t id, double value, uint32_t offset) noexcept {
     if (!std::isfinite(value) || value < 0 || value > 1)
@@ -678,6 +770,17 @@ bool VST3Plugin::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
   e.sampleOffset = 0;
   e.flags = Event::kIsLive;
   if (kind == 0x90 && b) {
+    if (auto &owed = s.releases[ch][a & 127]) {
+      // Old voices end first, in this block and ahead of the new note. Without
+      // room for all of them the note is discarded, never the releases: a lost
+      // note is audible once, a release applied to the wrong voice hangs or
+      // cuts it. Not a failure either way.
+      if (size_t(s.events.count) + owed + 1 > s.events.items.size()) {
+        s.droppedNotes.fetch_add(1, std::memory_order_relaxed);
+        return true;
+      }
+      for (; owed; --owed) s.release(ch, a & 127);
+    }
     if (s.notes[ch][a & 127] != UINT16_MAX)
       ++s.notes[ch][a & 127];
     e.type = Event::kNoteOnEvent;
@@ -692,15 +795,17 @@ bool VST3Plugin::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
     e.polyPressure = {int16(ch), int16(a), float(b) / 127, -1};
   } else {
     if (kind == 0xb0 && (a == 120 || a == 123)) {
-      bool ok = true;
-      for (int pitch = 0; pitch < 128; ++pitch)
-        while (s.notes[ch][pitch]) {
-          if (!midi(0x80 | ch, pitch, 0)) {
-            s.failed = true;
-            return false;
-          }
-        }
-      return ok;
+      // Bounded: whatever exceeds this block's event list is released at the
+      // start of the following blocks. Never a failure, never an allocation.
+      for (int pitch = 0; pitch < 128; ++pitch) {
+        auto &held = s.notes[ch][pitch], &owed = s.releases[ch][pitch];
+        if (!held) continue;
+        owed = uint16_t(std::min<uint32_t>(UINT16_MAX, uint32_t(owed) + held));
+        held = 0;
+        s.releasesPending = true;
+      }
+      s.emitReleases();
+      return true;
     }
     int cc = kind == 0xb0 ? a : kind == 0xe0 ? kPitchBend : kind == 0xd0 ? kAfterTouch : -1;
     if (cc < 0)
@@ -717,15 +822,7 @@ bool VST3Plugin::process(float *buffer, uint32_t frames, uint64_t position, cons
   auto &s = *impl_;
   if (frames > 4096 || s.failed)
     return false;
-  auto ar = s.audioRead.load(std::memory_order_relaxed), aw = s.audioWrite.load(std::memory_order_acquire);
-  for (int n = 0; ar != aw && n < 128; ++n, ++ar) {
-    auto edit = s.audioEdits[ar % s.audioEdits.size()];
-    if (!s.setParameter(edit.id, edit.value, 0)) {
-      s.failed = true;
-      return false;
-    }
-  }
-  s.audioRead.store(ar, std::memory_order_release);
+  s.applyPendingEdits();
   for (uint32_t i = 0; i < frames; ++i) {
     s.left[i] = buffer[i * 2];
     s.right[i] = buffer[i * 2 + 1];
@@ -772,6 +869,7 @@ bool VST3Plugin::process(float *buffer, uint32_t frames, uint64_t position, cons
   data.processContext = &context;
   auto result = s.processor->process(data);
   s.events.count = 0;
+  s.emitReleases(); // Precede every event of the next block.
   s.changes.count = 0;
   s.outputChanges.count = 0;
   if (result != kResultOk)
@@ -828,7 +926,7 @@ PluginState VST3Plugin::state() const {
   pluginMainCall([&] {
     auto &s = *impl_;
     Stream component, controller;
-    while (s.changes.count || s.audioRead.load() != s.audioWrite.load()) {
+    while (s.changes.count || s.editsPending()) {
       std::array<float, 2> empty{};
       if (!const_cast<VST3Plugin *>(this)->process(empty.data(), 0, 0))
         throw std::runtime_error("Cannot flush VST3 parameter state");
@@ -862,6 +960,12 @@ PluginState VST3Plugin::state() const {
 double VST3Plugin::latency() const {
   return impl_->processor->getLatencySamples() / impl_->rate;
 }
+uint64_t VST3Plugin::droppedNotes() const noexcept {
+  return impl_->droppedNotes.load(std::memory_order_relaxed);
+}
+uint64_t VST3Plugin::droppedEdits() const noexcept {
+  return impl_->droppedEdits.load(std::memory_order_relaxed);
+}
 bool VST3Plugin::latencyChangePending() const noexcept {
   return impl_->latencyChanged.load(std::memory_order_acquire);
 }
@@ -879,6 +983,9 @@ void VST3Plugin::refreshLatency() {
       throw std::runtime_error("VST3 latency exceeds two seconds");
     require(s.processor->setProcessing(true), "Cannot resume VST3 after latency update");
     s.processing = true;
+    // A plugin may repeat its notification while being reactivated. The host
+    // reads the settled latency after this call, so that is not a new change.
+    s.latencyChanged.store(false, std::memory_order_release);
   });
 }
 double VST3Plugin::tail() const {
@@ -952,18 +1059,18 @@ std::vector<PluginDescriptor> VST3Plugin::discover(const std::string &path) {
     }
     for (int i = 0; i < count; ++i) {
       PClassInfo info{};
-      if (module.factory->getClassInfo(i, &info) != kResultOk || std::strcmp(info.category, kVstAudioEffectClass))
+      if (module.factory->getClassInfo(i, &info) != kResultOk || bounded(info.category) != kVstAudioEffectClass)
         continue;
       char uid[33]{};
       FUID(info.cid).toString(uid);
-      PluginDescriptor d{0, 0, 0, info.name};
+      PluginDescriptor d{0, 0, 0, bounded(info.name)};
       d.format = "VST3";
       d.path = path;
       d.classID = uid;
       if (factory2) {
         PClassInfo2 extended{};
         if (factory2->getClassInfo2(i, &extended) == kResultOk)
-          d.instrument = std::strstr(extended.subCategories, "Instrument") != nullptr;
+          d.instrument = bounded(extended.subCategories).find("Instrument") != std::string::npos;
       }
       result.push_back(d);
     }

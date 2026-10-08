@@ -42,6 +42,9 @@ struct MixerGraph {
   std::vector<MixerBus> buses;
   std::vector<MixerInstrumentOutput> instruments;
   std::vector<MixerSidechain> sidechains;
+  // Explicitly unconnected effect instances. Other unowned rack effects keep
+  // their normal Master fallback. Detached processors remain clocked on silence.
+  std::vector<std::string> detached;
   // An empty graph uses the legacy, reference-qualified master-rack path.
   bool active() const { return !buses.empty(); }
   bool operator==(const MixerGraph &) const = default;
@@ -50,6 +53,9 @@ struct MixerGraph {
   // fresh song identities. Returns a deterministic processing order.
   std::vector<size_t> validate(const std::vector<uint64_t> &tracks) const;
 };
+// Longest tail one processor (a plugin or a whole bus graph) may report. Hosts
+// clamp to this before describing a processor; compileMixer rejects more.
+inline constexpr double mixerMaximumTailSeconds = 120;
 struct MixerProcessorInfo {
   std::string instance;
   uint32_t latency = 0;
@@ -57,13 +63,15 @@ struct MixerProcessorInfo {
   bool instrument = false, bypass = false;
   uint32_t outputBuses = 1;
   uint64_t activeOutputs = UINT64_MAX;
-  uint64_t activeInputs = 0; // Auxiliary input bits only; main input belongs to the insert chain.
+  uint64_t activeInputs = 0; // Prepared auxiliary capacity; main input belongs to the insert chain.
+  uint64_t mainInputFallback = 0; // Missing detector input uses this processor's main input (native dynamics only).
 };
 struct MixerConnection {
   size_t source = 0, target = 0;
   bool preFader = false;
   double gain = 1;
   uint32_t delay = 0;
+  bool send = false; // Observation identity; main output and send may share endpoints.
 };
 struct MixerNodePlan {
   size_t bus = 0;
@@ -87,6 +95,7 @@ struct MixerSidechainPlan {
 struct MixerPlan {
   std::vector<MixerNodePlan> nodes; // Indexed by bus, evaluated in order.
   std::vector<size_t> order;
+  std::vector<size_t> detached; // Effects clocked on silence, with no audible output.
   std::vector<MixerConnection> connections;
   std::vector<MixerInstrumentPlan> instruments;
   std::vector<MixerSidechainPlan> sidechains;
@@ -94,6 +103,37 @@ struct MixerPlan {
   uint32_t latency = 0;
   double tail = 0;
 };
+// Move an ordered, contiguous insert segment as one edit. Unowned rack effects
+// are resolved on Master exactly as in compileMixer. No processor is recreated.
+void moveMixerInserts(MixerGraph &, const std::vector<std::string> &effectRack,
+                      const std::vector<std::string> &plugins, uint64_t target,
+                      const std::string &before = {});
+// Pull one effect out of its implicit serial main path, healing that path.
+// Explicit auxiliary routes are ambiguous and must be disconnected first.
+// No processor/state/binding is removed; the detached effect clocks silence.
+void detachMixerInsert(MixerGraph &, const std::vector<std::string> &effectRack,
+                       const std::string &plugin);
 MixerPlan compileMixer(const MixerGraph &, const std::vector<uint64_t> &tracks,
                        const std::vector<MixerProcessorInfo> &, uint32_t sampleRate);
+// Control-thread dependency comparison for a prepared live transition. Each
+// destination processor maps to an old processor slot only if every main and
+// auxiliary input has the same expression, including gain, summing order and
+// delay compensation. SIZE_MAX requires a separate prepared processor copy.
+// This proves signal equivalence, not mutable runtime-state transfer: a render
+// executor must also retain delay/fader histories and cache shared DSP output.
+// Explicitly reset identities cover changed recipes/state/assignment semantics.
+std::vector<size_t> reusableMixerProcessors(
+    const MixerGraph &before, const MixerPlan &beforePlan, const std::vector<MixerProcessorInfo> &beforeProcessors,
+    const MixerGraph &after, const MixerPlan &afterPlan, const std::vector<MixerProcessorInfo> &afterProcessors,
+    const std::vector<std::string> &reset = {});
+// Destination-to-source indices for histories whose complete input expression
+// is unchanged. Delay gain is intentionally excluded: it is applied on read,
+// after the stored samples. Controls include all smoothed bus values.
+struct MixerTransitionReuse {
+  std::vector<size_t> processors, direct, connections, instruments, sidechains, controls;
+};
+MixerTransitionReuse mixerTransitionReuse(
+    const MixerGraph &before, const MixerPlan &beforePlan, const std::vector<MixerProcessorInfo> &beforeProcessors,
+    const MixerGraph &after, const MixerPlan &afterPlan, const std::vector<MixerProcessorInfo> &afterProcessors,
+    const std::vector<std::string> &reset = {});
 } // namespace Tracker

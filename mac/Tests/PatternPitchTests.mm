@@ -1,4 +1,5 @@
 #include "../Audio/AudioUnitHost.hpp"
+#include "FixtureTrust.hpp"
 #import "../Bridge/TrackerSession.h"
 #include "editor/TrackerDocument.hpp"
 #include "soundlib/ModInstrument.h"
@@ -59,7 +60,7 @@ static void sessionTest() {
   check([expected isEqual:call(@"pattern.performance.get",@{@"pattern":@0})[@"data"]],"Version 8 preserves exact pitch metadata");
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
 }
-int main(int argc,char **argv){@autoreleasepool{try{
+int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Fixture bundle required");
   void *bundle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW);
   check(bundle,"Open local pitch fixture");

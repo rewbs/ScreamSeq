@@ -11,7 +11,7 @@ extension InterfaceTests {
     let picker = PatternCommandPicker(frame:.zero)
     picker.onContext = { (model,cursor,0,4) }
     picker.capture()
-    try require(picker.filtered.count==8 && picker.table.selectedRow==1 && picker.parameter.stringValue=="D3", "Picker identifies extended command without losing its low parameter digit")
+    try require(picker.filtered.count==model.commands.effects.count+PatternCommand.native.count && picker.table.selectedRow==1 && picker.parameter.stringValue=="D3", "Picker identifies extended command without losing its low parameter digit")
     let grid = PatternView();grid.model=model;grid.column=4
     try require(grid.currentCommandHelp.contains("Delay in ticks"),"Cursor help explains the exact extended command")
     try require(model.commands.entry(command:20,parameter:211)?.family=="timing" && model.commands.entry(command:20,parameter:129)==nil, "Unknown extended prefixes are not mislabeled")
@@ -96,6 +96,8 @@ extension InterfaceTests {
     try require(grid.column==4 && deferredCommit==1,"Navigation after a pending effect survives its asynchronous save exactly once")
     grid.canEdit={true};grid.onTrackerEffect={_,_,_,_,_ in}
     grid.column=3;key(grid,45,"n");key(grid,8,"c");try require(typed=="note-cut","NC opens the precise cut editor")
+    key(grid,45,"n");key(grid,3,"f");try require(grid.nudgeEditor?.kind=="nudge-forward" && grid.column==4,"NF enters strength directly inside the pattern");grid.nudgeEditor?.onFinish?(false)
+    grid.column=3;key(grid,45,"n");key(grid,15,"r");try require(grid.nudgeEditor?.kind=="nudge-reverse","NR enters reverse scratch values inside the pattern");grid.nudgeEditor?.onFinish?(false)
     grid.column=3;key(grid,35,"p");key(grid,53,"\u{1b}");try require(grid.effectPrefix.isEmpty,"Escape cancels incomplete command entry")
     grid.cyclePositionMode();try require(grid.positionMode == .beats && grid.positionLabels[4]=="1.000" && grid.gutterWidth==92,"Beat ruler uses the pattern signature and expands its gutter")
     grid.positionTimes=(0..<grid.model.rows).map{["patternSeconds":Double($0)*0.12,"songSeconds":12+Double($0)*0.12]}

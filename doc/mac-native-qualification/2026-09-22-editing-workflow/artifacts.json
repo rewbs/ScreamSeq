@@ -1,0 +1,24 @@
+{
+  "baseRevision": "d5d376fa0ced527cc901d8555076cadbf98d75d4",
+  "builtAtUTC": "2026-09-22T12:41:28.294641+00:00",
+  "sourceFingerprint": "a7f3c00ba0babff4cc467d2d4fab1ba10c25bf3220d4e9ea60029cde0e616756",
+  "executableSHA256": "95473b4b18b7950a54cf04d7b7b089e3f06cc244784f4100e46f286761faa656",
+  "application": "/Users/rewbs/code/openmpt/bin/mac-background/ScreamSeq.app",
+  "uiFixture": "Disposable Midnight Circuit demo in uniquely identified --inspection --automation QA bundles",
+  "uiChecked": [
+    "subdued plugin action buttons versus selected inspector tabs",
+    "BPM 137.25 entry and Escape cancellation",
+    "beat 1/16 equals row 0.25 and native position 16384",
+    "single-click note musical typing C-4 -> D-4",
+    "precise Undo C-4 followed immediately by typing F-4",
+    "instrument Return, Option-Up and Option-Right",
+    "native Command-X and Command-Z"
+  ],
+  "audio": "Existing offline audio/plugin regression suite; no system audio defaults changed",
+  "tests": {
+    "ctestPassed": 75,
+    "interface": "passed",
+    "editingSocket": "passed",
+    "workspaceSocket": "passed"
+  }
+}

@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -114,7 +115,7 @@ class SessionAdapter {
   Json describe() const {
     Json result= {{"protocol","ScreamSeq local API"},{"version",1},
       {"reads",{"api.describe","document.get","pattern.get","transport.get","context.get","workspace.get","workspace.commands.get"}},
-      {"writes",{"transport.play","transport.stop","context.set","workspace.panel","workspace.layout","workspace.shortcut.set"}},{"maxPatternCells",4096},
+      {"writes",{"transport.play","transport.stop","context.set","workspace.input","workspace.panel","workspace.layout","workspace.shortcut.set"}},{"maxPatternCells",4096},
       {"coordinates","Patterns, rows, channels and orders are zero-based. Samples and instruments are one-based; zero means none."},
       {"noteEncoding","0=empty; 1=C-0, 49=C-4, 61=C-5. Special notes and format command IDs follow document.get."},
       {"platform","windows"},{"musicalEditing",false},{"fullApiParity",false},
@@ -127,13 +128,14 @@ class SessionAdapter {
         {"durable",false}}},
       {"revisionGuards",{{"transport.play",{"expectedRevision"}},{"transport.stop",{"expectedRevision"}},
         {"context.set",{"expectedRevision","expectedContext"}},
+        {"workspace.input",{"expectedRevision","expectedContext"}},
         {"workspace.panel",Json::array()},{"workspace.layout",Json::array()},{"workspace.shortcut.set",Json::array()}}},
       {"workspaceSubset",{{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"placements",{"right","hide"}},
         {"editorPlacements",{{"automation",{"right","bottom","secondary","float","hide"}},{"instruments",{"right","bottom","secondary","float","hide"}},{"graphCurve",{"right","bottom","secondary","float","hide"}},{"preciseNotes",{"right","bottom","secondary","float","hide"}}}},
         {"layouts",{"Compose","Pattern focus","Sound design","Connected","Graph editing","Save custom","Restore custom","Delete custom","Reload saved"}},
         {"namedLayouts",{{"optionalField","savedName"},{"default","Custom"},{"maximum",24},{"nameCharacters",64}}},
         {"schema","windows/Api/workspace.schema.json"}}},
-      {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. Workspace operations accept neither revision token; unsupported parameters reject."}};
+      {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. workspace.input also requires both tokens; other workspace operations accept neither token. Unsupported parameters reject."}};
     if(host_ && host_->supportsDocumentOperations()) {
       for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","arrangement.get","arrangement.matrix","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
       for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.open","pattern.notes.set","document.timing.set","song.annotate","arrangement.copyBlock"}) {
@@ -146,7 +148,7 @@ class SessionAdapter {
         {"preview","dryRun validates the complete candidate without consuming IDs/history. wouldChange includes native-only edits; changedCells counts six-field cell edits only. Changed Apply creates one Undo and stops playback; no-op preserves playback and Redo."}};
       for(const auto &m:host_->additionalDocumentReads()) if(std::find(result["reads"].begin(),result["reads"].end(),m)==result["reads"].end())result["reads"].push_back(m);
       for(const auto &m:host_->additionalDocumentWrites()) {
-        if(std::find(result["writes"].begin(),result["writes"].end(),m)==result["writes"].end())result["writes"].push_back(m);result["revisionGuards"][m]={m=="plugin.library.set"?"expectedLibraryRevision":"expectedRevision"};
+        if(std::find(result["writes"].begin(),result["writes"].end(),m)==result["writes"].end())result["writes"].push_back(m);result["revisionGuards"][m]=m=="parameter.activity.watch"?Json::array():Json::array({m=="plugin.library.set"?"expectedLibraryRevision":"expectedRevision"});
       }
       result["windowsExtensions"]={{"document.open","absolute path, expectedRevision, discard:true required for unsaved work"},
         {"plugin.editor.open","slot and expectedRevision; native VST3 editor on the private STA; no musical change unless the vendor emits edits"},
@@ -155,7 +157,7 @@ class SessionAdapter {
         {"graph.plugin.path.get/scan/set","The same Windows VST3 location workflow for a graph/node target, using document Undo and preserving the graph recipe's state, ports and routing."}};
       result["patternEffects"]={{"columns","1–8 FX columns per channel. Code/value cursor fields are 3+2*column and 4+2*column."},
         {"methods","pattern.effects.get/set and pattern.performance.get/set merge ordinary FX 1 with all native commands. pattern.effect.set edits one cell; null clears it."},
-        {"commands","tracker, parameter-set, parameter-slide, pitch-set, pitch-slide, note-cut. Use pattern.commands for source-format IDs and two-character displayCode."},
+        {"commands","tracker, parameter-set, parameter-slide, pitch-set, pitch-slide, note-cut, nudge-forward (NF), nudge-reverse (NR). Nudges: strength value 0..1, duration >0 in 65536 units/row; sample-only, reversal above 0.5 opposing strength. Use pattern.commands for source-format IDs and two-character displayCode."},
         {"timing","65536 units per row; tracker commands require row boundaries. Bindings use stable plugin instance and parameter IDs."},
         {"transforms","pattern.transform uses shared selection/channel/note-track/pattern/song transforms; field effect includes all FX columns. Precise notes remain independent."}};
       const auto extraReads=host_->additionalDocumentReads();
@@ -256,7 +258,7 @@ public:
     if(std::this_thread::get_id()!=owner_) return errorResponse(q["id"],-32002,"Dispatch onto the session control thread");
     const std::string method=q["method"];
     const auto &p=q["params"];
-    const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout" || method=="workspace.commands.get" || method=="workspace.shortcut.set";
+    const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout" || method=="workspace.commands.get" || method=="workspace.shortcut.set" || method=="workspace.input";
     const auto reads=host_ ? host_->additionalDocumentReads() : std::vector<std::string>{};
     const auto writes=host_ ? host_->additionalDocumentWrites() : std::vector<std::string>{};
     const auto separateReads=host_?host_->independentReads():std::vector<std::string>{};
@@ -290,7 +292,7 @@ public:
       if(host_) before=host_->snapshot();
       else before.revision="unbound";
       revision=before.revision;
-      if(write && !workspace && method!="plugin.library.set") {
+      if(write && (!workspace || method=="workspace.input") && method!="plugin.library.set" && method!="parameter.activity.watch") {
         require(p.contains("expectedRevision") && p["expectedRevision"].is_string(),"expectedRevision is required");
         const auto expected=p["expectedRevision"].get<std::string>();
         require(!expected.empty() && expected.size()<=200 && expected.find('\0')==std::string::npos,"Invalid expectedRevision");
@@ -303,7 +305,22 @@ public:
       else if(method=="transport.get") { keys(p,{}); data=before.transport; }
       else if(method=="pattern.get") data=getPattern(p);
       else if(docRead || docWrite) data=host_->documentOperation(method,p);
-      else if(workspace) data=host_->workspace(method,p);
+      else if(workspace) {
+        if(method=="workspace.input") {
+          keys(p,{"expectedRevision","expectedContext","instrument","octave"});
+          require(p.contains("expectedContext")&&p.at("expectedContext").is_string(),"expectedContext is required");
+          if(p.at("expectedContext")!=before.context.at("contextRevision"))throw ApiError(-32001,"Workspace context changed; read it again");
+          require(p.contains("instrument")||p.contains("octave"),"Supply instrument or octave");
+          const auto inputInteger=[&](const char *key,unsigned low,unsigned high) {
+            if(!p.contains(key))return;
+            const auto &raw=p.at(key);require(raw.is_number(),"Input selection must be an integer number");
+            const auto value=raw.get<double>();
+            require(std::isfinite(value)&&std::floor(value)==value&&value>=low&&value<=high,"Input selection is outside its integer range");
+          };
+          inputInteger("instrument",1,255);inputInteger("octave",0,8);
+        }
+        data=host_->workspace(method,p);
+      }
       else if(method=="context.set") {
         host_->navigate(prepareNavigation(p,before)); data=host_->snapshot().context;
       }
@@ -316,7 +333,7 @@ public:
       const auto after=(write || docRead) ? host_->snapshot() : before;
       Json result={{"revision",after.revision},{"changed",before.revision!=after.revision},
         {"playbackStopped",before.transport.value("playing",false) && !after.transport.value("playing",false)}, {"data",std::move(data)}};
-      if(method=="context.get" || method=="context.set")
+      if(method=="context.get" || method=="context.set" || method=="workspace.input")
         result["contextChanged"]=before.context.at("contextRevision")!=after.context.at("contextRevision");
       else if(host_) result["documentId"]=after.documentId;
       Json response={{"jsonrpc","2.0"},{"id",q["id"]},{"result",std::move(result)}};

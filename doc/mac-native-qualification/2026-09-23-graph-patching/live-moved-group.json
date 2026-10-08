@@ -1,0 +1,96 @@
+{
+  "audio": [
+    {
+      "gain": 1,
+      "input": 0,
+      "output": 0,
+      "source": "n18",
+      "target": "n19"
+    },
+    {
+      "gain": 1,
+      "input": 0,
+      "output": 0,
+      "source": "n20",
+      "target": "n21"
+    }
+  ],
+  "id": "n17",
+  "modulation": [],
+  "name": "Patching test",
+  "nodes": [
+    {
+      "attack": 0.01,
+      "controller": 1,
+      "id": "n18",
+      "kind": "input",
+      "name": "Input",
+      "phase": 0,
+      "rate": 1,
+      "release": 0.1,
+      "x": 20,
+      "y": 60
+    },
+    {
+      "attack": 0.01,
+      "controller": 1,
+      "id": "n19",
+      "kind": "output",
+      "name": "Output",
+      "phase": 0,
+      "rate": 1,
+      "release": 0.1,
+      "x": 620,
+      "y": 60
+    },
+    {
+      "attack": 0.01,
+      "controller": 1,
+      "id": "n20",
+      "kind": "plugin",
+      "name": "Distortion",
+      "phase": 0,
+      "plugin": {
+        "classID": "resonance.distortion.v1",
+        "format": "Built-in",
+        "inputs": [],
+        "manufacturer": 0,
+        "name": "",
+        "outputs": [],
+        "path": "",
+        "state": "",
+        "subtype": 0,
+        "type": 0
+      },
+      "rate": 1,
+      "release": 0.1,
+      "x": 254.43152454780363,
+      "y": 322.954338921441
+    },
+    {
+      "attack": 0.01,
+      "controller": 1,
+      "id": "n21",
+      "kind": "plugin",
+      "name": "Compressor",
+      "phase": 0,
+      "plugin": {
+        "classID": "resonance.compressor.v1",
+        "format": "Built-in",
+        "inputs": [],
+        "manufacturer": 0,
+        "name": "",
+        "outputs": [],
+        "path": "",
+        "state": "",
+        "subtype": 0,
+        "type": 0
+      },
+      "rate": 1,
+      "release": 0.1,
+      "x": 474.43152454780363,
+      "y": 322.954338921441
+    }
+  ],
+  "number": 1
+}

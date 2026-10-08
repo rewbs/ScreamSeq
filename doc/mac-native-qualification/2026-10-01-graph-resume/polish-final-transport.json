@@ -1,0 +1,43 @@
+{
+  "changed": false,
+  "data": {
+    "audioActive": false,
+    "audition": false,
+    "callbacks": 34923,
+    "fault": false,
+    "frames": 17880576,
+    "graphActivity": [],
+    "left": 0.03961964696645737,
+    "loop": true,
+    "maxMicros": 4078.041,
+    "order": 0,
+    "overruns": 0,
+    "p999Micros": 3670,
+    "pattern": 0,
+    "patternPosition": 2507.58221302999,
+    "playing": false,
+    "pluginFailure": false,
+    "pluginLatency": 0.00375,
+    "region": {
+      "cursorRow": 0,
+      "loop": true,
+      "order": 0
+    },
+    "right": 0.03771772235631943,
+    "routing": {
+      "active": false,
+      "available": true,
+      "failedPlan": 0,
+      "latencyPending": false,
+      "renderedPlan": 3,
+      "requestedPlan": 3,
+      "state": "stopped"
+    },
+    "row": 9,
+    "voicePositions": [],
+    "voices": 4
+  },
+  "documentId": "F1AB3549-7972-4827-A12F-1DBF7063422D",
+  "playbackStopped": false,
+  "revision": "F1AB3549-7972-4827-A12F-1DBF7063422D:3:2:0"
+}

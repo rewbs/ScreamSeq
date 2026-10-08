@@ -29,6 +29,8 @@
 #include "PreciseNoteWindow.hpp"
 #include "InstrumentEnvelopeWindow.hpp"
 #include "AbsoluteAutomationWindow.hpp"
+#include "ParameterActivityWindow.hpp"
+#include "GraphWorkflowWindow.hpp"
 #include "SampleDetailWindow.hpp"
 #include "AuditionWindow.hpp"
 #include "../Samples/Library.hpp"
@@ -65,7 +67,7 @@ namespace {
 namespace Regions = ScreamSeq::WorkspaceRegions;
 constexpr int connectedWorkspaceCommand=562,openGraphCurveCommand=563,dockGraphCurveCommand=564,
     graphEditingWorkspaceCommand=565,editorGraphCurveTab=566,dockPreciseNotesCommand=567,
-    editorPreciseNotesTab=568,notesInspectorCommand=569,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
+    editorPreciseNotesTab=568,notesInspectorCommand=569,graphWorkflowCommand=574,parameterActivityCommand=575,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
 constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
@@ -217,6 +219,7 @@ public:
 	std::unique_ptr<ScreamSeq::ApiDispatch> api;
 	std::string documentId;
 	uint64_t contextRevision = 0;
+    std::optional<unsigned> inputInstrumentOverride;
 	ScreamSeq::WorkspaceState workspaceState;
 	bool playbackLoop = true;
 	Json playbackRegion = Json::object();
@@ -227,7 +230,7 @@ public:
 		auto audio = device.stats();
 		auto result=view->session;
 		result.context = {{"documentId",documentId},{"contextRevision",documentId + ":context:" + std::to_string(contextRevision) + ":" + selection().dump()},
-			{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",column},{"following",follow},{"follow",follow},{"selection",selection()},
+			{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",column},{"instrument",inputInstrumentOverride.value_or(typingSound)},{"octave",octave},{"following",follow},{"follow",follow},{"selection",selection()},
 			{"file",view->path.empty() ? Json(nullptr) : Json(utf8Path(view->path))},{"dirty",view->dirty},{"autosave",recoveryStatus()},
             {"playback",{{"playing",device.running()&&!auditionOnly},{"pattern",t.pattern},{"row",t.row}}}};
 		result.transport = {{"playing",device.running()&&!auditionOnly},{"loop",playbackLoop},{"region",playbackRegion},
@@ -327,6 +330,9 @@ public:
             {"parameterAutomation",parameterAutomationWindow?parameterAutomationWindow->snapshot():Json{{"visible",false}}},
             {"instrumentEnvelope",instrumentEnvelopeWindow?instrumentEnvelopeWindow->snapshot():Json{{"visible",false}}},
             {"absoluteAutomation",absoluteAutomationWindow?absoluteAutomationWindow->snapshot():Json{{"visible",false}}},
+            {"parameterActivity",parameterActivityWindow?parameterActivityWindow->snapshot():Json{{"visible",false}}},
+            {"graphWorkflowWindow",graphWorkflowWindow?graphWorkflowWindow->snapshot():Json{{"visible",false}}},
+            {"nudgeEditor",nudgeEditorSnapshot()},
             {"contextMenu",workspaceContextMenuSnapshot()},
             {"shortcuts",{{"pending",workspaceShortcuts&&workspaceShortcuts->pending()},{"hint",workspaceShortcuts?workspaceShortcuts->hint():std::string()}}},
             {"sampleDetail",sampleDetailWindow?sampleDetailWindow->snapshot():Json{{"visible",false}}},
@@ -342,6 +348,19 @@ public:
 	Json workspace(const std::string &method,const Json &p) override {
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
 		if(method=="workspace.get") { require(p.empty(),"workspace.get accepts no parameters"); return workspaceSnapshot(); }
+        if(method=="workspace.input") {
+            for(auto it=p.begin();it!=p.end();++it)require(it.key()=="expectedRevision"||it.key()=="expectedContext"||it.key()=="instrument"||it.key()=="octave","Unknown input field");
+            require(p.contains("instrument")||p.contains("octave"),"Supply instrument and/or octave");
+            require(p.contains("expectedRevision")&&p.at("expectedRevision").is_string()&&p.contains("expectedContext")&&p.at("expectedContext").is_string(),"Supply expectedRevision and expectedContext");
+            if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy");
+            const auto context=documentId+":context:"+std::to_string(contextRevision)+":"+selection().dump();
+            if(p.at("expectedRevision")!=view->session.revision||p.at("expectedContext")!=context)throw ScreamSeq::Api::ApiError(-32001,"Song or input context changed; read context.get again");
+            auto instrument=inputInstrumentOverride.value_or(typingSound),nextOctave=octave;
+            const auto integer=[&](const char *key,unsigned low,unsigned high,unsigned fallback){if(!p.contains(key))return fallback;const auto &v=p.at(key);require(v.is_number(),"Input value must be an integer");const auto n=v.get<double>();require(std::isfinite(n)&&std::floor(n)==n&&n>=low&&n<=high,"Input value is outside its range");return unsigned(n);};
+            instrument=integer("instrument",1,255,instrument);nextOctave=integer("octave",0,8,nextOctave);
+            if(p.contains("instrument"))inputInstrumentOverride=instrument;octave=nextOctave;++contextRevision;refreshTypingSounds();if(controls.contains(octaveChooser))ScreamSeq::NativeControls::select(controls.at(octaveChooser),octave);frameRequested=true;
+            return {{"instrument",instrument},{"octave",octave},{"contextRevision",documentId+":context:"+std::to_string(contextRevision)+":"+selection().dump()}};
+        }
         if(method=="workspace.commands.get"){require(p.empty(),"workspace.commands.get accepts no parameters");return workspaceCommandSnapshot();}
         if(method=="workspace.shortcut.set")return setWorkspaceShortcut(p);
 		if(method=="workspace.panel"&&p.contains("panel")&&p["panel"].is_string()&&isWorkspaceEditor(p["panel"].get<std::string>())){workspaceEditorRequest(p);return workspaceSnapshot();}
@@ -409,6 +428,22 @@ public:
     unsigned patternRows() const {return view->pattern(patternIndex).rows;}
 
     bool busy=false;
+    // Nested modal loops (message boxes, file choosers) dispatch this window's
+    // messages. Close/shutdown must not prompt again or destroy the window
+    // underneath them.
+    unsigned modalDepth=0;
+    struct ModalScope {unsigned &depth;explicit ModalScope(unsigned &value):depth(value){++depth;}~ModalScope(){--depth;}ModalScope(const ModalScope &)=delete;ModalScope &operator=(const ModalScope &)=delete;};
+    int modalMessage(const wchar_t *text,const wchar_t *title,UINT flags) {ModalScope modal(modalDepth);return MessageBoxW(window,text,title,flags);}
+    static BOOL CALLBACK disabledWindow(HWND candidate,LPARAM found) {
+        if(IsWindowVisible(candidate)&&!IsWindowEnabled(candidate)) {*reinterpret_cast<bool *>(found)=true;return FALSE;}
+        return TRUE;
+    }
+    // Also detects choosers owned by tool windows: a modal dialog disables its owner.
+    bool modalActive() const {
+        if(modalDepth)return true;
+        bool found=false;EnumThreadWindows(GetCurrentThreadId(),disabledWindow,reinterpret_cast<LPARAM>(&found));
+        return found;
+    }
     uint64_t stopGeneration=0;
     template<class T> T await(std::future<T> future) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy");
@@ -421,7 +456,7 @@ public:
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
                 if(message.message==WM_QUIT) {PostQuitMessage(int(message.wParam));break;}
                 if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && !ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd) && handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
-                if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&releaseAuditionKey(message.wParam))continue;
+                if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&handleKeyUp(message.wParam))continue;
                 TranslateMessage(&message);DispatchMessageW(&message);
             }
             // Complete the owned task even if presentation is lost; unwinding
@@ -443,19 +478,30 @@ public:
         row=std::min(row,patternRows()-1);channel=std::min(channel,view->channels-1);
         column=std::min(column,2u+2u*view->effectColumns.at(channel));
         anchorRow=std::min(anchorRow,patternRows()-1);anchorChannel=std::min(anchorChannel,view->channels-1);
-        if(previous!=documentId) {releaseTypedNotes();resetMidiDocument();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
+        if(previous!=documentId) {releaseTypedNotes();resetMidiDocument();preparedPlayback=nullptr;renderer=nullptr;inputInstrumentOverride.reset();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
         else if(oldPosition!=position()) ++contextRevision;
-        resolveArrangementSelection();revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();updateRecordingWindow();updateSongTools();
+        resolveArrangementSelection();revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();updateRecordingWindow();updateSongTools();if(graphWorkflowWindow)graphWorkflowWindow->update();
     }
     bool supportsDocumentOperations() const override {return true;}
-    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.push_back("recording.get");for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::EnvelopeOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
-    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.insert(r.end(),{"recording.get","graph.signal.get","graph.scope.get","graph.listen.get","parameter.activity.targets","parameter.activity.parameters","parameter.activity.sources","parameter.activity.get"});for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::EnvelopeOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard","graph.signal.clear","graph.scope.watch","graph.listen.set","parameter.activity.watch"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    #include "SignalObservation.inc"
     Json documentOperation(const std::string &method,const Json &params) override {
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
         if(busy||recoveryRestoring) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
-        try {auto result=await(controller->invoke(method,params));refreshDocument();if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();return result;}
+        if(method=="graph.signal.get"||method=="graph.signal.clear"||method=="graph.scope.get"||method=="graph.scope.watch"||method=="graph.listen.get"||method=="graph.listen.set")return signalObservationOperation(method,params);
+        try {
+            auto result=await(controller->invoke(method,params));refreshDocument();
+            if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
+            // A dropped vendor editor never blocks the operation; say what happened.
+            if(result.is_object()&&result.contains("pluginEditorWarning")&&result.at("pluginEditorWarning").is_string()) {
+                pluginEditorWarning=wide(result.at("pluginEditorWarning").get<std::string>());status=pluginEditorWarning;frameRequested=true;
+            }
+            return result;
+        }
         catch(...) {refreshDocument();throw;}
     }
+    std::wstring pluginEditorWarning;
     // Internal first-open reads must not refresh presentation until the whole
     // layout is ready. The native restore fixture overrides this boundary to
     // exercise failed reads and pumped input; it is not an API or launch option.
@@ -475,11 +521,25 @@ public:
         audioSettingsIdentity=documentId;
         ScreamSeq::PlaybackHooks playback;
         playback.feedback=[this]{
-            ScreamSeq::PlaybackFeedback result;result.playing=device.running()&&!auditionOnly;result.sampleRate=lastRate?lastRate:48000;
+            ScreamSeq::PlaybackFeedback result;result.audioActive=device.running();result.playing=result.audioActive&&!auditionOnly;result.sampleRate=lastRate?lastRate:48000;result.generation=stopGeneration;
             if(result.playing&&preparedPlayback){result.latency=preparedPlayback->chain().latency();result.meters=preparedPlayback->chain().mixerMeters();result.activity=preparedPlayback->chain().graphActivity();}
             return result;
         };
+        playback.pluginBypass=[this](size_t slot,bool value){
+            if(device.running()&&(!preparedPlayback||!preparedPlayback->chain().bypass(slot,value)))throw std::runtime_error("Prepared bypass target is unavailable");
+        };
         playback.controls=[this](const std::vector<Tracker::MixerControls> &values){return !device.running()||(preparedPlayback&&preparedPlayback->chain().mixerControls(values));};
+        playback.publishNativeUpdate=[this](ScreamSeq::HostedProjectPlayback *owner,ScreamSeq::HostedProjectPlayback::PreparedNativeUpdate &update){return device.running()&&owner==preparedPlayback&&owner->publishNativeUpdate(update);};
+        playback.prepareSampleLoops=[this](unsigned sample,const Tracker::SampleEditGeometry &geometry)->std::function<void()> {
+            const auto epoch=stopGeneration;const bool active=device.running();auto *owner=renderer;
+            if(active&&(!owner||!owner->canUpdateSampleLoops()))throw ScreamSeq::Api::ApiError(-32002,"Live sample loop queue is full; retry after playback advances");
+            // The library browser has a separate decoded-file preview and is
+            // deliberately untouched. Song and musical audition share this renderer.
+            return [this,epoch,active,owner,sample,geometry]{
+                if(stopGeneration!=epoch||device.running()!=active||renderer!=owner)throw ScreamSeq::Api::ApiError(-32002,"Playback changed before sample-loop commit; retry the edit");
+                if(active&&!owner->updateSampleLoops(uint16_t(sample),geometry))throw ScreamSeq::Api::ApiError(-32002,"Live sample loop queue is full; no edit committed");
+            };
+        };
         controller=std::make_unique<ScreamSeq::DocumentController>(input,documentId,[this]{stop();},[this](const auto &edits){
             if(device.running() && renderer && !renderer->enqueue(edits)) {stop();status=L"Edit committed; playback stopped because live queue was full";}
         },std::function<void()>{},64u*1024u*1024u,[this](std::span<const Tracker::ParameterChange> changes){
@@ -562,6 +622,7 @@ public:
     #include "MixerEditor.inc"
     #include "GraphEditor.inc"
     #include "GraphCurveEditor.inc"
+    #include "GraphWorkflowIntegration.inc"
     #include "GraphPatternLanes.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> makeInstrumentEnvelopeWindow(std::shared_ptr<bool> preparing={}){
@@ -588,6 +649,18 @@ public:
         auditionWindow->openAt(sample,std::move(identity));
     }
     bool releaseAuditionKey(WPARAM key){const bool typed=releaseTypedKey(key);return (auditionWindow&&auditionWindow->releaseKey(key))||typed;}
+    // Message pumps call this outside any handler: a full audition queue must
+    // become a status message, never an exception that unwinds the pump.
+    bool handleKeyUp(WPARAM key) noexcept {
+        bool handled=false;
+        try {handled=releaseTypedKey(key);}
+        catch(const std::exception &e) {handled=true;frameRequested=true;try {status=wide(e.what());} catch(...) {}}
+        catch(...) {handled=true;}
+        try {if(auditionWindow&&auditionWindow->releaseKey(key))handled=true;}
+        catch(const std::exception &e) {handled=true;frameRequested=true;try {status=wide(e.what());} catch(...) {}}
+        catch(...) {handled=true;}
+        return handled;
+    }
     std::unique_ptr<ScreamSeq::SampleDetailWindow> sampleDetailWindow;
     void openSampleDetail(){
         if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);});
@@ -595,6 +668,63 @@ public:
         sampleDetailWindow->openAt();
     }
     std::unique_ptr<ScreamSeq::AbsoluteAutomationWindow> absoluteAutomationWindow;
+    std::unique_ptr<ScreamSeq::ParameterActivityWindow> parameterActivityWindow;
+    void inspectParameterSource(const Json &source) {
+        if(busy||recoveryRestoring)throw std::runtime_error("Wait for the document before opening a captured source");
+        const auto sourceDocument=documentId,sourceRevision=view->session.revision;
+        const auto unchanged=[&](const Json &cursor){if(documentId!=sourceDocument||view->session.revision!=sourceRevision||position()!=cursor)throw std::runtime_error("Song or cursor changed while opening the source / newer context retained");};
+        const auto kind=source.value("kind",std::string());
+        const auto plugin=source.value("plugin",std::string());
+        const auto parameter=source.value("parameter",uint32_t(0));
+        const auto requireParameter=[&]{
+            const auto &rack=view->session.document.at("nativePlugins");
+            if(plugin.empty()||std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;}))throw std::runtime_error("Captured source plugin is unavailable");
+            const auto cursor=position();const auto parameters=documentOperation("plugin.parameters.get",{{"plugin",plugin}});unchanged(cursor);
+            if(std::none_of(parameters.begin(),parameters.end(),[&](const auto &p){return p.at("id")==parameter;}))throw std::runtime_error("Captured source parameter is unavailable");
+        };
+        if(kind=="recorded"){
+            if(absoluteAutomationWindow){const auto s=absoluteAutomationWindow->snapshot();if(s.value("dirty",false)||s.value("fieldDraft",false)||s.value("pending",false))throw std::runtime_error("Apply or Reload the existing song automation draft first");}
+            requireParameter();const auto cursor=position();openAbsoluteAutomation(plugin,parameter);unchanged(cursor);absoluteAutomationWindow->openSourceAt(plugin,parameter);return;
+        }
+        const auto sourcePattern=[&]{
+            const auto pattern=source.at("pattern").get<unsigned>();if(!view->patterns.contains(pattern))throw std::runtime_error("Captured source pattern is unavailable");
+            if(source.contains("patternID")){const auto &patterns=view->session.document.at("patterns");if(std::none_of(patterns.begin(),patterns.end(),[&](const auto &p){return p.at("index")==pattern&&p.at("id")==source.at("patternID");}))throw std::runtime_error("Captured source pattern identity changed");}return pattern;
+        };
+        if(kind=="envelope") {
+            if(parameterAutomationWindow){const auto s=parameterAutomationWindow->snapshot();if(s.value("retainedDraft",false)||s.value("pending",false))throw std::runtime_error("Apply or Reload the existing parameter curve draft first");}
+            const auto pattern=sourcePattern();requireParameter();auto next=position();next["pattern"]=pattern;next["row"]=source.value("position",0u)/65536;next["following"]=false;navigate(next);const auto cursor=position();openParameterAutomation(plugin,parameter);unchanged(cursor);parameterAutomationWindow->openSourceAt(plugin,parameter);workspaceEditors[0].pinned=true;return;
+        }
+        if(kind=="pattern-set"||kind=="pattern-slide"||kind=="pattern-commands"||kind=="graph-command") {
+            if(effectDraftExists)throw std::runtime_error("Apply or Reload the existing FX draft first");
+            if(kind=="graph-command"&&graphCommandsWindow){const auto s=graphCommandsWindow->snapshot();if(s.value("draft",false)||s.value("pending",false))throw std::runtime_error("Apply or Reload the existing graph command draft first");}
+            const auto pattern=sourcePattern();
+            if(kind=="graph-command"){
+                const auto cursor=position();const auto graph=documentOperation("graph.get",{{"includeState",false}});unchanged(cursor);
+                const auto target=source.value("target",std::string());const auto &buses=graph.at("mixer").at("buses");
+                if(source.value("column",0u)>7||std::none_of(buses.begin(),buses.end(),[&](const auto &b){return b.at("id")==target;}))throw std::runtime_error("Captured graph command target or lane is unavailable");
+            }
+            auto next=position();next["pattern"]=pattern;next["row"]=source.value("position",uint32_t(0))/65536;next["following"]=false;
+            if(kind!="graph-command"){next["channel"]=source.at("channel");next["column"]=3+2*source.value("column",0u);}
+            navigate(next);if(kind=="graph-command"){
+                const auto cursor=position();openGraphCommands();unchanged(cursor);graphCommandsWindow->openSourceAt(source.value("target",std::string()),source.value("column",0u));
+            }else{workspaceState.focus="pattern";SetFocus(window);openEffectEditor();}return;
+        }
+        if(source.value("scope",std::string())=="song"){openGraphWorkflow();graphWorkflowWindow->openSongSource(source.value("node",std::string()),plugin,parameter);return;}
+        if(source.contains("graph")&&source.at("graph").is_string()&&source.at("graph")!="n0") {
+            if(graphDirty||graphFieldDirty||graphPending)throw std::runtime_error("Apply or Reload the existing graph draft first");graphID=source.at("graph");graphNode=source.value("node",std::string());command(graphCommand);return;
+        }
+        if(!plugin.empty()) {
+            if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or Reload the rack draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;}))throw std::runtime_error("Captured plugin is unavailable");selectedPlugin=plugin;selectedParameter=parameter;pluginDetailsRevision.clear();command(pluginsCommand);return;
+        }
+        throw std::runtime_error("This event has no editable source location");
+    }
+    void openParameterActivity(std::string plugin={},std::optional<uint32_t> parameter={}) {
+        if(!parameterActivityWindow)parameterActivityWindow=std::make_unique<ScreamSeq::ParameterActivityWindow>(window,
+            [this](const auto &method,const auto &p){return documentOperation(method,p);},
+            [this]{return ScreamSeq::ParameterActivityWindow::Context{documentId,view->session.revision,busy||recoveryRestoring};},
+            [this](const Json &source){inspectParameterSource(source);});
+        parameterActivityWindow->openAt(std::move(plugin),parameter);
+    }
     void openAbsoluteAutomation(std::string plugin={},std::optional<uint32_t> parameter={}){
         if(!absoluteAutomationWindow)absoluteAutomationWindow=std::make_unique<ScreamSeq::AbsoluteAutomationWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::AbsoluteAutomationWindow::Context{documentId,view->session.revision,selectedPlugin,selectedParameter,view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter,bool pattern){
             if(pattern){openParameterAutomation(plugin,parameter);return;}
@@ -624,6 +754,47 @@ public:
         finishWorkspaceEditorOpen("automation");
     }
 	#include "WorkspaceDraw.inc"
+	// The one close decision for WM_CLOSE and WM_QUERYENDSESSION. It never
+	// throws. A failed save keeps the song open and says why; when unsaved
+	// work cannot even be checked, the user decides whether to close anyway,
+	// so a broken document worker cannot make the window unclosable.
+	bool canClose() noexcept {
+		std::wstring reason=L"unexpected error";
+		unsavedChecked=false;
+		try {
+			// A prompt or chooser is already showing: do not stack another.
+			if(modalActive()||recoverySaving||recoveryRestoring||recoveryReads) return false;
+			if(busy||libraryWaits) {stop();++samplePreviewGeneration;samplePreview.stop();return false;}
+			return protectUnsaved();
+		} catch(const std::exception &e) {
+			try {reason=wide(e.what());} catch(...) {}
+		} catch(...) {}
+		frameRequested=true;
+		try {
+			status=L"Not closed / "+reason;
+			// The song is known to be dirty and its save (or prompt) failed:
+			// keep it. Closing again offers Save/Discard/Cancel once more.
+			if(unsavedChecked) return false;
+			const auto text=L"Could not check for unsaved changes: "+reason+L".\nClose anyway? Unsaved changes will be lost.";
+			return modalMessage(text.c_str(),L"ScreamSeq",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)==IDYES;
+		} catch(...) {}
+		return false;
+	}
+	// A persistent presentation failure must not cost the song: report it and
+	// offer Save while the document worker is still healthy.
+	void presentationFailure() noexcept {
+		try {
+			releaseTypedNotes();
+			if(busy||!view->dirty) {
+				modalMessage(L"ScreamSeq cannot draw its window and keeps retrying.\nThe song in memory is unchanged.",L"ScreamSeq display unavailable",MB_OK|MB_ICONWARNING);
+				return;
+			}
+			if(modalMessage(L"ScreamSeq cannot draw its window and keeps retrying.\nSave the unsaved song now?",L"ScreamSeq display unavailable",MB_YESNO|MB_ICONWARNING)!=IDYES) return;
+			if(saveFile()) modalMessage(L"The song was saved.",L"ScreamSeq display unavailable",MB_OK|MB_ICONINFORMATION);
+		} catch(const std::exception &e) {
+			try {status=wide(e.what());modalMessage(status.c_str(),L"ScreamSeq could not save the song",MB_OK|MB_ICONERROR);} catch(...) {}
+		} catch(...) {}
+	}
 	void draw() {
         frameRequested=false;
         auditionWasAnimating=auditionOnly&&auditionAnimating();
@@ -647,10 +818,17 @@ public:
         }
 		if(follow && device.running() && !auditionOnly && playback.pattern==patternIndex) firstRow = playback.row > visibleRows()/2 ? playback.row - visibleRows()/2 : 0;
 		surface->begin();
-		drawWorkspace(playback);
-		surface->finishDrawing();
+		// A failed frame must still end the D2D draw and pop its clips.
+		try {drawWorkspace(playback);} catch(...) {surface->abandon();throw;}
+		const bool drawn=surface->finishDrawing();
 		if(cpuDraw.size() < 120000) cpuDraw.push_back((ScreamSeq::ticks() - begin) * 1e6 / frequency);
-		auto result = surface->present(); ScreamSeq::check(result, "Present application");
+		auto result = drawn ? surface->present() : S_FALSE; ScreamSeq::check(result, "Present application");
+		if(surface->lost()) {
+			// Device removed/reset: resources were discarded and the next frame
+			// recreates them. The caller sees lost() and counts the failure.
+			frameRequested=true;
+			return;
+		}
 		if(result == DXGI_STATUS_OCCLUDED) ++occluded;
 		auto now = ScreamSeq::ticks();
 		if(previousSubmit && submitIntervals.size() < 120000) submitIntervals.push_back((now - previousSubmit) * 1000 / frequency);
@@ -696,9 +874,16 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		case WM_CLOSE:
             app->recoveryClosePosted=false;
             if(app->recoverySaving||app->recoveryRestoring||app->recoveryReads||(app->recoveryCloseRequested&&(app->busy||app->libraryWaits))) {app->recoveryCloseRequested=true;return 0;}
-            if(app->busy||app->libraryWaits) {app->stop();++app->samplePreviewGeneration;app->samplePreview.stop();return 0;}
-            app->recoveryCloseRequested=false;if(!app->protectUnsaved())return 0;break;
+            app->recoveryCloseRequested=false;if(!app->canClose())return 0;break;
+		case WM_QUERYENDSESSION: return app->canClose() ? TRUE : FALSE;
+		case WM_ENDSESSION:
+			if(wp) {
+                app->releaseTypedNotes();app->stop();++app->samplePreviewGeneration;app->samplePreview.stop();
+                if(!app->busy&&!app->libraryWaits&&!app->recoverySaving&&!app->recoveryRestoring&&!app->recoveryReads&&!app->modalActive()) DestroyWindow(window);
+			}
+			return 0;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
+		case WM_NCDESTROY: SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
         case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
         case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
         case WM_DEVICECHANGE: app->midiRescanRequested=!app->midiSource.empty();return 0;
@@ -717,6 +902,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             SetTextColor(reinterpret_cast<HDC>(wp),RGB(212,224,235));SetBkColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));
             SetDCBrushColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
         case WM_COMMAND:
+            if(LOWORD(wp)==9800||LOWORD(wp)==9801){if(HIWORD(wp)==EN_CHANGE)app->patternNudgeFieldChanged();return 0;}
             if(LOWORD(wp)==graphPropertyValue||(LOWORD(wp)>=graphOutputPort&&LOWORD(wp)<=graphGain)||LOWORD(wp)==graphParameterValue||LOWORD(wp)==graphAmount||LOWORD(wp)==graphWet){if(HIWORD(wp)==EN_CHANGE)app->graphFieldChanged();return 0;}
             if((LOWORD(wp)==graphLibrary||LOWORD(wp)==graphKind||LOWORD(wp)==graphRack||LOWORD(wp)==graphNodePicker||LOWORD(wp)==graphPage||LOWORD(wp)==graphProperty||LOWORD(wp)==graphSource||LOWORD(wp)==graphDestination||LOWORD(wp)==graphWire||LOWORD(wp)==graphParameter||LOWORD(wp)==graphBus)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)>=mixerName&&LOWORD(wp)<=mixerTiming){if(HIWORD(wp)==EN_CHANGE)app->mixerFieldChanged();return 0;}
@@ -735,12 +921,12 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             if(LOWORD(wp)==sampleCommandBase && HIWORD(wp)!=LBN_SELCHANGE && HIWORD(wp)!=LBN_DBLCLK) return 0;
             app->command(LOWORD(wp));return 0;
 		case WM_KEYDOWN:case WM_SYSKEYDOWN: if(app->key(wp,(lp&(1LL<<30))!=0)) return 0;break;
-        case WM_KEYUP:case WM_SYSKEYUP:if(app->releaseAuditionKey(wp))return 0;break;
+        case WM_KEYUP:case WM_SYSKEYUP:if(app->handleKeyUp(wp))return 0;break;
         case WM_KILLFOCUS:if(!app->liveKeyboard)app->releaseTypedNotes(window);break;
         case WM_ACTIVATEAPP:if(!wp)app->releaseTypedNotes();break;
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
-        case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);app->graphLaneClick(x,y,true);return 0;}
+        case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->patternNudgeDoubleClick(x,y))app->graphLaneClick(x,y,true);return 0;}
 		case WM_LBUTTONUP: app->graphMouseUp(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));app->dragging=0;ReleaseCapture();return 0;
 		case WM_CAPTURECHANGED:if(app->dragging>=6&&app->dragging<=9)app->graphCancelDrag();app->cancelWorkspaceRegionDrag();app->dragging=0;return 0;
 		case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{
@@ -757,11 +943,33 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 			break;
 		}
 		}
-	} catch(const std::exception &error) { app->status = wide(error.what()); }
+	} catch(const std::exception &error) {
+		try { app->status = wide(error.what()); } catch(...) {}
+		// Never let a failed close fall through to the default handler, which
+		// would destroy the window and discard the unsaved song.
+		if(message==WM_CLOSE || message==WM_QUERYENDSESSION || message==WM_ENDSESSION) return 0;
+	} catch(...) {
+		if(message==WM_CLOSE || message==WM_QUERYENDSESSION || message==WM_ENDSESSION) return 0;
+	}
 	return DefWindowProcW(window, message, wp, lp);
 }
+// The UI thread hosts shell dialogs (IFileOpenDialog), so it owns an STA.
+struct ComApartment {
+	HRESULT result = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	ComApartment() = default;
+	ComApartment(const ComApartment &) = delete;
+	ComApartment &operator=(const ComApartment &) = delete;
+	~ComApartment() { if(SUCCEEDED(result)) CoUninitialize(); }
+};
+// Declared after the Application: on every exit path, including unwinding, the
+// window is detached from it and destroyed while the Application still exists.
+struct WindowOwner {
+	HWND &window;
+	~WindowOwner() { if(window) { SetWindowLongPtrW(window, GWLP_USERDATA, 0); DestroyWindow(window); window = nullptr; } }
+};
 }
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+	ComApartment apartment; // Outlives the Application and every COM user below.
 	HWND window{};
 	try {
 		int argc = 0; auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -826,6 +1034,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             try{library=std::filesystem::path(local)/L"org.resonance.tracker"/L"plugin-library-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
         }
 		Application app(projectPath,inspection,std::move(catalogue),std::move(library));app.silentOutput=silentOutput;
+		WindowOwner windowOwner{window};
         if(!inspection&&!audioTest){
             PWSTR local{};ScreamSeq::check(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local),"Find workspace directory");
             std::filesystem::path path;try{path=std::filesystem::path(local)/L"org.resonance.tracker"/L"workspace-layouts-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
@@ -870,18 +1079,21 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         if(!inspection&&!audioTest&&!automation)app.reloadRecoveryBrowser(true);
 		if(audioTest) { app.play(); if(!app.device.running()) throw std::runtime_error("Audio test could not start endpoint"); }
 		bool closed = false; double start = ScreamSeq::ticks();
+		// Qualification runs keep their non-modal failure exit code.
+		const bool unattended=inspection||audioTest||automation||seconds>0;
+		unsigned drawFailures=0;double drawRetry=0;bool drawFailureShown=false;
 		while(!closed) {
 			HANDLE event = app.surface->ready();
-            const bool renderPending=!IsIconic(window) && app.presentationNeeded();
+            const bool renderPending=!IsIconic(window) && app.presentationNeeded() && ScreamSeq::ticks()>=drawRetry;
             if(!renderPending) ++app.idleWaits;
             // A ready swapchain stays signaled without Present. Exclude it while
             // stopped/unchanged, otherwise the idle loop spins at full CPU.
-			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, 1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, drawFailures?100:1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 			MSG message{};
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }
 				if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && !ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd) && app.handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
-				if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&app.releaseAuditionKey(message.wParam))continue;
+				if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&app.handleKeyUp(message.wParam))continue;
 				TranslateMessage(&message); DispatchMessageW(&message);
 			}
 			if(closed) break;
@@ -890,7 +1102,27 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             app.serviceRecovery();
             app.serviceMidi();
 			if(result == WAIT_FAILED) throw std::runtime_error("Frame wait failed");
-			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) app.draw();
+			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) {
+				// A frame counts only when it was really presented: draw() returns
+				// normally after a device loss, with the surface still lost.
+				bool presented=false; std::wstring reason=L"display device lost";
+				try { app.draw(); presented=!app.surface->lost(); }
+				catch(const std::exception &error) {
+					if(unattended) throw;
+					try { reason=wide(error.what()); } catch(...) {}
+				}
+				if(presented) { drawFailures=0; drawFailureShown=false; drawRetry=0; }
+				else {
+					++drawFailures;
+					if(unattended && drawFailures>=3) throw std::runtime_error("The display device keeps resetting");
+					// Keep the session and its unsaved song. The first retry is
+					// immediate (one device reset); later ones back off to 2 s.
+					drawRetry=ScreamSeq::ticks()+app.frequency*0.25*std::min(drawFailures-1,8u);
+					app.frameRequested=true;
+					try { app.status=L"Display unavailable / retrying / "+reason; } catch(...) {}
+					if(drawFailures>=3 && !drawFailureShown) { drawFailureShown=true; app.presentationFailure(); }
+				}
+			}
 			if(seconds && (ScreamSeq::ticks() - start) / app.frequency >= seconds) break;
             if(audioTest && !audioTestAllowStop && !app.device.running()) throw std::runtime_error("Audio device stopped during test");
 		}
@@ -904,7 +1136,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 	} catch(const std::exception &error) {
 		OutputDebugStringA(error.what());
 		// Test failures remain non-modal. Normal startup errors are also observable via exit code.
-		if(window) DestroyWindow(window);
+		if(window) { SetWindowLongPtrW(window, GWLP_USERDATA, 0); DestroyWindow(window); }
 		return 1;
 	}
 }

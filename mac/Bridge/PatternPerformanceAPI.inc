@@ -78,13 +78,14 @@
           const auto channel=uint16_t(integer(item[@"channel"],0,song.GetNumChannels()-1));
           const auto kind=decodePatternCommandName(item[@"kind"]);
           const bool pitch=kind==PatternCommandKind::PitchSet||kind==PatternCommandKind::PitchSlide;
+          const bool nudge=isNudge(kind);
           const bool cut=kind==PatternCommandKind::NoteCut,tracker=kind==PatternCommandKind::TrackerEffect;
           const auto position=uint32_t(integer(item[@"position"],0,end-1));
           const auto column=uint8_t(integer(item[@"column"],0,maximumEffectColumns-1));
           require(column || !song.Patterns[index].GetpModCommand(position/performanceUnitsPerRow,channel)->IsPcNote(),"Imported parameter-control notes own FX 1; use another FX column or replace the note first");
           require(occupied.emplace(channel,uint16_t(position/performanceUnitsPerRow),column).second,"Duplicate FX cell");
           PatternCommand c{pattern,next.tracks.at(channel).id,position,uint32_t(integer(item[@"duration"]?:@0,0,end-position)),
-            column,kind,uint16_t(integer(item[@"binding"]?:@0,(pitch||cut||tracker)?0:1,(pitch||cut||tracker)?0:255)),
+            column,kind,uint16_t(integer(item[@"binding"]?:@0,(pitch||cut||tracker||nudge)?0:1,(pitch||cut||tracker||nudge)?0:255)),
             number(item[@"value"] ?: ((cut||tracker)?@0:nil),pitch?-96:0,(cut||tracker)?0:pitch?96:1),
             uint8_t(integer(item[@"pitchRange"]?:@2,1,96)),uint8_t(integer(item[@"effect"]?:@0,0,MAX_EFFECTS-1)),uint8_t(integer(item[@"parameter"]?:@0,0,255))};
           require(tracker || (!c.effect&&!c.parameter),"Only tracker effects have effect/parameter bytes");

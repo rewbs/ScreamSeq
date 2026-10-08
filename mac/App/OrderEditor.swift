@@ -2,16 +2,23 @@ import AppKit
 
 // NSTableView recycles visible rows, so every order remains reachable without
 // creating thousands of buttons in the main window's quick-access strip.
-final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
-  let table = NSTableView(), picker = NSPopUpButton(), sequencePicker = NSPopUpButton()
+final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
+  let table = DirectActionTable(), picker = NSPopUpButton(), sequencePicker = NSPopUpButton()
   let count = Theme.label("", size: 12, color: Theme.muted)
   var model = PatternModel([:])
   var selected = 0, updating = false
+  var onReorder: ((Int, Int, String) -> Void)?, onOpen: (() -> Void)?
+  private let dragType = NSPasteboard.PasteboardType("org.screamseq.order")
+  private var dragRow: Int?, dragRevision = ""
   var onSelect: ((Int) -> Void)?, onChange: ((Int, Int, String) -> Void)?
   var onSequence: ((Int) -> Void)?
   var onMatrix: (() -> Void)?
   var onAnnotate: (([String: Any]) -> Void)?
   let sectionName = NSTextField(), patternName = NSTextField(), patternNotes = NSTextField()
+  // The value last written into each detail field and the order/pattern it
+  // belonged to. Text that differs from it is an uncommitted edit and survives
+  // refreshes for that same target.
+  private var shownDetails = [ObjectIdentifier: (target: String, text: String)]()
   override init(frame: NSRect) {
     super.init(frame: frame)
     for (id, title, width) in [
@@ -22,6 +29,10 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
       column.width = width
       table.addTableColumn(column)
     }
+    table.registerForDraggedTypes([dragType]); table.setDraggingSourceOperationMask(.move,forLocal:true)
+    table.activate = { [weak self] in self?.onOpen?() }
+    table.remove = { [weak self] in self?.change("remove") }
+    table.actions = { [weak self] in self?.actionMenu() ?? NSMenu() }
     table.delegate = self
     table.dataSource = self
     table.usesAlternatingRowBackgroundColors = true
@@ -32,6 +43,7 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     scroll.hasVerticalScroller = true
     scroll.documentView = table
     picker.fixed(width: 210)
+    picker.target = self; picker.action = #selector(assignPattern)
     sequencePicker.fixed(width: 210)
     sequencePicker.target = self
     sequencePicker.action = #selector(selectSequence)
@@ -46,6 +58,7 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     operations.addArrangedSubview(NSView())
     for (field, label) in [(sectionName, "Section beginning at this order"), (patternName, "Pattern name"), (patternNotes, "Pattern notes")] {
       field.placeholderString = label
+      field.delegate = self; field.target = self; field.action = #selector(commitDetails(_:))
       field.setAccessibilityLabel(label)
       field.widthAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
     }
@@ -62,18 +75,15 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
         stack(
           .horizontal,
           [
-            Theme.label("Pattern", size: 12), picker,
-            ActionButton("Assign to order") { [weak self] in self?.change("assign") }, NSView(),
+            Theme.label("Pattern", size: 12), picker, NSView(),
           ]),
-        operations,
+        stack(.horizontal, [ActionButton("Insert after"){[weak self] in self?.change("after")}, ActionMenuButton { [weak self] in self?.actionMenu() ?? NSMenu() }, NSView()]),
         stack(.horizontal, [
           ActionButton("Previous section") { [weak self] in self?.navigateSection(-1) },
           ActionButton("Next section") { [weak self] in self?.navigateSection(1) }, NSView(),
         ]),
-        stack(.horizontal, [Theme.label("Section", size: 12), sectionName,
-          ActionButton("Set section") { [weak self] in self?.saveSection() }]),
-        stack(.horizontal, [Theme.label("Pattern", size: 12), patternName,
-          ActionButton("Save details") { [weak self] in self?.savePatternDetails() }]),
+        stack(.horizontal, [Theme.label("Section", size: 12), sectionName]),
+        stack(.horizontal, [Theme.label("Pattern", size: 12), patternName]),
         patternNotes,
         Theme.label(
           "Sections move with their first order. An empty section name removes that marker. Pattern details are shared.",
@@ -88,20 +98,30 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     self.model = model
     self.selected = max(0, min(selected, model.orders.count - 1))
     count.stringValue = "\(model.orders.count) orders"
+    // Sequences may share a name, and addItem(withTitle:) would drop the
+    // earlier one. Each item carries its own sequence index instead.
     sequencePicker.removeAllItems()
     for (index, sequence) in model.sequences.enumerated() {
       let name = sequence["name"] as? String ?? ""
-      sequencePicker.addItem(withTitle: name.isEmpty ? "Sequence \(index + 1)" : name)
+      let item = NSMenuItem(title: name.isEmpty ? "Sequence \(index + 1)" : name, action: nil, keyEquivalent: "")
+      item.tag = index; sequencePicker.menu?.addItem(item)
     }
-    if model.sequence < model.sequences.count { sequencePicker.selectItem(at: model.sequence) }
+    if model.sequence < model.sequences.count { sequencePicker.selectItem(withTag: model.sequence) }
     sequencePicker.isHidden = model.sequences.count <= 1
+    let assigned = self.selected < model.orders.count ? model.orders[self.selected] : nil
+    let samePattern = assigned != nil && assigned == shownAssignment
+    let chosenPattern = picker.selectedItem?.tag
     picker.removeAllItems()
     for pattern in model.patterns {
       let index = pattern["index"] as? Int ?? 0
-      picker.addItem(withTitle: "Pattern \(index) · \(pattern["rows"] ?? 0) rows")
-      picker.lastItem?.tag = index
+      let item = NSMenuItem(title: "Pattern \(index) · \(pattern["rows"] ?? 0) rows", action: nil, keyEquivalent: "")
+      item.tag = index; picker.menu?.addItem(item)
     }
-    if !model.orders.isEmpty { picker.selectItem(withTag: model.orders[self.selected]) }
+    // A pattern chosen for "Assign to order" but not yet assigned is kept
+    // while the same order still holds the same pattern.
+    if let chosenPattern, samePattern, picker.selectItem(withTag: chosenPattern) {
+    } else if let assigned { picker.selectItem(withTag: assigned) }
+    shownAssignment = assigned
     table.reloadData()
     table.selectRowIndexes(IndexSet(integer: self.selected), byExtendingSelection: false)
     table.scrollRowToVisible(self.selected)
@@ -134,15 +154,28 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
   func tableViewSelectionDidChange(_ notification: Notification) {
     guard !updating, table.selectedRow >= 0 else { return }
     selected = table.selectedRow
-    picker.selectItem(withTag: model.orders[selected])
+    picker.selectItem(withTag: model.orders[selected]); shownAssignment = model.orders[selected]
     updateDetails()
     onSelect?(selected)
   }
+  private var shownAssignment: Int?
+  private func show(_ field: NSTextField, _ text: String, target: String) {
+    let key = ObjectIdentifier(field)
+    let edited = shownDetails[key].map { $0.target == target && field.stringValue != $0.text } ?? false
+    shownDetails[key] = (target, text)
+    if !edited && field.stringValue != text { field.stringValue = text }
+  }
+  /// True while a detail field holds text that has not been saved for its target.
+  var hasUncommittedDetails: Bool {
+    [sectionName, patternName, patternNotes].contains { field in shownDetails[ObjectIdentifier(field)].map { field.stringValue != $0.text } ?? false }
+  }
   private func updateDetails() {
-    sectionName.stringValue = selected < model.orderMetadata.count ? model.orderMetadata[selected]["name"] as? String ?? "" : ""
+    let section = selected < model.orderMetadata.count ? model.orderMetadata[selected] : nil
+    show(sectionName, section?["name"] as? String ?? "", target: section?["id"] as? String ?? "order \(selected)")
     let pattern = selected < model.orders.count ? model.patterns.first { $0["index"] as? Int == model.orders[selected] } : nil
-    patternName.stringValue = pattern?["name"] as? String ?? ""
-    patternNotes.stringValue = pattern?["annotation"] as? String ?? ""
+    let identity = pattern?["id"] as? String ?? "pattern \(pattern?["index"] as? Int ?? -1)"
+    show(patternName, pattern?["name"] as? String ?? "", target: identity)
+    show(patternNotes, pattern?["annotation"] as? String ?? "", target: identity)
     patternName.isEnabled = pattern != nil
     patternNotes.isEnabled = pattern != nil
   }
@@ -164,5 +197,36 @@ final class OrderEditor: NSView, NSTableViewDataSource, NSTableViewDelegate {
     onAnnotate?(["id": id, "name": patternName.stringValue, "annotation": patternNotes.stringValue, "expectedRevision": model.revisionToken])
   }
   private func change(_ operation: String) { onChange?(selected, picker.selectedTag(), operation) }
-  @objc private func selectSequence() { onSequence?(sequencePicker.indexOfSelectedItem) }
+  func actionMenu() -> NSMenu {
+    let menu = NSMenu(title: "Orders"); menu.autoenablesItems=false
+    for (label, operation) in [("Insert before","before"),("Insert after","after"),("Move up","up"),("Move down","down"),("Remove order","remove")] {
+      let enabled = operation == "up" ? selected>0 : operation == "down" ? selected+1<model.orders.count : operation == "remove" ? model.orders.count>1 : !model.orders.isEmpty
+      menu.addItem(ContextAction(label,enabled:enabled){[weak self] in self?.change(operation)})
+    }
+    return menu
+  }
+  func tableView(_ tableView:NSTableView,pasteboardWriterForRow row:Int)->NSPasteboardWriting? {
+    guard model.orders.indices.contains(row) else{return nil}
+    dragRow=row;dragRevision=model.revisionToken
+    let item=NSPasteboardItem();item.setString(String(row),forType:dragType);return item
+  }
+  func tableView(_ tableView:NSTableView,validateDrop info:NSDraggingInfo,proposedRow row:Int,proposedDropOperation operation:NSTableView.DropOperation)->NSDragOperation {
+    guard info.draggingSource as? NSTableView === table,dragRow != nil,dragRevision==model.revisionToken,(0...model.orders.count).contains(row) else{return []}
+    table.setDropRow(row,dropOperation:.above);return .move
+  }
+  func tableView(_ tableView:NSTableView,acceptDrop info:NSDraggingInfo,row:Int,dropOperation operation:NSTableView.DropOperation)->Bool {
+    guard info.draggingSource as? NSTableView === table,let from=dragRow,dragRevision==model.revisionToken,(0...model.orders.count).contains(row) else{return false}
+    let to=row>from ? row-1:row
+    if to != from{onReorder?(from,to,dragRevision)};dragRow=nil;return true
+  }
+  @objc private func assignPattern() { if !updating { change("assign") } }
+  @objc private func commitDetails(_ field: NSTextField) {
+    guard !updating else { return }
+    if field === sectionName {
+      if selected < model.orderMetadata.count, sectionName.stringValue != model.orderMetadata[selected]["name"] as? String ?? "" { saveSection() }
+    } else if selected < model.orders.count, let pattern = model.patterns.first(where: { $0["index"] as? Int == model.orders[selected] }),
+      patternName.stringValue != pattern["name"] as? String ?? "" || patternNotes.stringValue != pattern["annotation"] as? String ?? "" { savePatternDetails() }
+  }
+  func controlTextDidEndEditing(_ notification: Notification) { if let field = notification.object as? NSTextField { commitDetails(field) } }
+  @objc private func selectSequence() { guard let item = sequencePicker.selectedItem else { return }; onSequence?(item.tag) }
 }

@@ -97,9 +97,11 @@ static bool same(const TUID a, const FUID &b) {
 
 // Native fixture-owned HWND. DSP below is the Mac fixture's unmodified algorithm.
 static std::atomic<int> attachedViews{0}, removedViews{0}, resizedViews{0};
+static std::atomic<double> initialViewParameter{0};
 static std::array<int,6> viewMetrics{};
 static IPlugView *reviewView=nullptr;static IPlugFrame *reviewFrame=nullptr;
 extern "C" __declspec(dllexport) int FixtureViewMetric(int i){return viewMetrics.at(i);}
+extern "C" __declspec(dllexport) double FixtureInitialViewParameter(){return initialViewParameter.load();}
 extern "C" __declspec(dllexport) int FixtureRequestSize(int width,int height){if(!reviewView||!reviewFrame)return kResultFalse;ViewRect r{0,0,width,height};return reviewFrame->resizeView(reviewView,&r);}
 extern "C" __declspec(dllexport) int FixtureExtremeSize(){if(!reviewView||!reviewFrame)return kResultFalse;ViewRect r{INT_MIN,0,INT_MAX,220};return reviewFrame->resizeView(reviewView,&r);}
 extern "C" __declspec(dllexport) int FixtureViews(int what) {
@@ -109,7 +111,7 @@ class View final : public IPlugView {
  std::atomic<uint32> refs{1}; HWND child=nullptr; IPlugFrame *frame=nullptr;
  IComponentHandler *handler; ViewRect size{0,0,460,180};
 public:
- View(IComponentHandler *h,double):handler(h){if(handler)handler->addRef();reviewView=this;}
+ View(IComponentHandler *h,double initial):handler(h){initialViewParameter=initial;if(handler)handler->addRef();reviewView=this;}
  ~View(){if(child)removed();setFrame(nullptr);if(handler)handler->release();reviewView=nullptr;}
  tresult PLUGIN_API queryInterface(const TUID id,void **out) override {
   *out=nullptr;if(same(id,IPlugView::iid)||same(id,FUnknown::iid)){*out=this;addRef();return kResultOk;}return kNoInterface;
