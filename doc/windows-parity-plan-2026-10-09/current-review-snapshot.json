@@ -1,9 +1,9 @@
 {
   "review_type": "planning-only; read source, artifacts, images, hashes and existing logs; no build/test/application/workflow execution",
-  "review_utc": "2026-10-09T12:23:37.826179+00:00",
+  "review_utc": "2026-10-09T12:56:48.896324+00:00",
   "reference_baseline": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
   "remote_main": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
-  "checkout": "07060e1c4a7d5a5928c9762dd7897261636ef0b8",
+  "checkout": "55774c98fc47e355bc2811a9c1d8fc50cf63ea9a",
   "initial_worktree": "clean",
   "tested_pr_merge": "6433dc0da9c1b779b1390de7a495af2c2353fd9e",
   "tested_tree_equals_main": true,
@@ -42,6 +42,9 @@
     "doc/windows-parity-plan-2026-10-09/README.md",
     "doc/windows-parity-plan-2026-10-09/ci-evidence.md",
     "doc/windows-parity-plan-2026-10-09/command-inventory.csv",
+    "doc/windows-parity-plan-2026-10-09/current-ci-excerpts.md",
+    "doc/windows-parity-plan-2026-10-09/current-review-snapshot.json",
+    "doc/windows-parity-plan-2026-10-09/current-review.md",
     "doc/windows-parity-plan-2026-10-09/current-source-review.md",
     "doc/windows-parity-plan-2026-10-09/evidence.json",
     "doc/windows-parity-plan-2026-10-09/handoff-details.md",
@@ -80,9 +83,11 @@
     "windows/App/PatternSampleRenderWindow.hpp",
     "windows/App/PluginEditor.inc",
     "windows/App/PluginInstrumentsWindow.hpp",
+    "windows/App/PluginPathWindow.hpp",
     "windows/App/PreciseNoteWindow.hpp",
     "windows/App/SampleDetailWindow.hpp",
     "windows/App/SampleEditor.inc",
+    "windows/App/SampleRecordingWindow.hpp",
     "windows/App/ScratchGestureWindow.hpp",
     "windows/App/SongRoutingCanvas.hpp",
     "windows/App/SongRoutingWindow.hpp",
@@ -95,10 +100,13 @@
     "windows/Tests/DocumentDepartureControllerTests.inc",
     "windows/Tests/GraphOperations/FanConnectionOperationsTests.inc",
     "windows/Tests/Workspace/DocumentDraftCensusTests.inc",
+    "windows/Tests/Workspace/DraftImportRetentionTests.inc",
     "windows/Tests/Workspace/DraftRequestRetentionTests.inc",
     "windows/Tests/Workspace/NativeToolWindowTests.cpp",
     "windows/Tests/Workspace/WorkspaceRestoreTests.cpp",
     "windows/Tests/test_graph_editor.py",
+    "windows/Tests/test_plugin_paths.py",
+    "windows/Tests/test_sample_library.py",
     "windows/Tests/test_song_routing.py"
   ],
   "inputs": {
@@ -114,17 +122,6 @@
     "05-arrangement-copy-after.screamseq": "f8ea7cc23b73cf2aa7b911867dc3bdb0c1718f32ed7e06a6a3413ed34350efaf"
   },
   "extracted_fixture_mismatches": [],
-  "receipt": {
-    "path": "bin/parity-evidence/p0b-census-receipt.json",
-    "sha256": "2975549f40b1bbb3fd0bea6bf448ef1f4ebc700846b5143b03ffb77782499a46",
-    "source_count": 1830,
-    "source_mismatches": [],
-    "log_count": 16,
-    "log_mismatches": [],
-    "executable_count": 4,
-    "executable_mismatches": [],
-    "cache_matches": true
-  },
   "inventory_counts": {
     "reference_rows": 117,
     "peer_rows": 84,
@@ -152,5 +149,90 @@
     "Mac full interface harness remains separate",
     "Reciprocal fixture saves not performed",
     "No foreground, accessibility or hardware qualification"
-  ]
+  ],
+  "previous_planning_checkpoint": {
+    "checkout": "07060e1c4a7d5a5928c9762dd7897261636ef0b8",
+    "review_utc": "2026-10-09T12:23:37.826179+00:00",
+    "receipt": {
+      "path": "bin/parity-evidence/p0b-census-receipt.json",
+      "sha256": "2975549f40b1bbb3fd0bea6bf448ef1f4ebc700846b5143b03ffb77782499a46",
+      "source_count": 1830,
+      "source_mismatches": [],
+      "log_count": 16,
+      "log_mismatches": [],
+      "executable_count": 4,
+      "executable_mismatches": [],
+      "cache_matches": true
+    }
+  },
+  "remote_main_read_method": "git ls-remote origin refs/heads/main; no fetch, checkout, build or workflow dispatch",
+  "receipt": {
+    "path": "bin/parity-evidence/p0b-owner-completion-receipt.json",
+    "sha256": "04fc1d8b64b48ef260058d075f2cab6225096c26517a0ecd9113d0ac9eaf52dd",
+    "recorded_commit": "55774c98fc47e355bc2811a9c1d8fc50cf63ea9a",
+    "readback": {
+      "source_hashes": {
+        "count": 1831,
+        "mismatches": []
+      },
+      "executables": {
+        "count": 4,
+        "mismatches": []
+      },
+      "logs": {
+        "count": 11,
+        "mismatches": []
+      },
+      "fixture_inputs": {
+        "count": 5,
+        "mismatches": []
+      },
+      "cmake_cache_matches": true
+    },
+    "scope": "Three native owner summaries/completion retention; existing ARM64 private-desktop checks only; final admission and typed outcomes outstanding"
+  },
+  "reference_extraction": "bin/parity-planning-review/reference/2026-10-09",
+  "planning_actions": "Read Git/source/docs/CSV/JSON/plist/image/log artifacts and hash existing inputs; extracted reference under ignored bin; wrote planning documents only. No validator script, build, test, app or workflow executed.",
+  "final_worktree_readback": {
+    "review_utc": "2026-10-09T13:05:06.467200+00:00",
+    "mode": "planning only; source/artifact inspection and documentation edits; no builds/tests/app execution",
+    "remote_main": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
+    "remote_method": "git ls-remote origin refs/heads/main",
+    "head": "55774c98fc47e355bc2811a9c1d8fc50cf63ea9a",
+    "product_candidate_status": "Existing uncommitted partial P0b.1; inspected and left untouched; unqualified",
+    "product_candidate_sha256": {
+      "editor/WriteOutcome.hpp": "81a595ec26d111785eddd5691a88eac0b9bcb5b3fb2a457efe85d7370d159ed2",
+      "windows/Api/SessionAdapter.hpp": "80840aaf84628818fd230ff983dc3826dd3e2a1a62a777028439fc1412e2412d",
+      "windows/Session/DocumentController.cpp": "e609000aa6fce19ca2260eeb61337689cceb44d527c64d8d2182dc8e11bdec38",
+      "windows/Tests/Api/SessionCacheTests.cpp": "356aab2cce4faecf496a8b87f6b146a43b28ebd43b619964d0fe515d38712b43",
+      "windows/Tests/DocumentControllerTests.cpp": "055d791b39709b2f93353b2fcd758843b9c2db060b74de235b51aad09a62a40f"
+    },
+    "owner_receipt_current_source_mismatches": [
+      "windows/Api/SessionAdapter.hpp",
+      "windows/Session/DocumentController.cpp",
+      "windows/Tests/Api/SessionCacheTests.cpp",
+      "windows/Tests/DocumentControllerTests.cpp"
+    ],
+    "new_dependency_not_in_owner_receipt": "editor/WriteOutcome.hpp",
+    "receipt_reuse": "Earlier matching committed snapshot remains historical evidence; do not inherit whole receipt for this changed candidate. Check transitive inputs per scenario.",
+    "supplied_files_sha256": {
+      "screamseq-mac-ui-reference-2026-10-09.zip": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81",
+      "SCREAMSEQ_WINDOWS_PARITY_MATRIX_2026-10-09.csv": "ec2bbc2c01769072f6cc3edc3e9d331122e2656f53d6cb793fcdd4a444aa91f5",
+      "SCREAMSEQ_WINDOWS_PARITY_PLAN_2026-10-09.md": "c1b50ca8424da02bd2e0dced7e7129e928d7e4de5e25d7cd31aae0378a8d73ce"
+    },
+    "archive_fixture_matches_extraction": {
+      "2026-10-09/fixtures/01-midnight-circuit.screamseq": true,
+      "2026-10-09/fixtures/02-editors-and-effects.screamseq": true,
+      "2026-10-09/fixtures/03-routing-and-modulation.screamseq": true,
+      "2026-10-09/fixtures/04-complete-reference.screamseq": true,
+      "2026-10-09/fixtures/05-arrangement-copy-after.screamseq": true
+    },
+    "inventory_rows": {
+      "parity-matrix.csv": 117,
+      "peer-matrix-review.csv": 84,
+      "command-inventory.csv": 419,
+      "api-inventory.csv": 232
+    },
+    "new_runtime_evidence": false
+  }
 }
