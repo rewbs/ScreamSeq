@@ -41,6 +41,18 @@ Press F5 in the app to retry native cleanup/refresh without reopening the file
 or replaying the write. Stop remains available and preserves that recovery
 message. A successful retry restores normal editing.
 
+The native sample recorder retains an unresolved Record/Stop/Discard operation
+in `workspace.get.data.sampleRecording.lifecycleReview`, including its method,
+captured document/revision, take identity and submitted parameters. While present,
+another lifecycle write, Keep, setup discard and Close are unavailable. The
+native **Review current take** action reads `sample.recording.get` without
+repeating the operation. Failed or malformed readback retains the review state.
+Successful review adopts the observed current take (including a different take
+created through the API, or no take), preserving the sample-name/output draft.
+It does not claim whether the earlier operation succeeded. Subsequent explicit
+actions use the observed take identity. An uncertain Keep still requires its
+separate result review; absence of the old take does not prove sample import.
+
 `document.get` includes stable current-sequence order identities in
 `orderMetadata: [{id: "n…", name, annotation, color}]`, aligned with every untrimmed entry in `orders`,
 including End (`65535`), Skip (`65534`) and entries after End. Each existing

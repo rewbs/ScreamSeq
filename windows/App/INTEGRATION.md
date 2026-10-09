@@ -328,6 +328,16 @@ refresh failure displays an F5 retry action; it does not repeat Open. Canceled
 OS shutdown releases its admission lease without consuming drafts. A failed
 state read keeps the application open rather than offering an unchecked close.
 
+Sample-recording Record, Stop and Discard retain an unresolved lifecycle request
+if the reply or native completion fails without a proven preflight refusal.
+Review current take reads session state without replaying the request. Until
+that review succeeds, the owner refuses another capture, Keep, Discard, setup
+discard and Close, and its draft census blocks document departure. A microphone
+may still be active after an uncertain Record/Stop; review exposes its current
+state and makes an explicit Stop available. Readback preserves newer name/output
+intent and never consumes an externally created replacement take. Keep's sample
+import/result reconciliation remains distinct from this observation of take state.
+
 AssetOperations is registered and retained on the worker, including imports,
 PCM, processing, loop settings, drawing, private clipboard and instrument edits.
 Import validation checks actual preserved plugin assignments, adapter capacity

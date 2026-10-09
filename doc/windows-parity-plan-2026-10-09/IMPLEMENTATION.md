@@ -2,6 +2,47 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Recorder lifecycle readback
+
+`SampleRecordingWindow` now retains uncertain Record, Stop and Discard requests,
+including method, captured document/revision, original take identity and submitted
+parameters. Only an explicit typed `NotCommitted` refusal before the request
+returns releases that intent immediately. A returned request followed by failed
+native completion remains unresolved. The native census exposes pending versus
+uncertain state, so a missing local take identity after failed Record cannot
+permit document departure.
+
+The native **Review current take** action performs only `sample.recording.get`.
+It adopts the observed current state without claiming that the previous operation
+succeeded: the old take may still be capturing, may be stopped, may be absent, or
+may have been replaced by another API client. Review never repeats Record/Stop/
+Discard or consumes the replacement take. Failed/malformed readback keeps the
+unresolved request. Newer sample-name/output drafts remain unchanged. Subsequent
+explicit actions use the observed take identity. While unresolved, unsafe writes,
+setup discard and Close are refused; the UI explains that capture may still be
+active. Review makes the observed Stop/Keep/Discard actions available again.
+
+This is **take-state reconciliation**, not proof of a musical import. Keep's
+result review remains separate, and an absent take does not prove that Keep
+created a sample. Unknown Keep/render/import/reconnect results and scan/cache
+reconciliation remain open P0b work. No shared musical operation, persistence
+format, audio callback, capture device or Mac implementation changes here.
+
+`RecordingLifecycleReviewTests.inc` uses real native HWNDs and deterministic
+session responses. It covers failures after each lifecycle side effect, no
+replay, departure refusal, newer setup, failed/malformed reads, explicit reopen,
+active/stopped/absent take observations, an externally replaced take and typed
+preflight refusal. The native tool suite passes (2.25 s). The actual-app
+`test_sample_capture_ui.py` separately verifies setup retention, API departure
+refusal, explicit discard and a fresh post-Open recorder without opening a
+microphone. That case plus the nudge-departure regression pass (2/2, 1.038 s).
+The full workspace, draft-census and Application-departure suites also pass
+(3/3 CTest entries, 99.88 s) against the rebuilt Application fixture.
+Source/toolchain/executable/log evidence is recorded in
+`bin/parity-evidence/p0b-recording-lifecycle-receipt.json`. Native fault injection
+does not establish hardware behavior, foreground accessibility or cross-platform
+qualification; those gates and full P0b–P8 remain open.
+
 ## P0b.2 Application admission, retirement and refresh
 
 `Application` now supplies `DocumentController`'s replacement-admission observer.
