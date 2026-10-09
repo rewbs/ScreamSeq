@@ -46,6 +46,14 @@ private:
   }
   uint64_t documentGeneration_=0,draftGeneration_=0,selectionGeneration_=0,requestGeneration_=0;
   bool loaded_=false,opened_=false,setting_=false,pending_=false,dirty_=false,resizingColumns_=false;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    auto result=describeDraft(draftDocument_,draftRevision_,sourceID_,draftGeneration_,
+      dirty_||sectionDraft_.dirty||patternDraft_.dirty,pending_);
+    Json details=Json::array();
+    for(const auto *detail:{&sectionDraft_,&patternDraft_})if(detail->dirty)
+      details.push_back(Json::array({detail->document,detail->revision,detail->sequence,detail->target,detail->generation}));
+    result.subdrafts=details.dump();return result;
+  }
   HWND pendingFocus_{};
   HIMAGELIST rowHeight_{};
   std::array<float,4> columnWidths_{68,290,64,200};

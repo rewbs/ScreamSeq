@@ -128,6 +128,10 @@ public:
   }
   ~PreciseNoteWindow()override{ready_=false;dragging_=false;if(owns(GetCapture()))ReleaseCapture();}
   bool retainedDraft()const{return pending_||dragging_||draft_!=original_||pointRaw()!=pointBaseline_||toolsRaw()!=toolsBaseline_;}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(document_,revision_,Json::array({target_.patternID,target_.trackID,target_.row}).dump(),generation_,
+      dragging_||draft_!=original_||pointRaw()!=pointBaseline_||toolsRaw()!=toolsBaseline_,pending_);
+  }
   bool pending()const noexcept{return pending_;}
   bool capturedCurrent()const{return current();}
   std::optional<Target> capturedTarget()const{return hasTarget()?std::optional<Target>(target_):std::nullopt;}

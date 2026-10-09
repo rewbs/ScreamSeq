@@ -16,6 +16,9 @@ private:
   Cursor captured_;std::string patternID_,bus_;unsigned rows_=0,column_=0;
   Json data_=Json::object();bool dirty_=false,pending_=false,setting_=false,tails_=false;
   uint64_t generation_=0;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.document,captured_.revision,Json::array({patternID_,bus_,column_,captured_.row}).dump(),generation_,dirty_,pending_);
+  }
   static constexpr std::array<const char *,6> kinds={"row","start","stop","clear","amount","wet"};
   int selection(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
   void select(int id,int index){SendMessageW(controls_.at(id),CB_SETCURSEL,index,0);}

@@ -184,6 +184,7 @@
         installMixerControls();
         installGraphControls();
         installWorkspaceRegionControls();
+        registerMainDrafts();
         if(inspection)SetPropW(window,ScreamSeq::NativeControls::inspectionProperty,reinterpret_cast<HANDLE>(1));
         for(auto [id,h]:controls)ScreamSeq::NativeControls::install(h,inspection);
 		configureWorkspaceCommands();

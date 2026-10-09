@@ -3,6 +3,7 @@
     Json listedPlugins=Json::array(),pluginCatalog=Json::array(),pluginParameters=Json::array();
     std::string selectedPlugin,pluginDocument,pluginDetailsRevision,pluginDetailsTarget;
     std::string pluginDraftRevision,pluginDraftTarget;
+    uint64_t pluginDraftGeneration=0;
     Json pluginPrograms=Json::array(),pluginPorts=Json::array();
     std::string selectedProgram,programCatalogRevision;
     int pluginDetailPage=0,selectedPort=-1;
@@ -170,6 +171,7 @@
     }
     void pluginFieldChanged() {
         if(settingPluginFields) return;
+        ++pluginDraftGeneration;
         if(!pluginDraft) {pluginDraft=true;pluginProgramDraft=false;pluginDraftRevision=view->session.revision;pluginDraftTarget=selectedPlugin;pluginDraftParameter=selectedParameter;}
         frameRequested=true;
     }
@@ -230,6 +232,7 @@
         }
         if(id==pluginLibrary || id==pluginInstrument)return true;
         if(id==pluginProgram){const auto chosen=SendMessageW(controls.at(pluginProgram),CB_GETCURSEL,0,0);if(chosen>=0 && size_t(chosen)<pluginPrograms.size()){
+            ++pluginDraftGeneration;
             selectedProgram=pluginPrograms[size_t(chosen)].at("id").get<std::string>();if(!pluginDraft){pluginDraft=true;pluginProgramDraft=true;pluginDraftRevision=pluginDetailsRevision;pluginDraftTarget=pluginDetailsTarget;}}return true;}
         if(id==pluginPort){const auto chosen=SendMessageW(controls.at(pluginPort),CB_GETCURSEL,0,0);if(chosen>=0&&size_t(chosen)<pluginPorts.size())selectedPort=int(chosen);return true;}
         if(id==pluginRescan) {refreshPluginLibrary(true);status=L"Plugin library scan finished";return true;}

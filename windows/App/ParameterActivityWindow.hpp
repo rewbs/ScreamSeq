@@ -21,6 +21,10 @@ private:
   uint64_t generation_=0;
   size_t offset_=0,total_=0;int page_=0,traceMode_=0,selected_=-1;double seconds_=8;
   bool setting_=false,pending_=false,frozen_=false,fields_=false,active_=false;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.document,captured_.revision,Json::array({target_,plugin_,parameter_?Json(*parameter_):Json(),originalFrame_}).dump(),
+      generation_,fields_,pending_);
+  }
   WorkspaceRect plot_{};
   std::map<int,LRESULT> pendingSelections_;
   void beginPending(){pendingSelections_.clear();for(int id:{processors,parameters,mode,details})pendingSelections_[id]=SendMessageW(controls_.at(id),CB_GETCURSEL,0,0);pendingSelections_[items]=SendMessageW(controls_.at(items),LB_GETCURSEL,0,0);pending_=true;}

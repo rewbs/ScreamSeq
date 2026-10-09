@@ -348,6 +348,10 @@ public:
     load(true);
   }
   bool retainedDraft()const{return pending_||draft()||toolFieldsDirty_||dragging_||(bank_&&bank_->retainedDraft());}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.document,captured_.revision,Json::array({identity_,kind_}).dump(),generation_,
+      draft()||toolFieldsDirty_||dragging_,pending_);
+  }
   bool followCursor(){
     if(retainedDraft())return false;const auto c=context_();auto chosen=std::find_if(c.instruments.begin(),c.instruments.end(),[&](const auto &i){return i.at("index")==c.instrument;});if(chosen==c.instruments.end())chosen=c.instruments.begin();
     const std::string wanted=chosen==c.instruments.end()?std::string{}:chosen->at("id").get<std::string>();

@@ -204,6 +204,7 @@ void offlineHostedTest(const std::filesystem::path &project,const std::filesyste
 class Application : public ScreamSeq::Api::SessionHost {
 public:
 	HWND window{};
+	ScreamSeq::DocumentDraftRegistry documentDrafts;
 	std::unique_ptr<ScreamSeq::RenderSurface> surface;
 	std::unique_ptr<ScreamSeq::DocumentController> controller;
 	std::shared_ptr<const ScreamSeq::DocumentView> view;
@@ -643,6 +644,7 @@ public:
     #include "GraphPatternLanes.inc"
     #include "ScratchGestureIntegration.inc"
     #include "SampleCaptureIntegration.inc"
+    #include "DocumentDrafts.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> makeInstrumentEnvelopeWindow(std::shared_ptr<bool> preparing={}){
         return std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();});
@@ -882,6 +884,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 	if(message == WM_NCCREATE) {
 		app = static_cast<Application *>(reinterpret_cast<CREATESTRUCTW *>(lp)->lpCreateParams);
 		SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(app)); app->window = window;
+		if(!SetPropW(window,ScreamSeq::documentDraftRegistryProperty,reinterpret_cast<HANDLE>(&app->documentDrafts)))return FALSE;
 	}
 	if(!app) return DefWindowProcW(window, message, wp, lp);
     if(message==WM_PAINT || message==WM_SIZE || message==WM_DPICHANGED || message==WM_SETFOCUS || message==WM_KILLFOCUS ||
@@ -903,7 +906,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 			}
 			return 0;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
-		case WM_NCDESTROY: SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
+		case WM_NCDESTROY: RemovePropW(window,ScreamSeq::documentDraftRegistryProperty);SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
         case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)})||app->sampleCaptureContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
         case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
         case WM_DEVICECHANGE: app->midiRescanRequested=!app->midiSource.empty();return 0;

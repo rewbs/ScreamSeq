@@ -5,6 +5,7 @@
     std::string sampleRangeDocument, sampleDraftRevision, sampleDraftId;
     uint64_t sampleRangeCatalog=UINT64_MAX;
     bool sampleDraft=false, settingSampleFields=false;
+    uint64_t sampleDraftGeneration=0;
     unsigned sampleAnchor=0;
     std::string sampleDragId, sampleDragRevision;
     SampleRange sampleDragBefore;
@@ -45,6 +46,7 @@
     }
     void sampleFieldChanged() {
         if(settingSampleFields) return;
+        ++sampleDraftGeneration;
         if(!sampleDraft) {sampleDraftRevision=view->session.revision;sampleDraftId=selectedSampleId();sampleDraft=true;}
     }
     void applySampleRange() {

@@ -12,31 +12,37 @@ public:
 private:
   enum:int {useSelection=6601,name,tail,output,check,render,close,heading=6650,targetLabel,nameLabel,tailLabel,outputLabel,helpLabel,statusLabel};
   Request request_;Context context_;Committed committed_;Target target_;
-  Json report_=Json::object();bool captured_=false,pending_=false;
+  Json report_=Json::object(),baseline_=Json::object();bool captured_=false,pending_=false;uint64_t generation_=0;
+  Json raw()const{return Json::array({utf8(field(name)),utf8(field(tail)),choice(output)});}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(target_.document,target_.revision,Json::array({target_.pattern,target_.firstRow,target_.lastRow,target_.firstChannel,target_.lastChannel}).dump(),
+      generation_,captured_&&raw()!=baseline_,pending_);
+  }
   bool current()const{const auto now=context_();return captured_&&now.document==target_.document&&now.revision==target_.revision;}
   int choice(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
   void status(std::wstring value){status_=std::move(value);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   void capture(Target target){
-    target_=std::move(target);captured_=true;report_=Json::object();
+    target_=std::move(target);captured_=true;++generation_;report_=Json::object();
     set(targetLabel,L"Pattern "+std::to_wstring(target_.pattern)+L" · rows "+std::to_wstring(target_.firstRow)+L"–"+std::to_wstring(target_.lastRow)+L" · channels "+std::to_wstring(target_.firstChannel+1)+L"–"+std::to_wstring(target_.lastChannel+1)+L"\nAll notes and FX in those channels / source pattern remains unchanged");
     status(L"Selection captured / Check validates; Render creates a new sample");
   }
   void apply(bool dryRun){
     if(pending_)return;if(!current())throw std::runtime_error("Song changed / captured selection retained; choose Use current selection before rendering");
     const auto seconds=number(tail);if(seconds<0||seconds>60)throw std::runtime_error("Tail must be between 0 and 60 seconds");
-    const auto document=target_.document;
+    const auto document=target_.document;const auto submitted=generation_;const auto fields=raw();
     const Json params={{"pattern",target_.pattern},{"firstRow",target_.firstRow},{"lastRow",target_.lastRow},{"firstChannel",target_.firstChannel},{"lastChannel",target_.lastChannel},
       {"name",utf8(field(name))},{"createInstrument",choice(output)==1},{"tailSeconds",seconds},{"dryRun",dryRun},{"expectedRevision",target_.revision}};
     pending_=true;layout();
     try{
       report_=request_("sample.renderSelection",params);
       if(dryRun)status(L"Selection validated / Render adds a new sample with one Undo");
-      else{auto text=L"Created sample "+std::to_wstring(report_.at("sample").get<unsigned>());if(const auto instrument=report_.value("instrument",0u))text+=L" + mapped instrument "+std::to_wstring(instrument);status(text+L" / document Undo available");committed_(document,report_);}
+      else{auto text=L"Created sample "+std::to_wstring(report_.at("sample").get<unsigned>());if(const auto instrument=report_.value("instrument",0u))text+=L" + mapped instrument "+std::to_wstring(instrument);status(text+L" / document Undo available");committed_(document,report_);if(generation_==submitted)baseline_=fields;}
     }catch(...){pending_=false;layout();throw;}
     pending_=false;layout();
   }
   void action(int id,unsigned notification)override{
+    if((notification==EN_CHANGE&&(id==name||id==tail))||(notification==CBN_SELCHANGE&&id==output)){++generation_;return;}
     if(pending_||notification!=BN_CLICKED)return;
     if(id==useSelection)capture(context_());else if(id==check)apply(true);else if(id==render)apply(false);else if(id==close)hide();
   }
@@ -59,9 +65,9 @@ public:
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"RENDER PATTERN SELECTION"},{targetLabel,L""},{nameLabel,L"Sample name"},{tailLabel,L"Tail after selection (seconds)"},{outputLabel,L"Create"},{helpLabel,L"The captured row and channel range includes complete channels.\nMoving the cursor keeps this selection. Song edits require a new capture."},{statusLabel,L""}})label(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{useSelection,L"Use current selection"},{check,L"Check"},{render,L"Render sample"},{close,L"Close"}})button(id,text);
     edit(name,L"Pattern selection",200);edit(tail,L"0",12);combo(output);
-    for(const auto text:{L"Sample",L"Sample + mapped instrument"})SendMessageW(controls_.at(output),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));SendMessageW(controls_.at(output),CB_SETCURSEL,0,0);finish();
+    for(const auto text:{L"Sample",L"Sample + mapped instrument"})SendMessageW(controls_.at(output),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));SendMessageW(controls_.at(output),CB_SETCURSEL,0,0);baseline_=raw();finish();
   }
-  void openAt(bool instrument,Target target){if(!captured_){capture(std::move(target));SendMessageW(controls_.at(output),CB_SETCURSEL,instrument?1:0,0);}show();layout();}
+  void openAt(bool instrument,Target target){if(!captured_){capture(std::move(target));SendMessageW(controls_.at(output),CB_SETCURSEL,instrument?1:0,0);baseline_=raw();}show();layout();}
   void documentChanged(){if(ready_&&!pending_){layout();requestPaint();}}
   void hide()override{if(pending_){status(L"Wait for the render request to finish before closing");return;}NativeToolWindow::hide();}
   Json snapshot()const{return {{"visible",visible()},{"pending",pending_},{"document",target_.document},{"expectedRevision",target_.revision},{"stale",!current()},{"pattern",target_.pattern},{"firstRow",target_.firstRow},{"lastRow",target_.lastRow},{"firstChannel",target_.firstChannel},{"lastChannel",target_.lastChannel},{"name",utf8(field(name))},{"tailSeconds",utf8(field(tail))},{"createInstrument",choice(output)==1},{"report",report_},{"status",utf8(status_)}};}

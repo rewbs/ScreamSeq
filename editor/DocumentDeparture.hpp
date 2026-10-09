@@ -17,12 +17,13 @@ namespace Tracker {
 struct DocumentDraft {
   uint64_t owner=0,generation=0;
   std::string document,target,revision;
+  std::string subdrafts; // Optional bounded identity/generation tuple for composite owners.
   std::string name,label; // Presentation only; excluded from admission identity.
   bool dirty=false,pending=false,uncertain=false;
   bool retained()const noexcept{return dirty||pending||uncertain;}
   bool sameWork(const DocumentDraft &other)const noexcept {
     return owner==other.owner&&generation==other.generation&&document==other.document&&
-      target==other.target&&revision==other.revision&&dirty==other.dirty&&
+      target==other.target&&revision==other.revision&&subdrafts==other.subdrafts&&dirty==other.dirty&&
       pending==other.pending&&uncertain==other.uncertain;
   }
 };

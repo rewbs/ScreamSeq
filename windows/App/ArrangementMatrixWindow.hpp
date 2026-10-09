@@ -28,6 +28,11 @@ private:
   std::optional<std::array<std::string,3>> failedReadContext_;
   unsigned startOrder_=0,startChannel_=0,totalOrders_=0,totalChannels_=1;uint64_t contextGeneration_=0,requestGeneration_=0,copyGeneration_=0,selectionGeneration_=0;
   bool loaded_=false,opened_=false,pending_=false,setting_=false,queued_=false,unique_=true,clip_=false;int mode_=0;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    // A private copied block and the selected cell are navigation/clipboard
+    // state. Only an in-flight request needs departure protection here.
+    return describeDraft(viewDocument_,viewRevision_,viewSequence_,requestGeneration_,false,pending_);
+  }
   HIMAGELIST rowHeight_{};UINT columnDpi_=0;std::map<std::string,float> widths_;HWND pendingFocus_{},retainedFocus_{};
   static constexpr UINT refreshMessage=WM_APP+186;static constexpr UINT_PTR subclassID=0x4d415458;
   static unsigned integer(const Json &value,unsigned maximum=65536){

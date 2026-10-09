@@ -197,6 +197,13 @@ public:
   }
   void show(){const bool wasVisible=visible();refreshSourceState();NativeToolWindow::show();if(!wasVisible)SetFocus(controls_.at(referenceOnly_?search:code));if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
   bool retainedDraft()const{return !referenceOnly_&&(pending_||applyState_.retained(source()));}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    if(referenceOnly_)return {};
+    const auto &parent=parentDraftIdentity();
+    return describeDraft(parent?parent->document:std::string(),parent?parent->revision:std::string(),
+      Json::array({parent?parent->target:std::string(),point_}).dump(),generation_,
+      applyState_.retained(source()),pending_||applyState_.pending());
+  }
   Json snapshot()const{Json names=Json::array(),matches=Json::array();for(auto i:filtered_)names.push_back(reference_[i].at("name"));for(auto i:matches_)matches.push_back(reference_[i].at("insert"));return {{"visible",visible()},{"referenceOnly",referenceOnly_},{"source",utf8(source())},{"dirty",retainedDraft()},{"pending",pending_||applyState_.pending()},{"checking",previewNeeded_||pending_},{"valid",validGeneration_&&*validGeneration_==generation_},{"sourceCurrent",referenceOnly_||sourceCurrent_()},{"previewSamples",values_.size()},{"values",values_},{"point",point_},{"symbols",names},{"completionVisible",completing_},{"completions",matches},{"status",utf8(displayStatus())}};}
 };
 }

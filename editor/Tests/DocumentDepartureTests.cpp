@@ -42,6 +42,7 @@ void changedWork() {
     {"new invalid raw text",[](auto &s){++s.drafts[0].generation;}},
     {"new captured target",[](auto &s){s.drafts[0].target="pattern-n13/source-n38";}},
     {"new captured revision",[](auto &s){s.drafts[0].revision="r8";}},
+    {"new composite detail draft",[](auto &s){s.drafts[0].subdrafts="section:n3:g7";}},
     {"owner moved to another document",[](auto &s){s.drafts[0].document="song-B";}},
     {"hidden clean owner becomes dirty",[](auto &s){s.drafts.push_back(draft(2));}},
     {"nested formula begins Apply",[](auto &s){s.drafts[0].pending=true;}},

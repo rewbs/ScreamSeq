@@ -13,6 +13,9 @@ class PluginInstrumentsWindow final : public NativeToolWindow {
   Json inventory_=Json::array(),assignments_=Json::array();
   int selected_=-1;bool dirty_=false,pending_=false,setting_=false;
   uint64_t generation_=0;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(document_,revision_,plugin_,generation_,dirty_,pending_);
+  }
   void status(std::wstring text){status_=std::move(text);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   bool available(unsigned target)const{

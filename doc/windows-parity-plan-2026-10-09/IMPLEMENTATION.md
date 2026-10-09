@@ -1,6 +1,33 @@
 # Parity implementation progress
 
-Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](planning-review-refresh.md) retains the planning checkpoint. P0a is not yet fully qualified or merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding. Earlier receipts below retain their original scope and dates.
+Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](planning-review-refresh.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
+
+## P0a integrated on shared main
+
+[PR 3](https://github.com/rewbs/ScreamSeq/pull/3) merged as `16cab100b898f66726cfab6c2386887a9bcf5fd4` after all three candidate jobs passed. The actual tested PR merge was `6433dc0da9c1b779b1390de7a495af2c2353fd9e`; a local tree comparison found no content difference from the final main merge. Head was guarded at `6c3eea908fd3167ada681b2c44be551cb7eb94a3` during merge.
+
+- Windows x64 [run 37923921386](https://github.com/rewbs/ScreamSeq/actions/runs/37923921386), job 113798216568: app build, 46 portable entries, 62 worker entries, three scratch app cases, three retained-editor CTests and five merged app scenarios passed.
+- Mac [run 37923921268](https://github.com/rewbs/ScreamSeq/actions/runs/37923921268): Apple Silicon job 113798215876 and Intel job 113798216235 passed native builds, 120 CTests each and Swift recovery/picker checks. Their actual checkout lines identify `6433dc0`; CTest elapsed times were 118.25 and 228.86 seconds respectively.
+
+These gates qualify the P0a integration, not P0b, reciprocal fixture compatibility, physical devices or full foreground/accessibility behavior. No duplicate workflow was dispatched. Source main now differs from the planning reference baseline; the plan's main-pinned findings remain historical until individually superseded by implementation evidence here.
+
+## P0b native draft census and completion retention
+
+The native registry now follows retained HWND/Main owner lifetimes, including hidden/reparented windows. Raw draft summaries include captured document, revision, target and generation; composite arrangement details retain independent identity/generation tuples. Formula children inherit their original parent identity; reference-only Formula search is excluded. Main owners register separately from `NativeToolWindow`. Song Timing includes the captured sequence; nudge Review reveals the captured cell without reloading or applying its raw strings.
+
+Graph Trim and Pattern Selection Render requests expose pending state and retain newer input on completion. A new real-HWND regression reproduced loss of a trim link choice while Apply pumped messages. The repair increments generation for later selector edits and restores the displayed owner/port selection when an in-flight request prevents retargeting. Trim text, read refusal, stale retries and pending discard are covered; render Check/refusal/commit cases distinguish submitted fields from newer raw input. Those bounded callbacks qualify native completion ownership, not audio rendering.
+
+Focused qualification uses `bin/windows-parity-p0` (ARM64 Release):
+
+- `p0b-request-retention-before.log` retains the reproduced selector-loss failure; `p0b-request-retention-after.log` passes after the fix.
+- Final app/workspace build: `p0b-census-final-build.log`.
+- `p0b-census-final-tests.log`: workspace draft census, native-tool-window and pure departure targets pass, 2.49 seconds total.
+- `p0b-census-final-app.log`: all 17 song-tools/graph-curve-host/precise-note-host app cases pass, 28.388 seconds, with the explicit arrangement fixture and silent-output prerequisites.
+- `p0b-census-final-restore.log`: final retained workspace regression passed in 82.82 seconds, within the unchanged private-child bound.
+
+`bin/parity-evidence/p0b-census-receipt.json` records the 1,830 source/dependency hashes, build configuration, executables and logs. Earlier census attempts remain retained; a missing arrangement-fixture setup failure and explicit silent-output skip are not relabelled as passes. The two new census cases use a separate invocation of the existing workspace executable, avoiding a second native-app translation unit and retaining the private child's 90-second bound.
+
+**This is a foundation slice, not F21 closure.** `Application` still omits `DocumentReplacementAdmission`, and `protectUnsaved`/`canClose` do not authorize against the registry. Remaining P0b work includes complete owner classification (plugin path repair, recorder configuration, configured import intent, uncertain write outcomes), stable or sufficiently guarded Main FX identity, unavailable nudge-target review, and the final native input/API/adoption/retirement lease. Native Open/Close/API replacement/recovery and shutdown must then pass actual application checks. Current P0a Mac evidence does not qualify the changed departure header.
 
 ## P0b departure protocol foundation
 

@@ -125,6 +125,10 @@ public:
       (workbench_&&(workbench_->visible()||workbench_->retainedDraft()));
   }
   bool pending()const noexcept{return pending_||openingChild_;}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(document_,revision_,Json::array({target_.graph,target_.node,target_.patternID}).dump(),
+      generation_,draft()||dragging_,pending_||openingChild_);
+  }
   bool capturedCurrent()const{return current();}
   std::optional<Target> capturedTarget()const{return hasTarget()?std::optional<Target>(target_):std::nullopt;}
   Json formulaWorkbenchSnapshot()const{return workbench_?workbench_->snapshot():Json{{"visible",false}};}

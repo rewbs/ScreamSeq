@@ -43,6 +43,10 @@ private:
   bool setting_=false,pending_=false,dirty_=false,spectrum_=false,dryRun_=false;
   HWND pendingFocus_{};
   std::string message_,error_,observedRevision_;bool observedDraft_=false;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.value("documentId",std::string()),captured_.value("revision",std::string()),
+      graph_.dump(),generation_,dirty_,pending_);
+  }
   static constexpr std::array<const wchar_t *,8> pages_{L"Processing groups",L"Processors and patching",L"Song control sources",L"Parameter modulation",L"Frames and comments",L"Cable reroutes",L"Signal scope and listening",L"Existing parameter sources"};
   static void require(bool ok,const char *why){if(!ok)throw std::runtime_error(why);}
   bool current()const {const auto c=callbacks_.context();return !captured_.empty()&&c.at("documentId")==captured_.at("documentId")&&c.at("revision")==captured_.at("revision");}

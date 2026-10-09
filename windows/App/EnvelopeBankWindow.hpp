@@ -135,6 +135,12 @@ public:
   }
   void show(){refreshSourceState();NativeToolWindow::show();if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
   bool retainedDraft()const{return draft()||pending_||(workbench_&&(workbench_->visible()||workbench_->retainedDraft()));}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    // Catalogue browsing/preferences are not an unsaved song template. A
+    // pending bank operation still owns this captured song until it completes.
+    return describeDraft(document_,revision_,Json::array({target_,selected_}).dump(),generation_,
+      !catalogueScope_&&(draft()||dragging_),pending_);
+  }
   Json snapshot()const{Json handles=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});return {{"visible",visible()},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}},{"formulaReference",referenceWindow_?referenceWindow_->snapshot():Json{{"visible",false}}},{"target",target_},{"document",document_},{"expectedRevision",revision_},{"catalogueRevision",catalogueRevision_},{"scope",catalogueScope_?"catalogue":"song"},{"selected",selected_},{"linkedTemplate",linked_},{"dirty",dirty_},{"fieldDraft",pointFields_||timingFields_},{"pending",pending_},{"sourceCurrent",sourceCurrent_()},{"shape",shape_},{"selectedPoint",selectedPoint_},{"previewSamples",canvas_.curve.size()},{"handles",handles},{"status",utf8(status_)}};}
 };
 }

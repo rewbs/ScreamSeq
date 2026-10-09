@@ -12,6 +12,10 @@ private:
   Request request_;Context context_;std::function<void(unsigned,const std::string &)> applied_;
   Json group_,zones_=Json::array(),reviewedParams_;std::pair<std::string,std::string> captured_;
   bool pending_=false,setting_=false,draft_=false;uint64_t generation_=0;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.first,captured_.second,group_.is_object()?group_.value("name",std::string()):std::string(),
+      generation_,draft_,pending_);
+  }
   void status(std::wstring text){status_=std::move(text);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   void requireCurrent(){if(context_()!=captured_)throw std::runtime_error("Song changed / reopen this family review before importing");}

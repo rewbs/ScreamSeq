@@ -1,5 +1,5 @@
 #pragma once
-#include "editor/DocumentDeparture.hpp"
+#include "../../editor/DocumentDeparture.hpp"
 #include <exception>
 #include <functional>
 #include <map>

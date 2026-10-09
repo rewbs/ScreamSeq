@@ -2,6 +2,7 @@
 #include "RenderSurface.hpp"
 #include "AutomationCanvas.hpp"
 #include "NativeControls.hpp"
+#include "DocumentDraftRegistry.hpp"
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <windowsx.h>
@@ -12,6 +13,7 @@
 
 namespace ScreamSeq {
 inline constexpr wchar_t workspaceShortcutProperty[]=L"ScreamSeq.WorkspaceShortcutHandler";
+inline constexpr wchar_t documentDraftRegistryProperty[]=L"ScreamSeq.DocumentDraftRegistry";
 using WorkspaceShortcutHandler=std::function<bool(WPARAM,bool,bool)>;
 // Musical typing follows key positions, not letters, so QWERTZ and AZERTY keep
 // the same two piano rows. Returns the US-layout virtual key of the physical
@@ -33,6 +35,8 @@ inline WPARAM physicalMusicalKey(WPARAM key){
 // a hidden or unchanged tool has no running presentation timer.
 class NativeToolWindow {
   inline static constexpr wchar_t toolProperty_[]=L"ScreamSeq.NativeToolWindow";
+  DocumentDraftRegistry::Registration draftRegistration_;
+  std::optional<Tracker::DocumentDraft> parentDraftIdentity_;
   HWND dockParent_{};
   RECT lastFloatingRect_{};
   LONG_PTR floatingStyle_=WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN;
@@ -155,6 +159,12 @@ class NativeToolWindow {
     layoutAll();if(visible())resumeVisiblePresentation();notifyPlacement();
   }
 protected:
+  static Tracker::DocumentDraft describeDraft(std::string document,std::string revision,std::string target,
+      uint64_t generation,bool dirty,bool pending=false) {
+    Tracker::DocumentDraft result;result.document=std::move(document);result.revision=std::move(revision);
+    result.target=std::move(target);result.generation=generation;result.dirty=dirty;result.pending=pending;return result;
+  }
+  const std::optional<Tracker::DocumentDraft> &parentDraftIdentity()const noexcept{return parentDraftIdentity_;}
   HWND owner_{},window_{};
   std::map<int,HWND> controls_;
   std::unique_ptr<RenderSurface> surface_;
@@ -290,7 +300,7 @@ protected:
       case WM_CONTEXTMENU:self->workspaceShortcut(VK_ESCAPE,false,true);if(self->contextMenu(reinterpret_cast<HWND>(w),POINT{GET_X_LPARAM(l),GET_Y_LPARAM(l)}))return 0;break;
       case WM_ACTIVATE:if(LOWORD(w)==WA_INACTIVE&&!self->relocating_)self->releaseMusicalInput();break;
       case WM_KILLFOCUS:if(!self->relocating_&&!self->owns(reinterpret_cast<HWND>(w)))self->releaseMusicalInput();break;
-      case WM_NCDESTROY:RemovePropW(h,toolProperty_);self->window_=nullptr;self->ready_=false;self->dockParent_=nullptr;break;
+      case WM_NCDESTROY:self->draftRegistration_.reset();RemovePropW(h,documentDraftRegistryProperty);RemovePropW(h,toolProperty_);self->window_=nullptr;self->ready_=false;self->dockParent_=nullptr;break;
       case WM_MOVE:self->rememberFloatingBounds();break;
       case WM_SIZE:self->rememberFloatingBounds();self->layoutAll();return 0;
       case WM_DPICHANGED:{if(!self->docked()){auto r=reinterpret_cast<RECT *>(l);SetWindowPos(h,nullptr,r->left,r->top,r->right-r->left,r->bottom-r->top,SWP_NOZORDER|SWP_NOACTIVATE);}self->layoutAll();return 0;}
@@ -316,11 +326,29 @@ protected:
     }catch(...){if(m==WM_CLOSE)return 0;}
     return DefWindowProcW(h,m,w,l);
   }
-  explicit NativeToolWindow(HWND owner):owner_(owner){}
+  explicit NativeToolWindow(HWND owner):owner_(owner){
+    if(auto *parent=presentationTool(owner))parentDraftIdentity_=parent->documentDraft();
+  }
   void create(const wchar_t *className,const wchar_t *title,int width=960,int height=680,bool doubleClicks=false){WNDCLASSW wc{};wc.style=doubleClicks?CS_DBLCLKS:0;wc.lpfnWndProc=proc;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=className;wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&wc);RECT owner{};GetWindowRect(owner_,&owner);const auto scale=GetDpiForWindow(owner_)/96.0f;window_=CreateWindowExW(WS_EX_TOOLWINDOW,className,title,WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,owner.left+int(35*scale),owner.top+int(35*scale),int(width*scale),int(height*scale),owner_,nullptr,wc.hInstance,this);if(!window_)throw std::runtime_error("Cannot create editor window");const BOOL dark=TRUE;DwmSetWindowAttribute(window_,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));surface_=std::make_unique<RenderSurface>(window_);}
-  void finish(){if(!SetPropW(window_,toolProperty_,reinterpret_cast<HANDLE>(this)))throw std::system_error(GetLastError(),std::system_category(),"Identify native tool window");rememberFloatingBounds();ready_=true;layoutAll();}
+  void finish(){
+    if(!SetPropW(window_,toolProperty_,reinterpret_cast<HANDLE>(this)))throw std::system_error(GetLastError(),std::system_category(),"Identify native tool window");
+    rememberFloatingBounds();ready_=true;layoutAll();
+    if(auto *registry=reinterpret_cast<DocumentDraftRegistry *>(GetPropW(owner_,documentDraftRegistryProperty)))trackDocumentDrafts(*registry);
+  }
 public:
-  virtual ~NativeToolWindow(){ready_=false;if(window_)DestroyWindow(window_);if(font_)DeleteObject(font_);}
+  virtual ~NativeToolWindow(){draftRegistration_.reset();ready_=false;if(window_)DestroyWindow(window_);if(font_)DeleteObject(font_);}
+  // Editing owners opt in with their own raw-field semantics. Read-only
+  // browsers, references, meters and global preferences have no song draft.
+  // Clean identities are also useful to capture a nested editor's context;
+  // the registry filters them from the departure census.
+  virtual std::optional<Tracker::DocumentDraft> documentDraft()const{return {};}
+  void trackDocumentDrafts(DocumentDraftRegistry &registry) {
+    if(draftRegistration_.id())throw std::logic_error("Native draft owner already registered");
+    std::wstring title(size_t(GetWindowTextLengthW(window_))+1,0);GetWindowTextW(window_,title.data(),int(title.size()));title.resize(wcslen(title.c_str()));
+    if(!SetPropW(window_,documentDraftRegistryProperty,reinterpret_cast<HANDLE>(&registry)))throw std::system_error(GetLastError(),std::system_category(),"Register native draft context");
+    try{draftRegistration_=registry.add(utf8(title),[this]{return documentDraft();},[this]{show();SetFocus(window_);});}
+    catch(...){RemovePropW(window_,documentDraftRegistryProperty);throw;}
+  }
   bool visible()const{return window_&&IsWindowVisible(window_);}
   HWND window()const{return window_;}
   bool docked()const{return dockParent_!=nullptr;}

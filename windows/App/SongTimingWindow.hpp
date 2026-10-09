@@ -210,6 +210,11 @@ public:
     if(!attemptedLoad_){try{loadTiming();}catch(const std::exception &e){error(e);}}}
   void hide()override{const bool focused=owns(GetFocus());NativeToolWindow::hide();if(focused&&callbacks_.returnToPattern)callbacks_.returnToPattern();}
   bool retainedDraft()const{return raw()!=baseline_;}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.value("documentId",std::string()),captured_.value("revision",std::string()),
+      Json::array({"song-timing",captured_.value("sequence",0u)}).dump(),
+      generation_,loaded_&&retainedDraft(),pending_);
+  }
   Json snapshot()const{
     Json bounds=Json::array();RECT client{};GetClientRect(window_,&client);
     for(const auto &[id,control]:controls_)if((GetWindowLongPtrW(control,GWL_STYLE)&WS_VISIBLE)!=0){RECT box{};GetWindowRect(control,&box);MapWindowPoints(nullptr,window_,reinterpret_cast<POINT *>(&box),2);bounds.push_back({{"id",id},{"bounds",Json::array({box.left,box.top,box.right,box.bottom})},{"enabled",bool(IsWindowEnabled(control))}});}

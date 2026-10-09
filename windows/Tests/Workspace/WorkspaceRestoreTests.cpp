@@ -997,6 +997,8 @@ static void retainedTakesProtectLeavingDocument() {
     });
 }
 
+#include "DocumentDraftCensusTests.inc"
+
 int wmain(int argc,wchar_t **argv) {
     try {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -1004,6 +1006,14 @@ int wmain(int argc,wchar_t **argv) {
             const auto initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);ScreamSeq::check(initialized,"Initialize restore test COM");
             struct Com {~Com(){CoUninitialize();}} com;
             INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_LISTVIEW_CLASSES};restoreCheck(InitCommonControlsEx(&controls)!=FALSE,"Initialize restore native lists");
+            std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
+            wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
+            if(length) {
+                restoreCheck(length<std::size(group)&&std::wstring_view(group)==L"drafts","Unknown workspace test group");
+                nativeDraftCensusRetainsRawOwners();std::cout<<"PASS draft census: real native raw fields, hidden/reparented owners and nested formula lifetimes\n";
+                mainAndTimingDraftCensus();std::cout<<"PASS draft census: Main nudge review and captured timing sequence\n";
+                return;
+            }
             retainedTakesProtectLeavingDocument();std::cout<<"PASS take protection: MIDI, microphone, both, read failure and reentrant input\n";
             modulationCatalogueReadRetainsNewerDraft();std::cout<<"PASS modulation catalogue: manual baseline and pumped raw-draft retention\n";
             firstRestoreMatchesOrdinaryOpen();std::cout<<"PASS first restore: independent Notes inspector/native target and FX binding equivalence\n";

@@ -11,6 +11,9 @@ class SongRoutingWindow final:public NativeToolWindow {
   Json data_=Json::object();SongRoutingCanvas canvas_;std::string document_,revision_,selected_,filter_;int wire_=-1,page_=0;
   bool setting_=false,pending_=false,dirty_=false,layoutDirty_=false,pre_=false,enabled_=true;uint64_t generation_=0;
   std::map<int,std::vector<std::string>> choices_;int drag_=0;std::string dragNode_;SongRoutingCanvas::Point dragStart_,dragOrigin_,pointer_;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(document_,revision_,Json::array({selected_,wire_}).dump(),generation_,dirty_||layoutDirty_||drag_==3||drag_==4||drag_==5,pending_);
+  }
   void status(const std::wstring &s){status_=s;set(statusLabel,s);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   void current()const{if(context_()!=std::pair(document_,revision_))throw std::runtime_error("Song changed / draft retained. Reload before applying");}

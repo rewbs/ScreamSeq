@@ -129,6 +129,11 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME workspace-restore-tests COMMAND workspace-restore-tests)
     set_tests_properties(workspace-restore-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;docking" TIMEOUT 120)
+    # Separate owned processes keep the existing 90-second private-child bound;
+    # sharing the executable avoids another compilation of the native app TU.
+    add_test(NAME workspace-draft-census-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-draft-census-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=drafts" TIMEOUT 120)
   endif()
   add_executable(workspace-regions-tests Tests/WorkspaceRegionsTests.cpp)
   target_include_directories(workspace-regions-tests PRIVATE "${ROOT}/include/nlohmann-json/include")

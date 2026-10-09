@@ -8,7 +8,7 @@
         unsigned pattern=0,row=0,channel=0,fx=0,offset=0,rowsPerBeat=4;
         double maximumDurationBeats=0;
         double originalValue=.75;
-        std::wstring originalStrength,message;
+        std::wstring originalStrength,originalDuration,message;
         Json navigation;
     } patternNudge;
     bool patternNudgeOwnsFocus()const {
@@ -26,6 +26,16 @@
         return pattern&&track;
     }
     bool patternNudgeCurrent()const {return patternNudgeTargetCurrent()&&patternNudge.revision==view->session.revision;}
+    void reviewPatternNudge(){
+        if(!patternNudge.active)return;
+        // Reveal the captured cell without reloading its fields or treating
+        // navigation as permission to rebase a stale musical edit.
+        revealWorkspacePattern();workspaceState.focus="pattern";
+        if(patternNudgeTargetCurrent())navigate(patternNudge.navigation);
+        ensureCursorVisible();layoutControls();layoutPatternNudgeEditor();
+        SetFocus(controls.contains(nudgeStrengthField)&&IsWindowVisible(controls.at(nudgeStrengthField))?controls.at(nudgeStrengthField):window);
+        status=patternNudgeCurrent()?patternNudge.message:L"Captured nudge target changed / raw draft retained; copy the values or cancel before reopening";
+    }
     void installPatternNudgeControls(){
         if(controls.contains(nudgeStrengthField))return;
         for(int id:{nudgeStrengthField,nudgeDurationField}){
@@ -66,7 +76,7 @@
         next.originalValue=wasNudge?existing->value:.75;
         wchar_t strength[64]{},duration[64]{};swprintf_s(strength,L"%.15g",next.originalValue*100);
         swprintf_s(duration,L"%.15g",(wasNudge?existing->durationBeats:std::min(1.0,next.maximumDurationBeats))*(next.rows?next.rowsPerBeat:1));
-        next.originalStrength=strength;
+        next.originalStrength=strength;next.originalDuration=duration;
         next.navigation=position();next.navigation["column"]=4+2*next.fx;next.navigation["following"]=false;
         next.message=std::wstring(L"Strength (%) / duration (")+(next.rows?L"rows":L"beats")+L") · Tab switches · Enter saves and advances · Esc cancels";
         patternNudge=std::move(next);patternNudge.setting=true;

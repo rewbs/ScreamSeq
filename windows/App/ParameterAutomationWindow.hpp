@@ -394,6 +394,10 @@ public:
     for(int id=toolLabel0;id<=toolLabel3;++id)label(id,L"");label(pageHelp,L"");setting_=true;set(rangeStart,L"0");set(rangeEnd,L"64");setting_=false;finish();
   }
   bool retainedDraft()const{return pending_||dragging_||draft()||toolFieldsDirty_||(bank_&&bank_->retainedDraft())||(workbench_&&workbench_->retainedDraft());}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.document,captured_.revision,Json::array({patternID_,pluginID_,parameter_?Json(*parameter_):Json()}).dump(),
+      generation_,draft()||toolFieldsDirty_||dragging_,pending_);
+  }
   bool followCursor(){
     if(retainedDraft())return false;const auto now=context_();
     if(now.document==captured_.document&&now.pattern==captured_.pattern&&now.revision==captured_.revision)return true;
