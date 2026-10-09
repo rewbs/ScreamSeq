@@ -1,6 +1,6 @@
 # Review of the supplied parity plan and matrix
 
-**Current authority:** [Comprehensive plan](README.md) and [current source review](planning-readback.md), with [inspection receipt](planning-readback-snapshot.json). They distinguish main `16cab100b`, committed product checkpoint `e68b94c03`, docs-only HEAD `9a40d6599`, and the seven pre-existing uncommitted plugin-reconnect files. All older checkout and CI statements below are historical; they do not override that separation.
+**Current authority:** [Comprehensive plan](README.md) and [current source review](planning-readback.md), with [inspection receipt](planning-readback-snapshot.json). They distinguish main `16cab100b`, committed product checkpoint `e68b94c03`, docs-only HEAD `8d2997c2e`, and the seven pre-existing uncommitted plugin-reconnect files. All older checkout and CI statements below are historical; they do not override that separation.
 
 Both Downloads files were reviewed again for this planning-only update. The integrated plan remains the base. The peer's complete architecture, visual/interaction guidance, phase specifications, validation rules, decisions and all 84 matrix acceptance proposals were considered. No product changes, builds, tests, application launches, commits or CI dispatches were performed during this review.
 

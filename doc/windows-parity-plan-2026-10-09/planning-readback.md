@@ -10,7 +10,7 @@ Planning only, 9 October 2026. This is the current-state supplement to the [comp
 | Reference baseline | `ffe81aa4bfa83bc89b1e1dd92db06c67819c247a` |
 | Latest remote main | `16cab100b898f66726cfab6c2386887a9bcf5fd4`, verified with read-only `git ls-remote`; matches local `origin/main` |
 | Local main ref | `d36a6129f7582c89223229bc26bd09018b48713f`; this stale local ref was **not** used as latest main |
-| Inspected checkout | `codex/windows-parity-safety` at `9a40d65991421967fa0c821d40d16fd729cc6abb`; latest committed product change `e68b94c03`, followed by a docs-only commit. Seven pre-existing uncommitted plugin-reconnect source/test files were inspected and left untouched; their exact hashes are in the receipt |
+| Inspected checkout | `codex/windows-parity-safety` at `8d2997c2e`; latest committed product change `e68b94c03`, followed by two docs-only commits. The final inspection found no intervening product change. Seven pre-existing uncommitted plugin-reconnect source/test files were inspected and left untouched; their exact hashes and the full checkout SHA are in the receipt |
 | Peer plan | Downloads `SCREAMSEQ_WINDOWS_PARITY_PLAN_2026-10-09.md`, 166,644 bytes; SHA-256 `c1b50ca8424da02bd2e0dced7e7129e928d7e4de5e25d7cd31aae0378a8d73ce` |
 | Peer matrix | Downloads `SCREAMSEQ_WINDOWS_PARITY_MATRIX_2026-10-09.csv`, 37,671 bytes, 84 rows; SHA-256 `ec2bbc2c01769072f6cc3edc3e9d331122e2656f53d6cb793fcdd4a444aa91f5` |
 

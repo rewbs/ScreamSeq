@@ -5,7 +5,7 @@
   "remote_main": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
   "local_origin_main": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
   "local_main_not_used": "d36a6129f7582c89223229bc26bd09018b48713f",
-  "checkout": "9a40d65991421967fa0c821d40d16fd729cc6abb",
+  "checkout": "8d2997c2e642bd3d4b0b58ac2bfd3132262846e7",
   "branch": "codex/windows-parity-safety",
   "clean_at_start": false,
   "preexisting_product_changes": {
@@ -216,19 +216,27 @@
   },
   "candidate_log_limit": "Existing log reports native-tool-window-tests 1/1 pass, 1.71 seconds. No complete frozen source/toolchain receipt for this plugin reconnect candidate found; not treated as current full-app/backend or cross-platform qualification.",
   "final_readback": {
-    "utc": "2026-10-09T14:49:30.305091+00:00",
+    "utc": "2026-10-09T14:55:14.446454+00:00",
     "remote_main_rechecked": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
     "missing_local_document_links": [],
     "preexisting_product_hash_changes": [],
     "no_product_edits_builds_tests_or_launches": true,
     "document_hashes": {
-      "README.md": "fa018ab5948a58e264775219c168215002f6ecb336258e78cc8d3508b7d83071",
-      "planning-readback.md": "90c4e366b8b1ddcd9be656a0545be2a6f74b7f472a19b499c5833a3b69154b87",
-      "peer-review-reconciliation.md": "e3e1e38cf580205adaae9aef31249c3ddc66b23431344608496536228e6e8912",
-      "parity-matrix.csv": "1d7612ecb19e3dee43cbaa8e95e31f6531f17d385141a576ae4a0ba7f1254587",
+      "README.md": "9d63627b6266245cde65a1887dcf6f0c7b0767cbba5beffdef98961f0b89cc55",
+      "planning-readback.md": "afdb8a9b263a62c61de77c4e950b55ec4af88f45b04f5a4b8d48e52295e70524",
+      "peer-review-reconciliation.md": "45b2f6dad8829790bb9b84253e36ed6de1fc6b9eb5973434639605f1ffa421b5",
+      "parity-matrix.csv": "18b6c740b83584edd19adb1676ad84eab225a1508fe32f96cf10ff0baec86854",
       "command-inventory.csv": "d9a1d91d55dfe493820cc7b0540d3b88fc9addca7240816471f8dc9003639ded",
       "api-inventory.csv": "d1f233f0d0e55f4ed0297faed1833c0e058f240cfa40963b34980689d323ab73",
       "peer-matrix-review.csv": "c37faff3395625c29288d4ebc6e0673ed1dfa98859a0fc6f2397cee4152f4ac8"
-    }
-  }
+    },
+    "checkout_rechecked": "8d2997c2e642bd3d4b0b58ac2bfd3132262846e7",
+    "input_hashes_rechecked": {
+      "screamseq-mac-ui-reference-2026-10-09.zip": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81",
+      "SCREAMSEQ_WINDOWS_PARITY_PLAN_2026-10-09.md": "c1b50ca8424da02bd2e0dced7e7129e928d7e4de5e25d7cd31aae0378a8d73ce",
+      "SCREAMSEQ_WINDOWS_PARITY_MATRIX_2026-10-09.csv": "ec2bbc2c01769072f6cc3edc3e9d331122e2656f53d6cb793fcdd4a444aa91f5"
+    },
+    "scope": "Read-only source, reference, peer, image and retained-log inspection; planning-document edits only. No product edits, builds, tests, launches, commits or CI dispatches."
+  },
+  "previous_review_checkout": "9a40d65991421967fa0c821d40d16fd729cc6abb"
 }
