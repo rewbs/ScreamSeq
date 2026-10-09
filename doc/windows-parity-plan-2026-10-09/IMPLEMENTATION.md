@@ -1,6 +1,32 @@
 # Parity implementation progress
 
-Historical receipt of implementation already present before the current planning-only review. Its earlier implementation authorization does not authorize execution under the current request. The complete proposed scope is the [reviewed parity plan](README.md); [current source review](current-source-review.md) distinguishes main and candidates. The results below retain their original scope and dates. P0a is not recorded here as fully qualified or merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.
+Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [current source review](current-source-review.md) retains the planning checkpoint. P0a is not yet fully qualified or merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding. Earlier receipts below retain their original scope and dates.
+
+## P0a retained-editor qualification repairs
+
+The existing x64 job at PR merge `29149338` passed build, portable/worker and scratch checks, then failed workspace and graph-curve native checks. Local diagnostics established two distinct issues:
+
+- At 96 DPI, the Graph Curve shape combo occupied `[8,52,154,80]`, while the axes began at y=79. The real one-pixel overlap is repaired by measuring closed combo bounds before placing the axes. Requested dropdown heights cannot stand in for closed HWND geometry. Existing 100–120-DIP short canvas and exact 272-DIP floating canvas assertions remain intact. The native suite now exercises 96 DPI as well as the developer display's 192 DPI through a fixture-local thread context.
+- `SetWindowPos` obeyed monitor-derived maximum tracking bounds. Even the local requested 1440×900-DIP client was actually 2880×1759 pixels at 192 DPI, rather than 2880×1800. The private restore fixture now temporarily establishes its exact requested frame maximum and asserts the resulting client size. It additionally reproduces a capped-small-desktop case and requires compact reflow. Production maximum/minimum sizing, focus, raw-field and independent-region assertions are unchanged.
+
+The five previously unreached Python app cases exposed two fixture issues. A wheel message carried screen `(0,0)` and was correctly ignored outside the tracker; the test now verifies that rejection, then sends real tracker screen coordinates and retains both scroll-direction assertions. A graph read raced the curve's coalesced preview; the test now uses the existing bounded quiet/readiness observation before the read, without retrying any edit or weakening draft/target assertions.
+
+Source commits on the safety branch: `13a5be2ab` (layout/native fixtures), `758cd1559` (app fixtures). Corresponding isolated P0a commits: `25a97241c`, `8afd4175a`, based on `4a5c8ed88`; later P0b cable/role changes are not included in that branch.
+
+Local ARM64 Release evidence, no physical device or foreground claim:
+
+| Check | Result / retained log under `bin/parity-evidence/` |
+|---|---|
+| 96-DPI graph failure before repair | Reproduced; `p0-layout-graph-before.log` includes exact rectangles |
+| Original workspace geometry | Pass at larger local work area, with clipped client height recorded; `p0-layout-workspace-before.log` |
+| Focused native/app rebuild | Passed; `p0-layout-build.log` |
+| Graph Curve native suite, display DPI plus 96 DPI | Passed, 2.72 s; `p0-layout-graph-after.log` |
+| Full workspace restore and Precise Notes native suites | Both passed, 83.33 s + 5.60 s; `p0-layout-retained-after.log` |
+| Five app integration cases | Three passed initially; two diagnosed failures retained in `p0-layout-integration.log`. Both corrected cases passed, 4.799 s, in `p0-layout-integration-corrected.log`; unchanged successful cases were not rerun |
+
+`p0-layout-receipt.json` records safety-branch source `758cd1559bb3e9be13093e1263476708e49d6081`, 1,823 tracked source/dependency input hashes, CMake cache and log hashes. Executable SHA-256: app `2e43cc3305c1239cb79d9a54e2afb3da509402c3987a84531ca48a8916ac18f2`; workspace `1b9f3dc5621e7b6c7989022472b3cad35761ffd96d9517990e8b67abd161ac10`; graph curve `381f04441e54dca99e673194b823d505d1701af97a39b2914aa0560b2caf4122`; precise notes `ecbad7f684264af8d31a79b7ca0b07762a9b1ec890ddc9389e198444296a9da0`.
+
+The existing Apple Silicon CI job passed. Intel subsequently completed its build and was running native tests at the last read. Wait for that actual job before updating the PR, because the workflow cancels an older run on a new push. New x64 CI must qualify the isolated P0a candidate; local safety-branch execution is not substituted for it. In particular, actual-app tests requesting large windows may expose the same runner geometry limit separately from the now-fixed in-process fixture. Do not skip their assertions if that occurs. No source migration, broad UI redesign or aggregate raw-draft registry is included in this correction.
 
 ## Resumed P0a: exposed Windows worker failures
 
