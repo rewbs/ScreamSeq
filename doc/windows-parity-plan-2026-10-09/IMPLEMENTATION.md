@@ -12,6 +12,28 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Cross-platform correction batch — prepared, 9 October, 23:02 UTC
+
+**23:09 UTC update:** the frozen Windows x64 → Intel Mac → Windows x64
+exchange is complete. Both retained runs passed all seven files, with app-build
+jobs skipped. Downloaded artifact hashes, report lineage and direct original-to-return
+typed comparisons were verified; all seven returned files also match the original
+Windows bytes. See [reciprocal checkpoint 03](reciprocal-checkpoint-03.json).
+This evidence applies to built source `494d65563`, not the pending corrections.
+The corrective batch additionally includes Mac unified-history checks for no-op
+Redo preservation and uninterrupted advancing transport. Those checks are not yet
+executed. P0b/P0c and the complete P1–P8 implementation scope remain open.
+
+The [checkpoint 03 follow-up](p0b-ci-checkpoint-03.md#follow-up-inspection-and-corrective-batch-2302-utc)
+records the terminal x64/Intel results, verified app archives and running
+Windows→Intel retained exchange (38001876485 / 114061620308; no build requested).
+It also documents the next uncompiled batch: collision-free envelope fixtures,
+explicit owned wide-window setup, shared order no-op admission before transport
+stop, and runner audio-service startup with diagnostics and unchanged required
+assertions. These join the four Mac interface corrections below. No new local
+build/test was run; P0 remains open. Separate P1 strip preparation is not included
+in this frozen-app evidence and does not close these gates.
+
 ## Mac interface correction batch — prepared, 9 October, 22:24 UTC
 
 The four failures from run **37997879633** are being handled together. No new

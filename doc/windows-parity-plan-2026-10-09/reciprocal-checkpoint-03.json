@@ -1,0 +1,186 @@
+{
+  "format": "screamseq-reciprocal-checkpoint-v1",
+  "sourceCommit": "494d6556367ee6ac9c592ae19cc7a858e6bc2e1b",
+  "scope": "Archived Windows x64 to Intel Mac to the same Windows x64 binary; five no-edit fixtures and two Windows render/import outputs; direct original-to-return typed comparison",
+  "parityComplete": false,
+  "buildsRequested": 0,
+  "fixtures": [
+    {
+      "fixture": "01-midnight-circuit.screamseq",
+      "sourceSHA256": "b5ee14dce18dec7399ddf1b9758edaa92fcbe9a31c3e2513967b420150e8bb9f",
+      "returnSHA256": "b5ee14dce18dec7399ddf1b9758edaa92fcbe9a31c3e2513967b420150e8bb9f",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "02-editors-and-effects.screamseq",
+      "sourceSHA256": "c604b8c4881134daa1aab48960b5a53eb5f6cf3fd74727c2a22aa7d0e6a8bc11",
+      "returnSHA256": "c604b8c4881134daa1aab48960b5a53eb5f6cf3fd74727c2a22aa7d0e6a8bc11",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "03-routing-and-modulation.screamseq",
+      "sourceSHA256": "751802b151a61edeb094106843864f40228e43bf0b179f03894d39e30969828d",
+      "returnSHA256": "751802b151a61edeb094106843864f40228e43bf0b179f03894d39e30969828d",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "04-complete-reference.screamseq",
+      "sourceSHA256": "cea638339845c67217d1e15f3632fc2540e43a9c7335041c8621d56d25f08993",
+      "returnSHA256": "cea638339845c67217d1e15f3632fc2540e43a9c7335041c8621d56d25f08993",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "05-arrangement-copy-after.screamseq",
+      "sourceSHA256": "d71ebaeeef5b6385424c1610f65469a4953948c132053e720efe58111bd75d83",
+      "returnSHA256": "d71ebaeeef5b6385424c1610f65469a4953948c132053e720efe58111bd75d83",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "imported.screamseq",
+      "sourceSHA256": "0f54250ec961669b679e1ae61e8fb1f6a6e8cd6f6f8ea59471d9bde3e4935635",
+      "returnSHA256": "0f54250ec961669b679e1ae61e8fb1f6a6e8cd6f6f8ea59471d9bde3e4935635",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "rendered.screamseq",
+      "sourceSHA256": "123ff7947b6c5e0bd64869bdb0162698e48898b00c11a83685bb985060c9e349",
+      "returnSHA256": "123ff7947b6c5e0bd64869bdb0162698e48898b00c11a83685bb985060c9e349",
+      "exactTypedEqual": true
+    }
+  ],
+  "runs": {
+    "windowsBuild": 37997874323,
+    "macBuild": 37997877049,
+    "macExchange": 38001876485,
+    "windowsReturn": 38002680949
+  },
+  "artifacts": [
+    {
+      "artifact": 11649699409,
+      "archive": "C:\\Users\\P14\\.codex\\worktrees\\da23\\ScreamSeq\\bin\\parity-evidence\\windows-return-03.zip",
+      "directory": "C:\\Users\\P14\\.codex\\worktrees\\da23\\ScreamSeq\\bin\\parity-evidence\\windows-return-03",
+      "bytes": 2542991,
+      "sha256": "9b03e87f40f4be424432d6f067c3cb4e864b071d4752e69f5ec7d3a71774ff13"
+    },
+    {
+      "artifact": 11648937917,
+      "archive": "C:\\Users\\P14\\.codex\\worktrees\\da23\\ScreamSeq\\bin\\parity-evidence\\macos-intel-exchange-03.zip",
+      "directory": "C:\\Users\\P14\\.codex\\worktrees\\da23\\ScreamSeq\\bin\\parity-evidence\\macos-intel-exchange-03",
+      "bytes": 2847043,
+      "sha256": "2629f0d2f187f1996f3bb593a089a9cdcf45ae5e24120f242f6cae69f7597f40"
+    }
+  ],
+  "receipts": {
+    "intel": {
+      "format": "screamseq-retained-run-v1",
+      "passed": true,
+      "parityComplete": false,
+      "legs": {
+        "no-edit": {
+          "exitCode": 0,
+          "reportSHA256": "af0fb77817fdba70dce55dad31a8a1a62d4f74af4c0a996c709ede08c7903443"
+        },
+        "edited": {
+          "exitCode": 0,
+          "reportSHA256": "636a66f8ed008f3729cb66d24af1938fc666bd53423f6664fb0e6c7348db27f6"
+        }
+      },
+      "mode": "exchange",
+      "artifactOrigin": {
+        "APP_RUN": "37997877049",
+        "APP_ARTIFACT": "screamseq-macos-macos-15-intel-app",
+        "INPUT_RUN": "37997874323",
+        "INPUT_ARTIFACT": "screamseq-windows-logs",
+        "GITHUB_RUN_ID": "38001876485"
+      },
+      "appIdentity": {
+        "sourceCommit": "494d6556367ee6ac9c592ae19cc7a858e6bc2e1b",
+        "executableSHA256": "6fe5152943231e81f691c93f7f0bb4fdcb1abbb39d994832ca47b6297bd5228d",
+        "archiveSHA256": "cd6311e3e8f3d4644e24822cef11581e313028d8d9cb08c46acff02e9987554e",
+        "buildReceiptSHA256": "8e7bb9b2636b9d92212205cd25a9504d29d626a650bde06e3917de3dc67c17b7",
+        "qualification": "Built candidate; test results are separate and may fail."
+      },
+      "toolingSourceChanges": [
+        "doc/windows-parity-plan-2026-10-09/IMPLEMENTATION.md"
+      ],
+      "toolSHA256": "66a2fe0be5f106f2cc8a4fd17f7c5e8cb2a144368679c2d818c1c620c2c48799",
+      "toolingCommit": "cd22e3daa75c1914c1c1903f819b679179e0673a",
+      "lineage": {
+        "nativeAssetReportSHA256": "acf552b02df5038fafd1b347aeeb7072d2359aef8089ac2378314ac3d0d90b7b",
+        "nativeTestLogSHA256": "70deba2f7ae33d04c8ad219b2f8bba35d2b109d5848e6cea794cd1601c914a1c",
+        "sourceIdentity": {
+          "executableSHA256": "e0e73c297df8856b6a788e920ba20f453dc48c22fb1811eae722e540d4ce7a20",
+          "archiveSHA256": "971af32ce596972f79b7ce9768cb7b47a92a5994acffcc733996fb0f352ebb10",
+          "qualification": "Built candidate; test results are separate and may fail.",
+          "buildReceiptSHA256": "b9872dc58da48e41501fd1f4e8fe79f5e8f38259a173115716cc91a47330ce1a",
+          "sourceCommit": "494d6556367ee6ac9c592ae19cc7a858e6bc2e1b"
+        },
+        "priorNoEditReportSHA256": "fcac042126c2071fd44877517a2be64af14851dcb98bb0ca799dadf856194159",
+        "inputs": {
+          "01-midnight-circuit.screamseq": "b5ee14dce18dec7399ddf1b9758edaa92fcbe9a31c3e2513967b420150e8bb9f",
+          "02-editors-and-effects.screamseq": "c604b8c4881134daa1aab48960b5a53eb5f6cf3fd74727c2a22aa7d0e6a8bc11",
+          "03-routing-and-modulation.screamseq": "751802b151a61edeb094106843864f40228e43bf0b179f03894d39e30969828d",
+          "04-complete-reference.screamseq": "cea638339845c67217d1e15f3632fc2540e43a9c7335041c8621d56d25f08993",
+          "05-arrangement-copy-after.screamseq": "d71ebaeeef5b6385424c1610f65469a4953948c132053e720efe58111bd75d83",
+          "rendered.screamseq": "123ff7947b6c5e0bd64869bdb0162698e48898b00c11a83685bb985060c9e349",
+          "imported.screamseq": "0f54250ec961669b679e1ae61e8fb1f6a6e8cd6f6f8ea59471d9bde3e4935635"
+        }
+      }
+    },
+    "windows": {
+      "format": "screamseq-retained-run-v1",
+      "passed": true,
+      "parityComplete": false,
+      "legs": {
+        "no-edit": {
+          "exitCode": 0,
+          "reportSHA256": "cbec262e4225e83a8790f4e699e930234a760d610f327ba2275cadfbc5e9515a"
+        },
+        "edited": {
+          "exitCode": 0,
+          "reportSHA256": "2ab72b0d3f5951f7aa2c632dd68308102140cb76181c272e798b235971779d83"
+        }
+      },
+      "mode": "exchange",
+      "artifactOrigin": {
+        "APP_RUN": "37997874323",
+        "APP_ARTIFACT": "screamseq-windows-logs",
+        "INPUT_RUN": "38001876485",
+        "INPUT_ARTIFACT": "screamseq-retained-macos-15-intel",
+        "GITHUB_RUN_ID": "38002680949"
+      },
+      "appIdentity": {
+        "executableSHA256": "e0e73c297df8856b6a788e920ba20f453dc48c22fb1811eae722e540d4ce7a20",
+        "archiveSHA256": "971af32ce596972f79b7ce9768cb7b47a92a5994acffcc733996fb0f352ebb10",
+        "qualification": "Built candidate; test results are separate and may fail.",
+        "buildReceiptSHA256": "b9872dc58da48e41501fd1f4e8fe79f5e8f38259a173115716cc91a47330ce1a",
+        "sourceCommit": "494d6556367ee6ac9c592ae19cc7a858e6bc2e1b"
+      },
+      "toolingSourceChanges": [
+        "doc/windows-parity-plan-2026-10-09/IMPLEMENTATION.md"
+      ],
+      "toolSHA256": "55f916bdd16469cd7dfa744abf8fdf9067ef03d911b625bb638f13e33efd7929",
+      "toolingCommit": "cd22e3daa75c1914c1c1903f819b679179e0673a",
+      "lineage": {
+        "priorExchangeSHA256": "691cc1bbb5b5f7781e06963f6790857d9cff71322811395f6c1c4e7eea225673",
+        "sourceIdentity": {
+          "sourceCommit": "494d6556367ee6ac9c592ae19cc7a858e6bc2e1b",
+          "executableSHA256": "6fe5152943231e81f691c93f7f0bb4fdcb1abbb39d994832ca47b6297bd5228d",
+          "archiveSHA256": "cd6311e3e8f3d4644e24822cef11581e313028d8d9cb08c46acff02e9987554e",
+          "buildReceiptSHA256": "8e7bb9b2636b9d92212205cd25a9504d29d626a650bde06e3917de3dc67c17b7",
+          "qualification": "Built candidate; test results are separate and may fail."
+        },
+        "priorNoEditReportSHA256": "af0fb77817fdba70dce55dad31a8a1a62d4f74af4c0a996c709ede08c7903443",
+        "inputs": {
+          "01-midnight-circuit.screamseq": "e6d7a0ea19f0327ebb0b1e6e2a5885c525916e0f1a2fb0977b602c2efb8e4f58",
+          "02-editors-and-effects.screamseq": "5ca8394b2a597e044421834d0b8b7167560e13a599b32194651f05dd03fb73e6",
+          "03-routing-and-modulation.screamseq": "fb2289429c269c69d4e25f1b8a6358d1a747c44629f603b9f882e3b39ed937b2",
+          "04-complete-reference.screamseq": "ec36560ceecc0baaf4e127217d1637cd5e387fbd9d4c42163e99b467e84fe813",
+          "05-arrangement-copy-after.screamseq": "f8ea7cc23b73cf2aa7b911867dc3bdb0c1718f32ed7e06a6a3413ed34350efaf",
+          "rendered.screamseq": "cf531dbfaab55c5f01098c8bbc0312006978daac212f63ad7f1c246380cae043",
+          "imported.screamseq": "1e776a520bd2f696796f8c95940eb1881018b911d26a34b982a8a70709fa616d"
+        }
+      }
+    }
+  }
+}

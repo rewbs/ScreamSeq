@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #if defined(_WIN32)
 #include <windows.h>
 #else
@@ -749,8 +750,30 @@ int Document::addPattern(int rows, bool duplicate, int source)
 	return index;
 }
 void Document::setOrder(int index, int pattern) { editOrder(index, pattern, "assign"); }
+bool Document::orderEditChanges(int index,int pattern,const std::string &operation) const
+{
+    if(!editable())throw std::invalid_argument("This document is read-only.");
+    const auto &sequence=song_->Order();
+    if(index<0||index>=sequence.size())throw std::invalid_argument("Select a valid order.");
+    if(operation=="assign"||operation=="before"||operation=="after") {
+        if(pattern<0||pattern>std::numeric_limits<PATTERNINDEX>::max()||!song_->Patterns.IsValidPat(PATTERNINDEX(pattern)))
+            throw std::invalid_argument("Select a valid pattern.");
+        if(operation=="assign")return sequence[index]!=PATTERNINDEX(pattern);
+        if(sequence.size()>=song_->GetModSpecifications().ordersMax)throw std::invalid_argument("The order list is full.");
+    } else if(operation=="move") {
+        if(pattern<0||pattern>=sequence.size())throw std::invalid_argument("Select a valid destination order.");
+        return pattern!=index;
+    } else if(operation=="up"||operation=="down") {
+        const auto target=index+(operation=="up"?-1:1);
+        if(target<0||target>=sequence.size())throw std::invalid_argument("This order is at the edge of the list.");
+    } else if(operation=="remove") {
+        if(sequence.size()<=1)throw std::invalid_argument("Keep at least one order.");
+    } else throw std::invalid_argument("Unknown order operation.");
+    return true;
+}
 void Document::editOrder(int index, int pattern, const std::string &operation)
 {
+    if(!orderEditChanges(index,pattern,operation))return;
 	transaction([&](CSoundFile &s, NativeSong &native)
 	{
 		auto &sequence = s.Order();
