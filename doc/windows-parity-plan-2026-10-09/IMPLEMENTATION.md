@@ -2,6 +2,59 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Sample-browser import receipts and composing context
+
+The sample browser now submits `sample.importMany` through `NativeWriteCompletion`
+and retains the original paths, instrument option, song/revision and generation.
+Pending and uncertain imports register with document-departure admission. Hiding,
+reopening or refreshing the browser cannot drop the receipt or submit the batch
+again. **Review import** consumes an exact worker receipt without repeating import
+or reveal; an old result never uses its sample slots to retarget today's editor.
+If there is no receipt, Review synchronizes and reads the original song's current
+samples/instruments, labels the observation **unverified**, and requires explicit
+**Use current song** before a fresh import. Failed/malformed observations and a
+changed original document retain uncertainty. Stop preview and raw gain entry
+remain available while the import selection is frozen.
+
+The worker prepares the full batch result before Stop and the atomic asset commit,
+then publishes that preallocated receipt immediately after commit. Allocation or
+Stop failure cannot create a success receipt; later publication/native callback
+failure cannot lose the committed destinations. Unchanged-revision failures for
+this operation carry the proven NotCommitted outcome. The API shape, project
+codec, stable identities and one-transaction Undo semantics are unchanged.
+
+Successful browser completion reuses the existing sample reveal helper. A sample
+range draft keeps its raw text, captured identity and revision instead of being
+cleared by import. The browser temporarily parks focus on its owner before
+controls are disabled, restoring the original enabled control only if focus has
+stayed there; an unresolved import offers focus on Review. Navigation to another
+control or window during completion wins. The new Application fixture verifies
+both retained focus and newer focus choices in the sample range and preview gain.
+
+Evidence: `bin/parity-evidence/p0b-sample-browser-receipt-receipt.json`, with 1,851
+source/dependency inputs, compiler/cache/executable hashes and retained logs.
+
+| Check | Result and scope |
+|---|---|
+| ARM64 native-tool, controller, workspace and app targets | Built successfully; focus correction rebuilt affected native-tool/workspace/app targets |
+| Worker asset/publication checks and setup dependencies | 4/4 passed within the initial 5-entry boundary run (5.05 s including native tools); exact receipt before failed publication, dry run, allocation/Stop refusal, exact PCM/identity Undo/Redo including allocator high-water mark. Worker sources and dependencies are unchanged by the later focus fix |
+| Final native-tool and Application receipt groups | 2/2 passed, 11.55 s; known/unknown receipt, failed/malformed Review, hidden owners, no replay, departure refusal, raw sample draft and newer focus preservation |
+| Draft census and departure groups | Both passed in the initial workspace run (9.28 s and 5.43 s); these are earlier scoped checks, not a final full-workspace pass |
+| Final actual application sample-library checks | 7/7 passed, 5.254 s, no skips; batch Undo/persistence, native search/selection/import, gain/partial text, retained multisample drafts/rebase, minimum-size controls and folder removal preserving source files |
+
+The initial Application assertion failed. Splitting it without removing any term
+isolated a real focus loss caused by disabling the focused browser child; every
+sample draft term already passed. The focus correction and the added newer-focus
+cases then passed. An initial diagnostic build used a nonexistent target name;
+the corrected `workspace-restore-tests` target built successfully. Initial logs
+and the original source freeze are retained; no assertion was weakened.
+
+This closes this browser batch-import path only. Direct file-dialog sample import
+and independent sample-folder/root/rescan completion still require the P0b entry-
+point audit. No Mac/x64, physical audio, foreground/UIA, supplied reciprocal fixture
+or final integration qualification is claimed. P0b and the full P0c–P8 scope remain
+active; prior planning findings retain their dated baseline.
+
 ## P0b.1 Plugin-library completion and application-wide draft retention
 
 `PluginLibraryWindow` now submits rescans, browser preference changes and Add to

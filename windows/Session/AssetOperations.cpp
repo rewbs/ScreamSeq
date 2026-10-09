@@ -214,7 +214,7 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p,const Pre
     Json items=Json::array();for(const auto &item:imported)items.push_back({{"path",item.path},{"sample",item.sample},{"instrument",item.instrument}});
     Json result={{"samples",items},{"count",items.size()},{"dryRun",dry}};
     if(validateImport_)validateImport_(prepared.candidate());
-    if(!dry&&prepared.changed()){stop();prepared.commit();}return result;
+    if(!dry&&prepared.changed()){auto completion=prepare?prepare(result):nullptr;stop();prepared.commit();if(completion)completion->committed();}return result;
   }
   if(method=="sample.import"||method=="instrument.import") {
     keys(p,{"path","slot"});const auto path=importPath(field(p,"path"));const bool instrument=method=="instrument.import";

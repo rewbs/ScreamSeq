@@ -802,7 +802,7 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
     // recorder's Keep consumes its take only after that import succeeds; an
     // unchanged revision on failure proves no Keep/import was committed.
     // This does not classify recording start/stop/discard, files or vendor calls.
-    if(method=="instrument.importMultisample"||method=="sample.renderSelection"||method=="sample.recording.commit") {
+    if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit") {
       const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
       try {std::rethrow_exception(failure);}
       catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),rejected);}

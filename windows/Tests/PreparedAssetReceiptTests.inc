@@ -9,8 +9,9 @@ static void preparedAssetReceiptTests(const std::filesystem::path &directory) {
     std::ofstream file(path,std::ios::binary);need(source->song().SaveWAVSample(1,file),"Write receipt sample fixture");file.close();
     sources.push_back({{"path",path.generic_string()},{"rootNote",49+i*12}});
   }
+  Json paths=Json::array();for(const auto &item:sources)paths.push_back(item.at("path"));
   const std::array<float,8> pcm{.1f,-.2f,.3f,-.4f,.2f,-.1f,0,0};
-  for(bool multisample:{false,true})for(unsigned mode=0;mode<4;++mode){
+  for(unsigned kind=0;kind<3;++kind)for(unsigned mode=0;mode<4;++mode){
     auto document=Tracker::Document::demo();const auto before=document->snapshotData();const auto native=document->native();const auto revision=document->revision;
     unsigned prepared=0,stopped=0,published=0;Json saved;
     AssetOperations assets(*document,[&]{++stopped;need(prepared==1&&published==0,"Stop ran before result preparation or after premature publication");if(mode==2)throw std::runtime_error("Stop refused");});
@@ -26,7 +27,8 @@ static void preparedAssetReceiptTests(const std::filesystem::path &directory) {
     };
     bool failed=false;Json returned;
     try{
-      if(multisample)returned=assets.invoke("instrument.importMultisample",{{"samples",sources},{"name","Receipt family"},{"dryRun",mode==0}},prepare);
+      if(kind==2)returned=assets.invoke("sample.importMany",{{"paths",paths},{"createInstruments",true},{"dryRun",mode==0}},prepare);
+      else if(kind==1)returned=assets.invoke("instrument.importMultisample",{{"samples",sources},{"name","Receipt family"},{"dryRun",mode==0}},prepare);
       else returned=assets.appendCapturedAudio(pcm,48000,2,"Receipt take",true,mode==0,prepare);
     }catch(const std::exception &){failed=true;}
     need(failed==(mode==1||mode==2),"Unexpected asset receipt result");
@@ -44,14 +46,14 @@ static void preparedAssetReceiptTests(const std::filesystem::path &directory) {
       need(stopped==(mode==2?1u:0u)&&prepared==(mode==0?0u:1u),"Dry run or failed preparation reached Stop");
     }
   }
-  for(bool multisample:{false,true}){
+  for(unsigned kind=0;kind<3;++kind){
     bool failPublication=false,armPublication=true,receiptBeforeEveryPublication=true;std::shared_ptr<NativeCallReceipt> ticket=std::make_shared<NativeCallReceipt>();unsigned observations=0;
     DocumentController controller({},"prepared-receipt",[&]{if(armPublication)failPublication=true;},[](const auto &){},[&]{
       if(failPublication){++observations;receiptBeforeEveryPublication=receiptBeforeEveryPublication&&bool(ticket->read());throw std::runtime_error("Controlled publication failure");}
     });
     const auto original=controller.view();
-    const std::string method=multisample?"instrument.importMultisample":"sample.renderSelection";
-    Json params=multisample?Json{{"samples",sources},{"name","Worker receipt"}}:
+    const std::string method=kind==2?"sample.importMany":kind==1?"instrument.importMultisample":"sample.renderSelection";
+    Json params=kind==2?Json{{"paths",paths},{"createInstruments",true}}:kind==1?Json{{"samples",sources},{"name","Worker receipt"}}:
       Json{{"pattern",0},{"firstRow",0},{"lastRow",0},{"firstChannel",0},{"lastChannel",0},{"tailSeconds",0},{"createInstrument",true},{"name","Worker receipt"}};
     params["expectedRevision"]=original->session.revision;
     auto pending=controller.invokeCompleted(method,params,ticket);
@@ -64,7 +66,8 @@ static void preparedAssetReceiptTests(const std::filesystem::path &directory) {
     const auto receipt=ticket->read();
     need(committed&&receiptBeforeEveryPublication&&observations>=2&&receipt&&receipt->method==method&&receipt->document==original->session.documentId,
       "Real asset publication fault lost its attributed commit");
-    if(multisample)need(receipt->result.at("zones").size()==2,"Multisample receipt lost exact zones");
+    if(kind==2)need(receipt->result.at("samples").size()==2,"Batch import receipt lost file destinations");
+    else if(kind==1)need(receipt->result.at("zones").size()==2,"Multisample receipt lost exact zones");
     else need(receipt->result.contains("selectedFrames")&&receipt->result.at("name")=="Worker receipt","Render receipt was replaced by an append-only result");
     armPublication=false;failPublication=false;controller.invoke("synchronizeView",Json::object()).get();
     need(controller.view()->session.revision==receipt->revision,"Preallocated receipt predicted the wrong committed revision");

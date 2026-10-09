@@ -10,19 +10,12 @@
     void openSampleBrowser() {
         prepareSampleLibrary();
         if(!sampleBrowser)sampleBrowser=std::make_unique<ScreamSeq::SampleLibraryWindow>(window,
-            [this](const auto &method,const auto &params){return method.starts_with("sample.library.")?independentOperation(method,params).at("data"):documentOperation(method,params);},
+            [this](const auto &method,const auto &params){if(method=="document.get")return view->session.document;return method.starts_with("sample.library.")?independentOperation(method,params).at("data"):documentOperation(method,params);},
             [this]{return sampleLibrary->status();},
             [this]{return samplePreview.status();},
             [this](double db){samplePreview.gain(float(std::pow(10.,db/20.)));},
             [this]{return ScreamSeq::SampleLibraryWindow::Context{documentId,view->session.revision,view->instruments!=0};},
-            [this](const Json &result,const std::string &document){
-                if(documentId!=document)return;
-                workspaceState.show("samples",position(),cursorSample(),true);setWorkspaceCanvasFocus("samples",true);auto &panel=workspaceState.panel("samples");
-                const auto &first=result.at("samples").at(0);panel.sample=first.at("sample");panel.pinned=true;sampleDraft=false;
-                const auto instrument=first.at("instrument").get<unsigned>();
-                if(instrument||!view->instruments){const auto target=typingTarget(!instrument,instrument?instrument:first.at("sample").get<unsigned>(),49,window);typingSoundId=target.identity;refreshTypingSounds();}
-                layoutControls();
-            },
+            [this](const Json &result,const std::string &document){revealCapturedSample(document,result.at("samples").at(0));},
             [this](unsigned instrument,const std::string &document){if(documentId!=document)return;const auto target=typingTarget(false,instrument,49,window);typingSoundId=target.identity;refreshTypingSounds();status=L"Multi-sample instrument imported / selected for musical typing";},
             [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
         sampleBrowser->show();

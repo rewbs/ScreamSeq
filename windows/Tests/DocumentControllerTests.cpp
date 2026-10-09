@@ -79,7 +79,7 @@ void publicationTests(const std::filesystem::path &directory) {
     "Native request ticket lost the worker result or acquired a later edit's revision");
   need(receipt.method=="document.patch"&&receipt.document==controller.view()->session.documentId&&receipt.revision==firstRevision&&receipt.revision!=controller.view()->session.revision,
     "Later worker edit relabelled an unconsumed operation receipt");
-  for(const auto method:{"sample.renderSelection","instrument.importMultisample","sample.recording.commit"}){
+  for(const auto method:{"sample.renderSelection","instrument.importMultisample","sample.importMany","sample.recording.commit"}){
     bool classified=false;
     const auto refusedTicket=std::make_shared<NativeCallReceipt>();
     try{controller.invokeCompleted(method,{{"unknown",true},{"expectedRevision",controller.view()->session.revision}},refusedTicket).get();}
