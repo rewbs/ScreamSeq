@@ -78,6 +78,10 @@ static void liveHistory() {
     throw std::runtime_error("Live topology did not settle while advancing transport");
   };
   settled();
+  const auto orderNoOpRevision=session.automationRevision;
+  call(@"order.edit",@{@"order":@0,@"operation":@"move",@"destination":@0});
+  check([session.automationRevision isEqual:orderNoOpRevision],"Live order no-op preserves revision");
+  settled(); // Requires the same running transport to keep advancing frames.
   const auto source=call(@"graph.song.source.add",@{@"source":@{@"kind":@"amount",@"name":@"Live implicit source",@"amount":@.2}})[@"data"][@"node"];settled();
   check([call(@"graph.get",@{},false)[@"data"][@"mixer"][@"buses"] count]==0,"Adding live song controls preserves implicit document routing");
   call(@"graph.song.source.update",@{@"node":source,@"source":@{@"amount":@.6}});settled();
@@ -260,6 +264,13 @@ int main(int argc,char **argv){@autoreleasepool {try {
   check([session editPattern:0 row:2 channel:0 values:@[@55,@1,@0,@0,@0,@0] error:&error],"Branch with a pattern edit");
   check(!session.canRedo,"A document edit discards plugin redo");
   call(@"history.undo",@{},true);check(session.canRedo,"Document branch has redo");
+  const auto orderNoOpRevision=session.automationRevision;
+  call(@"order.edit",@{@"order":@0,@"operation":@"move",@"destination":@0},true);
+  check([session.automationRevision isEqual:orderNoOpRevision]&&session.canRedo,
+    "Order API move-to-self preserves revision and the interleaved Redo branch");
+  check([session editOrder:0 pattern:0 operation:@"assign" error:&error],"Unchanged order assignment succeeds");
+  check([session.automationRevision isEqual:orderNoOpRevision]&&session.canRedo,
+    "Native unchanged assignment preserves revision and the interleaved Redo branch");
   check([session pluginParameter:0 identifier:1 value:-3 record:NO error:&error],"Branch with a plugin edit");
   check(!session.canRedo,"A plugin edit discards document redo");
   NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];

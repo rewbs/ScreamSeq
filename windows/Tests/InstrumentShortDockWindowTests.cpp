@@ -16,9 +16,7 @@ struct Owner {
 std::wstring text(HWND control){std::wstring result(size_t(GetWindowTextLengthW(control))+1,0);GetWindowTextW(control,result.data(),int(result.size()));result.resize(wcslen(result.c_str()));return result;}
 std::pair<DWORD,DWORD> selection(HWND control){DWORD first=0,last=0;SendMessageW(control,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));return {first,last};}
 void sizeClient(HWND window,int width,int height){
-  const auto dpi=GetDpiForWindow(window);RECT frame{0,0,MulDiv(width,dpi,96),MulDiv(height,dpi,96)};
-  require(AdjustWindowRectExForDpi(&frame,DWORD(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(window,GWL_EXSTYLE)),dpi),"Calculate instrument client frame");
-  require(SetWindowPos(window,nullptr,0,0,frame.right-frame.left,frame.bottom-frame.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE),"Size wide instrument fixture");
+  ScreamSeq::Tests::sizeOwnedGuiClient(window,width,height);
 }
 struct Form {
   ScreamSeq::InstrumentEnvelopeWindow::Context current{"owned-song","r1",1,1,

@@ -96,9 +96,21 @@ jobs:
           $env:SCREAMSEQ_TEST_LIVE_AUDIO = '1'
           $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-integration-ui'
           New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
-          $audioServices = @(foreach ($serviceName in @('Audiosrv', 'AudioEndpointBuilder')) {
+          # The hosted Server image may leave both native audio services stopped.
+          # Start them on this disposable runner; do not alter endpoint selection
+          # or system audio defaults, and retain any failure for diagnosis.
+          $audioServices = @(foreach ($serviceName in @('AudioEndpointBuilder', 'Audiosrv')) {
             $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-            @{ name = $serviceName; status = $(if ($service) { $service.Status.ToString() } else { 'unavailable' }) }
+            $before = if ($service) { $service.Status.ToString() } else { 'unavailable' }
+            $failure = $null
+            if ($service -and $service.Status -ne 'Running') {
+              try {
+                Start-Service -Name $serviceName -ErrorAction Stop
+                $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
+              } catch { $failure = $_.Exception.Message }
+              $service.Refresh()
+            }
+            @{ name = $serviceName; before = $before; status = $(if ($service) { $service.Status.ToString() } else { 'unavailable' }); error = $failure }
           })
           $audioServices | ConvertTo-Json | Set-Content bin/windows-ci/audio-services.json
           $binaryHash = (Get-FileHash -LiteralPath $env:SCREAMSEQ_TEST_EXE -Algorithm SHA256).Hash.ToLowerInvariant()

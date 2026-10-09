@@ -1397,6 +1397,10 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)editOrder:(NSInteger)order pattern:(NSInteger)pattern operation:(NSString *)operation error:(NSError **)error {
   try {
+    if(order<std::numeric_limits<int>::min()||order>std::numeric_limits<int>::max()||
+       pattern<std::numeric_limits<int>::min()||pattern>std::numeric_limits<int>::max())
+      throw std::invalid_argument("Order editing value is outside its range.");
+    if(!_document->orderEditChanges(int(order),int(pattern),operation.UTF8String))return YES;
     _audio->stop();
     _document->editOrder(int(order), int(pattern), operation.UTF8String);
     return YES;
@@ -1428,6 +1432,8 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)removeOrder:(NSInteger)order error:(NSError **)error {
   try {
+    if(order<0||order>std::numeric_limits<int>::max())throw std::invalid_argument("Select a valid order.");
+    _document->orderEditChanges(int(order),0,"remove");
     _audio->stop();
     _document->removeOrder(int(order));
     return YES;

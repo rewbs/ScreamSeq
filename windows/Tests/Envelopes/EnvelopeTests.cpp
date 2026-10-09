@@ -7,6 +7,7 @@
 #include "soundlib/mod_specifications.h"
 #include "mpt/crypto/hash.hpp"
 #include <filesystem>
+#include <atomic>
 #ifdef small
 #undef small
 #endif
@@ -162,7 +163,8 @@ std::filesystem::path testScratch() {
 struct Files {
   std::filesystem::path folder,path;
   Files() {
-    folder=testScratch()/(L"envelopes-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64()));
+    static std::atomic<uint64_t> serial{0};
+    folder=testScratch()/(L"envelopes-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64())+L"-"+std::to_wstring(++serial));
     path=folder/L"envelope-catalogue-v1.plist";
   }
   ~Files() { std::error_code e; std::filesystem::remove_all(folder,e); }
