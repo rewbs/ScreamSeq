@@ -57,7 +57,7 @@ private:
     const auto control=controls_.at(id);DWORD first=0,last=0;
     SendMessageW(control,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
     set(id,value);
-    SendMessageW(control,EM_SETSEL,std::min<size_t>(first,value.size()),std::min<size_t>(last,value.size()));
+    ScreamSeq::NativeInputGate::present(control,EM_SETSEL,std::min<size_t>(first,value.size()),std::min<size_t>(last,value.size()));
   }
   void details(){
     const auto index=indexOf(selected_);

@@ -81,10 +81,10 @@
         next.navigation=position();next.navigation["column"]=4+2*next.fx;next.navigation["following"]=false;
         next.message=std::wstring(L"Strength (%) / duration (")+(next.rows?L"rows":L"beats")+L") · Tab switches · Enter saves and advances · Esc cancels";
         patternNudge=std::move(next);patternNudge.setting=true;
-        SetWindowTextW(controls.at(nudgeStrengthField),replacing.empty()?strength:replacing.c_str());
-        SetWindowTextW(controls.at(nudgeDurationField),duration);SendMessageW(controls.at(nudgeDurationField),EM_SETCUEBANNER,FALSE,reinterpret_cast<LPARAM>(patternNudge.rows?L"Duration (rows)":L"Duration (beats)"));patternNudge.setting=false;
+        ScreamSeq::NativeInputGate::text(controls.at(nudgeStrengthField),replacing.empty()?strength:replacing.c_str());
+        ScreamSeq::NativeInputGate::text(controls.at(nudgeDurationField),duration);SendMessageW(controls.at(nudgeDurationField),EM_SETCUEBANNER,FALSE,reinterpret_cast<LPARAM>(patternNudge.rows?L"Duration (rows)":L"Duration (beats)"));patternNudge.setting=false;
         navigate(patternNudge.navigation);layoutPatternNudgeEditor();SetFocus(controls.at(nudgeStrengthField));
-        SendMessageW(controls.at(nudgeStrengthField),EM_SETSEL,replacing.empty()?0:WPARAM(-1),-1);status=patternNudge.message;return true;
+        ScreamSeq::NativeInputGate::present(controls.at(nudgeStrengthField),EM_SETSEL,replacing.empty()?0:WPARAM(-1),-1);status=patternNudge.message;return true;
     }
     void finishPatternNudge(bool advanceRow){
         const bool owned=patternNudgeOwnsFocus(),same=position()==patternNudge.navigation;
@@ -122,7 +122,7 @@
         if(!patternNudge.active||!patternNudgeOwnsFocus())return false;
         if(key==VK_ESCAPE){if(!patternNudge.pending){finishPatternNudge(false);status=L"Nudge draft cancelled";}return true;}
         if(key==VK_RETURN){commitPatternNudge();return true;}
-        if(key==VK_TAB){auto h=controls.at(GetFocus()==controls.at(nudgeStrengthField)?nudgeDurationField:nudgeStrengthField);SetFocus(h);SendMessageW(h,EM_SETSEL,0,-1);return true;}
+        if(key==VK_TAB){auto h=controls.at(GetFocus()==controls.at(nudgeStrengthField)?nudgeDurationField:nudgeStrengthField);SetFocus(h);ScreamSeq::NativeInputGate::present(h,EM_SETSEL,0,-1);return true;}
         return false;
     }
     bool patternNudgeDoubleClick(float x,float y){

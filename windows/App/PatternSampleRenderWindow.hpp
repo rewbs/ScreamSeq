@@ -89,9 +89,9 @@ public:
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"RENDER PATTERN SELECTION"},{targetLabel,L""},{nameLabel,L"Sample name"},{tailLabel,L"Tail after selection (seconds)"},{outputLabel,L"Create"},{helpLabel,L"The captured row and channel range includes complete channels.\nMoving the cursor keeps this selection. Song edits require a new capture."},{statusLabel,L""}})label(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{useSelection,L"Use current selection"},{check,L"Check"},{render,L"Render sample"},{close,L"Close"}})button(id,text);
     edit(name,L"Pattern selection",200);edit(tail,L"0",12);combo(output);
-    for(const auto text:{L"Sample",L"Sample + mapped instrument"})SendMessageW(controls_.at(output),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));SendMessageW(controls_.at(output),CB_SETCURSEL,0,0);baseline_=raw();finish();
+    for(const auto text:{L"Sample",L"Sample + mapped instrument"})ScreamSeq::NativeInputGate::present(controls_.at(output),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));ScreamSeq::NativeInputGate::present(controls_.at(output),CB_SETCURSEL,0,0);baseline_=raw();finish();
   }
-  void openAt(bool instrument,Target target){if(!captured_){capture(std::move(target));SendMessageW(controls_.at(output),CB_SETCURSEL,instrument?1:0,0);baseline_=raw();}show();layout();}
+  void openAt(bool instrument,Target target){if(!captured_){capture(std::move(target));ScreamSeq::NativeInputGate::present(controls_.at(output),CB_SETCURSEL,instrument?1:0,0);baseline_=raw();}show();layout();}
   void documentChanged(){if(ready_&&!pending_){layout();requestPaint();}}
   void hide()override{if(pending_){status(L"Wait for the render request to finish before closing");return;}NativeToolWindow::hide();}
   Json snapshot()const{return {{"visible",visible()},{"pending",pending_},{"completion",completion_.snapshot()},{"document",target_.document},{"expectedRevision",target_.revision},{"stale",!current()},{"pattern",target_.pattern},{"firstRow",target_.firstRow},{"lastRow",target_.lastRow},{"firstChannel",target_.firstChannel},{"lastChannel",target_.lastChannel},{"name",utf8(field(name))},{"tailSeconds",utf8(field(tail))},{"createInstrument",choice(output)==1},{"report",report_},{"status",utf8(status_)}};}

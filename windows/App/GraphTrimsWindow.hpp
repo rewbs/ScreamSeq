@@ -24,9 +24,9 @@ private:
     return describeDraft(captured_.document,captured_.revision,target.dump(),generation_,dirty_,pending_);
   }
   int selected(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
-  void select(int id,int value){SendMessageW(controls_.at(id),CB_SETCURSEL,value,0);}
-  void addChoice(int id,const std::string &name){auto text=wide(name);SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
-  void clear(int id){SendMessageW(controls_.at(id),CB_RESETCONTENT,0,0);}
+  void select(int id,int value){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_SETCURSEL,value,0);}
+  void addChoice(int id,const std::string &name){auto text=wide(name);ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
+  void clear(int id){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_RESETCONTENT,0,0);}
   void status(std::wstring message){status_=std::move(message);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   void current()const{auto now=context_();if(now.document!=captured_.document||now.revision!=captured_.revision)throw std::runtime_error("Song changed / Reload before applying this trim draft");}

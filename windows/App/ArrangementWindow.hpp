@@ -42,7 +42,7 @@ private:
     for(int id:{sectionName,patternName,patternNotes}){auto &view=views[index++];const auto control=controls_.at(id);SendMessageW(control,EM_GETSEL,reinterpret_cast<WPARAM>(&view.first),reinterpret_cast<LPARAM>(&view.last));view.line=int(SendMessageW(control,EM_GETFIRSTVISIBLELINE,0,0));}return views;
   }
   void restoreFieldViews(const std::array<FieldView,3> &views){
-    size_t index=0;for(int id:{sectionName,patternName,patternNotes}){const auto &view=views[index++];const auto control=controls_.at(id);DWORD first=0,last=0;SendMessageW(control,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));if(first!=view.first||last!=view.last)SendMessageW(control,EM_SETSEL,view.first,view.last);if(id==patternNotes){const auto line=int(SendMessageW(control,EM_GETFIRSTVISIBLELINE,0,0));if(line!=view.line)SendMessageW(control,EM_LINESCROLL,0,view.line-line);}}
+    size_t index=0;for(int id:{sectionName,patternName,patternNotes}){const auto &view=views[index++];const auto control=controls_.at(id);DWORD first=0,last=0;SendMessageW(control,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));if(first!=view.first||last!=view.last)ScreamSeq::NativeInputGate::present(control,EM_SETSEL,view.first,view.last);if(id==patternNotes){const auto line=int(SendMessageW(control,EM_GETFIRSTVISIBLELINE,0,0));if(line!=view.line)SendMessageW(control,EM_LINESCROLL,0,view.line-line);}}
   }
   uint64_t documentGeneration_=0,draftGeneration_=0,selectionGeneration_=0,requestGeneration_=0;
   bool loaded_=false,opened_=false,setting_=false,pending_=false,dirty_=false,resizingColumns_=false;
@@ -81,9 +81,9 @@ private:
     size_t used=0;for(const auto &value:patterns_)if(value.index<maximum)++used;return used<maximum;
   }
   void fillPatterns(int control,const std::vector<Pattern> &values,const std::string &chosen){
-    const auto handle=controls_.at(control);SendMessageW(handle,CB_RESETCONTENT,0,0);int selection=-1;
-    for(size_t i=0;i<values.size();++i){SendMessageW(handle,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(values[i].label.c_str()));if(values[i].id==chosen)selection=int(i);}
-    SendMessageW(handle,CB_SETCURSEL,selection,0);
+    const auto handle=controls_.at(control);ScreamSeq::NativeInputGate::present(handle,CB_RESETCONTENT,0,0);int selection=-1;
+    for(size_t i=0;i<values.size();++i){ScreamSeq::NativeInputGate::present(handle,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(values[i].label.c_str()));if(values[i].id==chosen)selection=int(i);}
+    ScreamSeq::NativeInputGate::present(handle,CB_SETCURSEL,selection,0);
   }
   void captureDraft(std::string requested={}){
     if(!loaded_)return;
@@ -247,7 +247,7 @@ private:
     if(id==sequence&&notification==CBN_SELCHANGE){
       const auto index=SendMessageW(controls_.at(sequence),CB_GETCURSEL,0,0);
       if(index>=0&&size_t(index)<sequences_.size())execute("sequence.select",{{"sequence",sequences_[size_t(index)].first}});
-      setting_=true;for(size_t i=0;i<sequences_.size();++i)if(sequences_[i].first==unsignedValue(document().at("sequence")))SendMessageW(controls_.at(sequence),CB_SETCURSEL,i,0);setting_=false;return;
+      setting_=true;for(size_t i=0;i<sequences_.size();++i)if(sequences_[i].first==unsignedValue(document().at("sequence")))ScreamSeq::NativeInputGate::present(controls_.at(sequence),CB_SETCURSEL,i,0);setting_=false;return;
     }
     if(notification!=BN_CLICKED)return;
     if(id==close){leave();return;}if(id==returnPattern){if(callbacks_.returnToPattern)callbacks_.returnToPattern();return;}
@@ -410,8 +410,8 @@ public:
     if(selected_!=selected){selected_=selected;++selectionGeneration_;}
     setting_=true;
     if(patternsChanged){if(!pattern(patterns_,assignmentID_))assignmentID_=patterns_.empty()?std::string():patterns_.front().id;fillPatterns(assignment,patterns_,assignmentID_);}
-    if(sequencesChanged){SendMessageW(controls_.at(sequence),CB_RESETCONTENT,0,0);for(const auto &[index,label]:sequences_)SendMessageW(controls_.at(sequence),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
-    for(size_t i=0;i<sequences_.size();++i)if(sequences_[i].first==currentSequence)SendMessageW(controls_.at(sequence),CB_SETCURSEL,i,0);
+    if(sequencesChanged){ScreamSeq::NativeInputGate::present(controls_.at(sequence),CB_RESETCONTENT,0,0);for(const auto &[index,label]:sequences_)ScreamSeq::NativeInputGate::present(controls_.at(sequence),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+    for(size_t i=0;i<sequences_.size();++i)if(sequences_[i].first==currentSequence)ScreamSeq::NativeInputGate::present(controls_.at(sequence),CB_SETCURSEL,i,0);
     const auto chosen=std::find_if(orderList.begin(),orderList.end(),[&](const auto &value){return value.id==selected_;});const auto chosenIndex=chosen==orderList.end()?-1:int(chosen-orderList.begin());
     if(orders_!=orderList||ListView_GetNextItem(list,-1,LVNI_SELECTED)!=chosenIndex){
       orders_=std::move(orderList);SendMessageW(list,WM_SETREDRAW,FALSE,0);ListView_SetItemCountEx(list,int(orders_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);ListView_SetItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);const auto selectedIndex=orderIndex(selected_);if(selectedIndex>=0)ListView_SetItemState(list,selectedIndex,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);

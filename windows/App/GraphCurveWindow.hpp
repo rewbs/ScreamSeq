@@ -108,8 +108,8 @@ public:
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{
       {titleLabel,L"Choose a graph automation source"},{rowLabel,L"Row"},{valueLabel,L"Value %"},
       {formulaLabel,L"Formula"},{statusLabel,L""},{helpLabel,L""}})label(id,text);
-    for(auto text:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})SendMessageW(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
-    for(auto text:{L"1 row",L"½ row",L"¼ row",L"1/256 row"})SendMessageW(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+    for(auto text:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+    for(auto text:{L"1 row",L"½ row",L"¼ row",L"1/256 row"})ScreamSeq::NativeInputGate::present(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
     setting_=true;selection(kind,1);selection(snap,0);set(pointRow,L"0");set(pointValue,L"50");set(formula,L"mix(start,end,t)");setting_=false;
     status_=L"Choose a source in Graph / Tools → Load selection";finish();
   }

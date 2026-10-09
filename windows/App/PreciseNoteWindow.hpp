@@ -118,10 +118,10 @@ public:
       {velocityLabel,L"Velocity"},{offsetLabel,L"Offset"},{unitsLabel,L"Units"},{effectLabel,L"Note-local effect"},
       {parameterLabel,L"Hex"},{repeatLabel,L"Hits (2–64)"},{endLabel,L"End velocity (1–127)"}})label(id,text);
     for(unsigned n=1;n<=122;++n){const auto text=n<=120?L"Note "+std::to_wstring(n):n==121?L"Note off":L"Cut";
-      const auto i=SendMessageW(controls_.at(pitch),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));
-      SendMessageW(controls_.at(pitch),CB_SETITEMDATA,i,n<=120?n:n==121?255:254);}
-    for(auto text:{L"Beats",L"Rows"})SendMessageW(controls_.at(units),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
-    for(auto text:{L"Free",L"1/16 beat",L"1/32 beat",L"1/64 beat"})SendMessageW(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+      const auto i=ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));
+      ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_SETITEMDATA,i,n<=120?n:n==121?255:254);}
+    for(auto text:{L"Beats",L"Rows"})ScreamSeq::NativeInputGate::present(controls_.at(units),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+    for(auto text:{L"Free",L"1/16 beat",L"1/32 beat",L"1/64 beat"})ScreamSeq::NativeInputGate::present(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
     {Setting guard(setting_);selection(pitch,60);selection(units,0);selection(snap,0);
       set(instrument,L"0");set(velocity,L"127");set(offset,L"0");set(parameter,L"00");set(repeatCount,L"4");set(endVelocity,L"127");}
     pointBaseline_=pointRaw();toolsBaseline_=toolsRaw();status_=L"Tools → Load selection captures a row";finish();

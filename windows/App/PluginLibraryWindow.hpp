@@ -15,16 +15,16 @@ class PluginLibraryWindow final : public NativeToolWindow {
   void status(std::wstring message){status_=std::move(message);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   int choice(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
-  void strings(int id,const std::vector<std::wstring> &items,int selection=0){SendMessageW(controls_.at(id),CB_RESETCONTENT,0,0);for(const auto &item:items)SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(item.c_str()));SendMessageW(controls_.at(id),CB_SETCURSEL,selection,0);}
+  void strings(int id,const std::vector<std::wstring> &items,int selection=0){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_RESETCONTENT,0,0);for(const auto &item:items)ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(item.c_str()));ScreamSeq::NativeInputGate::present(controls_.at(id),CB_SETCURSEL,selection,0);}
   void fields(){setting_=true;const auto *p=selected();if(!categoryDraft_)set(customCategory,p?wide(p->at("customCategory").get<std::string>()):L"");
     set(favorite,p&&p->at("favorite").get<bool>()?L"Unfavorite":L"Favorite");set(hidePlugin,p&&p->at("hidden").get<bool>()?L"Unhide":L"Hide");
     set(detailLabel,p?wide(p->at("name").get<std::string>()+" / "+p->at("format").get<std::string>()+" / "+p->at("category").get<std::string>()):L"Choose a plugin to add or organize");setting_=false;layout();
   }
   void list(){
-    const auto top=SendMessageW(controls_.at(plugins),LB_GETTOPINDEX,0,0);SendMessageW(controls_.at(plugins),WM_SETREDRAW,FALSE,0);SendMessageW(controls_.at(plugins),LB_RESETCONTENT,0,0);
-    int selection=-1;for(size_t i=0;i<entries_.size();++i){const auto &p=entries_[i];auto label=wide((p.at("favorite").get<bool>()?"★  ":"   ")+p.at("name").get<std::string>()+"    / "+p.at("format").get<std::string>()+" / "+p.at("category").get<std::string>()+(p.at("hidden").get<bool>()?"  [hidden]":""));SendMessageW(controls_.at(plugins),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(p.at("catalogID")==selected_)selection=int(i);}
+    const auto top=SendMessageW(controls_.at(plugins),LB_GETTOPINDEX,0,0);SendMessageW(controls_.at(plugins),WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(controls_.at(plugins),LB_RESETCONTENT,0,0);
+    int selection=-1;for(size_t i=0;i<entries_.size();++i){const auto &p=entries_[i];auto label=wide((p.at("favorite").get<bool>()?"★  ":"   ")+p.at("name").get<std::string>()+"    / "+p.at("format").get<std::string>()+" / "+p.at("category").get<std::string>()+(p.at("hidden").get<bool>()?"  [hidden]":""));ScreamSeq::NativeInputGate::present(controls_.at(plugins),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(p.at("catalogID")==selected_)selection=int(i);}
     if(selection<0)selected_.clear(); // Never retarget an edit when its row disappears.
-    SendMessageW(controls_.at(plugins),LB_SETCURSEL,selection,0);if(top!=LB_ERR)SendMessageW(controls_.at(plugins),LB_SETTOPINDEX,top,0);SendMessageW(controls_.at(plugins),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(plugins),nullptr,FALSE);fields();
+    ScreamSeq::NativeInputGate::present(controls_.at(plugins),LB_SETCURSEL,selection,0);if(top!=LB_ERR)ScreamSeq::NativeInputGate::present(controls_.at(plugins),LB_SETTOPINDEX,top,0);SendMessageW(controls_.at(plugins),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(plugins),nullptr,FALSE);fields();
   }
   void filter(){
     refreshQueued_=false;entries_=Json::array();const auto query=field(search);const auto k=choice(kind),f=choice(format);
@@ -76,7 +76,7 @@ class PluginLibraryWindow final : public NativeToolWindow {
   void timer(UINT_PTR id)override{if(id==1){KillTimer(window_,1);if(categoryDraft_)return;try{if(readQueued_)load();else filter();}catch(const Api::ApiError &e){if(e.code==-32002){queue(true);layout();return;}throw;}}}
   bool key(WPARAM value,bool ctrl,bool)override{
     if(value==VK_ESCAPE){if(categoryDraft_){categoryDraft_=false;fields();status(L"Category draft discarded");}else hide();return true;}
-    if(ctrl&&value=='F'){SetFocus(controls_.at(search));SendMessageW(controls_.at(search),EM_SETSEL,0,-1);return true;}
+    if(ctrl&&value=='F'){SetFocus(controls_.at(search));ScreamSeq::NativeInputGate::present(controls_.at(search),EM_SETSEL,0,-1);return true;}
     if(ctrl&&value=='R'){action(reload,BN_CLICKED);return true;}
     if(value==VK_F6){SetFocus(controls_.at(GetFocus()==controls_.at(plugins)?search:plugins));return true;}
     if(value==VK_RETURN){const auto focus=GetFocus();if(focus==controls_.at(customCategory)){action(saveCategory,BN_CLICKED);return true;}if(focus==controls_.at(plugins)){addPlugin();return true;}wchar_t type[32]{};GetClassNameW(focus,type,32);if(_wcsicmp(type,L"Button")==0){action(GetDlgCtrlID(focus),BN_CLICKED);return true;}}return false;

@@ -22,6 +22,13 @@ private:
   size_t offset_=0,total_=0;uint64_t generation_=0;
   bool previewPlaying_=false;float previewPosition_=0;
   std::unique_ptr<MultisampleImportWindow> multisample_;
+  std::function<void(unsigned,const std::string &)> multisampleApplied_;
+  NativeWriteCompletion::Write write_;
+  MultisampleImportWindow &multisampleEditor() {
+    if(!multisample_||multisample_->retired())
+      multisample_=std::make_unique<MultisampleImportWindow>(window_,request_,[this]{const auto c=context_();return std::pair(c.document,c.revision);},multisampleApplied_,write_);
+    return *multisample_;
+  }
   void status(std::wstring message){status_=std::move(message);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   Json call(const std::string &method,const Json &p=Json::object()){return request_(method,p);}
@@ -37,12 +44,12 @@ private:
     if(position!=previewPosition_){previewPosition_=position;requestPaint();}
   }
   void queue(){queued_=true;offset_=0;++generation_;SetTimer(window_,1,100,nullptr);}
-  void roots(){setting_=true;SendMessageW(controls_.at(root),CB_RESETCONTENT,0,0);SendMessageW(controls_.at(root),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"All sample folders"));int choice=0;
-    for(size_t i=0;i<state_.at("roots").size();++i){const auto path=state_.at("roots")[i].get<std::string>();const auto text=wide(path);SendMessageW(controls_.at(root),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));if(path==rootPath_)choice=int(i+1);}if(!choice)rootPath_.clear();SendMessageW(controls_.at(root),CB_SETCURSEL,choice,0);setting_=false;}
+  void roots(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(root),CB_RESETCONTENT,0,0);ScreamSeq::NativeInputGate::present(controls_.at(root),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"All sample folders"));int choice=0;
+    for(size_t i=0;i<state_.at("roots").size();++i){const auto path=state_.at("roots")[i].get<std::string>();const auto text=wide(path);ScreamSeq::NativeInputGate::present(controls_.at(root),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));if(path==rootPath_)choice=int(i+1);}if(!choice)rootPath_.clear();ScreamSeq::NativeInputGate::present(controls_.at(root),CB_SETCURSEL,choice,0);setting_=false;}
   std::vector<unsigned> selections(int id)const{const auto count=SendMessageW(controls_.at(id),LB_GETSELCOUNT,0,0);if(count<=0)return {};std::vector<int> items(size_t(count),0);SendMessageW(controls_.at(id),LB_GETSELITEMS,count,reinterpret_cast<LPARAM>(items.data()));return {items.begin(),items.end()};}
-  void list(int id,const Json &items,const std::vector<std::string> &selected,const char *key){const auto top=SendMessageW(controls_.at(id),LB_GETTOPINDEX,0,0);SendMessageW(controls_.at(id),WM_SETREDRAW,FALSE,0);SendMessageW(controls_.at(id),LB_RESETCONTENT,0,0);
-    for(size_t i=0;i<items.size();++i){const auto &item=items[i];auto name=wide(item.at("name").get<std::string>());if(id==tags)name+=L"  ("+std::to_wstring(item.at("count").get<unsigned>())+L")";SendMessageW(controls_.at(id),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(std::find(selected.begin(),selected.end(),item.at(key).get<std::string>())!=selected.end())SendMessageW(controls_.at(id),LB_SETSEL,TRUE,i);}
-    if(top!=LB_ERR)SendMessageW(controls_.at(id),LB_SETTOPINDEX,top,0);SendMessageW(controls_.at(id),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(id),nullptr,FALSE);
+  void list(int id,const Json &items,const std::vector<std::string> &selected,const char *key){const auto top=SendMessageW(controls_.at(id),LB_GETTOPINDEX,0,0);SendMessageW(controls_.at(id),WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(controls_.at(id),LB_RESETCONTENT,0,0);
+    for(size_t i=0;i<items.size();++i){const auto &item=items[i];auto name=wide(item.at("name").get<std::string>());if(id==tags)name+=L"  ("+std::to_wstring(item.at("count").get<unsigned>())+L")";ScreamSeq::NativeInputGate::present(controls_.at(id),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(std::find(selected.begin(),selected.end(),item.at(key).get<std::string>())!=selected.end())ScreamSeq::NativeInputGate::present(controls_.at(id),LB_SETSEL,TRUE,i);}
+    if(top!=LB_ERR)ScreamSeq::NativeInputGate::present(controls_.at(id),LB_SETTOPINDEX,top,0);SendMessageW(controls_.at(id),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(id),nullptr,FALSE);
   }
   void load(){
     if(pending_)return;queued_=false;const auto generation=generation_;pending_=true;layout();
@@ -92,7 +99,7 @@ private:
     else if(id==previous||id==next){if(id==previous)offset_=offset_>=200?offset_-200:0;else if(offset_+200<total_)offset_+=200;queued_=true;++generation_;SetTimer(window_,1,1,nullptr);}
     else if(id==importSelection)importPaths(selectedPaths(),context_());
     else if(id==chooseFiles){const auto captured=context_();pending_=true;layout();try{const auto chosen=chooseSampleFiles(window_,L"Import samples",true);pending_=false;std::vector<std::string> paths;for(const auto &p:chosen){auto s=p.u8string();paths.emplace_back(s.begin(),s.end());}importPaths(paths,captured);}catch(...){pending_=false;layout();throw;}}
-    else if(id==family&&group_.is_object())multisample_->open(group_);
+    else if(id==family&&group_.is_object())reviewFamily(group_);
   }
   void timer(UINT_PTR id)override{
     if(id!=1||!visible())return;playback();if(pending_)return;auto state=statusRead_();if(state_!=state){const bool changed=state_.is_null()||state_.value("libraryRevision",std::string{})!=state.value("libraryRevision",std::string{});state_=std::move(state);roots();if(changed){queued_=true;++generation_;}set(heading,L"Sample library / "+std::to_wstring(state_.at("count").get<unsigned>())+(state_.at("indexing").get<bool>()?L" / indexing…":L""));if(!state_.at("error").is_null())status(wide(state_.at("error").get<std::string>()));layout();}
@@ -100,7 +107,7 @@ private:
   }
   bool key(WPARAM value,bool ctrl,bool)override{
     if(value==VK_ESCAPE){++generation_;call("sample.library.preview.stop");playback();return true;}
-    if(ctrl&&value=='F'){SetFocus(controls_.at(search));SendMessageW(controls_.at(search),EM_SETSEL,0,-1);return true;}
+    if(ctrl&&value=='F'){SetFocus(controls_.at(search));ScreamSeq::NativeInputGate::present(controls_.at(search),EM_SETSEL,0,-1);return true;}
     if(ctrl&&value=='R'){action(rescan,BN_CLICKED);return true;}
     if(value==VK_SPACE&&GetFocus()==controls_.at(files)){action(preview,BN_CLICKED);return true;}
     if(value==VK_RETURN){if(GetFocus()==controls_.at(gain)){updateGain(true);return true;}if(GetFocus()==controls_.at(files)){action(importSelection,BN_CLICKED);return true;}wchar_t type[32]{};GetClassNameW(GetFocus(),type,32);if(_wcsicmp(type,L"Button")==0){action(GetDlgCtrlID(GetFocus()),BN_CLICKED);return true;}}
@@ -121,10 +128,11 @@ public:
     add(tags,L"LISTBOX",L"Folder tags",LBS_EXTENDEDSEL|LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL);add(files,L"LISTBOX",L"Sample files",LBS_EXTENDEDSEL|LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{addFolder,L"Add folders…"},{removeFolder,L"Remove"},{rescan,L"Rescan"},{chooseFiles,L"Choose files…"},{mapped,L""},{preview,L"Preview"},{stop,L"Stop"},{autoPreview,L""},{importSelection,L"Import selection"},{family,L"Review family…"},{previous,L"Previous"},{next,L"Next"},{close,L"Close"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Sample library"},{searchLabel,L"Search samples / quotes group words, minus excludes"},{rootLabel,L"Folder"},{tagsLabel,L"Folder tags / Ctrl selects more"},{resultsLabel,L""},{detailLabel,L"Select a sample to inspect its waveform"},{statusLabel,L""},{gainLabel,L"Gain dB"}})label(id,text);
-    multisample_=std::make_unique<MultisampleImportWindow>(window_,request_,[this]{const auto c=context_();return std::pair(c.document,c.revision);},std::move(multisampleApplied),std::move(write));finish();roots();
+    multisampleApplied_=std::move(multisampleApplied);write_=std::move(write);multisampleEditor();finish();roots();
   }
+  void reviewFamily(const Json &group){multisampleEditor().open(group);}
   void show(){const bool wasVisible=visible();NativeToolWindow::show();if(!wasVisible)queued_=true;SetTimer(window_,1,1,nullptr);SetFocus(controls_.at(search));}
   void hide()override{++generation_;call("sample.library.preview.stop");playback();if(multisample_->visible())multisample_->hide();KillTimer(window_,1);NativeToolWindow::hide();}
-  Json snapshot()const{return {{"visible",visible()},{"pending",pending_},{"queued",queued_},{"libraryRevision",revision_},{"search",utf8(field(search))},{"root",rootPath_},{"tags",selectedTags_},{"items",entries_},{"offset",offset_},{"total",total_},{"selectedPaths",selectedPaths()},{"selected",selectedPath_},{"inspection",inspection_},{"family",group_},{"createInstruments",mapped_},{"autoPreview",auto_},{"gainDB",utf8(field(gain))},{"previewPlaying",previewPlaying_},{"previewPosition",previewPosition_},{"status",utf8(status_)},{"multisample",multisample_->snapshot()}};}
+  Json snapshot()const{return {{"visible",visible()},{"pending",pending_},{"queued",queued_},{"libraryRevision",revision_},{"search",utf8(field(search))},{"root",rootPath_},{"tags",selectedTags_},{"items",entries_},{"offset",offset_},{"total",total_},{"selectedPaths",selectedPaths()},{"selected",selectedPath_},{"inspection",inspection_},{"family",group_},{"createInstruments",mapped_},{"autoPreview",auto_},{"gainDB",utf8(field(gain))},{"previewPlaying",previewPlaying_},{"previewPosition",previewPosition_},{"status",utf8(status_)},{"multisample",multisample_&&!multisample_->retired()?multisample_->snapshot():Json{{"visible",false}}}};}
 };
 }

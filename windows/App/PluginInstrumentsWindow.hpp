@@ -29,21 +29,21 @@ class PluginInstrumentsWindow final : public NativeToolWindow {
     return L"Missing instrument "+std::to_wstring(target);
   }
   void fields(){
-    setting_=true;SendMessageW(controls_.at(instrument),CB_RESETCONTENT,0,0);
+    setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(instrument),CB_RESETCONTENT,0,0);
     const auto target=selected_>=0?assignments_.at(size_t(selected_)).at("instrument").get<unsigned>():0u;
     bool found=false;
-    auto append=[&](unsigned value){auto name=instrumentName(value);auto index=SendMessageW(controls_.at(instrument),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));SendMessageW(controls_.at(instrument),CB_SETITEMDATA,index,value);if(value==target){SendMessageW(controls_.at(instrument),CB_SETCURSEL,index,0);found=true;}};
+    auto append=[&](unsigned value){auto name=instrumentName(value);auto index=ScreamSeq::NativeInputGate::present(controls_.at(instrument),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));ScreamSeq::NativeInputGate::present(controls_.at(instrument),CB_SETITEMDATA,index,value);if(value==target){ScreamSeq::NativeInputGate::present(controls_.at(instrument),CB_SETCURSEL,index,0);found=true;}};
     for(const auto &item:inventory_){auto value=item.at("instrument").get<unsigned>();if(value==target||available(value))append(value);}
     if(target&&!found)append(target);
-    SendMessageW(controls_.at(channel),CB_SETCURSEL,selected_>=0?assignments_.at(size_t(selected_)).at("channel").get<int>()-1:-1,0);
+    ScreamSeq::NativeInputGate::present(controls_.at(channel),CB_SETCURSEL,selected_>=0?assignments_.at(size_t(selected_)).at("channel").get<int>()-1:-1,0);
     setting_=false;layout();
   }
   void list(){
     const auto top=SendMessageW(controls_.at(routes),LB_GETTOPINDEX,0,0);
-    SendMessageW(controls_.at(routes),WM_SETREDRAW,FALSE,0);SendMessageW(controls_.at(routes),LB_RESETCONTENT,0,0);
-    for(size_t i=0;i<assignments_.size();++i){const auto &a=assignments_[i];auto label=instrumentName(a.at("instrument").get<unsigned>())+L"     / MIDI "+std::to_wstring(a.at("channel").get<unsigned>())+(i==0?L"  / primary":L"");SendMessageW(controls_.at(routes),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+    SendMessageW(controls_.at(routes),WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(controls_.at(routes),LB_RESETCONTENT,0,0);
+    for(size_t i=0;i<assignments_.size();++i){const auto &a=assignments_[i];auto label=instrumentName(a.at("instrument").get<unsigned>())+L"     / MIDI "+std::to_wstring(a.at("channel").get<unsigned>())+(i==0?L"  / primary":L"");ScreamSeq::NativeInputGate::present(controls_.at(routes),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
     if(assignments_.empty())selected_=-1;else selected_=std::clamp(selected_,0,int(assignments_.size()-1));
-    SendMessageW(controls_.at(routes),LB_SETCURSEL,selected_,0);if(top!=LB_ERR)SendMessageW(controls_.at(routes),LB_SETTOPINDEX,top,0);
+    ScreamSeq::NativeInputGate::present(controls_.at(routes),LB_SETCURSEL,selected_,0);if(top!=LB_ERR)ScreamSeq::NativeInputGate::present(controls_.at(routes),LB_SETTOPINDEX,top,0);
     SendMessageW(controls_.at(routes),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(routes),nullptr,FALSE);fields();
   }
   void install(const Json &data){
@@ -112,7 +112,7 @@ public:
     :NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),plugin_(std::move(plugin)){
     minimumWidth_=620;minimumHeight_=420;create(L"ScreamSeq.PluginInstruments",L"Plugin instrument assignments",740,540);
     add(routes,L"LISTBOX",L"Assigned tracker instruments",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL);combo(instrument);combo(channel);
-    for(unsigned i=1;i<=16;++i){auto name=L"MIDI "+std::to_wstring(i);SendMessageW(controls_.at(channel),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}
+    for(unsigned i=1;i<=16;++i){auto name=L"MIDI "+std::to_wstring(i);ScreamSeq::NativeInputGate::present(controls_.at(channel),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{addRoute,L"Add instrument"},{removeRoute,L"Remove"},{preview,L"Preview"},{apply,L"Apply"},{reload,L"Reload / discard"},{close,L"Close"},{discard,L"Discard / close"}})button(id,text);
     label(heading,L"Plugin instruments");label(explanation,L"These instruments share one plugin, its sound, automation and audio outputs. MIDI channels can select parts in a multitimbral instrument.");label(statusLabel,L"");finish();load();
   }

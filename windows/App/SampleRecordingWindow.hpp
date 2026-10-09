@@ -50,14 +50,14 @@ private:
     pending_=false;layout();schedule();requestPaint();
   }
   void deviceChoices(){
-    setting_=true;SendMessageW(controls_.at(device),CB_RESETCONTENT,0,0);int selected=-1;
+    setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(device),CB_RESETCONTENT,0,0);int selected=-1;
     for(size_t i=0;i<devices_.size();++i){const auto &d=devices_[i];const auto text=wide(d.at("name").get<std::string>())+L" · "+std::to_wstring(d.at("channels").get<unsigned>())+L" ch";
-      SendMessageW(controls_.at(device),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));if(d.at("id")==selectedDevice_)selected=int(i);}
+      ScreamSeq::NativeInputGate::present(controls_.at(device),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));if(d.at("id")==selectedDevice_)selected=int(i);}
     if(selected<0&&!take_.empty()){
       const wchar_t *text=selectedDevice_.empty()?L"Default input used for this take":L"Recorded input is unavailable";
-      selected=int(SendMessageW(controls_.at(device),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text)));
+      selected=int(ScreamSeq::NativeInputGate::present(controls_.at(device),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text)));
     }
-    SendMessageW(controls_.at(device),CB_SETCURSEL,selected,0);setting_=false;
+    ScreamSeq::NativeInputGate::present(controls_.at(device),CB_SETCURSEL,selected,0);setting_=false;
   }
   void inputChoices(bool fallback=false){
     // The native capture format accepts up to 64 source channels. Retain the
@@ -69,10 +69,10 @@ private:
     if(selected==inputs_.end()&&fallback&&!inputs_.empty()){input_=inputs_.front();selected=inputs_.begin();}
     int index=selected==inputs_.end()?-1:int(selected-inputs_.begin());
     if(index<0&&!take_.empty()){index=int(inputs_.size());inputs_.push_back(input_);}
-    setting_=true;SendMessageW(controls_.at(channels),CB_RESETCONTENT,0,0);
+    setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(channels),CB_RESETCONTENT,0,0);
     for(const auto &v:inputs_){const auto text=v.count==1?L"Mono / input "+std::to_wstring(v.first+1):L"Stereo / inputs "+std::to_wstring(v.first+1)+L"–"+std::to_wstring(v.first+2);
-      SendMessageW(controls_.at(channels),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
-    SendMessageW(controls_.at(channels),CB_SETCURSEL,index,0);setting_=false;
+      ScreamSeq::NativeInputGate::present(controls_.at(channels),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
+    ScreamSeq::NativeInputGate::present(controls_.at(channels),CB_SETCURSEL,index,0);setting_=false;
   }
   void clearTake(){take_.clear();takeState_=Json::object();baseRevision_.clear();document_.clear();deviceChoices();inputChoices();describe();}
   void describe(){
@@ -178,7 +178,7 @@ private:
     if(id==device&&notification==CBN_SELCHANGE){const auto index=choice(device);if(index>=0&&size_t(index)<devices_.size()){selectedDevice_=devices_[size_t(index)].at("id").get<std::string>();inputChoices(true);}return;}
     if(id==channels&&notification==CBN_SELCHANGE){const auto index=choice(channels);if(index>=0&&size_t(index)<inputs_.size())input_=inputs_[size_t(index)];return;}
     if(notification!=BN_CLICKED)return;
-    if(id==discardSetup){requireResolved();setting_=true;set(name,L"Recording");SendMessageW(controls_.at(output),CB_SETCURSEL,0,0);setting_=false;baseline_=raw();draft_=false;draftContext_=context_();++generation_;status(L"Sample name and output reset / retained take unchanged");return;}
+    if(id==discardSetup){requireResolved();setting_=true;set(name,L"Recording");ScreamSeq::NativeInputGate::present(controls_.at(output),CB_SETCURSEL,0,0);setting_=false;baseline_=raw();draft_=false;draftContext_=context_();++generation_;status(L"Sample name and output reset / retained take unchanged");return;}
     if(id==refresh)loadDevices();else if(id==record)begin();else if(id==stop)end();else if(id==keep)commit();else if(id==discard)discardTake();else if(id==close)hide();
   }
   bool key(WPARAM value,bool,bool)override{
@@ -221,8 +221,8 @@ public:
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"RECORD A SAMPLE"},{deviceLabel,L"Input device"},{channelLabel,L"Input channels"},{nameLabel,L"Sample name"},{outputLabel,L"Keep as"},{permissionLabel,L""},{takeLabel,L""},{statusLabel,L""},{helpLabel,L"Record opens the selected microphone. No input monitoring.\nStop or Close retains the take; Keep adds it to the original song."}})label(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{record,L"Record"},{stop,L"Stop"},{keep,L"Keep take"},{discard,L"Discard take"},{close,L"Close"},{discardSetup,L"Discard setup"}})button(id,text);
     combo(device);combo(channels);combo(output);edit(name,L"Recording",128);
-    for(const auto text:{L"Sample",L"Sample + mapped instrument"})SendMessageW(controls_.at(output),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
-    SendMessageW(controls_.at(output),CB_SETCURSEL,0,0);baseline_=raw();draftContext_=context_();finish();
+    for(const auto text:{L"Sample",L"Sample + mapped instrument"})ScreamSeq::NativeInputGate::present(controls_.at(output),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+    ScreamSeq::NativeInputGate::present(controls_.at(output),CB_SETCURSEL,0,0);baseline_=raw();draftContext_=context_();finish();
   }
   ~SampleRecordingWindow()override{ready_=false;if(window_)KillTimer(window_,3);}
   bool hasRetainedTake()const{return !take_.empty();}

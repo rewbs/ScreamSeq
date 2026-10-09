@@ -140,13 +140,13 @@
             auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &v){return v.at("index")==slot;});
             if(found==catalog.end())found=catalog.begin();if(found!=catalog.end())typingSoundId=found->at("id");
         }
-        typingSound=0;SendMessageW(controls.at(soundChooser),CB_RESETCONTENT,0,0);
+        typingSound=0;ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_RESETCONTENT,0,0);
         for(const auto &v:catalog){const auto slot=v.at("index").get<unsigned>();const auto text=(sample?L"S":L"I")+std::to_wstring(slot)+L" · "+wide(v.at("name").get<std::string>());
-            const auto i=SendMessageW(controls.at(soundChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));SendMessageW(controls.at(soundChooser),CB_SETITEMDATA,i,slot);
-            if(inputInstrumentOverride?slot==*inputInstrumentOverride:v.at("id")==typingSoundId){typingSound=slot;typingSoundId=v.at("id");SendMessageW(controls.at(soundChooser),CB_SETCURSEL,i,0);}}
+            const auto i=ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_SETITEMDATA,i,slot);
+            if(inputInstrumentOverride?slot==*inputInstrumentOverride:v.at("id")==typingSoundId){typingSound=slot;typingSoundId=v.at("id");ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_SETCURSEL,i,0);}}
         if(inputInstrumentOverride&&!typingSound){
             const auto label=(sample?L"S":L"I")+std::to_wstring(*inputInstrumentOverride)+L" / empty slot";
-            const auto i=SendMessageW(controls.at(soundChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));SendMessageW(controls.at(soundChooser),CB_SETITEMDATA,i,*inputInstrumentOverride);SendMessageW(controls.at(soundChooser),CB_SETCURSEL,i,0);
+            const auto i=ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_SETITEMDATA,i,*inputInstrumentOverride);ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_SETCURSEL,i,0);
         }
     }
     void selectTypingSound() {

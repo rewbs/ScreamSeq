@@ -55,7 +55,7 @@ private:
   void status(std::wstring value){status_=std::move(value);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   int choice(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
-  void choose(int id,int value){SendMessageW(controls_.at(id),CB_SETCURSEL,value,0);}
+  void choose(int id,int value){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_SETCURSEL,value,0);}
   const char *channelName()const{return channel_==1?"left":channel_==2?"right":"both";}
   unsigned integerField(int id,unsigned maximum)const{auto n=number(id);require(n>=0&&n<=maximum&&std::floor(n)==n,"Enter a whole frame number within the allowed range");return unsigned(n);}
   unsigned wantedBins()const{return std::min(region_.end-region_.start,unsigned(std::clamp(canvas_.w,1.f,4096.f)));}
@@ -82,7 +82,7 @@ private:
     const auto path=paths.front().u8string();mutate("sample.import",{{"slot",slot_},{"path",std::string(path.begin(),path.end())}});
     status(L"Captured sample replaced / slot and song references retained / one Undo restores its audio");
   }
-  void sampleChoices(){setting_=true;SendMessageW(controls_.at(sample),CB_RESETCONTENT,0,0);for(size_t i=0;i<captured_.samples.size();++i){const auto &v=captured_.samples[i];auto name=std::to_wstring(v.at("index").get<unsigned>())+L" · "+wide(v.at("name").get<std::string>());SendMessageW(controls_.at(sample),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(v.at("id")==id_)choose(sample,int(i));}choose(channels,channel_);setting_=false;}
+  void sampleChoices(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(sample),CB_RESETCONTENT,0,0);for(size_t i=0;i<captured_.samples.size();++i){const auto &v=captured_.samples[i];auto name=std::to_wstring(v.at("index").get<unsigned>())+L" · "+wide(v.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(sample),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(v.at("id")==id_)choose(sample,int(i));}choose(channels,channel_);setting_=false;}
   void pointFields(unsigned frame,double value){setting_=true;set(pointFrame,frame);set(pointValue,value);setting_=false;}
   void readWave(){
     requireCurrent();const auto token=generation_;const auto first=region_.start,last=region_.end,bins=wantedBins();
@@ -236,7 +236,7 @@ public:
     label(nameLabel,L"Name");label(rateLabel,L"C-5 Hz");label(volumeLabel,L"Vol");label(panLabel,L"Pan");edit(sampleName,L"",200);edit(sampleRate,L"48000",12);edit(sampleVolume,L"64",12);edit(samplePan,L"128",12);
     button(applySettings,L"Apply settings");button(discardSettings,L"Discard");button(replaceSample,L"Replace…");button(createInstrument,L"Create instrument");
     button(recordSample,L"Record sample…");
-    combo(sample);auto options=[&](int id,std::initializer_list<const wchar_t *> values){combo(id);for(auto text:values)SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));choose(id,0);};
+    combo(sample);auto options=[&](int id,std::initializer_list<const wchar_t *> values){combo(id);for(auto text:values)ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));choose(id,0);};
     options(channels,{L"Both channels",L"Left",L"Right"});options(interpolation,{L"Linear draw",L"Step draw"});options(operation,{L"Reverse",L"Normalize",L"Gain",L"Fade in",L"Fade out",L"Invert",L"Remove DC",L"Smooth",L"Trim",L"Silence",L"Swap channels",L"Copy left",L"Copy right",L"Stereo average"});options(fadeCurve,{L"Linear fade",L"Smooth",L"Exponential",L"Logarithmic"});options(crossLoop,{L"Normal loop",L"Sustain loop"});options(crossMode,{L"Preserve duration",L"Overlap"});options(crossCurve,{L"Linear",L"Equal power"});options(snapMode,{L"Zero crossing",L"Grid"});options(snapDirection,{L"Nearest",L"Before",L"After"});options(pasteMode,{L"Insert",L"Overwrite",L"Mix",L"Replace selection"});createWorkflowControls();finish();
   }
   void openAt(){if(id_.empty())load(true);show();}

@@ -30,10 +30,10 @@
         settingMixerFields=true;
         const auto selected=mixerSelected();mixerDraft=selected>=0?mixerData.at("buses")[size_t(selected)]:Json::object();
         const char *keys[]={"name","preGainDB","prePan","gainDB","pan","width","timingMS"};
-        for(int id=mixerName;id<=mixerTiming;++id){std::wstring text;if(selected>=0){const auto &v=mixerDraft.at(keys[id-mixerName]);text=wide(v.is_string()?v.get<std::string>():v.dump());}SetWindowTextW(controls.at(id),text.c_str());}
-        SendMessageW(controls.at(mixerOutput),CB_RESETCONTENT,0,0);SendMessageW(controls.at(mixerOutput),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Disconnected"));
-        int output=0;if(mixerData.contains("buses"))for(size_t i=0;i<mixerData.at("buses").size();++i){const auto &b=mixerData.at("buses")[i];auto name=wide(b.at("name").get<std::string>());SendMessageW(controls.at(mixerOutput),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(selected>=0&&mixerDraft.at("output")==b.at("id"))output=int(i+1);}
-        SendMessageW(controls.at(mixerOutput),CB_SETCURSEL,output,0);SendMessageW(controls.at(mixerList),LB_SETCURSEL,selected,0);
+        for(int id=mixerName;id<=mixerTiming;++id){std::wstring text;if(selected>=0){const auto &v=mixerDraft.at(keys[id-mixerName]);text=wide(v.is_string()?v.get<std::string>():v.dump());}ScreamSeq::NativeInputGate::text(controls.at(id),text.c_str());}
+        ScreamSeq::NativeInputGate::present(controls.at(mixerOutput),CB_RESETCONTENT,0,0);ScreamSeq::NativeInputGate::present(controls.at(mixerOutput),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Disconnected"));
+        int output=0;if(mixerData.contains("buses"))for(size_t i=0;i<mixerData.at("buses").size();++i){const auto &b=mixerData.at("buses")[i];auto name=wide(b.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls.at(mixerOutput),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(selected>=0&&mixerDraft.at("output")==b.at("id"))output=int(i+1);}
+        ScreamSeq::NativeInputGate::present(controls.at(mixerOutput),CB_SETCURSEL,output,0);ScreamSeq::NativeInputGate::present(controls.at(mixerList),LB_SETCURSEL,selected,0);
         settingMixerFields=false;mixerDirty=false;++mixerGeneration;
     }
     struct PreparedInitialMixer {
@@ -91,12 +91,12 @@
         struct FieldsGuard {bool &flag;bool previous;explicit FieldsGuard(bool &value):flag(value),previous(value){flag=true;}~FieldsGuard(){flag=previous;}} guard(settingMixerFields);
         mixerData.swap(candidate.data);mixerDraft.swap(candidate.draft);mixerDocument.swap(candidate.document);mixerRevision.swap(candidate.revision);mixerTarget.swap(candidate.target);mixerStatus.swap(candidate.status);
         const auto list=controls.at(mixerList);const auto top=SendMessageW(list,LB_GETTOPINDEX,0,0);
-        SendMessageW(list,LB_RESETCONTENT,0,0);for(const auto &label:candidate.buses)SendMessageW(list,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
-        SendMessageW(list,LB_SETCURSEL,candidate.selected,0);if(top!=LB_ERR)SendMessageW(list,LB_SETTOPINDEX,top,0);
-        const auto output=controls.at(mixerOutput);SendMessageW(output,CB_RESETCONTENT,0,0);
-        for(const auto &label:candidate.outputs)SendMessageW(output,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
-        SendMessageW(output,CB_SETCURSEL,candidate.output,0);
-        for(size_t i=0;i<candidate.fields.size();++i)SetWindowTextW(controls.at(mixerName+int(i)),candidate.fields[i].c_str());
+        ScreamSeq::NativeInputGate::present(list,LB_RESETCONTENT,0,0);for(const auto &label:candidate.buses)ScreamSeq::NativeInputGate::present(list,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+        ScreamSeq::NativeInputGate::present(list,LB_SETCURSEL,candidate.selected,0);if(top!=LB_ERR)ScreamSeq::NativeInputGate::present(list,LB_SETTOPINDEX,top,0);
+        const auto output=controls.at(mixerOutput);ScreamSeq::NativeInputGate::present(output,CB_RESETCONTENT,0,0);
+        for(const auto &label:candidate.outputs)ScreamSeq::NativeInputGate::present(output,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+        ScreamSeq::NativeInputGate::present(output,CB_SETCURSEL,candidate.output,0);
+        for(size_t i=0;i<candidate.fields.size();++i)ScreamSeq::NativeInputGate::text(controls.at(mixerName+int(i)),candidate.fields[i].c_str());
         ++mixerGeneration;frameRequested=true;
     }
     void refreshMixer() {
@@ -107,9 +107,9 @@
             if(generation==mixerGeneration&&!mixerDirty){
                 mixerData=std::move(next);mixerRevision=view->session.revision;mixerDocument=documentId;
                 if(mixerSelected()<0)mixerTarget=mixerData.at("buses").empty()?"":mixerData.at("buses")[0].at("id").get<std::string>();
-                auto top=SendMessageW(controls.at(mixerList),LB_GETTOPINDEX,0,0);SendMessageW(controls.at(mixerList),WM_SETREDRAW,FALSE,0);SendMessageW(controls.at(mixerList),LB_RESETCONTENT,0,0);
-                for(const auto &b:mixerData.at("buses")){auto label=wide(b.at("name").get<std::string>()+(b.at("output")==""&&b.at("kind")!="master"?" / detached":""));SendMessageW(controls.at(mixerList),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
-                if(top!=LB_ERR)SendMessageW(controls.at(mixerList),LB_SETTOPINDEX,top,0);SendMessageW(controls.at(mixerList),WM_SETREDRAW,TRUE,0);
+                auto top=SendMessageW(controls.at(mixerList),LB_GETTOPINDEX,0,0);SendMessageW(controls.at(mixerList),WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(controls.at(mixerList),LB_RESETCONTENT,0,0);
+                for(const auto &b:mixerData.at("buses")){auto label=wide(b.at("name").get<std::string>()+(b.at("output")==""&&b.at("kind")!="master"?" / detached":""));ScreamSeq::NativeInputGate::present(controls.at(mixerList),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+                if(top!=LB_ERR)ScreamSeq::NativeInputGate::present(controls.at(mixerList),LB_SETTOPINDEX,top,0);SendMessageW(controls.at(mixerList),WM_SETREDRAW,TRUE,0);
                 loadMixerFields();mixerStatus=L"Gain, balance, width, mute and solo apply during playback";
             }
         }catch(const std::exception &e){mixerStatus=wide(e.what());}
@@ -147,7 +147,7 @@
         if(id==mixerRouting){openSongRouting();return true;}
         if(id==mixerCommand){graphEditorOpen=false;mixerEditorOpen=true;workspaceState.layout="Compose";refreshMixer();layoutControls();SetFocus(controls.at(mixerList));return true;}
         if(id==mixerReload){mixerDirty=false;++mixerGeneration;refreshMixer();return true;}
-        if(id==mixerList){if(mixerDirty){SendMessageW(controls.at(mixerList),LB_SETCURSEL,mixerSelected(),0);throw std::runtime_error("Apply or reload the captured mixer draft before changing buses");}const auto index=SendMessageW(controls.at(mixerList),LB_GETCURSEL,0,0);if(index>=0&&size_t(index)<mixerData.at("buses").size()){mixerTarget=mixerData.at("buses")[size_t(index)].at("id").get<std::string>();loadMixerFields();}return true;}
+        if(id==mixerList){if(mixerDirty){ScreamSeq::NativeInputGate::present(controls.at(mixerList),LB_SETCURSEL,mixerSelected(),0);throw std::runtime_error("Apply or reload the captured mixer draft before changing buses");}const auto index=SendMessageW(controls.at(mixerList),LB_GETCURSEL,0,0);if(index>=0&&size_t(index)<mixerData.at("buses").size()){mixerTarget=mixerData.at("buses")[size_t(index)].at("id").get<std::string>();loadMixerFields();}return true;}
         if(id==mixerOutput){mixerFieldChanged();return true;}
         if(id==mixerMute||id==mixerSolo){const char *key=id==mixerMute?"mute":"solo";mixerDraft[key]=!mixerDraft.value(key,false);mixerFieldChanged();return true;}
         if(mixerDocument!=documentId||mixerRevision!=view->session.revision)throw std::runtime_error("Song changed; mixer draft retained. Reload to use the current song");

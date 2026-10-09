@@ -96,19 +96,19 @@ private:
   }
   void sourceOptions(){
     const auto control=controls_.at(source);if(SendMessageW(control,CB_GETDROPPEDSTATE,0,0)){sourceRefresh_=true;return;}
-    setting_=true;SendMessageW(control,CB_RESETCONTENT,0,0);sourceIDs_.clear();
-    auto addOption=[&](std::string id,const std::wstring &name){SendMessageW(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));sourceIDs_.push_back(std::move(id));};
+    setting_=true;ScreamSeq::NativeInputGate::present(control,CB_RESETCONTENT,0,0);sourceIDs_.clear();
+    auto addOption=[&](std::string id,const std::wstring &name){ScreamSeq::NativeInputGate::present(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));sourceIDs_.push_back(std::move(id));};
     addOption({},L"Disconnected");for(const auto &device:devices_)addOption(device.at("id"),wide(device.at("name")));
     auto found=std::find(sourceIDs_.begin(),sourceIDs_.end(),draftSource_);if(found==sourceIDs_.end()){addOption(draftSource_,L"Selected source unavailable");found=sourceIDs_.end()-1;}
-    SendMessageW(control,CB_SETCURSEL,found-sourceIDs_.begin(),0);sourceRefresh_=false;setting_=false;
+    ScreamSeq::NativeInputGate::present(control,CB_SETCURSEL,found-sourceIDs_.begin(),0);sourceRefresh_=false;setting_=false;
   }
   void quantumOptions(){
-    const auto control=controls_.at(quantum);SendMessageW(control,CB_RESETCONTENT,0,0);int selected=-1;
+    const auto control=controls_.at(quantum);ScreamSeq::NativeInputGate::present(control,CB_RESETCONTENT,0,0);int selected=-1;
     for(const auto &[label,value]:std::array<std::pair<const wchar_t *,unsigned>,4>{{{L"Keep exact timing",0},{L"1/16 row",4096},{L"1/4 row",16384},{L"Whole row",65536}}}){
-      const auto index=SendMessageW(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));SendMessageW(control,CB_SETITEMDATA,index,value);if(value==draftQuantum_)selected=int(index);
+      const auto index=ScreamSeq::NativeInputGate::present(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));ScreamSeq::NativeInputGate::present(control,CB_SETITEMDATA,index,value);if(value==draftQuantum_)selected=int(index);
     }
-    if(selected<0){const auto label=L"Custom: "+std::to_wstring(draftQuantum_)+L"/65536 row";selected=int(SendMessageW(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str())));SendMessageW(control,CB_SETITEMDATA,selected,draftQuantum_);}
-    SendMessageW(control,CB_SETCURSEL,selected,0);
+    if(selected<0){const auto label=L"Custom: "+std::to_wstring(draftQuantum_)+L"/65536 row";selected=int(ScreamSeq::NativeInputGate::present(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str())));ScreamSeq::NativeInputGate::present(control,CB_SETITEMDATA,selected,draftQuantum_);}
+    ScreamSeq::NativeInputGate::present(control,CB_SETCURSEL,selected,0);
   }
   void savedFields(){
     if(settings_.empty())return;setting_=true;baseRevision_=settings_.at("revision");draftSource_=settings_.at("source");draftArmed_=settings_.at("armed");draftQuantum_=settings_.at("quantization");

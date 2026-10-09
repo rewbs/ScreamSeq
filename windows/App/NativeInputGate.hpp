@@ -151,6 +151,9 @@ public:
   static bool protectedWindow(HWND h) noexcept {
     DWORD_PTR data=0;return GetWindowSubclass(h,procedure,subclassID,&data)!=FALSE;
   }
+  static LRESULT text(HWND h,const wchar_t *value) {
+    return present(h,WM_SETTEXT,0,reinterpret_cast<LPARAM>(value));
+  }
   // Only concrete presentation setters can bypass the gate. No general callback
   // scope, keyboard/click, WM_COMMAND or notification permission is exposed.
   static LRESULT present(HWND h,UINT m,WPARAM w=0,LPARAM l=0) {

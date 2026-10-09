@@ -295,6 +295,11 @@ protected:
     return DefSubclassProc(h,m,w,l);
   }
   static LRESULT CALLBACK proc(HWND h,UINT m,WPARAM w,LPARAM l){auto self=reinterpret_cast<NativeToolWindow *>(GetWindowLongPtrW(h,GWLP_USERDATA));if(m==WM_NCCREATE){self=static_cast<NativeToolWindow *>(reinterpret_cast<CREATESTRUCTW *>(l)->lpCreateParams);self->window_=h;SetWindowLongPtrW(h,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}if(!self)return DefWindowProcW(h,m,w,l);
+    // Children may be constructed before this owner's finish(). Publish only
+    // the registry context at HWND creation; register this owner's summary
+    // after all its controls exist. Otherwise an early child escapes census.
+    if(m==WM_NCCREATE)if(auto registry=GetPropW(self->owner_,documentDraftRegistryProperty))
+      if(!SetPropW(h,documentDraftRegistryProperty,registry))return FALSE;
     try{
       if(self->retired_&&m!=WM_NCDESTROY&&m!=WM_DESTROY)return DefWindowProcW(h,m,w,l);
       if(m==WM_SETFOCUS||m==WM_KILLFOCUS)self->notifyFocusPresentation();

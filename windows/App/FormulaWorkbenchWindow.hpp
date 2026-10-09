@@ -55,18 +55,18 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     LONG start=range.cpMin;if(range.cpMin==range.cpMax)while(start>0&&identifier(text[size_t(start-1)]))--start;
     const auto prefix=text.substr(size_t(start),size_t(range.cpMax-start));
     if(!explicitRequest&&(GetFocus()!=controls_.at(code)||prefix.size()<2)){dismissCompletion();return;}
-    matches_.clear();SendMessageW(controls_.at(suggestions),LB_RESETCONTENT,0,0);
-    for(size_t i=0;i<reference_.size();++i){auto name=wide(reference_[i].at("name").get<std::string>());if(name.starts_with(prefix)){matches_.push_back(i);auto text=wide(reference_[i].at("insert").get<std::string>());SendMessageW(controls_.at(suggestions),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}}
+    matches_.clear();ScreamSeq::NativeInputGate::present(controls_.at(suggestions),LB_RESETCONTENT,0,0);
+    for(size_t i=0;i<reference_.size();++i){auto name=wide(reference_[i].at("name").get<std::string>());if(name.starts_with(prefix)){matches_.push_back(i);auto text=wide(reference_[i].at("insert").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(suggestions),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}}
     if(matches_.empty()){dismissCompletion();if(explicitRequest)status(L"No matching formula value or function");return;}
     completionText_=text;completionStart_=start;completionEnd_=range.cpMax;completionSelectionStart_=range.cpMin;completionGeneration_=generation_;completing_=true;
-    SendMessageW(controls_.at(suggestions),LB_SETCURSEL,0,0);SetFocus(controls_.at(code));layout();
+    ScreamSeq::NativeInputGate::present(controls_.at(suggestions),LB_SETCURSEL,0,0);SetFocus(controls_.at(code));layout();
   }
   void insertText(const std::wstring &text){
     const auto range=selection();const auto current=source();
     if(range.cpMin<0||range.cpMax<range.cpMin||size_t(range.cpMax)>current.size()||current.size()-size_t(range.cpMax-range.cpMin)+text.size()>2048)
       throw std::runtime_error("The complete insertion would exceed the 2,048-character formula limit");
     SetFocus(controls_.at(code));SendMessageW(controls_.at(code),EM_STOPGROUPTYPING,0,0);
-    SendMessageW(controls_.at(code),EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(text.c_str()));
+    ScreamSeq::NativeInputGate::present(controls_.at(code),EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(text.c_str()));
     SendMessageW(controls_.at(code),EM_STOPGROUPTYPING,0,0);
   }
   void acceptCompletion(){
@@ -81,9 +81,9 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
   }
   void filter(){
     auto query=field(search);std::transform(query.begin(),query.end(),query.begin(),towlower);
-    filtered_.clear();SendMessageW(controls_.at(symbols),LB_RESETCONTENT,0,0);
-    for(size_t i=0;i<reference_.size();++i){auto full=wide(reference_[i].at("name").get<std::string>()+" "+reference_[i].at("description").get<std::string>()+" "+reference_[i].at("category").get<std::string>());std::transform(full.begin(),full.end(),full.begin(),towlower);if(full.find(query)==std::wstring::npos)continue;filtered_.push_back(i);auto text=wide(reference_[i].at("insert").get<std::string>()+" — "+reference_[i].at("description").get<std::string>());SendMessageW(controls_.at(symbols),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
-    if(!filtered_.empty())SendMessageW(controls_.at(symbols),LB_SETCURSEL,0,0);layout();
+    filtered_.clear();ScreamSeq::NativeInputGate::present(controls_.at(symbols),LB_RESETCONTENT,0,0);
+    for(size_t i=0;i<reference_.size();++i){auto full=wide(reference_[i].at("name").get<std::string>()+" "+reference_[i].at("description").get<std::string>()+" "+reference_[i].at("category").get<std::string>());std::transform(full.begin(),full.end(),full.begin(),towlower);if(full.find(query)==std::wstring::npos)continue;filtered_.push_back(i);auto text=wide(reference_[i].at("insert").get<std::string>()+" — "+reference_[i].at("description").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(symbols),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
+    if(!filtered_.empty())ScreamSeq::NativeInputGate::present(controls_.at(symbols),LB_SETCURSEL,0,0);layout();
   }
   void insertReference(){if(referenceOnly_)return;const auto index=SendMessageW(controls_.at(symbols),LB_GETCURSEL,0,0);if(index<0||size_t(index)>=filtered_.size())return;dismissCompletion();insertText(wide(reference_[filtered_[size_t(index)]].at("insert").get<std::string>()));}
   void previewNow(){
@@ -127,7 +127,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     if(value==VK_F6){dismissCompletion();SetFocus(referenceOnly_?(id==search?controls_.at(symbols):controls_.at(search)):(id==code?controls_.at(search):controls_.at(code)));return true;}
     if(value==VK_ESCAPE){if(completing_){dismissCompletion();return true;}hide();return true;}
     if(id==code){
-      if(completing_&&(value==VK_UP||value==VK_DOWN)){auto index=SendMessageW(controls_.at(suggestions),LB_GETCURSEL,0,0);index=std::clamp<LRESULT>(index+(value==VK_UP?-1:1),0,LRESULT(matches_.size()-1));SendMessageW(controls_.at(suggestions),LB_SETCURSEL,index,0);return true;}
+      if(completing_&&(value==VK_UP||value==VK_DOWN)){auto index=SendMessageW(controls_.at(suggestions),LB_GETCURSEL,0,0);index=std::clamp<LRESULT>(index+(value==VK_UP?-1:1),0,LRESULT(matches_.size()-1));ScreamSeq::NativeInputGate::present(controls_.at(suggestions),LB_SETCURSEL,index,0);return true;}
       if(completing_&&(value==VK_RETURN||value==VK_TAB)){acceptCompletion();return true;}
       if(value==VK_LEFT||value==VK_RIGHT||value==VK_HOME||value==VK_END||value==VK_PRIOR||value==VK_NEXT)dismissCompletion();
       if(value==VK_TAB&&!ctrl&&!shift){insertText(L"    ");return true;}
@@ -135,7 +135,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     }
     if(value==VK_RETURN&&(id==search||id==symbols)){insertReference();return !referenceOnly_;}
     if(value==VK_RETURN&&id==suggestions){acceptCompletion();return true;}
-    if(id==search&&(value==VK_UP||value==VK_DOWN)){auto index=SendMessageW(controls_.at(symbols),LB_GETCURSEL,0,0);if(!filtered_.empty())SendMessageW(controls_.at(symbols),LB_SETCURSEL,std::clamp<LRESULT>(index+(value==VK_UP?-1:1),0,LRESULT(filtered_.size()-1)),0);return true;}
+    if(id==search&&(value==VK_UP||value==VK_DOWN)){auto index=SendMessageW(controls_.at(symbols),LB_GETCURSEL,0,0);if(!filtered_.empty())ScreamSeq::NativeInputGate::present(controls_.at(symbols),LB_SETCURSEL,std::clamp<LRESULT>(index+(value==VK_UP?-1:1),0,LRESULT(filtered_.size()-1)),0);return true;}
     if(value==VK_RETURN){wchar_t type[32]{};GetClassNameW(focus,type,32);if(_wcsicmp(type,L"Button")==0){action(id,BN_CLICKED);return true;}}return false;
   }
   void timer(UINT_PTR id)override{
@@ -184,7 +184,7 @@ public:
     add(notes,L"EDIT",L"",ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL|WS_VSCROLL);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{complete,L"Complete · Ctrl+Space"},{insert,L"Insert selected value / function"},{checkPreview,L"Check"},{use,L"Use formula"},{close,L"Close"},{discard,L"Discard"}})button(id,text);
     label(heading,L"Formula · Ctrl+Enter to use · F6 for reference");label(previewLabel,L"Preview / normalized value · captured envelope");label(referenceHeading,L"Values and functions");label(statusLabel,L"");
-    setting_=true;set(code,wide(sourceText));setting_=false;applyState_.baseline=source();SendMessageW(controls_.at(code),EM_EMPTYUNDOBUFFER,0,0);
+    setting_=true;set(code,wide(sourceText));setting_=false;applyState_.baseline=source();ScreamSeq::NativeInputGate::present(controls_.at(code),EM_EMPTYUNDOBUFFER,0,0);
     const auto reference=request_("automation.formula.reference",Json::object());reference_=reference.at("symbols");auto noteText=wide(reference.at("notes").get<std::string>());std::wstring lines;for(auto c:noteText){if(c=='\n')lines+='\r';lines+=c;}set(notes,lines);
     if(!referenceOnly_){if(!params_.contains("points")||point_>=params_.at("points").size())throw std::runtime_error("Formula point no longer exists");params_["samples"]=1024;canvas_.start=0;canvas_.end=params_.value("span",params_.at("rows").get<double>()*256);previewNeeded_=true;}
     finish();filter();status(L"Checking formula…");

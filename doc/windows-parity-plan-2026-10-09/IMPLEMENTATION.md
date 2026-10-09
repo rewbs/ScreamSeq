@@ -2,6 +2,29 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.2 refresh setters and early nested owners
+
+The Application admission audit found a concrete missing owner: `SampleLibraryWindow` creates `MultisampleImportWindow` before its own `finish`, which previously published the registry property. That early child could therefore remain outside the draft census. `NativeToolWindow` now propagates registry context during `WM_NCCREATE`, while summary registration still waits until controls are initialized. This changes no draft semantics or document state.
+
+The global sample browser also handles post-adoption child retirement. It preserves its library search/preferences and callbacks, avoids reading a retired child's HWNDs in its snapshot, and creates a fresh import editor when the musician next reviews a family. Reopening captures the new song/revision and allocates a new registry owner identity. Pending and uncertain children still refuse departure through the existing registry policy.
+
+`NestedDraftOwnerTests.inc` exercises the real browser/child constructors with a generated family and stubbed filesystem requests. It verifies configured/invalid hidden family intent enters the census, canceled admission preserves exact work, successful callback retirement destroys only the document child, and reopening uses a fresh owner/current song with clean fields. This is native-owner contract evidence, not an actual Application Open test.
+
+379 explicit text, caret, combo and listbox setter calls across 46 native files now use `NativeInputGate::text/present`. A comparison against the previous commit verifies 44 files contain only argument-preserving setter substitutions; the other substantive/include changes are the helper, palette include, early registry propagation and sample browser lifecycle. No Windows API macro is redefined and no callback-wide permission is introduced. Additional gate tests prove selector/list rebuilds preserve item identity and selection while unsolicited raw changes remain blocked.
+
+**Next integration requirements remain:** Application admission/retirement/refresh is not activated. Owner-data report controls still need explicit count/state/scroll refresh handling and a read-only notification policy (`LVN_GETDISPINFO`, custom drawing) before protection is enabled around their refresh. Audit stock report/header cascades without granting arbitrary recursive messages. Collect all owned roots, filter pre-dispatch shortcuts and API/deferred actions, retire C++ owner pointers, and provide a retained-lease refresh retry path. The preceding boundary tests are not proof of these host behaviors.
+
+ARM64 Release qualification is recorded in `bin/parity-evidence/p0b-native-refresh-receipt.json`, with 1,839 frozen source/dependency inputs and compiler/cache/executable/log hashes:
+
+| Evidence under `bin/parity-evidence/` | Scope/result |
+|---|---|
+| `p0b-native-refresh-boundary-rebuild.log` / `p0b-native-refresh-boundary-tests.log` | Native owner/input target built; focused boundary and nested-owner regression passed, 2.39 s |
+| `p0b-native-refresh-build.log` | App, workspace and 13 affected native editor/control targets built |
+| `p0b-native-refresh-native-tests.log` | 15/15 workspace/native UI entries passed; 122.40 s, including full workspace and separate draft census |
+| `p0b-native-refresh-app-tests.log` | Seven actual-app cases passed; 4.313 s, no skips: configured multisample reopen, roots/stale/rebase, nudge/history/persistence, precise FX and retained workspace inspectors |
+
+The first new fixture build omitted the thread-ID argument to `EnumThreadWindows`; the corrected fixture compiled and passed without a product change. The failed build log is retained. Tests used owned private desktops and disposable inspection documents, with no physical capture or system audio-default changes. This batch changes Windows native UI adapters only; shared musical behavior, persistence formats, Mac UI and audio/device code are unchanged. Final admission journeys, Windows x64/Mac qualification, reciprocal supplied fixtures, full P0b and P0c–P8 remain open.
+
 ## P0b.2 native input boundary
 
 `NativeInputGate.hpp` adds a UI-thread RAII guard over explicit native root windows and their children. Install it after editor subclasses and before the final registry capture/admission. It intercepts input before stock controls or custom editor handlers receive it: queued/sent keyboard and mouse messages, focus-triggered edits, command/notification handlers, and text/selection/content setters for the application's standard edit, combo, button, listbox and report/header controls. Destroyed HWNDs unregister safely; failed construction removes only its own protection. Additional fully initialized trees require explicit `protect` before exposure or a message-pumping read.

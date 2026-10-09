@@ -71,6 +71,11 @@ void nativeInputGate(HWND main) {
     ScreamSeq::NativeControls::select(combo,0);
     require(text(edit)==L"New document value"&&text(other)==L"Captured draft"&&probe.reentrant==1&&probe.textCalls==1,"One-shot refresh permitted recursive or sibling mutation");
     require(probe.commands==0&&SendMessageW(combo,CB_GETCURSEL,0,0)==0,"Host refresh leaked notification or failed to update selection");
+    NativeInputGate::present(combo,CB_RESETCONTENT);
+    require(NativeInputGate::present(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"New song target"))==0,"Guarded selector refresh could not add the new target");
+    NativeInputGate::present(combo,CB_SETITEMDATA,0,123);
+    NativeInputGate::present(combo,CB_SETCURSEL,0);
+    require(SendMessageW(combo,CB_GETCOUNT,0,0)==1&&SendMessageW(combo,CB_GETITEMDATA,0,0)==123,"Guarded selector refresh lost item identity");
     SetWindowTextW(edit,L"after permitted call");
     require(text(edit)==L"New document value"&&probe.textCalls==1,"Refresh permit survived its concrete send");
     // A protected HWND may be retired while the lease survives through host
@@ -108,6 +113,11 @@ void nativeInputGate(HWND main) {
     require(SendMessageW(listBox.value,LB_GETCURSEL,0,0)==1&&SendMessageW(listBox.value,LB_GETCOUNT,0,0)==2,"Native listbox draft changed under input lease");
     require(ListView_GetItemCount(report.value)==1&&(ListView_GetItemState(report.value,0,LVIS_SELECTED)&LVIS_SELECTED),"Report selection or rows changed under input lease");
     require(ListView_GetColumnWidth(report.value,0)==100,"Report header changed under input lease");
+    NativeInputGate::present(listBox.value,LB_RESETCONTENT);
+    require(NativeInputGate::present(listBox.value,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"New list target"))==0,"Guarded list refresh could not add the new target");
+    NativeInputGate::present(listBox.value,LB_SETITEMDATA,0,456);NativeInputGate::present(listBox.value,LB_SETCURSEL,0);
+    require(SendMessageW(listBox.value,LB_GETCOUNT,0,0)==1&&SendMessageW(listBox.value,LB_GETITEMDATA,0,0)==456&&SendMessageW(listBox.value,LB_GETCURSEL,0,0)==0,
+        "Guarded list refresh lost selection or item identity");
   }
   std::cout<<"Native input lease: raw values, caret, queued keys, focus, commands and reentrant refresh protected\n";
 }

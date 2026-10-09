@@ -29,9 +29,9 @@ class PluginPathWindow final : public NativeToolWindow {
     try{auto data=request_(prefix_+"get",target_);if(context_()!=captured||generation!=generation_)throw std::runtime_error("Song or path draft changed while reading / retained; Reload again when ready");
       const auto previous=selectedPath();
       candidates_=data.at("candidates");document_=captured.first;revision_=captured.second;setting_=true;
-      set(heading,L"Reconnect "+wide(data.at("descriptor").at("name").get<std::string>()));set(savedPath,data.at("descriptor").at("path"));SendMessageW(controls_.at(candidate),CB_RESETCONTENT,0,0);selected_=-1;
-      for(size_t i=0;i<candidates_.size();++i){const auto &d=candidates_[i].at("descriptor");auto label=wide(d.at("name").get<std::string>()+" / "+d.at("path").get<std::string>());SendMessageW(controls_.at(candidate),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(d.at("path")==previous)selected_=int(i);}
-      if(selected_<0&&!candidates_.empty())selected_=0;SendMessageW(controls_.at(candidate),CB_SETCURSEL,selected_,0);chosen();setting_=false;
+      set(heading,L"Reconnect "+wide(data.at("descriptor").at("name").get<std::string>()));set(savedPath,data.at("descriptor").at("path"));ScreamSeq::NativeInputGate::present(controls_.at(candidate),CB_RESETCONTENT,0,0);selected_=-1;
+      for(size_t i=0;i<candidates_.size();++i){const auto &d=candidates_[i].at("descriptor");auto label=wide(d.at("name").get<std::string>()+" / "+d.at("path").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(candidate),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(d.at("path")==previous)selected_=int(i);}
+      if(selected_<0&&!candidates_.empty())selected_=0;ScreamSeq::NativeInputGate::present(controls_.at(candidate),CB_SETCURSEL,selected_,0);chosen();setting_=false;
       if(!loaded_)baseline_=raw();loaded_=true;++generation_;
       status(data.at("moduleVerified").get<bool>()?L"Saved module matches its scan / choose a different location only if needed":wide(data.at("reason").get<std::string>())+L" / choose or scan the matching Windows VST3");
     }catch(...){setting_=false;pending_=false;layout();throw;}pending_=false;layout();
