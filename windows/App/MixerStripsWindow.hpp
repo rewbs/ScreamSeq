@@ -5,7 +5,7 @@
 
 namespace ScreamSeq {
 // Native strips share the existing mixer API and history; Details remains a
-// separate retained owner. A small page of stock controls bounds HWND count.
+// separate retained owner. Visible neighbors and captured controls bound HWNDs.
 class MixerStripsWindow final:public NativeToolWindow {
 public:
   using Json=Api::Json;
@@ -19,14 +19,15 @@ private:
   std::function<void()> admit_,reveal_;std::function<void(const std::string &)> details_;
   NativeWriteCompletion completion_;Tracker::MixerGesture gesture_;
   Json data_=Json::object();std::string document_,revision_;
-  std::vector<std::string> bindings_;size_t first_=0,displayed_=0;
+  std::vector<std::string> bindings_;std::vector<size_t> positions_;size_t first_=0,lastVisibleCount_=0,viewportTotal_=0;
   std::map<std::string,Tracker::MixerMeter> meters_;
   bool setting_=false,pending_=false,captureLost_=false,rawDirty_=false,observed_=false,previewBlocked_=false,resetPresentation_=false;
   int capturedControl_=0;
   float stripTop_=34,sliderTop_=57,sliderHeight_=32;
-  int scrollOffset_=0,contentHeight_=0;bool layingOut_=false;
-  size_t visibleStart_=0,visibleEnd_=0;
-  static constexpr size_t maximumStrips=16;
+  int scrollOffset_=0,contentHeight_=0,wheelHorizontal_=0,wheelVertical_=0;bool layingOut_=false;
+  HWND lastLayoutFocus_{};
+  // 240 visible strips, two neighbors and distinct focus/gesture reservations.
+  static constexpr size_t maximumVisibleStrips=240,maximumStrips=maximumVisibleStrips+4;
   bool retained()const noexcept{return gesture_.active()||pending_||completion_.retained();}
   const Json *bus(const std::string &id)const {
     if(!data_.contains("buses"))return nullptr;
@@ -34,17 +35,27 @@ private:
     return nullptr;
   }
   int slot(int id)const {return id>=base&&size_t((id-base)/stride)<bindings_.size()?(id-base)/stride:-1;}
-  bool stripFocused()const {
+  bool pinned(size_t index)const {
     const auto focus=GetFocus();
-    for(size_t i=0;i<displayed_;++i)for(int part=0;part<=lastPart;++part)
-      if(focus==controls_.at(base+int(i)*stride+part))return true;
-    return false;
+    return (gesture_.active()&&bindings_[index]==gesture_.context().bus)||
+      (GetParent(focus)==window_&&slot(GetDlgCtrlID(focus))==int(index));
+  }
+  void scrollBusesTo(size_t index) {
+    const size_t total=viewportTotal_;
+    first_=std::min(index,total>visibleCount()?total-visibleCount():0);
+    layout();requestPaint();
   }
   void scrollTo(int offset) {
     scrollOffset_=std::clamp(offset,0,std::max(0,contentHeight_-int(size().second)));
     layout();requestPaint();
   }
   void revealControl(HWND control) {
+    const int index=slot(GetDlgCtrlID(control));
+    if(index>=0&&positions_[size_t(index)]!=SIZE_MAX) {
+      const auto at=positions_[size_t(index)];
+      if(at<first_)scrollBusesTo(at);
+      else if(at>=first_+visibleCount())scrollBusesTo(at+1-visibleCount());
+    }
     RECT bounds{};if(!GetWindowRect(control,&bounds))return;
     MapWindowPoints(nullptr,window_,reinterpret_cast<POINT *>(&bounds),2);
     const float scale=96.0f/GetDpiForWindow(window_);
@@ -55,7 +66,13 @@ private:
   void installReveal(HWND control) {
     if(!SetWindowSubclass(control,[](HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data)->LRESULT {
       auto &self=*reinterpret_cast<MixerStripsWindow *>(data);
-      if(m==WM_SETFOCUS)try{self.revealControl(h);}catch(const std::exception &e){self.error(e);}
+      if(m==WM_SETFOCUS||m==WM_KEYDOWN)try{self.revealControl(h);}catch(const std::exception &e){self.error(e);}
+      // Wheel navigation over a strip must not alter the control under it.
+      // Trackbars otherwise consume the wheel without an end-track notification.
+      if(m==WM_MOUSEWHEEL||m==WM_MOUSEHWHEEL) {
+        try{self.wheel(m,0,0,w);}catch(const std::exception &e){self.error(e);}
+        return 0;
+      }
       return DefSubclassProc(h,m,w,l);
     },2,reinterpret_cast<DWORD_PTR>(this)))throw std::runtime_error("Cannot install mixer focus scrolling");
   }
@@ -152,6 +169,7 @@ private:
   }
   void createStrip(size_t index) {
     const int id=base+int(index)*stride;
+    bindings_.reserve(index+1);positions_.reserve(index+1);
     try {
     label(id+name,L"");
     add(id+fader,TRACKBAR_CLASSW,L"Gain / dB",TBS_VERT|TBS_NOTICKS);
@@ -170,7 +188,7 @@ private:
       installReveal(controls_.at(id+part));
       if(font_)SendMessageW(controls_.at(id+part),WM_SETFONT,reinterpret_cast<WPARAM>(font_),FALSE);
     }
-    bindings_.push_back({});
+    bindings_.push_back({});positions_.push_back(SIZE_MAX);
     } catch(...) {
       for(int part=0;part<=lastPart;++part)if(const auto found=controls_.find(id+part);found!=controls_.end()) {
         DestroyWindow(found->second);controls_.erase(found);
@@ -203,13 +221,66 @@ private:
     setting_=false;
   }
   void page(int direction) {
-    if(retained())throw std::runtime_error("Finish or cancel the captured gesture before changing the mixer page");
-    SetFocus(window_);const size_t count=std::max(size_t(1),visibleCount());
-    if(direction<0)first_=first_>count?first_-count:0;
-    else if(data_.contains("buses")&&first_+count<data_["buses"].size())first_+=count;
-    layout();requestPaint();
+    const size_t count=std::max(size_t(1),visibleCount());
+    scrollBusesTo(direction<0?(first_>count?first_-count:0):first_+count);
   }
-  size_t visibleCount()const {return std::clamp(size_t(std::max(1.0f,std::floor((size().first-8)/132))),size_t(1),maximumStrips);}
+  size_t visibleCount()const {return std::clamp(size_t(std::max(1.0f,std::floor((size().first-8)/132))),size_t(1),maximumVisibleStrips);}
+  void bindViewport(size_t total) {
+    const auto count=visibleCount();
+    viewportTotal_=total;
+    std::vector<size_t> next( maximumStrips,SIZE_MAX );
+    std::vector<bool> used(maximumStrips,false),protectedSlot(maximumStrips,false);
+    // Existing focused/captured HWNDs are reserved before choosing recycle slots.
+    // A deleted pinned bus occupies its former place as unavailable until review
+    // or focus departure; it cannot become the replacement at that index.
+    for(size_t i=0;i<bindings_.size();++i)if(pinned(i)) {
+      protectedSlot[i]=used[i]=true;auto at=positions_[i];
+      for(size_t j=0;j<total;++j)if(data_["buses"][j].at("id")==bindings_[i]){at=j;break;}
+      next[i]=at;
+      if(at!=SIZE_MAX)viewportTotal_=std::max(viewportTotal_,at+1);
+      if(at!=SIZE_MAX&&(lastVisibleCount_!=count||at!=positions_[i])) {
+        if(at<first_)first_=at;
+        else if(at>=first_+count)first_=at+1-count;
+      }
+    }
+    first_=std::min(first_,viewportTotal_>count?viewportTotal_-count:0);
+    const auto begin=first_?first_-1:0,end=std::min(total,first_+count+1);
+    // Reserve surviving neighbors before recycling anything. A leftward scroll
+    // must not steal the next desired bus's HWND for its newly exposed neighbor.
+    for(size_t at=begin;at<end;++at) {
+      bool reserved=false;
+      for(size_t i=0;i<bindings_.size();++i)if(used[i]&&next[i]==at){reserved=true;break;}
+      if(reserved)continue;
+      for(size_t i=0;i<bindings_.size();++i)if(!used[i]&&bindings_[i]==data_["buses"][at].at("id")) {
+        used[i]=true;next[i]=at;break;
+      }
+    }
+    for(size_t at=begin;at<end;++at) {
+      const auto &value=data_["buses"][at];const auto identity=value.at("id").get<std::string>();
+      bool reserved=false;
+      for(size_t i=0;i<bindings_.size();++i)if(used[i]&&next[i]==at){if(!protectedSlot[i])bind(i,value);reserved=true;break;}
+      if(reserved)continue;
+      size_t index=bindings_.size();
+      for(size_t i=0;i<bindings_.size();++i)if(!used[i]&&bindings_[i]==identity){index=i;break;}
+      if(index==bindings_.size())for(size_t i=0;i<bindings_.size();++i)if(!used[i]&&!protectedSlot[i]){index=i;break;}
+      if(index==bindings_.size()) {
+        if(index>=maximumStrips)throw std::runtime_error("Mixer visible control capacity exceeded");
+        createStrip(index);
+      }
+      used[index]=true;next[index]=at;bind(index,value);
+    }
+    for(size_t i=0;i<bindings_.size();++i) {
+      positions_[i]=next[i];
+      if(protectedSlot[i]) {
+        if(const auto *saved=bus(bindings_[i]))bind(i,*saved);
+        else set(base+int(i)*stride+name,L"Bus unavailable");
+      }
+    }
+    lastVisibleCount_=count;
+    SCROLLINFO scroll{sizeof(scroll),SIF_RANGE|SIF_PAGE|SIF_POS|SIF_DISABLENOSCROLL};
+    scroll.nMin=0;scroll.nMax=int(viewportTotal_?viewportTotal_-1:0);scroll.nPage=UINT(count);scroll.nPos=int(first_);
+    SetScrollInfo(window_,SB_HORZ,&scroll,TRUE);
+  }
   void layout()override {
     if(layingOut_)return;
     struct LayoutGuard {bool &value;LayoutGuard(bool &v):value(v){value=true;}~LayoutGuard(){value=false;}}guard(layingOut_);
@@ -220,30 +291,14 @@ private:
     scroll.nMin=0;scroll.nMax=contentHeight_-1;scroll.nPage=UINT(std::max(1.0f,clientHeight));scroll.nPos=scrollOffset_;
     SetScrollInfo(window_,SB_VERT,&scroll,TRUE);
     const auto position=[&](int id,float x,float y,float width,float height,bool show=true){place(id,x,y-float(scrollOffset_),width,height,show);};
-    const bool frozen=retained()||stripFocused();
-    if(!frozen&&first_>=total)first_=0;
-    // Freeze the entire displayed set, not just the focused slot. Rebinding its
-    // neighbors during an external reorder could otherwise duplicate a bus.
-    const size_t count=frozen?displayed_:std::min(visibleCount(),total-first_);
-    while(bindings_.size()<count)createStrip(bindings_.size());
-    displayed_=count;
+    bindViewport(total);
     // Reconciliation replaces navigation while it is disabled anyway. Both
     // actions remain reachable in a narrow dock without another toolbar row.
     position(previous,8,4,72,24,!completion_.retained());position(next,84,4,72,24,!completion_.retained());
     position(cancel,164,4,76,24,!completion_.retained());
     position(review,8,4,112,24,completion_.retained());position(accept,126,4,110,24,completion_.retained());
     stripTop_=34;sliderTop_=57;
-    visibleStart_=std::min(visibleStart_,count>visibleCount()?count-visibleCount():0);
-    if(!frozen)visibleStart_=0;
-    const auto focus=GetFocus();
-    const int focusedSlot=GetParent(focus)==window_?slot(GetDlgCtrlID(focus)):-1;
-    const int anchor=gesture_.active()?slot(capturedControl_):focusedSlot;
-    if(anchor>=0) {
-      if(size_t(anchor)<visibleStart_)visibleStart_=size_t(anchor);
-      else if(size_t(anchor)>=visibleStart_+visibleCount())visibleStart_=size_t(anchor)+1-visibleCount();
-    }
-    visibleEnd_=std::min(count,visibleStart_+visibleCount());
-    EnableWindow(controls_.at(previous),first_>0&&!retained());EnableWindow(controls_.at(next),first_+count<total&&!retained());
+    EnableWindow(controls_.at(previous),first_>0);EnableWindow(controls_.at(next),first_+visibleCount()<viewportTotal_);
     EnableWindow(controls_.at(cancel),gesture_.active()&&!pending_&&!completion_.retained());
     EnableWindow(controls_.at(review),!pending_);EnableWindow(controls_.at(accept),observed_&&!pending_);
     // Keep the two horizontal controls clear of the button row at short dock
@@ -251,13 +306,8 @@ private:
     const float stripWidth=132;
     sliderHeight_=std::max(60.0f,h-sliderTop_-212);
     for(size_t i=0;i<bindings_.size();++i) {
-      const int id=base+int(i)*stride;const bool show=i>=visibleStart_&&i<visibleEnd_;
-      if(i<count) {
-        if(!frozen)bind(i,data_["buses"][first_+i]);
-        else if(const auto *saved=bus(bindings_[i]))bind(i,*saved);
-        else set(id+name,L"Bus unavailable");
-      }
-      const float x=8+(float(i)-float(visibleStart_))*stripWidth;
+      const int id=base+int(i)*stride;const bool show=positions_[i]!=SIZE_MAX;
+      const float x=show?8+(float(positions_[i])-float(first_))*stripWidth:0;
       position(id+name,x,stripTop_,124,19,show);position(id+fader,x+6,sliderTop_,32,sliderHeight_,show);
       position(id+gain,x+52,sliderTop_,67,24,show);position(id+pan,x+52,sliderTop_+35,67,25,show);
       position(id+mute,x,sliderTop_+sliderHeight_+5,60,24,show);position(id+solo,x+64,sliderTop_+sliderHeight_+5,60,24,show);
@@ -267,8 +317,19 @@ private:
       position(id+prePanLabel,x,controlsTop+30,124,18,show);position(id+prePan,x,controlsTop+48,124,24,show);
       position(id+widthLabel,x,controlsTop+78,124,18,show);position(id+width,x,controlsTop+96,124,24,show);
     }
+    // Win32 dialog traversal follows sibling Z order, not recycled slot IDs.
+    // Order the native controls by the current musical bus order without
+    // recreating HWNDs or disturbing the focused edit's text/selection.
+    std::vector<size_t> ordered;
+    for(size_t i=0;i<bindings_.size();++i)if(positions_[i]!=SIZE_MAX)ordered.push_back(i);
+    std::stable_sort(ordered.begin(),ordered.end(),[&](size_t a,size_t b){return positions_[a]<positions_[b];});
+    for(int id:{previous,next,cancel,review,accept})
+      SetWindowPos(controls_.at(id),HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+    for(const auto i:ordered)for(int part=0;part<=lastPart;++part)
+      SetWindowPos(controls_.at(base+int(i)*stride+part),HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
     enableEdits();
     resetPresentation_=false;
+    lastLayoutFocus_=GetFocus();
   }
   void paint(RenderSurface &s)override {
     const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);
@@ -276,8 +337,11 @@ private:
     if(data_.contains("buses")&&data_["buses"].empty())s.uiText(L"Enable the mixer to show channel and Master strips",12,54,w-24,0xabbacb);
     const float height=sliderHeight_;
     const float top=sliderTop_-float(scrollOffset_);
-    for(size_t i=visibleStart_;i<visibleEnd_;++i) {
-      const auto found=meters_.find(bindings_[i]);const float x=8+float(i-visibleStart_)*132;
+    for(size_t i=0;i<bindings_.size();++i) {
+      if(positions_[i]==SIZE_MAX)continue;
+      const float x=8+(float(positions_[i])-float(first_))*132;
+      if(x>=w||x+124<=0)continue;
+      const auto found=meters_.find(bindings_[i]);
       for(int channel=0;channel<2;++channel) {
         const float value=found==meters_.end()?0:(channel?found->second.right:found->second.left);
         const float amount=std::clamp(value,0.0f,1.0f)*height;
@@ -299,6 +363,17 @@ private:
     if(part==mute||part==solo){const bool continuing=gesture_.active();begin(id,part==mute?Tracker::MixerControl::Mute:Tracker::MixerControl::Solo);if(!continuing)gesture_.update(gesture_.value()==0?1:0);commit();}
   }
   bool controlScroll(UINT message,WPARAM event,HWND control)override {
+    if(!control&&message==WM_HSCROLL) {
+      SCROLLINFO info{sizeof(info),SIF_TRACKPOS};GetScrollInfo(window_,SB_HORZ,&info);
+      int target=int(first_);const int count=int(visibleCount());
+      switch(LOWORD(event)) {
+        case SB_LEFT:target=0;break;case SB_RIGHT:target=int(viewportTotal_);break;
+        case SB_LINELEFT:--target;break;case SB_LINERIGHT:++target;break;
+        case SB_PAGELEFT:target-=count;break;case SB_PAGERIGHT:target+=count;break;
+        case SB_THUMBTRACK:case SB_THUMBPOSITION:target=info.nTrackPos;break;default:return true;
+      }
+      scrollBusesTo(size_t(std::max(0,target)));return true;
+    }
     if(!control&&message==WM_VSCROLL) {
       SCROLLINFO info{sizeof(info),SIF_TRACKPOS};GetScrollInfo(window_,SB_VERT,&info);
       int target=scrollOffset_;const int pageSize=std::max(24,int(size().second)-24);
@@ -339,7 +414,11 @@ private:
     if(pending_){SetTimer(window_,3,50,nullptr);return;}
     if(captureLost_&&gesture_.active()&&!completion_.retained()){captureLost_=false;restoreCurrent();layout();requestPaint();}
   }
-  bool key(WPARAM key,bool control,bool)override {
+  bool key(WPARAM key,bool control,bool shift)override {
+    if(key==VK_TAB&&GetFocus()==window_) {
+      if(auto target=GetNextDlgTabItem(window_,nullptr,shift))SetFocus(target);
+      return true;
+    }
     if(control&&(key==VK_PRIOR||key==VK_NEXT)){page(key==VK_PRIOR?-1:1);return true;}
     if(key==VK_ESCAPE&&gesture_.active()){restoreCurrent();layout();return true;}
     if(key==VK_RETURN&&gesture_.active()){commit();layout();return true;}
@@ -352,8 +431,13 @@ private:
     return false;
   }
   bool wheel(UINT message,float,float,WPARAM value)override {
-    if(message==WM_MOUSEWHEEL&&contentHeight_>size().second)scrollTo(scrollOffset_-GET_WHEEL_DELTA_WPARAM(value)/WHEEL_DELTA*48);
-    else page(GET_WHEEL_DELTA_WPARAM(value)>0?-1:1);
+    const bool vertical=message==WM_MOUSEWHEEL&&!(GET_KEYSTATE_WPARAM(value)&MK_SHIFT)&&contentHeight_>size().second;
+    auto &remainder=vertical?wheelVertical_:wheelHorizontal_;
+    remainder+=GET_WHEEL_DELTA_WPARAM(value)*(message==WM_MOUSEWHEEL&&!vertical?-1:1);
+    const auto delta=remainder/WHEEL_DELTA;remainder%=WHEEL_DELTA;
+    if(!delta)return true;
+    if(vertical)scrollTo(scrollOffset_-delta*48);
+    else scrollBusesTo(size_t(std::max(0,int(first_)+delta)));
     return true;
   }
   void reviewDocumentDraft()override {reveal_();show();SetFocus(window_);}
@@ -366,7 +450,7 @@ public:
     if(!InitCommonControlsEx(&common))throw std::runtime_error("Cannot initialize native mixer sliders");
     create(L"ScreamSeqMixerStrips",L"Mixer strips",900,330);
     minimumClientWidth_=280;minimumClientHeight_=205;
-    SetWindowLongPtrW(window_,GWL_STYLE,GetWindowLongPtrW(window_,GWL_STYLE)|WS_VSCROLL);
+    SetWindowLongPtrW(window_,GWL_STYLE,GetWindowLongPtrW(window_,GWL_STYLE)|WS_VSCROLL|WS_HSCROLL);
     SetWindowPos(window_,nullptr,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_FRAMECHANGED);
     button(previous,L"Previous");button(next,L"Next");button(cancel,L"Cancel");button(review,L"Review result");button(accept,L"Use current");
     for(const auto id:{previous,next,cancel,review,accept})installReveal(controls_.at(id));
@@ -377,6 +461,14 @@ public:
       gesture_.active(),pending_,completion_.retained());
   }
   bool hasGesture()const noexcept{return retained();}
+  Json snapshot()const {
+    Json strips=Json::array();
+    for(size_t i=0;i<bindings_.size();++i)if(positions_[i]!=SIZE_MAX)
+      strips.push_back({{"bus",bindings_[i]},{"controlBase",base+int(i)*stride},{"position",positions_[i]},
+        {"pinned",pinned(i)},{"inViewport",positions_[i]>=first_&&positions_[i]<first_+visibleCount()}});
+    return {{"visible",visible()},{"firstBus",first_},{"visibleCapacity",visibleCount()},{"allocatedStrips",bindings_.size()},
+      {"strips",strips},{"gesture",gesture_.active()},{"pending",pending_},{"completion",completion_.snapshot()}};
+  }
   void hide()override {
     // Reset after the current native notification stack unwinds. Do not call
     // the worker from workspace layout or wait for a visible-only meter timer.
@@ -394,10 +486,11 @@ public:
   void update() {
     if(retired()||!visible()||pending_)return;
     try {
-      if(captureLost_&&gesture_.active()&&!completion_.retained()){captureLost_=false;restoreCurrent();}
+      bool relayout=GetFocus()!=lastLayoutFocus_;
+      if(captureLost_&&gesture_.active()&&!completion_.retained()){captureLost_=false;restoreCurrent();relayout=true;}
       else if(gesture_.active())preview();
-      else if(!completion_.retained()&&context_()!=std::pair(document_,revision_)){Pending guard(pending_);reload();}
-      layout();requestPaint();
+      else if(!completion_.retained()&&context_()!=std::pair(document_,revision_)){Pending guard(pending_);reload();relayout=true;}
+      if(relayout||resetPresentation_)layout();requestPaint();
     }catch(const std::exception &e){error(e);}
   }
 };

@@ -223,3 +223,39 @@ The existing workspace command-result fixture now includes completed Mixer Apply
 with a later raw name and an unknown mixer result whose review is invalidated by
 a concurrent bus edit. These are source-only additions to the same bounded
 workspace command-result group; include that group at the P1 checkpoint.
+
+## Native strip viewport and navigation — source only
+
+Replaced the page-only binding policy with a native horizontal scrollbar and a
+pool of visible strips plus one neighbor on either side. Existing focused and
+captured gesture HWNDs are reserved before recycling; unchanged neighbor IDs keep
+their HWNDs. A deleted focused bus remains unavailable until focus leaves. A
+captured raw field can remain offscreen while scrolling without losing text,
+selection or generation; the next key reveals that same field. Resize and
+external reorder retain the focused bus in view. Pool capacity supports the
+model's 240 buses without creating all song controls in an ordinary viewport.
+
+Native sibling order follows musical bus order after recycling, preserving Tab
+and Shift+Tab traversal. Tab can enter the strips from the root focus used by the
+command palette. Strips and Details now have explicit palette/shortcut entries.
+Wheel input over any strip child scrolls the viewport instead of adjusting a
+trackbar with no end-track notification; partial wheel deltas accumulate. Normal
+wheel scrolls vertically in short docks; Shift+wheel and horizontal wheel move
+between buses. Partial neighboring strips now paint their own meter observations.
+Workspace inspection exposes retained bus/control bindings and pool size for
+actual-process qualification.
+
+The existing native strip test now has a 240-bus fixture. Its new assertions cover
+bounded allocations through a complete bidirectional traversal, unchanged neighbor
+HWNDs, late Master, unique bus/position bindings, raw text/caret/generation retention,
+keyboard reveal and Tab order, and partial wheel navigation with no musical write.
+These tests have **not run**. Static diff inspection completed; no build/test cycle
+was started. Next normal local build remains no earlier than 2026-10-10 00:19:51
+UTC. Include native strips, workspace command/recovery and actual-app navigation
+with the already-required P1 shared/native mixer checks in that checkpoint.
+
+Still open: runtime viewport/input verification (including mixed DPI), actual UIA
+and high-contrast treatment, Add Return and destination-aware routing/effect entry
+points, naming/color ergonomics, F04 audible gesture/Undo/save checks and both
+platform qualification. This supersedes the earlier page-only limitation, not
+any unexecuted qualification gate.

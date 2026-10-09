@@ -268,7 +268,22 @@ counts are checked against plugin adapter capacity. Envelope targets use real
 plugin parameter/conflict hooks; inspection catalogue storage is explicitly
 private. See `../MIXER_GRAPH_PROGRESS.md` for current evidence and limits.
 
-The native mixer dock has a captured, revision-guarded bus draft, compact numeric
+The Mixer opens channel strips by default. **Strips** and **Details** are separate
+command-palette entries with configurable shortcuts; Details retains its bus
+draft when switching views. Strips expose pre/post gain and balance, width,
+mute/solo, stereo meters and a per-bus Details action. Dragging previews a value;
+release or Enter commits once, and Escape restores the current saved value.
+An uncertain result offers Review result and Use current without repeating the
+write. The horizontal scrollbar, Shift+wheel and Ctrl+Page Up/Page Down navigate
+buses. The normal wheel scrolls a short strip vertically. Wheel input over a
+control navigates the viewport without changing the musical value. Tab reveals
+offscreen controls and follows bus order even after native controls are recycled.
+The HWND pool contains visible strips, neighbors and retained focused/gesture
+owners; scrolling never rebinds a captured edit to another bus. This P1 source
+candidate still requires the qualification gates in
+`../../doc/windows-parity-plan-2026-10-09/P1-IMPLEMENTATION.md`.
+
+The native mixer Details dock has a captured, revision-guarded bus draft, compact numeric
 controls, main-output selection (including disconnect), mute/solo, group creation
 and removal, reload, Apply, keyboard access and stereo meters. Unfinished fields
 survive navigation and stale revisions; async completion checks draft generation.

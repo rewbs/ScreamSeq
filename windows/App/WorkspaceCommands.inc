@@ -17,6 +17,8 @@
             {graphWorkflowCommand,L"Graph / Groups, modulation, visual layout and signal inspection",L""},
             {parameterActivityCommand,L"Automation / Effective parameter activity and sources",L""},
             {mixerCommand,L"Mix / Open mixer controls and routing",L""},
+            {mixerStripsCommand,L"Mix / Show channel strips",L"Ctrl+Page Up / Page Down in strips"},
+            {mixerDetailsCommand,L"Mix / Show retained bus details",L""},
             {mixerRouting,L"Mix / Song routing overview, inserts, sends and sidechains",L""},
             {graphCommandsCommand,L"Pattern / Graph command editor",L"Enter on a graph lane"},
             {graphLanesFocus,L"Pattern / Focus graph command lanes",L"F6 from pattern"},

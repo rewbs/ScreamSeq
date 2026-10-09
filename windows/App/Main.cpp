@@ -340,6 +340,7 @@ public:
             {"pluginLibrary",pluginLibraryWindow?pluginLibraryWindow->snapshot():Json{{"visible",false}}},
             {"pluginPath",pluginPathWindow?pluginPathWindow->snapshot():Json{{"visible",false}}},
             {"songRouting",songRoutingWindow?songRoutingWindow->snapshot():Json{{"visible",false}}},
+            {"mixerStrips",mixerStrips?mixerStrips->snapshot():Json{{"visible",false}}},
             {"graphCommands",graphCommandsWindow?graphCommandsWindow->snapshot():Json{{"visible",false}}},
             {"graphLanes",graphLanesSnapshot()},
             {"parameterAutomation",parameterAutomationWindow?parameterAutomationWindow->snapshot():Json{{"visible",false}}},

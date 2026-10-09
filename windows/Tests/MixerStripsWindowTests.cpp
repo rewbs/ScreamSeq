@@ -1,6 +1,7 @@
 #include "common/stdafx.h"
 #include "../App/MixerStripsWindow.hpp"
 #include "PrivateGuiTest.hpp"
+#include <set>
 
 namespace {
 using Json=ScreamSeq::Api::Json;
@@ -19,7 +20,7 @@ struct Fixture {
   std::string revision="r1";unsigned writes=0,previews=0;bool unknown=false;Json lastWrite,lastPreview;
   double audible=-6.123456789;
   ScreamSeq::MixerStripsWindow tool;
-  explicit Fixture(HWND owner):tool(owner,
+  explicit Fixture(HWND owner,unsigned busCount=12):tool(owner,
     [this](const auto &method,const auto &params){return read(method,params);},
     [this]{return std::pair(std::string("owned-song"),revision);},
     [this](const std::string &method,const Json &params,const auto &)->ScreamSeq::Api::CompletedCall {
@@ -30,8 +31,8 @@ struct Fixture {
       if(unknown)throw ScreamSeq::Api::ApiError(-32003,"Owned lost response",Tracker::WriteOutcome{});
       return {method,"owned-song",revision,{{"wouldChange",true}}};
     },[]{},[](const auto &){},[]{}) {
-    for(unsigned i=0;i<12;++i)data["buses"].push_back({{"id","n"+std::to_string(i+1)},
-      {"name",i==11?"Master":"Track "+std::to_string(i+1)},{"gainDB",i==0?audible:0},
+    for(unsigned i=0;i<busCount;++i)data["buses"].push_back({{"id","n"+std::to_string(i+1)},
+      {"name",i+1==busCount?"Master":"Track "+std::to_string(i+1)},{"gainDB",i==0?audible:0},
       {"pan",0},{"preGainDB",0},{"prePan",0},{"width",1},{"mute",false},{"solo",false}});
     ScreamSeq::Tests::ownGuiWindow(tool.window());tool.dock(owner);tool.dockBounds(0,0,528,260);tool.show();tool.update();
   }
@@ -130,9 +131,73 @@ void inputAndWidth(HWND owner) {
   bool master=false;for(int i=0;i<16;++i){auto title=GetDlgItem(f.tool.window(),100+i*16);if(title&&IsWindowVisible(title)&&text(title)==L"Master")master=true;}
   check(master,"Late Master is unreachable through native mixer navigation");
 }
+void viewportPool(HWND owner) {
+  Fixture f(owner,240);
+  auto bound=[&](const std::string &bus) {
+    const auto snapshot=f.tool.snapshot();
+    for(const auto &strip:snapshot.at("strips"))if(strip.at("bus")==bus)return strip;
+    throw std::runtime_error("Expected bus is absent from the native strip pool: "+bus);
+  };
+  const auto capacity=f.tool.snapshot().at("visibleCapacity").get<size_t>();
+  SetFocus(f.tool.window());SendMessageW(f.tool.window(),WM_KEYDOWN,VK_TAB,0);
+  check(GetFocus()!=f.tool.window()&&IsChild(f.tool.window(),GetFocus()),"Keyboard cannot enter strips after the palette focuses their root");
+  SetFocus(f.tool.window());
+  const int neighbor=bound("n2").at("controlBase");
+  SendMessageW(f.tool.window(),WM_HSCROLL,SB_LINERIGHT,0);
+  check(bound("n2").at("controlBase")==neighbor,"Scrolling recycled an unchanged neighboring HWND");
+  SendMessageW(f.tool.window(),WM_HSCROLL,SB_LEFT,0);
+  const int capturedBase=bound("n1").at("controlBase");
+  const auto captured=f.control(capturedBase+2);
+  SetFocus(captured);SetWindowTextW(captured,L"--");SendMessageW(captured,EM_SETSEL,1,2);
+  const auto draft=f.tool.documentDraft();
+  check(draft&&draft->dirty&&draft->target=="n1","Pool fixture did not capture its invalid raw draft");
+  SendMessageW(f.tool.window(),WM_HSCROLL,SB_RIGHT,0);
+  auto snapshot=f.tool.snapshot();
+  check(snapshot.at("firstBus")==240-capacity&&bound("n240").at("inViewport")==true,
+    "Native horizontal scrollbar did not expose the late Master");
+  DWORD start=0,end=0;SendMessageW(captured,EM_GETSEL,reinterpret_cast<WPARAM>(&start),reinterpret_cast<LPARAM>(&end));
+  check(GetFocus()==captured&&text(captured)==L"--"&&start==1&&end==2&&
+    bound("n1").at("controlBase")==capturedBase&&f.tool.documentDraft()->generation==draft->generation,
+    "Scrolling retargeted a captured HWND or changed raw text, caret or generation");
+  auto bounded=[&] {
+    const auto state=f.tool.snapshot();std::set<std::string> identities;std::set<size_t> positions;
+    for(const auto &strip:state.at("strips")) {
+      check(identities.insert(strip.at("bus").get<std::string>()).second,"Pool duplicated a bus identity");
+      check(positions.insert(strip.at("position").get<size_t>()).second,"Pool duplicated a bus position");
+    }
+    check(state.at("allocatedStrips").get<size_t>()<=capacity+3,
+      "Native HWND allocation grew with song length instead of visible neighbors and the captured owner");
+  };
+  bounded();
+  for(unsigned i=0;i<240;++i){SendMessageW(f.tool.window(),WM_HSCROLL,SB_LINELEFT,0);bounded();}
+  for(unsigned i=0;i<240;++i){SendMessageW(f.tool.window(),WM_HSCROLL,SB_LINERIGHT,0);bounded();}
+  check(f.writes==0&&f.previews==0&&text(captured)==L"--","Viewport navigation performed or discarded an edit");
+  // A key on an offscreen focused field reveals that same control before input.
+  SendMessageW(captured,WM_KEYDOWN,VK_F1,0);
+  RECT client{};GetClientRect(f.tool.window(),&client);const auto r=bounds(captured,f.tool.window());
+  check(r.left>=0&&r.right<=client.right&&GetFocus()==captured,"Keyboard input failed to reveal the captured bus");
+  SendMessageW(captured,WM_KEYDOWN,VK_ESCAPE,0);SetFocus(f.tool.window());f.tool.update();
+  SendMessageW(f.tool.window(),WM_HSCROLL,SB_RIGHT,0);
+  const int beforeMaster=bound("n239").at("controlBase"),master=bound("n240").at("controlBase");
+  check(GetNextDlgTabItem(f.tool.window(),f.control(beforeMaster+9),FALSE)==f.control(master+1)&&
+    GetNextDlgTabItem(f.tool.window(),f.control(master+1),TRUE)==f.control(beforeMaster+9),
+    "Recycled HWND creation order replaced musical left-to-right Tab order");
+  SetFocus(f.control(beforeMaster+9));SendMessageW(f.control(beforeMaster+9),WM_KEYDOWN,VK_TAB,0);
+  check(GetFocus()==f.control(master+1),"Tab did not reach the adjacent late Master fader");
+  SendMessageW(f.tool.window(),WM_HSCROLL,SB_LEFT,0);SetFocus(f.tool.window());f.tool.update();
+  const auto first=bound("n1").at("controlBase").get<int>();
+  const auto position=SendMessageW(f.control(first+1),TBM_GETPOS,0,0);
+  const auto previews=f.previews;
+  SendMessageW(f.control(first+1),WM_MOUSEHWHEEL,MAKEWPARAM(0,WHEEL_DELTA/2),0);
+  check(f.tool.snapshot().at("firstBus")==0,"Partial wheel delta moved too far");
+  SendMessageW(f.control(first+1),WM_MOUSEHWHEEL,MAKEWPARAM(0,WHEEL_DELTA/2),0);
+  check(f.tool.snapshot().at("firstBus")==1&&SendMessageW(f.control(first+1),TBM_GETPOS,0,0)==position&&
+    !f.tool.hasGesture()&&f.writes==0&&f.previews==previews,
+    "Wheel over a strip changed its musical value or failed to navigate the viewport");
+}
 }
 int main(){try {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);});
+  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);viewportPool(owner.window);});
   std::cout<<"PASS native mixer gesture coalescing, exact no-op, stale cancel, raw retention, capture loss and uncertain result review\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}
