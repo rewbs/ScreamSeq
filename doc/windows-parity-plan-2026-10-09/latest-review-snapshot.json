@@ -1,0 +1,171 @@
+{
+  "reviewed_utc": "2026-10-09T13:37:27.802223+00:00",
+  "scope": "Planning only: existing source and evidence read; no product edits, builds, tests or application launches. Hash checks are artifact inspection, not product qualification.",
+  "reference_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+  "remote_main": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
+  "checkout": "68c2cf1ded25aebe600df222de9282662949c25d",
+  "branch": "codex/windows-parity-safety",
+  "inputs": {
+    "screamseq-mac-ui-reference-2026-10-09.zip": {
+      "bytes": 22362982,
+      "sha256": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81"
+    },
+    "SCREAMSEQ_WINDOWS_PARITY_PLAN_2026-10-09.md": {
+      "bytes": 166644,
+      "sha256": "c1b50ca8424da02bd2e0dced7e7129e928d7e4de5e25d7cd31aae0378a8d73ce"
+    },
+    "SCREAMSEQ_WINDOWS_PARITY_MATRIX_2026-10-09.csv": {
+      "bytes": 37671,
+      "sha256": "ec2bbc2c01769072f6cc3edc3e9d331122e2656f53d6cb793fcdd4a444aa91f5"
+    }
+  },
+  "preexisting_product_worktree": {
+    "windows/Api/SessionAdapter.hpp": "eb17f038ea659e08a2e5f843d4422524677bf45e7536c9986827d85d0b795a5a",
+    "windows/App/Main.cpp": "cb4a6ff249fba038934e6675247224ace2886b2f41668e99dd295a7b719709a9",
+    "windows/App/NativeToolWindow.hpp": "2ba0e735a288a03614c5172e49a7af38a803fd1c366c72c9cfb59f3da08aba06",
+    "windows/App/PatternSampleRenderWindow.hpp": "c078a39f5a7c2214e86a94786f8e31e42e7cb52dc207acb9c5e31b9edb8cc8df",
+    "windows/Session/DocumentController.cpp": "173e13b28229d06f8e892697f2c7f0f5b5f2c6fd007290ee93bb8699d9ab8669",
+    "windows/Session/DocumentController.hpp": "3241321496bd6e725330a26e7920fe67cf6a2c930e07c5a6ff85c1fbf8e69412",
+    "windows/App/NativeWriteCompletion.hpp": "614cf2a4b3bdf41fc65d1f27595fbbc6acd2139f6befd31f8c86bd6cfee8045b"
+  },
+  "outcome_receipt": {
+    "path": "bin/parity-evidence/p0b-outcome-receipt.json",
+    "sha256": "f2a773697252d35b29036ab401d169aeea0cd5ec46f9705544106296146c3129",
+    "recorded_commit": "68c2cf1ded25aebe600df222de9282662949c25d",
+    "recorded_scope": "Frozen outcome boundary candidate; no native owner reconciliation or departure integration claim",
+    "inspection": {
+      "source_hashes": {
+        "count": 1834,
+        "changed": [
+          "windows/Api/SessionAdapter.hpp",
+          "windows/App/Main.cpp",
+          "windows/App/NativeToolWindow.hpp",
+          "windows/App/PatternSampleRenderWindow.hpp",
+          "windows/Session/DocumentController.cpp",
+          "windows/Session/DocumentController.hpp"
+        ],
+        "missing": []
+      },
+      "executables": {
+        "count": 5,
+        "changed": [],
+        "missing": []
+      },
+      "cmake_caches": {
+        "count": 2,
+        "changed": [],
+        "missing": []
+      },
+      "logs": {
+        "count": 18,
+        "changed": [],
+        "missing": []
+      }
+    }
+  },
+  "post_reference_main_paths": [
+    "doc/windows-parity-plan-2026-10-09/IMPLEMENTATION.md",
+    "doc/windows-parity-plan-2026-10-09/README.md",
+    "doc/windows-parity-plan-2026-10-09/api-inventory.csv",
+    "doc/windows-parity-plan-2026-10-09/ci-evidence.md",
+    "doc/windows-parity-plan-2026-10-09/command-inventory.csv",
+    "doc/windows-parity-plan-2026-10-09/evidence.json",
+    "doc/windows-parity-plan-2026-10-09/handoff-details.md",
+    "doc/windows-parity-plan-2026-10-09/parity-matrix.csv",
+    "doc/windows-parity-plan-2026-10-09/peer-matrix-review.csv",
+    "doc/windows-parity-plan-2026-10-09/peer-review-reconciliation.md",
+    "doc/windows-parity-plan-2026-10-09/review-refresh.md",
+    "doc/windows-parity-plan-2026-10-09/source-map.md",
+    "mac/App/WorkspaceIntegration.swift",
+    "mac/Audio/CaptureEndMonitor.hpp",
+    "mac/Audio/SampleRecorder.mm",
+    "mac/Tests/SampleRecorderTests.mm",
+    "windows/Api/README.md",
+    "windows/App/GraphCurveOwnerLayout.inc",
+    "windows/App/Main.cpp",
+    "windows/App/RecordingIntegration.inc",
+    "windows/App/SampleCaptureIntegration.inc",
+    "windows/Session/DocumentController.cpp",
+    "windows/Tests/GraphCurveWindowTests.cpp",
+    "windows/Tests/LiveNativeControllerTests.inc",
+    "windows/Tests/Workspace/WorkspaceRestoreTests.cpp",
+    "windows/Tests/precise_note_native_support.py",
+    "windows/Tests/test_graph_curve_host.py",
+    "windows/Tests/test_pattern_performance.py"
+  ],
+  "post_prior_review_paths": [
+    "doc/windows-parity-plan-2026-10-09/IMPLEMENTATION.md",
+    "doc/windows-parity-plan-2026-10-09/README.md",
+    "doc/windows-parity-plan-2026-10-09/current-review-snapshot.json",
+    "doc/windows-parity-plan-2026-10-09/current-review.md",
+    "doc/windows-parity-plan-2026-10-09/parity-matrix.csv",
+    "doc/windows-parity-plan-2026-10-09/peer-review-reconciliation.md",
+    "editor/WriteOutcome.hpp",
+    "windows/Api/PipeServer.hpp",
+    "windows/Api/ProtocolLimits.hpp",
+    "windows/Api/README.md",
+    "windows/Api/SessionAdapter.hpp",
+    "windows/Api/write-outcome.schema.json",
+    "windows/App/Main.cpp",
+    "windows/Session/DocumentController.cpp",
+    "windows/Tests/Api/ApiTests.cpp",
+    "windows/Tests/Api/SessionCacheTests.cpp",
+    "windows/Tests/DocumentControllerTests.cpp",
+    "windows/Tests/Workspace/WorkspaceRestoreTests.cpp"
+  ],
+  "p0a_ci_tree_matches_main": true,
+  "fixture_static_inspection": [
+    {
+      "member": "2026-10-09/fixtures/01-midnight-circuit.screamseq",
+      "bytes": 52063,
+      "sha256": "e6d7a0ea19f0327ebb0b1e6e2a5885c525916e0f1a2fb0977b602c2efb8e4f58",
+      "container": 6,
+      "metadata": 17,
+      "plugins": 0
+    },
+    {
+      "member": "2026-10-09/fixtures/02-editors-and-effects.screamseq",
+      "bytes": 212069,
+      "sha256": "5ca8394b2a597e044421834d0b8b7167560e13a599b32194651f05dd03fb73e6",
+      "container": 6,
+      "metadata": 17,
+      "plugins": 15
+    },
+    {
+      "member": "2026-10-09/fixtures/03-routing-and-modulation.screamseq",
+      "bytes": 214386,
+      "sha256": "fb2289429c269c69d4e25f1b8a6358d1a747c44629f603b9f882e3b39ed937b2",
+      "container": 6,
+      "metadata": 17,
+      "plugins": 15
+    },
+    {
+      "member": "2026-10-09/fixtures/04-complete-reference.screamseq",
+      "bytes": 214858,
+      "sha256": "ec36560ceecc0baaf4e127217d1637cd5e387fbd9d4c42163e99b467e84fe813",
+      "container": 6,
+      "metadata": 17,
+      "plugins": 15
+    },
+    {
+      "member": "2026-10-09/fixtures/05-arrangement-copy-after.screamseq",
+      "bytes": 216467,
+      "sha256": "f8ea7cc23b73cf2aa7b911867dc3bdb0c1718f32ed7e06a6a3413ed34350efaf",
+      "container": 6,
+      "metadata": 17,
+      "plugins": 15
+    }
+  ],
+  "final_document_review": {
+    "remote_main": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
+    "preexisting_product_hash_changes": [],
+    "inventory_counts": {
+      "parity-matrix.csv": 117,
+      "command-inventory.csv": 419,
+      "api-inventory.csv": 232,
+      "peer-matrix-review.csv": 84
+    },
+    "missing_local_document_links": [],
+    "scope": "Static document/link/hash readback only; no product builds/tests/launches."
+  }
+}
