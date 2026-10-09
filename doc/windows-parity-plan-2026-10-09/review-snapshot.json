@@ -1,0 +1,273 @@
+{
+  "head": "c7643949430b6c077ab7d2deae720322f450a72a",
+  "product_snapshot": {
+    "editor/DocumentDeparture.hpp": "31d9f0e37aa2e732245e118173e06aa7e1d843fd2ef41d52f2d7b680c8eec30d",
+    "editor/Tests/DocumentDepartureTests.cpp": "104631ee2ce644a332bb2524410d6245f6631dedf12978080eb73019dc3334a2",
+    "windows/App/AbsoluteAutomationWindow.hpp": "4e142374971c6c9c64b0c6a4ec593c2a7e6a767b6ae57ba5c276f50836b67bf5",
+    "windows/App/ArrangementMatrixWindow.hpp": "49d8ea05f704d59cb0542d52c6976f04bf53f7d2d0b35835c2693806b84534e2",
+    "windows/App/ArrangementWindow.hpp": "287c7057765efe49d91f380dcf58ed6f866d98a3aaa24efe184b59bf79e13776",
+    "windows/App/DocumentDraftRegistry.hpp": "3a49ccbf6450fa485fdbf795b8f47505a7bf2e942dbab6d838eb3cdf38b6ace9",
+    "windows/App/EnvelopeBankWindow.hpp": "70a4d4f6d3e6809eb1b75f3211a5f64fabea421addb5d150a13a4eccabce230f",
+    "windows/App/FormulaWorkbenchWindow.hpp": "b24cb094b507f1a1e6920c90db2a354b510f2b808b9182b5d6e3a626bf0a49f6",
+    "windows/App/GraphCommandsWindow.hpp": "e33f3e81cebd1a749f85cb5a4285e19b4a64efa0c8dc5cb23cbcfdfc90a95416",
+    "windows/App/GraphCurveWindow.hpp": "83728138d681555d0f53761a491169da05653175a50342bad86cc5250d95cf30",
+    "windows/App/GraphTrimsWindow.hpp": "d9c655fa6a9707689bf521269517050bfe6385d10d5bd92095af582d05434ad9",
+    "windows/App/GraphWorkflowWindow.hpp": "15f90ddd270c3cc6a800401781495bc0b38a36a09cac053d0f1afcbb791467e9",
+    "windows/App/InstrumentEnvelopeWindow.hpp": "4413b5224861a0576634956060066348496bc005e1dd655d7b3860211c39aa77",
+    "windows/App/Main.cpp": "976a24f1373be04778a68a06ee651f6ce1a6a7107f9a4aee3f537e25458042b0",
+    "windows/App/MultisampleImportWindow.hpp": "82f5926168de0d44fb60b769cdeccec21dfcc779cd2fe725c14830e9db93b052",
+    "windows/App/NativeToolWindow.hpp": "ef466befd30bf974f047273cbebdcfb5e795772dcda51b05f73a06a589b6014b",
+    "windows/App/ParameterActivityWindow.hpp": "7ef24589282ca17d149e9b1d958539fbf509a8db4d9e009748acccf921750fc6",
+    "windows/App/ParameterAutomationWindow.hpp": "22186fd48bcc6b3bb851f97d10097c34c27808876ecd83a40db8654b48f0ebf8",
+    "windows/App/PatternNudgeEditor.inc": "58b6ef1a98f1a6c73b31b1e1fad04649d4d27c7683a8fe1c98402f2eb00ee0ae",
+    "windows/App/PatternSampleRenderWindow.hpp": "a36a4112ff09a4f6c4825a820fa0910af67ab8da188bd793ac3e50b32e00762c",
+    "windows/App/PluginEditor.inc": "eb9b9daacc20750a283b611bf03ab7d81bf7b1fd2d0dfe44a05c6eb6f6da9aca",
+    "windows/App/PluginInstrumentsWindow.hpp": "393a911b3bd4d9cf0000719aff0dd3ae19a92d75b1978be721a026355c454355",
+    "windows/App/PreciseNoteWindow.hpp": "5eadc4e835267e2b9bfaf58a5742f60913a7ac11470a190d66373d80a7aa2559",
+    "windows/App/SampleDetailWindow.hpp": "4c05e3b7804ae19845125676da12d0b3b429f9bfc48bef1a10056dc6951d5fc3",
+    "windows/App/SampleEditor.inc": "0ca951bb99444e504245a83a79c1140831035f74924881edfcc68b8b88b817b6",
+    "windows/App/ScratchGestureWindow.hpp": "78839850b2abba8c4cad5f5be7f1039fb83529ada9842e31159ca403ee81b675",
+    "windows/App/SongRoutingWindow.hpp": "344def1e865391fdff6efde4324200e82f002c6fa7584b6ced4b6dd392edddfa",
+    "windows/App/SongTimingWindow.hpp": "2afd0ce4bf1edf1fa8afbeba07870dca2f2494d04b2337bfcacb3cdcea2f4dcb",
+    "windows/App/WorkspaceView.inc": "f4c023615d5bc785fbf0d0fe0b87d90870492ac3e3a5a5eea35d3efe8841765a",
+    "windows/CMakeLists.txt": "94f217dbefcfd6ce7b5afef12dc4151e2dd80c02d2a8e86a2755bd0ff8462600",
+    "windows/Tests/Workspace/WorkspaceRestoreTests.cpp": "6f47bd7991f5cf460b3d0841b4f9d5b3649a97ddf5aa17e125815da79c668963",
+    "windows/App/DocumentDrafts.inc": "3a304217535e2f5cbfc636fd9f94a6280364c70199e7f82f8efec76ff0af85c2",
+    "windows/Tests/Workspace/DocumentDraftCensusTests.inc": "98d05bc7700387a82127d5541cadb4129f99b13ea792cc5bab0f179aec38919a"
+  },
+  "inputs": {
+    "screamseq-mac-ui-reference-2026-10-09.zip": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81",
+    "SCREAMSEQ_WINDOWS_PARITY_MATRIX_2026-10-09.csv": "ec2bbc2c01769072f6cc3edc3e9d331122e2656f53d6cb793fcdd4a444aa91f5",
+    "SCREAMSEQ_WINDOWS_PARITY_PLAN_2026-10-09.md": "c1b50ca8424da02bd2e0dced7e7129e928d7e4de5e25d7cd31aae0378a8d73ce"
+  },
+  "zip_hash": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81",
+  "inventory": {
+    "api-inventory.csv": 232,
+    "command-inventory.csv": 419,
+    "parity-matrix.csv": 117,
+    "peer-matrix-review.csv": 84
+  },
+  "reference": {
+    "windows-parity-checklist.csv": 84,
+    "screenshot-index.csv": 103,
+    "command-catalog.csv": 419
+  },
+  "review_utc": "2026-10-09 12:00 UTC",
+  "scope": "Planning only. Snapshot of pre-existing working files and supplied inputs; not a build manifest or qualification receipt.",
+  "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+  "post_reference_main_commits": 0,
+  "candidate_jobs": [
+    {
+      "id": 113798216568,
+      "name": "Native app (Windows x64)",
+      "status": "in_progress",
+      "conclusion": null,
+      "run_id": 37923921386,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Build native application and run portable and worker tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Scratch editor on an owned private desktop",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Retained editors and merged command paths on private desktops",
+          "status": "in_progress",
+          "conclusion": null,
+          "number": 6
+        },
+        {
+          "name": "Preserve qualification logs",
+          "status": "pending",
+          "conclusion": null,
+          "number": 7
+        },
+        {
+          "name": "Post Run actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+          "status": "pending",
+          "conclusion": null,
+          "number": 13
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "status": "pending",
+          "conclusion": null,
+          "number": 14
+        }
+      ]
+    },
+    {
+      "id": 113798215876,
+      "name": "Native app (macos-15)",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 37923921268,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Build C++ targets and Swift application from a clean tree",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Native model and host tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Swift recovery and picker tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Preserve qualification logs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13
+        }
+      ]
+    },
+    {
+      "id": 113798216235,
+      "name": "Native app (macos-15-intel)",
+      "status": "in_progress",
+      "conclusion": null,
+      "run_id": 37923921268,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Build C++ targets and Swift application from a clean tree",
+          "status": "in_progress",
+          "conclusion": null,
+          "number": 3
+        },
+        {
+          "name": "Native model and host tests",
+          "status": "pending",
+          "conclusion": null,
+          "number": 4
+        },
+        {
+          "name": "Swift recovery and picker tests",
+          "status": "pending",
+          "conclusion": null,
+          "number": 5
+        },
+        {
+          "name": "Preserve qualification logs",
+          "status": "pending",
+          "conclusion": null,
+          "number": 6
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "status": "pending",
+          "conclusion": null,
+          "number": 12
+        }
+      ]
+    }
+  ],
+  "candidate_pr": {
+    "url": "https://github.com/rewbs/ScreamSeq/pull/3",
+    "number": 3,
+    "state": "open",
+    "merged": false,
+    "mergeable": true,
+    "draft": true,
+    "title": "Restore native builds and protect retained recording takes",
+    "base": "main",
+    "base_sha": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+    "head": "codex/windows-parity-p0",
+    "head_sha": "6c3eea908fd3167ada681b2c44be551cb7eb94a3",
+    "head_repo_id": 1378857822,
+    "head_repo_full_name": "rewbs/ScreamSeq",
+    "merge_commit_sha": "6433dc0da9c1b779b1390de7a495af2c2353fd9e",
+    "user": {
+      "login": "rewbs",
+      "name": "rewbs",
+      "email": null,
+      "avatar_url": "https://avatars.githubusercontent.com/u/74455?v=4",
+      "id": 74455
+    },
+    "requested_reviewers": null,
+    "requested_team_reviewers": null,
+    "diff": null,
+    "comments": null,
+    "created_at": "2026-10-09T09:08:59Z",
+    "updated_at": "2026-10-09T11:28:56Z",
+    "closed_at": null,
+    "merged_at": null,
+    "commits": 7,
+    "changed_files": 28,
+    "additions": 2876,
+    "deletions": 32,
+    "display_url": "https://github.com/rewbs/ScreamSeq/pull/3",
+    "display_title": "Restore native builds and protect retained recording takes"
+  },
+  "mac_job_actual_checkout": "6433dc0da9c1b779b1390de7a495af2c2353fd9e"
+}

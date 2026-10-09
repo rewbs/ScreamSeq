@@ -2,18 +2,22 @@
   "planning_only": true,
   "no_builds_tests_or_app_launches": true,
   "date": "2026-10-09 America/Los_Angeles",
-  "checkout_head": "3d6a194fbab1713057e34fbcf64c7ba7107d1e30",
+  "checkout_head": "c7643949430b6c077ab7d2deae720322f450a72a",
   "final_planning_recheck": {
-    "read_utc": "2026-10-09 11:42 UTC",
+    "read_utc": "2026-10-09 12:00 UTC",
     "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
-    "checkout_head": "3d6a194fbab1713057e34fbcf64c7ba7107d1e30",
-    "delta_from_previous_review": "Seven planning documents only; no new product commit since d37ecf785",
+    "checkout_head": "c7643949430b6c077ab7d2deae720322f450a72a",
+    "pre_existing_modified_files": 31,
+    "pre_existing_untracked_files": 2,
     "peer_file_hashes_match": true,
-    "scope": "Read-only source, archive, image and GitHub evidence inspection; planning-document edits only. No product edits, builds, tests, app launches, workflow dispatches, commits, pushes or merges.",
+    "snapshot": "review-snapshot.json",
+    "scope": "Planning only. Snapshot of pre-existing working files and supplied inputs; not a build manifest or qualification receipt.",
+    "no_product_edits_builds_tests_or_launches": true,
     "candidate_pr": 3,
     "candidate_head": "6c3eea908fd3167ada681b2c44be551cb7eb94a3",
-    "candidate_status": "Open draft, unmerged; Windows job 113798216568 and Mac jobs 113798215876/113798216235 still in progress when read",
-    "plan_refinement": "P3c owns New/Demo/song settings/load report; P6 consumes those interfaces for exports and codec convergence. Subphase estimates are included in parent estimates."
+    "candidate_status": "Open draft, unmerged. Apple Silicon passed at actual PR merge 6433dc0; Windows retained-editor step and Intel build still in progress when read.",
+    "local_evidence": "Existing p0b-census logs cover selected native owners; no consolidated source-to-binary census receipt found. F21 remains open because Application admission is not wired.",
+    "plan_refinement": "Preserve existing timing-sequence/nudge-Review changes, separate remaining owner coverage from aggregate admission, and reuse focused evidence only with matching inputs."
   },
   "inspected_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
   "remote_main_equal_to_reference": true,
@@ -1117,5 +1121,17 @@
       "windows/App/WorkspaceView.inc": "f4c023615d5bc785fbf0d0fe0b87d90870492ac3e3a5a5eea35d3efe8841765a"
     }
   },
-  "snapshot_precedence": "Top-level checkout_head and final_planning_recheck identify the final read-only recheck. latest_planning_review supplies the unchanged product hashes and preceding detailed inspection. prior_candidate_review, previous_planning_review and review_refresh are retained historical snapshots."
+  "snapshot_precedence": "Top-level checkout_head and final_planning_recheck identify the final read-only recheck. latest_planning_review supplies the unchanged product hashes and preceding detailed inspection. prior_candidate_review, previous_planning_review and review_refresh are retained historical snapshots.",
+  "previous_final_planning_recheck": {
+    "read_utc": "2026-10-09 11:42 UTC",
+    "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+    "checkout_head": "3d6a194fbab1713057e34fbcf64c7ba7107d1e30",
+    "delta_from_previous_review": "Seven planning documents only; no new product commit since d37ecf785",
+    "peer_file_hashes_match": true,
+    "scope": "Read-only source, archive, image and GitHub evidence inspection; planning-document edits only. No product edits, builds, tests, app launches, workflow dispatches, commits, pushes or merges.",
+    "candidate_pr": 3,
+    "candidate_head": "6c3eea908fd3167ada681b2c44be551cb7eb94a3",
+    "candidate_status": "Open draft, unmerged; Windows job 113798216568 and Mac jobs 113798215876/113798216235 still in progress when read",
+    "plan_refinement": "P3c owns New/Demo/song settings/load report; P6 consumes those interfaces for exports and codec convergence. Subphase estimates are included in parent estimates."
+  }
 }
