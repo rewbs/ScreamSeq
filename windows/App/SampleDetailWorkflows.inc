@@ -30,14 +30,6 @@
     if(!dry){require(loops_.acceptApplied(submittedTarget,submittedRaw,workflowTarget()),"Loop draft changed during Apply / newer fields retained");syncLoops();}
     const auto changed=report_.value("loopsChanged",false);status(dry?(changed?L"Preview: normal and sustain loops change together / PCM and history unchanged":L"Preview: both loops already match the saved sample"):(changed?L"Both loops applied / one Undo restores them / PCM unchanged":L"Loops unchanged / no history entry created"));
   }
-  void reloadLoopFields(){
-    const auto before=context_(true);require(before.document==captured_.document,"Document replaced / use From cursor to capture the new sample");
-    require(std::any_of(before.samples.begin(),before.samples.end(),[&](const auto &v){return v.at("index")==slot_&&v.at("id")==id_;}),"Captured sample is unavailable / use From cursor");
-    const auto token=generation_;busy([&]{const auto data=request_("sample.get",{{"sample",slot_}});const auto now=context_(true);require(now.document==before.document&&now.revision==before.revision&&token==generation_,"Song or fields changed while reloading loops / draft retained");
-      captured_=now;info_=data;region_.frames=data.at("frames");clamp();if(!edited_.contains(rangeStart)&&!edited_.contains(rangeEnd)&&!edited_.contains(viewStart)&&!edited_.contains(viewEnd))syncFields();
-      resetLoops();refreshSavedSettings();sampleChoices();describeTarget();readWave();
-    });++generation_;report_=Json::object();invalidatePaste();status(L"Loop fields reloaded / other raw fields retained at their captured revision");
-  }
   Json snapParams(unsigned first,unsigned last)const{
     const bool grid=choice(snapMode)==1;Json p={{"sample",slot_},{"positions",Json::array({first,last})},{"mode",grid?"grid":"zero"},{"direction",choice(snapDirection)==1?"before":choice(snapDirection)==2?"after":"nearest"}};
     if(grid){const auto step=integerField(snapSize,268435456);require(step>0,"Grid step must be at least one frame");p["step"]=step;p["origin"]=integerField(snapOrigin,region_.frames);}else{p["radius"]=integerField(snapSize,65536);p["channels"]=channelName();}return p;

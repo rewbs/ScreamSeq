@@ -71,6 +71,7 @@ struct RestoreApplication final:Application {
     std::function<void()> duringSampleGuard;
     std::function<void()> completionFault;
     std::function<void(const std::string &)> sampleMutationCompletion;
+    std::function<void(const std::string &,Json &)> sampleReadResult;
     std::function<void()> sampleLibraryCompletionFault;
     unsigned sampleLibraryCompletions=0;
     void finishSampleLibraryOperation(const std::string &,const Json &)override {
@@ -119,7 +120,7 @@ struct RestoreApplication final:Application {
             if(sampleGuardFails)throw ScreamSeq::Api::ApiError(-32003,"Owned sample-state read failure");
             return result;
         }
-        ordinaryReads.push_back(method);auto result=Application::documentOperation(method,params);if(pumpOrdinaryReads)pumpInputAfterRead(method);return result;
+        ordinaryReads.push_back(method);auto result=Application::documentOperation(method,params);if(pumpOrdinaryReads)pumpInputAfterRead(method);if(sampleReadResult)sampleReadResult(method,result);return result;
     }
     Json workspacePreparationRead(const std::string &method,const Json &params)override {
         preparationReads.push_back(method);preparationRequests.emplace_back(method,params);if(beforeRead)beforeRead(method);
@@ -1044,6 +1045,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "PluginPresetApplicationTests.inc"
 #include "InstrumentCreationApplicationTests.inc"
 #include "SampleMutationApplicationTests.inc"
+#include "SampleReadbackApplicationTests.inc"
 
 void nativeCompletionRetainsOutcome() {
     using Json=RestoreJson;
@@ -1097,6 +1099,9 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"sample-reads") {
+                    applicationSampleReadbackRecovery();std::cout<<"PASS sample readback: staged target, raw drafts, waveform and navigation\n";return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"sample-results") {
                     applicationSampleMutationRecovery();std::cout<<"PASS sample mutation recovery: receipts, staged refresh, domain readback and no replay\n";return;
                 }
@@ -1116,6 +1121,7 @@ int wmain(int argc,wchar_t **argv) {
                 directRenderCompletionCensus();std::cout<<"PASS direct render: pending census, retained result, read-only review, one Undo and stale selection\n";
                 return;
             }
+            applicationSampleReadbackRecovery();
             applicationSampleMutationRecovery();
             applicationInstrumentCreationRecovery();std::cout<<"PASS instrument creation recovery: receipt, domain readback, chooser and newer draft retention\n";
             applicationPluginPresetRecovery();std::cout<<"PASS preset recovery: exact receipts, unknown readback, pending departure and draft retention\n";

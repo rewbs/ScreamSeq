@@ -134,6 +134,9 @@ if(BUILD_TESTING)
     add_test(NAME workspace-draft-census-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-departure-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-receipt-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-sample-readback-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-sample-readback-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts;samples"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=sample-reads" TIMEOUT 120)
     add_test(NAME workspace-sample-result-tests COMMAND workspace-restore-tests)
     set_tests_properties(workspace-sample-result-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts;samples"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=sample-results" TIMEOUT 120)

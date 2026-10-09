@@ -74,18 +74,17 @@
       const auto check=[&]{const auto current=context_(false);require(current.document==before.document&&current.revision==revision&&token==generation_,"Song or fields changed while applying / newer draft retained; Review the result");};
       check();require(std::any_of(now.samples.begin(),now.samples.end(),[&](const auto &v){return v.at("index")==slot_&&v.at("id")==id_;}),"Captured sample was removed by history / Review the result before choosing another sample");
       if(dry){report_=std::move(result);return;}
-      auto info=request_("sample.get",{{"sample",slot_}});check();
+      auto info=readSampleInfo(slot_,check);
       auto region=region_;const auto old=region.frames;region.frames=info.at("frames");if(region.end==old)region.end=region.frames;if(region.last==old)region.last=region.frames;
-      region.first=std::min(region.first,region.frames);region.last=std::clamp(region.last,region.first,region.frames);
-      const auto span=std::min(region.frames,std::max(1u,region.end>region.start?region.end-region.start:1u));region.start=std::min(region.start,region.frames-span);region.end=region.start+span;
-      const auto bins=std::min(region.end-region.start,unsigned(std::clamp(canvas_.w,1.f,4096.f)));std::vector<float> peaks;
-      if(region.start!=region.end)peaks=request_("sample.waveform.get",{{"sample",slot_},{"start",region.start},{"end",region.end},{"bins",bins},{"channels",channelName()}}).at("peaks").get<std::vector<float>>();
+      region=clampRegion(region);auto loops=loops_;const bool resetLoopState=!loopEdit&&!loops_.dirty();
+      if(resetLoopState)loops.reset({now.document,id_,now.revision,slot_,region.frames},info);
+      auto wave=readSampleWave(slot_,region,channel_,check);
       check();Json report={{"outcome","verified"},{"submission",mutationCompletion_.snapshot()},{"result",result}};
       // All worker reads and generation checks precede clearing owned drafts.
-      report_=std::move(result);mutationReport_=std::move(report);captured_=std::move(now);info_=std::move(info);region_=region;peaks_=std::move(peaks);waveStart_=region.start;waveEnd_=region.end;bins_=bins;
+      report_=std::move(result);mutationReport_=std::move(report);captured_=std::move(now);info_=std::move(info);region_=region;adoptSampleWave(std::move(wave));
       if(!settings&&!loopEdit){if(method=="sample.process")clearFields({operation,fadeCurve,amount,exponent});if(method=="sample.crossfade")clearFields({crossLoop,crossMode,crossCurve,crossFrames});if(drawing)clearFields({pointFrame,pointValue,interpolation});}
       if(drawing)stroke_.clear();if((settings||loopEdit)&&fieldsRevision_==before.revision&&old==region_.frames)fieldsRevision_=captured_.revision;
-      if(!settings&&!loopEdit)syncFields();syncSettings();if(!loopEdit&&!loops_.dirty())resetLoops();invalidatePaste();sampleChoices();describeTarget();requestPaint();
+      if(!settings&&!loopEdit)syncFields();syncSettings();if(resetLoopState){loops_=std::move(loops);syncLoops();}invalidatePaste();sampleChoices();describeTarget();requestPaint();
     });
       resultStatus(dry?L"Preview / no audio or history changed":method=="sample.clipboard.copy"?L"Copied to the private sample clipboard":L"Applied / document history updated only when audio or settings change");
       if(!dry)mutationCompletion_.finish();

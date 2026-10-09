@@ -62,7 +62,8 @@ private:
   unsigned wantedBins()const{return std::min(region_.end-region_.start,unsigned(std::clamp(canvas_.w,1.f,4096.f)));}
   bool precise()const{return region_.end>region_.start&&region_.end-region_.start<=unsigned(std::clamp(canvas_.w,1.f,4096.f))&&waveStart_==region_.start&&waveEnd_==region_.end&&peaks_.size()==size_t(region_.end-region_.start)*2;}
   void remember(){if(!id_.empty())regions_[id_]=region_;}
-  void clamp(){auto &r=region_;r.first=std::min(r.first,r.frames);r.last=std::clamp(r.last,r.first,r.frames);const auto span=std::min(r.frames,std::max(1u,r.end>r.start?r.end-r.start:1u));r.start=std::min(r.start,r.frames-span);r.end=r.start+span;}
+  static Region clampRegion(Region r){r.first=std::min(r.first,r.frames);r.last=std::clamp(r.last,r.first,r.frames);const auto span=std::min(r.frames,std::max(1u,r.end>r.start?r.end-r.start:1u));r.start=std::min(r.start,r.frames-span);r.end=r.start+span;return r;}
+  void clamp(){region_=clampRegion(region_);}
   void syncFields(){setting_=true;for(auto [id,value]:std::initializer_list<std::pair<int,unsigned>>{{rangeStart,region_.first},{rangeEnd,region_.last},{viewStart,region_.start},{viewEnd,region_.end}})if(!edited_.contains(id))set(id,value);setting_=false;remember();}
   void describeTarget(){set(targetLabel,wide(info_.at("name").get<std::string>())+L" · "+std::to_wstring(region_.frames)+L" frames · "+std::to_wstring(info_.at("channels").get<unsigned>())+L" channel(s) · "+std::to_wstring(info_.at("rate").get<unsigned>())+L" Hz");}
   void syncSettings(){setting_=true;set(sampleName,info_.at("name"));set(sampleRate,info_.at("rate"));set(sampleVolume,info_.at("volume"));set(samplePan,info_.at("pan"));setting_=false;clearFields({sampleName,sampleRate,sampleVolume,samplePan});}
@@ -87,31 +88,10 @@ private:
   }
   void sampleChoices(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(sample),CB_RESETCONTENT,0,0);for(size_t i=0;i<captured_.samples.size();++i){const auto &v=captured_.samples[i];auto name=std::to_wstring(v.at("index").get<unsigned>())+L" · "+wide(v.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(sample),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(v.at("id")==id_)choose(sample,int(i));}choose(channels,channel_);setting_=false;}
   void pointFields(unsigned frame,double value){setting_=true;set(pointFrame,frame);set(pointValue,value);setting_=false;}
-  void readWave(){
-    requireCurrent();const auto token=generation_;const auto first=region_.start,last=region_.end,bins=wantedBins();
-    if(first==last){peaks_.clear();waveStart_=waveEnd_=first;bins_=0;return;}
-    const auto result=request_("sample.waveform.get",{{"sample",slot_},{"start",first},{"end",last},{"bins",bins},{"channels",channelName()}});
-    requireCurrent();require(token==generation_,"Sample view changed while loading / retry the view");
-    peaks_=result.at("peaks").get<std::vector<float>>();waveStart_=first;waveEnd_=last;bins_=bins;requestPaint();
-  }
+#include "SampleReadback.inc"
   template<class Function> void busy(Function work){if(pending_)return;pending_=true;layout();try{work();pending_=false;layout();}catch(...){pending_=false;layout();throw;}}
   void refreshWave(){busy([&]{readWave();});}
-  void load(bool follow,unsigned requested=0){
-    require(!mutationCompletion_.retained(),"Review the retained sample result before reloading");
-    if(pending_)return;const auto c=context_(true);require(follow||c.document==captured_.document,"Document replaced / use From cursor to capture the new song");
-    auto selected=std::find_if(c.samples.begin(),c.samples.end(),[&](const auto &v){return follow?v.at("index")==unsigned(requested?requested:c.sample):v.at("id")==id_;});
-    require(selected!=c.samples.end(),"Captured sample is unavailable / choose From cursor");const auto index=selected->at("index").get<unsigned>();const auto identity=selected->at("id").get<std::string>();
-    const auto token=generation_;busy([&]{const auto data=request_("sample.get",{{"sample",index}});const auto now=context_(true);require(now.document==c.document&&now.revision==c.revision&&token==generation_,"Sample changed while loading / captured draft retained");
-      remember();if(c.document!=captured_.document)regions_.clear();const bool same=c.document==captured_.document&&identity==id_;captured_=c;slot_=index;id_=identity;info_=data;
-      const unsigned frames=data.at("frames");if(regions_.contains(id_))region_=regions_.at(id_);else region_={0,frames,0,frames,frames};
-      const auto previousFrames=region_.frames;region_.frames=frames;if(region_.end==previousFrames)region_.end=frames;if(region_.last==previousFrames)region_.last=frames;clamp();
-      stroke_.clear();dragBefore_.clear();dragging_=selecting_=fields_=false;edited_.clear();++generation_;report_=Json::object();
-      if(!same||channel_==2&&data.at("channels")==1)channel_=0;
-      sampleChoices();syncFields();syncSettings();resetLoops();invalidatePaste();pointFields(region_.start,0);describeTarget();readWave();
-    });status(L"Captured sample / F6: waveform or text focus / Z–M, Q–U: audition saved sound");
-  }
   void applyRange(){require(!(edited_.contains(rangeStart)||edited_.contains(rangeEnd))||fieldsRevision_==captured_.revision,"Selection fields belong to an earlier revision / Reload them first");const auto first=integerField(rangeStart,region_.frames),last=integerField(rangeEnd,region_.frames);require(first<=last,"Range end must follow its start");if(region_.first!=first||region_.last!=last){++selectionVersion_;invalidatePaste();}region_.first=first;region_.last=last;clearFields({rangeStart,rangeEnd});syncFields();}
-  void viewport(unsigned first,unsigned last){require(stroke_.empty()&&!dragging_,"Apply or discard the drawing before changing its view");require(first<last&&last<=region_.frames,"Visible range must be nonempty and inside the sample");region_.start=first;region_.end=last;clearFields({viewStart,viewEnd});++generation_;syncFields();refreshWave();}
   void zoom(double factor,std::optional<double> center={}){if(!region_.frames)return;const double anchor=center.value_or(region_.first>=region_.start&&region_.first<region_.end?double(region_.first):(double(region_.start)+region_.end)*.5);const double ratio=std::clamp((anchor-region_.start)/std::max(1u,region_.end-region_.start),0.,1.);const auto span=unsigned(std::clamp(std::round((region_.end-region_.start)/factor),1.,double(region_.frames)));const auto first=unsigned(std::clamp(std::round(anchor-span*ratio),0.,double(region_.frames-span)));viewport(first,first+span);}
   void pan(int direction){const auto span=region_.end-region_.start;const auto first=unsigned(std::clamp(int64_t(region_.start)+direction*int64_t(std::max(1u,span/4)),int64_t(0),int64_t(region_.frames-span)));if(span)viewport(first,first+span);}
   Json rangeParams(){applyRange();return {{"sample",slot_},{"start",region_.first},{"end",region_.last}};}
@@ -188,8 +168,8 @@ private:
       if(id>=pageDraw&&id<=pageSnap&&notification==BN_CLICKED){page_=id-pageDraw;return;}
       throw std::runtime_error("Review the retained sample result before another edit");
     }
-    if(notification==CBN_SELCHANGE){if(id==sample){const auto selected=choice(sample);require(selected>=0&&size_t(selected)<captured_.samples.size(),"Choose a sample");if(draft()||!current()){for(size_t i=0;i<captured_.samples.size();++i)if(captured_.samples[i].at("id")==id_)choose(sample,int(i));requireCurrent();throw std::runtime_error("Apply or reload the captured draft before changing sample");}load(true,captured_.samples[size_t(selected)].at("index"));return;}
-      if(id==channels){const auto next=choice(channels);if(!stroke_.empty()||next==2&&info_.at("channels")==1){choose(channels,channel_);throw std::runtime_error(!stroke_.empty()?"Apply or discard the drawing before changing channels":"This sample has no right channel");}channel_=next;++generation_;invalidatePaste();refreshWave();return;}
+    if(notification==CBN_SELCHANGE){if(id==sample){const auto selected=choice(sample);require(selected>=0&&size_t(selected)<captured_.samples.size(),"Choose a sample");if(draft()||!current()){for(size_t i=0;i<captured_.samples.size();++i)if(captured_.samples[i].at("id")==id_)choose(sample,int(i));requireCurrent();throw std::runtime_error("Apply or reload the captured draft before changing sample");}try{load(true,captured_.samples[size_t(selected)].at("index"));}catch(...){for(size_t i=0;i<captured_.samples.size();++i)if(captured_.samples[i].at("id")==id_)choose(sample,int(i));throw;}return;}
+      if(id==channels){changeWaveChannel(choice(channels));return;}
       if(loopField(id)){loopChanged();return;}
       ++generation_;report_=Json::object();if(!snapField(id))invalidatePaste();
       if(id==pasteMode||id==snapMode){layoutPage_=-1;if(id==snapMode)set(snapSizeLabel,choice(snapMode)==1?L"Grid step (frames)":L"Search radius (frames)");}return;

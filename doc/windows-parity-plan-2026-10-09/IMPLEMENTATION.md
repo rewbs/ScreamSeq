@@ -2,6 +2,81 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Atomic sample readback and navigation
+
+`windows/App/SampleReadback.inc` now owns the sample inspector's staged metadata
+and waveform reads, full Reload/From cursor, loop-only Reload, viewport and channel
+changes. It is reused by post-mutation refresh in `SampleMutation.inc`; duplicate
+waveform request/adoption code was removed. This completes the explicit Reload
+read-ordering follow-up identified in the preceding sample mutation checkpoint.
+
+Full Reload prepares the target context, stable identity, remembered region map,
+metadata, validated loop draft, selected channel and bounded waveform before
+adopting them or discarding the submitted drawing/raw fields. Loop-only Reload
+prepares the same fallible reads while retaining other raw fields and drawing at
+their original draft revision. A changed song revision or newer field generation
+during either read rejects adoption, leaving that newer work intact. Invalid
+metadata or a malformed/mismatched waveform also cannot clear the current view.
+The shared waveform reader checks requested sample/range/channel/bin identity,
+bounded peak count and finite values before adoption; empty views remain bounded
+empty results. Pure region clamping is reused without publishing intermediate
+state.
+
+Viewport and channel changes stage their waveform first. Failed channel and
+sample choices restore the old native combo selection so its label continues to
+match the retained waveform/target. Successful explicit retry uses the current
+request. All paths retain the existing native UI and shared worker operations;
+there are no new wire methods, project-format changes, audio changes or Mac edits.
+This is native presentation state, not a replacement musical model.
+
+Validation used one incremental build of `workspace-restore-tests` and `ScreamSeq`
+(Windows ARM64, parallelism 2), then bounded private-desktop checks:
+
+- Four CTests passed in 90.94 seconds total: draft census 8.97, departure 5.32,
+  sample readback 67.86, and previous sample result recovery 8.76. Each child keeps
+  its existing 90-second bound; the readback group has a separate registration.
+- The new readback group exercises 31 scenarios through the actual Application
+  and native HWNDs. It covers Reload, From cursor and loop-only Reload at both
+  metadata/waveform boundaries with thrown failures, malformed results, newer raw
+  input and intervening document edits (24 cases); viewport/channel failure,
+  malformed result and newer input (6); and sample selection failure/retry (1).
+  Assertions compare retained target/revision, waveform/ranges, drawing, loops,
+  raw text, song/history, focus and corrected combo selection. Successful retry
+  proves the authorized discard/adoption; loop-only retry preserves other drafts.
+  The previous mutation/chooser/unknown-outcome cases also passed against the
+  shared reader. Private-process lifecycle, foreground and clipboard guards passed.
+- Nine actual-application cases passed in 70.521 seconds, no skips: waveform
+  zoom/cache/selection bounds; raw loop drafts and explicit Reload; drawing with
+  Undo/Redo/save/reopen; all 14 processing operations compared with the shared API;
+  retained drafts and guarded document replacement; history removal and reuse of
+  the old slot by a different stable sample; joint loop Preview/Apply/storage;
+  keyboard Apply/focus/caret retention; and captured replacement with chooser
+  cancellation/stale guards/history/reopen.
+- The document-replacement test now asserts refusal while a drawing is retained,
+  explicit discard, retirement of the old inspector and fresh open with unchanged
+  stable identity/PCM. The history test now actually reuses the removed slot,
+  verifies historical Review never adopts that occupant, and verifies a subsequent
+  Reload remains unavailable until explicit From cursor. These strengthen the
+  obsolete pre-departure assumptions without weakening music/draft assertions.
+
+Evidence: `bin/parity-evidence/p0b-sample-readback-receipt.json` pins 1,861 source
+and dependency inputs, compiler/cache, executables, aggregate and detailed logs.
+Build, native and application runs passed on their first executions. The only
+source changes after the initial freeze were the two strengthened Python cases;
+no product or native test input changed after compilation. No broad suite was
+repeated.
+
+P0b remains open. Next concrete owner-audit entry is
+`windows/App/SampleEditor.inc::sampleCommand` (main-panel sample actions), which
+currently calls `EditingView.inc::edit` and lacks this inspector's retained native
+completion/Review owner. Inspect its range draft and pending clipboard read as
+well as the final write before extending the pattern. Prepared commit receipts
+inside remaining asset operations, other owners, integration on shared main and
+P0c–P8 remain required. No Windows x64/Mac, foreground/accessibility, physical
+device or supplied reciprocal-fixture qualification is claimed here. Unknown
+sample-removal readback without a returned receipt remains separate from the
+now-tested historical receipt/slot-reuse path.
+
 ## P0b.1 Sample editor mutation recovery and staged completion
 
 The sample editor now routes non-preview operations through its own
