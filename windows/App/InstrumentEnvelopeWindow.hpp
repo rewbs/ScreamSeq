@@ -309,6 +309,11 @@ private:
         else if(id==kind||(id>=enabled&&id<=loop))selectPage(0);
       }
     }
+    if(wasShort&&!shortDock_&&compact_&&focus&&IsChild(window_,focus)){
+      // The short Curve page has inline point fields. In a compact floating
+      // window those same HWNDs live on Points; keep the focused draft visible.
+      const auto id=GetDlgCtrlID(focus);if(id>=node&&id<=deletePoint)selectPage(1);
+    }
     if(shortDock_)layoutShortDock(w,h);else if(compact_)layoutCompact(w,h);else layoutFull(w,h);
     if(focus&&IsChild(window_,focus)&&!IsWindowVisible(focus))SetFocus(controls_.at(compact_?pageEnvelope+page_:instrument));
     const bool inlinePoint=shortDock_&&page_==0&&!shortEnvelopeOptions_;

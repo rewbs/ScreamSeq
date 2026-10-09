@@ -286,7 +286,9 @@ private:
       }else if(compactPage_==1){
         float x=left;const float kindWidth=inner-278;
         for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{kind,kindWidth},{snap,82.f},{enabled,74.f},{fit,40.f},{zoomOut,26.f},{zoomIn,26.f}}){put(id,x,52,width,id==kind?230.f:id==snap?220.f:26.f);x+=width+gap;}
-        canvas_.viewport={left,100,inner,std::max(1.f,h-198)};
+        // Owner-drawn combos can have a 28-DIP collapsed body with classic
+        // Windows borders. Leave room above the 22-DIP ruler on that theme too.
+        canvas_.viewport={left,104,inner,std::max(1.f,h-200)};
         pointFields(h-92);
       }else if(compactPage_==2){
         put(kind,left,52,inner-174,230);put(snap,w-176,52,82,220);put(enabled,w-88,52,80,26);
