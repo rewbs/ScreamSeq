@@ -96,6 +96,14 @@ jobs:
           $env:SCREAMSEQ_TEST_LIVE_AUDIO = '1'
           $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-integration-ui'
           New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
+          $audioServices = @(foreach ($serviceName in @('Audiosrv', 'AudioEndpointBuilder')) {
+            $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+            @{ name = $serviceName; status = $(if ($service) { $service.Status.ToString() } else { 'unavailable' }) }
+          })
+          $audioServices | ConvertTo-Json | Set-Content bin/windows-ci/audio-services.json
+          $binaryHash = (Get-FileHash -LiteralPath $env:SCREAMSEQ_TEST_EXE -Algorithm SHA256).Hash.ToLowerInvariant()
+          python -B windows/Tests/audio_environment.py --executable $env:SCREAMSEQ_TEST_EXE --binary-sha256 $binaryHash --output bin/windows-ci/audio-environment
+          if ($LASTEXITCODE -ne 0) { Write-Warning 'Audio availability probe failed; retained report is diagnostic, and required tests still run.' }
           $integrationLog = Join-Path $env:GITHUB_WORKSPACE 'screamseq-integration-ui.log'
           Push-Location windows/Tests
           try {
@@ -159,6 +167,8 @@ jobs:
             bin/windows-ci/CMakeCache.txt
             bin/windows-ci/test-registration.json
             bin/windows-ci/test-schedule.json
+            bin/windows-ci/audio-services.json
+            bin/windows-ci/audio-environment/**
             bin/windows-ci/Testing/Temporary/*.log
             bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: warn

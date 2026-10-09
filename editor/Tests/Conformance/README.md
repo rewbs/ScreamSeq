@@ -176,8 +176,19 @@ These follow-up runs have separate concurrency identities and cannot cancel the
 normal build. The source run must have uploaded its archive and identity manifest;
 an unfinished run without those artifacts is not a reusable build.
 Mac dispatch additionally accepts `retained_runner=macos-15|macos-15-intel|both`;
-use one architecture when only its artifact is ready or its inputs changed. Normal
-builds always retain the two-architecture matrix.
+use one architecture when only its artifact is ready or its inputs changed. Main
+pushes and PRs retain the two-architecture matrix. A manual full build may select
+`build_runner=macos-15|macos-15-intel|both` when only one architecture needs rebuilding.
+Mac normal builds archive the completed app before qualification and also retain
+the final logs artifact. `retained_artifact_kind=app` selects that early archive if
+later qualification timed out; default `logs` selects the final evidence bundle.
+An early archive establishes build identity, not success of tests that never ran.
+For changes confined to the standalone Mac interface harness, dispatch Mac with
+`qualification=interface`, an empty `retained_app_run`, and the required
+`retained_runner`. This compiles/runs only `mac/test-interface.sh`, retaining its
+binary, source manifest and log. It does not run CMake or build the app. Reuse prior
+app/model results only after checking that their actual inputs are unchanged; this
+job alone is not a replacement for a required app or shared-core build.
 
 `reuse_native.py --app-artifact EXTRACTED_ARTIFACT --output NEW_DIRECTORY` verifies
 archive/executable/build-receipt hashes, matching full built source identity and the
@@ -218,6 +229,13 @@ local app and explicit `native_roundtrip.py --input-file` / `--input-directory` 
 The generated manifest does not qualify reciprocal UI edits, audio, missing-provider
 playback, foreground interaction or an architecture whose runner never executed.
 Python 3.12 or later is required by the safe Mac tar extraction path.
+
+The standalone interface script compiles once, then runs the compiled harness's
+complete declared inventory in separate processes. Failures and 120-second group
+timeouts do not suppress later groups; any failure fails the complete run. The
+portable `mac/Tests/test_interface_groups.py` checks this runner before compilation.
+For a targeted diagnosis, invoke the compiled harness directly with `--group NAME`;
+that result is explicitly partial and does not replace the complete group run.
 
 ### Mac loading provenance
 

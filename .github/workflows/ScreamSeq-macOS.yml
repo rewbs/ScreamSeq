@@ -7,15 +7,30 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      qualification:
+        description: 'Full app qualification, or only the standalone native interface harness'
+        type: choice
+        options: [full, interface]
+        default: full
+      build_runner:
+        description: 'Architecture for a manually requested full build; pushes and PRs build both'
+        type: choice
+        options: [both, macos-15, macos-15-intel]
+        default: both
       retained_app_run:
         description: 'Existing Mac build run ID; blank performs a normal build'
         type: string
         default: ''
       retained_runner:
-        description: 'Retained app architecture to check; normal builds always check both'
+        description: 'Architecture for retained-app or interface-only qualification'
         type: choice
         options: [both, macos-15, macos-15-intel]
         default: both
+      retained_artifact_kind:
+        description: 'Final logs artifact, or early app archive if qualification timed out'
+        type: choice
+        options: [logs, app]
+        default: logs
       fixture_run:
         description: 'Preceding fixture run ID; blank rechecks the original corpus/API/codec baseline'
         type: string
@@ -35,19 +50,19 @@ permissions:
   actions: read
 
 concurrency:
-  group: screamseq-macos-${{ github.workflow }}-${{ github.ref }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.retained_runner || 'both' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}
+  group: screamseq-macos-${{ github.workflow }}-${{ github.ref }}-${{ inputs.qualification || 'full' }}-${{ inputs.build_runner || 'both' }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.retained_runner || 'both' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}
   cancel-in-progress: true
 
 jobs:
   native-app:
-    if: github.event_name != 'workflow_dispatch' || inputs.retained_app_run == ''
+    if: github.event_name != 'workflow_dispatch' || (inputs.retained_app_run == '' && inputs.qualification != 'interface')
     name: Native app (${{ matrix.runner }})
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15, macos-15-intel]
+        runner: ${{ fromJSON(inputs.build_runner == 'macos-15' && '["macos-15"]' || inputs.build_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15","macos-15-intel"]') }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       SCREAMSEQ_BUILD_DIR: bin/mac-ci
       SCREAMSEQ_BUILD_JOBS: "2"
@@ -62,6 +77,39 @@ jobs:
         run: |
           set -o pipefail
           bash mac/build.sh 2>&1 | tee screamseq-macos-build.log
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        with:
+          python-version: '3.12'
+      - name: Retain the built app for reciprocal checks without rebuilding
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          tar -czf "$SCREAMSEQ_BUILD_DIR/native-app.tar.gz" -C "$SCREAMSEQ_BUILD_DIR" ScreamSeq.app
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          build = pathlib.Path(os.environ['SCREAMSEQ_BUILD_DIR'])
+          def digest(path):
+              return hashlib.sha256((build / path).read_bytes()).hexdigest()
+          identity = dict(sourceCommit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              executableSHA256=digest('ScreamSeq.app/Contents/MacOS/ScreamSeq'),
+              archiveSHA256=digest('native-app.tar.gz'),
+              buildReceiptSHA256=digest('ScreamSeq.app/Contents/Resources/BuildInfo.json'),
+              qualification='Built candidate; test results are separate and may fail.')
+          (build / 'native-app-identity.json').write_text(json.dumps(identity, indent=2) + '\n')
+          PY
+      - name: Preserve the completed app before qualification
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: screamseq-macos-${{ matrix.runner }}-app
+          path: |
+            screamseq-macos-build.log
+            bin/mac-ci/native-app.tar.gz
+            bin/mac-ci/native-app-identity.json
+            bin/mac-ci/ScreamSeq.app/Contents/Resources/BuildInfo.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Native model and host tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
@@ -86,27 +134,6 @@ jobs:
         run: |
           set -o pipefail
           bash mac/test-interface.sh 2>&1 | tee screamseq-macos-interface.log
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        with:
-          python-version: '3.12'
-      - name: Retain the built app for reciprocal checks without rebuilding
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        shell: bash
-        run: |
-          tar -czf "$SCREAMSEQ_BUILD_DIR/native-app.tar.gz" -C "$SCREAMSEQ_BUILD_DIR" ScreamSeq.app
-          python - <<'PY'
-          import hashlib, json, os, pathlib, subprocess
-          build = pathlib.Path(os.environ['SCREAMSEQ_BUILD_DIR'])
-          def digest(path):
-              return hashlib.sha256((build / path).read_bytes()).hexdigest()
-          identity = dict(sourceCommit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
-              executableSHA256=digest('ScreamSeq.app/Contents/MacOS/ScreamSeq'),
-              archiveSHA256=digest('native-app.tar.gz'),
-              buildReceiptSHA256=digest('ScreamSeq.app/Contents/Resources/BuildInfo.json'),
-              qualification='Built candidate; test results are separate and may fail.')
-          (build / 'native-app-identity.json').write_text(json.dumps(identity, indent=2) + '\n')
-          PY
       - name: Typed fixtures and actual socket conformance baseline
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
@@ -149,7 +176,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   retained-app:
-    if: github.event_name == 'workflow_dispatch' && inputs.retained_app_run != ''
+    if: github.event_name == 'workflow_dispatch' && inputs.retained_app_run != '' && inputs.qualification != 'interface'
     strategy:
       fail-fast: false
       matrix:
@@ -158,7 +185,47 @@ jobs:
     with:
       runner: ${{ matrix.runner }}
       app-run: ${{ inputs.retained_app_run }}
-      app-artifact: screamseq-macos-${{ matrix.runner }}-logs
+      app-artifact: screamseq-macos-${{ matrix.runner }}-${{ inputs.retained_artifact_kind || 'logs' }}
       input-run: ${{ inputs.fixture_run }}
       input-artifact: ${{ inputs.fixture_artifact }}
       input-layout: ${{ inputs.fixture_layout }}
+  interface-only:
+    if: github.event_name == 'workflow_dispatch' && inputs.qualification == 'interface' && inputs.retained_app_run == ''
+    name: Native interface only (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(inputs.retained_runner == 'macos-15' && '["macos-15"]' || inputs.retained_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15","macos-15-intel"]') }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      SCREAMSEQ_BUILD_DIR: bin/mac-interface
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Compile and run the standalone interface harness once
+        shell: bash
+        run: |
+          set -o pipefail
+          bash mac/test-interface.sh 2>&1 | tee screamseq-macos-interface.log
+      - name: Identify the compiled harness even when an assertion failed
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$SCREAMSEQ_BUILD_DIR/interface-tests" ]]; then
+            python3 mac/Tools/build_manifest.py "$SCREAMSEQ_BUILD_DIR/InterfaceSource.json"
+            shasum -a 256 "$SCREAMSEQ_BUILD_DIR/interface-tests" > "$SCREAMSEQ_BUILD_DIR/interface-tests.sha256"
+          fi
+      - name: Preserve interface evidence without claiming an app build
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: screamseq-interface-${{ matrix.runner }}
+          path: |
+            screamseq-macos-interface.log
+            bin/mac-interface/interface-tests
+            bin/mac-interface/interface-tests.sha256
+            bin/mac-interface/InterfaceSource.json
+          if-no-files-found: warn
+          retention-days: 14

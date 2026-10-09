@@ -12,6 +12,54 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Batched harness and CI corrections — 9 October, 22:05 UTC
+
+No product build ran during this preparation. Native changes in `5561ca900`
+remain uncompiled. The next normal local build remains no earlier than 22:11:49
+UTC. P0b is still open; none of these tooling results establishes product parity.
+
+The Mac interface harness now declares 34 independent checks plus its unchanged
+core/layout body. `mac/test-interface.sh` compiles once; the Python driver runs
+every group in its own process, retains all failures, and never retries crashes
+or assertions. A group has a 120-second bound; discovery has a 15-second bound.
+Five portable runner tests passed, covering continuation after failure/timeout,
+invalid inventory, subset refusal, argument forwarding and completion status.
+A source census against the preceding harness verified every existing check
+exactly once and the core/layout body byte-for-byte unchanged. This is source
+coverage evidence; the Swift changes still need native compilation and execution.
+
+`EditorDraftInterfaceTests.wait` now attaches a one-shot timer at the original
+deadline because an otherwise empty run loop can return immediately. Plugin retry
+assertions retain their original deadlines and expectations and report actual
+edit/slider/status values on failure. This is a harness-cause hypothesis pending
+native execution, not a demonstrated plugin behavior fix.
+
+Intel job **114027623926** in run **37991809860** is terminal/cancelled. Its build,
+model/host tests, recovery/picker and library steps passed; cancellation occurred
+during interface compilation, before app archival. The downloaded logs artifact
+**11646694540** matches SHA-256
+`3160e0de59a35853c426bf0bb1d3fcffde4b0c7d6d59a5174a8d2f23cf2834e7`
+and contains no app archive. Local evidence is under
+`bin/parity-evidence/macos-intel-gate-01`. The revised workflow archives the app
+immediately after a successful build, bounds the full job at 60 minutes, and
+allows a manual Intel-only build. A separate interface-only mode avoids another
+unchanged Mac ARM application build. Both architectures remain mandatory for
+normal main/PR qualification.
+
+The Windows workflow now records audio service status and performs only
+`audio.devices.get`, `audio.settings.get` and `transport.get` in an owned inspection
+process before the required integration checks. It neither changes service/device
+configuration nor skips failed tests. The new probe succeeded against the archived
+x64 app on this ARM64 host (all three reads; executable unchanged), recorded at
+`bin/parity-evidence/x64-audio-environment-01/report.json`. The CI machine's audio
+failure cause is still unmeasured; local availability does not establish CI availability.
+
+All three ScreamSeq workflow YAML files parse. Next consolidated checkpoint:
+Windows ARM64 changed app/native targets, Windows x64 qualification, Mac ARM
+interface-only qualification and the necessary Intel full build. Preserve the
+existing exact seven-file ARM Mac reciprocal evidence; use the recovered Intel
+archive for its still-outstanding reciprocal journey without another build.
+
 ## Completed ARM Mac reciprocal checkpoint — 9 October, 21:49 UTC
 
 All **seven Windows x64 → Mac ARM64 → Windows x64** fixture journeys passed with
