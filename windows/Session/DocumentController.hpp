@@ -145,6 +145,8 @@ class DocumentController {
   void install(std::shared_ptr<const DocumentView> next);
   void publish();
   void publishCommitted(const std::string &method,const Json &result);
+  std::unique_ptr<AssetOperations::ImportCommit> prepareAssetCompletion(const std::string &,const Json &);
+  std::shared_ptr<NativeCallReceipt> nativeCallReceipt_; // Worker-only publication target for this invocation.
   std::shared_ptr<const Api::CompletedCall> completedCall_; // Worker-owned, scoped to one invocation.
   Api::CompletedCall invokeOperation(const std::string &method,Json params,const std::shared_ptr<NativeCallReceipt> &receipt={});
   void preflightGrowth(const std::string &method,const Json &params);
@@ -169,6 +171,7 @@ class DocumentController {
   Json parameterActivityOperation(const std::string &method,const Json &params);
   std::function<void()> prepareNativeUpdate(const Tracker::NativeSong &before,const Tracker::NativeSong &next);
   std::string revision() const;
+  std::string revision(uint64_t documentRevision) const;
   Json operation(const std::string &method,Json params);
 public:
   DocumentController(const std::filesystem::path &input,std::string identity,

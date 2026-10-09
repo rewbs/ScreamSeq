@@ -47,7 +47,7 @@ SampleRecordingOperations::Json SampleRecordingOperations::invoke(const std::str
     capture_->stop(); // Join a limit/error-completed capture before borrowing PCM.
     Json result,identity={{"take",take_}};
     appending=true;
-    try{result=hooks_.append(capture_->pcm(),s.sampleRate,s.channels,name,instrument,dry);}
+    try{result=hooks_.append(capture_->pcm(),s.sampleRate,s.channels,name,instrument,dry,take_);}
     catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
     catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
     result.get_ref<Json::object_t&>().merge(identity.get_ref<Json::object_t&>());

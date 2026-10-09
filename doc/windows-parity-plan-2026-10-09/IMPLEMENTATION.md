@@ -2,6 +2,66 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Prepare asset receipts before the musical commit
+
+The previous callback-loss receipt is now prepared **before** the asset commit.
+`AssetOperations::PrepareImportCommit` builds a notification from the complete
+result before Stop/transaction; `ImportCommit::committed() noexcept` publishes it
+only after the single asset transaction returns successfully. Dry runs and failed
+preparation/Stop do not publish. The operation layer exposes a narrow notification
+interface rather than depending on native HWNDs, the API transport or a UI owner.
+
+`DocumentController::prepareAssetCompletion` preallocates method, document,
+post-transaction revision and result. Its revision uses the existing format and
+the one-transaction asset contract: document revision advances once while identity,
+sequence and plugin revision remain unchanged. The full render reply (including
+selection/crop/latency fields) is retained; the recorder append hook receives the
+validated take identity so the preallocated Keep reply includes it. Multisample
+receipts retain the exact imported zones. Native ticket publication and controller
+retention then require no allocation. Successful completion and failed view
+publication reuse the same immutable receipt.
+
+The real controller can now classify a failed Keep with an unchanged revision as
+NotCommitted: its own append path consumes no take until the prepared import
+succeeds. This inference is deliberately absent from the generic injected recorder
+hook, whose failure can follow arbitrary host effects, and from start/stop/discard,
+plugin, file and catalogue paths. The musical transaction, Undo implementation,
+project format and external API response shape are unchanged.
+
+This closes the previously recorded allocation window between a successful
+render/multisample/Keep import and retention of its result. It is in-process recovery,
+not durable crash replay. Unknown failures outside these prepared boundaries remain
+subject to the wider P0b audit; no current-state sample/take inference is introduced.
+
+Evidence: `bin/parity-evidence/p0b-prepared-asset-receipt-receipt.json` pins 1,847
+source/dependency inputs and the final compiler/cache/executable/log hashes.
+
+| Check | Result and scope |
+|---|---|
+| ARM64 app, workspace, controller and portable recorder targets | Final incremental build passed |
+| Worker/recorder CTests | 7/7, 1.19 s, including two fixture setup entries. New real-asset cases cover dry run, preparation allocation failure, Stop refusal, exact Undo/Redo with retained allocator high-water mark, receipt availability before every failed view publication, and full render/multisample result identity |
+| Workspace receipt/departure/draft groups | 3/3, 17.39 s; lost-callback Review, no duplicate render/Undo, raw drafts and departure admission |
+| Actual application, private desktop | 5/5, 3.963 s, no skips; direct/options render history and reopen, multisample retained drafts/import transaction, recorder setup retention |
+
+The initial new Undo assertion incorrectly expected the stable-ID allocator to
+rewind. Inspection of `Document::undo` established its intentional high-water-mark
+contract. The corrected fixture asserts the exact committed nextID after Undo,
+all other restored native content, exact module bytes and exact Redo content/IDs.
+The failing log and initial source freeze are retained; no product change or
+unexplained identity normalization was used to make it pass.
+
+Mac also compiles `SampleRecordingOperations` and this updated hook fixture in
+`windows-sample-recording-tests` (`windows-sample-recording` CTest). That Mac target,
+Windows x64, physical recording, foreground accessibility, supplied reciprocal
+fixtures and the complete integration gate remain required. No Mac build was
+available in this local run. No shared engine or Mac UI implementation changed.
+
+**Next confirmed P0b work:** `PluginLibraryWindow::load/change/addPlugin` clears
+pending state on exceptions without retaining scan/preference/insert outcomes.
+Its app-wide library ownership must stay distinct from document replacement;
+Review must not rescan or repeat a successful add/preferences write. Finish this
+entry-point audit and remaining stable-owner checks before closing P0b.
+
 ## P0b.1 Native request receipts survive callback loss
 
 Each retained native render, multisample import, recorder Keep and plugin reconnect

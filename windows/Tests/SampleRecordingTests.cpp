@@ -39,7 +39,7 @@ static void lifecycle(){
   SampleRecordingOperations::Hooks hooks;
   hooks.devices=[] {return std::vector<CaptureDevice>{{"input-A","Input",4,true}};};
   hooks.capture=[&]{++starts;return std::make_unique<FakeCapture>(fail);};hooks.uniqueID=[&]{return "take-"+std::to_string(++serial);};
-  hooks.append=[&](std::span<const float> pcm,uint32_t rate,uint32_t channels,const std::string &name,bool instrument,bool dry){check(pcm.size()==4&&rate==48000&&channels==2&&(name=="Take"||name=="Recorded sample")&&instrument,"Append must preserve capture parameters");if(appendFails)throw Api::ApiError(-32602,"Capacity");++preflights;if(!dry)++commits;return nlohmann::json{{"sample",5},{"instrument",2},{"dryRun",dry}};};
+  hooks.append=[&](std::span<const float> pcm,uint32_t rate,uint32_t channels,const std::string &name,bool instrument,bool dry,const std::string &take){check(take=="take-"+std::to_string(serial),"Append receipt needs exact take identity");check(pcm.size()==4&&rate==48000&&channels==2&&(name=="Take"||name=="Recorded sample")&&instrument,"Append must preserve capture parameters");if(appendFails)throw Api::ApiError(-32602,"Capacity");++preflights;if(!dry)++commits;return nlohmann::json{{"sample",5},{"instrument",2},{"dryRun",dry}};};
   SampleRecordingOperations operation(std::move(hooks));
   auto call=[&](const char *method,nlohmann::json p=nlohmann::json::object(),std::string doc="song-A",std::string rev="r1"){return operation.invoke(method,p,doc,rev);};
   check(call("sample.recording.devices")["devices"].size()==1&&starts==0,"Enumerating must never start a microphone");

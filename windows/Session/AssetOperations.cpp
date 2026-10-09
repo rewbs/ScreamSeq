@@ -155,14 +155,14 @@ Json processReport(int sample,bool dry,const SampleProcessResult &r) {
 }
 AssetOperations::AssetOperations(Tracker::Document &d,std::function<void()> stop,std::function<void(const Tracker::Document &)> validate):
   document_(d),stopPlayback_(std::move(stop)),validateImport_(std::move(validate)) {}
-Json AssetOperations::appendCapturedAudio(std::span<const float> pcm,uint32_t rate,uint32_t channels,const std::string &name,bool instrument,bool dry) {
+Json AssetOperations::appendCapturedAudio(std::span<const float> pcm,uint32_t rate,uint32_t channels,const std::string &name,bool instrument,bool dry,const PrepareImportCommit &prepare) {
   require(owner_==std::this_thread::get_id(),"Sample import requires its document worker");require(document_.editable(),"This document is read-only");
   PreparedAssetImport prepared(document_);
   const auto imported=Tracker::importRecordedAudio(prepared.candidate(),pcm,rate,channels,name,instrument,false);
   if(validateImport_)validateImport_(prepared.candidate());
   Json result={{"sample",imported.sample},{"instrument",imported.instrument},{"frames",imported.frames},{"sampleRate",imported.sampleRate},
     {"channels",imported.channels},{"clipped",imported.clippedValues},{"clippedValues",imported.clippedValues},{"convertsToInstruments",imported.convertsToInstruments},{"dryRun",dry}};
-  if(!dry){if(stopPlayback_)stopPlayback_();prepared.commit();}return result;
+  if(!dry){auto completion=prepare?prepare(result):nullptr;if(stopPlayback_)stopPlayback_();prepared.commit();if(completion)completion->committed();}return result;
 }
 Json AssetOperations::clipboardInfo() const {
   if(!clipboard_)return {{"available",false}};
@@ -174,18 +174,18 @@ std::vector<std::string> AssetOperations::reads() {return {"sample.snap.get","sa
 std::vector<std::string> AssetOperations::writes() {return {"sample.import","sample.importMany","sample.process","sample.loops.set","sample.draw","sample.crossfade","sample.copyToNew",
   "sample.patch","sample.pcm.set","sample.clipboard.copy","sample.clipboard.set","sample.cut","sample.delete","sample.paste",
   "instrument.import","instrument.importMultisample","instrument.create","instrument.patch","instrument.envelope.transform"};}
-Json AssetOperations::invoke(const std::string &method,const Json &p) {
+Json AssetOperations::invoke(const std::string &method,const Json &p,const PrepareImportCommit &prepare) {
   if(owner_!=std::this_thread::get_id()) throw Api::ApiError(-32003,"Asset operations require their document control worker");
   const auto r=reads(),w=writes();
   const bool write=std::find(w.begin(),w.end(),method)!=w.end();
   if(!write&&std::find(r.begin(),r.end(),method)==r.end()) throw Api::ApiError(-32601,"Unknown asset operation");
   require(p.is_object(),"Expected an object");
   require(!write||document_.editable(),"This document is read-only");
-  try {return dispatch(method,p);}
+  try {return dispatch(method,p,prepare);}
   catch(const std::invalid_argument &e) {throw Api::ApiError(-32602,e.what());}
   catch(const std::out_of_range &e) {throw Api::ApiError(-32602,e.what());}
 }
-Json AssetOperations::dispatch(const std::string &method,const Json &p) {
+Json AssetOperations::dispatch(const std::string &method,const Json &p,const PrepareImportCommit &prepare) {
   using namespace Tracker;
   auto &song=document_.song();
   const auto sampleIndex=[&]{return int(integer(field(p,"sample"),1,song.GetNumSamples()));};
@@ -201,7 +201,7 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p) {
     Json zones=Json::array();for(const auto &z:imported.zones)zones.push_back({{"path",z.path},{"sample",z.sample},{"rootNote",z.rootNote},{"lowNote",z.lowNote},{"highNote",z.highNote}});
     Json result={{"instrument",imported.instrument},{"zones",zones},{"count",zones.size()},{"dryRun",dry}};
     if(validateImport_)validateImport_(prepared.candidate());
-    if(!dry&&prepared.changed()){stop();prepared.commit();}return result;
+    if(!dry&&prepared.changed()){auto completion=prepare?prepare(result):nullptr;stop();prepared.commit();if(completion)completion->committed();}return result;
   }
   if(method=="sample.importMany") {
     keys(p,{"paths","createInstruments","dryRun"});const auto &input=field(p,"paths");

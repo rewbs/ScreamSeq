@@ -18,6 +18,7 @@ Json call(DocumentController &controller,const char *method,Json p) {
 Json invoke(DocumentController &controller,const char *method,Json p=Json::object()) {
   p["expectedRevision"]=controller.view()->session.revision;return call(controller,method,std::move(p));
 }
+#include "PreparedAssetReceiptTests.inc"
 void publicationTests(const std::filesystem::path &directory) {
   bool fail=false,persistent=false;unsigned stops=0;
   DocumentController controller({},"worker-test",[&]{++stops;},[](const auto &){},[&]{if(fail || persistent) {fail=false;throw std::runtime_error("controlled view publication failure");}});
@@ -78,7 +79,7 @@ void publicationTests(const std::filesystem::path &directory) {
     "Native request ticket lost the worker result or acquired a later edit's revision");
   need(receipt.method=="document.patch"&&receipt.document==controller.view()->session.documentId&&receipt.revision==firstRevision&&receipt.revision!=controller.view()->session.revision,
     "Later worker edit relabelled an unconsumed operation receipt");
-  for(const auto method:{"sample.renderSelection","instrument.importMultisample"}){
+  for(const auto method:{"sample.renderSelection","instrument.importMultisample","sample.recording.commit"}){
     bool classified=false;
     const auto refusedTicket=std::make_shared<NativeCallReceipt>();
     try{controller.invokeCompleted(method,{{"unknown",true},{"expectedRevision",controller.view()->session.revision}},refusedTicket).get();}
@@ -99,6 +100,7 @@ void publicationTests(const std::filesystem::path &directory) {
     need(classified,"Missing reconnect target lacks a proven preflight refusal");
     need(controller.view()==beforePathRefusal&&stops==pathRefusalStops,"Reconnect preflight changed the document, history view or transport");
   }
+  preparedAssetReceiptTests(directory);
   std::cout<<"publication tests passed\n";
 }
 
