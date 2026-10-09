@@ -918,6 +918,22 @@ void provenanceNavigationUsesCapturedTargets() {
 }
 }
 
+static void modulationCatalogueReadRetainsNewerDraft() {
+    withRestoreFixture([](RestoreApplication &app) {
+        addRestoreGain(app);app.command(graphCommand);app.command(graphNew);app.command(graphAddEffect);
+        const auto plugin=app.graphNode;const auto before=songState(app),definition=app.graphDraft;
+        const auto baseline=app.graphInitialModulation(plugin,1);
+        restoreCheck(baseline.base==.8&&!baseline.quantized,"Graph catalogue did not retain the normalized manual Gain baseline");
+        app.targetRead="graph.plugin.get";app.pumpOrdinaryReads=true;
+        app.postedInput=[&]{SetWindowTextW(app.controls.at(graphMinimum),L"-.125");};
+        const auto error=restoreRejected([&]{app.graphInitialModulation(plugin,1);});
+        restoreCheck(app.dispatchedInput==1&&error.find("draft changed")!=std::string::npos,"Catalogue completion accepted an older draft generation");
+        restoreCheck(app.graphFieldDirty&&restoreText(app.controls.at(graphMinimum))==L"-.125"&&app.graphDraft==definition,
+            "Catalogue completion overwrote newer raw text or the captured graph");
+        restoreCheck(songState(app)==before,"Catalogue read changed song/history");
+    });
+}
+
 static void retainedTakesProtectLeavingDocument() {
     using Json=RestoreJson;
     withRestoreFixture([](RestoreApplication &app) {
@@ -963,6 +979,7 @@ int wmain(int argc,wchar_t **argv) {
             struct Com {~Com(){CoUninitialize();}} com;
             INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_LISTVIEW_CLASSES};restoreCheck(InitCommonControlsEx(&controls)!=FALSE,"Initialize restore native lists");
             retainedTakesProtectLeavingDocument();std::cout<<"PASS take protection: MIDI, microphone, both, read failure and reentrant input\n";
+            modulationCatalogueReadRetainsNewerDraft();std::cout<<"PASS modulation catalogue: manual baseline and pumped raw-draft retention\n";
             firstRestoreMatchesOrdinaryOpen();std::cout<<"PASS first restore: independent Notes inspector/native target and FX binding equivalence\n";
             requiredReadFailuresAreAtomic();std::cout<<"PASS required reads: errors and malformed Notes/Graph/Mixer are atomic\n";
             secondHiddenEditorFailureIsAtomic();std::cout<<"PASS all-before-any: second hidden editor failure and normal adopted callbacks\n";

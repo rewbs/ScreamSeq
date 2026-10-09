@@ -142,6 +142,56 @@ class SongRoutingTests(unittest.TestCase):
         self.assertEqual(self.desktop.send(control,0x188),1)
         self.record('song-routing-scene',canvas=self.local()['canvas'],graph=self.read('graph.get',includeState=False))
 
+    def test_command_stages_cannot_change_ordinary_assignment_or_regular_inserts(self):
+        first, _, _ = self.setup_mixer()
+        effect = self.add_gain()
+        self.write('mixer.bus.set', bus=first, inserts=[effect])
+        ordinary = self.write('graph.create', name='Ordinary recipe')['graph']
+        row = self.write('graph.create', name='Row recipe')['graph']
+        persistent = self.write('graph.create', name='Persistent recipe')['graph']
+        self.write('graph.assign', target=first, graph=ordinary, amount=.25, wet=.75)
+        self.write('graph.commands.set', pattern=0, lanes=[dict(target=first, count=2)], commands=[
+            dict(target=first, graph=row, position=0, column=0, kind='row'),
+            dict(target=first, graph=persistent, position=0, column=1, kind='start')])
+        self.start()
+        before = self.doc()
+        original = self.read('graph.get', includeState=False)
+        for role, graph, choice in [('Row', row, 2), ('Persistent', persistent, 3)]:
+            with self.subTest(role=role):
+                key = f'graph:{first}:{role}:{graph}'
+                self.choose_node(3802, key)
+                node = self.node(key)
+                self.assertEqual(node['stageRole'], role.lower())
+                self.assertFalse(node['canAssignGraph'])
+                self.assertFalse(node['canEditInserts'])
+                self.select(3823, 2)
+                self.assertEqual(self.desktop.send(self.control(3830), 0x147), choice)
+                for control in (3830, 3831, 3832, 3833, 3834):
+                    self.assertFalse(private_desktop.user.IsWindowEnabled(self.control(control)))
+                # Posted commands bypass disabled HWNDs, so the handler must
+                # independently refuse them before issuing any document write.
+                for command in (3833, 3834):
+                    self.press(command)
+                    self.assertEqual(self.doc(), before)
+                    self.assertIn('pattern commands', self.local()['status'])
+                self.select(3823, 1)
+                for control in (3824, 3825, 3826, 3827, 3828, 3829):
+                    self.assertFalse(private_desktop.user.IsWindowEnabled(self.control(control)))
+                for command in (3826, 3827, 3828, 3829):
+                    self.press(command)
+                    self.assertEqual(self.doc(), before)
+                self.press(3821)
+                self.assertEqual(self.read('workspace.get')['graphEditor']['graph'], graph)
+                self.assertEqual(self.read('graph.get', includeState=False), original)
+        self.choose_node(3802, f'graph:{first}:Ordinary:{ordinary}')
+        self.select(3823, 2)
+        self.assertTrue(private_desktop.user.IsWindowEnabled(self.control(3834)))
+        self.press(3834)
+        self.assertEqual(self.read('graph.get', includeState=False)['assignments'], [])
+        self.assertEqual(self.bus(first)['inserts'], [effect])
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('graph.get', includeState=False), original)
+
     def test_native_send_update_preserves_other_routes_dry_stale_and_retained_draft(self):
         first,second,master=self.setup_mixer();g1=self.write('mixer.bus.add',kind='group',name='A')['bus'];g2=self.write('mixer.bus.add',kind='return',name='B')['bus'];self.start()
         before=self.doc();self.route(1,first,g1,gain=-9);self.press(3810);self.press(3836);self.assertEqual(self.doc(),before)

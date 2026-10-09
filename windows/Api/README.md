@@ -248,6 +248,15 @@ uses the existing guarded `graph.update` transaction and document history.
 Catalogue reads capture endpoint identities and reject a changed draft/revision
 before adopting new wire defaults.
 
+`workspace.get.songRouting.canvas.nodes` includes `stageRole` (`none`, `row`,
+`persistent`, `ordinary`, `instrument`), `canEditInserts` and `canAssignGraph`.
+Row/Persistent cards inspect their own shared recipe; activation remains in
+pattern commands. They cannot change the bus's Ordinary assignment or regular
+insert chain, including through keyboard or directly dispatched control actions.
+Regular inserts are edited from the bus/effect owner. These presentation roles
+do not rename persisted graph/layout identities or identify an aggregate audio
+stage as an individual prepared processor copy.
+
 The retained Graph Curve editor uses `graph.automation.get/set` and
 `automation.formula.preview`. Graph's Pattern curve action opens that editor
 while routing remains on its previous page. `workspace.get.graphCurve` reports
