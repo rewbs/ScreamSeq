@@ -32,20 +32,53 @@ jobs:
         with:
           persist-credentials: false
       - name: Build C++ targets and Swift application from a clean tree
+        id: build
         shell: bash
         run: |
           set -o pipefail
           bash mac/build.sh 2>&1 | tee screamseq-macos-build.log
       - name: Native model and host tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
         run: |
           set -o pipefail
           ctest --test-dir "$SCREAMSEQ_BUILD_DIR" --output-on-failure --timeout 120 -j 2 2>&1 | tee screamseq-macos-tests.log
       - name: Swift recovery and picker tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
         run: |
           "$SCREAMSEQ_BUILD_DIR/recovery-tests"
           "$SCREAMSEQ_BUILD_DIR/plugin-picker-tests"
+      - name: Sample library tests from the existing build
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          "$SCREAMSEQ_BUILD_DIR/sample-library-tests" 2>&1 | tee screamseq-macos-sample-library.log
+      - name: Full native interface harness
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          bash mac/test-interface.sh 2>&1 | tee screamseq-macos-interface.log
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        with:
+          python-version: '3.12'
+      - name: Typed fixtures and actual socket conformance baseline
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          python -B -m unittest discover -s editor/Tests/Conformance -p 'test_*.py' -v 2>&1 | tee screamseq-macos-conformance-tools.log
+          executable="$SCREAMSEQ_BUILD_DIR/ScreamSeq.app/Contents/MacOS/ScreamSeq"
+          binary_hash="$(shasum -a 256 "$executable" | cut -d ' ' -f 1)"
+          python -B editor/Tests/Conformance/native_roundtrip.py \
+            --executable "$executable" --binary-sha256 "$binary_hash" \
+            --binary-source-commit "$(git rev-parse HEAD)" \
+            --build-receipt "$SCREAMSEQ_BUILD_DIR/ScreamSeq.app/Contents/Resources/BuildInfo.json" \
+            --output "$SCREAMSEQ_BUILD_DIR/parity-conformance" --api-vectors \
+            2>&1 | tee screamseq-macos-conformance-native.log
       - name: Preserve qualification logs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -55,5 +88,8 @@ jobs:
             screamseq-macos-*.log
             bin/mac-ci/Testing/Temporary/*.log
             bin/mac-ci/CMakeFiles/CMakeConfigureLog.yaml
+            bin/mac-ci/CMakeCache.txt
+            bin/mac-ci/parity-conformance/**
+            bin/mac-ci/ScreamSeq.app/Contents/Resources/BuildInfo.json
           if-no-files-found: warn
           retention-days: 14

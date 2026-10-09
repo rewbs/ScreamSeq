@@ -12,6 +12,54 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## P0c actual API baseline and grouped CI preparation — 9 October
+
+The shared pipe/socket corpus now records 27 table-driven input cases plus rejected
+request-ID reuse and one real edit/history/persistence sequence. The Windows run on
+the same **5358a8ebc** executable matched the baseline: invalid whole-batch rejection,
+dry-run/no-op preservation for pattern edits, exact successful replay, changed-content
+ID rejection, one Undo/Redo and typed unrelated-state preservation through save/reopen.
+All five original no-edit fixture checks also passed. This is actual private-pipe
+evidence; Mac expectations still come from current source and require socket execution.
+
+The live Windows catalogue advertises **72 reads and 162 writes**. Against the 232-method
+shared schema it omits 13 method names and adds 15 others. These are advertisement
+facts, not complete dispatcher or behavioral qualification. The checked-in
+[platform difference inventory](../api/platform-differences.json) pins exact method
+sets, assigns missing-name/contract questions to their domain phases and rejects new
+unreviewed catalogue drift. Mac inventory remains explicitly unqualified rather than
+being populated from the historical reference.
+
+One probe corrected a source-only assumption: Windows `plugin.parameters.set` accepts
+stable `plugin` identity. It also exposed a no-op defect on original F04: assigning the
+already-current Enabled value changes revision, adds plugin Undo and replaces empty
+`plugins[0].state` with a 75-byte payload. The runner retains the exact changed project
+and typed diff before resetting the owned document for independent cases. This is
+`API-PLUGIN-NOOP`, owned by P4b; **preservation failed and API parity remains false**.
+The baseline ratchet pins this exact defect, including changed paths and payload hash;
+it does not exempt no-op history or plugin state from the required fix.
+
+Retained attempts: `bin/parity-evidence/p0c-windows-api-01` stopped at the first newly
+observed no-op failure; `p0c-windows-api-02` completed the isolated corpus. Its API
+report SHA-256 is `5f47b16d99a706289d072e9f13eca82063e2c244a451e1d686f6e994a1cd319c`.
+Subsequent source hardening pins the payload diff, uses typed comparisons for every
+edit/replay assertion and stops on busy/unknown internal errors; these later harness
+changes await the grouped gate. Python syntax/data checks passed. No native rebuild ran.
+
+CI source now builds each platform once, then runs independent checks from those
+outputs even if another test stage fails. Windows adds the native-ui/preferences/recovery
+label union, marks parameter-provenance portable, and schedules the locally qualified
+closure application scenarios with explicit silent output. Mac adds the existing
+sample-library binary and repaired full interface harness. Both retain conformance
+reports, songs and build receipts. Workflows have not been dispatched or qualified;
+the first Mac baseline deliberately remains incomplete until its native catalogue
+and results are reviewed and pinned. No required assertion was made optional.
+
+Still open in P0c: final harness execution, Mac inventory, codec recovery/differential
+vectors, declared-versus-scheduled standalone test inventory, helper alignment and
+reciprocal edited/no-edit fixture exchange. P0b's source repairs still await the next
+hourly build checkpoint (not before 21:10:15 UTC).
+
 ## P0c typed corpus and no-edit Windows leg — 9 October, 20:28 UTC
 
 Independent P0c tooling progressed without another native build. The

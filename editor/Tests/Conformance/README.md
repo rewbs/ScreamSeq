@@ -78,5 +78,33 @@ pass its `first/` directory as `--input-directory`; use a new output directory a
 the receiving platform's actual build identities. Link the receiving input hashes
 to the preceding `firstSave.sha256` records. Returning the Mac `first/` to Windows
 completes the no-edit round trip. Keep every intermediate report, including failures.
-This runner does not yet implement edited legs, provider fixtures, audio comparison,
-or warning-classification/API differential vectors; these remain distinct gates.
+This runner does not yet implement reciprocal edited legs, provider fixtures, audio
+comparison or codec warning-classification vectors; these remain distinct gates.
+
+Add `--api-vectors` to execute the shared pipe/socket API corpus after the five
+no-edit legs. It uses an owned F04 document, validates the advertised method
+inventory against `doc/api/platform-differences.json`, records exact response/error
+envelopes and runs the common edit/history/persistence sequence. The additional
+`api/report.json` distinguishes **baselineMatched** from **parityComplete**. Exit 0
+means the no-edit legs and reviewed evidence baseline matched; it does not declare
+API parity. Known differences, including preservation failures, remain release work.
+The first current Mac inventory must be reviewed and pinned before its baseline can
+match; historical reference data is not silently substituted for that native run.
+
+The table covers boolean/integer/real distinctions, bounds, invalid fields, missing
+and stale guards, UTF-16/NUL limits, plugin identity, absolute moves, dry-run/gesture
+fields and rejected request-ID reuse. The edit sequence additionally requires whole
+batch rejection, no-op history preservation, exact successful replay, rejection of
+different content under a retained ID, single Undo/Redo, unrelated native/plugin
+state preservation and actual save/reopen. Revision tokens remain opaque. A transport,
+busy or uncertain internal error stops the run; it is not retried by this harness.
+The existing Mac client retains its bounded same-ID protocol-busy retry behavior.
+
+An observed no-op defect retains its changed project and full typed difference before
+the runner explicitly reloads the immutable fixture in the owned app. This permits
+independent probes to complete without declaring the defect fixed. A recorded defect
+matches only its exact expected response, changed document paths and typed saved
+payload difference. There is no general permission to ignore revisions, Undo entries,
+plugin bytes or unknown fields. Update both vectors and the owned difference entry
+when a domain implementation fixes it. Broader codec recovery vectors, raw malformed
+wire inputs, cache bounds and full musical behavior remain separate coverage.

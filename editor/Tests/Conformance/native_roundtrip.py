@@ -135,8 +135,11 @@ def main(argv=None):
     parser.add_argument("--output", required=True, type=Path, help="New directory; existing paths are refused")
     parser.add_argument("--input-directory", type=Path,
                         help="Prior leg's first/ directory, with all five original filenames")
+    parser.add_argument("--api-vectors", action="store_true",
+                        help="Also run the bounded API baseline corpus on an owned copy of F04")
     args = parser.parse_args(argv)
-    report = dict(format="screamseq-native-roundtrip-v1", passed=False, fixtures=[])
+    report = dict(format="screamseq-native-roundtrip-v1", passed=False, fixtures=[], parityComplete=False,
+                  qualificationScope="Five no-edit fixture legs; optional API evidence baseline is not a parity pass")
     output = None
     result_code = 2
     try:
@@ -186,10 +189,19 @@ def main(argv=None):
                     # never send another document replacement to that process.
                     raise
                 print(f"{'PASS' if row['passed'] else 'FAIL'} {source.name}", flush=True)
+            if args.api_vectors:
+                from api_vectors import run
+                api_report = run(client, output / "api")
+                report["api"] = dict(baselineMatched=api_report["baselineMatched"],
+                    parityComplete=api_report["parityComplete"], report="api/report.json",
+                    sha256=sha256(read_bytes(output / "api/report.json")))
+                print(f"API baseline matched: {api_report['baselineMatched']}; parity complete: False; "
+                      f"preservation failures: {len(api_report.get('preservationFailures', []))}", flush=True)
         report["inputsUnchanged"] = all(sha256(read_bytes(path)) == inputs[path.name] for path in sources)
         report["binaryUnchanged"] = sha256(read_bytes(executable)) == args.binary_sha256
         report["passed"] = (len(report["fixtures"]) == 5 and all(row["passed"] for row in report["fixtures"])
-                            and report["inputsUnchanged"] and report["binaryUnchanged"])
+                            and report["inputsUnchanged"] and report["binaryUnchanged"]
+                            and report.get("api", {}).get("baselineMatched", True))
         result_code = 0 if report["passed"] else 1
     except Exception as error:
         report["error"] = dict(type=type(error).__name__, message=str(error))

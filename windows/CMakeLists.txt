@@ -372,6 +372,7 @@ if(BUILD_TESTING)
   target_compile_options(parameter-provenance-tests PRIVATE "/FI${ROOT}/windows/cmake/WindowsTestPreamble.hpp")
   target_link_options(parameter-provenance-tests PRIVATE /STACK:8388608)
   add_test(NAME parameter-provenance COMMAND parameter-provenance-tests)
+  set_tests_properties(parameter-provenance PROPERTIES LABELS "portable;functional")
   add_dependencies(portable-tests parameter-provenance-tests)
 
   foreach(case "unified-effects;UnifiedEffects" "playback-display;PlaybackDisplay")

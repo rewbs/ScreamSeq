@@ -1,0 +1,433 @@
+{
+  "format": "screamseq-api-vectors-v1",
+  "note": "Source-supported baseline predictions. Runtime reports identify the binary actually checked. Known differences are unresolved parity defects, not release waivers.",
+  "cases": [
+    {
+      "id": "pattern-index-integer",
+      "method": "pattern.get",
+      "params": {
+        "pattern": 0,
+        "rowCount": 1,
+        "channelCount": 1
+      },
+      "expected": {
+        "windows": "success",
+        "macos": "success"
+      }
+    },
+    {
+      "id": "pattern-index-boolean",
+      "method": "pattern.get",
+      "params": {
+        "pattern": false,
+        "rowCount": 1,
+        "channelCount": 1
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "pattern-index-fraction",
+      "method": "pattern.get",
+      "params": {
+        "pattern": 0.5,
+        "rowCount": 1,
+        "channelCount": 1
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "pattern-index-negative",
+      "method": "pattern.get",
+      "params": {
+        "pattern": -1,
+        "rowCount": 1,
+        "channelCount": 1
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "pattern-index-unsafe-integer",
+      "method": "pattern.get",
+      "params": {
+        "pattern": 9007199254740993,
+        "rowCount": 1,
+        "channelCount": 1
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "pattern-index-uint64-max",
+      "method": "pattern.get",
+      "params": {
+        "pattern": 18446744073709551615,
+        "rowCount": 1,
+        "channelCount": 1
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "pattern-index-string",
+      "method": "pattern.get",
+      "params": {
+        "pattern": "0",
+        "rowCount": 1,
+        "channelCount": 1
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "pattern-index-null",
+      "method": "pattern.get",
+      "params": {
+        "pattern": null,
+        "rowCount": 1,
+        "channelCount": 1
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "pattern-index-real",
+      "method": "pattern.get",
+      "params": {
+        "pattern": 0.0,
+        "rowCount": 1,
+        "channelCount": 1
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": "success"
+      },
+      "difference": "API-INTEGER-TYPES",
+      "phase": "P6a"
+    },
+    {
+      "id": "read-unknown-key",
+      "method": "pattern.get",
+      "params": {
+        "pattern": 0,
+        "unexpected": true
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "mutation-missing-guard",
+      "method": "document.patch",
+      "params": {
+        "speed": 6
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "mutation-stale-guard",
+      "method": "document.patch",
+      "params": {
+        "speed": 6
+      },
+      "expected": {
+        "windows": -32001,
+        "macos": -32001
+      },
+      "guard": "stale"
+    },
+    {
+      "id": "mutation-unknown-key",
+      "method": "document.patch",
+      "params": {
+        "unexpected": true
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      },
+      "guard": "fresh"
+    },
+    {
+      "id": "mutation-boolean-integer",
+      "method": "document.patch",
+      "params": {
+        "speed": true
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      },
+      "guard": "fresh"
+    },
+    {
+      "id": "mutation-fraction",
+      "method": "document.patch",
+      "params": {
+        "speed": 1.25
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      },
+      "guard": "fresh"
+    },
+    {
+      "id": "title-utf16-over-limit",
+      "method": "document.patch",
+      "params": {
+        "title": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5"
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      },
+      "guard": "fresh"
+    },
+    {
+      "id": "title-nul",
+      "method": "document.patch",
+      "params": {
+        "title": "bad\u0000title"
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      },
+      "guard": "fresh"
+    },
+    {
+      "id": "order-move-destination",
+      "method": "order.edit",
+      "params": {
+        "order": 0,
+        "operation": "move",
+        "destination": 0
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": "success"
+      },
+      "guard": "fresh",
+      "difference": "API-ORDER-MOVE",
+      "phase": "P3a"
+    },
+    {
+      "id": "plugin-move-position",
+      "method": "plugin.move",
+      "params": {
+        "slot": 0,
+        "position": 0
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": "success"
+      },
+      "guard": "fresh",
+      "difference": "API-PLUGIN-POSITION",
+      "phase": "P4b"
+    },
+    {
+      "id": "plugin-slot-real",
+      "method": "plugin.parameters.get",
+      "params": {
+        "slot": 0.0
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": "success"
+      },
+      "difference": "API-INTEGER-TYPES",
+      "phase": "P6a"
+    },
+    {
+      "id": "plugin-stable-identity-read",
+      "method": "plugin.parameters.get",
+      "params": {
+        "plugin": "$plugin"
+      },
+      "expected": {
+        "windows": "success",
+        "macos": "success"
+      }
+    },
+    {
+      "id": "plugin-parameter-stable-identity",
+      "method": "plugin.parameters.set",
+      "params": {
+        "plugin": "$plugin",
+        "values": [
+          {
+            "id": "$parameter",
+            "value": "$value"
+          }
+        ]
+      },
+      "expected": {
+        "windows": "success",
+        "macos": "success"
+      },
+      "guard": "fresh",
+      "difference": "API-PLUGIN-NOOP",
+      "phase": "P4b",
+      "documentUnchanged": {
+        "windows": false,
+        "macos": true
+      },
+      "changedPaths": {
+        "windows": [
+          "/data/canUndo",
+          "/data/canUndoPlugins",
+          "/revision"
+        ]
+      },
+      "persistedDifference": {
+        "windows": {
+          "equal": false,
+          "differenceCount": 1,
+          "truncated": false,
+          "differences": [
+            {
+              "path": "/plugins/0/state",
+              "kind": "value",
+              "before": [
+                "data",
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              ],
+              "after": [
+                "data",
+                75,
+                "3796b14339cc9d2841696f21001eb9a9c9121968a239e3377971c0b7bcf6b993"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "plugin-bypass-dry-run",
+      "method": "plugin.bypass",
+      "params": {
+        "slot": 0,
+        "bypass": false,
+        "dryRun": true
+      },
+      "expected": {
+        "windows": "success",
+        "macos": -32602
+      },
+      "guard": "fresh",
+      "difference": "API-PLUGIN-DRY-RUN",
+      "phase": "P4b"
+    },
+    {
+      "id": "plugin-parameters-dry-run",
+      "method": "plugin.parameters.set",
+      "params": {
+        "slot": 0,
+        "values": [
+          {
+            "id": "$parameter",
+            "value": "$value"
+          }
+        ],
+        "dryRun": true
+      },
+      "expected": {
+        "windows": "success",
+        "macos": -32602
+      },
+      "guard": "fresh",
+      "difference": "API-PLUGIN-DRY-RUN",
+      "phase": "P4b"
+    },
+    {
+      "id": "plugin-parameter-unknown-field",
+      "method": "plugin.parameters.set",
+      "params": {
+        "slot": 0,
+        "values": [
+          {
+            "id": "$parameter",
+            "value": "$value"
+          }
+        ],
+        "dryRun": true,
+        "unexpected": true
+      },
+      "guard": "fresh",
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "graph-parameter-dry-run",
+      "method": "graph.plugin.set",
+      "params": {
+        "graph": "$graph",
+        "node": "$node",
+        "parameters": [
+          {
+            "id": "$graphParameter",
+            "value": "$graphValue"
+          }
+        ],
+        "dryRun": true
+      },
+      "expected": {
+        "windows": "success",
+        "macos": "success"
+      },
+      "guard": "fresh"
+    },
+    {
+      "id": "graph-parameter-gesture",
+      "method": "graph.plugin.set",
+      "params": {
+        "graph": "$graph",
+        "node": "$node",
+        "parameters": [
+          {
+            "id": "$graphParameter",
+            "value": "$graphValue"
+          }
+        ],
+        "dryRun": true,
+        "gesture": "parity-one-gesture"
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": "success"
+      },
+      "guard": "fresh",
+      "difference": "API-GRAPH-GESTURE",
+      "phase": "P5"
+    }
+  ],
+  "rejectedRequestIDReuse": {
+    "windows": "success",
+    "macos": -32600
+  }
+}
