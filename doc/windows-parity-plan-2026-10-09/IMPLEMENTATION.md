@@ -28,6 +28,8 @@ Local ARM64 Release evidence, no physical device or foreground claim:
 
 Both jobs in existing Mac run `37913656837` completed successfully before the new push: app build, 120 CTests, Swift recovery and picker checks. Intel's native tests took 240.22 seconds. Their checkout remains PR merge `29149338` of `4a5c8ed88` into `ffe81aa4b`. The isolated P0a head `8afd4175a82eba3dc0331e6951b55e3ea891ae72` was then pushed to the existing draft PR 3, avoiding cancellation of that live evidence. New exact-candidate CI is still required; local safety-branch execution is not substituted for it. In particular, actual-app tests requesting large windows may expose the same runner geometry limit separately from the now-fixed in-process fixture. Do not skip their assertions if that occurs. No source migration, broad UI redesign or aggregate raw-draft registry is included in this correction.
 
+New runs confirmed live for `8afd4175a`: [Windows 37918435648](https://github.com/rewbs/ScreamSeq/actions/runs/37918435648), [Mac 37918435661](https://github.com/rewbs/ScreamSeq/actions/runs/37918435661). Inspect those handles rather than starting duplicate runs. The managed `parity-ci-layout` worktree remains at the isolated PR head for any demonstrated follow-up; the main task checkout keeps the broader safety candidate and complete reviewed plan.
+
 ## Resumed P0a: exposed Windows worker failures
 
 The original CI runs are terminal failures: both Mac jobs reached the already-repaired Swift expression failure, while Windows x64 compiled and passed 60 of 62 worker checks. The two failures were reproduced in the isolated local ARM64 build before editing:
