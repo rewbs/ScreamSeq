@@ -43,6 +43,8 @@
 #include "SampleLibraryWindow.hpp"
 #include "AudioSettingsWindow.hpp"
 #include "../Project/RecoveryStore.hpp"
+#include "../Project/ProjectIO.hpp"
+#include "mpt/crypto/hash.hpp"
 #include "RecoveryWriter.hpp"
 #include "RecoveryWindow.hpp"
 #include "../Audio/MidiInput.hpp"
@@ -352,6 +354,7 @@ public:
             {"patternSampleRender",patternSampleRenderWindow?patternSampleRenderWindow->snapshot():Json{{"visible",false}}},
             {"pluginPresetAction",{{"pending",pluginPresetPending},{"completion",pluginPresetCompletion.snapshot()},{"target",pluginPresetTarget},
                 {"report",pluginPresetReport},{"needsReload",pluginPresetNeedsReload},{"status",utf8Path(pluginPresetStatus)}}},
+            {"nativeCommandResult",{{"pending",nativeCommandPending},{"completion",nativeCommandCompletion.snapshot()},{"target",nativeCommandTarget},{"report",nativeCommandReport}}},
             {"patternSampleRenderAction",{{"pending",directSampleRenderPending},{"completion",directSampleRenderCompletion.snapshot()},{"target",directSampleRenderTarget},{"report",directSampleRenderReport}}},
             {"audition",auditionWindow?auditionWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
@@ -624,6 +627,7 @@ public:
 	}
     #include "Audition.inc"
     #include "MusicalTyping.inc"
+    #include "NativeCommandRecovery.inc"
     #include "RecordingIntegration.inc"
     #include "SongTools.inc"
 	void play() { play(Json::object()); }
@@ -657,9 +661,9 @@ public:
     void stop() override {
         frameRequested=true;
         if(controller&&view&&view->recording.value("capturing",false)&&!recordingFinishing&&!midiClosing&&!recoveryRestoring) {
-            if(!busy&&!midiBusy&&!midiServicing) {
+            if(!busy&&!midiBusy&&!midiServicing&&!nativeCommandPending&&!nativeCommandCompletion.retained()) {
                 const auto target=recordingTarget();
-                try{MidiTransaction boundary(*this);boundary.capture();if(matchesRecording(target))documentOperation("recording.stop",{{"expectedRevision",view->session.revision},{"take",target.take}});}
+                try{MidiTransaction boundary(*this);boundary.capture();if(matchesRecording(target))retainedNativeCommand("midi","recording.stop",{{"expectedRevision",view->session.revision},{"take",target.take}},{{"take",target.take}});}
                 catch(const std::exception &e){recordingError=e.what();recordingStopRequested=target;}
             }else recordingStopRequested=recordingTarget();
         }
@@ -800,10 +804,11 @@ public:
     }
     std::unique_ptr<ScreamSeq::ParameterAutomationWindow> parameterAutomationWindow;
     std::unique_ptr<ScreamSeq::ParameterAutomationWindow> makeParameterAutomationWindow(std::shared_ptr<bool> preparing={}){
-        return std::make_unique<ScreamSeq::ParameterAutomationWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::ParameterAutomationWindow::Cursor{documentId,view->session.revision,patternIndex,view->session.document.at("patterns"),view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter){
+        auto editor=std::make_unique<ScreamSeq::ParameterAutomationWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::ParameterAutomationWindow::Cursor{documentId,view->session.revision,patternIndex,view->session.document.at("patterns"),view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter){
             if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the rack draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;}))throw std::runtime_error("The captured plugin is unavailable");
             selectedPlugin=plugin;selectedParameter=parameter;pluginDetailPage=0;pluginDetailsRevision.clear();command(pluginsCommand);
         },[this](const auto &plugin,uint32_t parameter){openAbsoluteAutomation(plugin,parameter);});
+        editor->bankWriter([this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});return editor;
     }
     std::pair<std::string,std::optional<uint32_t>> initialParameterAutomationTarget(std::string requestedPlugin={},std::optional<uint32_t> requestedParameter={})const{
         std::string plugin=std::move(requestedPlugin);auto parameter=requestedParameter;

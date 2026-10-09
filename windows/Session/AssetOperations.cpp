@@ -223,7 +223,9 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p,const Pre
     try {index=instrument?prepared.candidate().importInstrument(path,slot):prepared.candidate().importSample(path,slot);}
     catch(const std::runtime_error &e){throw Api::ApiError(-32003,e.what());}
     if(validateImport_)validateImport_(prepared.candidate());
-    const auto changed=prepared.changed();if(changed){stop();prepared.commit();}return {{"index",index}};
+    Json result={{"index",index}};
+    if(prepared.changed()){auto completion=prepare?prepare(result):nullptr;stop();prepared.commit();if(completion)completion->committed();}
+    return result;
   }
   if(method=="sample.process") {
     keys(p,{"sample","operation","start","end","channels","curve","exponent","gainDB","targetDB","window","dryRun"});
@@ -434,8 +436,9 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p,const Pre
         s.Instruments[index]->name=::OpenMPT::mpt::ToCharset(s.GetCharsetInternal(),::OpenMPT::mpt::Charset::UTF8,name);s.m_nInstruments=INSTRUMENTINDEX(index);
       });
       if(validateImport_)validateImport_(prepared.candidate());
-      if(!dry){stop();prepared.commit();}
-      return {{"instrument",index},{"empty",true},{"dryRun",dry}};
+      Json result={{"instrument",index},{"empty",true},{"dryRun",dry}};
+      if(!dry){auto completion=prepare?prepare(result):nullptr;stop();prepared.commit();if(completion)completion->committed();}
+      return result;
     }
     const int count=song.GetNumInstruments()?song.GetNumInstruments()+1:std::max(1,int(song.GetNumSamples()));
     require(count<MAX_INSTRUMENTS&&count<=song.GetModSpecifications().instrumentsMax,"Instrument slots are full");int index=0;
@@ -445,7 +448,10 @@ Json AssetOperations::dispatch(const std::string &method,const Json &p,const Pre
         s.m_nInstruments=std::max(SAMPLEINDEX(1),s.GetNumSamples());index=std::clamp(sample,1,int(s.m_nInstruments));
       } else {index=s.GetNumInstruments()+1;s.Instruments[index]=new ModInstrument(SAMPLEINDEX(sample));s.Instruments[index]->name="New instrument";s.m_nInstruments=INSTRUMENTINDEX(index);}
     });};
-    preflight(document_,[&](Document &d){op(d);if(validateImport_)validateImport_(d);});stop();op(document_);return {{"instrument",index}};
+    PreparedAssetImport prepared(document_);op(prepared.candidate());
+    if(validateImport_)validateImport_(prepared.candidate());
+    Json result={{"instrument",index}};auto completion=prepare?prepare(result):nullptr;
+    stop();prepared.commit();if(completion)completion->committed();return result;
   }
   if(method=="instrument.get"||method=="instrument.patch") {
     if(method=="instrument.get")keys(p,{"instrument"});else keys(p,{"instrument","values"});

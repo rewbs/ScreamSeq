@@ -239,17 +239,20 @@
         return selected ? std::filesystem::path(path.data()) : std::filesystem::path{};
     }
     bool saveFile(bool saveAs=false) {
+        if(nativeCommandCompletion.retained()){reviewNativeCommand();return false;}
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         if(!protectRecordingTake())return false;
         pluginEditorWarning.clear();
         documentOperation("flushPluginEditors",{{"force",true}});
-        auto revision=view->session.revision;auto path=view->path;
+        const auto document=documentId;auto revision=view->session.revision;auto path=view->path;
         auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),towlower);
         if(saveAs || view->session.document.value("requiresSaveAs",false) || path.empty() || (ext!=L".screamseq" && ext!=L".resonance")) path=chooseFile(true);
-        if(path.empty()) return false;
-        documentOperation("document.save",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}});
-        status=L"Native project saved atomically";
-        if(!pluginEditorWarning.empty()) {status+=L" / "+pluginEditorWarning;pluginEditorWarning.clear();}
+        if(path.empty())return false;
+        if(documentId!=document||view->session.revision!=revision)throw ScreamSeq::Api::ApiError(-32001,"Song changed while choosing Save; no file was written",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        retainedNativeCommand("save","document.save",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}},{{"path",utf8Path(path)}},[&](const Json &){
+            status=L"Native project saved atomically";
+            if(!pluginEditorWarning.empty()){status+=L" / "+pluginEditorWarning;pluginEditorWarning.clear();}
+        });
         return true;
     }
     bool unsavedChecked=false; // The last protectUnsaved() got as far as knowing whether the song is dirty.

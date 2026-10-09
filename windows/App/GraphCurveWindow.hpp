@@ -34,7 +34,7 @@ public:
     titleLabel=9120,rowLabel,valueLabel,formulaLabel,statusLabel,helpLabel};
 private:
   static constexpr std::array<const char *,9> curves={"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse","scripted"};
-  Request request_;
+  Request request_;NativeWriteCompletion::Write bankWrite_;
   ContextProvider context_;
   std::function<void()> return_;
   Target target_;
@@ -92,8 +92,10 @@ private:
 #include "GraphCurveOwnerLayout.inc"
 
 public:
+  void bankWriter(NativeWriteCompletion::Write write){bankWrite_=std::move(write);}
   GraphCurveWindow(HWND owner,Request request,ContextProvider context,std::function<void()> returnToPattern)
     :NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),return_(std::move(returnToPattern)){
+    bankWrite_=[this](const auto &method,const auto &params){const auto before=context_();auto result=request_(method,params);return Api::CompletedCall{method,before.document,context_().revision,std::move(result)};};
     require(bool(request_)&&bool(context_),"Curve editor needs request and context callbacks");
     minimumClientWidth_=440;minimumClientHeight_=500;
     create(L"ScreamSeq.GraphCurve",L"Graph source pattern curve",760,650);

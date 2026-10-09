@@ -725,6 +725,10 @@ Json DocumentController::operation(const std::string &method,Json params) {
     hooks.validateCandidate=[this](const auto &next){validateNativeCandidate(next);};
     hooks.parameterAutomationConflicts=[&](const std::string &id,uint32_t parameter){const auto slot=slotOf(id);for(const auto &event:project_.preserved.at("automation"))if(event.at(0)==slot&&event.at(1)==parameter)return true;return false;};
     hooks.preparePublication=[this](const Tracker::NativeSong &next){return prepareNativePublication(next);};
+    hooks.prepareCompletion=[this,&method](const Json &value,bool musicalChange){
+      auto completed=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,identity_+":"+std::to_string(generation_),revision(document_->revision+(musicalChange?1:0)),value});
+      return [this,completed=std::move(completed),ticket=nativeCallReceipt_]()noexcept{completedCall_=completed;if(ticket)ticket->publish(completed);};
+    };
     EnvelopeOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks),cataloguePath_);result=operations.invoke(method,params);
   } else if(patternMethod) {
     PatternHostHooks hooks;for(const auto &p:project_.preserved.at("plugins"))hooks.plugins.push_back(p.at("instanceID").get<std::string>());
@@ -802,7 +806,8 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
     // recorder's Keep consumes its take only after that import succeeds; an
     // unchanged revision on failure proves no Keep/import was committed.
     // This does not classify recording start/stop/discard, files or vendor calls.
-    if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit") {
+    if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit"
+        ||method=="sample.import"||method=="instrument.import"||method=="instrument.create") {
       const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
       try {std::rethrow_exception(failure);}
       catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),rejected);}

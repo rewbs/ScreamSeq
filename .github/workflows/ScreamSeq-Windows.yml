@@ -41,7 +41,7 @@ jobs:
       - name: Retained editors and merged command paths on private desktops
         shell: pwsh
         run: |
-          ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error -R '^(workspace-restore-tests|precise-note-window-tests|graph-curve-window-tests)$' *>&1 | Tee-Object screamseq-retained-editors.log
+          ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error -R '^(workspace-(restore|draft-census|departure|receipt|parity-fixture|asset-outcome|command-result|bank-result|sample-readback|sample-result)-tests|precise-note-window-tests|graph-curve-window-tests)$' *>&1 | Tee-Object screamseq-retained-editors.log
           if ($LASTEXITCODE -ne 0) { throw 'Retained native editor checks failed.' }
           $env:SCREAMSEQ_TEST_EXE = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
           $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-integration-ui'

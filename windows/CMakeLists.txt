@@ -134,6 +134,18 @@ if(BUILD_TESTING)
     add_test(NAME workspace-draft-census-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-departure-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-receipt-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-parity-fixture-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-parity-fixture-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts;fixtures"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=parity-fixture;SCREAMSEQ_PARITY_FIXTURE_DIRECTORY=${ROOT}/editor/Tests/Fixtures/Parity20261009" TIMEOUT 120)
+    add_test(NAME workspace-asset-outcome-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-asset-outcome-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=asset-outcomes" TIMEOUT 120)
+    add_test(NAME workspace-command-result-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-command-result-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=command-results" TIMEOUT 120)
+    add_test(NAME workspace-bank-result-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-bank-result-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts;receipts"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=bank-results" TIMEOUT 120)
     add_test(NAME workspace-sample-readback-tests COMMAND workspace-restore-tests)
     set_tests_properties(workspace-sample-readback-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts;samples"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=sample-reads" TIMEOUT 120)
@@ -435,6 +447,19 @@ if(BUILD_TESTING)
   add_executable(document-controller-tests Tests/DocumentControllerTests.cpp Session/DocumentController.cpp Session/DocumentOperations.cpp Session/TimelineOperations.cpp Session/AssetOperations.cpp Session/PluginOperations.cpp Session/PatternOperations.cpp Session/GraphOperations.cpp Session/MixerOperations.cpp Session/EnvelopeOperations.cpp)
   target_sources(document-controller-tests PRIVATE Session/SampleRecordingOperations.cpp)
   target_link_libraries(document-controller-tests PRIVATE ScreamSeqProject ScreamSeqPlayback ScreamSeqAudio)
+  # The completion boundary affects every bank operation. Reuse the existing
+  # standalone scenarios in this build so CI and the app share current libraries.
+  add_executable(envelope-operations-tests Tests/Envelopes/EnvelopeTests.cpp Session/EnvelopeOperations.cpp)
+  target_link_libraries(envelope-operations-tests PRIVATE ScreamSeqProject)
+  target_link_options(envelope-operations-tests PRIVATE /STACK:8388608)
+  # Preserve the original fixture's strict matching, owned scratch-path checks.
+  set(envelope_scratch "${CMAKE_CURRENT_BINARY_DIR}/test-scratch/envelope/hermes/cache/scratch")
+  file(MAKE_DIRECTORY "${envelope_scratch}")
+  foreach(scenario bankHistory linkedUses songGraphTargets catalogueCopies strictShapesAndTargets parameterHooks instrumentBaking refitAndIndependentCopies capacityBeforePlayback instrumentMetadataBudget catalogueValidation catalogueWriters bankPersistence jsonRead jsonImport jsonPublish jsonDefault jsonStrict jsonLimits jsonOutputBudget jsonGuards plistWriters jsonResponseBudget)
+    add_test(NAME envelope-${scenario} COMMAND envelope-operations-tests ${scenario})
+    set_tests_properties(envelope-${scenario} PROPERTIES LABELS "worker;functional;envelopes" TIMEOUT 60
+      ENVIRONMENT "TMPDIR=${envelope_scratch};TEMP=${envelope_scratch};TMP=${envelope_scratch}")
+  endforeach()
   add_executable(mixer-document-tests Tests/MixerOperationsTests.cpp Session/MixerOperations.cpp)
   add_executable(graph-document-tests Tests/GraphOperations/GraphOperationsTests.cpp Session/GraphOperations.cpp)
   target_link_libraries(graph-document-tests PRIVATE ScreamSeqProject)
@@ -501,7 +526,7 @@ if(BUILD_TESTING)
   else()
     message(STATUS "native-project-tests is built but not registered: set SCREAMSEQ_REFERENCE_PROJECT to the Mac reference project")
   endif()
-  add_custom_target(worker-tests DEPENDS native-audio-bus-tests native-project-tests document-controller-tests windows-save-tests
+  add_custom_target(worker-tests DEPENDS native-audio-bus-tests native-project-tests document-controller-tests envelope-operations-tests windows-save-tests
     native-metadata-tests live-parameter-tests recorded-automation-tests audio-port-trim-tests hosted-project-tests project-preservation-tests mixer-document-tests graph-document-tests scratch-gesture-api-tests)
 endif()
 

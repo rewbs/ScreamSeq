@@ -82,13 +82,20 @@
                 graphCanvas.nodes.clear();graphCanvas.sockets.clear();graphCanvas.wires.clear();graphCanvas.regions.clear();
                 graphCanvas.panX=graphCanvas.panY=0;graphStatus.clear();if(graphDragging())dragging=0;return true;
             });
+        add("Command result",[this]{
+            auto result=mainDraft(nativeCommandTarget.value("documentId",std::string()),nativeCommandTarget.value("revision",std::string()),nativeCommandTarget.dump(),nativeCommandGeneration,false,nativeCommandPending);
+            result.uncertain=!nativeCommandPending&&nativeCommandCompletion.retained();return result;
+        },[this]{reviewNativeCommand();},[this]()noexcept{
+            if(nativeCommandPending||nativeCommandCompletion.retained())return false;
+            ++nativeCommandGeneration;nativeCommandCompletion=ScreamSeq::NativeWriteCompletion{};nativeCommandTarget.clear();nativeCommandReport.clear();return true;
+        });
         add("Render selection result",[this]{
             auto result=mainDraft(directSampleRenderTarget.value("documentId",std::string()),directSampleRenderTarget.value("expectedRevision",std::string()),
                 directSampleRenderTarget.dump(),directSampleRenderGeneration,false,directSampleRenderPending);
             result.uncertain=!directSampleRenderPending&&directSampleRenderCompletion.retained();return result;
         },[this]{reviewDirectSampleRender();},[this]()noexcept{
             if(directSampleRenderPending||directSampleRenderCompletion.retained())return false;
-            ++directSampleRenderGeneration;directSampleRenderCompletion=ScreamSeq::NativeWriteCompletion{};
+            ++directSampleRenderGeneration;directSampleRenderCompletion=ScreamSeq::NativeWriteCompletion{};directSampleRenderObservation.clear();
             directSampleRenderTarget.clear();directSampleRenderReport.clear();return true;
         });
     }

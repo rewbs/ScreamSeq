@@ -12,23 +12,53 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
-## Closure candidate preparation (not yet built or tested)
+## Grouped closure candidate (source prepared; qualification pending)
 
-Prepared C4 single-asset completion changes in AssetOperations and DocumentController:
-sample.import, instrument.import and both instrument.create forms stage exact result
-receipts before Stop/commit and publish after successful adoption. Mapped instrument
-creation now adopts a validated prepared candidate. Related test edits cover prepared
-allocation/Stop failures, exact results, Undo/Redo, unchanged replacements, initial and
-existing instrument collections, real worker publication loss and NotCommitted Stop
-refusal. These edits are uncompiled and untested; they are not a qualified milestone.
+C1–C5 are now prepared together for one consolidated build, rather than one build
+per editor. This is source evidence only; none of these pending changes has been
+compiled or executed yet.
 
-Prepared C5 scheduling changes as part of the grouped candidate: default workspace
-execution no longer repeats sample readback, sample mutation, instrument creation,
-preset and generic completion cases already assigned to named groups. Direct render
-census runs in receipts rather than both receipts and drafts. Windows CI explicitly
-selects all six registered workspace groups plus its existing precise-note and graph-
-curve groups. No scenario body, assertion or deadline changed. These changes have
-not been built, tested or qualified; they await the C1–C4 source freeze and C6 gate.
+- **C1:** Envelope bank retains capture-name-only drafts, raw generations and exact
+  worker receipts through parent/child completion. Bank/catalogue reads stage before
+  replacing fields. Unknown outcomes have guarded read-only acknowledgement; catalogue
+  acknowledgement rechecks its independent revision. EnvelopeOperations prepares exact
+  attribution before musical/file effects, with no-op/dry-run preservation.
+- **C2:** Render options, multisample import, direct selection render and recorder Keep
+  can review genuinely unknown outcomes without repeating writes. Current catalogues
+  and take identity are observations, explicitly unverified. Newer raw inputs invalidate
+  acknowledgement, remain retained, and require an explicit new target/rebase where
+  appropriate. Sample-detail deleted-target observation was already implemented; no
+  second implementation was added.
+- **C3:** One Main command-result owner covers native sample commands, MIDI lifecycle
+  (including transport Stop) and Save. Exact receipts survive failed native completion.
+  Unknown Review checks original assets/clipboard, take or validated destination file
+  plus recovery state; acknowledgement rechecks independent effects. Later raw fields
+  remain untouched. API callers retain their existing structured outcomes. Main now
+  has nine registrations; the earlier eight-owner census remains the prior checkpoint.
+- **C4:** Single sample/instrument import and both instrument.create forms prepare exact
+  results before Stop/commit, then publish after successful adoption. Mapped instrument
+  creation adopts a validated prepared candidate. Tests cover precommit allocation/Stop
+  refusal, publication loss, no-ops, initial mapping, exact history and stable identities.
+- **C5:** Ten explicitly selected workspace groups share one executable and keep the
+  existing private-child/CTest deadlines. The source-only mapping in
+  [closure-test-groups.json](closure-test-groups.json) finds no lost scenarios and removes
+  six duplicate calls. Existing envelope operation scenarios now also use the main
+  build's current libraries and worker test selection; the standalone Python catalogue
+  oracle remains a distinct check, not an implied pass.
+
+New actual-Application fixtures cover bank/master/catalogue completion, native Main
+sample/MIDI/Save outcomes, unknown asset observation and the supplied F04/three Parity
+WAVs. Original fixtures live in `editor/Tests/Fixtures/Parity20261009` with archive and
+member SHA-256 provenance. They are immutable inputs; all edited outputs use owned
+scratch directories. F04 checks full chunked PCM and stable sample IDs through dry run,
+committed render/import, lost completion, read-only Review, one Undo/Redo and save/reopen.
+This is not reciprocal Mac qualification. Recorder callback cases are controlled native
+owner checks, not physical capture evidence.
+
+Remote main was rechecked at `16cab100b898f66726cfab6c2386887a9bcf5fd4`.
+No running ScreamSeq process was present at the candidate inspection. Source formatting
+checks passed; no build, executable test, app launch or device operation has yet run
+for this grouped candidate. P0b remains incomplete until C6 qualifies it.
 
 ## Remaining P0b closure checklist
 

@@ -81,6 +81,7 @@
         if(selectedSampleId().empty()) throw std::runtime_error("Choose a sample first");
         if(id==sampleRangeCommand) {applySampleRange();return true;}
         if(id==sampleAllCommand) {sampleDraft=false;auto &r=sampleRange();r.first=0;r.last=r.frames;refreshSampleFields();return true;}
+        if(nativeCommandCompletion.retained()){reviewNativeCommand();return true;}
         if(sampleDraft) applySampleRange();
         const auto range=sampleRange();const auto sample=selectedSample();const auto target=selectedSampleId(),revision=view->session.revision;
         Json p={{"sample",sample},{"start",range.first},{"end",range.last}};
@@ -111,9 +112,11 @@
             }
             p={{"sample",sample},{sustain?"sustain":"normal",{{"start",first},{"end",last},{"enabled",enabled},{"pingpong",pingpong},{"reverse",reverse}}}};
         } else p["operation"]=id==sampleReverseCommand ? "reverse" : id==sampleNormalizeCommand ? "normalize" : id==sampleFadeInCommand ? "fade-in" : id==sampleFadeOutCommand ? "fade-out" : "trim";
-        auto result=edit(method,p);
-        status=id==sampleCopyCommand ? L"Selection copied to the song's sample clipboard" : L"Sample edit applied / Ctrl+Z to undo";
-        if(target==selectedSampleId()) refreshSampleFields();
+        const auto generation=sampleDraftGeneration;p["expectedRevision"]=revision;
+        retainedNativeCommand("sample",method,std::move(p),{{"id",target},{"sample",sample},{"generation",generation}},[&](const Json &){
+            status=id==sampleCopyCommand ? L"Selection copied to the song's sample clipboard" : L"Sample edit applied / Ctrl+Z to undo";
+            if(target==selectedSampleId()&&generation==sampleDraftGeneration)refreshSampleFields();else status+=L" / newer selection or range fields retained";
+        });
         return true;
     }
     unsigned sampleFrameAt(float x) {

@@ -1,6 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
-#include "NativeWriteCompletion.hpp"
+#include "NativeAssetObservation.hpp"
 #include <iomanip>
 #include <sstream>
 
@@ -14,10 +14,10 @@ public:
   using Context=std::function<std::pair<std::string,std::string>()>;
   using Committed=std::function<void(const std::string &,const Json &)>;
 private:
-  enum:int {device=6501,channels,refresh,record,stop,keep,discard,name,output,close,discardSetup,reviewTake,
+  enum:int {device=6501,channels,refresh,record,stop,keep,discard,name,output,close,discardSetup,reviewTake,acceptState,
     heading=6550,deviceLabel,channelLabel,nameLabel,outputLabel,permissionLabel,takeLabel,statusLabel,helpLabel};
   Request request_;Context context_;Committed committed_;
-  NativeWriteCompletion::Write write_;NativeWriteCompletion completion_;
+  NativeWriteCompletion::Write write_;NativeWriteCompletion completion_;NativeAssetObservation observation_;Json submitted_;
   std::string completionTake_;
   struct Lifecycle {std::string method,document,revision,take;Json params;};
   std::optional<Lifecycle> lifecycle_;
@@ -173,8 +173,8 @@ private:
     const auto identity=take_,title=utf8(field(name));const bool instrument=choice(output)==1;const auto generation=generation_;const auto fields=raw();
     require(!title.empty()&&title.size()<=128,"Enter a sample name using 1–128 UTF-8 bytes");
     perform([&]{
-      completionTake_=identity;
-      completion_.submit(write_,"sample.recording.commit",{{"take",identity},{"name",title},{"createInstrument",instrument},{"expectedRevision",target.second},{"dryRun",false}},target.first,generation,fields);
+      completionTake_=identity;observation_.clear();submitted_={{"take",identity},{"name",title},{"createInstrument",instrument},{"expectedRevision",target.second},{"dryRun",false}};
+      completion_.submit(write_,"sample.recording.commit",submitted_,target.first,generation,fields);
       finishCommit();
     });
   }
@@ -196,7 +196,17 @@ private:
     baseline_=completion_.fields();draft_=generation_!=completion_.generation();
     status(text+L" / result reviewed without repeating Keep");completion_.finish();completionTake_.clear();
   }
-  void reviewCommit(){perform([&]{request_("synchronizeView",Json::object());finishCommit();});}
+  void reviewCommit(){perform([&]{request_("synchronizeView",Json::object());if(completion_.returned())finishCommit();else{
+    observation_.read(request_,context_,[this]{return generation_;},completion_.snapshot().at("documentId").get<std::string>(),Json{{"completion",completion_.snapshot()},{"params",submitted_}},true);
+    status(L"Current assets and take inspected / earlier Keep unverified; Accept state acknowledges without keeping again");
+  }});}
+  void acknowledgeKeep(){
+    require(completion_.retained(),"No Keep result to acknowledge");perform([&]{
+      observation_.check(context_(),generation_);auto current=request_("sample.recording.get",Json::object());observation_.checkTake(current);observation_.check(context_(),generation_);
+      auto report=observation_.report();accept(current,true);report_=std::move(report);
+      status(L"Unverified Keep acknowledged / current take and raw setup retained / no write repeated");completion_.finish();completionTake_.clear();observation_.clear();
+    });
+  }
   void discardTake(){requireResolved();require(!take_.empty(),"There is no retained take");perform([&]{lifecycleRequest("sample.recording.discard",{{"take",take_}},[&](const Json &){clearTake();status(L"Take discarded / ready to record");});});}
   void action(int id,unsigned notification)override{
     if(setting_)return;
@@ -209,6 +219,7 @@ private:
     if(id==channels&&notification==CBN_SELCHANGE){const auto index=choice(channels);if(index>=0&&size_t(index)<inputs_.size())input_=inputs_[size_t(index)];return;}
     if(notification!=BN_CLICKED)return;
     if(id==discardSetup){requireResolved();setting_=true;set(name,L"Recording");ScreamSeq::NativeInputGate::present(controls_.at(output),CB_SETCURSEL,0,0);setting_=false;baseline_=raw();draft_=false;draftContext_=context_();++generation_;status(L"Sample name and output reset / retained take unchanged");return;}
+    if(id==acceptState){acknowledgeKeep();return;}
     if(id==reviewTake)reviewLifecycle();else if(id==refresh){requireResolved();loadDevices();}else if(id==record)begin();else if(id==stop)end();else if(id==keep)commit();else if(id==discard)discardTake();else if(id==close)hide();
   }
   bool key(WPARAM value,bool,bool)override{
@@ -231,6 +242,7 @@ private:
     place(channelLabel,18,112,150,20);place(channels,18,136,210,180);place(permissionLabel,242,139,w-260,24);
     place(nameLabel,18,180,90,20);place(name,18,204,w-272,27);place(outputLabel,w-240,180,222,20);place(output,w-240,204,222,180);
     place(takeLabel,18,250,w-36,50);place(helpLabel,18,332,w-36,46);place(statusLabel,18,388,w-36,std::max(48.f,h-446));
+    place(acceptState,206,302,204,26,completion_.retained());EnableWindow(controls_.at(acceptState),!pending_&&observation_.ready());
     place(reviewTake,18,302,180,26);ShowWindow(controls_.at(reviewTake),lifecycle_?SW_SHOWNA:SW_HIDE);EnableWindow(controls_.at(reviewTake),!pending_&&bool(lifecycle_));
     place(record,18,h-46,92,28);place(stop,118,h-46,80,28);place(keep,206,h-46,110,28);place(discard,324,h-46,100,28);place(close,w-118,h-46,100,28);
     for(int id:{device,channels,refresh})EnableWindow(controls_.at(id),!pending_&&!completion_.retained()&&!lifecycle_&&take_.empty());
@@ -248,7 +260,7 @@ private:
   }
 public:
   SampleRecordingWindow(HWND owner,Request request,Context context,Committed committed,NativeWriteCompletion::Write write):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),committed_(std::move(committed)),write_(std::move(write)){
-    minimumWidth_=600;minimumHeight_=530;create(L"ScreamSeq.SampleRecording",L"Record a sample",660,560);
+    minimumWidth_=600;minimumHeight_=530;create(L"ScreamSeq.SampleRecording",L"Record a sample",660,560);button(acceptState,L"Accept observed state");
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"RECORD A SAMPLE"},{deviceLabel,L"Input device"},{channelLabel,L"Input channels"},{nameLabel,L"Sample name"},{outputLabel,L"Keep as"},{permissionLabel,L""},{takeLabel,L""},{statusLabel,L""},{helpLabel,L"Record opens the selected microphone. No input monitoring.\nStop or Close retains the take; Keep adds it to the original song."}})label(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{record,L"Record"},{stop,L"Stop"},{keep,L"Keep take"},{discard,L"Discard take"},{close,L"Close"},{discardSetup,L"Discard setup"},{reviewTake,L"Review current take"}})button(id,text);
     combo(device);combo(channels);combo(output);edit(name,L"Recording",128);
@@ -266,6 +278,6 @@ public:
     require(!lifecycle_,"Review current take before closing / the microphone may still be active");
     if(capturing())end();KillTimer(window_,3);NativeToolWindow::hide();
   }
-  Json snapshot()const{Json inputs=Json::array();for(const auto &v:inputs_)inputs.push_back({{"firstChannel",v.first},{"channels",v.count}});return {{"visible",visible()},{"pending",pending_},{"completion",completion_.snapshot()},{"lifecycleReview",lifecycle_?Json{{"method",lifecycle_->method},{"documentId",lifecycle_->document},{"revision",lifecycle_->revision},{"take",lifecycle_->take},{"params",lifecycle_->params}}:Json()},{"draft",draft_},{"draftDocument",draftContext_.first},{"draftRevision",draftContext_.second},{"generation",generation_},{"document",document_},{"baseRevision",baseRevision_},{"take",take_},{"capturing",capturing()},{"staleDocument",!sameDocument()},{"device",selectedDevice_},{"devices",devices_},{"permission",permission_},{"firstChannel",input_.first},{"channels",input_.count},{"inputChoices",inputs},{"name",utf8(field(name))},{"createInstrument",choice(output)==1},{"state",takeState_},{"report",report_},{"status",utf8(status_)}};}
+  Json snapshot()const{Json inputs=Json::array();for(const auto &v:inputs_)inputs.push_back({{"firstChannel",v.first},{"channels",v.count}});return {{"visible",visible()},{"pending",pending_},{"completion",completion_.snapshot()},{"observation",observation_.report()},{"lifecycleReview",lifecycle_?Json{{"method",lifecycle_->method},{"documentId",lifecycle_->document},{"revision",lifecycle_->revision},{"take",lifecycle_->take},{"params",lifecycle_->params}}:Json()},{"draft",draft_},{"draftDocument",draftContext_.first},{"draftRevision",draftContext_.second},{"generation",generation_},{"document",document_},{"baseRevision",baseRevision_},{"take",take_},{"capturing",capturing()},{"staleDocument",!sameDocument()},{"device",selectedDevice_},{"devices",devices_},{"permission",permission_},{"firstChannel",input_.first},{"channels",input_.count},{"inputChoices",inputs},{"name",utf8(field(name))},{"createInstrument",choice(output)==1},{"state",takeState_},{"report",report_},{"status",utf8(status_)}};}
 };
 }

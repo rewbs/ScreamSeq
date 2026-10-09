@@ -89,6 +89,9 @@ struct RestoreApplication final:Application {
         if(!pluginPresetChooser)throw std::runtime_error("Fixture requires an owned preset chooser");
         return pluginPresetChooser(save);
     }
+    int nativeCommandChoice=IDNO;std::function<void()> duringCommandAcknowledgement;
+    bool failSaveBeforeCleanup=false;unsigned saveCleanupFailures=0;
+    int chooseNativeCommandAcknowledgement(const Json &)override{if(auto action=std::exchange(duringCommandAcknowledgement,{}))action();return nativeCommandChoice;}
     int departureChoice=IDCANCEL;
     bool failDepartureStop=false,failDepartureRefresh=false;
     std::function<void()> beforeDepartureAdmission,duringDepartureAdmission;
@@ -104,6 +107,7 @@ struct RestoreApplication final:Application {
     explicit RestoreApplication(const std::filesystem::path &folder)
         :Application({},true,folder/L"envelope-catalogue.json",folder/L"plugin-library.json"){}
     void finishDocumentOperation(const std::string &method,const Json &result)override {
+        if(method=="document.save"&&failSaveBeforeCleanup){refreshDocument();++saveCleanupFailures;throw std::runtime_error("Owned failure before recovery cleanup scheduling");}
         Application::finishDocumentOperation(method,result);
         if(method=="plugin.preset.save"||method=="plugin.preset.load") {
             ++pluginPresetWrites;if(auto fault=std::exchange(pluginPresetCompletionFault,{}))fault();
@@ -1046,6 +1050,10 @@ static void retainedTakesProtectLeavingDocument() {
 #include "InstrumentCreationApplicationTests.inc"
 #include "SampleMutationApplicationTests.inc"
 #include "SampleReadbackApplicationTests.inc"
+#include "BankClosureApplicationTests.inc"
+#include "NativeCommandApplicationTests.inc"
+#include "UnknownAssetApplicationTests.inc"
+#include "ParityFixtureApplicationTests.inc"
 
 void nativeCompletionRetainsOutcome() {
     using Json=RestoreJson;
@@ -1099,6 +1107,18 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"parity-fixture") {
+                    applicationParityFixtureRecovery();std::cout<<"PASS original F04 and three Parity WAVs: retained results, no replay, exact PCM/identity history and save/reopen\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"asset-outcomes") {
+                    applicationUnknownAssetRecovery();std::cout<<"PASS unknown asset outcomes: render, family, direct render and retained Keep owner\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
+                    applicationNativeCommandRecovery();std::cout<<"PASS Main command recovery: sample, MIDI, saved file and recovery cleanup without replay\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"bank-results") {
+                    applicationBankClosure();std::cout<<"PASS bank closure: capture drafts, exact/unknown outcomes, staged reads and catalogue effects\n";return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"sample-reads") {
                     applicationSampleReadbackRecovery();std::cout<<"PASS sample readback: staged target, raw drafts, waveform and navigation\n";return;
                 }
@@ -1118,14 +1138,11 @@ int wmain(int argc,wchar_t **argv) {
                 mainAndTimingDraftCensus();std::cout<<"PASS draft census: Main nudge review and captured timing sequence\n";
                 importAndRecorderDraftCensus();std::cout<<"PASS draft census: recorder setup and actual Application hidden path repair ownership\n";
                 mainOwnersRetireAfterAdmission();std::cout<<"PASS Main retirement: seven owners, rollback, raw text, generations and fresh initialization\n";
-                directRenderCompletionCensus();std::cout<<"PASS direct render: pending census, retained result, read-only review, one Undo and stale selection\n";
                 return;
             }
-            applicationSampleReadbackRecovery();
-            applicationSampleMutationRecovery();
-            applicationInstrumentCreationRecovery();std::cout<<"PASS instrument creation recovery: receipt, domain readback, chooser and newer draft retention\n";
-            applicationPluginPresetRecovery();std::cout<<"PASS preset recovery: exact receipts, unknown readback, pending departure and draft retention\n";
-            nativeCompletionRetainsOutcome();std::cout<<"PASS native completion: real worker commit, classified error, readback and one Undo\n";
+            // Recovery/receipt scenarios have dedicated CTest groups above.
+            // Keep this default process limited to the original workspace cases;
+            // each private child retains the same bounded lifetime.
             retainedTakesProtectLeavingDocument();std::cout<<"PASS take protection: MIDI, microphone, both, read failure and reentrant input\n";
             modulationCatalogueReadRetainsNewerDraft();std::cout<<"PASS modulation catalogue: manual baseline and pumped raw-draft retention\n";
             firstRestoreMatchesOrdinaryOpen();std::cout<<"PASS first restore: independent Notes inspector/native target and FX binding equivalence\n";

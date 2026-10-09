@@ -19,6 +19,7 @@ Json invoke(DocumentController &controller,const char *method,Json p=Json::objec
   p["expectedRevision"]=controller.view()->session.revision;return call(controller,method,std::move(p));
 }
 #include "PreparedAssetReceiptTests.inc"
+#include "PreparedEnvelopeReceiptTests.inc"
 void publicationTests(const std::filesystem::path &directory) {
   bool fail=false,persistent=false;unsigned stops=0;
   DocumentController controller({},"worker-test",[&]{++stops;},[](const auto &){},[&]{if(fail || persistent) {fail=false;throw std::runtime_error("controlled view publication failure");}});
@@ -100,7 +101,7 @@ void publicationTests(const std::filesystem::path &directory) {
     need(classified,"Missing reconnect target lacks a proven preflight refusal");
     need(controller.view()==beforePathRefusal&&stops==pathRefusalStops,"Reconnect preflight changed the document, history view or transport");
   }
-  preparedAssetReceiptTests(directory);
+  preparedAssetReceiptTests(directory);preparedEnvelopeReceiptTests(directory);
   std::cout<<"publication tests passed\n";
 }
 

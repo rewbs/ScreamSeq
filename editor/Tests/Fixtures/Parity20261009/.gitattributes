@@ -1,0 +1,3 @@
+# Preserve original archive bytes, including the hashed textual reference files.
+FIXTURES.md -text
+fixtures/** -text

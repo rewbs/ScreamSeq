@@ -4,6 +4,7 @@
     bool directSampleRenderPending=false;
     uint64_t directSampleRenderGeneration=0;
     ScreamSeq::NativeWriteCompletion directSampleRenderCompletion;
+    ScreamSeq::NativeAssetObservation directSampleRenderObservation;
     Json directSampleRenderTarget=Json::object(),directSampleRenderReport=Json::object();
     void connectSampleCaptureTransport(ScreamSeq::NativeToolWindow &tool){
         tool.musicalTyping([this](HWND focus,WPARAM key,bool repeat){
@@ -29,7 +30,7 @@
     }
     void ensureSampleRecordingWindow(){
         if(!sampleRecordingWindow){sampleRecordingWindow=std::make_unique<ScreamSeq::SampleRecordingWindow>(window,
-            [this](const auto &method,const auto &params){return documentOperation(method,params);},
+            [this](const auto &method,const auto &params){if(method=="document.get")return view->session.document;return documentOperation(method,params);},
             [this]{return std::pair(documentId,view->session.revision);},
             [this](const auto &document,const auto &result){revealCapturedSample(document,result);},
             [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
@@ -71,7 +72,7 @@
         const Json params={{"pattern",target.pattern},{"firstRow",target.firstRow},{"lastRow",target.lastRow},{"firstChannel",target.firstChannel},{"lastChannel",target.lastChannel},
             {"name","Rendered selection"},{"tailSeconds",0},{"createInstrument",instrument},{"dryRun",false},{"expectedRevision",target.revision}};
         directSampleRenderTarget=params;directSampleRenderTarget["documentId"]=target.document;directSampleRenderReport=Json::object();
-        ++directSampleRenderGeneration;
+        ++directSampleRenderGeneration;directSampleRenderObservation.clear();
         directSampleRenderPending=true;struct Guard{bool &value;~Guard(){value=false;}} guard{directSampleRenderPending};
         directSampleRenderCompletion.submit([this](const auto &method,const auto &request,const auto &receipt){return documentOperationWithOutcome(method,request,receipt);},
             "sample.renderSelection",params,target.document,directSampleRenderGeneration,directSampleRenderTarget);
@@ -94,14 +95,24 @@
         if(busy||directSampleRenderPending)throw std::runtime_error("Wait for the render request before reviewing its result");
         if(!directSampleRenderCompletion.retained())return;
         directSampleRenderPending=true;struct Guard{bool &value;~Guard(){value=false;}} guard{directSampleRenderPending};
-        documentOperation("synchronizeView",Json::object());finishDirectSampleRender();
+        documentOperation("synchronizeView",Json::object());
+        if(directSampleRenderCompletion.returned()){finishDirectSampleRender();return;}
+        directSampleRenderObservation.read([this](const auto &method,const auto &params){if(method=="document.get")return view->session.document;return documentOperation(method,params);},
+          [this]{return std::pair(documentId,view->session.revision);},[this]{return directSampleRenderGeneration;},directSampleRenderTarget.at("documentId").get<std::string>(),
+          Json{{"completion",directSampleRenderCompletion.snapshot()},{"params",directSampleRenderTarget}});
+        directSampleRenderReport=directSampleRenderObservation.report();
+        auto prompt=directSampleRenderReport;prompt["submission"]["domain"]="render";
+        const auto choice=chooseNativeCommandAcknowledgement(prompt);
+        if(choice!=IDYES){status=L"Unverified render retained / no write repeated";return;}
+        directSampleRenderObservation.check({documentId,view->session.revision},directSampleRenderGeneration);
+        directSampleRenderCompletion.finish();status=L"Unverified render acknowledged / no selection changed and no render repeated";frameRequested=true;
     }
     void openPatternSampleRender(bool instrument,std::optional<ScreamSeq::PatternSampleRenderWindow::Target> captured={}){
         if(busy)throw std::runtime_error("Wait for the document worker before opening selection rendering");
         if(directSampleRenderCompletion.retained()){reviewDirectSampleRender();return;}
         if(!view->session.document.value("editable",false))throw std::runtime_error("The current song cannot be edited");
         if(!patternSampleRenderWindow){patternSampleRenderWindow=std::make_unique<ScreamSeq::PatternSampleRenderWindow>(window,
-            [this](const auto &method,const auto &params){return documentOperation(method,params);},
+            [this](const auto &method,const auto &params){if(method=="document.get")return view->session.document;return documentOperation(method,params);},
             [this]{return patternSampleTarget();},
             [this](const auto &document,const auto &result){revealCapturedSample(document,result);},
             [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});

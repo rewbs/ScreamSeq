@@ -16,7 +16,7 @@ private:
     heading=4300,targetLabel,rowLabel,valueLabel,formulaLabel,rangeLabel,toolLabel0,toolLabel1,toolLabel2,toolLabel3,statusLabel,pageHelp};
   static constexpr std::array<const char *,9> curves={"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse","scripted"};
   static constexpr std::array<const char *,9> operations={"flip-time","flip-values","shift","scale","ramp","sine","humanize","paste","insert"};
-  Request request_;std::function<Cursor()> context_;std::function<void(const std::string &,uint32_t)> inspect_;
+  Request request_;NativeWriteCompletion::Write bankWrite_;std::function<Cursor()> context_;std::function<void(const std::string &,uint32_t)> inspect_;
   std::function<void(const std::string &,uint32_t)> absolute_;
   Cursor captured_;std::string patternID_,pluginID_,laneID_;std::optional<uint32_t> parameter_;
   Json lanes_=Json::array(),plugins_=Json::array(),catalog_=Json::array(),points_=Json::array(),values_=Json::array(),clip_;
@@ -164,11 +164,13 @@ private:
     const auto doc=captured_.document,plugin=pluginID_,pattern=patternID_;const auto parameter=parameter_;auto token=std::make_shared<uint64_t>(generation_);
     auto source=[this,doc,plugin,pattern,parameter,token]{return context_().document==doc&&captured_.document==doc&&pluginID_==plugin&&patternID_==pattern&&parameter_==parameter&&generation_==*token&&!pointFields_;};
     auto context=[this]{const auto c=context_();return std::pair(c.document,c.revision);};
-    auto request=[this,source,token](const std::string &method,const Json &p){const bool owned=source(),wasPending=pending_;if(owned)pending_=true;Json result;try{result=request_(method,p);}catch(...){pending_=wasPending;throw;}pending_=wasPending;
-      if(p.contains("expectedRevision")&&owned&&source()){captured_.revision=context_().revision;if(method=="envelope.bank.apply"||((method=="envelope.bank.unlink"||method=="envelope.bank.save")&&!draft())){const auto before=generation_;load(false);if(!draft()&&generation_==before+1)*token=generation_;}}return result;};
+    auto dispatch=[this,source,token](const std::string &method,const Json &p,const std::shared_ptr<NativeCallReceipt> &receipt){const bool owned=source(),wasPending=pending_;if(owned)pending_=true;Api::CompletedCall completed;Json result;try{if(receipt){completed=bankWrite_(method,p,receipt);if(!receipt->read())receipt->publish(std::make_shared<const Api::CompletedCall>(completed));result=completed.result;}else result=request_(method,p);}catch(...){pending_=wasPending;throw;}pending_=wasPending;
+      if(p.contains("expectedRevision")&&owned&&source()){captured_.revision=context_().revision;if(method=="envelope.bank.apply"||((method=="envelope.bank.unlink"||method=="envelope.bank.save")&&!draft())){const auto before=generation_;load(false);if(!draft()&&generation_==before+1)*token=generation_;}}if(receipt)return completed;return Api::CompletedCall{method,captured_.document,context_().revision,std::move(result)};};
+    auto request=[dispatch](const auto &method,const auto &params){return dispatch(method,params,{}).result;};
+    auto write=[dispatch](const auto &method,const auto &params,const auto &receipt){return dispatch(method,params,receipt);};
     Json target={{"kind","parameter"},{"pattern",captured_.pattern},{"plugin",pluginID_},{"parameter",*parameter_}},shape;
     if(!points_.empty())shape={{"span",rows_*256},{"rowsPerBeat",rowsPerBeat_},{"points",points_}};
-    bank_=std::make_unique<EnvelopeBankWindow>(window_,target,shape,captured_.document,captured_.revision,parameterName()+L" · Pattern "+std::to_wstring(captured_.pattern),std::move(request),std::move(context),std::move(source));bank_->show();
+    bank_=std::make_unique<EnvelopeBankWindow>(window_,target,shape,captured_.document,captured_.revision,parameterName()+L" · Pattern "+std::to_wstring(captured_.pattern),std::move(request),std::move(context),std::move(source),std::move(write));bank_->show();
   }
   void touch(){require(!draft(),"Apply or Reload the current curve draft first");const auto data=request_("automation.target.get",Json::object());const auto &target=data.at("target");require(!target.is_null()&&target.value("available",false),"Touch a parameter in the rack or a plugin editor first");load(true,target.at("plugin"),target.at("parameter").get<uint32_t>());}
   void action(int id,unsigned notification)override{
@@ -380,7 +382,9 @@ private:
     wchar_t label[160]{};swprintf_s(label,shortDock_?L"Rows %.2f–%.2f · %.1f–%.1f%%":L"Rows %.2f–%.2f · %.1f–%.1f%% · Ctrl+wheel zooms; Ctrl+Shift zooms values",canvas_.start/256,canvas_.end/256,canvas_.valueLow*100,canvas_.valueHigh*100);s.uiText(label,r.x,r.y-22,r.w,0x93aabd);
   }
 public:
+  void bankWriter(NativeWriteCompletion::Write write){bankWrite_=std::move(write);}
   ParameterAutomationWindow(HWND owner,Request request,std::function<Cursor()> context,std::function<void(const std::string &,uint32_t)> inspect,std::function<void(const std::string &,uint32_t)> absoluteEditor):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)),absolute_(std::move(absoluteEditor)){
+    bankWrite_=[this](const auto &method,const auto &params){const auto before=context_();auto result=request_(method,params);return Api::CompletedCall{method,before.document,context_().revision,std::move(result)};};
     minimumClientWidth_=440;minimumClientHeight_=500;create(L"ScreamSeq.ParameterAutomation",L"Pattern parameter automation",1240,850);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{pageTarget,L"Target"},{pageCurve,L"Curve"},{pageFormula,L"Formula"},{pageTools,L"Tools"}})button(id,name);
     for(int id:{pattern,plugin,kind,snap,tool})combo(id);for(int id:{search,pointRow,pointValue,formula,rangeStart,rangeEnd,toolValue0,toolValue1,toolValue2,toolValue3})edit(id,L"",id==formula?2048:id==search?128:32);
