@@ -70,6 +70,7 @@ struct RestoreApplication final:Application {
     bool sampleGuardFails=false;
     std::function<void()> duringSampleGuard;
     std::function<void()> completionFault;
+    std::function<void(const std::string &)> sampleMutationCompletion;
     std::function<void()> sampleLibraryCompletionFault;
     unsigned sampleLibraryCompletions=0;
     void finishSampleLibraryOperation(const std::string &,const Json &)override {
@@ -106,6 +107,7 @@ struct RestoreApplication final:Application {
         if(method=="plugin.preset.save"||method=="plugin.preset.load") {
             ++pluginPresetWrites;if(auto fault=std::exchange(pluginPresetCompletionFault,{}))fault();
         }
+        if(sampleMutationCompletion)sampleMutationCompletion(method);
         if(auto fault=std::exchange(completionFault,{}))fault();
     }
     Json documentOperation(const std::string &method,const Json &params)override {
@@ -1041,6 +1043,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "NativeReceiptApplicationTests.inc"
 #include "PluginPresetApplicationTests.inc"
 #include "InstrumentCreationApplicationTests.inc"
+#include "SampleMutationApplicationTests.inc"
 
 void nativeCompletionRetainsOutcome() {
     using Json=RestoreJson;
@@ -1094,6 +1097,9 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"sample-results") {
+                    applicationSampleMutationRecovery();std::cout<<"PASS sample mutation recovery: receipts, staged refresh, domain readback and no replay\n";return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"receipts") {
                     nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();applicationDirectSampleImportRetention();applicationSampleLibraryRecovery();applicationPluginPresetRecovery();applicationInstrumentCreationRecovery();
                     std::cout<<"PASS Native receipts: worker identity, lost callback, retained render and one Undo\n";return;
@@ -1110,6 +1116,7 @@ int wmain(int argc,wchar_t **argv) {
                 directRenderCompletionCensus();std::cout<<"PASS direct render: pending census, retained result, read-only review, one Undo and stale selection\n";
                 return;
             }
+            applicationSampleMutationRecovery();
             applicationInstrumentCreationRecovery();std::cout<<"PASS instrument creation recovery: receipt, domain readback, chooser and newer draft retention\n";
             applicationPluginPresetRecovery();std::cout<<"PASS preset recovery: exact receipts, unknown readback, pending departure and draft retention\n";
             nativeCompletionRetainsOutcome();std::cout<<"PASS native completion: real worker commit, classified error, readback and one Undo\n";

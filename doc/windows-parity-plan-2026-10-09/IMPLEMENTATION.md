@@ -2,6 +2,82 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Sample editor mutation recovery and staged completion
+
+The sample editor now routes non-preview operations through its own
+`NativeWriteCompletion` and the Application's exact per-call worker ticket
+(`windows/App/SampleMutation.inc`, `SampleDetailWindow.hpp`, `Main.cpp`). This
+covers settings, replacement, processing, drawing, loop edits, clipboard
+copy/cut/delete/paste/copy-to-new, Create instrument and native document Undo/Redo.
+Preview remains read-only. The editor captures method, original document/revision,
+stable sample identity/slot, request, draft generation and raw edit fields.
+
+Post-write sample metadata and bounded waveform reads now stage locally before
+adopting the refreshed context or clearing submitted fields/drawing. Each read is
+followed by document/revision/generation checks. A worker return followed by a
+native exception, failed read or newer raw edit leaves the exact receipt and
+unapplied drafts retained. Review synchronizes and presents that historical
+completion without repeating the write, reopening a chooser, retargeting the
+inspector, rebasing its drafts or stealing a newer focus choice. Hide/reopen keeps
+the same owner. Pending and unresolved outcomes participate in document departure;
+conflicting controls and gestures remain disabled until resolution.
+
+Without a receipt, Review reads the current stable sample catalogue and original
+sample metadata, if that identity still exists. It additionally reads the private
+clipboard for copy/cut/paste and the published document (including validated
+instrument identities) for Create instrument and Undo/Redo. A missing original
+sample is an observation, not permission to adopt its former slot's occupant.
+Readback remains explicitly **unverified** and requires **Accept state** against
+the same observed document/revision. Failed/malformed reads and stale
+acknowledgements retain uncertainty. Neither Review nor acknowledgement writes or
+claims that equal song revision proves clipboard success. Explicit Reload is
+needed to adopt current audio after a historical/unknown completion review.
+
+Replacement's chooser contributes pending ownership before submission and rejects
+nested replacement, API Open, and changed captured context. Cancellation or a
+chooser exception does not leave an unresolved mutation. The native labels are
+**Review** and **Accept state** while unresolved, then return to **Reload** and
+**From cursor**. No shared operation, public API, codec, plugin state, audio/device
+integration or Mac source changed.
+
+Validation (Windows ARM64, private desktops):
+
+- Incremental `workspace-restore-tests` and `ScreamSeq` build passed. Initial
+  compilation found a test-only helper mismatch; the shared
+  `DocumentDraft::retained()` assertion corrected it.
+- Three CTests passed in 23.20 seconds: draft census (9.05), departure (5.32), and
+  the new sample-result group (8.79). The new group covers real replacement,
+  pending chooser/nested/API refusal, exact result loss, newer raw text/focus,
+  hide/reopen, unrelated sample preservation, single Undo/Redo, drawing failures
+  at both metadata and waveform refresh, unknown clipboard and instrument
+  outcomes, malformed/failed domain reads, stale acknowledgement and no replay.
+  The private-process foreground/clipboard/lifecycle guards passed.
+- Ten targeted actual-application cases passed across two runs: seven in the
+  initial ten-case run (70.589 seconds), then the three affected save/reopen cases
+  in a 14.285-second recheck on the **same binary**. The initial three errors came
+  from the new helper reading the API envelope instead of its data. The corrected
+  helper retains assertions for stable identity, slot, full settings and PCM.
+  No product source changed after the successful build/native run.
+- The application cases cover settings/no-op/invalid/stale drafts, explicit
+  departure refusal/discard, captured replacement with chooser cancellation and
+  stale guards, drawing and persistence, all 14 processing operations compared
+  against the shared API, joint loop Preview/Apply/Undo/persistence, replaced
+  clipboard review with raw option retention, Ctrl+Enter focus/caret retention,
+  and minimum-size controls/F6. No skips; no assertion was removed or relaxed.
+
+Evidence: `bin/parity-evidence/p0b-sample-mutation-receipt.json` freezes 1,859
+source/dependency inputs, toolchain/cache, executable and retained log hashes.
+It retains both initial failures and the exact recheck scope. Only the helper's
+three affected cases were repeated; valid unrelated evidence was reused.
+
+This is a targeted checkpoint, not completion of P0b. Remaining work includes
+atomicity of explicit sample Reload/loop Reload (those older read paths still
+clear drafts before a fallible waveform read), prepared commit receipts inside
+remaining asset operations, the rest of the owner audit, and integration on main.
+Unknown sample removal/slot reuse is guarded in source but not newly exercised by
+this fault-injection group. Windows x64, Mac, foreground/UIA, physical devices,
+all five supplied reciprocal fixtures and P0c–P8 remain open.
+
 ## P0b.1 Instrument import and creation recovery
 
 `InstrumentEnvelopeWindow` now shares one native creation-result path for **Import

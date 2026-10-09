@@ -72,7 +72,7 @@ class SampleDetailUITests(unittest.TestCase):
     def test_drawing_native_units_channels_interpolation_history_and_reopen(self):
         self.select(4813,2);self.stage(4,.5);self.stage(8,-.5);self.assertEqual(self.pcm(),self.raw);self.press(4825);actual=self.pcm();self.assertEqual(actual[::2],self.raw[::2]);self.assertEqual(actual[9:18:2],(16384,8192,0,-8192,-16384));self.assertEqual(self.state()['points'],[])
         before=self.doc();self.stage(4,.5);self.stage(8,-.5);self.press(4825);self.assertEqual(self.doc(),before);self.press(4804);self.assertEqual(self.pcm(),self.raw);self.press(4805);self.assertEqual(self.pcm(),actual)
-        path=self.folder/'sample-drawing.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.press(4802);self.assertEqual(self.pcm(),actual)
+        identity=self.state()['id'];path=self.folder/'sample-drawing.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.start();self.assertEqual(self.state()['id'],identity);self.assertEqual(self.pcm(),actual)
         self.select(4813,1);self.select(4827,1);self.stage(10,.25);self.stage(13,-.25);self.press(4825);self.assertEqual(self.pcm()[20:28:2],(8192,8192,8192,-8192));self.assertEqual(self.pcm()[1::2],actual[1::2]);self.assertFalse(self.state()['fieldDraft'])
 
     def test_mouse_drawing_cancellation_and_stale_gesture_preserve_audio(self):

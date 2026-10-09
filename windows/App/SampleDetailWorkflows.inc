@@ -133,9 +133,15 @@
     }
     for(auto [id,control]:controls_){wchar_t type[24]{};GetClassNameW(control,type,24);if(_wcsicmp(type,L"STATIC"))EnableWindow(control,!pending_||id==close);}
     EnableWindow(controls_.at(paste),!pending_&&pasteReady());
+    if(mutationFrozen()){
+      for(auto [id,control]:controls_){wchar_t type[24]{};GetClassNameW(control,type,24);if(_wcsicmp(type,L"STATIC"))EnableWindow(control,id==close||(id>=pageDraw&&id<=pageSnap));}
+      EnableWindow(controls_.at(reload),!pending_&&!mutationWorking_);
+      EnableWindow(controls_.at(fromCursor),!pending_&&!mutationWorking_&&mutationNeedsAcknowledgement_);
+    }
+    set(reload,mutationCompletion_.retained()?L"Review":L"Reload");set(fromCursor,mutationCompletion_.retained()?L"Accept state":L"From cursor");
     // Disabling native controls clears their focus during worker requests.
     // Restore only that lost focus, never a newer choice or inactive window.
     if(pending_&&previousFocus&&IsChild(window_,previousFocus)&&!GetFocus())pendingFocus_=previousFocus;
-    if(!pending_&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
+    if(!pending_&&!mutationFrozen()&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
     layoutPending_=pending_;
   }

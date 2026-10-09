@@ -729,7 +729,7 @@ public:
     }
     std::unique_ptr<ScreamSeq::SampleDetailWindow> sampleDetailWindow;
     void openSampleDetail(){
-        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);},[this]{openSampleRecording();});
+        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){if(method=="document.get")return view->session.document;return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);},[this]{openSampleRecording();},[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
         connectTyping(*sampleDetailWindow,[this]{return sampleDetailWindow->musicalTarget();});
         sampleDetailWindow->openAt();
     }
