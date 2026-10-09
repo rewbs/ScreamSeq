@@ -1,6 +1,23 @@
 # Parity implementation progress
 
-Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](planning-readback.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
+Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
+
+## P0b.2 post-adoption owner retirement foundation
+
+The existing registry/native-window candidate now has bounded ARM64 qualification. `DocumentDraftRegistry::admitForReplacement` prepares cleanup and summary reads before acquiring its lease. Its move-only `AdmittedReplacement` retires document owners only after the caller observes adoption; dropping an unused admission leaves drafts intact. Clean document owners retire alongside dirty ones; global tools remain. Missing cleanup or failed summary reads refuse admission. Retirement skips nested owners already destroyed by their parent, retries only incomplete cleanup and retains its lease through native refresh.
+
+`NativeToolWindow` registers no-throw HWND retirement, disables/hides/destroys the old window, unregisters on destruction and rejects reopening retired owners. The controller fixture observes the newly adopted document before retiring; Stop failure leaves drafts untouched. Real native-window checks cover dirty docked parents, nested children, hidden clean owners, rollback, no placement callback and global-tool survival.
+
+Existing final-source build and execution logs were re-read; frozen source hashes matched. The additional separate draft census was run on the same executable without rebuilding. Evidence under `bin/parity-evidence/`:
+
+| Log | Scope/result |
+|---|---|
+| `p0b-retirement-final-build.log` | ARM64 Release app, departure/controller and both native workspace targets |
+| `p0b-retirement-final-tests.log` | 5/5: full workspace, native owner, controller scratch fixture/departure and portable departure; 88.18 s |
+| `p0b-retirement-app-tests.log` | Two isolated actual-app layout/pin/focus retention cases; 1.363 s, no skips |
+| `p0b-retirement-census-tests.log` | Separate raw-draft owner census 1/1; 6.16 s |
+
+`p0b-retirement-native-receipt.json` pins source, compiler, cache, executables and logs. This does **not** activate final departure in Application: Main-owner retirement callbacks, C++ owner cleanup, the input/API lease and native/API/recovery/Close/session-end integration remain. No shared musical model, file format or DSP changed. Mac/x64 execution, actual departure journeys, reciprocal fixtures, foreground UIA and hardware remain open.
 
 ## P0b.1 plugin reconnect result retention
 

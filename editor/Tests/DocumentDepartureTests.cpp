@@ -114,7 +114,73 @@ void nativeOwners() {
   {ScreamSeq::DocumentDraftRegistry temporary;surviving=temporary.add("Surviving handle",[](){return std::optional<DocumentDraft>{};},[]{});}
   surviving.reset(); // Owner teardown remains safe if its registry already died.
 }
+void ownerRetirement() {
+  using Registry=ScreamSeq::DocumentDraftRegistry;
+  static_assert(!std::is_constructible_v<Registry::RetireAction,decltype([]{return true;})>,"Throwing cleanup must be staged before admission");
+  static_assert(!std::is_constructible_v<Registry::RetireAction,decltype([]()noexcept{})>,"Cleanup must report completion");
+  static_assert(std::is_constructible_v<Registry::RetireAction,decltype([]()noexcept{return true;})>);
+  Registry registry;auto fields=draft();auto clean=fields;clean.dirty=false;
+  unsigned retired=0,cleanRetired=0,childRetired=0,globalRetired=0;
+  bool leaseDuringRetirement=true;
+  Registry::Registration parent,nested;
+  parent=registry.add("Parent",[&]{return std::optional(fields);},[]{},[&]()noexcept{
+    leaseDuringRetirement&=registry.departing();++retired;fields.dirty=false;
+    nested.reset();parent.reset();return true; // Nested object's callback must not be invoked after its destruction.
+  });
+  nested=registry.add("Nested",[&]{return std::optional(fields);},[]{},[&]()noexcept{++childRetired;return true;});
+  auto cleanOwner=registry.add("Clean target",[&]{return std::optional(clean);},[]{},[&]()noexcept{++cleanRetired;return true;});
+  auto global=registry.add("Preferences",[]{return std::optional<DocumentDraft>{};},[]{},[&]()noexcept{++globalRetired;return true;});
+  auto review=[&]{return registry.authorize(registry.capture("song-A","r9"),true);};
+  auto consent=review();
+  {
+    auto admission=registry.admitForReplacement(*consent.token,"song-A","r9");
+    need(admission.status==Status::Ready&&admission.replacement&&registry.departing(),"Prepared cleanup must own the departure lease");
+    need(retired==0&&cleanRetired==0&&fields.dirty,"Admission discarded work before adoption");
+  }
+  need(!registry.departing()&&retired==0&&fields.dirty,"Failed worker adoption must roll back without retirement");
+  need(registry.admitForReplacement(*consent.token,"song-A","r9").status==Status::Changed,"Rollback revived old discard consent");
+  consent=review();auto admission=registry.admitForReplacement(*consent.token,"song-A","r9");
+  auto moved=std::move(*admission.replacement);
+  need(!admission.replacement->retireOwners()&&registry.departing(),"Moved-from admission retained authority");
+  need(moved.retireOwners()&&registry.departing(),"Retirement must retain lease through native refresh");
+  need(retired==1&&cleanRetired==1&&childRetired==0&&globalRetired==0&&leaseDuringRetirement,"Wrong owners retired or nested destroyed callback ran");
+  need(!moved.retireOwners(),"Retirement repeated a final native cleanup");
+  moved.release();need(!registry.departing()&&!moved.retireOwners(),"Released retirement retained authority");
+
+  // A recreated owner with identical fields cannot inherit another owner's consent.
+  fields.dirty=true;parent=registry.add("Parent",[&]{return std::optional(fields);},[]{},[&]()noexcept{++retired;return true;});
+  consent=review();parent.reset();parent=registry.add("Parent",[&]{return std::optional(fields);},[]{},[&]()noexcept{++retired;return true;});
+  need(registry.admitForReplacement(*consent.token,"song-A","r9").status==Status::Changed&&retired==1,"Replacement owner inherited retirement authority");
+  consent=review();++fields.generation;
+  need(registry.admitForReplacement(*consent.token,"song-A","r9").status==Status::Changed&&fields.dirty,"New raw input was discarded by retirement preparation");
+  for(bool uncertain:{false,true}) {
+    fields.pending=fields.uncertain=false;consent=review();fields.pending=!uncertain;fields.uncertain=uncertain;
+    need(registry.admitForReplacement(*consent.token,"song-A","r9").status==Status::Changed,"New pending/uncertain work acquired retirement authority");
+  }
+  fields.pending=fields.uncertain=false;
+  auto unhandled=registry.add("Unimplemented clean owner",[&]{return std::optional(clean);},[]{});
+  consent=review();bool refused=false;
+  try{registry.admitForReplacement(*consent.token,"song-A","r9");}catch(const std::logic_error &){refused=true;}
+  need(refused&&!registry.departing()&&retired==1,"Missing clean-owner cleanup must fail before adoption");
+  unhandled.reset();need(registry.admitForReplacement(*consent.token,"song-A","r9").status==Status::Changed,"Failed cleanup staging did not consume consent");
+  consent=review();auto failed=registry.add("Failed census",[]()->std::optional<DocumentDraft>{throw std::runtime_error("summary unavailable");},[]{},[]()noexcept{return true;});
+  refused=false;try{registry.admitForReplacement(*consent.token,"song-A","r9");}catch(const std::runtime_error &){refused=true;}
+  need(refused&&!registry.departing()&&fields.dirty,"Summary failure changed retained work or acquired a lease");
+  failed.reset();consent=review();auto retry=registry.admitForReplacement(*consent.token,"song-A","r9");
+  need(retry.status==Status::Ready,"Failed preparation leaked registry capture ownership");
+  retry.replacement->release();
+  consent=review();auto next=registry.admitForReplacement(*consent.token,"song-A","r9");
+  need(!retry.replacement->retireOwners()&&registry.departing(),"Old released admission acquired a newer lease");
+  next.replacement.reset();
+  unsigned cleanupAttempts=0;
+  auto incomplete=registry.add("Native close refusal",[&]{return std::optional(clean);},[]{},[&]()noexcept{return ++cleanupAttempts==2;});
+  consent=review();auto partial=registry.admitForReplacement(*consent.token,"song-A","r9");
+  need(!partial.replacement->retireOwners()&&registry.departing()&&cleanupAttempts==1,"Incomplete native cleanup released or falsely completed retirement");
+  const auto completedParents=retired,completedClean=cleanRetired;
+  need(partial.replacement->retireOwners()&&registry.departing()&&cleanupAttempts==2,"Remaining native cleanup could not finish under the same lease");
+  need(retired==completedParents&&cleanRetired==completedClean,"Retry repeated already completed owner cleanup");
+}
 int main() {
-  try{refusalAndConsent();changedWork();presentationAndLifetimes();nativeOwners();std::cout<<"Document departure and native owner registry tests passed\n";return 0;}
+  try{refusalAndConsent();changedWork();presentationAndLifetimes();nativeOwners();ownerRetirement();std::cout<<"Document departure, native owner registry and post-adoption retirement tests passed\n";return 0;}
   catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}
 }
