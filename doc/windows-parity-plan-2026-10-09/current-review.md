@@ -16,6 +16,8 @@ Planning only, 9 October 2026. This is the current-state supplement to the [comp
 
 The second peer file is named `SCREAMSEQ_WINDOWS_PARITY_MATRIX_2026-10-09.csv`, rather than PLAN. Both Downloads files were reviewed, including phases, acceptance recipes, architecture, validation, decisions and appendices. The source-backed integrated plan is the base; valid peer recommendations are incorporated into its phases and acceptance criteria, not treated as a separate alternative plan.
 
+Final readback at checkout `b09f42f50308ca1e2f8a829bd9627b631185017f` confirmed remote main remains `16cab100b`. The intervening commit changes planning documents only; the product-source snapshot above remains applicable. Both supplied peer hashes still match. The Mixer handoff now explicitly uses the typed outcome contract rather than treating an error number as proof of an uncertain commit.
+
 The reference was read starting with `MAIN-UPDATE.md`, `README.md`, gallery/index, `FIXTURES.md` and the checklist. All nine contact sheets and selected full-size originals were inspected. Its **70 live images** and **33 supplemental component renders** remain distinct. Only views 12 and 59–61 were recaptured at the reference's current-main checkpoint; the other 99 images retain their older provenance. Blank native captions in the component renders and synthetic meters cannot establish live presentation or sound. The complete reference is 103 images plus 14 behavioral checklist entries: 117 integrated rows, with 84 rows in the supplied checklist.
 
 ### Existing qualification rechecked without execution
