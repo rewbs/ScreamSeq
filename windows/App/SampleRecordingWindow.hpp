@@ -13,14 +13,24 @@ public:
   using Context=std::function<std::pair<std::string,std::string>()>;
   using Committed=std::function<void(const std::string &,const Json &)>;
 private:
-  enum:int {device=6501,channels,refresh,record,stop,keep,discard,name,output,close,
+  enum:int {device=6501,channels,refresh,record,stop,keep,discard,name,output,close,discardSetup,
     heading=6550,deviceLabel,channelLabel,nameLabel,outputLabel,permissionLabel,takeLabel,statusLabel,helpLabel};
   Request request_;Context context_;Committed committed_;
   Json devices_=Json::array(),takeState_=Json::object(),report_=Json::object();
   std::string selectedDevice_,document_,baseRevision_,take_,permission_;
   struct Input {unsigned first=0,count=1;};
   std::vector<Input> inputs_;Input input_;
-  bool pending_=false,setting_=false,loaded_=false;
+  bool pending_=false,setting_=false,loaded_=false,draft_=false;uint64_t generation_=0;
+  std::pair<std::string,std::string> draftContext_,pendingContext_;
+  Json baseline_=Json::array();
+  Json raw()const{return Json::array({utf8(field(name)),choice(output)});}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    // Takes have their own session guard. Name/output intent belongs to a song;
+    // idle endpoint/channel choices are global capture configuration.
+    const auto &captured=draft_?draftContext_:pending_?pendingContext_:draftContext_;
+    return describeDraft(captured.first,captured.second,Json::array({"sample-recording",take_,selectedDevice_,input_.first,input_.count}).dump(),generation_,draft_,pending_);
+  }
+  void requireSetupDocument()const{require(!draft_||draftContext_.first==context_().first,"Sample setup belongs to the previous song / Discard setup before recording into another song");}
   int choice(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
   bool capturing()const{return !take_.empty()&&takeState_.value("capturing",false);}
   bool sameDocument()const{return take_.empty()||context_().first==document_;}
@@ -31,7 +41,7 @@ private:
   void error(const std::exception &e)override{status(wide(e.what()));}
   void schedule(){if(visible()&&capturing())SetTimer(window_,3,150,nullptr);else KillTimer(window_,3);}
   template<typename F> void perform(F operation){
-    require(!pending_,"A recording request is still running");pending_=true;layout();
+    require(!pending_,"A recording request is still running");pendingContext_=context_();pending_=true;layout();
     try{operation();}catch(...){pending_=false;layout();schedule();throw;}
     pending_=false;layout();schedule();requestPaint();
   }
@@ -105,6 +115,7 @@ private:
     });
   }
   void begin(){
+    requireSetupDocument();
     require(take_.empty(),"Keep or discard the retained take before recording again");
     require(inputAvailable(),"Choose an available input and channel range");
     const auto first=input_.first,count=input_.count;
@@ -119,10 +130,11 @@ private:
   }
   void end(){require(!take_.empty(),"There is no retained take");perform([&]{accept(request_("sample.recording.stop",{{"take",take_}}));if(!takeState_.contains("error"))status(L"Take stopped / Keep adds a new sample with one Undo");});}
   void commit(){
+    requireSetupDocument();
     require(!take_.empty()&&!capturing(),"Stop the take before keeping it");
     require(takeState_.value("frames",uint64_t(0))>0,"The take contains no audio frames");
     const auto target=context_();require(target.first==document_,"Original song is no longer open / take retained");
-    const auto identity=take_,title=utf8(field(name));const bool instrument=choice(output)==1;
+    const auto identity=take_,title=utf8(field(name));const bool instrument=choice(output)==1;const auto generation=generation_;const auto fields=raw();
     require(!title.empty()&&title.size()<=128,"Enter a sample name using 1–128 UTF-8 bytes");
     perform([&]{
       auto result=request_("sample.recording.commit",{{"take",identity},{"name",title},{"createInstrument",instrument},{"expectedRevision",target.second},{"dryRun",false}});
@@ -131,14 +143,21 @@ private:
       if(const auto instrument=report_.value("instrument",0u))text+=L" + mapped instrument "+std::to_wstring(instrument);
       status(text+L" / document Undo available");
       committed_(target.first,report_);
+      baseline_=fields;draft_=generation!=generation_;
     });
   }
   void discardTake(){require(!take_.empty(),"There is no retained take");perform([&]{request_("sample.recording.discard",{{"take",take_}});clearTake();status(L"Take discarded / ready to record");});}
   void action(int id,unsigned notification)override{
-    if(setting_||pending_)return;
+    if(setting_)return;
+    if((id==name&&notification==EN_CHANGE)||(id==output&&notification==CBN_SELCHANGE)){
+      if(!draft_)draftContext_=pending_?pendingContext_:context_();++generation_;draft_=raw()!=baseline_;return;
+    }
+    if((id==device||id==channels)&&notification==CBN_SELCHANGE&&(pending_||!take_.empty())){deviceChoices();inputChoices();return;}
+    if(pending_)return;
     if(id==device&&notification==CBN_SELCHANGE){const auto index=choice(device);if(index>=0&&size_t(index)<devices_.size()){selectedDevice_=devices_[size_t(index)].at("id").get<std::string>();inputChoices(true);}return;}
     if(id==channels&&notification==CBN_SELCHANGE){const auto index=choice(channels);if(index>=0&&size_t(index)<inputs_.size())input_=inputs_[size_t(index)];return;}
     if(notification!=BN_CLICKED)return;
+    if(id==discardSetup){setting_=true;set(name,L"Recording");SendMessageW(controls_.at(output),CB_SETCURSEL,0,0);setting_=false;baseline_=raw();draft_=false;draftContext_=context_();++generation_;status(L"Sample name and output reset / retained take unchanged");return;}
     if(id==refresh)loadDevices();else if(id==record)begin();else if(id==stop)end();else if(id==keep)commit();else if(id==discard)discardTake();else if(id==close)hide();
   }
   bool key(WPARAM value,bool,bool)override{
@@ -157,7 +176,7 @@ private:
   }
   void layout()override{
     if(!ready_)return;const auto [w,h]=size();
-    place(heading,18,12,w-36,24);place(deviceLabel,18,46,w-36,20);place(device,18,70,w-146,240);place(refresh,w-118,70,100,27);
+    place(heading,18,12,w-186,24);place(discardSetup,w-158,12,140,26);place(deviceLabel,18,46,w-36,20);place(device,18,70,w-146,240);place(refresh,w-118,70,100,27);
     place(channelLabel,18,112,150,20);place(channels,18,136,210,180);place(permissionLabel,242,139,w-260,24);
     place(nameLabel,18,180,90,20);place(name,18,204,w-272,27);place(outputLabel,w-240,180,222,20);place(output,w-240,204,222,180);
     place(takeLabel,18,250,w-36,50);place(helpLabel,18,332,w-36,46);place(statusLabel,18,388,w-36,std::max(48.f,h-446));
@@ -167,7 +186,7 @@ private:
     EnableWindow(controls_.at(stop),!pending_&&capturing());
     EnableWindow(controls_.at(keep),!pending_&&!take_.empty()&&!capturing()&&sameDocument()&&takeState_.value("frames",uint64_t(0))>0);
     EnableWindow(controls_.at(discard),!pending_&&!take_.empty());
-    for(int id:{name,output,close})EnableWindow(controls_.at(id),!pending_);
+    for(int id:{name,output,close,discardSetup})EnableWindow(controls_.at(id),!pending_);
   }
   void paint(RenderSurface &s)override{
     const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);s.fill(18,310,w-36,12,0x0c141c);
@@ -177,10 +196,10 @@ public:
   SampleRecordingWindow(HWND owner,Request request,Context context,Committed committed):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),committed_(std::move(committed)){
     minimumWidth_=600;minimumHeight_=530;create(L"ScreamSeq.SampleRecording",L"Record a sample",660,560);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"RECORD A SAMPLE"},{deviceLabel,L"Input device"},{channelLabel,L"Input channels"},{nameLabel,L"Sample name"},{outputLabel,L"Keep as"},{permissionLabel,L""},{takeLabel,L""},{statusLabel,L""},{helpLabel,L"Record opens the selected microphone. No input monitoring.\nStop or Close retains the take; Keep adds it to the original song."}})label(id,text);
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{record,L"Record"},{stop,L"Stop"},{keep,L"Keep take"},{discard,L"Discard take"},{close,L"Close"}})button(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{record,L"Record"},{stop,L"Stop"},{keep,L"Keep take"},{discard,L"Discard take"},{close,L"Close"},{discardSetup,L"Discard setup"}})button(id,text);
     combo(device);combo(channels);combo(output);edit(name,L"Recording",128);
     for(const auto text:{L"Sample",L"Sample + mapped instrument"})SendMessageW(controls_.at(output),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
-    SendMessageW(controls_.at(output),CB_SETCURSEL,0,0);finish();
+    SendMessageW(controls_.at(output),CB_SETCURSEL,0,0);baseline_=raw();draftContext_=context_();finish();
   }
   ~SampleRecordingWindow()override{ready_=false;if(window_)KillTimer(window_,3);}
   bool hasRetainedTake()const{return !take_.empty();}
@@ -192,6 +211,6 @@ public:
     if(pending_){status(L"Wait for the recording request to finish before closing");return;}
     if(capturing())end();KillTimer(window_,3);NativeToolWindow::hide();
   }
-  Json snapshot()const{Json inputs=Json::array();for(const auto &v:inputs_)inputs.push_back({{"firstChannel",v.first},{"channels",v.count}});return {{"visible",visible()},{"pending",pending_},{"document",document_},{"baseRevision",baseRevision_},{"take",take_},{"capturing",capturing()},{"staleDocument",!sameDocument()},{"device",selectedDevice_},{"devices",devices_},{"permission",permission_},{"firstChannel",input_.first},{"channels",input_.count},{"inputChoices",inputs},{"name",utf8(field(name))},{"createInstrument",choice(output)==1},{"state",takeState_},{"report",report_},{"status",utf8(status_)}};}
+  Json snapshot()const{Json inputs=Json::array();for(const auto &v:inputs_)inputs.push_back({{"firstChannel",v.first},{"channels",v.count}});return {{"visible",visible()},{"pending",pending_},{"draft",draft_},{"draftDocument",draftContext_.first},{"draftRevision",draftContext_.second},{"generation",generation_},{"document",document_},{"baseRevision",baseRevision_},{"take",take_},{"capturing",capturing()},{"staleDocument",!sameDocument()},{"device",selectedDevice_},{"devices",devices_},{"permission",permission_},{"firstChannel",input_.first},{"channels",input_.count},{"inputChoices",inputs},{"name",utf8(field(name))},{"createInstrument",choice(output)==1},{"state",takeState_},{"report",report_},{"status",utf8(status_)}};}
 };
 }

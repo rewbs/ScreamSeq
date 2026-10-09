@@ -1,6 +1,9 @@
 #include "../../App/NativeToolWindow.hpp"
 #include "../../App/GraphTrimsWindow.hpp"
 #include "../../App/PatternSampleRenderWindow.hpp"
+#include "../../App/MultisampleImportWindow.hpp"
+#include "../../App/PluginPathWindow.hpp"
+#include "../../App/SampleRecordingWindow.hpp"
 #include "../PrivateGuiTest.hpp"
 #include <iostream>
 
@@ -127,12 +130,13 @@ void retainedDock(HWND main,HWND host){
   tool.placementChanged({});tool.floatWindow();tool.hide();
 }
 #include "DraftRequestRetentionTests.inc"
+#include "DraftImportRetentionTests.inc"
 }
 int main(){
   try{
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqDockTest",[]{
     WNDCLASSW type{};type.lpfnWndProc=DefWindowProcW;type.hInstance=GetModuleHandleW(nullptr);type.lpszClassName=L"ScreamSeq.DockTest.Host";RegisterClassW(&type);
-    HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);compactHeaderMeasurement();trimRequestRetention(main.value);renderRequestRetention(main.value);host.close();main.close();}
+    HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);compactHeaderMeasurement();trimRequestRetention(main.value);renderRequestRetention(main.value);multisampleRequestRetention(main.value);pluginPathRequestRetention(main.value);recordingSetupRetention(main.value);host.close();main.close();}
     require(!IsWindow(mainWindow)&&!IsWindow(hostWindow),"Destroy owned dock test hosts");});std::cout<<"Native tool docking: retained HWNDs, focus, keyboard, ownership and bounds passed\n";return 0;
   }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
 }

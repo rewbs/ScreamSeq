@@ -113,3 +113,32 @@ void mainAndTimingDraftCensus() {
         app.songTimingWindow.reset();
     });
 }
+
+void importAndRecorderDraftCensus() {
+    withRestoreFixture([](RestoreApplication &app) {
+        const auto song=songState(app);
+        app.ensureSampleRecordingWindow();auto &recorder=*app.sampleRecordingWindow;
+        ScreamSeq::Tests::ownGuiWindow(recorder.window());recorder.show();
+        rawDraftText(GetDlgItem(recorder.window(),6508),L"Unrecorded sample idea");recorder.hide();
+        const auto recording=namedDraft(census(app),"Record a sample");
+        restoreCheck(recording.dirty&&recording.document==app.documentId&&!recorder.hasRetainedTake(),"Recorder setup must survive hidden without inventing a take");
+
+        // Isolate provider scanning; use the real Application reopen path to
+        // prove that another target cannot destroy a hidden path repair owner.
+        const RestoreJson first={{"plugin","first-plugin"}},second={{"plugin","second-plugin"}};
+        app.pluginPathWindow=std::make_unique<ScreamSeq::PluginPathWindow>(app.window,first,
+            [](const auto &,const auto &){return RestoreJson{{"descriptor",{{"name","Fixture"},{"path","C:/fixture/original.vst3"}}},{"candidates",RestoreJson::array()},{"moduleVerified",false},{"reason","Missing fixture plugin"}};},
+            [&]{return std::pair(app.documentId,app.view->session.revision);});
+        auto *const repair=app.pluginPathWindow.get();const auto repairWindow=repair->window();ScreamSeq::Tests::ownGuiWindow(repairWindow);repair->show();
+        rawDraftText(GetDlgItem(repairWindow,3611),L"C:/pending/plugin.vst3");repair->hide();
+        const auto captured=census(app);app.openPluginPath(second);
+        restoreCheck(app.pluginPathWindow.get()==repair&&repair->window()==repairWindow&&repair->target()==first&&census(app).sameWork(captured),
+            "Opening another plugin replaced or retargeted a hidden repair draft");
+        const auto path=namedDraft(captured,"Reconnect Windows plugin");
+        repair->hide();restoreCheck(app.documentDrafts.review(path.owner)&&repair->visible()&&restoreText(GetDlgItem(repairWindow,3611))==L"C:/pending/plugin.vst3",
+            "Review must raise the original path owner without Reload");
+        restoreCheck(songState(app)==song,"Native setup/path census mutated the song or history");
+        app.pluginPathWindow.reset();app.sampleRecordingWindow.reset();
+        restoreCheck(census(app).drafts.empty(),"Destroyed setup/path owners stayed registered");
+    });
+}

@@ -1012,6 +1012,7 @@ int wmain(int argc,wchar_t **argv) {
                 restoreCheck(length<std::size(group)&&std::wstring_view(group)==L"drafts","Unknown workspace test group");
                 nativeDraftCensusRetainsRawOwners();std::cout<<"PASS draft census: real native raw fields, hidden/reparented owners and nested formula lifetimes\n";
                 mainAndTimingDraftCensus();std::cout<<"PASS draft census: Main nudge review and captured timing sequence\n";
+                importAndRecorderDraftCensus();std::cout<<"PASS draft census: recorder setup and actual Application hidden path repair ownership\n";
                 return;
             }
             retainedTakesProtectLeavingDocument();std::cout<<"PASS take protection: MIDI, microphone, both, read failure and reentrant input\n";

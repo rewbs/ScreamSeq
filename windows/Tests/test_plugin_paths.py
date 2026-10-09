@@ -164,7 +164,18 @@ class PluginPathTests(unittest.TestCase):
         self.write('graph.plugin.set',graph=graph,node=node,inputs=[1]);rack_before=self.rack();opaque=self.state()
         definition=self.read('graph.get',includeState=True)['library'][0]
         recipe=next(n for n in definition['nodes'] if n['id']==node)['plugin'];recipe['path']='/Library/Audio/Plug-Ins/VST3/Graph.vst3'
-        self.write('graph.update',definition=definition);before=self.doc()
+        # Mutations cannot inject foreign module paths. Model a project saved
+        # on the other platform through file loading, as the rack case does.
+        unchanged=self.doc()
+        with self.assertRaises(ApiError):self.write('graph.update',definition=definition)
+        self.assertEqual(self.doc(),unchanged)
+        path,tree=self.save_tree('foreign-graph-path.screamseq')
+        saved=next(g for g in tree['native']['signalGraph']['library'] if g['id']==graph)
+        next(n for n in saved['nodes'] if n['id']==node)['plugin']['path']=recipe['path']
+        path.write_bytes(plistlib.dumps(tree,fmt=plistlib.FMT_BINARY))
+        self.write('document.open',path=str(path),discard=True)
+        self.assertEqual(self.read('graph.get',includeState=True)['library'][0],definition)
+        before=self.doc()
         info=self.read('graph.plugin.path.get',graph=graph,node=node);self.assertFalse(info['moduleVerified']);candidate=info['candidates'][0]
         params=dict(graph=graph,node=node,path=candidate['descriptor']['path'],expectedModuleSHA256=candidate['moduleSHA256'])
         self.write('graph.plugin.path.set',**params,dryRun=True);self.assertEqual(self.doc(),before)
@@ -176,7 +187,11 @@ class PluginPathTests(unittest.TestCase):
         path,_=self.save_tree('graph-path.screamseq');self.write('document.open',path=str(path));self.assertEqual(self.read('graph.get',includeState=True)['library'][0],expected)
         self.assertTrue(self.read('graph.plugin.get',graph=graph,node=node)['parameters'])
         # Actual graph inspector entry point uses the same captured node.
-        self.command(430);self.select(443,3);self.select(442,2);self.command(471);self.idle()
+        self.desktop.send(self.hwnd,0x111,430);self.idle()
+        self.assertEqual(self.read('workspace.get')['graphEditor']['graph'],graph)
+        self.select(443,3);self.idle();self.select(442,next(i for i,n in enumerate(definition['nodes']) if n['id']==node));self.idle()
+        self.assertEqual(self.read('workspace.get')['graphEditor']['node'],node)
+        self.command(471);self.idle()
         self.assertEqual(self.local()['target'],dict(graph=graph,node=node))
 
     def local(self):return self.read('workspace.get')['pluginPath']
@@ -184,7 +199,7 @@ class PluginPathTests(unittest.TestCase):
         end=time.monotonic()+7;quiet=None
         while time.monotonic()<end:
             state=self.read('workspace.get')
-            if state['documentBusy'] or state['pluginPath'].get('pending'):quiet=None
+            if state['documentBusy'] or state['pendingViewCommands'] or state['graphEditor'].get('pending') or state['pluginPath'].get('pending'):quiet=None
             elif quiet is None:quiet=time.monotonic()
             elif time.monotonic()-quiet>=.18:return
             time.sleep(.02)
@@ -218,7 +233,7 @@ class PluginPathTests(unittest.TestCase):
         self.desktop.send(self.control(3611),0x100,0x75);self.assertEqual(self.desktop.focus(self.window()),self.control(3601))
         user.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT];user.GetWindowRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)]
         scale=self.read('workspace.get')['dpi']/96;self.assertTrue(user.SetWindowPos(self.window(),None,0,0,int(700*scale),int(480*scale),0x16));frame=wintypes.RECT();user.GetWindowRect(self.window(),ctypes.byref(frame))
-        for identifier in list(range(3601,3612))+list(range(3700,3705)):
+        for identifier in list(range(3601,3613))+list(range(3700,3705)):
             rect=wintypes.RECT();user.GetWindowRect(self.control(identifier),ctypes.byref(rect));self.assertGreater(rect.right,rect.left);self.assertGreaterEqual(rect.left,frame.left);self.assertLessEqual(rect.right,frame.right);self.assertLessEqual(rect.bottom,frame.bottom)
         user.PostMessageW.argtypes=[wintypes.HWND,wintypes.UINT,wintypes.WPARAM,wintypes.LPARAM]
         before=self.doc();user.PostMessageW(self.window(),0x111,3606,self.control(3606));dlg=self.dialog(self.process,'Choose Windows VST3 module');user.PostMessageW(dlg,0x111,2,0);self.idle();self.assertEqual(self.doc(),before)

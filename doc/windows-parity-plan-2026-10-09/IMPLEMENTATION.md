@@ -1,6 +1,35 @@
 # Parity implementation progress
 
-Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](planning-review-refresh.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
+Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](current-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
+
+## P0b plugin repair, configured import and recorder setup
+
+This continuation completes the three owner omissions identified by the latest review. It is branch work; it does not close F21 or qualify the final departure path.
+
+- `PluginPathWindow` registers raw manual-path/candidate intent and pending reads, verification, scans, chooser and reconnect requests. Late fields and selections retain their captured revision; accepted-path baselines distinguish returning to an old path from accepting the submitted reconnect. Manual paths not submitted by Reconnect remain dirty. Explicit Discard releases local intent. `Application::openPluginPath` preserves hidden dirty/pending owners and distinguishes the document when reusing a clean owner.
+- `MultisampleImportWindow::open` treats a configured family as retained intent immediately. Hiding is presentation, not a new draft generation. Check/Import keep pending ownership through completion callbacks; late raw text invalidates reviewed roots and survives successful import. Reopen raises the existing family; explicit Use current song plus Check is required for stale import. Discard rechecks generation after stopping preview.
+- `SampleRecordingWindow` registers document-scoped name/output intent separately from the session's retained take. Idle endpoint/channel preferences do not create song drafts. Pending Start/Keep/Discard/read requests are protected, and attempted endpoint retargeting during a request restores the captured selection. Keep clears only its submitted generation; later name/output changes survive. Discard setup resets local fields without discarding a take; Discard take does not consume unrelated setup. Old-song setup cannot silently start/keep into a replacement song.
+
+New real-HWND cases in `Workspace/DraftImportRetentionTests.inc` exercise pending census/refused discard, raw text and selector callbacks, Check versus commit, rejected writes, stale retry, late callback input, hidden/reopened owners and explicit discard. `DocumentDraftCensusTests.inc` additionally exercises the actual Application's hidden path-owner reuse and recorder registration. The small target links native `comdlg32` for the existing file chooser; production libraries and Mac/shared musical code are unchanged.
+
+Qualification used the dedicated ARM64 Release `bin/windows-parity-p0` build and owned private desktops. No musician app was running at the preflight or final process check; no audio defaults changed. Logs under `bin/parity-evidence/`:
+
+| Evidence | Result and boundary |
+|---|---|
+| `p0b-import-before-build.log`, `p0b-import-before-test.log` | New check reproduced omitted configured family intent before the repair |
+| `p0b-owner-completion-tests.log` | Retained first post-edit failure: late plugin choice returning to the old baseline was misclassified clean; fixed without weakening the assertion |
+| `p0b-owner-completion-final-build.log`, `p0b-owner-completion-final-tests.log` | Native tool target passed, 1.11 s |
+| `p0b-owner-app-build.log` | App and workspace harness built successfully once the native owner changes were ready |
+| `p0b-owner-integration-tests.log` | 4/4 CTests: full workspace restore 83.60 s, expanded draft census 4.01 s, native tools 1.05 s, sample-recording lifecycle 0.06 s; private child bound unchanged |
+| `p0b-owner-app-tests.log` | Five sample-library scenarios and native rack reconnect passed. The graph-path scenario exposed an outdated foreign-path fixture setup; its failure remains retained |
+| `p0b-owner-graph-path-tests.log` | File-based foreign-path setup passed backend state/history/persistence checks; native entry then exposed a stale button/deferred-load test sequence |
+| `p0b-owner-path-final-tests.log` | Graph and rack native reconnect cases both passed, 7.531 s, after fixture/input readiness corrections; no product validation was relaxed |
+
+The corrected graph-path case now asserts `graph.update` rejects a foreign Windows module path without mutation, then creates the imported project through a saved property tree. It still asserts recipe/rack/opaque-state preservation, Undo/Redo, save/reopen and the actual native graph target. Native commands wait for deferred view work, select the stable fixture node and verify selection before opening repair. The sample-library addition verifies a hidden family survives an external document edit before any field has been typed. Seven distinct application scenarios passed across the retained runs, with no skipped cases. Existing third-party/native provider fixtures were reused from the explicit test caches, not installed or modified globally.
+
+`bin/parity-evidence/p0b-owner-completion-receipt.json` records source/dependency, executable, fixture/cache and log hashes. This is Windows ARM64 functional/native ownership evidence; it does not establish foreground accessibility, physical capture, x64, Mac P0b or reciprocal saves. No shared code changed in this slice, so the unchanged Mac baseline is reused only within its original P0a scope.
+
+**Next:** introduce typed commit outcomes at the actual controller commit boundary and reconcile uncertain native writes; finish the remaining owner audit, including direct `SampleCaptureIntegration.inc::renderPatternSample` pending intent (not currently registered in `DocumentDrafts.inc`), Main FX identity and unavailable nudge review. Then wire Application final replacement/close/recovery admission with exact consent and the input/API lease. Existing numeric `-32003` errors cannot alone distinguish rejection from committed-but-unreported work. Do not treat these selected owner tests as complete departure protection.
 
 ## P0a integrated on shared main
 
