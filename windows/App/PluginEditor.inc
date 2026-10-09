@@ -19,13 +19,14 @@
         if(!pluginPathWindow||(!pluginPathWindow->visible()&&!pluginPathWindow->retainedDraft()&&!pluginPathWindow->matchesTarget(target)))pluginPathWindow=std::make_unique<ScreamSeq::PluginPathWindow>(window,target,[this](const auto &method,const auto &params){return documentOperation(method,params);},[this]{return std::pair(documentId,view->session.revision);},[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
         pluginPathWindow->show();
     }
-    void openPluginLibrary(){
+    void openPluginLibrary(std::string destinationDocument={},std::string destinationBus={},std::string destinationName={}){
         if(!pluginLibraryWindow)pluginLibraryWindow=std::make_unique<ScreamSeq::PluginLibraryWindow>(window,[this](const auto &method,const auto &params){
             if(method=="document.get")return view->session.document;
             auto result=documentOperation(method,params);if(method=="plugin.library.get"){pluginLibraryLoaded=false;armPluginTimer();}return result;
         },[this]{return std::pair(documentId,view->session.revision);},[this](const auto &method,const auto &params,const auto &receipt){
             auto result=documentOperationWithOutcome(method,params,receipt);if(method=="plugin.library.set"){pluginLibraryLoaded=false;armPluginTimer();}return result;
         });
+        if(!destinationBus.empty())pluginLibraryWindow->setDestination(std::move(destinationDocument),std::move(destinationBus),std::move(destinationName));
         pluginLibraryWindow->show();
     }
     void openPluginInstruments(){

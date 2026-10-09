@@ -286,6 +286,45 @@ Because common command dispatch changed, that checkpoint must also include the
 workspace/departure/shortcut/typing/recovery application group, in addition to P1
 native strip/model/PCM checks. No build or test was run for these changes.
 
-Remaining bounded P1 feature work includes instrument Route Here and destination-
-aware effect insertion/sidechain catalogs. Physical UI/accessibility and reciprocal
+Remaining bounded P1 feature work includes instrument Route Here and sidechain
+catalogs. Physical UI/accessibility and reciprocal
 Mac fixture checks remain open; prepared source does not close them.
+
+## Destination-aware effect browser — source only
+
+Mixer Details and the command palette now expose **Add effect to selected bus**
+(`mixerAddEffect`, 422). They open the existing retained `PluginLibraryWindow`
+with the captured document and stable bus identity. The browser displays the bus
+name/ID, restricts the list to effects, and provides **Rack destination** (3216)
+to explicitly return to ordinary rack insertion. Existing category drafts,
+pending operations, uncertain results and unacknowledged readback prevent
+retargeting. Reopening the ordinary browser preserves the visible destination.
+
+Insertion reads current `mixer.get` to verify the captured bus still exists,
+rechecks document/revision, selection and generation after the message-pumping
+read, and submits existing `plugin.add {descriptor,target,expectedRevision}`.
+Windows `PluginOperations.cpp` already stages plugin creation and insertion as
+one validated commit; no API, codec or audio integration change was needed.
+The pending read prevents recursive submission. Deleted buses and replacement
+documents require an explicit new destination; they never fall back to Master.
+The browser's unknown-result review now records routing alongside the rack,
+without resending or attributing a merely matching current state to the request.
+
+Prepared acceptance cases (not executed):
+
+* Native library completion fixtures cover captured bus insertion, exact and
+  unknown completion, routing readback, and refusal to retarget unresolved work.
+* Admission fixtures cover deleted destination, revision changes and newer raw
+  category input during reads, plus recursive Add and destination-change refusal.
+* Real workspace/worker fixture exercises the Mixer command, effect filtering,
+  lost completion after atomic insertion, preservation of every other bus, one
+  Undo/Redo, stable plugin and bus IDs through save/reopen, document-replacement
+  and deleted-bus refusal, and explicit return to rack destination.
+* Existing invalid Mixer draft case now also refuses the effect-browser action.
+
+Next consolidated Windows checkpoint must include `NativeToolWindowTests` and
+workspace restore/application library and command cases, alongside the already
+pending strip/model cases. Full foreground layout, keyboard, UIA and mixed-DPI
+acceptance remains open. Only `git diff --check` was used during preparation;
+no build or product test was started. The normal local build remains gated until
+2026-10-10 00:19:51 UTC or later, and should include the next ready P1 slices.

@@ -283,6 +283,13 @@ owners; scrolling never rebinds a captured edit to another bus. This P1 source
 candidate still requires the qualification gates in
 `../../doc/windows-parity-plan-2026-10-09/P1-IMPLEMENTATION.md`.
 
+The native mixer Details dock also opens the retained plugin browser with
+**Add effect…**, targeting the selected stable bus. The browser shows that
+destination, filters to effects and uses existing atomic `plugin.add` insertion.
+**Rack destination** explicitly clears the bus target. Missing buses, replacement
+documents, pending operations and retained drafts cannot silently redirect the
+insertion. This prepared P1 source has not yet been built or qualified.
+
 The native mixer Details dock has a captured, revision-guarded bus draft, compact numeric
 controls, main-output selection (including disconnect), mute/solo, group/return creation
 and removal, reload, Apply, keyboard access and stereo meters. Unfinished fields

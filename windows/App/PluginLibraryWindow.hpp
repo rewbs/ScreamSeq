@@ -7,10 +7,11 @@ class PluginLibraryWindow final : public NativeToolWindow {
   using Request=std::function<Json(const std::string &,const Json &)>;
   using Context=std::function<std::pair<std::string,std::string>()>;
   enum : int {search=3201,kind,format,category,favorites,hidden,plugins,favorite,hidePlugin,customCategory,saveCategory,insert,reload,rescan,close,
-    heading=3300,searchLabel,kindLabel,formatLabel,categoryLabel,detailLabel,customLabel,statusLabel};
+    rackDestination,heading=3300,searchLabel,kindLabel,formatLabel,categoryLabel,detailLabel,customLabel,statusLabel,destinationLabel};
   Request request_;Context context_;NativeWriteCompletion::Write write_;
   NativeWriteCompletion completion_;std::string operation_,operationDocument_,operationRevision_;
   Json operationParams_,report_;uint64_t generation_=0;bool readbackNeedsReload_=false;
+  std::string destinationDocument_,destinationBus_,destinationName_;
   bool unresolved()const noexcept{return completion_.retained();}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     if(operation_!="plugin.add"||(!pending_&&!unresolved()))return {};
@@ -39,6 +40,7 @@ class PluginLibraryWindow final : public NativeToolWindow {
   void filter(){
     refreshQueued_=false;entries_=Json::array();const auto query=field(search);const auto k=choice(kind),f=choice(format);
     for(const auto &p:allEntries_){
+      if(!destinationBus_.empty()&&p.at("isInstrument").get<bool>())continue;
       if(f>0&&p.at("format")!=(f==1?"Built-in":f==2?"VST3":"AU"))continue;
       if(k>0&&p.at("isInstrument").get<bool>()!=(k==2))continue;
       if(favoritesOnly_&&!p.at("favorite").get<bool>())continue;
@@ -75,7 +77,7 @@ class PluginLibraryWindow final : public NativeToolWindow {
       if(!slot.is_number_integer()||slot.get<double>()<0||returned->result.at("dryRun").get<bool>())throw std::runtime_error("Malformed rack insertion result");
       // This API returns a historical slot, not a stable identity. Never use
       // it to select/inspect today's rack after later edits or reordering.
-      status(context_()==std::pair(returned->document,returned->revision)?L"Plugin added to the captured rack / Undo removes it":
+      status(context_()==std::pair(returned->document,returned->revision)?(operationParams_.contains("target")?L"Effect added to the captured bus / one Undo removes it":L"Plugin added to the captured rack / Undo removes it"):
         L"Original rack insertion completed / song changed since completion; current selection retained");
     }else{
       if(operation_=="plugin.library.set"){
@@ -105,6 +107,12 @@ class PluginLibraryWindow final : public NativeToolWindow {
           if(context_()!=captured)throw std::runtime_error("Song changed during rack review / result retained");
           const auto &rack=observed.at("nativePlugins");if(!rack.is_array())throw std::runtime_error("Malformed rack observation");
           for(const auto &plugin:rack)(void)plugin.at("instanceID").get<std::string>();
+          if(operationParams_.contains("target")){
+            auto mixer=request_("mixer.get",Json::object());
+            if(context_()!=captured)throw std::runtime_error("Song changed during destination review / result retained");
+            if(!mixer.at("buses").is_array())throw std::runtime_error("Malformed destination observation");
+            observed["mixer"]=std::move(mixer);
+          }
         }else{
           observed=request_("plugin.library.get",{{"includeHidden",true},{"rescan",false}});validateLibrary(observed);
           if(operation_=="plugin.library.set"){
@@ -144,7 +152,22 @@ class PluginLibraryWindow final : public NativeToolWindow {
   }
   void addPlugin(){
     if(pending_||refreshQueued_)return;requireWritable();const auto *p=selected();if(!p)return;
-    submit("plugin.add",{{"expectedRevision",context_().second},{"descriptor",p->at("descriptor")}});
+    const auto captured=context_();const auto bus=destinationBus_;const auto selected=selected_;
+    Json params={{"expectedRevision",captured.second},{"descriptor",p->at("descriptor")}};
+    if(!bus.empty()){
+      if(captured.first!=destinationDocument_)throw std::runtime_error("Destination belongs to another song / reopen from Mixer or choose Rack destination");
+      if(p->at("isInstrument").get<bool>())throw std::runtime_error("Choose an effect for this bus");
+      // Copy all intent before this read: worker reads can pump native messages.
+      const auto generation=generation_;Json mixer;pending_=true;layout();
+      try{mixer=request_("mixer.get",Json::object());}catch(...){pending_=false;layout();throw;}
+      pending_=false;layout();
+      if(context_()!=captured||generation_!=generation||destinationBus_!=bus||selected_!=selected||pending_||unresolved()||readbackNeedsReload_)
+        throw std::runtime_error("Destination or selection changed while checking the bus / choose Add effect again");
+      const auto &buses=mixer.at("buses");
+      if(std::none_of(buses.begin(),buses.end(),[&](const auto &entry){return entry.at("id")==bus;}))throw std::runtime_error("Destination bus no longer exists / reopen from Mixer or choose Rack destination");
+      params["target"]=bus;
+    }
+    submit("plugin.add",std::move(params));
   }
   void action(int id,unsigned notification)override{
     if(setting_)return;if(id==close&&notification==BN_CLICKED){hide();return;}
@@ -153,6 +176,7 @@ class PluginLibraryWindow final : public NativeToolWindow {
     if(id==reload&&notification==BN_CLICKED&&unresolved()){reviewResult();return;}requireResolved();
     if(id==saveCategory&&notification==BN_CLICKED){change({{"category",utf8(field(customCategory))}});return;}
     if(id==reload&&notification==BN_CLICKED){const auto generation=generation_;load();if(generation==generation_){categoryDraft_=false;fields();}return;}
+    if(id==rackDestination&&notification==BN_CLICKED){setDestination("","","");return;}
     if(categoryDraft_&&id!=insert)throw std::runtime_error("Apply the category or press Escape before changing the selection or filters");
     if(id==search&&notification==EN_CHANGE){queue();return;}
     if(id==kind||id==format||id==category){if(notification!=CBN_SELCHANGE)return;if(id==category){const auto index=choice(category);filterCategory_=index<=0?"":utf8([&]{const auto n=SendMessageW(controls_.at(category),CB_GETLBTEXTLEN,index,0);std::wstring value(size_t(n)+1,0);SendMessageW(controls_.at(category),CB_GETLBTEXT,index,reinterpret_cast<LPARAM>(value.data()));value.resize(size_t(n));return value;}());}queue();return;}
@@ -176,11 +200,16 @@ class PluginLibraryWindow final : public NativeToolWindow {
     const auto third=(w-48)/3;place(kindLabel,16,115,third,20);place(formatLabel,24+third,115,third,20);place(categoryLabel,32+2*third,115,third,20);
     place(kind,16,138,third,200);place(format,24+third,138,third,220);place(category,32+2*third,138,third,280);
     place(favorites,16,176,150,26);place(hidden,174,176,150,26);
-    place(plugins,16,214,w-32,std::max(70.0f,h-434));place(detailLabel,16,h-208,w-32,22);
+    place(rackDestination,w-164,176,148,26);place(destinationLabel,16,210,w-32,22);
+    place(plugins,16,240,w-32,std::max(70.0f,h-460));place(detailLabel,16,h-208,w-32,22);
     place(favorite,16,h-177,110,26);place(hidePlugin,134,h-177,100,26);place(insert,w-222,h-177,126,26);place(close,w-88,h-177,72,26);
     place(customLabel,16,h-138,w-32,20);place(customCategory,16,h-112,w-178,26);place(saveCategory,w-154,h-112,138,26);place(statusLabel,16,h-70,w-32,56);
     const bool has=selected()!=nullptr,ready=!pending_&&!unresolved()&&!readbackNeedsReload_;for(int id:{search,kind,format,category,favorites,hidden,plugins,rescan})EnableWindow(controls_.at(id),ready&&!categoryDraft_);
     set(reload,unresolved()?L"Review result":L"Reload");EnableWindow(controls_.at(reload),!pending_);EnableWindow(controls_.at(plugins),ready&&!refreshQueued_&&!categoryDraft_);EnableWindow(controls_.at(insert),ready&&!refreshQueued_&&has);
+    EnableWindow(controls_.at(kind),ready&&!categoryDraft_&&destinationBus_.empty());
+    EnableWindow(controls_.at(rackDestination),ready&&!categoryDraft_&&!destinationBus_.empty());
+    set(insert,destinationBus_.empty()?L"Add to rack":L"Add effect");
+    set(destinationLabel,destinationBus_.empty()?L"Destination: plugin rack":wide("Destination: "+destinationName_+" ["+destinationBus_+"] / bus inserts"));
     for(int id:{favorite,hidePlugin,customCategory,saveCategory})EnableWindow(controls_.at(id),ready&&!refreshQueued_&&has&&!revision_.empty()&&(!categoryDraft_||id==customCategory||id==saveCategory));
     set(favorites,favoritesOnly_?L"★ Favorites only":L"Favorites filter: off");set(hidden,includeHidden_?L"Hidden included":L"Hidden excluded");
   }
@@ -201,12 +230,21 @@ public:
     minimumWidth_=640;minimumHeight_=540;create(L"ScreamSeq.PluginLibrary",L"Plugin library",820,680);
     edit(search,L"",200);combo(kind);combo(format);combo(category);edit(customCategory,L"",80);
     add(plugins,L"LISTBOX",L"Available plugins",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|LBS_HASSTRINGS|LBS_OWNERDRAWFIXED|WS_VSCROLL);
-    for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{favorites,L"Favorites filter: off"},{hidden,L"Hidden excluded"},{favorite,L"Favorite"},{hidePlugin,L"Hide"},{saveCategory,L"Apply category"},{insert,L"Add to rack"},{reload,L"Reload"},{rescan,L"Rescan"},{close,L"Close"}})button(id,label);
+    for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{favorites,L"Favorites filter: off"},{hidden,L"Hidden excluded"},{favorite,L"Favorite"},{hidePlugin,L"Hide"},{saveCategory,L"Apply category"},{insert,L"Add to rack"},{reload,L"Reload"},{rescan,L"Rescan"},{close,L"Close"},{rackDestination,L"Rack destination"}})button(id,label);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Plugin library"},{searchLabel,L"Search plugins"},{kindLabel,L"Kind"},{formatLabel,L"Format"},{categoryLabel,L"Category"},{detailLabel,L""},{customLabel,L"Custom category / empty uses the default"},{statusLabel,L""}})label(id,text);
+    label(destinationLabel,L"Destination: plugin rack");
     strings(kind,{L"All kinds",L"Effects",L"Instruments"});strings(format,{L"All formats",L"Built-in",L"VST3",L"AU"});strings(category,{L"All categories"});finish();queue(true);
+  }
+  void setDestination(std::string document,std::string bus,std::string name){
+    if(document==destinationDocument_&&bus==destinationBus_)return;
+    requireWritable();if(pending_||categoryDraft_)throw std::runtime_error("Finish the retained library operation or category draft before changing destination");
+    destinationDocument_=std::move(document);destinationBus_=std::move(bus);destinationName_=std::move(name);++generation_;
+    ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,destinationBus_.empty()?0:1,0);
+    // Retain search and selection when still compatible; never select another row.
+    queue(true);layout();
   }
   void show(){const bool existing=visible();NativeToolWindow::show();if(!existing){SetFocus(controls_.at(search));if(!categoryDraft_&&!unresolved()&&!readbackNeedsReload_)queue(true);}}
   bool protectsClose()const{return pending_||unresolved()||categoryDraft_;}
-  Json snapshot()const{return {{"completion",completion_.snapshot()},{"report",report_},{"readbackNeedsReload",readbackNeedsReload_},{"generation",generation_},{"visible",visible()},{"pending",pending_},{"refreshQueued",refreshQueued_},{"selected",selected_},{"plugins",entries_},{"categories",categories_},{"libraryRevision",revision_},{"categoryDraft",categoryDraft_},{"search",utf8(field(search))},{"category",filterCategory_},{"favoritesOnly",favoritesOnly_},{"includeHidden",includeHidden_},{"status",utf8(status_)}};}
+  Json snapshot()const{return {{"destination",{{"document",destinationDocument_},{"bus",destinationBus_},{"name",destinationName_}}},{"completion",completion_.snapshot()},{"report",report_},{"readbackNeedsReload",readbackNeedsReload_},{"generation",generation_},{"visible",visible()},{"pending",pending_},{"refreshQueued",refreshQueued_},{"selected",selected_},{"plugins",entries_},{"categories",categories_},{"libraryRevision",revision_},{"categoryDraft",categoryDraft_},{"search",utf8(field(search))},{"category",filterCategory_},{"favoritesOnly",favoritesOnly_},{"includeHidden",includeHidden_},{"status",utf8(status_)}};}
 };
 }
