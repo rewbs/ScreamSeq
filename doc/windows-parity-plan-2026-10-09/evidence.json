@@ -6,6 +6,18 @@
   "inspected_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
   "remote_main_equal_to_reference": true,
   "post_reference_main_commits": 0,
+  "review_refresh": {
+    "scope": "Planning documents only; no product edits, application launches, builds, tests, workflow dispatches, branch changes, merges or process control in this review pass",
+    "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+    "checkout_branch": "codex/windows-parity-p0",
+    "checkout_head": "605c7c688e8fb5e3876b1b086ea6b4f1a1e17309",
+    "clean_at_start": true,
+    "existing_candidate_product_test_files": 7,
+    "candidate_status": "Source inspected; not a merged main milestone; runtime/build results not qualified by this review",
+    "input_hashes_rechecked": true,
+    "notes": "review-refresh.md",
+    "historical_checkout_head_note": "The top-level checkout_head records initial discovery. Use review_refresh.checkout_head for this review's actual starting checkout."
+  },
   "archive": "~/Downloads/screamseq-mac-ui-reference-2026-10-09.zip",
   "archive_sha256": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81",
   "reference_counts": {

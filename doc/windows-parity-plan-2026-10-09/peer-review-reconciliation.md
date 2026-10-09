@@ -1,6 +1,6 @@
 # Review of the supplied parity plan and matrix
 
-Reviewed on 9 October 2026, planning only. The integrated implementation plan is [README.md](README.md). This document records why the peer review changed it and where the peer's assertions or prescriptions were not adopted. No product code, build, test, workflow dispatch, application launch or implementation was performed.
+Reviewed on 9 October 2026, planning only. The integrated implementation plan is [README.md](README.md). This document records why the peer review changed it and where the peer's assertions or prescriptions were not adopted. No product code, build, test, workflow dispatch, application launch or implementation was performed in this review pass. [Review refresh](review-refresh.md) distinguishes the current checkout's pre-existing candidate changes from the main baseline.
 
 ## Inputs and method
 
@@ -69,6 +69,7 @@ The reviewer also correctly identified existing Windows strengths: retained targ
 | All floats should stop being tool windows, mandatory fonts/custom Fluent focus, exact Mac colors/geometry | **Design options, not parity requirements.** Preserve appropriate Windows ownership/Alt+Tab/focus cues, use installed/system fonts, accessible semantic tokens and native target sizes. Shared musical semantics do not demand identical Bézier constants or palette |
 | Always commit on blur or auto-rebase if target value unchanged | **Unsafe as a universal rule.** Raw invalid text, stale structural dependencies and hidden owners must survive. Commit only completed valid operations; compare full read-set and rebuild candidate after an explicit conflict resolution |
 | Quarantine required tests to obtain green CI | **Not a release strategy.** Triage/fix failures; required assertions/gates stay mandatory. A user-approved scope change must name any exception rather than burying it in an allowlist |
+| Final exit names only a subset of B01–B14 | **Incomplete exit checklist.** Recording, presets/aliases, recovery, input-error retention and audible/realtime qualification remain required. The integrated final gate covers every behavioral row and every necessary platform/device check; a skip is reported separately from a pass |
 | Adopt 30-day recovery deletion, exclusive mode, branch deletion immediately | **Not required for parity and not executed.** Retention must account for unresolved takes and protected sources. Device mode expansion needs demonstrated scope. Branch housekeeping is outside this planning deliverable |
 
 The peer's invalid-inline-formula autosave claim, stopped activity list/refresh behavior, context-specific command gaps, exact visual contrast values, float placement persistence and pin shortcut scope remain explicit review/runtime leads where not independently traced end to end. The row reconciliation keeps their proposed checks without asserting that all are confirmed defects.

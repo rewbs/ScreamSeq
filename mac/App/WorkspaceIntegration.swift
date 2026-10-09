@@ -109,13 +109,21 @@ extension AppController {
     }
     commandPalette.additionalMenus = { [weak self] in
       guard let self, let dock = self.workspace else { return [] }
-      return InspectorTabs.items.compactMap { item in
-        guard let panel = dock.panels[item.id] else { return nil }
+      var menus: [NSMenu] = []
+      for item in InspectorTabs.items {
+        guard let panel = dock.panels[item.id] else { continue }
         let menu = ContextActions.controls(in: panel.content, title: panel.title)
         ContextActions.appendMenu(panel.actionMenu(), to: menu)
-        return menu
-      } + [ContextActions.controls(in: self.orderEditor, title: "Arrangement")] + (self.scratchGestureWindow?.isVisible==true ? self.scratchGestureWindow?.contentView.map{[ContextActions.controls(in:$0,title:"Scratch phrases")]} ?? []:[])
-        + (self.sampleRecordingWindow?.isVisible==true ? self.sampleRecordingWindow?.contentView.map{[ContextActions.controls(in:$0,title:"Record sample")]} ?? []:[])
+        menus.append(menu)
+      }
+      menus.append(ContextActions.controls(in: self.orderEditor, title: "Arrangement"))
+      if let window = self.scratchGestureWindow, window.isVisible, let content = window.contentView {
+        menus.append(ContextActions.controls(in: content, title: "Scratch phrases"))
+      }
+      if let window = self.sampleRecordingWindow, window.isVisible, let content = window.contentView {
+        menus.append(ContextActions.controls(in: content, title: "Record sample"))
+      }
+      return menus
     }
     commandPalette.collect()
     for tabs in [dock.right,dock.bottom,dock.secondary] {

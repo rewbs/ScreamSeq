@@ -305,8 +305,13 @@ void firstRestoreMatchesOrdinaryOpen() {
             else app.adoptInitialEffects(app.prepareInitialEffects(code));
             const auto restored=effectsState(app);
             restoreCheck(app.effectChoices.at(app.effectSelected).at("kind").get<std::string>()==kind,"Staged nudge selected the wrong command");
-            restoreCheck(app.effectField(effectValue)==(saved?L"0.375":L"0.75")&&app.effectField(effectOffset)==(saved?L"0.125":L"0")&&
+            // The typed descriptor presents normalized strength as percent;
+            // display conversion must not change the captured raw command.
+            restoreCheck(app.effectField(effectValue)==(saved?L"37.5":L"75")&&app.effectField(effectOffset)==(saved?L"0.125":L"0")&&
                 std::stod(app.effectField(effectDuration))==(saved?123456.0/(65536*4):1.0),"Staged nudge lost saved timing or new-command defaults");
+            const auto read=app.readEffectFields();
+            restoreCheck(read.at("value")== (saved?.375:.75)&&read.at("offset")== (saved?32768:0)&&
+                read.at("durationBeats")== (saved?123456.0/(65536*4):1.0),"Reading displayed nudge fields changed exact raw strength or timing");
             app.openEffectEditor(saved?"":code,true);
             restoreCheck(effectsState(app)==restored,"Staged nudge values/catalogue differ from ordinary opening");
             restoreCheck(songState(app)==before&&app.position()==position,"Nudge restore/open changed song/history or cursor");
