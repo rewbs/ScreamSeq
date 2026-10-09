@@ -2,6 +2,37 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## Execution adjustment: close P0b in cohesive batches
+
+The user asked to accelerate progress while P0b is still open. Stop treating each
+newly inspected control as a separate build/qualification milestone. The remaining
+P0b work will use three closure batches, governed by the five exit requirements in
+`final-planning-review.md` rather than an expanding list of desirable refinements:
+
+1. **One remaining-coverage audit.** Inventory the required Main/nested owners and
+   side-effect domains once. Map each to current implementation and scoped existing
+   evidence; identify concrete unmet exit requirements. Distinguish required draft,
+   identity and uncertain-write safety from improvements already assigned to later
+   phases. Current candidate requiring inspection is the main sample-panel edit
+   path; do not assume every generic edit caller needs an identical new UI owner.
+2. **One cohesive closure implementation batch.** Group the audit's confirmed gaps
+   by common command/result boundary and reuse existing admission/receipt machinery.
+   Prepare the related fixes and fault cases together before compiling the native
+   application. Split only for a material dependency/risk reason, not per control.
+   Rebuild once after the source freeze; repeat only invalidated checks or failures.
+3. **One P0b integration gate.** Reuse valid exact-input evidence, run the necessary
+   common-dispatch/workspace/recovery checks, the planned F04/Parity WAV cases, and
+   affected Windows/Mac platform builds/checks. Integrate on shared main, then move
+   to P0c and the P1/P2 feature batches. Do not postpone platform viability until P8.
+
+This changes execution granularity, not acceptance criteria. No required safety,
+platform, fixture or compatibility check is waived; no P0b completion percentage is
+claimed before the coverage audit. New findings enter the fixed exit checklist or
+their existing later phase instead of automatically starting another P0b mini-batch.
+The just-completed sample readback batch is committed as `daddecd6c`; all four native
+groups and nine targeted application cases passed. P0a is merged; P0b is not yet
+closed or merged, and P0c–P8 remain outstanding.
+
 ## P0b.1 Atomic sample readback and navigation
 
 `windows/App/SampleReadback.inc` now owns the sample inspector's staged metadata
