@@ -71,14 +71,17 @@
         if (p[@"name"]) bus.name = string(p[@"name"], 256).UTF8String;
         if (p[@"color"]) bus.color = uint32_t(integer(p[@"color"], 0, 0xffffff));
         if (p[@"output"]) bus.output = p[@"output"] == NSNull.null ? 0 : decodeNativeID(p[@"output"]);
-        if (p[@"preGainDB"]) bus.preGainDB = number(p[@"preGainDB"], -96, 24);
-        if (p[@"prePan"]) bus.prePan = number(p[@"prePan"], -1, 1);
-        if (p[@"gainDB"]) bus.gainDB = number(p[@"gainDB"], -96, 24);
-        if (p[@"pan"]) bus.pan = number(p[@"pan"], -1, 1);
-        if (p[@"width"]) bus.width = number(p[@"width"], 0, 2);
+        MixerControlPatch controls;
+        if (p[@"preGainDB"]) controls.preGainDB = number(p[@"preGainDB"], -96, 24);
+        if (p[@"prePan"]) controls.prePan = number(p[@"prePan"], -1, 1);
+        if (p[@"gainDB"]) controls.gainDB = number(p[@"gainDB"], -96, 24);
+        if (p[@"pan"]) controls.pan = number(p[@"pan"], -1, 1);
+        if (p[@"width"]) controls.width = number(p[@"width"], 0, 2);
+        if (p[@"mute"]) controls.mute = boolean(p[@"mute"]);
+        if (p[@"solo"]) controls.solo = boolean(p[@"solo"]);
+        try { applyMixerControls(graph, affected, controls); }
+        catch(const std::invalid_argument &e) { throw Error(-32602, e.what()); }
         if (p[@"timingMS"]) bus.timingMS = number(p[@"timingMS"], -500, 500);
-        if (p[@"mute"]) bus.mute = boolean(p[@"mute"]);
-        if (p[@"solo"]) bus.solo = boolean(p[@"solo"]);
         if (p[@"inserts"]) {
           bus.inserts.clear();
           for (id insert in array(p[@"inserts"], 32)) {auto id=plugin(insert,false);bus.inserts.push_back(id);std::erase(graph.detached,id);for(auto &chain:graph.detachedChains)std::erase(chain.plugins,id);std::erase(graph.disconnectedMainInputs,id);}
@@ -246,16 +249,21 @@
       const bool different = controlEdit.changed || (!preview && candidate.signal.layout != _document->native().signal.layout);
       if (!dryRun && (different || preview || ([method isEqual:@"mixer.bus.set"] && graph.active()))) {
         std::unique_ptr<MixerTransition::Plan> routing;
-        if (controlsOnly && graph.active()) {
-          const auto controls = prepareMixerControlFrame(graph, plan);
-          if (!_audio->mixerControls(controls)) throw Error(-32002, "Mixer control queue is busy; retry the same revision");
-        } else if(!controlsOnly) {
+        const bool publishControls = controlsOnly && graph.active();
+        const auto controls = publishControls ? prepareMixerControlFrame(graph, plan) : std::vector<MixerControls>{};
+        if(!controlsOnly) {
           if(!_audio->mixerRoutingReady())throw Error(-32002,"Routing transition is busy; retry the same revision");
           routing=_audio->prepareMixerRouting(candidate);
           if(!routing && _audio->active())throw Error(-32002,"This routing change needs a stopped transport; playback and routing were preserved");
         }
-        auto publish=[&]{if(routing && !_audio->publishMixerRouting(routing))throw Error(-32002,"Routing publication was refused; retry the same revision");};
-        if (!preview) _document->annotate([&](NativeSong &n) { n = candidate; },publish);
+        auto publish=[&]{
+          if(publishControls && !_audio->mixerControls(controls))throw Error(-32002,"Mixer control queue is busy; retry the same revision");
+          if(routing && !_audio->publishMixerRouting(routing))throw Error(-32002,"Routing publication was refused; retry the same revision");
+        };
+        // Stage all allocating model/history work before touching the live queue.
+        // annotate skips unchanged data: an unchanged final must still restore
+        // the saved frame after a preview, without creating a history entry.
+        if (!preview && different) _document->annotate([&](NativeSong &n) { n = candidate; },publish);
         else publish();
       }
       result = @{@"mixer": encodeMixer(graph), @"wouldChange": @(different), @"preview": @(preview),

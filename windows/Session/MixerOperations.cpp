@@ -60,7 +60,16 @@ Json MixerOperations::invoke(const std::string &method,const Json &p) {
       keys(p,{"bus","name","color","output","preGainDB","prePan","gainDB","pan","width","timingMS","mute","solo","inserts","mainOutputConnected","dryRun","preview"});auto &bus=findBus(field(p,"bus"));affected=bus.id;
       if(p.contains("mainOutputConnected")){need(bus.kind==MixerBusKind::Master,"Only Master has the final output cable");graph.masterOutputDisconnected=!flag(p,"mainOutputConnected");}
       if(p.contains("name"))bus.name=text(p.at("name"),256);if(p.contains("color"))bus.color=uint32_t(integer(p.at("color"),0,0xffffff));if(p.contains("output"))bus.output=p.at("output").is_null()?0:identity(p.at("output"));
-      if(p.contains("preGainDB"))bus.preGainDB=number(p.at("preGainDB"),-96,24);if(p.contains("prePan"))bus.prePan=number(p.at("prePan"),-1,1);if(p.contains("gainDB"))bus.gainDB=number(p.at("gainDB"),-96,24);if(p.contains("pan"))bus.pan=number(p.at("pan"),-1,1);if(p.contains("width"))bus.width=number(p.at("width"),0,2);if(p.contains("timingMS"))bus.timingMS=number(p.at("timingMS"),-500,500);if(p.contains("mute"))bus.mute=flag(p,"mute");if(p.contains("solo"))bus.solo=flag(p,"solo");
+      MixerControlPatch controls;
+      if(p.contains("preGainDB"))controls.preGainDB=number(p.at("preGainDB"),-96,24);
+      if(p.contains("prePan"))controls.prePan=number(p.at("prePan"),-1,1);
+      if(p.contains("gainDB"))controls.gainDB=number(p.at("gainDB"),-96,24);
+      if(p.contains("pan"))controls.pan=number(p.at("pan"),-1,1);
+      if(p.contains("width"))controls.width=number(p.at("width"),0,2);
+      if(p.contains("mute"))controls.mute=flag(p,"mute");
+      if(p.contains("solo"))controls.solo=flag(p,"solo");
+      applyMixerControls(graph,affected,controls);
+      if(p.contains("timingMS"))bus.timingMS=number(p.at("timingMS"),-500,500);
       if(p.contains("inserts")){bus.inserts.clear();for(const auto &v:array(p.at("inserts"),32)){auto id=plugin(v,false);bus.inserts.push_back(id);std::erase(graph.detached,id);for(auto &chain:graph.detachedChains)std::erase(chain.plugins,id);std::erase(graph.disconnectedMainInputs,id);}std::erase_if(graph.detachedChains,[](const auto &c){return c.plugins.empty();});for(const auto &chain:graph.detachedChains)std::erase(graph.disconnectedMainInputs,chain.plugins.front());}
     } else if(method=="mixer.inserts.move"||method=="mixer.inserts.detach") {
       const bool detach=method=="mixer.inserts.detach";

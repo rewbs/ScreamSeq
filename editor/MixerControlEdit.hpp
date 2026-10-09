@@ -1,8 +1,41 @@
 #pragma once
 #include "MixerRuntime.hpp"
+#include <algorithm>
+#include <cmath>
+#include <optional>
 #include <stdexcept>
 
 namespace Tracker {
+// Omitted values preserve the exact saved value (not its formatted UI text).
+// Structural fields and presentation metadata stay with their own operations.
+struct MixerControlPatch {
+  std::optional<double> preGainDB, prePan, gainDB, pan, width;
+  std::optional<bool> mute, solo;
+};
+
+// Native adapters parse their wire types, then share musical ranges and the
+// candidate operation. Resolve the persistent bus ID, never a visible strip.
+// Validation finishes before assigning anything, including for multi-field edits.
+inline bool applyMixerControls(MixerGraph &candidate, uint64_t busID, const MixerControlPatch &patch) {
+  auto bus = std::find_if(candidate.buses.begin(), candidate.buses.end(),
+    [&](const auto &value) { return value.id == busID; });
+  if(bus == candidate.buses.end()) throw std::invalid_argument("Mixer bus does not exist");
+  const auto validate = [](const std::optional<double> &value, double low, double high) {
+    if(value && (!std::isfinite(*value) || *value < low || *value > high))
+      throw std::invalid_argument("Mixer control value is outside its range");
+  };
+  validate(patch.preGainDB, -96, 24); validate(patch.gainDB, -96, 24);
+  validate(patch.prePan, -1, 1); validate(patch.pan, -1, 1); validate(patch.width, 0, 2);
+  bool changed = false;
+  const auto assign = [&](auto &target, const auto &value) {
+    if(value && target != *value) { target = *value; changed = true; }
+  };
+  assign(bus->preGainDB, patch.preGainDB); assign(bus->prePan, patch.prePan);
+  assign(bus->gainDB, patch.gainDB); assign(bus->pan, patch.pan); assign(bus->width, patch.width);
+  assign(bus->mute, patch.mute); assign(bus->solo, patch.solo);
+  return changed;
+}
+
 struct MixerControlEdit {
   bool changed = false;
   // Matches the public mixer API: labels/colors also avoid routing preparation.

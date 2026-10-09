@@ -1,18 +1,63 @@
 #include "editor/MixerControlEdit.hpp"
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <utility>
 using namespace Tracker;
 namespace {
 void check(bool value, const char *message) { if(!value) throw std::runtime_error(message); }
 void rejects(const std::function<void()> &operation) {
   try { operation(); } catch(const std::invalid_argument &) { return; }
-  throw std::runtime_error("Mismatched control frame plan was accepted");
+  throw std::runtime_error("Invalid mixer control candidate was accepted");
 }
 MixerGraph fixture() {
   MixerGraph graph;
   graph.buses = {{7, 90, MixerBusKind::Track, "Track"}, {90, 0, MixerBusKind::Master, "Master"}};
   return graph;
+}
+void candidates() {
+  auto graph=fixture();
+  graph.buses[0].gainDB=-6.123456789;
+  graph.buses[0].inserts={"retained-state"};
+  graph.buses[0].sends={{90,-12,false,true}};
+  graph.buses[0].timingMS=2.5;
+  const auto before=graph;
+  check(!applyMixerControls(graph,7,{}),"An empty patch is a no-op");
+  MixerControlPatch unchanged;unchanged.gainDB=graph.buses[0].gainDB;
+  check(!applyMixerControls(graph,7,unchanged) && graph==before,"Exact native values remain no-ops without display rounding");
+  MixerControlPatch patch;patch.preGainDB=-96;patch.prePan=-1;patch.pan=1;patch.width=2;patch.mute=true;patch.solo=true;
+  check(applyMixerControls(graph,7,patch),"An effective patch reports a change");
+  auto expected=before;
+  expected.buses[0].preGainDB=-96;expected.buses[0].prePan=-1;expected.buses[0].pan=1;
+  expected.buses[0].width=2;expected.buses[0].mute=true;expected.buses[0].solo=true;
+  check(graph==expected,"Only supplied controls change; other buses, precise gain, routes and insert identity survive");
+  check(!applyMixerControls(graph,7,patch),"Repeated control patches do not create changes");
+  patch={};patch.mute=false;patch.solo=false;patch.width=0;patch.preGainDB=24;
+  check(applyMixerControls(graph,7,patch) && !graph.buses[0].mute && !graph.buses[0].solo &&
+    graph.buses[0].width==0 && graph.buses[0].preGainDB==24,"Explicit false and zero values are not omitted");
+  std::swap(graph.buses[0],graph.buses[1]);
+  patch={};patch.gainDB=-9;
+  check(applyMixerControls(graph,7,patch) && graph.buses[1].gainDB==-9 && graph.buses[0].gainDB==0,
+    "Stable bus lookup survives reordering");
+  const auto valid=graph;
+  rejects([&]{applyMixerControls(graph,123,patch);});
+  using Field=std::optional<double> MixerControlPatch::*;
+  const std::vector<std::pair<Field,std::pair<double,double>>> ranges={
+    {&MixerControlPatch::preGainDB,{-96,24}},{&MixerControlPatch::gainDB,{-96,24}},
+    {&MixerControlPatch::prePan,{-1,1}},{&MixerControlPatch::pan,{-1,1}},{&MixerControlPatch::width,{0,2}}
+  };
+  for(const auto &[field,range]:ranges) {
+    for(double value:{range.first-.001,range.second+.001,std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::infinity(),-std::numeric_limits<double>::infinity()}) {
+      patch={};patch.mute=true;patch.*field=value;
+      rejects([&]{applyMixerControls(graph,7,patch);});
+      check(graph==valid,"Invalid multi-field patch cannot partly modify its bus");
+    }
+    for(double value:{range.first,range.second}) {
+      auto boundary=valid;patch={};patch.*field=value;
+      applyMixerControls(boundary,7,patch);
+    }
+  }
 }
 void classification() {
   const auto original = fixture();
@@ -66,7 +111,7 @@ void projectedFrames() {
 }
 }
 int main() { try {
-  classification();projectedFrames();
-  std::cout << "PASS shared mixer edit classification and detached control-frame preparation\n";
+  candidates();classification();projectedFrames();
+  std::cout << "PASS shared mixer control candidates, classification and detached control-frame preparation\n";
   return 0;
 } catch(const std::exception &error) { std::cerr << error.what() << '\n'; return 1; } }

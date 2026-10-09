@@ -53,6 +53,68 @@ void operator delete(void *p, std::size_t, std::align_val_t alignment) noexcept 
 void operator delete[](void *p, std::size_t, std::align_val_t alignment) noexcept { ::operator delete(p, alignment); }
 
 namespace {
+size_t annotationSweep(bool merge) {
+  for(ptrdiff_t fault=0;fault<10000;++fault) {
+    Tracker::Document document;
+    document.annotate([](auto &n){n.ensureMixer();});
+    const auto gestureBaseline=document.native();
+    document.annotate([](auto &n){n.mixer.buses.front().gainDB=-3;});
+    if(!merge) {
+      document.annotate([](auto &n){n.mixer.buses.front().gainDB=-6;});
+      document.undo(); // A failed new edit must preserve this redo branch too.
+    }
+    const auto before=document.native();
+    const auto revision=document.revision,sequence=document.historySequence();
+    const auto undo=document.historyHead(false),redo=document.historyHead(true);
+    auto candidate=before;candidate.mixer.buses.front().gainDB=-9;
+    unsigned publications=0;
+    // Prepare the callable wrappers before fault injection just as a native
+    // adapter does; fault every allocation within document/history admission.
+    std::function<void(Tracker::NativeSong &)> change=[&](auto &n){n=candidate;};
+    std::function<void()> publish=[&]{++publications;};
+    bool rejected=false;
+    failAfter=fault;
+    try {document.annotate(change,publish,merge?sequence:0);}
+    catch(const std::bad_alloc &){rejected=true;}
+    catch(...){failAfter=-1;throw;}
+    failAfter=-1;
+    if(rejected) {
+      check(publications==0,"Mixer controls were published before history allocation finished");
+      check(document.native()==before && document.revision==revision && document.historySequence()==sequence &&
+        document.historyHead(false)==undo && document.historyHead(true)==redo,
+        "Failed mixer admission changed data, revision, Undo or Redo");
+      document.annotate(change,publish,merge?sequence:0);
+    }
+    check(publications==1 && document.native()==candidate && document.revision==revision+1 && !document.canRedo(),
+      "Retried mixer admission must publish and commit exactly once");
+    document.undo();
+    check(document.native()==(merge?gestureBaseline:before),"Mixer admission lost its original Undo baseline");
+    document.redo();check(document.native()==candidate,"Mixer admission lost its Redo value");
+    if(!rejected) {check(fault>0,"Annotation sweep did not reach allocation staging");return size_t(fault);}
+  }
+  throw std::runtime_error("Annotation allocation sweep did not terminate");
+}
+
+void refusedAnnotation(bool merge) {
+  Tracker::Document document;
+  document.annotate([](auto &n){n.ensureMixer();});
+  const auto baseline=document.native();
+  document.annotate([](auto &n){n.mixer.buses.front().gainDB=-3;});
+  const auto before=document.native();
+  const auto revision=document.revision,sequence=document.historySequence(),undo=document.historyHead(false);
+  bool rejected=false;unsigned publications=0;
+  try {
+    document.annotate([](auto &n){n.mixer.buses.front().gainDB=-9;},[&]{
+      ++publications;throw std::runtime_error("Mixer queue rejected");
+    },merge?sequence:0);
+  } catch(const std::runtime_error &){rejected=true;}
+  check(rejected && publications==1 && document.native()==before && document.revision==revision &&
+    document.historySequence()==sequence && document.historyHead(false)==undo && !document.canRedo(),
+    "Refused mixer publication must roll back staged history");
+  document.undo();check(document.native()==baseline,"Refused mixer publication damaged its prior Undo snapshot");
+  document.redo();check(document.native()==before,"Refused mixer publication damaged its prior Redo snapshot");
+}
+
 size_t sweep(bool redo, bool mixed, bool publication=false) {
   for(ptrdiff_t fault = 0; fault < 10000; ++fault) {
     Tracker::Document document;
@@ -121,7 +183,8 @@ int main() {
     size_t failures = 0;
     for(bool redo : {false, true}) for(bool mixed : {false, true}) failures += sweep(redo, mixed);
     for(bool redo:{false,true}){failures+=sweep(redo,false,true);refusedPublication(redo);}
-    std::cout << "PASS " << failures << " injected allocation failures: native and mixed-cell Undo/Redo remain atomic, retryable and reversible\n";
+    for(bool merge:{false,true}){failures+=annotationSweep(merge);refusedAnnotation(merge);}
+    std::cout << "PASS " << failures << " injected allocation failures: native admission and mixed-cell Undo/Redo remain atomic, retryable and reversible\n";
     return 0;
   } catch(const std::exception &error) { std::cerr << "FAIL " << error.what() << '\n'; return 1; }
 }

@@ -11,8 +11,47 @@ using namespace Tracker;
 using namespace ScreamSeq;
 #define CHECK(x) do { if(!(x)) throw std::runtime_error(std::string(__func__)+":"+std::to_string(__LINE__)+": "+#x); } while(false)
 
+static void controlAdmission() {
+  auto storage=std::make_unique<Document>(MOD_TYPE_MPT,4);auto &document=*storage;
+  bool active=false,refuse=false;unsigned publications=0,stops=0;
+  std::vector<MixerControls> accepted;
+  MixerHostHooks hooks;
+  hooks.feedback=[&]{PlaybackFeedback f;f.audioActive=active;return f;};
+  hooks.controls=[&](const auto &values){++publications;if(refuse)return false;accepted=values;return true;};
+  MixerOperations api(document,[&]{++stops;},hooks);
+  api.invoke("mixer.enable",Json::object());active=true;
+  const auto baseline=document.native();const auto revision=document.revision;
+  const auto undo=document.historyHead(false);const auto stopCount=stops;
+  const auto bus=api.invoke("mixer.get",Json::object())["buses"][0]["id"];
+  for(double gain:{-3.,-12.,-9.})api.invoke("mixer.bus.set",{{"bus",bus},{"gainDB",gain},{"preview",true}});
+  CHECK(publications==3 && document.native()==baseline && document.revision==revision && accepted[0].gainDB==-9);
+  api.invoke("mixer.bus.set",{{"bus",bus},{"gainDB",0}});
+  CHECK(publications==4 && accepted[0].gainDB==0 && document.revision==revision && document.historyHead(false)==undo);
+  const Json values={{"bus",bus},{"gainDB",-6.123456789},{"preGainDB",-3},{"prePan",-.5},
+    {"pan",.25},{"width",1.5},{"mute",true},{"solo",true}};
+  auto dry=values;dry["dryRun"]=true;api.invoke("mixer.bus.set",dry);
+  CHECK(publications==4 && document.native()==baseline && document.revision==revision);
+  refuse=true;bool rejected=false;
+  try{api.invoke("mixer.bus.set",values);}catch(const Api::ApiError &e){rejected=e.code==-32002;}
+  CHECK(rejected && publications==5 && accepted[0].gainDB==0 && document.native()==baseline &&
+    document.revision==revision && document.historyHead(false)==undo);
+  refuse=false;api.invoke("mixer.bus.set",values);const auto changed=document.native();
+  CHECK(publications==6 && document.revision==revision+1 && accepted[0].gainDB==-6.123456789 &&
+    accepted[0].preGainDB==-3 && accepted[0].prePan==-.5 && accepted[0].pan==.25 && accepted[0].width==1.5);
+  api.invoke("mixer.bus.set",values);
+  CHECK(publications==7 && document.native()==changed && document.revision==revision+1 && stops==stopCount);
+  document.undo();CHECK(document.native()==baseline && document.canRedo());
+  const auto undoRevision=document.revision;
+  api.invoke("mixer.bus.set",{{"bus",bus},{"gainDB",-24},{"preview",true}});
+  api.invoke("mixer.bus.set",{{"bus",bus},{"gainDB",0}});
+  CHECK(document.canRedo() && document.revision==undoRevision && accepted[0].gainDB==0);
+  document.redo();CHECK(document.native()==changed);
+  document.undo();document.undo();CHECK(!document.native().mixer.active());
+}
+
 int main() {
   try {
+    controlAdmission();
     auto storage=std::make_unique<Document>(MOD_TYPE_MPT,4);auto &document=*storage;
     unsigned stops=0;
     PluginState effect;effect.instanceID="loose-effect";effect.descriptor.name="Gain";effect.descriptor.format="Built-in";effect.descriptor.classID="resonance.gainer.v1";
