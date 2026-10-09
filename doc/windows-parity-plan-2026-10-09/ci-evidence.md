@@ -1,5 +1,7 @@
 # Existing CI evidence inspected during peer-plan review
 
+**Historical evidence:** retain the source identities and timestamps below. The [latest planning review](planning-review-refresh.md) supersedes this file's candidate-status snapshot; none of these historical results proves the latest checkout or current main passes all gates.
+
 Read-only retrieval; no workflows were started or rerun. The first three job logs identify source `ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`. Their excerpts establish baseline failures. The separate candidate checkpoint at the end records later existing runs and their different source identity.
 
 ## Job 113721103353

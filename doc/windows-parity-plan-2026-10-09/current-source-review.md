@@ -1,5 +1,7 @@
 # Current source review and remaining parity work
 
+**Superseded checkpoint:** this file records the review at `e7f165eb4`. Read [the latest planning review](planning-review-refresh.md) for checkout `d5b7a09eb`, the later layout/fixture candidates and current evidence snapshot. Main remains the same `ffe81aa4b` baseline. Historical execution descriptions below are not authorization to implement during the current planning-only task.
+
 This is the current handoff for the [implementation plan](README.md). It incorporates both Downloads peer files and distinguishes main, existing candidate code, retained execution evidence and future acceptance. The current request is planning only. No product code, builds, tests, app launches, workflow dispatches, merges or process control were performed in this review.
 
 ## Source identities

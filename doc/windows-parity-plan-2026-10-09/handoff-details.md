@@ -2,7 +2,7 @@
 
 This supplements the [implementation plan](README.md). It specifies future work. This review read source, fixtures, images and retained logs; it did not modify product code, launch the app, build, run tests, dispatch workflows or integrate a branch.
 
-**Current-status update:** the checkout is now the pre-existing safety candidate `e7f165eb4`; [current source review](current-source-review.md) supersedes the candidate/evidence status below. The eight-file list in this section records the earlier `61a28b489` checkpoint. The P0b owner and admission design remains future work; the cable and stage-role fixes described later already have candidate implementations and bounded local evidence. Do not implement those fixes twice.
+**Historical checkpoint:** the candidate discussion below records `e7f165eb4` and earlier source. The [latest planning review](planning-review-refresh.md) pins the inspected checkout to `d5b7a09eb50a89b775841da14d8d81f49362c122` and supersedes candidate and evidence status here. The eight-file list records the earlier `61a28b489` checkpoint. The P0b owner and admission design remains future work; cable, stage-role and subsequent layout/fixture repairs already have candidate implementations and bounded local evidence. Do not implement those fixes twice.
 
 ## Earlier source and candidate checkpoint
 

@@ -742,6 +742,108 @@
     "matrix_dispositions": "peer-matrix-review.csv"
   },
   "latest_planning_review": {
+    "scope": "Planning documents only; no product edits, builds, tests, application launches, workflow dispatches, commits, pushes or merges",
+    "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+    "post_reference_main_commits": 0,
+    "checkout_branch": "codex/windows-parity-safety",
+    "checkout_head": "d5b7a09eb50a89b775841da14d8d81f49362c122",
+    "clean_at_start": true,
+    "changed_product_test_paths_relative_to_main": 21,
+    "additional_api_guide_change": true,
+    "shared_editor_changes": false,
+    "notes": "planning-review-refresh.md",
+    "local_action_audit": "local-action-audit.md",
+    "source_mapped_local_command_rows": 332,
+    "reference_and_peer_hashes_rechecked": true,
+    "new_runtime_results": false,
+    "ci_snapshot": {
+      "read_before_utc": "2026-10-09T10:41:15Z",
+      "windows_run": 37918435648,
+      "mac_run": 37918435661,
+      "jobs": [
+        113780223549,
+        113780223733,
+        113780224030
+      ],
+      "status": "all three in progress; existing runs only",
+      "isolated_candidate": "8afd4175a82eba3dc0331e6951b55e3ea891ae72"
+    },
+    "existing_local_receipt": "bin/parity-evidence/p0-layout-receipt.json",
+    "remaining_safety_gap": "Aggregate raw native draft admission across replacement/recovery/Close/shutdown; candidate cable/role changes are not main fixes",
+    "fixture_property_tree_inspection": [
+      {
+        "member": "2026-10-09/fixtures/01-midnight-circuit.screamseq",
+        "sha256": "e6d7a0ea19f0327ebb0b1e6e2a5885c525916e0f1a2fb0977b602c2efb8e4f58",
+        "root_keys": [
+          "automation",
+          "module",
+          "native",
+          "plugins",
+          "sequence",
+          "version"
+        ],
+        "native_version": 17,
+        "container_version": 6
+      },
+      {
+        "member": "2026-10-09/fixtures/02-editors-and-effects.screamseq",
+        "sha256": "5ca8394b2a597e044421834d0b8b7167560e13a599b32194651f05dd03fb73e6",
+        "root_keys": [
+          "automation",
+          "module",
+          "native",
+          "plugins",
+          "sequence",
+          "version"
+        ],
+        "native_version": 17,
+        "container_version": 6
+      },
+      {
+        "member": "2026-10-09/fixtures/03-routing-and-modulation.screamseq",
+        "sha256": "fb2289429c269c69d4e25f1b8a6358d1a747c44629f603b9f882e3b39ed937b2",
+        "root_keys": [
+          "automation",
+          "module",
+          "native",
+          "plugins",
+          "sequence",
+          "version"
+        ],
+        "native_version": 17,
+        "container_version": 6
+      },
+      {
+        "member": "2026-10-09/fixtures/04-complete-reference.screamseq",
+        "sha256": "ec36560ceecc0baaf4e127217d1637cd5e387fbd9d4c42163e99b467e84fe813",
+        "root_keys": [
+          "automation",
+          "module",
+          "native",
+          "plugins",
+          "sequence",
+          "version"
+        ],
+        "native_version": 17,
+        "container_version": 6
+      },
+      {
+        "member": "2026-10-09/fixtures/05-arrangement-copy-after.screamseq",
+        "sha256": "f8ea7cc23b73cf2aa7b911867dc3bdb0c1718f32ed7e06a6a3413ed34350efaf",
+        "root_keys": [
+          "automation",
+          "module",
+          "native",
+          "plugins",
+          "sequence",
+          "version"
+        ],
+        "native_version": 17,
+        "container_version": 6
+      }
+    ]
+  },
+  "previous_planning_review": {
     "scope": "Planning documents only; no product code changes, builds, tests, application launches, CI dispatches, merges, branch switches or process control",
     "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
     "post_reference_main_commits": 0,

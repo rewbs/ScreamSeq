@@ -1,5 +1,7 @@
 # Review of the supplied parity plan and matrix
 
+The [latest planning review](planning-review-refresh.md) refreshes this reconciliation at checkout `d5b7a09eb`. [Local action audit](local-action-audit.md) adds handler-level evidence, including existing Activity zoom and the distinction between song and recipe modulation controls. Main-pinned findings below are unchanged; candidate status is superseded by the latest review.
+
 The [current source review](current-source-review.md) updates candidate disposition through `e7f165eb4` and rechecks both supplied files' hashes. Findings below about main still apply at `ffe81aa4b`; F22/F23 now have existing local candidate fixes. Main status and candidate evidence are kept separate in the parity matrix.
 
 Reviewed on 9 October 2026, planning only. The integrated implementation plan is [README.md](README.md). This document records why the peer review changed it and where the peer's assertions or prescriptions were not adopted. No product code, build, test, workflow dispatch, application launch or implementation was performed in this review pass. [Review refresh](review-refresh.md) distinguishes the current checkout's pre-existing candidate changes from the main baseline.
