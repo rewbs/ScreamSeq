@@ -568,6 +568,23 @@ public:
   const float *captureMixerBus(size_t bus,const float *,const float *,uint32_t frames,bool finish) noexcept;
   bool mixerControls(const std::vector<MixerControls> &controls) noexcept { return mixerTransition_ && mixerTransition_->controls(controls); }
   std::vector<MixerMeter> mixerMeters() const { return mixerTransition_ ? mixerTransition_->controlPlan().runtime->meters() : std::vector<MixerMeter>{}; }
+  // Control owner only: collection and identity copies never run on audio.
+  // During adoption/failure, report unavailable instead of assigning old PCM
+  // to the newly edited bus list. Recheck the generation after reading levels.
+  MixerMeterReading identifiedMixerMeters() const {
+    MixerMeterReading result;
+    if(!mixerTransition_||!mixerTransition_->ready())return result;
+    const auto before=mixerTransition_->reading();
+    if(before.preparing()||before.rejected())return result;
+    const auto &runtime=*mixerTransition_->controlPlan().runtime;
+    const auto levels=runtime.meters();const auto &buses=runtime.graph().buses;
+    if(levels.size()!=buses.size())return result;
+    result.buses.reserve(buses.size());
+    for(size_t i=0;i<buses.size();++i)result.buses.push_back({buses[i].id,levels[i]});
+    const auto after=mixerTransition_->reading();
+    if(after.requested!=before.requested||after.rendered!=before.rendered||after.failed!=before.failed)return {};
+    result.fresh=true;result.revision=after.rendered;return result;
+  }
   bool mixerRoutingReady() noexcept {return !mixerTransition_ || mixerTransition_->ready();}
   MixerTransition::Reading mixerRoutingReading() const noexcept {return mixerTransition_?mixerTransition_->reading():MixerTransition::Reading{};}
   // First live-routing path: unchanged processors, sources and total latency.

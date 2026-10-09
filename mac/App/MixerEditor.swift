@@ -84,6 +84,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   let mute = NSButton(checkboxWithTitle: "Mute", target: nil, action: nil)
   let solo = NSButton(checkboxWithTitle: "Solo", target: nil, action: nil)
   let meter = MixerMeterView(frame: .zero), peak = Theme.label("−∞ dB", size: 11, mono: true)
+  private var meterAvailable: Bool?
   let controls = [MixerControl("Pre gain · dB", key: "preGainDB", min: -96, max: 24),
     MixerControl("Pre balance · %", key: "prePan", min: -1, max: 1, scale: 100),
     MixerControl("Fader · dB", key: "gainDB", min: -96, max: 24),
@@ -443,10 +444,12 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     let current = meters.first { $0["bus"] as? String == selectedID }
     let left = (current?["left"] as? NSNumber)?.doubleValue ?? 0, right = (current?["right"] as? NSNumber)?.doubleValue ?? 0
     // This runs on every display tick: leave the views alone unless a level moved.
-    guard left != meter.left || right != meter.right else { return }
+    let available = current != nil
+    guard left != meter.left || right != meter.right || meterAvailable != available else { return }
+    meterAvailable = available
     meter.left = left; meter.right = right; meter.needsDisplay = true
     let level = max(left, right)
-    let text = level > 0.00001 ? String(format: "%.1f dB", 20 * log10(level)) : "−∞ dB"
+    let text = current == nil ? "—" : level > 0.00001 ? String(format: "%.1f dB", 20 * log10(level)) : "−∞ dB"
     if peak.stringValue != text { peak.stringValue = text }
   }
   func numberOfRows(in tableView: NSTableView) -> Int { buses.count }

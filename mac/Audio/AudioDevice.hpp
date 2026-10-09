@@ -116,6 +116,7 @@ public:
   bool publishGraphControls(std::unique_ptr<GraphControlPlan> plan) {return plugins_&&plugins_->publishGraphControls(std::move(plan));}
   bool publishMixerRouting(std::unique_ptr<MixerTransition::Plan> &plan) noexcept {return plugins_ && plugins_->publishMixerRouting(plan);}
   std::vector<MixerMeter> mixerMeters() const { return active() && plugins_ ? plugins_->mixerMeters() : std::vector<MixerMeter>{}; }
+  MixerMeterReading identifiedMixerMeters() const { return active() && plugins_ ? plugins_->identifiedMixerMeters() : MixerMeterReading{}; }
   bool deviceChanged() const { return deviceChanged_.load(); }
   void refreshDevice() {
     deviceChanged_ = false;

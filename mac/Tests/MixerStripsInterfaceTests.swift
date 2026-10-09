@@ -93,6 +93,10 @@ extension InterfaceTests {
     try require(editor.controls.first(where: { $0.key == "prePan" })?.value.doubleValue == -60, "The routing inspector shows independent input balance as percent")
     let levels: [[AnyHashable: Any]] = buses.enumerated().map { ["bus": $0.element["id"]!, "left": Double($0.offset + 1) / 240, "right": Double($0.offset + 1) / 480] }
     let allocations = strips.createdCount, begin = CFAbsoluteTimeGetCurrent()
+    strip.showMeter(nil)
+    try require(strip.peak.stringValue == "—", "An unavailable strip reading is distinct from silence")
+    strip.showMeter((0, 0))
+    try require(strip.peak.stringValue == "−∞ dB", "A current silent strip reading retains its measured meaning")
     for _ in 0..<600 { editor.showMeters(levels) }
     let elapsed = (CFAbsoluteTimeGetCurrent() - begin) * 1000
     try require(strips.createdCount == allocations && strip.meter.left == 1.0 / 240 && strip.meter.right == 1.0 / 480, "Meter refresh never reallocates controls and keeps independent stereo peaks")

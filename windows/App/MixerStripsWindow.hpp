@@ -264,6 +264,7 @@ private:
         s.fill(x+40+channel*5,top,3,height,0x303b49);
         s.fill(x+40+channel*5,top+height-amount,3,amount,value>1?0xe87c77:0x6edac5);
       }
+      if(found==meters_.end())s.uiText(L"—",x+38,top+height/2,18,0xabbacb);
       s.uiText(L"dB",x+100,top+24,24,0xabbacb);
     }
   }
@@ -363,9 +364,9 @@ public:
     }
     NativeToolWindow::hide();
   }
-  void meters(const Json &buses,const std::vector<Tracker::MixerMeter> &values) {
-    meters_.clear();for(size_t i=0;i<std::min(buses.size(),values.size());++i)
-      meters_.emplace(buses[i].at("id").get<std::string>(),values[i]);
+  void meters(const Tracker::MixerMeterReading &reading) {
+    meters_.clear();if(reading.fresh)for(const auto &bus:reading.buses)
+      meters_.emplace("n"+std::to_string(bus.id),bus.level);
     requestPaint();
   }
   void update() {

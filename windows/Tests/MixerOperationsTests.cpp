@@ -49,9 +49,23 @@ static void controlAdmission() {
   document.undo();document.undo();CHECK(!document.native().mixer.active());
 }
 
+static void meterIdentity() {
+  auto document=std::make_unique<Document>(MOD_TYPE_MPT,4);
+  PlaybackFeedback feedback;MixerHostHooks hooks;hooks.feedback=[&]{return feedback;};
+  MixerOperations api(*document,[]{},hooks);api.invoke("mixer.enable",Json::object());
+  const auto &buses=document->native().mixer.buses;
+  feedback.meters.fresh=true;
+  feedback.meters.buses={{buses[1].id,{.75f,.5f}},{buses[0].id,{.125f,.25f}}};
+  const auto rows=api.invoke("mixer.meters",Json::object())["meters"];
+  CHECK(rows.size()==2&&rows[0]["bus"]=="n"+std::to_string(buses[1].id)&&rows[0]["left"]==.75f);
+  CHECK(rows[1]["bus"]=="n"+std::to_string(buses[0].id)&&rows[1]["right"]==.25f);
+  feedback.meters.fresh=false;
+  CHECK(api.invoke("mixer.meters",Json::object())["meters"].empty());
+}
 int main() {
   try {
     controlAdmission();
+    meterIdentity();
     auto storage=std::make_unique<Document>(MOD_TYPE_MPT,4);auto &document=*storage;
     unsigned stops=0;
     PluginState effect;effect.instanceID="loose-effect";effect.descriptor.name="Gain";effect.descriptor.format="Built-in";effect.descriptor.classID="resonance.gainer.v1";

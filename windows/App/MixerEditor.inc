@@ -136,10 +136,17 @@
         if(!mixerEditorVisible()){KillTimer(window,3);return;}
         if(busy||refreshingMixer||mixerPending)return;
         if(!mixerDirty&&(mixerRevision!=view->session.revision||mixerDocument!=documentId)){refreshMixer();layoutControls();}
-        if(device.running()&&preparedPlayback&&mixerRevision==view->session.revision){mixerMeters=preparedPlayback->chain().mixerMeters();frameRequested=true;}
-        else if(!mixerMeters.empty()){mixerMeters.clear();frameRequested=true;}
+        Tracker::MixerMeterReading reading;
+        if(device.running()&&preparedPlayback)reading=preparedPlayback->chain().identifiedMixerMeters();
+        mixerMeters.clear();
+        if(reading.fresh&&mixerRevision==view->session.revision)for(const auto &bus:mixerData.value("buses",Json::array())) {
+            const auto found=std::find_if(reading.buses.begin(),reading.buses.end(),[&](const auto &meter){return bus.at("id")=="n"+std::to_string(meter.id);});
+            if(found==reading.buses.end()){mixerMeters.clear();break;}
+            mixerMeters.push_back(found->level);
+        }
+        frameRequested=true;
         if(mixerStrips&&!mixerStrips->retired()) {
-            mixerStrips->update();mixerStrips->meters(mixerData.value("buses",Json::array()),mixerMeters);
+            mixerStrips->update();mixerStrips->meters(reading);
         }
     }
     template<class Place> void layoutMixerControls(Place place) {

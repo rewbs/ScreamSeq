@@ -84,7 +84,12 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
     mute.state = bus["mute"] as? Bool == true ? .on : .off; solo.state = bus["solo"] as? Bool == true ? .on : .off
     counts.stringValue = "\((bus["inserts"] as? [String] ?? []).count) effects · \((bus["sends"] as? [[String: Any]] ?? []).count) sends"
   }
-  func showMeter(_ levels: (Double, Double)) {
+  func showMeter(_ levels: (Double, Double)?) {
+    guard let levels else {
+      meter.set(0, 0); if peak.stringValue != "—" { peak.stringValue = "—" }; peak.textColor = Theme.muted
+      peak.toolTip = "No current meter reading"; return
+    }
+    peak.toolTip = nil
     meter.set(levels.0, levels.1)
     let value = max(levels.0, levels.1)
     let text = value > 0.00001 ? String(format: "%.1f dB", 20 * log10(value)) : "−∞ dB"
@@ -149,7 +154,7 @@ final class MixerStrips: NSView {
     refreshVisible()
     for (index, strip) in visible where buses.indices.contains(index) {
       strip.update(buses[index], selected: buses[index]["id"] as? String == selectedID)
-      strip.showMeter(meters[strip.busID] ?? (0, 0))
+      strip.showMeter(meters[strip.busID])
     }
   }
   func refreshVisible() {
@@ -173,7 +178,7 @@ final class MixerStrips: NSView {
       strip.onInspect = { [weak self] id in self?.onInspect?(id) }
       strip.frame = NSRect(x: CGFloat(index) * stripWidth + 4, y: 4, width: stripWidth - 8, height: stripHeight - 8)
       strip.update(buses[index], selected: buses[index]["id"] as? String == selectedID)
-      strip.showMeter(meters[strip.busID] ?? (0, 0)); document.addSubview(strip); visible[index] = strip
+      strip.showMeter(meters[strip.busID]); document.addSubview(strip); visible[index] = strip
     }
     if spare.count > 2 { spare.removeFirst(spare.count - 2) }
   }
@@ -183,7 +188,7 @@ final class MixerStrips: NSView {
     for value in values { if let id = value["bus"] as? String {
       meters[id] = ((value["left"] as? NSNumber)?.doubleValue ?? 0, (value["right"] as? NSNumber)?.doubleValue ?? 0)
     } }
-    for strip in visible.values { strip.showMeter(meters[strip.busID] ?? (0, 0)) }
+    for strip in visible.values { strip.showMeter(meters[strip.busID]) }
   }
   func reveal(_ id: String) {
     guard let index = buses.firstIndex(where: { $0["id"] as? String == id }) else { return }

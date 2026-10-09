@@ -3,7 +3,7 @@ void mixerIntegrationTests(const std::filesystem::path &directory) {
   unsigned stops=0,publications=0,nativePublications=0;bool active=false,refuse=false;HostedProjectPlayback *playback=nullptr;
   const auto owner=std::this_thread::get_id();
   PlaybackHooks hooks;
-  hooks.feedback=[&]{need(std::this_thread::get_id()==owner,"Feedback escaped UI owner");PlaybackFeedback f;f.playing=f.audioActive=active;f.generation=1;if(active&&playback){f.meters=playback->chain().mixerMeters();f.activity=playback->chain().graphActivity();}return f;};
+  hooks.feedback=[&]{need(std::this_thread::get_id()==owner,"Feedback escaped UI owner");PlaybackFeedback f;f.playing=f.audioActive=active;f.generation=1;if(active&&playback){f.meters=playback->chain().identifiedMixerMeters();f.activity=playback->chain().graphActivity();}return f;};
   hooks.controls=[&](const auto &values){need(std::this_thread::get_id()==owner,"Mixer queue has a second producer");++publications;return !refuse&&(!active||playback->chain().mixerControls(values));};
   hooks.publishNativeUpdate=[&](auto *target,auto &plan){need(std::this_thread::get_id()==owner,"Routing queue has a second producer");++nativePublications;return !refuse&&active&&target==playback&&target->publishNativeUpdate(plan);};
   DocumentController c({},"mixer-integration",[&]{++stops;active=false;},[](const auto &){},{},64u*1024u*1024u,{},std::move(hooks));
@@ -39,7 +39,15 @@ void mixerIntegrationTests(const std::filesystem::path &directory) {
   refuse=true;rejected=false;try{invoke(c,"mixer.bus.add",{{"kind","group"},{"name","Disconnected send"}});}catch(const Api::ApiError &e){rejected=e.code==-32002;}refuse=false;
   need(rejected&&c.view()==view&&active&&stops==beforeStops,"Refused prepared route changed music/history or stopped playback");
   const auto beforeRoute=nativePublications;
-  const auto group=invoke(c,"mixer.bus.add",{{"kind","group"},{"name","Disconnected send"}}).at("bus");renderPublication();
+  const auto group=invoke(c,"mixer.bus.add",{{"kind","group"},{"name","Disconnected send"}}).at("bus");
+  need(!playback->chain().identifiedMixerMeters().fresh&&call(c,"mixer.meters",Json::object()).at("meters").empty(),
+    "Pending topology labelled old meter samples with the new editor bus list");
+  renderPublication();
+  const auto meterReading=playback->chain().identifiedMixerMeters();
+  need(meterReading.fresh&&meterReading.buses.size()==baseline.size()+1,"Adopted topology has no identified meter snapshot");
+  const auto meterRows=call(c,"mixer.meters",Json::object()).at("meters");
+  for(const auto &meter:meterReading.buses)need(std::any_of(meterRows.begin(),meterRows.end(),[&](const auto &row){return row.at("bus")=="n"+std::to_string(meter.id);}),
+    "Adopted meter identity disappeared or was rebound to editor order");
   invoke(c,"mixer.bus.set",{{"bus",group},{"output",nullptr}});renderPublication();
   invoke(c,"mixer.sends.set",{{"bus",group},{"sends",Json::array({{{"target",master},{"gainDB",-6}}})}});renderPublication();
   need(active&&stops==beforeStops&&nativePublications==beforeRoute+3,"Supported routing edits did not publish live");

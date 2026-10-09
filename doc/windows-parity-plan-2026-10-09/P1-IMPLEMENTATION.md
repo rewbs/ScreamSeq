@@ -162,3 +162,30 @@ true continuous visible-neighbor scrolling versus the current bounded page pool,
 actual accessibility/high-contrast behavior, meter source/adoption identity,
 native wheel/keyboard termination, actual-app document adoption and F04/PCM/API/
 reciprocal gates. This slice is not a P1 completion claim. No build/test was run.
+
+## Shared meter identity — source only, 23:20 UTC
+
+Source inspection found both adapters pairing the host's retained-plan meter
+array with the editor's current bus order. `MixerMeterReading` now carries stable
+bus IDs with values and a fresh flag. `PluginChain::identifiedMixerMeters` runs on
+the existing control owner, waits for a settled routing plan, reads that plan's
+IDs and atomic meters together, and rejects changed/pending/failed generations.
+No additional callback allocation, synchronization or DSP work was introduced.
+The legacy positional reader remains for low-level device tests; native UI/API
+identity assignment now consumes the identified reader.
+
+Windows worker feedback, API meter rows, Details and strips use these identities.
+Mac AudioDevice/session does likewise, including the implicit mixer. The JSON
+meter row shape is unchanged; pending/unavailable observations have no rows.
+Both native strip displays distinguish unavailable readings (an em dash) from
+measured silence. Mac's existing unchanged-level label optimization is preserved,
+with availability included in its change detection.
+
+New candidate checks cover deliberately reordered meter rows, pending native
+publication withholding and post-adoption identities, native Mac device identity
+availability, and missing-versus-silent Mac meter labels. All remain unexecuted.
+The P0 build at `d39ec5548` is separate and does not qualify these changes. The
+next P1 checkpoint requires both platform builds, mixer operations/integration,
+Mac mixer/draft interface groups, device-backed meters and existing queue/PCM
+checks. UI meter readings are bounded peak observations, not a claim of exact
+sample-synchronous stereo snapshots or physical output calibration.

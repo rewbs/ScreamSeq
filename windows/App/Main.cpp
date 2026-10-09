@@ -588,7 +588,7 @@ public:
         ScreamSeq::PlaybackHooks playback;
         playback.feedback=[this]{
             ScreamSeq::PlaybackFeedback result;result.audioActive=device.running();result.playing=result.audioActive&&!auditionOnly;result.sampleRate=lastRate?lastRate:48000;result.generation=stopGeneration;
-            if(result.playing&&preparedPlayback){result.latency=preparedPlayback->chain().latency();result.meters=preparedPlayback->chain().mixerMeters();result.activity=preparedPlayback->chain().graphActivity();}
+            if(result.playing&&preparedPlayback){result.latency=preparedPlayback->chain().latency();result.meters=preparedPlayback->chain().identifiedMixerMeters();result.activity=preparedPlayback->chain().graphActivity();}
             return result;
         };
         playback.pluginBypass=[this](size_t slot,bool value){

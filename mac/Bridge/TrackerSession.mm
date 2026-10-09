@@ -1359,9 +1359,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (void)redo { [self historyUndo:YES error:nil]; }
 - (NSArray<NSDictionary *> *)mixerMeters {
   NSMutableArray *result = [NSMutableArray array];
-  const auto levels = _audio->mixerMeters(); const auto &buses = _document->native().mixer.buses;
-  for (size_t i = 0; i < levels.size() && i < buses.size(); ++i)
-    [result addObject:@{@"bus": nativeID(buses[i].id), @"left": @(levels[i].left), @"right": @(levels[i].right)}];
+  const auto reading = _audio->identifiedMixerMeters();
+  if(reading.fresh)for(const auto &bus:reading.buses)
+    [result addObject:@{@"bus": nativeID(bus.id), @"left": @(bus.level.left), @"right": @(bus.level.right)}];
   return result;
 }
 - (void)muteChannel:(NSInteger)c muted:(BOOL)m {

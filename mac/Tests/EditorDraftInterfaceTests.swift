@@ -252,6 +252,10 @@ extension InterfaceTests {
     try require(mixer.peak.stringValue == "marker", "Unchanged meter levels do not rewrite the peak label")
     mixer.showMeters([["bus": "t1", "left": 1.0, "right": 0.25]])
     try require(mixer.peak.stringValue == "0.0 dB", "Changed meter levels update the peak label")
+    mixer.showMeters([["bus": "t1", "left": 0.0, "right": 0.0]])
+    try require(mixer.peak.stringValue == "−∞ dB", "A current silent observation reports negative infinity")
+    mixer.showMeters([])
+    try require(mixer.peak.stringValue == "—", "Missing observation is unavailable rather than measured silence")
   }
 
   static func graphDraftChecks() throws {

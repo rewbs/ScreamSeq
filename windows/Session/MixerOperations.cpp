@@ -20,7 +20,13 @@ std::string text(const Json &v,size_t maximum){return Project::validatedNativeTe
 std::string id(uint64_t value){return value?"n"+std::to_string(value):"";}
 uint64_t identity(const Json &v){const auto s=text(v,32);need(s.size()>1&&s[0]=='n'&&s[1]!='0',"Invalid native identity");uint64_t n=0;for(size_t i=1;i<s.size();++i){need(s[i]>='0'&&s[i]<='9'&&n<NativeSong::maximumID/10,"Invalid native identity");n=n*10+s[i]-'0';}need(n>0&&n<NativeSong::maximumID,"Invalid native identity");return n;}
 uint64_t allocate(NativeSong &n){need(n.nextID>0&&n.nextID<NativeSong::maximumID,"Native identity limit reached");return n.makeEntity().id;}
-Json meterObjects(const MixerGraph &graph,const PlaybackFeedback &feedback){auto meters=Json::array();for(size_t i=0;i<std::min(graph.buses.size(),feedback.meters.size());++i)meters.push_back({{"bus",id(graph.buses[i].id)},{"left",feedback.meters[i].left},{"right",feedback.meters[i].right}});return meters;}
+Json meterObjects(const MixerGraph &graph,const PlaybackFeedback &feedback){
+  auto meters=Json::array();
+  if(feedback.meters.fresh)for(const auto &meter:feedback.meters.buses)
+    if(std::any_of(graph.buses.begin(),graph.buses.end(),[&](const auto &bus){return bus.id==meter.id;}))
+      meters.push_back({{"bus",id(meter.id)},{"left",meter.level.left},{"right",meter.level.right}});
+  return meters;
+}
 }
 MixerOperations::MixerOperations(Tracker::Document &d,std::function<void()> stop,MixerHostHooks hooks):document_(d),stop_(std::move(stop)),host_(std::move(hooks)){}
 std::vector<std::string> MixerOperations::reads(){return {"mixer.get","mixer.meters"};}

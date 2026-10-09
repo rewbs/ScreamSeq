@@ -8,7 +8,7 @@ struct PlaybackFeedback {
   unsigned sampleRate=48000;
   double latency=0;
   uint64_t generation=0; // Host transport epoch, including stopped/restarted devices.
-  std::vector<Tracker::MixerMeter> meters;
+  Tracker::MixerMeterReading meters;
   std::vector<Tracker::SignalActivity> activity;
 };
 // Application callbacks execute on its UI owner, never the audio callback.
