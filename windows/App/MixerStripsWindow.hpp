@@ -12,15 +12,16 @@ public:
   using Read=std::function<Json(const std::string &,const Json &)>;
   using Context=std::function<std::pair<std::string,std::string>()>;
 private:
-  enum {previous=10,next=11,cancel=12,review=13,accept=14,base=100,stride=8};
-  enum {name=0,fader=1,gain=2,pan=3,mute=4,solo=5,details=6};
+  enum {previous=10,next=11,cancel=12,review=13,accept=14,base=100,stride=16};
+  enum {name=0,fader=1,gain=2,pan=3,mute=4,solo=5,details=6,preGain=7,prePan=8,width=9,
+    preGainLabel=10,prePanLabel=11,widthLabel=12,lastPart=widthLabel};
   Read request_;Context context_;NativeWriteCompletion::Write write_;
   std::function<void()> admit_,reveal_;std::function<void(const std::string &)> details_;
   NativeWriteCompletion completion_;Tracker::MixerGesture gesture_;
   Json data_=Json::object();std::string document_,revision_;
   std::vector<std::string> bindings_;size_t first_=0,displayed_=0;
   std::map<std::string,Tracker::MixerMeter> meters_;
-  bool setting_=false,pending_=false,captureLost_=false,rawDirty_=false,observed_=false,previewBlocked_=false;
+  bool setting_=false,pending_=false,captureLost_=false,rawDirty_=false,observed_=false,previewBlocked_=false,resetPresentation_=false;
   int capturedControl_=0;
   float stripTop_=34,sliderTop_=57,sliderHeight_=32;
   int scrollOffset_=0,contentHeight_=0;bool layingOut_=false;
@@ -35,7 +36,7 @@ private:
   int slot(int id)const {return id>=base&&size_t((id-base)/stride)<bindings_.size()?(id-base)/stride:-1;}
   bool stripFocused()const {
     const auto focus=GetFocus();
-    for(size_t i=0;i<displayed_;++i)for(int part=0;part<=details;++part)
+    for(size_t i=0;i<displayed_;++i)for(int part=0;part<=lastPart;++part)
       if(focus==controls_.at(base+int(i)*stride+part))return true;
     return false;
   }
@@ -83,7 +84,7 @@ private:
     enableEdits();
   }
   void enableEdits() {
-    for(size_t i=0;i<bindings_.size();++i)for(int part=fader;part<=solo;++part) {
+    for(size_t i=0;i<bindings_.size();++i)for(int part:{fader,gain,pan,mute,solo,preGain,prePan,width}) {
       const int id=base+int(i)*stride+part;
       const bool available=bus(bindings_[i])!=nullptr;
       EnableWindow(controls_.at(id),!pending_&&!completion_.retained()&&
@@ -108,7 +109,7 @@ private:
     ~Pending(){value=false;}
   };
   void finishReadback() {
-    reload();gesture_.finish();rawDirty_=false;captureLost_=false;completion_.finish();observed_=false;
+    reload();gesture_.finish();rawDirty_=false;captureLost_=false;completion_.finish();observed_=false;resetPresentation_=true;
     status_=L"Mixer edit applied / Undo restores the previous value";
   }
   void commit() {
@@ -131,7 +132,7 @@ private:
       const auto value=v.is_boolean()?(v.get<bool>()?1.:0.):v.get<double>();
       request_("mixer.bus.set",params(value,true,{document_,revision_,gesture_.context().bus}));
     }
-    gesture_.finish();completion_.finish();rawDirty_=false;captureLost_=false;observed_=false;
+    gesture_.finish();completion_.finish();rawDirty_=false;captureLost_=false;observed_=false;resetPresentation_=true;
     status_=acknowledge?L"Current saved state accepted / the edit was not repeated":L"Gesture cancelled / current saved value restored";
   }
   void reviewResult() {
@@ -159,13 +160,19 @@ private:
     edit(id+gain,L"0",32);add(id+pan,TRACKBAR_CLASSW,L"Balance",TBS_HORZ|TBS_NOTICKS);
     NativeInputGate::present(controls_.at(id+pan),TBM_SETRANGE,TRUE,MAKELPARAM(0,200));
     button(id+mute,L"Mute");button(id+solo,L"Solo");button(id+details,L"Details");
-    for(int part=0;part<=details;++part) {
+    edit(id+preGain,L"0",32);label(id+preGainLabel,L"Pre dB");
+    label(id+prePanLabel,L"Pre balance");label(id+widthLabel,L"Width / %");
+    for(int part:{prePan,width}) {
+      add(id+part,TRACKBAR_CLASSW,part==prePan?L"Balance before effects":L"Stereo width / percent",TBS_HORZ|TBS_NOTICKS);
+      NativeInputGate::present(controls_.at(id+part),TBM_SETRANGE,TRUE,MAKELPARAM(0,200));
+    }
+    for(int part=0;part<=lastPart;++part) {
       installReveal(controls_.at(id+part));
       if(font_)SendMessageW(controls_.at(id+part),WM_SETFONT,reinterpret_cast<WPARAM>(font_),FALSE);
     }
     bindings_.push_back({});
     } catch(...) {
-      for(int part=0;part<=details;++part)if(const auto found=controls_.find(id+part);found!=controls_.end()) {
+      for(int part=0;part<=lastPart;++part)if(const auto found=controls_.find(id+part);found!=controls_.end()) {
         DestroyWindow(found->second);controls_.erase(found);
       }
       throw;
@@ -176,13 +183,21 @@ private:
     // Never rebind or rewrite the HWND that owns raw text or an active gesture.
     if(gesture_.active()&&bindings_[index]==gesture_.context().bus)return;
     const auto focus=GetFocus();
-    bool focused=false;for(int part=0;part<=details;++part)focused|=focus==controls_.at(id+part);
-    if(focused)return;
+    bool focused=false;for(int part=0;part<=lastPart;++part)focused|=focus==controls_.at(id+part);
+    if(focused&&!resetPresentation_)return;
     bindings_[index]=identity;setting_=true;
     try {
       set(id+name,value.at("name"));set(id+gain,value.at("gainDB"));
+      set(id+preGain,value.at("preGainDB"));
       NativeInputGate::present(controls_.at(id+fader),TBM_SETPOS,TRUE,LPARAM(std::lround((24-value.at("gainDB").get<double>())*10)));
       NativeInputGate::present(controls_.at(id+pan),TBM_SETPOS,TRUE,LPARAM(std::lround((value.at("pan").get<double>()+1)*100)));
+      NativeInputGate::present(controls_.at(id+prePan),TBM_SETPOS,TRUE,LPARAM(std::lround((value.at("prePan").get<double>()+1)*100)));
+      NativeInputGate::present(controls_.at(id+width),TBM_SETPOS,TRUE,LPARAM(std::lround(value.at("width").get<double>()*100)));
+      const auto title=wide(value.at("name").get<std::string>());
+      set(id+fader,title+L" gain / dB");
+      set(id+pan,title+L" balance / 0 left, 100 center, 200 right");
+      set(id+prePan,title+L" pre balance / 0 left, 100 center, 200 right");
+      set(id+width,title+L" stereo width / percent");
       set(id+mute,value.value("mute",false)?L"Mute on":L"Mute");set(id+solo,value.value("solo",false)?L"Solo on":L"Solo");
     }catch(...){setting_=false;throw;}
     setting_=false;
@@ -199,7 +214,7 @@ private:
     if(layingOut_)return;
     struct LayoutGuard {bool &value;LayoutGuard(bool &v):value(v){value=true;}~LayoutGuard(){value=false;}}guard(layingOut_);
     const auto [w,clientHeight]=size();const size_t total=data_.contains("buses")?data_["buses"].size():0;
-    contentHeight_=std::max(205,int(clientHeight));const float h=float(contentHeight_);
+    contentHeight_=std::max(329,int(clientHeight));const float h=float(contentHeight_);
     scrollOffset_=std::clamp(scrollOffset_,0,std::max(0,contentHeight_-int(clientHeight)));
     SCROLLINFO scroll{sizeof(scroll),SIF_RANGE|SIF_PAGE|SIF_POS|SIF_DISABLENOSCROLL};
     scroll.nMin=0;scroll.nMax=contentHeight_-1;scroll.nPage=UINT(std::max(1.0f,clientHeight));scroll.nPos=scrollOffset_;
@@ -234,7 +249,7 @@ private:
     // Keep the two horizontal controls clear of the button row at short dock
     // heights. The previous h-172 rule overlapped Balance and Mute at 226 DIPs.
     const float stripWidth=132;
-    sliderHeight_=std::max(60.0f,h-sliderTop_-84);
+    sliderHeight_=std::max(60.0f,h-sliderTop_-212);
     for(size_t i=0;i<bindings_.size();++i) {
       const int id=base+int(i)*stride;const bool show=i>=visibleStart_&&i<visibleEnd_;
       if(i<count) {
@@ -247,8 +262,13 @@ private:
       position(id+gain,x+52,sliderTop_,67,24,show);position(id+pan,x+52,sliderTop_+35,67,25,show);
       position(id+mute,x,sliderTop_+sliderHeight_+5,60,24,show);position(id+solo,x+64,sliderTop_+sliderHeight_+5,60,24,show);
       position(id+details,x,sliderTop_+sliderHeight_+33,124,24,show);
+      const float controlsTop=sliderTop_+sliderHeight_+64;
+      position(id+preGainLabel,x,controlsTop+4,48,18,show);position(id+preGain,x+52,controlsTop,67,24,show);
+      position(id+prePanLabel,x,controlsTop+30,124,18,show);position(id+prePan,x,controlsTop+48,124,24,show);
+      position(id+widthLabel,x,controlsTop+78,124,18,show);position(id+width,x,controlsTop+96,124,24,show);
     }
     enableEdits();
+    resetPresentation_=false;
   }
   void paint(RenderSurface &s)override {
     const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);
@@ -275,7 +295,7 @@ private:
     if(id==accept){if(!observed_)throw std::runtime_error("Inspect the result first");restoreCurrent(true);return;}
     const int index=slot(id);if(index<0)return;const int part=(id-base)%stride;
     if(part==details){details_(bindings_[size_t(index)]);return;}
-    if(part==gain&&notification==EN_CHANGE){begin(id,Tracker::MixerControl::Gain);rawDirty_=true;gesture_.rawChanged();return;}
+    if((part==gain||part==preGain)&&notification==EN_CHANGE){begin(id,part==gain?Tracker::MixerControl::Gain:Tracker::MixerControl::PreGain);rawDirty_=true;gesture_.rawChanged();return;}
     if(part==mute||part==solo){const bool continuing=gesture_.active();begin(id,part==mute?Tracker::MixerControl::Mute:Tracker::MixerControl::Solo);if(!continuing)gesture_.update(gesture_.value()==0?1:0);commit();}
   }
   bool controlScroll(UINT message,WPARAM event,HWND control)override {
@@ -292,17 +312,19 @@ private:
       scrollTo(target);return true;
     }
     const int id=GetDlgCtrlID(control),index=slot(id);if(index<0)return false;
-    const int part=(id-base)%stride;if(part!=fader&&part!=pan)return false;
+    const int part=(id-base)%stride;if(part!=fader&&part!=pan&&part!=prePan&&part!=width)return false;
     if(setting_||pending_||completion_.retained())return true;
     const auto position=double(SendMessageW(control,TBM_GETPOS,0,0));
     if(!gesture_.active()) {
       if(LOWORD(event)==TB_ENDTRACK)return true;
       const auto *saved=bus(bindings_[size_t(index)]);if(!saved)return true;
-      const auto rounded=part==fader?std::lround((24-saved->at("gainDB").get<double>())*10):std::lround((saved->at("pan").get<double>()+1)*100);
+      const auto rounded=part==fader?std::lround((24-saved->at("gainDB").get<double>())*10):
+        part==width?std::lround(saved->at("width").get<double>()*100):std::lround((saved->at(part==pan?"pan":"prePan").get<double>()+1)*100);
       if(position==double(rounded))return true; // Clicking a rounded thumb is not an edit.
     }
-    begin(id,part==fader?Tracker::MixerControl::Gain:Tracker::MixerControl::Pan);
-    gesture_.update(part==fader?24-position/10:position/100-1);
+    begin(id,part==fader?Tracker::MixerControl::Gain:part==pan?Tracker::MixerControl::Pan:
+      part==prePan?Tracker::MixerControl::PrePan:Tracker::MixerControl::Width);
+    gesture_.update(part==fader?24-position/10:part==width?position/100:position/100-1);
     previewBlocked_=false;
     if(part==fader){setting_=true;try{set(base+index*stride+gain,Json(gesture_.value()));}catch(...){setting_=false;throw;}setting_=false;}
     if(LOWORD(event)==TB_ENDTRACK){captureLost_=false;commit();layout();}

@@ -189,3 +189,21 @@ next P1 checkpoint requires both platform builds, mixer operations/integration,
 Mac mixer/draft interface groups, device-backed meters and existing queue/PCM
 checks. UI meter readings are bounded peak observations, not a claim of exact
 sample-synchronous stereo snapshots or physical output calibration.
+
+## Complete strip controls — source only, 23:26 UTC
+
+Windows strips now include exact numeric pre-gain, pre-balance and width, using
+the same shared gesture/revision and typed completion paths as post gain/pan.
+The stock horizontal width slider displays percent while sending the saved 0–2
+ratio; balance captions describe their native 0-left/100-center/200-right range.
+Per-bus trackbar captions include the bus name. Secondary controls remain in the
+same retained strip, reachable through the native vertical viewport in short
+docks. Strip HWND IDs now use a 16-wide internal stride to keep controls unique.
+
+Explicit commit/cancel readback now refreshes a focused field deliberately;
+ordinary background refresh still leaves focus/caret alone. This corrects the
+case where Cancel restored the model but left invalid raw text visibly present.
+New candidate HWND checks cover each added control, independent pre/post fields,
+exact pre-gain precision, invalid value retention/cancel, keyboard scrolling and
+a late Master. The older focus/reorder cases were updated for the internal IDs.
+No test was weakened, executed, or rebuilt in this slice.

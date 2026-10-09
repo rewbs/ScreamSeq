@@ -16,7 +16,7 @@ struct Owner {
 };
 struct Fixture {
   Json data={{"active",true},{"buses",Json::array()}};
-  std::string revision="r1";unsigned writes=0,previews=0;bool unknown=false;
+  std::string revision="r1";unsigned writes=0,previews=0;bool unknown=false;Json lastWrite,lastPreview;
   double audible=-6.123456789;
   ScreamSeq::MixerStripsWindow tool;
   explicit Fixture(HWND owner):tool(owner,
@@ -24,7 +24,7 @@ struct Fixture {
     [this]{return std::pair(std::string("owned-song"),revision);},
     [this](const std::string &method,const Json &params,const auto &)->ScreamSeq::Api::CompletedCall {
       check(method=="mixer.bus.set","Unexpected durable mixer operation");check(params.at("expectedRevision")==revision,"Final lost its captured revision");
-      ++writes;auto &bus=find(params.at("bus").get<std::string>());
+      ++writes;lastWrite=params;auto &bus=find(params.at("bus").get<std::string>());
       for(const auto &[key,value]:params.items())if(bus.contains(key)&&key!="id")bus[key]=value;
       audible=bus.at("gainDB").get<double>();revision="r"+std::to_string(writes+1);
       if(unknown)throw ScreamSeq::Api::ApiError(-32003,"Owned lost response",Tracker::WriteOutcome{});
@@ -32,7 +32,7 @@ struct Fixture {
     },[]{},[](const auto &){},[]{}) {
     for(unsigned i=0;i<12;++i)data["buses"].push_back({{"id","n"+std::to_string(i+1)},
       {"name",i==11?"Master":"Track "+std::to_string(i+1)},{"gainDB",i==0?audible:0},
-      {"pan",0},{"mute",false},{"solo",false}});
+      {"pan",0},{"preGainDB",0},{"prePan",0},{"width",1},{"mute",false},{"solo",false}});
     ScreamSeq::Tests::ownGuiWindow(tool.window());tool.dock(owner);tool.dockBounds(0,0,528,260);tool.show();tool.update();
   }
   Json &find(const std::string &id){for(auto &value:data["buses"])if(value["id"]==id)return value;throw std::runtime_error("Unknown captured mixer bus");}
@@ -40,7 +40,7 @@ struct Fixture {
     if(method=="mixer.get")return data;
     if(method=="synchronizeView")return Json::object();
     check(method=="mixer.bus.set"&&params.value("preview",false),"Unexpected preview operation");
-    check(params.at("expectedRevision")==revision,"Preview/reset lost revision guard");++previews;
+    check(params.at("expectedRevision")==revision,"Preview/reset lost revision guard");++previews;lastPreview=params;
     if(params.contains("gainDB"))audible=params.at("gainDB").get<double>();return Json::object();
   }
   HWND control(int id){auto value=GetDlgItem(tool.window(),id);check(value,"Missing native mixer control");return value;}
@@ -76,24 +76,24 @@ void layoutAndIdentity(HWND owner) {
   RECT client{};GetClientRect(f.tool.window(),&client);
   check(bounds(f.control(106),f.tool.window()).bottom<=client.bottom,"Default short dock clips Details");
   SetFocus(f.control(102));SendMessageW(f.control(102),EM_SETSEL,1,3);
-  const auto first=text(f.control(100)),second=text(f.control(108));
+  const auto first=text(f.control(100)),second=text(f.control(116));
   std::swap(f.data["buses"][0],f.data["buses"][1]);f.revision="reordered";f.tool.update();
   DWORD start=0,end=0;SendMessageW(f.control(102),EM_GETSEL,reinterpret_cast<WPARAM>(&start),reinterpret_cast<LPARAM>(&end));
-  check(text(f.control(100))==first&&text(f.control(108))==second&&GetFocus()==f.control(102)&&start==1&&end==3,
+  check(text(f.control(100))==first&&text(f.control(116))==second&&GetFocus()==f.control(102)&&start==1&&end==3,
     "External reorder rebound a focused strip, duplicated a neighbor, or moved its caret");
   // Shrinking a retained page must keep the focused late strip on screen.
-  SetFocus(f.control(110));f.tool.dockBounds(0,0,280,150);f.tool.update();
-  GetClientRect(f.tool.window(),&client);const auto focused=bounds(f.control(110),f.tool.window());
-  check(IsWindowVisible(f.control(110))&&focused.left>=0&&focused.right<=client.right,
+  SetFocus(f.control(118));f.tool.dockBounds(0,0,280,150);f.tool.update();
+  GetClientRect(f.tool.window(),&client);const auto focused=bounds(f.control(118),f.tool.window());
+  check(IsWindowVisible(f.control(118))&&focused.left>=0&&focused.right<=client.right,
     "Narrow dock clipped the focused strip instead of retaining its identity in view");
-  SetFocus(f.control(114));const auto detail=bounds(f.control(114),f.tool.window());
+  SetFocus(f.control(122));const auto detail=bounds(f.control(122),f.tool.window());
   check(detail.top>=0&&detail.bottom<=client.bottom,"Tab focus did not scroll Details into a short viewport");
   SendMessageW(f.tool.window(),WM_VSCROLL,SB_TOP,0);
   check(bounds(f.control(10),f.tool.window()).top>=0,"Native scrollbar cannot reach mixer navigation");
   // Removed focused identities stay visibly unavailable until focus leaves;
   // they must never become controls for the replacement at the same index.
   f.data["buses"].erase(f.data["buses"].begin());f.revision="deleted";f.tool.update();
-  check(text(f.control(108))==L"Bus unavailable"&&!IsWindowEnabled(f.control(109))&&!IsWindowEnabled(f.control(114)),
+  check(text(f.control(116))==L"Bus unavailable"&&!IsWindowEnabled(f.control(117))&&!IsWindowEnabled(f.control(122)),
     "Deleted focused bus silently rebound or remained writable");
   SetFocus(f.tool.window());f.tool.update();
   check(text(f.control(100))==first,"Leaving retained focus did not adopt the current ordered page");
@@ -104,9 +104,35 @@ void layoutAndIdentity(HWND owner) {
     check(IsWindowVisible(f.control(id))&&r.left>=0&&r.right<=client.right&&r.top>=0&&r.bottom<=client.bottom,
       "Narrow uncertain-result actions are not both reachable");}
 }
+void inputAndWidth(HWND owner) {
+  Fixture f(owner);f.tool.dockBounds(0,0,280,150);
+  auto adjust=[&](int id,int value,WORD notification){auto control=f.control(id);SetFocus(control);
+    SendMessageW(control,TBM_SETPOS,TRUE,value);SendMessageW(f.tool.window(),WM_HSCROLL,MAKEWPARAM(notification,value),reinterpret_cast<LPARAM>(control));};
+  adjust(108,40,TB_THUMBTRACK);f.tool.update();
+  check(f.lastPreview.at("prePan")==-.6&&!f.lastPreview.contains("pan")&&f.find("n1")["prePan"]==0,
+    "Pre-balance preview changed post balance or persisted before release");
+  adjust(108,40,TB_ENDTRACK);
+  check(f.writes==1&&f.lastWrite.at("prePan")==-.6&&f.find("n1")["pan"]==0,"Pre-balance final lost its independent control");
+  adjust(109,150,TB_THUMBTRACK);f.tool.update();adjust(109,150,TB_ENDTRACK);
+  check(f.writes==2&&f.lastWrite.at("width")==1.5&&f.find("n1")["width"]==1.5,"Width did not commit its musical ratio once");
+  SetFocus(f.control(107));SetWindowTextW(f.control(107),L"-9.123456789");
+  SendMessageW(f.control(107),WM_KEYDOWN,VK_RETURN,0);
+  check(f.writes==3&&f.lastWrite.at("preGainDB")==-9.123456789&&!f.lastWrite.contains("gainDB"),
+    "Typed pre gain was rounded, retargeted, or omitted from the guarded final");
+  SetWindowTextW(f.control(107),L"100");SendMessageW(f.control(107),WM_KEYDOWN,VK_RETURN,0);
+  check(f.writes==3&&f.tool.hasGesture()&&text(f.control(107))==L"100","Out-of-range pre gain was submitted or discarded");
+  SendMessageW(f.control(107),WM_KEYDOWN,VK_ESCAPE,0);
+  check(!f.tool.hasGesture()&&f.find("n1")["preGainDB"]==-9.123456789&&text(f.control(107))==L"-9.123456789",
+    "Pre-gain cancel lost the exact saved baseline or left rejected text in the focused field");
+  for(int id:{107,108,109}) {SetFocus(f.control(id));RECT client{};GetClientRect(f.tool.window(),&client);const auto r=bounds(f.control(id),f.tool.window());
+    check(r.top>=0&&r.bottom<=client.bottom,"Input/width control cannot be reached by keyboard in a short dock");}
+  SetFocus(f.tool.window());while(IsWindowEnabled(f.control(11)))f.press(11);
+  bool master=false;for(int i=0;i<16;++i){auto title=GetDlgItem(f.tool.window(),100+i*16);if(title&&IsWindowVisible(title)&&text(title)==L"Master")master=true;}
+  check(master,"Late Master is unreachable through native mixer navigation");
+}
 }
 int main(){try {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);});
+  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);});
   std::cout<<"PASS native mixer gesture coalescing, exact no-op, stale cancel, raw retention, capture loss and uncertain result review\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}
