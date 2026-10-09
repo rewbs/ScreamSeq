@@ -150,3 +150,19 @@ claims. Use those exact archived apps and retained `first/` songs for reciprocal
 checks or tooling-only corrections; do not rebuild unchanged product inputs merely
 to review a baseline. Preserve Mac executable permissions and bundle symlinks when
 extracting its tar archive. Compare all identity hashes before launching an archive.
+
+The Windows `workspace-parity-fixture-tests` also retains `original.screamseq`,
+`rendered.screamseq`, `imported.screamseq` and exact chunked PCM/identity observations
+in a unique directory under the build's `parity-fixture-output/`. These are the real
+native completion-loss/Review/Undo/Redo outputs, not reconstructed equivalents.
+The test preserves the original input, renders once and imports the three supplied
+WAVs once; the final report is written only after those assertions pass. CI retains
+partial outputs on failure as well, so their existence alone is not a test pass.
+
+For the reciprocal C6 leg, use repeated `--input-file PATH` arguments instead of
+`--input-directory`, supplying both `rendered.screamseq` and `imported.screamseq`.
+Keep the normal explicit binary/source/receipt arguments. The runner checks exact
+typed preservation through both Mac saves; return those `first/` files to the same
+Windows candidate with `--input-file` again. Each report identifies its narrower
+scope; this does not replace the mandatory five-original-fixture gate or prove all
+edited journeys. Duplicate input filenames are refused before launching the app.

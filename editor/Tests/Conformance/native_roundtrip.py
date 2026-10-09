@@ -133,8 +133,11 @@ def main(argv=None):
                         help="Actual built commit, never inferred from the tooling checkout")
     parser.add_argument("--build-receipt", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path, help="New directory; existing paths are refused")
-    parser.add_argument("--input-directory", type=Path,
+    inputs_group = parser.add_mutually_exclusive_group()
+    inputs_group.add_argument("--input-directory", type=Path,
                         help="Prior leg's first/ directory, with all five original filenames")
+    inputs_group.add_argument("--input-file", type=Path, action="append",
+                        help="Explicit edited fixture to exchange; repeat for distinct filenames")
     parser.add_argument("--api-vectors", action="store_true",
                         help="Also run the bounded API baseline corpus on an owned copy of F04")
     parser.add_argument("--codec-vectors", action="store_true",
@@ -158,7 +161,12 @@ def main(argv=None):
         if inventory != golden:
             raise EvidenceError("Original corpus differs from the pinned typed inventory")
         input_directory = (args.input_directory or CORPUS / "fixtures").resolve(strict=True)
-        sources = [input_directory / Path(name).name for name in inventory["projects"]]
+        sources = ([path.resolve(strict=True) for path in args.input_file] if args.input_file else
+                   [input_directory / Path(name).name for name in inventory["projects"]])
+        if len({path.name for path in sources}) != len(sources):
+            raise EvidenceError("Explicit inputs must have distinct filenames; no output may replace another")
+        if args.input_file:
+            report["qualificationScope"] = "Explicit edited inputs: exact typed preservation through two no-edit saves; does not qualify the originating edit"
         inputs = {path.name: sha256(read_bytes(path)) for path in sources}
         for path in sources:
             read_project(path)
@@ -172,7 +180,8 @@ def main(argv=None):
             platform=platform.platform(), machine=platform.machine(), python=sys.version,
             executable=str(executable), executableSHA256=args.binary_sha256,
             binarySourceCommit=args.binary_source_commit, buildReceiptSHA256=sha256(receipt),
-            inputDirectory=str(input_directory), inputSHA256=inputs,
+            inputDirectory=None if args.input_file else str(input_directory),
+            inputFiles=[str(path) for path in sources], inputSHA256=inputs,
             originalCorpus=inventory, process={},
             toolSHA256={str(path.relative_to(ROOT)): sha256(read_bytes(path)) for path in
                 (Path(__file__), Path(__file__).with_name("project_tree.py"),
@@ -208,7 +217,7 @@ def main(argv=None):
                     report="codec/report.json", sha256=sha256(read_bytes(output / "codec/report.json")))
         report["inputsUnchanged"] = all(sha256(read_bytes(path)) == inputs[path.name] for path in sources)
         report["binaryUnchanged"] = sha256(read_bytes(executable)) == args.binary_sha256
-        report["passed"] = (len(report["fixtures"]) == 5 and all(row["passed"] for row in report["fixtures"])
+        report["passed"] = (len(report["fixtures"]) == len(sources) and all(row["passed"] for row in report["fixtures"])
                             and report["inputsUnchanged"] and report["binaryUnchanged"]
                             and report.get("api", {}).get("baselineMatched", True)
                             and report.get("codec", {}).get("safetyPassed", True)

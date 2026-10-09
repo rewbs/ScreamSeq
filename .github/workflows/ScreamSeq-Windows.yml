@@ -132,6 +132,7 @@ jobs:
             screamseq-integration-ui.log
             screamseq-conformance-*.log
             bin/windows-ci/parity-conformance/**
+            bin/windows-ci/parity-fixture-output/**
             bin/windows-ci/BuildInfo.json
             bin/windows-ci/native-app.zip
             bin/windows-ci/native-app-identity.json

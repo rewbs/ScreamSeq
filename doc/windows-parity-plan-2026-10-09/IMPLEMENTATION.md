@@ -76,6 +76,13 @@ without recompiling the same product. Archive retention is not qualification. Bo
 workflows now follow main and PRs targeting main, removing the obsolete permanent
 platform-branch trigger; temporary implementation branches still qualify through PRs.
 
+The same pending build now retains the real F04 render/import recovery outputs and
+exact sample PCM/identity observations in a unique build-owned directory, rather
+than deleting them with the fixture. The conformance runner accepts explicit edited
+files for the C6 Mac-and-return legs and labels that scope separately from all five
+originals. Assertions and time limits are unchanged. This retention path, including
+the new native fixture source, awaits the scheduled build/test checkpoint.
+
 ## P0c actual API baseline and grouped CI preparation — 9 October
 
 The shared pipe/socket corpus now records 27 table-driven input cases plus rejected

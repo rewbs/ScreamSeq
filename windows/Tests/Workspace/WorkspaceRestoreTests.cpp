@@ -4,6 +4,7 @@
 #include "../../App/Main.cpp"
 #undef wWinMain
 #include "../PrivateGuiProcessTest.hpp"
+#include <fstream>
 #include <iostream>
 
 namespace {

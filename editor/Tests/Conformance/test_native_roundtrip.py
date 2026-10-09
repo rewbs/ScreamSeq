@@ -48,6 +48,9 @@ class RoundtripSafetyTests(unittest.TestCase):
             with patch.object(native_roundtrip, "owned_client") as launch:
                 for value in ("0" * 64, sha256(binary.read_bytes())):
                     self.assertEqual(native_roundtrip.main(args + ["--binary-sha256", value]), 2)
+                source = next((CORPUS / "fixtures").glob("*.screamseq"))
+                self.assertEqual(native_roundtrip.main(args + ["--binary-sha256", sha256(binary.read_bytes()),
+                    "--input-file", str(source), "--input-file", str(source)]), 2)
                 launch.assert_not_called()
             self.assertEqual(marker.read_bytes(), b"prior evidence must survive")
 

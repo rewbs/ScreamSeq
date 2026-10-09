@@ -136,7 +136,7 @@ if(BUILD_TESTING)
     add_test(NAME workspace-receipt-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-parity-fixture-tests COMMAND workspace-restore-tests)
     set_tests_properties(workspace-parity-fixture-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts;fixtures"
-      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=parity-fixture;SCREAMSEQ_PARITY_FIXTURE_DIRECTORY=${ROOT}/editor/Tests/Fixtures/Parity20261009" TIMEOUT 120)
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=parity-fixture;SCREAMSEQ_PARITY_FIXTURE_DIRECTORY=${ROOT}/editor/Tests/Fixtures/Parity20261009;SCREAMSEQ_PARITY_OUTPUT_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/parity-fixture-output" TIMEOUT 120)
     add_test(NAME workspace-asset-outcome-tests COMMAND workspace-restore-tests)
     set_tests_properties(workspace-asset-outcome-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=asset-outcomes" TIMEOUT 120)

@@ -1,9 +1,15 @@
-// Original user-supplied assets; every write goes to RestoreFixture's directory.
+// Original user-supplied assets; retain owned outputs for reciprocal qualification.
 void applicationParityFixtureRecovery(){
   wchar_t directory[32768]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_PARITY_FIXTURE_DIRECTORY",directory,DWORD(std::size(directory)));
   restoreCheck(length&&length<std::size(directory),"Required parity fixture directory unavailable");
   const auto root=std::filesystem::path(directory)/L"fixtures";
   RestoreFixture fixture;auto &app=*fixture.app;const auto input=root/L"04-complete-reference.screamseq";
+  wchar_t outputRoot[32768]{};const auto outputLength=GetEnvironmentVariableW(L"SCREAMSEQ_PARITY_OUTPUT_DIRECTORY",outputRoot,DWORD(std::size(outputRoot)));
+  restoreCheck(outputLength&&outputLength<std::size(outputRoot),"Required parity output directory unavailable");
+  std::filesystem::create_directories(outputRoot);
+  const auto retained=std::filesystem::path(outputRoot)/fixture.folder.filename();
+  restoreCheck(std::filesystem::create_directory(retained),"Parity evidence directory already exists");
+  restoreCheck(std::filesystem::copy_file(input,retained/L"original.screamseq"),"Retain original parity input");
   const auto originalBytes=ScreamSeq::Project::readProjectBytes(input);
   app.documentOperation("document.open",departureOpenRequest(app,input));
   const auto pcm=[&](unsigned slot){
@@ -25,7 +31,7 @@ void applicationParityFixtureRecovery(){
   const auto rendered=assets();app.edit("history.undo",{{"domain","all"}});restoreCheck(assets()==before,"F04 render did not have exact one-step PCM/identity Undo");
   app.edit("history.redo",{{"domain","all"}});restoreCheck(assets()==rendered,"F04 render Redo changed PCM or identities");
   const auto reopened=[&](const wchar_t *name,const RestoreJson &expected){
-    const auto output=fixture.folder/name;app.documentOperation("document.save",{{"expectedRevision",app.view->session.revision},{"path",utf8Path(output)},{"overwrite",false}});
+    const auto output=retained/name;app.documentOperation("document.save",{{"expectedRevision",app.view->session.revision},{"path",utf8Path(output)},{"overwrite",false}});
     app.documentOperation("document.open",departureOpenRequest(app,output));restoreCheck(assets()==expected,"F04 save/reopen changed exact PCM or stable sample identities");
   };
   reopened(L"rendered.screamseq",rendered);
@@ -38,5 +44,10 @@ void applicationParityFixtureRecovery(){
   restoreCheck(choices==1&&imports==1&&app.sampleBrowser->snapshot().at("importCompletion").is_null(),"Supplied WAV Review repeated chooser or import");app.sampleMutationCompletion={};
   const auto imported=assets();app.edit("history.undo",{{"domain","all"}});restoreCheck(assets()==rendered,"Supplied WAV import did not have one exact Undo");
   app.edit("history.redo",{{"domain","all"}});restoreCheck(assets()==imported,"Supplied WAV Redo changed exact PCM/identities");reopened(L"imported.screamseq",imported);
-  restoreCheck(ScreamSeq::Project::readProjectBytes(input)==originalBytes,"Original Mac reference was modified");fixture.close();
+  restoreCheck(ScreamSeq::Project::readProjectBytes(input)==originalBytes,"Original Mac reference was modified");
+  std::ofstream report(retained/L"assets.json",std::ios::binary);
+  report<<RestoreJson({{"before",before},{"rendered",rendered},{"imported",imported},
+    {"renders",renders},{"imports",imports},{"scope","Windows owned native render/import recovery; reciprocal qualification pending"}}).dump(2)<<'\n';
+  report.close();restoreCheck(bool(report),"Retain exact parity PCM/identity observations");
+  std::cout<<"Retained parity outputs: "<<utf8Path(retained)<<'\n';fixture.close();
 }
