@@ -144,6 +144,9 @@
     }
     template<class Place> void layoutMixerControls(Place place) {
         const bool visible=mixerEditorVisible(),show=visible&&!mixerStripsMode;const auto r=workspaceMainEditorRect();const float x=r.x+202,w=std::max(90.0f,(r.w-220)/3);
+        // Document adoption retires the previous native owner. Recreate it for
+        // a restored visible Strips view without requiring another Mixer click.
+        if(visible&&mixerStripsMode)ensureMixerStrips();
         place(mixerList,r.x+8,r.y+38,180,r.h-70,show);
         place(mixerEnable,r.x+8,r.y+5,118,25,visible);place(mixerAdd,x,r.y+5,94,25,show);place(mixerRemove,x+98,r.y+5,80,25,show);
         place(mixerRouting,mixerStripsMode?r.x+134:x+184,r.y+5,96,25,visible);

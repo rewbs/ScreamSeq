@@ -138,3 +138,27 @@ Mac mixer/history tests. Include native strips, workspace and actual pipe tests
 once that UI is in the batch. Publication changes additionally require bounded
 queue/failure and controlled PCM evidence. Do not rebuild or rerun the unrelated
 P0 job merely because this separate preparation exists.
+
+## Compact strips and stable focus — source only, 23:12 UTC
+
+The candidate now freezes the entire displayed set while a strip owns focus or
+a gesture. External reorder cannot rebind neighboring controls to duplicate the
+focused bus. A removed captured identity remains labelled unavailable with writes
+disabled; a retained raw gesture keeps its own field until explicit reconciliation.
+Focused text/caret is not reformatted by background refresh. A narrow resize shifts
+the visible subset to retain the focused strip, and Ctrl+Page Up/Down provides
+explicit keyboard page navigation.
+
+The default 226-DIP dock now separates Balance from Mute/Solo. Shorter docks use
+a native vertical scrollbar over a minimum 205-DIP content area, including
+keyboard-focus reveal. Meter and control geometry share the same offsets. Result
+review/acknowledgment replaces disabled navigation in the toolbar, keeping both
+actions accessible at 280 DIPs. A visible Strips workspace recreates its native
+owner after document adoption instead of requiring another Mixer command.
+
+Added private-HWND checks cover these geometry, focus, reorder, deletion and
+uncertain-result cases. They have not run. Remaining P1 qualification includes
+true continuous visible-neighbor scrolling versus the current bounded page pool,
+actual accessibility/high-contrast behavior, meter source/adoption identity,
+native wheel/keyboard termination, actual-app document adoption and F04/PCM/API/
+reciprocal gates. This slice is not a P1 completion claim. No build/test was run.
