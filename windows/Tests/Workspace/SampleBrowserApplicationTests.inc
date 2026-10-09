@@ -46,3 +46,64 @@ void applicationSampleBrowserCompletionRetention(){
   }
   fixture.close();
 }
+
+void applicationDirectSampleImportRetention(){
+  RestoreFixture fixture;auto &app=*fixture.app;const auto project=saveDepartureFixture(fixture);
+  const auto file=fixture.folder/L"direct.wav";auto demo=Tracker::Document::demo();
+  {std::ofstream stream(file,std::ios::binary);restoreCheck(demo->song().SaveWAVSample(1,stream),"Write direct import fixture");}
+  const auto originalDocument=app.documentId;const auto before=app.view->samples.size();unsigned choices=0;
+  app.sampleImportChooser=[&](bool){
+    ++choices;restoreCheck(app.sampleBrowser&&!app.sampleBrowser->visible(),"Direct chooser unnecessarily opened the browser");
+    restoreCheck(app.documentDrafts.authorize(census(app),true).status==Tracker::DocumentDeparture::Status::Pending,"File chooser escaped departure census");
+    restoreRejected([&]{app.documentOperation("document.open",departureOpenRequest(app,project));});
+    restoreCheck(app.documentId==originalDocument,"Song changed beneath the native file chooser");
+    restoreRejected([&]{app.importSample(false);});
+    return std::vector<std::filesystem::path>{};
+  };
+  app.command(sampleImportRawCommand);
+  restoreCheck(choices==1&&app.view->samples.size()==before&&census(app).drafts.empty(),"Cancelled picker imported, nested or retained phantom work");
+  app.sampleImportChooser=[](bool)->std::vector<std::filesystem::path>{throw std::runtime_error("Owned file chooser failure");};
+  restoreRejected([&]{app.importSample();});
+  restoreCheck(census(app).drafts.empty()&&!app.sampleBrowser->snapshot().at("pending").get<bool>(),"Failed picker left pending work");
+  app.sampleImportChooser=[&](bool){app.edit("sample.patch",{{"sample",1},{"values",{{"name","Changed during chooser"}}}});return std::vector{file};};
+  const auto stale=restoreRejected([&]{app.importSample(false);});
+  restoreCheck(stale.find("Song changed")!=std::string::npos&&app.view->samples.size()==before&&census(app).drafts.empty(),"Stale picker imported or retained a false uncertain result");
+  app.documentOperation("history.undo",{{"expectedRevision",app.view->session.revision},{"domain","all"}});
+
+  app.workspaceState.show("samples",app.position(),1,true);app.layoutControls();app.sampleRange();
+  rawDraftText(app.controls.at(sampleStartField),L"-");const auto rawID=app.sampleDraftId,rawRevision=app.sampleDraftRevision;
+  for(const auto [command,mapped]:std::array<std::pair<int,bool>,3>{{{sampleImportRawCommand,false},{sampleImportInstrumentsCommand,true},{sampleImportCommand,app.view->instruments!=0}}}) {
+    const auto instruments=app.view->instruments;const auto browserMapping=app.sampleBrowser->snapshot().at("createInstruments");
+    app.sampleImportChooser=[&](bool actual){++choices;restoreCheck(actual==mapped,"Direct command selected the wrong import mapping");return std::vector{file};};
+    SetFocus(app.controls.at(sampleStartField));app.command(command);
+    // Entering instrument mode preserves existing sample-only notes by
+    // mapping the original sample slots before appending the imported sound.
+    const auto expectedInstruments=mapped?(instruments?instruments:before)+1:instruments;
+    restoreCheck(app.view->samples.size()==before+1&&app.view->instruments==expectedInstruments,"Direct command did not import the requested sample/instrument");
+    if(mapped){
+      const auto first=instruments?expectedInstruments:1;
+      for(size_t slot=first;slot<=expectedInstruments;++slot){
+        const auto mapping=app.documentOperation("instrument.get",{{"instrument",slot}}).at("mapping").get<std::vector<unsigned>>();
+        const auto sample=slot==expectedInstruments?before+1:slot;
+        restoreCheck(!mapping.empty()&&std::all_of(mapping.begin(),mapping.end(),[&](unsigned value){return value==sample;}),"Entering instrument mode changed an original sample mapping or misrouted the import");
+      }
+    }
+    restoreCheck(app.sampleBrowser->snapshot().at("createInstruments")==browserMapping,"Direct import changed the browser's independent mapping choice");
+    restoreCheck(app.sampleDraft&&app.sampleDraftId==rawID&&app.sampleDraftRevision==rawRevision&&restoreText(app.controls.at(sampleStartField))==L"-"&&GetFocus()==app.controls.at(sampleStartField),"Direct command discarded/rebased raw sample text or stole focus");
+    app.documentOperation("history.undo",{{"expectedRevision",app.view->session.revision},{"domain","all"}});
+    restoreCheck(app.view->samples.size()==before&&app.view->instruments==instruments,"Direct import did not have one Undo");
+  }
+  app.sampleImportChooser=[&](bool){++choices;return std::vector{file};};
+  app.completionFault=[] {throw std::runtime_error("Drop direct import completion after asset commit");};
+  app.command(sampleImportRawCommand);const auto retained=app.sampleBrowser->snapshot().at("importCompletion");
+  restoreCheck(!retained.is_null()&&app.view->samples.size()==before+1,"Direct command lost committed import result");
+  const auto chosen=choices;app.command(sampleImportInstrumentsCommand);
+  restoreCheck(choices==chosen&&app.sampleBrowser->visible()&&app.sampleBrowser->snapshot().at("importCompletion")==retained,"Repeated direct command chose/imported again or lost Review");
+  restoreRejected([&]{app.documentOperation("document.open",departureOpenRequest(app,project));});
+  const auto window=app.sampleBrowser->window();ScreamSeq::Tests::ownGuiWindow(window);
+  SendMessageW(window,WM_COMMAND,5414,reinterpret_cast<LPARAM>(GetDlgItem(window,5414)));
+  restoreCheck(app.sampleBrowser->snapshot().at("importCompletion").is_null()&&app.view->samples.size()==before+1,"Direct command Review repeated import");
+  app.documentOperation("history.undo",{{"expectedRevision",app.view->session.revision},{"domain","all"}});
+  restoreCheck(app.view->samples.size()==before&&app.sampleDraft&&app.sampleDraftId==rawID&&restoreText(app.controls.at(sampleStartField))==L"-","Reviewed direct import lost draft or one Undo");
+  fixture.close();
+}

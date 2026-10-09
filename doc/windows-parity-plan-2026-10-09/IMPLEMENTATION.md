@@ -2,6 +2,58 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Direct file import reuses the retained native import owner
+
+The main Import command, Ctrl+I and explicit raw-sample/mapped-instrument commands
+now share the sample browser's captured `sample.importMany` submission and Review
+path. `SampleEditor.inc` retains the native OS picker and its modal scope; it no
+longer has a second untracked musical import/reveal implementation. The browser's
+**Choose files** action uses the same chooser lifecycle. `ensureSampleBrowser`
+constructs the native owner without showing it. Normal direct import does not open
+the browser; repeating a command with an unresolved result raises its existing
+**Review import** control, without opening another picker or resubmitting music.
+
+The native owner captures document/revision, mapping option and generation before
+the picker. It registers pending work during the picker, refuses nested import,
+releases it on cancellation/failure, and rechecks the song before import. An API
+`document.open(discard:true)` cannot replace the song beneath this pending owner.
+An ordinary edit during the picker makes its eventual selection stale instead of
+automatically rebasing it. Direct commands do not overwrite the browser's own
+Create instruments choice. Their command-dispatch branch also avoids the generic
+focus reset, preserving the sample range's raw text, identity, revision and focus.
+
+This removes native orchestration duplication while retaining the existing shared
+`Document::importSamples` transaction, API, prepared receipt, codec and Undo. A
+tradeoff is lazy construction of the sample library/hidden native browser on the
+first direct import; its existing background cache/index lifecycle is reused, with
+no second recovery window or separate result state. The picker still belongs to
+the initiating native window. App-wide folder/rescan work remains a separate audit.
+
+Evidence: `bin/parity-evidence/p0b-direct-import-receipt.json`, 1,851 source/dependency
+inputs plus final compiler/cache/executable hashes and five retained logs.
+
+| Check | Result and scope |
+|---|---|
+| ARM64 native-tool, workspace and application builds | Passed |
+| Native tools and Application receipt groups | Final 2/2, 15.00 s; library selection and direct chooser each cover known receipt, lost return and unknown result; repeated direct command does not choose again. Real Application cases cover cancellation/failure, pending admission, stale edits, mapping options, preserved draft/focus, post-commit failure and one Undo |
+| Draft census and departure groups | 2/2 in the initial run, 9.09 s and 5.33 s. Product sources were unchanged by the subsequent fixture correction; these groups do not execute the corrected import fixture |
+| Actual application sample-library and retained-shortcut checks | 8/8, 9.315 s, no skips; native library workflows, shared batch Undo/persistence and global shortcuts retaining editor focus/raw text |
+
+The initial receipt fixture expected only one new instrument when importing into
+a sample-only song. `editor/SampleImport.cpp` intentionally creates mappings for
+all old sample slots first to preserve old notes. The corrected fixture asserts
+the exact resulting count and every mapping, including the imported sound; the
+product behavior was not changed to fit the initial assertion. Initial failure
+logs and the original source freeze are retained. No assertions were removed.
+
+The new Application fixture substitutes only the OS picker result; all command,
+registry, worker, receipt, native controls and Undo paths are real. It does not
+qualify foreground common-dialog interaction. Worker/codec semantics did not change,
+so this batch does not rerun their broad suites. Windows x64, Mac integration,
+physical/foreground accessibility, reciprocal fixtures and the final gate remain
+open. P0b next audits independent library roots/rescans and their close/recovery
+behavior; the full P0c–P8 objective remains unchanged.
+
 ## P0b.1 Sample-browser import receipts and composing context
 
 The sample browser now submits `sample.importMany` through `NativeWriteCompletion`

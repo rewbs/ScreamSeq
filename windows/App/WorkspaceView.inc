@@ -202,6 +202,7 @@
             if(id==dockToggle){workspaceState.lowerVisible=!workspaceState.lowerVisible;workspaceState.focus="pattern";SetFocus(window);if(graphEditorVisible())SetTimer(window,4,100,nullptr);if(mixerEditorVisible())SetTimer(window,3,100,nullptr);layoutControls();ensureCursorVisible();return;}
             if(id==focusPatternCommand&&!drainingViews)deferredViews.clear();
             if(deferView(id))return;
+            if(id==sampleImportCommand||id==sampleImportRawCommand||id==sampleImportInstrumentsCommand){sampleCommand(id);layoutControls();return;}
             if(id==notesCommand){openNoteEditor();return;}
             if(id==notesInspectorCommand){workspace("workspace.panel",{{"panel","notes"},{"focus",true}});return;}
             if(id==samplesCommand||id==sampleCommandBase)revealWorkspaceMainEditor("samples");

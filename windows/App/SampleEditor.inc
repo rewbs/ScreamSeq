@@ -62,22 +62,16 @@
         if(first>last) throw std::runtime_error("Range end must follow its start");
         auto &r=sampleRange();r.first=first;r.last=last;sampleDraft=false;refreshSampleFields();
     }
-    bool sampleImportPending=false;
+    virtual std::vector<std::filesystem::path> chooseSampleImportFiles(bool instruments) {
+        ModalScope modal(modalDepth);
+        return ScreamSeq::chooseSampleFiles(window,instruments?L"Import samples as instruments":L"Import samples",true);
+    }
     void importSample(std::optional<bool> instruments={}) {
-        if(busy||sampleImportPending) throw ScreamSeq::Api::ApiError(-32002,"Sample import or document worker busy");
-        const auto revision=view->session.revision,document=documentId;
-        const bool createInstruments=instruments.value_or(view->instruments!=0);
-        sampleImportPending=true;struct Guard{bool &pending;~Guard(){pending=false;}} guard{sampleImportPending};
-        std::vector<std::filesystem::path> paths;{ModalScope modal(modalDepth);paths=ScreamSeq::chooseSampleFiles(window,createInstruments?L"Import samples as instruments":L"Import samples",true);}
-        if(paths.empty())return;
-        if(documentId!=document||view->session.revision!=revision)throw std::runtime_error("Song changed while choosing samples / reopen Import to use the current song");
-        Json files=Json::array();for(const auto &path:paths)files.push_back(utf8Path(path));
-        auto result=documentOperation("sample.importMany",{{"expectedRevision",revision},{"paths",files},{"createInstruments",createInstruments}});
-        if(documentId!=document)return;
-        workspaceState.show("samples",position(),cursorSample(),true);setWorkspaceCanvasFocus("samples",true);auto &p=workspaceState.panel("samples");
-        const auto &first=result.at("samples").at(0);p.sample=first.at("sample");p.pinned=true;sampleDraft=false;
-        if(createInstruments||!view->instruments){const auto held=typingTarget(!createInstruments,first.at(createInstruments?"instrument":"sample"),49,window);typingSoundId=held.identity;refreshTypingSounds();}
-        status=std::to_wstring(result.at("count").get<unsigned>())+L" sample(s) imported / one Undo restores the previous song";
+        if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        const bool mapped=instruments.value_or(view->instruments!=0);
+        ensureSampleBrowser();
+        if(sampleBrowser->chooseAndImport(mapped,[this,mapped]{return chooseSampleImportFiles(mapped);}))
+            status=L"Samples imported / one Undo restores the previous song";
     }
     bool sampleCommand(int id) {
         if(id==sampleImportCommand) {importSample();return true;}

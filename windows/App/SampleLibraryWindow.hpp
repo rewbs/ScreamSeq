@@ -25,11 +25,11 @@ private:
   std::function<void(unsigned,const std::string &)> multisampleApplied_;
   NativeWriteCompletion::Write write_;
   NativeWriteCompletion importCompletion_;Context importContext_;Json importParams_,importReport_;uint64_t importGeneration_=0;
-  bool importNeedsRebase_=false;
+  bool importNeedsRebase_=false,choosingImport_=false;
   bool importFrozen()const noexcept{return importCompletion_.retained()||importNeedsRebase_;}
   void requireImportResolved()const{if(importFrozen())throw std::runtime_error("Review the previous import before changing this browser selection");}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
-    if(!importCompletion_.retained())return {};
+    if(!choosingImport_&&!importCompletion_.retained())return {};
     return describeDraft(importContext_.document,importContext_.revision,importParams_.dump(),importGeneration_,false,pending_,!pending_);
   }
   MultisampleImportWindow &multisampleEditor() {
@@ -127,10 +127,10 @@ private:
       }
     }catch(...){pending_=false;layout();restoreImportFocus(focus);throw;}pending_=false;layout();restoreImportFocus(focus);
   }
-  void importPaths(const std::vector<std::string> &paths,const Context &captured){
+  void importPaths(const std::vector<std::string> &paths,const Context &captured,bool instruments){
     requireImportResolved();if(paths.empty())return;if(paths.size()>128)throw std::runtime_error("Select at most 128 samples to import");
     auto current=context_();if(current.document!=captured.document||current.revision!=captured.revision)throw std::runtime_error("Song changed / select Import again");
-    importParams_={{"paths",paths},{"createInstruments",mapped_},{"expectedRevision",captured.revision}};importContext_=captured;importGeneration_=++generation_;
+    importParams_={{"paths",paths},{"createInstruments",instruments},{"expectedRevision",captured.revision}};importContext_=captured;importGeneration_=++generation_;
     const auto focus=suspendImportFocus();pending_=true;layout();try{
       importCompletion_.submit(write_,"sample.importMany",importParams_,captured.document,importGeneration_,importParams_);
       finishImport(true);
@@ -149,15 +149,15 @@ private:
     if(id==root&&notification==CBN_SELCHANGE){const auto i=SendMessageW(controls_.at(root),CB_GETCURSEL,0,0);rootPath_=i>0&&size_t(i)<=state_.at("roots").size()?state_.at("roots")[size_t(i-1)].get<std::string>():"";queue();return;}
     if(id==tags&&notification==LBN_SELCHANGE){selectedTags_.clear();for(auto i:selections(tags))if(i<facets_.size())selectedTags_.push_back(facets_[i].at("name"));queue();return;}
     if(id==files&&notification==LBN_SELCHANGE){const auto paths=selectedPaths();const auto caret=SendMessageW(controls_.at(files),LB_GETCARETINDEX,0,0);const auto path=caret>=0&&size_t(caret)<entries_.size()?entries_[size_t(caret)].at("path").get<std::string>():paths.empty()?"":paths.front();if(path!=selectedPath_){selectedPath_=path;call("sample.library.preview.stop");inspect(auto_);}return;}
-    if(id==files&&notification==LBN_DBLCLK){importPaths(selectedPaths(),context_());return;}
+    if(id==files&&notification==LBN_DBLCLK){importPaths(selectedPaths(),context_(),mapped_);return;}
     if(notification!=BN_CLICKED)return;
     if(id==preview)inspect(true);else if(id==autoPreview){auto_=!auto_;if(!auto_)call("sample.library.preview.stop");}
     else if(id==mapped)mapped_=!mapped_;
     else if(id==addFolder||id==removeFolder)folderChange(id==addFolder);
     else if(id==rescan){call("sample.library.rescan",{{"expectedLibraryRevision",state_.at("libraryRevision")}});status(L"Refreshing sample folders");}
     else if(id==previous||id==next){if(id==previous)offset_=offset_>=200?offset_-200:0;else if(offset_+200<total_)offset_+=200;queued_=true;++generation_;SetTimer(window_,1,1,nullptr);}
-    else if(id==importSelection)importPaths(selectedPaths(),context_());
-    else if(id==chooseFiles){const auto captured=context_();pending_=true;layout();try{const auto chosen=chooseSampleFiles(window_,L"Import samples",true);pending_=false;std::vector<std::string> paths;for(const auto &p:chosen){auto s=p.u8string();paths.emplace_back(s.begin(),s.end());}importPaths(paths,captured);}catch(...){pending_=false;layout();throw;}}
+    else if(id==importSelection)importPaths(selectedPaths(),context_(),mapped_);
+    else if(id==chooseFiles)chooseAndImport(mapped_,[this]{return chooseSampleFiles(window_,L"Import samples",true);});
     else if(id==family&&group_.is_object())reviewFamily(group_);
   }
   void timer(UINT_PTR id)override{
@@ -190,9 +190,27 @@ public:
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Sample library"},{searchLabel,L"Search samples / quotes group words, minus excludes"},{rootLabel,L"Folder"},{tagsLabel,L"Folder tags / Ctrl selects more"},{resultsLabel,L""},{detailLabel,L"Select a sample to inspect its waveform"},{statusLabel,L""},{gainLabel,L"Gain dB"}})label(id,text);
     multisampleApplied_=std::move(multisampleApplied);write_=std::move(write);multisampleEditor();finish();roots();
   }
+  // The picker is native to its caller, but owns the same captured import as
+  // library selection. A direct command can retain its result here while this
+  // browser stays hidden; invoking it again reveals Review without replay.
+  bool chooseAndImport(bool instruments,const std::function<std::vector<std::filesystem::path>()> &choose){
+    if(pending_)throw std::runtime_error("Wait for the sample browser request before importing");
+    if(importFrozen()){show();SetFocus(controls_.at(importSelection));throw std::runtime_error("Review the previous import in Sample library before importing again");}
+    const auto captured=context_();importContext_=captured;
+    importParams_={{"createInstruments",instruments},{"expectedRevision",captured.revision}};importGeneration_=++generation_;
+    const auto focus=suspendImportFocus();pending_=choosingImport_=true;layout();
+    std::vector<std::string> paths;
+    try{for(const auto &path:choose()){auto text=path.u8string();paths.emplace_back(text.begin(),text.end());}}
+    catch(...){pending_=choosingImport_=false;layout();restoreImportFocus(focus);throw;}
+    pending_=choosingImport_=false;layout();restoreImportFocus(focus);
+    if(paths.empty())return false;
+    try{importPaths(paths,captured,instruments);}
+    catch(const std::exception &e){error(e);throw;}
+    return true;
+  }
   void reviewFamily(const Json &group){requireImportResolved();multisampleEditor().open(group);}
   void show(){const bool wasVisible=visible();NativeToolWindow::show();if(!wasVisible&&!importFrozen())queued_=true;SetTimer(window_,1,1,nullptr);SetFocus(controls_.at(search));}
   void hide()override{++generation_;call("sample.library.preview.stop");playback();if(multisample_->visible())multisample_->hide();KillTimer(window_,1);NativeToolWindow::hide();}
-  Json snapshot()const{return {{"importCompletion",importCompletion_.snapshot()},{"importReport",importReport_},{"importNeedsRebase",importNeedsRebase_},{"visible",visible()},{"pending",pending_},{"queued",queued_},{"libraryRevision",revision_},{"search",utf8(field(search))},{"root",rootPath_},{"tags",selectedTags_},{"items",entries_},{"offset",offset_},{"total",total_},{"selectedPaths",selectedPaths()},{"selected",selectedPath_},{"inspection",inspection_},{"family",group_},{"createInstruments",mapped_},{"autoPreview",auto_},{"gainDB",utf8(field(gain))},{"previewPlaying",previewPlaying_},{"previewPosition",previewPosition_},{"status",utf8(status_)},{"multisample",multisample_&&!multisample_->retired()?multisample_->snapshot():Json{{"visible",false}}}};}
+  Json snapshot()const{return {{"choosingImport",choosingImport_},{"importCompletion",importCompletion_.snapshot()},{"importReport",importReport_},{"importNeedsRebase",importNeedsRebase_},{"visible",visible()},{"pending",pending_},{"queued",queued_},{"libraryRevision",revision_},{"search",utf8(field(search))},{"root",rootPath_},{"tags",selectedTags_},{"items",entries_},{"offset",offset_},{"total",total_},{"selectedPaths",selectedPaths()},{"selected",selectedPath_},{"inspection",inspection_},{"family",group_},{"createInstruments",mapped_},{"autoPreview",auto_},{"gainDB",utf8(field(gain))},{"previewPlaying",previewPlaying_},{"previewPosition",previewPosition_},{"status",utf8(status_)},{"multisample",multisample_&&!multisample_->retired()?multisample_->snapshot():Json{{"visible",false}}}};}
 };
 }

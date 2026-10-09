@@ -70,6 +70,11 @@ struct RestoreApplication final:Application {
     bool sampleGuardFails=false;
     std::function<void()> duringSampleGuard;
     std::function<void()> completionFault;
+    std::function<std::vector<std::filesystem::path>(bool)> sampleImportChooser;
+    std::vector<std::filesystem::path> chooseSampleImportFiles(bool instruments)override {
+        if(!sampleImportChooser)throw std::runtime_error("Fixture requires an owned sample chooser");
+        return sampleImportChooser(instruments);
+    }
     int departureChoice=IDCANCEL;
     bool failDepartureStop=false,failDepartureRefresh=false;
     std::function<void()> beforeDepartureAdmission,duringDepartureAdmission;
@@ -1072,7 +1077,7 @@ int wmain(int argc,wchar_t **argv) {
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
                 if(length<std::size(group)&&std::wstring_view(group)==L"receipts") {
-                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();
+                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();applicationDirectSampleImportRetention();
                     std::cout<<"PASS Native receipts: worker identity, lost callback, retained render and one Undo\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"departure") {

@@ -7,7 +7,7 @@
     bool allowSamplePreview=false;
     std::unique_ptr<ScreamSeq::SampleLibraryWindow> sampleBrowser;
 
-    void openSampleBrowser() {
+    void ensureSampleBrowser() {
         prepareSampleLibrary();
         if(!sampleBrowser)sampleBrowser=std::make_unique<ScreamSeq::SampleLibraryWindow>(window,
             [this](const auto &method,const auto &params){if(method=="document.get")return view->session.document;return method.starts_with("sample.library.")?independentOperation(method,params).at("data"):documentOperation(method,params);},
@@ -18,8 +18,8 @@
             [this](const Json &result,const std::string &document){revealCapturedSample(document,result.at("samples").at(0));},
             [this](unsigned instrument,const std::string &document){if(documentId!=document)return;const auto target=typingTarget(false,instrument,49,window);typingSoundId=target.identity;refreshTypingSounds();status=L"Multi-sample instrument imported / selected for musical typing";},
             [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
-        sampleBrowser->show();
     }
+    void openSampleBrowser() {ensureSampleBrowser();sampleBrowser->show();}
 
     void prepareSampleLibrary() {
         if(sampleLibrary)return;
