@@ -8,6 +8,7 @@
 #include "EnvelopeOperations.hpp"
 #include "MixerOperations.hpp"
 #include "../Api/SessionAdapter.hpp"
+#include "NativeCallReceipt.hpp"
 #include "../Project/NativeProject.hpp"
 #include "../Audio/PresentationClock.hpp"
 #include "editor/NoteRecording.hpp"
@@ -85,6 +86,17 @@ struct RecoverySnapshot {
   std::optional<std::filesystem::path> source;
   bool hasRecording=false,needsProtection=false,hasOpenEditors=false;
 };
+// Both callbacks execute on the native UI owner through service(). The host
+// rechecks raw drafts/takes and obtains its short input lease in admit(). A
+// throwing admit must leave no lease behind; finish() is called exactly once
+// after successful admission, including when Stop refuses the replacement.
+// The observer must outlive the controller. Construction of the first document
+// has no departing source and invokes neither callback.
+struct DocumentReplacementAdmission {
+  virtual ~DocumentReplacementAdmission()=default;
+  virtual void admit(const std::string &document,const std::string &revision)=0;
+  virtual void finish(bool adopted)noexcept=0;
+};
 // One serial document owner. Work, cache construction and retired cache disposal
 // run here. service() is called ONLY by the UI thread for playback hooks.
 class DocumentController {
@@ -125,13 +137,18 @@ class DocumentController {
   PlaybackHooks playbackHooks_;
   std::optional<std::filesystem::path> cataloguePath_;
   std::optional<std::filesystem::path> libraryPath_;
+  DocumentReplacementAdmission *replacementAdmission_=nullptr;
   std::thread thread_; // Start only after every worker dependency is initialized.
   void loop();
   void onMain(std::function<void()> task);
   std::shared_ptr<DocumentView> buildView(Tracker::Document &document,const Project::ProjectState &project,uint64_t generation);
   void install(std::shared_ptr<const DocumentView> next);
   void publish();
-  void publishCommitted();
+  void publishCommitted(const std::string &method,const Json &result);
+  std::unique_ptr<AssetOperations::ImportCommit> prepareAssetCompletion(const std::string &,const Json &);
+  std::shared_ptr<NativeCallReceipt> nativeCallReceipt_; // Worker-only publication target for this invocation.
+  std::shared_ptr<const Api::CompletedCall> completedCall_; // Worker-owned, scoped to one invocation.
+  Api::CompletedCall invokeOperation(const std::string &method,Json params,const std::shared_ptr<NativeCallReceipt> &receipt={});
   void preflightGrowth(const std::string &method,const Json &params);
   void validateAssetCandidate(const Tracker::Document &candidate) const;
   void validateGraphViewGrowth(const Tracker::NativeSong &candidate) const;
@@ -154,17 +171,20 @@ class DocumentController {
   Json parameterActivityOperation(const std::string &method,const Json &params);
   std::function<void()> prepareNativeUpdate(const Tracker::NativeSong &before,const Tracker::NativeSong &next);
   std::string revision() const;
+  std::string revision(uint64_t documentRevision) const;
   Json operation(const std::string &method,Json params);
 public:
   DocumentController(const std::filesystem::path &input,std::string identity,
     std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,
     std::function<void()> beforeView={},size_t maxCacheBytes=64u*1024u*1024u,
     std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={},PlaybackHooks playbackHooks={},
-    std::optional<std::filesystem::path> cataloguePath={},std::optional<std::filesystem::path> libraryPath={});
+    std::optional<std::filesystem::path> cataloguePath={},std::optional<std::filesystem::path> libraryPath={},
+    DocumentReplacementAdmission *replacementAdmission=nullptr);
   ~DocumentController();
   bool publicationPending() const {return publicationPending_.load();}
   std::shared_ptr<const DocumentView> view();
   std::future<Json> invoke(std::string method,Json params);
+  std::future<Api::CompletedCall> invokeCompleted(std::string method,Json params,std::shared_ptr<NativeCallReceipt> receipt={});
   std::future<std::shared_ptr<const RecoverySnapshot>> captureRecovery(std::string expectedRevision);
   // Parse, validate and allocate the complete next view before stopping or
   // replacing anything. A recovered document has a new identity, no file path,

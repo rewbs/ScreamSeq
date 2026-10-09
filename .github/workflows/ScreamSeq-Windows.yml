@@ -2,20 +2,40 @@ name: ScreamSeq Windows
 
 on:
   push:
-    branches: [main, codex/windows-native]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      retained_app_run:
+        description: 'Existing Windows build run ID; blank performs a normal build'
+        type: string
+        default: ''
+      fixture_run:
+        description: 'Preceding fixture run ID; blank rechecks the original corpus/API/codec baseline'
+        type: string
+        default: ''
+      fixture_artifact:
+        description: 'Exact preceding artifact name (for example screamseq-retained-macos-15)'
+        type: string
+        default: ''
+      fixture_layout:
+        description: 'Initial Windows outputs or a retained exchange result'
+        type: choice
+        options: [exchange, windows]
+        default: exchange
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: screamseq-windows-${{ github.workflow }}-${{ github.ref }}
+  group: screamseq-windows-${{ github.workflow }}-${{ github.ref }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}
   cancel-in-progress: true
 
 jobs:
   native-app:
+    if: github.event_name != 'workflow_dispatch' || inputs.retained_app_run == ''
     name: Native app (Windows x64)
     runs-on: windows-2022
     timeout-minutes: 60
@@ -23,14 +43,38 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Build native application and run portable and worker tests
+      - name: Build native application and all test targets once
+        id: build
         shell: pwsh
         run: |
-          ./windows/build.ps1 -Architecture x64 -BuildDirectory bin/windows-ci -Jobs 2 -Test *>&1 | Tee-Object screamseq-windows.log
+          ./windows/build.ps1 -Architecture x64 -BuildDirectory bin/windows-ci -Jobs 2 *>&1 | Tee-Object screamseq-windows.log
+      - name: Portable and worker tests from the grouped build
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error -L '^(portable|worker)$' *>&1 | Tee-Object screamseq-windows-model.log
+          if ($LASTEXITCODE -ne 0) { throw 'Portable or worker checks failed.' }
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         with:
           python-version: '3.12'
+      - name: Retain the built app for reciprocal checks without rebuilding
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          python mac/Tools/build_manifest.py bin/windows-ci/BuildInfo.json
+          if ($LASTEXITCODE -ne 0) { throw 'Build receipt capture failed.' }
+          $release = (Resolve-Path bin/windows-ci/Release).Path
+          Compress-Archive -Path "$release/ScreamSeq.exe", "$release/ScreamSeqVST3Scanner.exe", "$release/THIRD-PARTY-NOTICES", "$release/VST3-NOTICES" -DestinationPath bin/windows-ci/native-app.zip
+          @{
+            sourceCommit = (git rev-parse HEAD).Trim()
+            executableSHA256 = (Get-FileHash "$release/ScreamSeq.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+            archiveSHA256 = (Get-FileHash bin/windows-ci/native-app.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+            buildReceiptSHA256 = (Get-FileHash bin/windows-ci/BuildInfo.json -Algorithm SHA256).Hash.ToLowerInvariant()
+            qualification = 'Built candidate; test results are separate and may fail.'
+          } | ConvertTo-Json | Set-Content bin/windows-ci/native-app-identity.json -Encoding utf8
       - name: Scratch editor on an owned private desktop
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
         run: |
           $env:SCREAMSEQ_TEST_EXE = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
@@ -38,25 +82,83 @@ jobs:
           New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
           python -m unittest discover -s windows/Tests -p test_scratch_editor.py -v *>&1 | Tee-Object screamseq-scratch-ui.log
           if ($LASTEXITCODE -ne 0) { throw 'Scratch private-desktop checks failed.' }
-      - name: Retained editors and merged command paths on private desktops
+      - name: Native editor, preference and recovery tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
         run: |
-          ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error -R '^(workspace-restore-tests|precise-note-window-tests|graph-curve-window-tests)$' *>&1 | Tee-Object screamseq-retained-editors.log
+          ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error -L '^(native-ui|preferences|recovery)$' *>&1 | Tee-Object screamseq-retained-editors.log
           if ($LASTEXITCODE -ne 0) { throw 'Retained native editor checks failed.' }
+      - name: Merged commands and closure paths on private desktops
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
           $env:SCREAMSEQ_TEST_EXE = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
+          $env:SCREAMSEQ_TEST_LIVE_AUDIO = '1'
           $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-integration-ui'
           New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
+          # The hosted Server image may leave both native audio services stopped.
+          # Start them on this disposable runner; do not alter endpoint selection
+          # or system audio defaults, and retain any failure for diagnosis.
+          $audioServices = @(foreach ($serviceName in @('AudioEndpointBuilder', 'Audiosrv')) {
+            $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+            $before = if ($service) { $service.Status.ToString() } else { 'unavailable' }
+            $failure = $null
+            if ($service -and $service.Status -ne 'Running') {
+              try {
+                Start-Service -Name $serviceName -ErrorAction Stop
+                $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
+              } catch { $failure = $_.Exception.Message }
+              $service.Refresh()
+            }
+            @{ name = $serviceName; before = $before; status = $(if ($service) { $service.Status.ToString() } else { 'unavailable' }); error = $failure }
+          })
+          $audioServices | ConvertTo-Json | Set-Content bin/windows-ci/audio-services.json
+          $binaryHash = (Get-FileHash -LiteralPath $env:SCREAMSEQ_TEST_EXE -Algorithm SHA256).Hash.ToLowerInvariant()
+          python -B windows/Tests/audio_environment.py --executable $env:SCREAMSEQ_TEST_EXE --binary-sha256 $binaryHash --output bin/windows-ci/audio-environment
+          if ($LASTEXITCODE -ne 0) { Write-Warning 'Audio availability probe failed; retained report is diagnostic, and required tests still run.' }
           $integrationLog = Join-Path $env:GITHUB_WORKSPACE 'screamseq-integration-ui.log'
           Push-Location windows/Tests
           try {
             python -m unittest -v `
-              test_workspace_shortcuts.WorkspaceShortcutTests.test_api_catalogue_validation_conflicts_and_atomic_presentation_only_edits `
+              test_workspace_shortcuts.WorkspaceShortcutTests `
+              test_recording.RecordingTests `
+              test_midi_recording_ui.MidiRecordingUITests `
+              test_sample_capture_ui.SampleCaptureUiTests `
+              test_recovery.RecoveryTests.test_native_browser_save_reload_restore_and_file_save_cleanup `
+              test_recovery.RecoveryTests.test_close_drains_pending_native_recovery_write `
+              test_recovery.RecoveryTests.test_pending_write_allows_edits_and_save_cleanup_cannot_resurrect_old_copies `
+              test_audition.AuditionTests.test_pattern_typing_selected_sound_repeat_limits_history_and_reopen `
+              test_audition.AuditionTests.test_typing_routes_precise_rows_to_the_captured_editor `
+              test_audition.AuditionTests.test_sample_dock_typing_live_mode_and_text_focus `
+              test_audition.AuditionTests.test_native_sample_and_instrument_typing_capture_text_and_close `
+              test_audition.AuditionTests.test_keyup_during_document_wait_never_starts_a_late_voice `
               test_pattern_performance.PatternPerformanceTests.test_typed_native_inline_slots_and_musical_unit_draft `
               test_pattern_performance.PatternPerformanceTests.test_inline_nudge_decimal_fields_commit_once_history_and_persistence `
               test_precise_note_host.PreciseNoteHostTests.test_simultaneous_hosts_compact_focus_and_saved_layout_retain_native_drafts `
               test_graph_curve_host.GraphCurveHostTests.test_routing_and_curve_keep_independent_raw_drafts_and_targets *>&1 | Tee-Object $integrationLog
             if ($LASTEXITCODE -ne 0) { throw 'Merged command and editor paths failed.' }
           } finally { Pop-Location }
+      - name: Typed fixtures and actual pipe conformance baseline
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          python -B -m unittest discover -s editor/Tests/Conformance -p 'test_*.py' -v *>&1 | Tee-Object screamseq-conformance-tools.log
+          if ($LASTEXITCODE -ne 0) { throw 'Conformance tool checks failed.' }
+          python -B -m unittest discover -s windows/Tests/Project -p 'test_*.py' -v *>&1 | Tee-Object screamseq-conformance-project-helper.log
+          if ($LASTEXITCODE -ne 0) { throw 'Project framing helper checks failed.' }
+          $executable = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
+          $binaryHash = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
+          $builtCommit = (git rev-parse HEAD).Trim()
+          python -B editor/Tests/Conformance/native_roundtrip.py --executable $executable --binary-sha256 $binaryHash --binary-source-commit $builtCommit --build-receipt bin/windows-ci/BuildInfo.json --output bin/windows-ci/parity-conformance --api-vectors --codec-vectors *>&1 | Tee-Object screamseq-conformance-native.log
+          if ($LASTEXITCODE -ne 0) { throw 'Native conformance baseline did not match; inspect retained reports.' }
+      - name: Configured test scheduling inventory
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          ctest --test-dir bin/windows-ci -C Release --show-only=json-v1 | Set-Content bin/windows-ci/test-registration.json -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw 'CTest inventory failed.' }
+          python -B editor/Tests/Conformance/schedule_inventory.py --ctest-json bin/windows-ci/test-registration.json --platform windows --output bin/windows-ci/test-schedule.json
+          if ($LASTEXITCODE -ne 0) { throw 'Registered tests are unscheduled or repeated; inspect the inventory.' }
       - name: Preserve qualification logs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -64,10 +166,32 @@ jobs:
           name: screamseq-windows-logs
           path: |
             screamseq-windows.log
+            screamseq-windows-model.log
             screamseq-scratch-ui.log
             screamseq-retained-editors.log
             screamseq-integration-ui.log
+            screamseq-conformance-*.log
+            bin/windows-ci/parity-conformance/**
+            bin/windows-ci/parity-fixture-output/**
+            bin/windows-ci/BuildInfo.json
+            bin/windows-ci/native-app.zip
+            bin/windows-ci/native-app-identity.json
+            bin/windows-ci/CMakeCache.txt
+            bin/windows-ci/test-registration.json
+            bin/windows-ci/test-schedule.json
+            bin/windows-ci/audio-services.json
+            bin/windows-ci/audio-environment/**
             bin/windows-ci/Testing/Temporary/*.log
             bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: warn
           retention-days: 14
+  retained-app:
+    if: github.event_name == 'workflow_dispatch' && inputs.retained_app_run != ''
+    uses: ./.github/workflows/ScreamSeq-Retained.yml
+    with:
+      runner: windows-2022
+      app-run: ${{ inputs.retained_app_run }}
+      app-artifact: screamseq-windows-logs
+      input-run: ${{ inputs.fixture_run }}
+      input-artifact: ${{ inputs.fixture_artifact }}
+      input-layout: ${{ inputs.fixture_layout }}

@@ -1,0 +1,119 @@
+{
+  "format": "screamseq-typed-tree-v1",
+  "referenceBaseline": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+  "archiveSHA256": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81",
+  "members": {
+    "fixtures/01-midnight-circuit.screamseq": {
+      "path": "fixtures/01-midnight-circuit.screamseq",
+      "sha256": "e6d7a0ea19f0327ebb0b1e6e2a5885c525916e0f1a2fb0977b602c2efb8e4f58",
+      "bytes": 52063
+    },
+    "fixtures/02-editors-and-effects.screamseq": {
+      "path": "fixtures/02-editors-and-effects.screamseq",
+      "sha256": "5ca8394b2a597e044421834d0b8b7167560e13a599b32194651f05dd03fb73e6",
+      "bytes": 212069
+    },
+    "fixtures/03-routing-and-modulation.screamseq": {
+      "path": "fixtures/03-routing-and-modulation.screamseq",
+      "sha256": "fb2289429c269c69d4e25f1b8a6358d1a747c44629f603b9f882e3b39ed937b2",
+      "bytes": 214386
+    },
+    "fixtures/04-complete-reference.screamseq": {
+      "path": "fixtures/04-complete-reference.screamseq",
+      "sha256": "ec36560ceecc0baaf4e127217d1637cd5e387fbd9d4c42163e99b467e84fe813",
+      "bytes": 214858
+    },
+    "fixtures/05-arrangement-copy-after.screamseq": {
+      "path": "fixtures/05-arrangement-copy-after.screamseq",
+      "sha256": "f8ea7cc23b73cf2aa7b911867dc3bdb0c1718f32ed7e06a6a3413ed34350efaf",
+      "bytes": 216467
+    },
+    "fixtures/audio/Parity_C3.wav": {
+      "path": "fixtures/audio/Parity_C3.wav",
+      "sha256": "7a7e84d9780aa0f37d36b81d9f3bf8f447cf052b8a2a70832da910f04146625a",
+      "bytes": 48044
+    },
+    "fixtures/audio/Parity_C4.wav": {
+      "path": "fixtures/audio/Parity_C4.wav",
+      "sha256": "28031f4594b430d5f7c6981ed458eda8728a41a149e04a8072d3567ca43eba8f",
+      "bytes": 48044
+    },
+    "fixtures/audio/Parity_G3.wav": {
+      "path": "fixtures/audio/Parity_G3.wav",
+      "sha256": "be80b6c0e2688870236bd526395a8254ea786efadaf5dceaf64869140999f653",
+      "bytes": 48044
+    },
+    "fixtures/manifest.json": {
+      "path": "fixtures/manifest.json",
+      "sha256": "c0d49f7e7d9995aa17e7991e727811f7650c6df49a031bb2175aebe95d388bae",
+      "bytes": 5256
+    },
+    "FIXTURES.md": {
+      "path": "FIXTURES.md",
+      "sha256": "72b7b325c2b48eb090ae2dd898d3964a66ec75665f920f7762fa2fdcb96d79da",
+      "bytes": 11109
+    }
+  },
+  "projects": {
+    "fixtures/01-midnight-circuit.screamseq": {
+      "fileSHA256": "e6d7a0ea19f0327ebb0b1e6e2a5885c525916e0f1a2fb0977b602c2efb8e4f58",
+      "typedSHA256": "9327b9b5a2f0b5447149f30910e2c15538e3e93fdd137f945e5c028fc9636cff",
+      "rootMembers": {
+        "automation": "377a0f672f66d9c1f778275404da357c06dc59f7c06c3f31d82b864cd366bdb8",
+        "module": "bb07b2cec3722afbf0895aa900e629bfe0f3fea1652a3c6b906020e973b216bf",
+        "native": "3d6dd4c5bed9b3d3bd91cf4701db589e2673d6ef1b8dc03bc3437b80f3c52588",
+        "plugins": "377a0f672f66d9c1f778275404da357c06dc59f7c06c3f31d82b864cd366bdb8",
+        "sequence": "47cf593f757269a67b947a1b2fef1cb992458ed1158648e1d8bff863b6d31e09",
+        "version": "89897fd075a075cde63ed118bed5a2d41207558d1015d7c1ae76d8fbe45fd8bf"
+      }
+    },
+    "fixtures/02-editors-and-effects.screamseq": {
+      "fileSHA256": "5ca8394b2a597e044421834d0b8b7167560e13a599b32194651f05dd03fb73e6",
+      "typedSHA256": "7e39d95a9fd5b72d47b653bfb02fe5727d161ef938eb72de2ce02bf71081d619",
+      "rootMembers": {
+        "automation": "377a0f672f66d9c1f778275404da357c06dc59f7c06c3f31d82b864cd366bdb8",
+        "module": "65ba9a8367d7962d55cc0e3ef55a80720bf78580b79cede103aa3c8839797433",
+        "native": "39aa63b97d726a6d3ac777f3ac544903b0f194a68cfca6ab0160a1cc37d066dc",
+        "plugins": "300cc22c7313e8baaa04c6c02a34498c8bc1015d3149e47fb1602d3db8d3aff6",
+        "sequence": "47cf593f757269a67b947a1b2fef1cb992458ed1158648e1d8bff863b6d31e09",
+        "version": "89897fd075a075cde63ed118bed5a2d41207558d1015d7c1ae76d8fbe45fd8bf"
+      }
+    },
+    "fixtures/03-routing-and-modulation.screamseq": {
+      "fileSHA256": "fb2289429c269c69d4e25f1b8a6358d1a747c44629f603b9f882e3b39ed937b2",
+      "typedSHA256": "d50caff144883798346b5487bbc46c4ba7bc9c7c6610612051c8d34453146605",
+      "rootMembers": {
+        "automation": "377a0f672f66d9c1f778275404da357c06dc59f7c06c3f31d82b864cd366bdb8",
+        "module": "65ba9a8367d7962d55cc0e3ef55a80720bf78580b79cede103aa3c8839797433",
+        "native": "709714ce5e87e588d0254aa9caaa3eeab64026ef1bd9475ce8c3bf3bfa06b465",
+        "plugins": "300cc22c7313e8baaa04c6c02a34498c8bc1015d3149e47fb1602d3db8d3aff6",
+        "sequence": "47cf593f757269a67b947a1b2fef1cb992458ed1158648e1d8bff863b6d31e09",
+        "version": "89897fd075a075cde63ed118bed5a2d41207558d1015d7c1ae76d8fbe45fd8bf"
+      }
+    },
+    "fixtures/04-complete-reference.screamseq": {
+      "fileSHA256": "ec36560ceecc0baaf4e127217d1637cd5e387fbd9d4c42163e99b467e84fe813",
+      "typedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "rootMembers": {
+        "automation": "377a0f672f66d9c1f778275404da357c06dc59f7c06c3f31d82b864cd366bdb8",
+        "module": "65ba9a8367d7962d55cc0e3ef55a80720bf78580b79cede103aa3c8839797433",
+        "native": "6d72ec676e70ac7683dc48e419fecfeb5e4e49a260e1c1fe8ecefd2acb68039d",
+        "plugins": "300cc22c7313e8baaa04c6c02a34498c8bc1015d3149e47fb1602d3db8d3aff6",
+        "sequence": "47cf593f757269a67b947a1b2fef1cb992458ed1158648e1d8bff863b6d31e09",
+        "version": "89897fd075a075cde63ed118bed5a2d41207558d1015d7c1ae76d8fbe45fd8bf"
+      }
+    },
+    "fixtures/05-arrangement-copy-after.screamseq": {
+      "fileSHA256": "f8ea7cc23b73cf2aa7b911867dc3bdb0c1718f32ed7e06a6a3413ed34350efaf",
+      "typedSHA256": "68b160e79ac9cf4326ada8cc7617cd6071304fa05d37df1f196bc45810690af9",
+      "rootMembers": {
+        "automation": "377a0f672f66d9c1f778275404da357c06dc59f7c06c3f31d82b864cd366bdb8",
+        "module": "6f73623c712183fa1510dee348d23535616f2e8827ef71a1e8bdeea8bf4f9f43",
+        "native": "94cdb65888292ff212901c7206380df89b6194543cca6cf53cf51293f8305e58",
+        "plugins": "300cc22c7313e8baaa04c6c02a34498c8bc1015d3149e47fb1602d3db8d3aff6",
+        "sequence": "47cf593f757269a67b947a1b2fef1cb992458ed1158648e1d8bff863b6d31e09",
+        "version": "89897fd075a075cde63ed118bed5a2d41207558d1015d7c1ae76d8fbe45fd8bf"
+      }
+    }
+  }
+}

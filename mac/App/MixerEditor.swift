@@ -174,7 +174,10 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
       Theme.label("Unassigned effects process on Master. Each enabled instrument output can use its own mixer destination.", size: 11, color: Theme.muted),
       NSView()
     ], spacing: 9)
-    inspectorContent.stretchAcrossAxis(); inspectorContent.fill(inspector, inset: 3)
+    // AppKit aligns rounded buttons by their alignment rect; the bezel extends
+    // beyond that rect. Leave room inside the scrolling document for the full
+    // native control bounds, including the right-aligned inspector actions.
+    inspectorContent.stretchAcrossAxis(); inspectorContent.fill(inspector, inset: 12)
     routingScroll.documentView = inspector
     inspector.translatesAutoresizingMaskIntoConstraints = false
     let fillHeight = inspector.heightAnchor.constraint(equalTo: routingScroll.contentView.heightAnchor)

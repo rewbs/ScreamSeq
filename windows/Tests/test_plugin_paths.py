@@ -95,13 +95,15 @@ class PluginPathTests(unittest.TestCase):
         path,tree=self.save_tree('unsupported.screamseq')
         tree['plugins'][0].update(format='AU',type=int.from_bytes(b'aufx','big'),classID='',state=b'opaque Mac Audio Unit state')
         path.write_bytes(plistlib.dumps(tree,fmt=plistlib.FMT_BINARY));self.write('document.open',path=str(path),discard=True);before=self.doc()
-        for action in [lambda:self.location(plugin),lambda:self.write('plugin.path.scan',plugin=plugin,path=self.program()['path']),lambda:self.write('plugin.path.set',**fields)]:
+        for method,action in [('get',lambda:self.location(plugin)),('scan',lambda:self.write('plugin.path.scan',plugin=plugin,path=self.program()['path'])),('set',lambda:self.write('plugin.path.set',**fields))]:
             with self.assertRaises(ApiError) as error:action()
             self.assertEqual(error.exception.code,-32602)
+            if method=='set':self.assertEqual(error.exception.data,dict(writeOutcome='notCommitted'))
         self.assertEqual(self.doc(),before);self.assertEqual(self.cache.read_bytes(),cache_before)
         _,after=self.save_tree('unsupported-retained.screamseq');self.assertEqual(after['plugins'],tree['plugins'])
         self.write('plugin.remove',slot=0);before=self.doc()
-        with self.assertRaises(ApiError):self.write('plugin.path.set',**fields)
+        with self.assertRaises(ApiError) as error:self.write('plugin.path.set',**fields)
+        self.assertEqual(error.exception.data,dict(writeOutcome='notCommitted'))
         self.assertEqual(self.doc(),before)
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PLUGIN_CACHE'),'installed effects')
@@ -134,7 +136,8 @@ class PluginPathTests(unittest.TestCase):
     def test_scan_path_hash_rejection_failed_vendor_state_and_ports(self):
         plugin,original,tree=self.broken(self.program(),ports=True);before=self.doc()
         self.assertEqual(self.reconnect(plugin,dryRun=True)['data']['dryRun'],True)
-        with self.assertRaises(ApiError):self.reconnect(plugin,expectedModuleSHA256='0'*64)
+        with self.assertRaises(ApiError) as error:self.reconnect(plugin,expectedModuleSHA256='0'*64)
+        self.assertEqual(error.exception.data,dict(writeOutcome='notCommitted'))
         different=next(d for d in self.descriptors if d['classID']!=self.program()['classID'])
         with self.assertRaises(ApiError):self.reconnect(plugin,path=different['path'])
         self.assertEqual(self.doc(),before)
@@ -154,7 +157,8 @@ class PluginPathTests(unittest.TestCase):
         path,bad=self.save_tree('bad-state.screamseq');bad['plugins'][0]['path']='/foreign/again.vst3';bad['plugins'][0]['state']=b'invalid vendor state'
         path.write_bytes(plistlib.dumps(bad,fmt=plistlib.FMT_BINARY));self.write('document.open',path=str(path),discard=True);before=self.doc()
         self.reconnect(plugin,changed,dryRun=True)
-        with self.assertRaises(ApiError):self.reconnect(plugin,changed)
+        with self.assertRaises(ApiError) as error:self.reconnect(plugin,changed)
+        self.assertEqual(error.exception.data,dict(writeOutcome='notCommitted'))
         self.assertEqual(self.doc(),before);self.assertEqual(base64.b64decode(self.state()),b'invalid vendor state')
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'),'native provider fixture')
@@ -164,9 +168,23 @@ class PluginPathTests(unittest.TestCase):
         self.write('graph.plugin.set',graph=graph,node=node,inputs=[1]);rack_before=self.rack();opaque=self.state()
         definition=self.read('graph.get',includeState=True)['library'][0]
         recipe=next(n for n in definition['nodes'] if n['id']==node)['plugin'];recipe['path']='/Library/Audio/Plug-Ins/VST3/Graph.vst3'
-        self.write('graph.update',definition=definition);before=self.doc()
+        # Mutations cannot inject foreign module paths. Model a project saved
+        # on the other platform through file loading, as the rack case does.
+        unchanged=self.doc()
+        with self.assertRaises(ApiError):self.write('graph.update',definition=definition)
+        self.assertEqual(self.doc(),unchanged)
+        path,tree=self.save_tree('foreign-graph-path.screamseq')
+        saved=next(g for g in tree['native']['signalGraph']['library'] if g['id']==graph)
+        next(n for n in saved['nodes'] if n['id']==node)['plugin']['path']=recipe['path']
+        path.write_bytes(plistlib.dumps(tree,fmt=plistlib.FMT_BINARY))
+        self.write('document.open',path=str(path),discard=True)
+        self.assertEqual(self.read('graph.get',includeState=True)['library'][0],definition)
+        before=self.doc()
         info=self.read('graph.plugin.path.get',graph=graph,node=node);self.assertFalse(info['moduleVerified']);candidate=info['candidates'][0]
         params=dict(graph=graph,node=node,path=candidate['descriptor']['path'],expectedModuleSHA256=candidate['moduleSHA256'])
+        with self.assertRaises(ApiError) as error:self.write('graph.plugin.path.set',**dict(params,expectedModuleSHA256='0'*64))
+        self.assertEqual(error.exception.data,dict(writeOutcome='notCommitted'))
+        self.assertEqual(self.doc(),before)
         self.write('graph.plugin.path.set',**params,dryRun=True);self.assertEqual(self.doc(),before)
         self.write('graph.plugin.path.set',**params)
         after=self.read('graph.get',includeState=True)['library'][0];expected=copy.deepcopy(definition);next(n for n in expected['nodes'] if n['id']==node)['plugin']['path']=descriptor['path']
@@ -176,7 +194,11 @@ class PluginPathTests(unittest.TestCase):
         path,_=self.save_tree('graph-path.screamseq');self.write('document.open',path=str(path));self.assertEqual(self.read('graph.get',includeState=True)['library'][0],expected)
         self.assertTrue(self.read('graph.plugin.get',graph=graph,node=node)['parameters'])
         # Actual graph inspector entry point uses the same captured node.
-        self.command(430);self.select(443,3);self.select(442,2);self.command(471);self.idle()
+        self.desktop.send(self.hwnd,0x111,430);self.idle()
+        self.assertEqual(self.read('workspace.get')['graphEditor']['graph'],graph)
+        self.select(443,3);self.idle();self.select(442,next(i for i,n in enumerate(definition['nodes']) if n['id']==node));self.idle()
+        self.assertEqual(self.read('workspace.get')['graphEditor']['node'],node)
+        self.command(471);self.idle()
         self.assertEqual(self.local()['target'],dict(graph=graph,node=node))
 
     def local(self):return self.read('workspace.get')['pluginPath']
@@ -184,7 +206,7 @@ class PluginPathTests(unittest.TestCase):
         end=time.monotonic()+7;quiet=None
         while time.monotonic()<end:
             state=self.read('workspace.get')
-            if state['documentBusy'] or state['pluginPath'].get('pending'):quiet=None
+            if state['documentBusy'] or state['pendingViewCommands'] or state['graphEditor'].get('pending') or state['pluginPath'].get('pending'):quiet=None
             elif quiet is None:quiet=time.monotonic()
             elif time.monotonic()-quiet>=.18:return
             time.sleep(.02)
@@ -200,6 +222,73 @@ class PluginPathTests(unittest.TestCase):
         private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop,visit,0));self.assertEqual(len(found),1);return found[0]
     def control(self,identifier):return private_desktop.user.GetDlgItem(self.window(),identifier)
     def press(self,identifier):self.idle();self.desktop.send(self.window(),0x111,identifier,self.control(identifier));self.idle()
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'),'native provider fixture')
+    def test_native_failed_scan_requires_readback_without_reconnect_or_rescan(self):
+        plugin, original, tree = self.broken(self.program())
+        self.command(327); self.idle()
+        path = str(self.folder / 'absent-module.vst3')
+        text = ctypes.create_unicode_buffer(path)
+        self.desktop.send(self.control(3611), 0xC, 0, ctypes.addressof(text))
+        before = self.doc(); cache = self.cache.read_bytes()
+        self.press(3605)
+        failed = self.local()
+        self.assertEqual(failed['scanReview']['method'], 'plugin.path.scan')
+        self.assertEqual(failed['scanReview']['params']['path'], path)
+        self.assertEqual(failed['manualPath'], path)
+        self.assertEqual(self.doc(), before)
+        with self.assertRaises(ApiError) as refusal:
+            self.write('document.open', path=str(self.folder/'broken.screamseq'), discard=True)
+        self.assertEqual(refusal.exception.code, -32002)
+        self.assertEqual(refusal.exception.data, dict(writeOutcome='notCommitted'))
+        self.press(3605); self.press(3612)
+        self.assertEqual(self.local()['scanReview'], failed['scanReview'])
+        self.press(3603)  # Review result reads the same stable plugin's location.
+        observed = self.local()
+        self.assertIsNone(observed['scanReview'])
+        self.assertTrue(observed['readbackNeedsReload'])
+        self.assertEqual(observed['report']['outcome'], 'unverified')
+        self.assertEqual(observed['report']['observed']['plugin'], plugin)
+        self.assertEqual(observed['manualPath'], path)
+        self.assertEqual(self.doc(), before)
+        self.assertEqual(self.cache.read_bytes(), cache)
+        self.assertEqual(self.state(), original)
+        self.press(3603)  # Explicit Reload is required before any new reconnect.
+        self.assertEqual(self.doc(), before)
+        self.press(3604)
+        self.assertFalse(self.local()['readbackNeedsReload'])
+        self.assertEqual(self.local()['manualPath'], path)
+        self.press(3612)
+        self.assertFalse(self.local()['draft'])
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE') and os.environ.get('SCREAMSEQ_TEST_PLUGIN_CACHE'),'provider and installed effect fixtures')
+    def test_native_wrong_class_scan_reviews_real_cache_side_effect_at_same_revision(self):
+        plugin, original, tree = self.broken(self.program())
+        copied = self.folder / 'different-class.vst3'
+        shutil.copy2(self.entry('Contourtonist')['path'], copied)
+        self.command(327); self.idle()
+        text = ctypes.create_unicode_buffer(str(copied))
+        self.desktop.send(self.control(3611), 0xC, 0, ctypes.addressof(text))
+        before = self.doc(); cache_before = self.cache.read_bytes()
+        self.press(3605)
+        pending = self.local()
+        self.assertIsNotNone(pending['scanReview'])
+        self.assertIn('different plugin class', pending['status'])
+        cache_after = self.cache.read_bytes()
+        self.assertNotEqual(cache_after, cache_before)
+        self.assertTrue(any(Path(entry['path']) == copied for entry in json.loads(cache_after)))
+        self.assertEqual(self.doc(), before)
+        self.press(3603)
+        observed = self.local()
+        self.assertIsNone(observed['scanReview'])
+        self.assertTrue(observed['readbackNeedsReload'])
+        self.assertEqual(observed['report']['outcome'], 'unverified')
+        self.assertEqual(observed['report']['submission']['params']['path'], str(copied))
+        self.assertEqual(observed['report']['observed']['plugin'], plugin)
+        self.assertEqual(observed['manualPath'], str(copied))
+        self.assertEqual(self.cache.read_bytes(), cache_after)
+        self.assertEqual(self.doc(), before)
+        self.assertEqual(self.state(), original)
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PLUGIN_CACHE'),'installed effects')
     def test_native_reconnect_draft_guard_close_keyboard_minimum_and_dialog_cancel(self):
@@ -218,7 +307,7 @@ class PluginPathTests(unittest.TestCase):
         self.desktop.send(self.control(3611),0x100,0x75);self.assertEqual(self.desktop.focus(self.window()),self.control(3601))
         user.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT];user.GetWindowRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)]
         scale=self.read('workspace.get')['dpi']/96;self.assertTrue(user.SetWindowPos(self.window(),None,0,0,int(700*scale),int(480*scale),0x16));frame=wintypes.RECT();user.GetWindowRect(self.window(),ctypes.byref(frame))
-        for identifier in list(range(3601,3612))+list(range(3700,3705)):
+        for identifier in list(range(3601,3613))+list(range(3700,3705)):
             rect=wintypes.RECT();user.GetWindowRect(self.control(identifier),ctypes.byref(rect));self.assertGreater(rect.right,rect.left);self.assertGreaterEqual(rect.left,frame.left);self.assertLessEqual(rect.right,frame.right);self.assertLessEqual(rect.bottom,frame.bottom)
         user.PostMessageW.argtypes=[wintypes.HWND,wintypes.UINT,wintypes.WPARAM,wintypes.LPARAM]
         before=self.doc();user.PostMessageW(self.window(),0x111,3606,self.control(3606));dlg=self.dialog(self.process,'Choose Windows VST3 module');user.PostMessageW(dlg,0x111,2,0);self.idle();self.assertEqual(self.doc(),before)

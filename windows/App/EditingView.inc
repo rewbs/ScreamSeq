@@ -137,7 +137,7 @@
         if(name.empty())name=L"Untitled";
         auto title=(view->dirty ? L"* " : L"")+name+L" - "+wide(view->session.document.at("format").get<std::string>())+L" - ScreamSeq";
         if(busy) title+=L" [Document worker busy]";
-        SetWindowTextW(window,title.c_str());
+        ScreamSeq::NativeInputGate::text(window,title.c_str());
     }
     Json edit(const std::string &method,Json params) {
         params["expectedRevision"]=view->session.revision;
@@ -239,17 +239,20 @@
         return selected ? std::filesystem::path(path.data()) : std::filesystem::path{};
     }
     bool saveFile(bool saveAs=false) {
+        if(nativeCommandCompletion.retained()){reviewNativeCommand();return false;}
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         if(!protectRecordingTake())return false;
         pluginEditorWarning.clear();
         documentOperation("flushPluginEditors",{{"force",true}});
-        auto revision=view->session.revision;auto path=view->path;
+        const auto document=documentId;auto revision=view->session.revision;auto path=view->path;
         auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),towlower);
         if(saveAs || view->session.document.value("requiresSaveAs",false) || path.empty() || (ext!=L".screamseq" && ext!=L".resonance")) path=chooseFile(true);
-        if(path.empty()) return false;
-        documentOperation("document.save",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}});
-        status=L"Native project saved atomically";
-        if(!pluginEditorWarning.empty()) {status+=L" / "+pluginEditorWarning;pluginEditorWarning.clear();}
+        if(path.empty())return false;
+        if(documentId!=document||view->session.revision!=revision)throw ScreamSeq::Api::ApiError(-32001,"Song changed while choosing Save; no file was written",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        retainedNativeCommand("save","document.save",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}},{{"path",utf8Path(path)}},[&](const Json &){
+            status=L"Native project saved atomically";
+            if(!pluginEditorWarning.empty()){status+=L" / "+pluginEditorWarning;pluginEditorWarning.clear();}
+        });
         return true;
     }
     bool unsavedChecked=false; // The last protectUnsaved() got as far as knowing whether the song is dirty.
@@ -271,6 +274,7 @@
         if(!protectUnsaved()) return;
         auto revision=view->session.revision;auto path=chooseFile(false);if(path.empty()) return;
         if(!protectRecordingTake()) return;
+        if(!reviewNativeDeparture())return;
         documentOperation("document.open",{{"expectedRevision",revision},{"path",utf8Path(path)},{"discard",true}});
         status=L"Opened "+path.filename().wstring();
         const auto warnings=view->session.document.value("loadWarnings",Json::array());
@@ -282,17 +286,17 @@
         if(listedCatalog!=view->catalogRevision) {
             refreshTypingSounds();
             const auto sampleSelection=SendMessageW(controls.at(sampleCommandBase),LB_GETCURSEL,0,0);
-            for(int id:{patternChooser,orderChooser,sampleCommandBase}) SendMessageW(controls.at(id),id==sampleCommandBase ? LB_RESETCONTENT : CB_RESETCONTENT,0,0);
+            for(int id:{patternChooser,orderChooser,sampleCommandBase}) ScreamSeq::NativeInputGate::present(controls.at(id),id==sampleCommandBase ? LB_RESETCONTENT : CB_RESETCONTENT,0,0);
             for(const auto &[i,sample]:view->samples) {
                 auto label=std::to_wstring(i)+L"  "+wide(sample.at("name").get<std::string>());
-                auto n=SendMessageW(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));SendMessageW(controls.at(sampleCommandBase),LB_SETITEMDATA,n,i);
+                auto n=ScreamSeq::NativeInputGate::present(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));ScreamSeq::NativeInputGate::present(controls.at(sampleCommandBase),LB_SETITEMDATA,n,i);
             }
-            for(const auto &[i,p]:view->patterns) {auto label=L"Pattern "+std::to_wstring(i);auto n=SendMessageW(controls.at(patternChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));SendMessageW(controls.at(patternChooser),CB_SETITEMDATA,n,i);}
+            for(const auto &[i,p]:view->patterns) {auto label=L"Pattern "+std::to_wstring(i);auto n=ScreamSeq::NativeInputGate::present(controls.at(patternChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));ScreamSeq::NativeInputGate::present(controls.at(patternChooser),CB_SETITEMDATA,n,i);}
             listedOrderIDs.clear();unsigned order=0;for(const auto &p:view->session.document.at("orders")) {
                 const auto index=p.get<unsigned>();const auto label=std::to_wstring(order)+L" : "+(index==65535?std::wstring(L"End"):index==65534?std::wstring(L"Skip"):L"P"+std::to_wstring(index)+(view->patterns.contains(index)?L"":L" (missing)"));
-                SendMessageW(controls.at(orderChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));listedOrderIDs.push_back(view->session.document.at("orderMetadata").at(order++).at("id"));
+                ScreamSeq::NativeInputGate::present(controls.at(orderChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));listedOrderIDs.push_back(view->session.document.at("orderMetadata").at(order++).at("id"));
             }
-            if(sampleSelection!=LB_ERR) SendMessageW(controls.at(sampleCommandBase),LB_SETCURSEL,sampleSelection,0);
+            if(sampleSelection!=LB_ERR) ScreamSeq::NativeInputGate::present(controls.at(sampleCommandBase),LB_SETCURSEL,sampleSelection,0);
             listedCatalog=view->catalogRevision;
         }
         unsigned selected=0;for(auto &[p,v]:view->patterns) {if(p==patternIndex) break;++selected;}ScreamSeq::NativeControls::select(controls.at(patternChooser),selected);

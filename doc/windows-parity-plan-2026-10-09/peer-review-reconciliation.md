@@ -1,6 +1,11 @@
 # Review of the supplied parity plan and matrix
 
-Reviewed on 9 October 2026, planning only. The integrated implementation plan is [README.md](README.md). This document records why the peer review changed it and where the peer's assertions or prescriptions were not adopted. No product code, build, test, workflow dispatch, application launch or implementation was performed in this review pass. [Review refresh](review-refresh.md) distinguishes the current checkout's pre-existing candidate changes from the main baseline.
+> Latest checkpoint: see [final planning review](final-planning-review.md) for main `16cab100b`, checkout `03321c22a`, existing retirement work and evidence limits. All 84 original peer acceptance cells were rechecked against the supplied CSV; the dispositions below remain proposals or source findings, never new runtime passes.
+**Current authority:** [Comprehensive plan](README.md) and [current source review](planning-readback.md), with [inspection receipt](planning-readback-snapshot.json). They distinguish main `16cab100b`, committed product checkpoint `e68b94c03`, docs-only HEAD `8d2997c2e`, and the seven pre-existing uncommitted plugin-reconnect files. All older checkout and CI statements below are historical; they do not override that separation.
+
+Both Downloads files were reviewed again for this planning-only update. The integrated plan remains the base. The peer's complete architecture, visual/interaction guidance, phase specifications, validation rules, decisions and all 84 matrix acceptance proposals were considered. No product changes, builds, tests, application launches, commits or CI dispatches were performed during this review.
+
+The historical reconciliation below records the original adoption rationale. Its red-main recommendation is superseded by merged P0a repairs. Its missing result-retention findings are superseded where the current branch and reconnect candidate provide those paths; unknown-result recovery and final document admission remain open. [Local action audit](local-action-audit.md) retains handler-level detail rather than inferring missing behavior from palette counts.
 
 ## Inputs and method
 
@@ -68,6 +73,8 @@ The reviewer also correctly identified existing Windows strengths: retained targ
 | No-edit reciprocal save may always change nextID/plugin UUID/revision | **Rejected blanket exemption.** No-edit legs must preserve identities/allocator unless an explicit justified migration is under test. High-water exception applies to documented allocation/Undo scenarios |
 | All floats should stop being tool windows, mandatory fonts/custom Fluent focus, exact Mac colors/geometry | **Design options, not parity requirements.** Preserve appropriate Windows ownership/Alt+Tab/focus cues, use installed/system fonts, accessible semantic tokens and native target sizes. Shared musical semantics do not demand identical Bézier constants or palette |
 | Always commit on blur or auto-rebase if target value unchanged | **Unsafe as a universal rule.** Raw invalid text, stale structural dependencies and hidden owners must survive. Commit only completed valid operations; compare full read-set and rebuild candidate after an explicit conflict resolution |
+| Aggregate dirty-owner prompt offers Apply / Discard / Cancel | **Use Review / Discard / Cancel.** Different owners may contain invalid/stale text, pending writes or uncertain outcomes. Review raises the existing captured owner; applying remains an explicit validated editor operation. Discard consent covers exact generations and only takes effect after successful replacement; API callers receive structured refusal, not modal UI |
+| Reject `2^53+1` as a universal integer-validation rule | **Scope by representation and destination range.** An exactly represented JSON integer must not be rounded through double or rejected solely for exceeding double's exact range. Integer-valued reals require safe, range-checked conversion; booleans and fractions remain invalid where integers are required |
 | Quarantine required tests to obtain green CI | **Not a release strategy.** Triage/fix failures; required assertions/gates stay mandatory. A user-approved scope change must name any exception rather than burying it in an allowlist |
 | Final exit names only a subset of B01–B14 | **Incomplete exit checklist.** Recording, presets/aliases, recovery, input-error retention and audible/realtime qualification remain required. The integrated final gate covers every behavioral row and every necessary platform/device check; a skip is reported separately from a pass |
 | Adopt 30-day recovery deletion, exclusive mode, branch deletion immediately | **Not required for parity and not executed.** Retention must account for unresolved takes and protected sources. Device mode expansion needs demonstrated scope. Branch housekeeping is outside this planning deliverable |
@@ -83,3 +90,26 @@ The latest review also corrected the integrated plan itself: recorded-automation
 The peer supplied fourteen decision prompts. Most are routine implementation recommendations that do not require blocking user input: small generated fixture corpus, scoped existing JSON use, reviewing rather than blindly adopting the Mixer proposal, stable command IDs, typed numeric policy, supported compiler repair and one-main integration. The plan states recommended behavior and requires compatibility tests instead of asking the user to choose low-level implementation details.
 
 No decision blocks the first batch. Required device/commercial-plugin support and any reduction of the currently assumed platform/architecture scope still genuinely require user input before qualification/release. Branch protection settings, paid/available runners or new automatic recovery-deletion policy may require owner authorization when proposed concretely; none is changed or needed to complete this plan. Mac defects that threaten shared correctness or the integration gate are in scope; discretionary Mac restyling is not.
+
+## Disposition of the peer decision prompts
+
+These are planning recommendations, not authorization to implement or change repository settings. Routine engineering choices need no additional product decision.
+
+| Peer ID | Integrated decision and reason | Owner phase |
+|---|---|---|
+| D1 Commit model | Gesture-end commit and one Undo for direct manipulation; retain Preview/Apply for compound edits. Never discard invalid text on blur or blindly rebase a stale request | P1, P3, P4 |
+| D2 Mac scope | Shared correctness, compatibility, native build viability and necessary regression repairs are in scope. Discretionary Mac restyling is not required | All shared batches |
+| D3 Integral values | Use typed range-checked validation: reject booleans/fractions; preserve exact integer tokens. Accept integral real input only under a safe documented conversion policy; no blanket rejection above 2^53 | P0c, domain migration |
+| D4 Unknown metadata | Preserve safe unknown data without implying understood semantics. Protect the source when meaning is unsupported or conversion is lossy; keep strict mutation/save validation | P0c, P6 |
+| D5 Keyboard/playback defaults | Keep existing saved bindings, add explicit focus-return and Stop, resolve local editing before transport, and qualify IME/AltGr. Loop/Follow are independent visible states; do not silently change user preferences to match a screenshot | P3 |
+| D6 JSON dependency | The existing vendored JSON library is a reasonable scoped codec/adapter dependency. Do not introduce JSON or Foundation into render callbacks or the musical model just to share code | P3a, P6 |
+| D7 Fixtures in Git | Recommend the small generated fixture/WAV corpus plus hashes/provenance; keep the gallery external and immutable. No arbitrary user songs are imported | P0c |
+| D8 CI policy | Both platforms must pass the applicable same-candidate checks before main integration. Current workflows already run on main-targeted PRs. Paid runner or branch-protection changes require owner approval only when concretely proposed | P0c, P8 |
+| D9 Mixer proposal | Review and reuse compatible pieces against current source and A02; never import stale Main.cpp/API/CMake wholesale. This is an engineering assessment, not a blocking user choice | P1 |
+| D10 Recovery pruning | No new automatic age-based deletion is required for parity. Preserve current recovery/take protections. A future retention-policy change needs an explicit product decision | P6, if later proposed |
+| D11 PCM tolerance | Characterize unchanged deterministic paths, preserve existing strict assertions, and justify tolerances per renderer/provider/rate/partition. A user-selected tolerance must not hide a regression | P6, P8 |
+| D12 dryRun differences | Record exact method contracts in conformance cases, then add safe nonmutating validation paths as each family migrates; do not call vendor/file effects twice | P0c, P4, P6 |
+| D13 Audio backend scope | Keep WASAPI native. Device robustness is required; exclusive-mode/ASIO expansion is not assumed necessary for Mac parity. A new backend is a separate scope decision | P7 |
+| D14 Priority | P0a is already merged. Finish P0b retained-work safety, establish P0c conformance, then Mixer and tracks. Commands/UI foundation and file entry points can start earlier at their stated dependencies | P0b–P3 |
+
+The only anticipated release inputs are required audio/MIDI devices and must-have commercial plugins, plus an explicit decision if the existing architecture support is to be reduced. None blocks completing this plan or defining the first batch.

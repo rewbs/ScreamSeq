@@ -96,19 +96,19 @@ private:
   }
   void sourceOptions(){
     const auto control=controls_.at(source);if(SendMessageW(control,CB_GETDROPPEDSTATE,0,0)){sourceRefresh_=true;return;}
-    setting_=true;SendMessageW(control,CB_RESETCONTENT,0,0);sourceIDs_.clear();
-    auto addOption=[&](std::string id,const std::wstring &name){SendMessageW(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));sourceIDs_.push_back(std::move(id));};
+    setting_=true;ScreamSeq::NativeInputGate::present(control,CB_RESETCONTENT,0,0);sourceIDs_.clear();
+    auto addOption=[&](std::string id,const std::wstring &name){ScreamSeq::NativeInputGate::present(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));sourceIDs_.push_back(std::move(id));};
     addOption({},L"Disconnected");for(const auto &device:devices_)addOption(device.at("id"),wide(device.at("name")));
     auto found=std::find(sourceIDs_.begin(),sourceIDs_.end(),draftSource_);if(found==sourceIDs_.end()){addOption(draftSource_,L"Selected source unavailable");found=sourceIDs_.end()-1;}
-    SendMessageW(control,CB_SETCURSEL,found-sourceIDs_.begin(),0);sourceRefresh_=false;setting_=false;
+    ScreamSeq::NativeInputGate::present(control,CB_SETCURSEL,found-sourceIDs_.begin(),0);sourceRefresh_=false;setting_=false;
   }
   void quantumOptions(){
-    const auto control=controls_.at(quantum);SendMessageW(control,CB_RESETCONTENT,0,0);int selected=-1;
+    const auto control=controls_.at(quantum);ScreamSeq::NativeInputGate::present(control,CB_RESETCONTENT,0,0);int selected=-1;
     for(const auto &[label,value]:std::array<std::pair<const wchar_t *,unsigned>,4>{{{L"Keep exact timing",0},{L"1/16 row",4096},{L"1/4 row",16384},{L"Whole row",65536}}}){
-      const auto index=SendMessageW(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));SendMessageW(control,CB_SETITEMDATA,index,value);if(value==draftQuantum_)selected=int(index);
+      const auto index=ScreamSeq::NativeInputGate::present(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));ScreamSeq::NativeInputGate::present(control,CB_SETITEMDATA,index,value);if(value==draftQuantum_)selected=int(index);
     }
-    if(selected<0){const auto label=L"Custom: "+std::to_wstring(draftQuantum_)+L"/65536 row";selected=int(SendMessageW(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str())));SendMessageW(control,CB_SETITEMDATA,selected,draftQuantum_);}
-    SendMessageW(control,CB_SETCURSEL,selected,0);
+    if(selected<0){const auto label=L"Custom: "+std::to_wstring(draftQuantum_)+L"/65536 row";selected=int(ScreamSeq::NativeInputGate::present(control,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str())));ScreamSeq::NativeInputGate::present(control,CB_SETITEMDATA,selected,draftQuantum_);}
+    ScreamSeq::NativeInputGate::present(control,CB_SETCURSEL,selected,0);
   }
   void savedFields(){
     if(settings_.empty())return;setting_=true;baseRevision_=settings_.at("revision");draftSource_=settings_.at("source");draftArmed_=settings_.at("armed");draftQuantum_=settings_.at("quantization");
@@ -148,9 +148,9 @@ private:
     const auto list=controls_.at(events);const auto oldTop=ListView_GetTopIndex(list);events_=next;reviewTake_=identity;selected_=-1;selectedKey_.clear();selectedOccurrence_=0;
     if(same&&!oldKey.empty()){unsigned seen=0;for(size_t i=0;i<events_.size();++i)if(eventKey(events_[i])==oldKey&&seen++==occurrence){selected_=int(i);selectedKey_=oldKey;selectedOccurrence_=occurrence;break;}}
     if((!same||first)&&!events_.empty()){selected_=0;selectedKey_=eventKey(events_[0]);}
-    setting_=true;SendMessageW(list,WM_SETREDRAW,FALSE,0);ListView_SetItemCountEx(list,int(events_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);ListView_SetItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);
-    if(selected_>=0)ListView_SetItemState(list,selected_,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
-    if(same&&oldTop>=0&&size_t(oldTop)<events_.size()){RECT row{};if(ListView_GetItemRect(list,oldTop,&row,LVIR_BOUNDS))ListView_Scroll(list,0,(oldTop-ListView_GetTopIndex(list))*(row.bottom-row.top));}
+    setting_=true;SendMessageW(list,WM_SETREDRAW,FALSE,0);NativeReportList::setItemCount(list,int(events_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);NativeReportList::setItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+    if(selected_>=0)NativeReportList::setItemState(list,selected_,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    if(same&&oldTop>=0&&size_t(oldTop)<events_.size()){RECT row{};if(ListView_GetItemRect(list,oldTop,&row,LVIR_BOUNDS))NativeReportList::scroll(list,0,(oldTop-ListView_GetTopIndex(list))*(row.bottom-row.top));}
     SendMessageW(list,WM_SETREDRAW,TRUE,0);InvalidateRect(list,nullptr,FALSE);setting_=false;details();
   }
   void begin(Operation operation){
@@ -201,7 +201,7 @@ private:
   void resizeColumns(){
     const auto list=controls_.at(events);RECT bounds{};GetClientRect(list,&bounds);const auto dpi=GetDpiForWindow(window_);const float width=bounds.right*96.f/dpi;
     if(width==listWidth_&&dpi==columnDpi_)return;if(listWidth_>0)columnWidths_[2]=std::max(130.f,columnWidths_[2]+width-listWidth_);else columnWidths_[2]=std::max(130.f,width-columnWidths_[0]-columnWidths_[1]-columnWidths_[3]-columnWidths_[4]-columnWidths_[5]);
-    listWidth_=width;columnDpi_=dpi;resizingColumns_=true;for(int i=0;i<6;++i)ListView_SetColumnWidth(list,i,int(std::lround(columnWidths_[size_t(i)]*dpi/96.f)));resizingColumns_=false;
+    listWidth_=width;columnDpi_=dpi;resizingColumns_=true;for(int i=0;i<6;++i)NativeReportList::setColumnWidth(list,i,int(std::lround(columnWidths_[size_t(i)]*dpi/96.f)));resizingColumns_=false;
   }
   void layout()override{
     if(!ready_)return;const auto [w,h]=size();const auto focus=GetFocus();

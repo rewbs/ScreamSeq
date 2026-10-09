@@ -1,0 +1,61 @@
+{
+  "scope": "Planning-only review. Product files and existing evidence read, not modified; no builds/tests/app launches/workflow dispatches. Retained logs are historical observations, not new execution.",
+  "inspected_utc": "2026-10-09T15:26:32.015246+00:00",
+  "reference_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+  "remote_main": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
+  "checkout": "03321c22a525f9fb0e11bda257bde404bdf47213",
+  "branch": "codex/windows-parity-safety",
+  "input_sha256": {
+    "screamseq-mac-ui-reference-2026-10-09.zip": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81",
+    "SCREAMSEQ_WINDOWS_PARITY_PLAN_2026-10-09.md": "c1b50ca8424da02bd2e0dced7e7129e928d7e4de5e25d7cd31aae0378a8d73ce",
+    "SCREAMSEQ_WINDOWS_PARITY_MATRIX_2026-10-09.csv": "ec2bbc2c01769072f6cc3edc3e9d331122e2656f53d6cb793fcdd4a444aa91f5"
+  },
+  "archive_members_compared": 392,
+  "archive_mismatches": [],
+  "peer_rows": 84,
+  "peer_acceptance_copy_mismatches": [],
+  "preexisting_product_hashes": {
+    "editor/Tests/DocumentDepartureTests.cpp": "92b2b62712fa5efc361f69b250d80745a585bbb37eb57dc62b31fdbbf74c7634",
+    "windows/App/DocumentDraftRegistry.hpp": "12b944cd702723e5285cdca6055cd373fb9837b5c51c5fd3f3a43cda37870b6b",
+    "windows/App/NativeToolWindow.hpp": "9804aaa8dbf9dd3bddb9c29aedbd22597dfbb179d32f6ec65bd5008dc9bf4435",
+    "windows/Tests/DocumentDepartureControllerTests.inc": "b437facdab9e71b8e284aee442373742674f6d7f95fdb2f651c47b4657d6eb4d",
+    "windows/Tests/Workspace/NativeToolWindowTests.cpp": "4ac0698be2e5130a71ffa18560bae142ed9a8e37885857aa6205258b968dfb56"
+  },
+  "existing_receipt_comparisons": {
+    "p0b-plugin-reconnect-receipt.json": {
+      "receipt_sha256": "59d82fb217c375e2a70806aefcaae398039146713f4a0b7d9a951d5aaf0898f2",
+      "status": "targeted Windows ARM64 qualification passed",
+      "commit": "03321c22a525f9fb0e11bda257bde404bdf47213",
+      "source_count": 1836,
+      "source_mismatches": [
+        "editor/Tests/DocumentDepartureTests.cpp",
+        "windows/App/DocumentDraftRegistry.hpp",
+        "windows/App/NativeToolWindow.hpp",
+        "windows/Tests/DocumentDepartureControllerTests.inc",
+        "windows/Tests/Workspace/NativeToolWindowTests.cpp"
+      ],
+      "logs_mismatches": [],
+      "executables_mismatches": [
+        "bin/windows-parity-p0/Release/ScreamSeq.exe",
+        "bin/windows-parity-p0/Release/workspace-restore-tests.exe",
+        "bin/windows-parity-p0/Release/document-controller-tests.exe",
+        "bin/windows-parity-p0/Release/native-tool-window-tests.exe"
+      ],
+      "cmake_caches_mismatches": [],
+      "compiler_files_mismatches": [],
+      "provider_inputs_mismatches": []
+    },
+    "p0b-retirement-native-receipt.json": {
+      "receipt_sha256": "14083f64ec7b10602e3fb2778bd199c64ba0b7ef2dd239ffcdaafd9c9bca73bb",
+      "status": "refrozen before final build: cleanup completion/failure is now explicit",
+      "commit": null,
+      "source_count": 1836,
+      "source_mismatches": []
+    }
+  },
+  "additional_existing_logs": {
+    "p0b-retirement-final-build.log": "3ca4e40a23eb1fd30e36f838de34f2e9bd2a70b9a37025e3edf7259fbe7554f7",
+    "p0b-retirement-final-tests.log": "9c443e6ee893fa19d2ad5ecf94ad92b563ae057de66c41081c2dc3a3f2ecc32d",
+    "p0b-retirement-app-tests.log": "ef971e09335d901d23fe992ba99c22f896dfa4652fe9aa5ab0093c7fa16ae561"
+  }
+}

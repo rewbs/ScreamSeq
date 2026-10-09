@@ -93,7 +93,7 @@ private:
   void changed(){if(setting_)return;++generation_;preview_=nullptr;error_.clear();message_.clear();}
   void install(const Json &context,const Json &timing){
     setting_=true;struct Guard{bool &value;~Guard(){value=false;}} guard{setting_};
-    const auto kind=timing.at("mode").get<std::string>();SendMessageW(controls_.at(mode),CB_SETCURSEL,std::find(modes_.begin(),modes_.end(),kind)-modes_.begin(),0);
+    const auto kind=timing.at("mode").get<std::string>();ScreamSeq::NativeInputGate::present(controls_.at(mode),CB_SETCURSEL,std::find(modes_.begin(),modes_.end(),kind)-modes_.begin(),0);
     set(tempo,numberText(timing.at("tempo").get<double>()));set(speed,timing.at("speed"));set(beat,timing.at("rowsPerBeat"));set(bar,timing.at("rowsPerMeasure"));set(groove,grooveText(timing.at("groove")));
     captured_=context;timing_=timing;loaded_=true;++generation_;baseline_=raw();preview_=nullptr;
   }
@@ -133,7 +133,7 @@ private:
     const auto percent=finite(field(swing),"Swing must be a number from 12.5 to 87.5 percent");require(percent>=12.5&&percent<=87.5,"Swing must be from 12.5 to 87.5 percent");
     const auto count=rows(beat,2,32,"Swing needs an even number of rows per beat, from 2 to 32");require(count%2==0,"Swing needs an even number of rows per beat");
     Json weights=Json::array();for(unsigned row=0;row<count;++row)weights.push_back(row%2?2-percent/50:percent/50);
-    setting_=true;SendMessageW(controls_.at(mode),CB_SETCURSEL,2,0);set(groove,grooveText(weights,8));setting_=false;changed();message_="Swing is in the draft. Preview or Apply to use it.";
+    setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(mode),CB_SETCURSEL,2,0);set(groove,grooveText(weights,8));setting_=false;changed();message_="Swing is in the draft. Preview or Apply to use it.";
   }
   std::wstring sequenceLabel()const{
     const auto &context=loaded_?captured_:current_;if(context.empty())return L"No song loaded";
@@ -194,7 +194,7 @@ public:
   SongTimingWindow(HWND owner,Callbacks callbacks):NativeToolWindow(owner),callbacks_(std::move(callbacks)){
     minimumClientWidth_=660;minimumClientHeight_=560;create(L"ScreamSeq.SongTiming",L"Tempo and groove",700,610);
     label(heading,L"TEMPO / GROOVE");label(scope,L"");label(modeLabel,L"Timing mode");combo(mode);
-    for(const auto *name:{L"Classic tracker timing",L"Alternative tracker timing",L"Musical timing (BPM + rows per beat)"})SendMessageW(controls_.at(mode),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));SendMessageW(controls_.at(mode),CB_SETCURSEL,0,0);
+    for(const auto *name:{L"Classic tracker timing",L"Alternative tracker timing",L"Musical timing (BPM + rows per beat)"})ScreamSeq::NativeInputGate::present(controls_.at(mode),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));ScreamSeq::NativeInputGate::present(controls_.at(mode),CB_SETCURSEL,0,0);
     label(tempoLabel,L"Tempo / BPM");edit(tempo,L"125",128);label(speedLabel,L"Ticks per row");edit(speed,L"6",128);
     label(beatLabel,L"Rows per beat");edit(beat,L"4",128);label(barLabel,L"Rows per bar");edit(bar,L"16",128);
     label(grooveLabel,L"Groove / one duration per row, separated by commas");auto weights=add(groove,L"EDIT",L"",ES_MULTILINE|ES_AUTOVSCROLL|WS_VSCROLL);SendMessageW(weights,EM_SETLIMITTEXT,8192,0);
@@ -210,6 +210,11 @@ public:
     if(!attemptedLoad_){try{loadTiming();}catch(const std::exception &e){error(e);}}}
   void hide()override{const bool focused=owns(GetFocus());NativeToolWindow::hide();if(focused&&callbacks_.returnToPattern)callbacks_.returnToPattern();}
   bool retainedDraft()const{return raw()!=baseline_;}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.value("documentId",std::string()),captured_.value("revision",std::string()),
+      Json::array({"song-timing",captured_.value("sequence",0u)}).dump(),
+      generation_,loaded_&&retainedDraft(),pending_);
+  }
   Json snapshot()const{
     Json bounds=Json::array();RECT client{};GetClientRect(window_,&client);
     for(const auto &[id,control]:controls_)if((GetWindowLongPtrW(control,GWL_STYLE)&WS_VISIBLE)!=0){RECT box{};GetWindowRect(control,&box);MapWindowPoints(nullptr,window_,reinterpret_cast<POINT *>(&box),2);bounds.push_back({{"id",id},{"bounds",Json::array({box.left,box.top,box.right,box.bottom})},{"enabled",bool(IsWindowEnabled(control))}});}

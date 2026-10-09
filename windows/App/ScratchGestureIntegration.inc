@@ -35,8 +35,12 @@
         if(screen.x==-1&&screen.y==-1){if(workspaceState.focus!="pattern")return false;const auto r=patternGridRect();screen={LONG((r.x+gutter+20)*GetDpiForWindow(window)/96),LONG((r.y+gridHeader+20)*GetDpiForWindow(window)/96)};ClientToScreen(window,&screen);}
         else{POINT client=screen;ScreenToClient(window,&client);const float scale=96.f/GetDpiForWindow(window);if(!patternContextClick(client.x*scale,client.y*scale))return false;}
         HMENU menu=CreatePopupMenu();if(!menu)return false;AppendMenuW(menu,MF_STRING,scratchGesturesCommand,L"Scratch phrases…");AppendMenuW(menu,MF_STRING,effectsCommand,L"Edit FX…");
-        AppendMenuW(menu,MF_SEPARATOR,0,nullptr);AppendMenuW(menu,MF_STRING,patternRenderSampleCommand,selecting?L"Render selection to sample":L"Render current row to sample");AppendMenuW(menu,MF_STRING,patternRenderInstrumentCommand,selecting?L"Render selection to instrument":L"Render current row to instrument");
-        AppendMenuW(menu,MF_STRING,patternRenderOptionsCommand,L"Render selection options…");
+        AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
+        if(directSampleRenderCompletion.retained())AppendMenuW(menu,MF_STRING,patternRenderSampleCommand,L"Review selection render result");
+        else{
+            AppendMenuW(menu,MF_STRING,patternRenderSampleCommand,selecting?L"Render selection to sample":L"Render current row to sample");AppendMenuW(menu,MF_STRING,patternRenderInstrumentCommand,selecting?L"Render selection to instrument":L"Render current row to instrument");
+            AppendMenuW(menu,MF_STRING,patternRenderOptionsCommand,L"Render selection options…");
+        }
         const auto target=patternSampleTarget();const auto selected=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_RIGHTBUTTON,screen.x,screen.y,0,window,nullptr);DestroyMenu(menu);
         if(selected==patternRenderSampleCommand||selected==patternRenderInstrumentCommand)renderPatternSample(selected==patternRenderInstrumentCommand,target);else if(selected==patternRenderOptionsCommand)openPatternSampleRender(false,target);else if(selected)command(int(selected));return true;
     }

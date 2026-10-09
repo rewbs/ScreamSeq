@@ -11,14 +11,17 @@ class SongRoutingWindow final:public NativeToolWindow {
   Json data_=Json::object();SongRoutingCanvas canvas_;std::string document_,revision_,selected_,filter_;int wire_=-1,page_=0;
   bool setting_=false,pending_=false,dirty_=false,layoutDirty_=false,pre_=false,enabled_=true;uint64_t generation_=0;
   std::map<int,std::vector<std::string>> choices_;int drag_=0;std::string dragNode_;SongRoutingCanvas::Point dragStart_,dragOrigin_,pointer_;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(document_,revision_,Json::array({selected_,wire_}).dump(),generation_,dirty_||layoutDirty_||drag_==3||drag_==4||drag_==5,pending_);
+  }
   void status(const std::wstring &s){status_=s;set(statusLabel,s);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   void current()const{if(context_()!=std::pair(document_,revision_))throw std::runtime_error("Song changed / draft retained. Reload before applying");}
   void clean()const{if(dirty_||layoutDirty_)throw std::runtime_error("Apply or reload the captured draft before changing selection");}
   void changed(){if(setting_)return;if(layoutDirty_)throw std::runtime_error("Save layout or Reload before editing routes");dirty_=true;++generation_;status(L"Captured route / Apply to save · Reload discards");}
   std::string choice(int id)const{auto index=SendMessageW(controls_.at(id),CB_GETCURSEL,0,0);const auto &list=choices_.at(id);return index>=0&&size_t(index)<list.size()?list[size_t(index)]:"";}
-  void choose(int id,const std::string &value){const auto &list=choices_.at(id);auto i=std::find(list.begin(),list.end(),value);SendMessageW(controls_.at(id),CB_SETCURSEL,i==list.end()?-1:i-list.begin(),0);}
-  void fill(int id,const std::vector<std::pair<std::wstring,std::string>> &list,const std::string &selected={}){SendMessageW(controls_.at(id),CB_RESETCONTENT,0,0);auto &ids=choices_[id];ids.clear();for(const auto &[label,key]:list){SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));ids.push_back(key);}choose(id,selected);}
+  void choose(int id,const std::string &value){const auto &list=choices_.at(id);auto i=std::find(list.begin(),list.end(),value);ScreamSeq::NativeInputGate::present(controls_.at(id),CB_SETCURSEL,i==list.end()?-1:i-list.begin(),0);}
+  void fill(int id,const std::vector<std::pair<std::wstring,std::string>> &list,const std::string &selected={}){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_RESETCONTENT,0,0);auto &ids=choices_[id];ids.clear();for(const auto &[label,key]:list){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));ids.push_back(key);}choose(id,selected);}
   const Node &chosenNode(int control)const{auto n=canvas_.find(choice(control));if(!n)throw std::runtime_error("Select a routing node");return *n;}
   const Json &bus(const std::string &id)const{for(const auto &b:data_.at("mixer").at("buses"))if(b.at("id")==id)return b;throw std::runtime_error("Select a bus or one of its inserts");}
   static std::string busID(const Node &n){if(n.bus.empty())throw std::runtime_error("This route requires a bus or channel stage");return n.bus;}
@@ -27,12 +30,15 @@ class SongRoutingWindow final:public NativeToolWindow {
   void inspectFields(){
     setting_=true;auto n=canvas_.find(selected_);set(title,n?n->name:L"Song routing");
     std::vector<std::pair<std::wstring,std::string>> inserts,effects,graphs{{L"Dry / no ordinary graph",""}};Json assignment=Json::object();
-    if(n&&!n->bus.empty()){const auto &b=bus(n->bus);for(const auto &id:b.at("inserts")){std::wstring name=L"Unavailable insert";for(const auto &p:data_.at("plugins"))if(p.at("id")==id)name=wide(p.at("name").get<std::string>());inserts.push_back({name,id});}}
+    if(n&&n->canEditInserts()){const auto &b=bus(n->bus);for(const auto &id:b.at("inserts")){std::wstring name=L"Unavailable insert";for(const auto &p:data_.at("plugins"))if(p.at("id")==id)name=wide(p.at("name").get<std::string>());inserts.push_back({name,id});}}
     std::set<std::string> owners;for(const auto &b:data_.at("mixer").at("buses"))for(const auto &p:b.at("inserts"))owners.insert(p);
     for(const auto &p:data_.at("plugins"))if(!p.value("isInstrument",false)&&!owners.contains(p.at("id")))effects.push_back({wide(p.at("name").get<std::string>()),p.at("id")});
     for(const auto &g:data_.at("library"))graphs.push_back({std::to_wstring(g.at("number").get<unsigned>())+L" · "+wide(g.at("name").get<std::string>()),g.at("id")});
-    if(n){const auto target=n->instrument.empty()?n->bus:n->instrument;for(const auto &a:data_.at(n->instrument.empty()?"assignments":"instrumentAssignments"))if(a.at("target")==target)assignment=a;}
-    fill(insertPicker,inserts,inserts.empty()?"":inserts[0].second);fill(effectPicker,effects,effects.empty()?"":effects[0].second);fill(graphPicker,graphs,assignment.value("graph",std::string{}));set(amount,assignment.value("amount",1.0));set(wet,assignment.value("wet",1.0));setting_=false;
+    if(n&&n->canAssignGraph()){const auto target=n->instrument.empty()?n->bus:n->instrument;for(const auto &a:data_.at(n->instrument.empty()?"assignments":"instrumentAssignments"))if(a.at("target")==target)assignment=a;}
+    if(n&&n->commandStage())assignment["graph"]=n->graph;
+    set(graphLabel,n&&n->commandStage()?L"Pattern-command stage / Open edits its shared recipe":L"Each channel or sample voice gets an independent copy");
+    set(insertLabel,n&&!n->canEditInserts()?L"Select the bus or an effect to edit its regular inserts":L"Explicit inserts / processed in this order");
+    fill(insertPicker,inserts,inserts.empty()?"":inserts[0].second);fill(effectPicker,effects,effects.empty()?"":effects[0].second);fill(graphPicker,graphs,assignment.value("graph",std::string{}));set(amount,assignment.value("amount",1.0));set(wet,assignment.value("wet",1.0));if(n&&n->commandStage()){set(amount,L"");set(wet,L"");}setting_=false;
   }
   void rebuild(bool resetFields=true){
     const auto from=choices_.contains(source)?choice(source):"",to=choices_.contains(destination)?choice(destination):"";
@@ -59,7 +65,7 @@ class SongRoutingWindow final:public NativeToolWindow {
     clean();wire_=index;setting_=true;choose(wirePicker,index<0?"":std::to_string(index));if(index<0){setting_=false;return;}selected_.clear();choose(nodePicker,"");set(title,L"Connection");
     const auto &e=canvas_.edges.at(size_t(index));choose(source,e.source);choose(destination,e.target);set(output,Json(e.output));set(input,Json(e.input));const auto &a=e.action;const auto type=a.value("kind",std::string{});Json settings=Json::object();
     int mode=0;if(type=="send"){mode=1;settings=bus(a.at("source")).at("sends").at(a.at("index").get<size_t>());}else if(type=="graph-input"){mode=2;settings=data_.at("inputs").at(a.at("index").get<size_t>());}else if(type=="graph-output")mode=3;else if(type=="plugin-input"){mode=4;settings=data_.at("mixer").at("sidechains").at(a.at("index").get<size_t>());}else if(type=="plugin-output")mode=5;else if(type=="plugin-connection"){mode=6;for(const auto &r:data_.at("mixer").at("pluginConnections"))if(r.at("source")==a.at("source")&&r.at("target")==a.at("target")&&r.at("output")==a.at("output")&&r.at("input")==a.at("input")){settings=r;break;}}
-    SendMessageW(controls_.at(kind),CB_SETCURSEL,mode,0);page_=0;SendMessageW(controls_.at(page),CB_SETCURSEL,0,0);set(gain,settings.value("gainDB",0.0));pre_=settings.value("preFader",false);enabled_=settings.value("enabled",true);setting_=false;status(type.empty()?L"This wire follows the chain order / use Inserts or open the subgraph":L"Selected wire / edit its settings then Update wire");layout();
+    ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,mode,0);page_=0;ScreamSeq::NativeInputGate::present(controls_.at(page),CB_SETCURSEL,0,0);set(gain,settings.value("gainDB",0.0));pre_=settings.value("preFader",false);enabled_=settings.value("enabled",true);setting_=false;status(type.empty()?L"This wire follows the chain order / use Inserts or open the subgraph":L"Selected wire / edit its settings then Update wire");layout();
   }
   std::pair<std::string,Json> route(bool remove,bool updating){
     if(layoutDirty_)throw std::runtime_error("Save layout or Reload before editing routes");const auto *edge=wire_>=0?&canvas_.edges.at(size_t(wire_)):nullptr;
@@ -97,12 +103,12 @@ class SongRoutingWindow final:public NativeToolWindow {
       if(!remove&&!updating)sources.push_back({{"source",busID(*from)},{"gainDB",number(gain)},{"preFader",pre_},{"enabled",enabled_}});return {"mixer.sidechains.set",{{"plugin",plugin},{"input",in},{"sources",sources}}};
     }throw std::runtime_error("Unsupported routing wire");
   }
-  void insertAction(int id){clean();const auto &n=chosenNode(nodePicker);auto list=bus(busID(n)).at("inserts");const auto picked=choice(insertPicker);auto i=std::find(list.begin(),list.end(),picked);
+  void insertAction(int id){clean();const auto &n=chosenNode(nodePicker);if(!n.canEditInserts())throw std::runtime_error("Select the bus or an effect to edit regular inserts; this graph stage was preserved");auto list=bus(n.bus).at("inserts");const auto picked=choice(insertPicker);auto i=std::find(list.begin(),list.end(),picked);
     if(id==insertAdd){const auto effect=choice(effectPicker);if(effect.empty())throw std::runtime_error("Choose an unassigned effect");list.push_back(effect);}
     else{if(i==list.end())throw std::runtime_error("Choose an explicit insert");if(id==insertRemove)list.erase(i);else{const auto offset=i-list.begin(),to=offset+(id==insertUp?-1:1);if(to<0||size_t(to)>=list.size())return;std::swap(list[size_t(offset)],list[size_t(to)]);}}
     mutate("mixer.bus.set",{{"bus",n.bus},{"inserts",list}});
   }
-  void assignGraph(bool clearAssignment){if(layoutDirty_)throw std::runtime_error("Save layout or Reload first");const auto &n=chosenNode(nodePicker);Json p={{"graph",clearAssignment||choice(graphPicker).empty()?Json():Json(choice(graphPicker))},{"amount",number(amount)},{"wet",number(wet)}};
+  void assignGraph(bool clearAssignment){if(layoutDirty_)throw std::runtime_error("Save layout or Reload first");const auto &n=chosenNode(nodePicker);if(!n.canAssignGraph())throw std::runtime_error("Row and Persistent graphs are controlled by pattern commands; the Ordinary assignment was preserved");Json p={{"graph",clearAssignment||choice(graphPicker).empty()?Json():Json(choice(graphPicker))},{"amount",number(amount)},{"wet",number(wet)}};
     if(n.instrument.empty()){p["target"]=busID(n);mutate("graph.assign",p);}else{p["instrument"]=n.instrumentIndex;mutate("graph.instrument.assign",p);}}
   void savePositions(){if(dirty_)throw std::runtime_error("Apply or Reload the route draft first");Json positions=Json::array();for(const auto &n:canvas_.nodes)positions.push_back({{"node",n.id},{"x",n.x},{"y",n.y}});mutate("graph.layout.set",{{"positions",positions}});}
   void arrangeNodes(){clean();std::vector<unsigned> levels(canvas_.nodes.size());for(size_t step=0;step<canvas_.nodes.size();++step){bool changed=false;for(const auto &e:canvas_.edges){auto a=canvas_.index.at(e.source),b=canvas_.index.at(e.target);if(levels[b]<levels[a]+1){levels[b]=std::min(unsigned(canvas_.nodes.size()),levels[a]+1);changed=true;}}if(!changed)break;}
@@ -114,7 +120,7 @@ class SongRoutingWindow final:public NativeToolWindow {
       if(id==filter){const auto next=choice(filter);if(dirty_||layoutDirty_){choose(filter,filter_);clean();}filter_=next;rebuild();canvas_.fit();return;}
       if(id==nodePicker){const auto next=choice(id);if(dirty_||layoutDirty_){choose(id,selected_);clean();}selectNode(next);return;}
       if(id==wirePicker){const auto selected=choice(id);if(dirty_||layoutDirty_){choose(id,wire_<0?"":std::to_string(wire_));clean();}selectWire(selected.empty()?-1:std::stoi(selected));return;}
-      if(id==page){const auto next=int(SendMessageW(controls_.at(page),CB_GETCURSEL,0,0));if(dirty_||layoutDirty_){SendMessageW(controls_.at(page),CB_SETCURSEL,page_,0);clean();}page_=next;inspectFields();return;}
+      if(id==page){const auto next=int(SendMessageW(controls_.at(page),CB_GETCURSEL,0,0));if(dirty_||layoutDirty_){ScreamSeq::NativeInputGate::present(controls_.at(page),CB_SETCURSEL,page_,0);clean();}page_=next;inspectFields();return;}
       if(id==kind||id==source||id==destination||id==graphPicker)changed();return;
     }
     if(note==EN_CHANGE){changed();return;}if(note!=BN_CLICKED)return;
@@ -161,7 +167,7 @@ class SongRoutingWindow final:public NativeToolWindow {
           const auto previous=int(SendMessageW(controls_.at(kind),CB_GETCURSEL,0,0));
           const int routeKind=GraphCableEdits::freshSongRoute(!from.plugin.empty(),!to.plugin.empty(),!from.graph.empty(),!to.graph.empty(),previous,dirty_);
           const bool keepDraft=dirty_&&previous==routeKind;
-          setting_=true;SendMessageW(controls_.at(kind),CB_SETCURSEL,routeKind,0);
+          setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,routeKind,0);
           if(!keepDraft){set(gain,L"0");set(input,L"0");set(output,L"0");pre_=false;enabled_=true;}setting_=false;
         }
         dirty_=true;++generation_;auto [method,p]=route(false,mode==4);mutate(method,p);
@@ -178,8 +184,8 @@ class SongRoutingWindow final:public NativeToolWindow {
     if(page_==1){place(insertLabel,x,188,cw,36);place(insertPicker,x,230,cw,240);place(insertUp,x,266,72,26);place(insertDown,x+78,266,72,26);place(insertRemove,x+158,266,148,26);place(effectLabel,x,310,cw,40);place(effectPicker,x,358,cw,260);place(insertAdd,x,398,cw,26);}
     if(page_==2){place(graphLabel,x,188,cw,40);place(graphPicker,x,238,cw,260);place(amountLabel,x,283,145,18);place(wetLabel,x+158,283,145,18);place(amount,x,307,145,26);place(wet,x+158,307,148,26);place(assign,x,350,145,26);place(clear,x+158,350,148,26);}
     place(statusLabel,12,h-52,w-24,42);for(const auto &[id,control]:controls_)if(id<title&&id!=close)EnableWindow(control,!pending_);
-    const auto n=canvas_.find(selected_);EnableWindow(controls_.at(enable),!pending_&&data_.value("mixer",Json::object()).value("buses",Json::array()).empty());EnableWindow(controls_.at(saveLayout),!pending_&&layoutDirty_);EnableWindow(controls_.at(open),!pending_&&n);for(int id:{insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown})EnableWindow(controls_.at(id),!pending_&&n&&!n->bus.empty());for(int id:{assign,clear,graphPicker,amount,wet})EnableWindow(controls_.at(id),!pending_&&n&&(!n->bus.empty()||!n->instrument.empty()));
-    const bool editable=wire_>=0&&!canvas_.edges.at(size_t(wire_)).action.empty();for(int id:{update,disconnect})EnableWindow(controls_.at(id),!pending_&&editable);SetWindowTextW(controls_.at(pre),pre_?L"Pre-fader: on":L"Pre-fader: off");SetWindowTextW(controls_.at(enabled),enabled_?L"Route enabled":L"Route disabled");
+    const auto n=canvas_.find(selected_);EnableWindow(controls_.at(enable),!pending_&&data_.value("mixer",Json::object()).value("buses",Json::array()).empty());EnableWindow(controls_.at(saveLayout),!pending_&&layoutDirty_);EnableWindow(controls_.at(open),!pending_&&n);for(int id:{insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown})EnableWindow(controls_.at(id),!pending_&&n&&n->canEditInserts());for(int id:{assign,clear,graphPicker,amount,wet})EnableWindow(controls_.at(id),!pending_&&n&&n->canAssignGraph());
+    const bool editable=wire_>=0&&!canvas_.edges.at(size_t(wire_)).action.empty();for(int id:{update,disconnect})EnableWindow(controls_.at(id),!pending_&&editable);ScreamSeq::NativeInputGate::text(controls_.at(pre),pre_?L"Pre-fader: on":L"Pre-fader: off");ScreamSeq::NativeInputGate::text(controls_.at(enabled),enabled_?L"Route enabled":L"Route disabled");
     const auto mode=SendMessageW(controls_.at(kind),CB_GETCURSEL,0,0);EnableWindow(controls_.at(gain),!pending_&&(mode==1||mode==2||mode==4||mode==6));EnableWindow(controls_.at(pre),!pending_&&(mode==1||mode==2||mode==4));EnableWindow(controls_.at(enabled),!pending_&&(mode==1||mode==4||mode==6));EnableWindow(controls_.at(input),!pending_&&(mode==2||mode==4||mode==6));EnableWindow(controls_.at(output),!pending_&&(mode==3||mode==5||mode==6));
     if(layoutDirty_)for(int id:{wirePicker,kind,source,destination,gain,input,output,pre,enabled,connect,update,disconnect,verify,insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown,graphPicker,amount,wet,assign,clear})EnableWindow(controls_.at(id),FALSE);
     EnableWindow(controls_.at(open),!pending_&&n&&(!n->bus.empty()||!n->plugin.empty()||!n->graph.empty()));
@@ -202,8 +208,8 @@ public:
   SongRoutingWindow(HWND owner,Request request,Context context,std::function<void(const Node &)> inspect):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)){
     minimumWidth_=1040;minimumHeight_=680;create(L"ScreamSeq.SongRouting",L"Song routing",1280,800);
     for(int id:{filter,nodePicker,wirePicker,kind,source,destination,page,insertPicker,effectPicker,graphPicker})combo(id);
-    for(auto name:{L"Main output",L"Send",L"Graph sidechain",L"Graph auxiliary",L"Plugin sidechain",L"Plugin output",L"Plugin cable"})SendMessageW(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));SendMessageW(controls_.at(kind),CB_SETCURSEL,0,0);
-    for(auto name:{L"Connections",L"Insert chain",L"Ordinary graph"})SendMessageW(controls_.at(page),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));SendMessageW(controls_.at(page),CB_SETCURSEL,0,0);
+    for(auto name:{L"Main output",L"Send",L"Graph sidechain",L"Graph auxiliary",L"Plugin sidechain",L"Plugin output",L"Plugin cable"})ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,0,0);
+    for(auto name:{L"Connections",L"Insert chain",L"Ordinary graph"})ScreamSeq::NativeInputGate::present(controls_.at(page),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));ScreamSeq::NativeInputGate::present(controls_.at(page),CB_SETCURSEL,0,0);
     for(int id:{gain,input,output,amount,wet})edit(id,L"",32);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{pre,L"Pre-fader: off"},{enabled,L"Route enabled"},{connect,L"Connect"},{update,L"Update wire"},{disconnect,L"Disconnect"},{reload,L"Reload"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{arrange,L"Arrange"},{close,L"Close"},{open,L"Open"},{enable,L"Enable routing"},{insertAdd,L"Append effect"},{insertRemove,L"Remove insert"},{insertUp,L"Up"},{insertDown,L"Down"},{assign,L"Assign graph"},{clear,L"Clear graph"},{saveLayout,L"Save layout"},{verify,L"Verify route"}})button(id,name);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{title,L"Song routing"},{nodeLabel,L"Selected stage"},{wireLabel,L"Connection"},{sourceLabel,L"From"},{destinationLabel,L"To"},{gainLabel,L"Gain / dB"},{inputLabel,L"Input port"},{outputLabel,L"Output port"},{insertLabel,L"Explicit inserts / processed in this order"},{effectLabel,L"Unassigned effects / otherwise processed on master"},{graphLabel,L"Each channel or sample voice gets an independent copy"},{amountLabel,L"Amount / 0…1"},{wetLabel,L"Wet / 0…1"},{statusLabel,L""}})label(id,name);

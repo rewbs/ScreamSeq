@@ -24,6 +24,48 @@ query the running instance's `api.describe` for its current method catalog. Do n
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
 
+`document.open` requires a current `expectedRevision`. Its `discard:true` applies
+to unsaved song changes; it does not authorize discarding retained native editor
+drafts. Those drafts produce `-32002` with `data.writeOutcome:"notCommitted"`
+before replacement. Resolve them in their editor, or use the native Open review
+prompt to review, discard the exact captured drafts, or keep editing. Recovery
+Restore uses the same final admission check. A changed draft invalidates an
+earlier native discard decision; pending or uncertain work must be resolved.
+
+During document adoption and native refresh, mutating API and workspace actions
+are refused with `-32002` / `notCommitted`. If refresh fails after adoption,
+`document.get` reads the adopted song and `context.get` reports
+`nativeRefreshPending:true`; remaining native context is the last displayed
+context and must not be used as a new editing target. Input stays protected.
+Press F5 in the app to retry native cleanup/refresh without reopening the file
+or replaying the write. Stop remains available and preserves that recovery
+message. A successful retry restores normal editing.
+
+The native sample recorder retains an unresolved Record/Stop/Discard operation
+in `workspace.get.data.sampleRecording.lifecycleReview`, including its method,
+captured document/revision, take identity and submitted parameters. While present,
+another lifecycle write, Keep, setup discard and Close are unavailable. The
+native **Review current take** action reads `sample.recording.get` without
+repeating the operation. Failed or malformed readback retains the review state.
+Successful review adopts the observed current take (including a different take
+created through the API, or no take), preserving the sample-name/output draft.
+It does not claim whether the earlier operation succeeded. Subsequent explicit
+actions use the observed take identity. An uncertain Keep still requires its
+separate result review; absence of the old take does not prove sample import.
+
+The native reconnect window similarly retains a failed explicit path scan or
+installed-plugin rescan in `workspace.get.data.pluginPath.scanReview`. Review
+result uses `synchronizeView` and the captured stable target's `plugin.path.get`
+or `graph.plugin.path.get`; it never sends another reconnect or scan. A reconnect
+with no retained result uses the same observation path. Successful readback
+records `report.outcome:"unverified"`, the observed location/candidates and the
+original submission. This is current-state evidence, not proof that the earlier
+request committed or created Undo history. Raw path fields and their baseline
+remain unchanged; `readbackNeedsReload:true` requires explicit Reload before
+another Verify, reconnect or scan. Wrong-document, changed-revision, wrong-target,
+malformed or failed reads retain the unresolved operation and departure guard.
+Known reconnect receipts retain their existing exact-result review behavior.
+
 `document.get` includes stable current-sequence order identities in
 `orderMetadata: [{id: "n…", name, annotation, color}]`, aligned with every untrimmed entry in `orders`,
 including End (`65535`), Skip (`65534`) and entries after End. Each existing
@@ -236,6 +278,26 @@ transport or changing history; unsupported preparations also preserve playback.
 `workspace.get.graphEditor` exposes the reusable canvas's captured revision,
 draft flags, selection and retained hit-test geometry. The contextual workspace
 panel API is unchanged.
+
+The reusable Windows graph editor starts new modulation cables at zero depth.
+Their base comes from an enabled contribution to the same target, or from the
+target catalogue's normalized manual value. New discrete targets retain an
+explicit quantized mode. In the new-wire form, an empty Base field means this
+automatic baseline; entering a number remains an explicit normalized base edit.
+Updating a selected cable preserves its saved quantized/enabled flags and all
+fields not displayed by the form. These remain local drafts until Apply, which
+uses the existing guarded `graph.update` transaction and document history.
+Catalogue reads capture endpoint identities and reject a changed draft/revision
+before adopting new wire defaults.
+
+`workspace.get.songRouting.canvas.nodes` includes `stageRole` (`none`, `row`,
+`persistent`, `ordinary`, `instrument`), `canEditInserts` and `canAssignGraph`.
+Row/Persistent cards inspect their own shared recipe; activation remains in
+pattern commands. They cannot change the bus's Ordinary assignment or regular
+insert chain, including through keyboard or directly dispatched control actions.
+Regular inserts are edited from the bus/effect owner. These presentation roles
+do not rename persisted graph/layout identities or identify an aggregate audio
+stage as an individual prepared processor copy.
 
 The retained Graph Curve editor uses `graph.automation.get/set` and
 `automation.formula.preview`. Graph's Pattern curve action opens that editor
@@ -621,12 +683,32 @@ response dictionaries. Unknown envelope keys/batches/notifications are -32600.
 Unbound adapters only describe capabilities; song requests return busy rather
 than fabricated state.
 
-### Bounded successful-write replay
+### Classified write outcomes
+
+A failure to deliver or present a result is separate from whether the operation
+took effect. Classified errors retain the existing public error codes and may
+add `error.data.writeOutcome`: `notCommitted`, `noChange`, `committed` or `unknown`.
+See [write-outcome.schema.json](write-outcome.schema.json) for this optional data.
+`documentId` and `revision` are included only when known at that boundary; a
+post-write snapshot or serialization failure never advertises the pre-write
+revision as current. `committed` means an effect occurred but completion failed;
+`unknown` requires reconciliation. Neither permits blind resubmission.
+
+The current worker classifies known committed publication failures. The adapter
+classifies completion failures after a returned host write, including invalid
+UTF-8 or a result exceeding the wire bound. The native application preserves a
+classified worker exception through best-effort view repair. This is not yet
+exhaustive classification of every host side effect. Absence of outcome data,
+an ordinary `-32003`, or an unchanged song revision does **not** prove rejection.
+Filesystem, library, take and device effects require their own domain readback.
+Transport loss after sending can also leave the outcome unknown to the client.
+
+### Bounded write replay
 
 `api.describe.result.data.writeReplayCache` reports the policy and aggregate
 occupancy (`retainedEntries`, `retainedSerializedBytes`), never cached IDs,
 parameters, paths or response contents. Per SessionAdapter, retention is limited
-to **64 successful writes and 8 MiB (8,388,608 bytes)**, whichever binds first.
+to **64 write responses and 8 MiB (8,388,608 bytes)**, whichever binds first.
 The byte charge is precisely `request.dump().size() + response.dump().size()`:
 compact, sorted-object-key UTF-8 JSON envelopes, without newline delimiters or
 original request whitespace. It is **not an 8 MiB heap/RSS guarantee**: retained
@@ -634,23 +716,26 @@ response JSON nodes, string capacities, ID copies, containers and allocator
 overhead cost additional memory. Temporary snapshots, serialization buffers and
 in-flight responses are outside this retention accounting.
 
-Only successful write-method results enter the cache, including successful
-no-ops and `dryRun:true` previews. Validation/host errors and all reads remain
-uncached. A retained request's ID, method and parameters must match its canonical
-parsed JSON exactly; key order/whitespace are irrelevant, but an integer changed
+Successful write-method results enter the cache, including successful no-ops
+and `dryRun:true` previews. Classified `committed` and `unknown` write errors
+also enter it. Proven `notCommitted`/`noChange`, unclassified validation/host
+errors and all reads remain uncached. A retained request's ID, method and
+parameters must match its canonical parsed JSON exactly; key order/whitespace
+are irrelevant, but an integer changed
 to a floating-point parameter is different. An exact retry returns the original
 complete response without invoking the host or rechecking now-stale tokens.
 Reusing that ID for a different write returns `-32600` and preserves the original
 entry. Applying a dry-run proposal requires a new ID and current revision.
 
-Successful insertions evict the oldest entries until both limits hold; a replay
+Insertions evict the oldest entries until both limits hold; a replay
 does not refresh an entry's age. An entry whose charge alone exceeds 8 MiB is
-not retained and does not evict older entries. Retention is best effort: size,
-serialization or allocation failure must not convert an already completed write
-into a rejection with the pre-write revision. The original success is returned
-even when it cannot be cached. A host result that cannot serialize still reaches
-the transport's existing bounded `-32003` fallback (currently with null ID), not
-a claim that the write was unchanged; inspect state to determine the outcome.
+not retained and does not evict older entries. Retention is best effort: a size
+limit or allocation failure must not convert an already completed write into a rejection
+with the pre-write revision. A deliverable success is returned even when it
+cannot be cached. Undeliverable write results instead produce a small `-32003`
+error with the original ID and `writeOutcome:"unknown"`, retained under the same
+bounds. The transport still has a generic fallback for failures outside this
+adapter (including malformed read replies); it makes no rejection claim.
 
 This is a **bounded, session-local replay window**, not durable/global
 idempotency. After eviction, skipped retention or adapter destruction, a request

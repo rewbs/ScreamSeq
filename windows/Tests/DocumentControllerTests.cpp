@@ -2,6 +2,7 @@
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"
 #include "windows/App/PatternClipboard.hpp"
+#include "windows/App/DocumentDraftRegistry.hpp"
 #include "windows/Project/BinaryPlist.hpp"
 #include "windows/Project/ProjectIO.hpp"
 #include "common/mptString.h"
@@ -17,6 +18,8 @@ Json call(DocumentController &controller,const char *method,Json p) {
 Json invoke(DocumentController &controller,const char *method,Json p=Json::object()) {
   p["expectedRevision"]=controller.view()->session.revision;return call(controller,method,std::move(p));
 }
+#include "PreparedAssetReceiptTests.inc"
+#include "PreparedEnvelopeReceiptTests.inc"
 void publicationTests(const std::filesystem::path &directory) {
   bool fail=false,persistent=false;unsigned stops=0;
   DocumentController controller({},"worker-test",[&]{++stops;},[](const auto &){},[&]{if(fail || persistent) {fail=false;throw std::runtime_error("controlled view publication failure");}});
@@ -40,15 +43,65 @@ void publicationTests(const std::filesystem::path &directory) {
   invoke(controller,"history.undo",{{"domain","document"}});
   need(controller.view()->cell(0,0,0).note==61,"recovered history must remain usable");
   invoke(controller,"document.open",{{"path",(directory/"unicode.screamseq").generic_string()},{"discard",true}});
+  const auto priorRevision=controller.view()->session.revision;
+  std::string committedRevision;
+  const auto failedPublicationTicket=std::make_shared<NativeCallReceipt>();
   persistent=true;
   rejected=false;
-  try {invoke(controller,"pattern.apply",{{"cells",Json::array({{{"pattern",0},{"row",0},{"channel",0},{"note",63}}})}});}
-  catch(const Api::ApiError &e) {rejected=std::string(e.what()).find("committed")!=std::string::npos;}
+  try {
+    auto pending=controller.invokeCompleted("pattern.apply",{{"cells",Json::array({{{"pattern",0},{"row",0},{"channel",0},{"note",63}}})},
+      {"expectedRevision",controller.view()->session.revision}},failedPublicationTicket);
+    while(pending.wait_for(std::chrono::milliseconds(1))!=std::future_status::ready)controller.service();
+    (void)pending.get();
+  }
+  catch(const Api::ApiError &e) {
+    rejected=e.code==-32003 && e.outcome && e.outcome->state==Tracker::CommitOutcome::Committed;
+    need(e.outcome && e.outcome->document==controller.view()->session.documentId,"postcommit outcome lost document identity");
+    committedRevision=e.outcome->revision;
+    need(!committedRevision.empty() && committedRevision!=priorRevision,"postcommit outcome advertised pre-write revision");
+    need(e.completed&&e.completed->method=="pattern.apply"&&e.completed->document==e.outcome->document&&e.completed->revision==committedRevision,
+      "publication failure lost the original worker result identity");
+    need(e.completed->result.is_object(),"publication failure lost the original operation result");
+    need(failedPublicationTicket->read()==e.completed,"Failed worker publication did not retain its own exact receipt");
+  }
   need(rejected && controller.publicationPending(),"persistent postcommit failure must explicitly report committed state");
   persistent=false;
   controller.invoke("synchronizeView",Json::object()).get();
   need(!controller.publicationPending() && controller.view()->cell(0,0,0).note==63,"read-side repair left a forever-stale cache");
+  need(controller.view()->session.revision==committedRevision,"read-side repair disagrees with committed outcome");
   invoke(controller,"history.undo",{{"domain","document"}});
+  const auto ticket=std::make_shared<NativeCallReceipt>();
+  auto returned=controller.invokeCompleted("document.patch",{{"title","First queued receipt"},{"expectedRevision",controller.view()->session.revision}},ticket);
+  while(returned.wait_for(std::chrono::milliseconds(1))!=std::future_status::ready)controller.service();
+  const auto firstRevision=controller.view()->session.revision;
+  invoke(controller,"document.patch",{{"title","Later queued edit"}});
+  const auto receipt=returned.get();
+  need(ticket->read()&&ticket->read()->result==receipt.result&&ticket->read()->revision==firstRevision,
+    "Native request ticket lost the worker result or acquired a later edit's revision");
+  need(receipt.method=="document.patch"&&receipt.document==controller.view()->session.documentId&&receipt.revision==firstRevision&&receipt.revision!=controller.view()->session.revision,
+    "Later worker edit relabelled an unconsumed operation receipt");
+  for(const auto method:{"sample.renderSelection","instrument.importMultisample","sample.importMany","sample.recording.commit"}){
+    bool classified=false;
+    const auto refusedTicket=std::make_shared<NativeCallReceipt>();
+    try{controller.invokeCompleted(method,{{"unknown",true},{"expectedRevision",controller.view()->session.revision}},refusedTicket).get();}
+    catch(const Api::ApiError &e){classified=e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;}
+    need(classified&&!refusedTicket->read(),"Rejected prepared import lacks a proven noncommit outcome or inherited a prior receipt");
+  }
+  // A path repair which cannot identify its target never reaches a vendor,
+  // history, Stop or publication. Native owners can safely keep the draft
+  // editable after this proven refusal; an unclassified error cannot do so.
+  const auto beforePathRefusal=controller.view();const auto pathRefusalStops=stops;
+  for(const auto method:{"plugin.path.set","graph.plugin.path.set"}){
+    bool classified=false;
+    const Json target=std::string_view(method).starts_with("graph.")
+      ?Json{{"graph","n999999"},{"node","n999998"}}
+      :Json{{"plugin","missing-instance"}};
+    try{invoke(controller,method,target);}
+    catch(const Api::ApiError &e){classified=e.code==-32602&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;}
+    need(classified,"Missing reconnect target lacks a proven preflight refusal");
+    need(controller.view()==beforePathRefusal&&stops==pathRefusalStops,"Reconnect preflight changed the document, history view or transport");
+  }
+  preparedAssetReceiptTests(directory);preparedEnvelopeReceiptTests(directory);
   std::cout<<"publication tests passed\n";
 }
 
@@ -579,8 +632,10 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
 #include "ParameterActivityControllerTests.inc"
 #include "LiveNativeControllerTests.inc"
 #include "SamplingOperationsChecks.inc"
+#include "DocumentDepartureControllerTests.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--departure") {documentDepartureControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--parameter-activity") {parameterActivityControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==2 && std::string(argv[1])=="--live-native") {liveNativeControllerTests();liveLoopControllerTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--matrix") {matrixControllerTests(std::filesystem::u8path(argv[2]));return 0;}

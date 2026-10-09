@@ -8,9 +8,9 @@
     selection(kind,kind_);pointFields_=false;setting_=false;layout();
   }
   void choices(){
-    setting_=true;SendMessageW(controls_.at(pattern),CB_RESETCONTENT,0,0);
+    setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(pattern),CB_RESETCONTENT,0,0);
     for(size_t i=0;i<patterns_.size();++i){const auto &p=patterns_[i];const auto name=L"Pattern "+std::to_wstring(p.at("index").get<unsigned>())+L" · "+wide(p.value("name",std::string()));
-      SendMessageW(controls_.at(pattern),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(p.at("id")==target_.patternID)selection(pattern,int(i));}
+      ScreamSeq::NativeInputGate::present(controls_.at(pattern),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(p.at("id")==target_.patternID)selection(pattern,int(i));}
     setting_=false;
   }
   void restorePatternChoice(){for(size_t i=0;i<patterns_.size();++i)if(patterns_[i].at("id")==target_.patternID){selection(pattern,int(i));return;}}

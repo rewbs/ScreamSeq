@@ -1,0 +1,57 @@
+{
+  "archive": "screamseq-mac-ui-reference-2026-10-09.zip",
+  "archiveSha256": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81",
+  "referenceBaseline": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+  "files": [
+    {
+      "path": "fixtures/01-midnight-circuit.screamseq",
+      "sha256": "e6d7a0ea19f0327ebb0b1e6e2a5885c525916e0f1a2fb0977b602c2efb8e4f58",
+      "bytes": 52063
+    },
+    {
+      "path": "fixtures/02-editors-and-effects.screamseq",
+      "sha256": "5ca8394b2a597e044421834d0b8b7167560e13a599b32194651f05dd03fb73e6",
+      "bytes": 212069
+    },
+    {
+      "path": "fixtures/03-routing-and-modulation.screamseq",
+      "sha256": "fb2289429c269c69d4e25f1b8a6358d1a747c44629f603b9f882e3b39ed937b2",
+      "bytes": 214386
+    },
+    {
+      "path": "fixtures/04-complete-reference.screamseq",
+      "sha256": "ec36560ceecc0baaf4e127217d1637cd5e387fbd9d4c42163e99b467e84fe813",
+      "bytes": 214858
+    },
+    {
+      "path": "fixtures/05-arrangement-copy-after.screamseq",
+      "sha256": "f8ea7cc23b73cf2aa7b911867dc3bdb0c1718f32ed7e06a6a3413ed34350efaf",
+      "bytes": 216467
+    },
+    {
+      "path": "fixtures/audio/Parity_C3.wav",
+      "sha256": "7a7e84d9780aa0f37d36b81d9f3bf8f447cf052b8a2a70832da910f04146625a",
+      "bytes": 48044
+    },
+    {
+      "path": "fixtures/audio/Parity_C4.wav",
+      "sha256": "28031f4594b430d5f7c6981ed458eda8728a41a149e04a8072d3567ca43eba8f",
+      "bytes": 48044
+    },
+    {
+      "path": "fixtures/audio/Parity_G3.wav",
+      "sha256": "be80b6c0e2688870236bd526395a8254ea786efadaf5dceaf64869140999f653",
+      "bytes": 48044
+    },
+    {
+      "path": "fixtures/manifest.json",
+      "sha256": "c0d49f7e7d9995aa17e7991e727811f7650c6df49a031bb2175aebe95d388bae",
+      "bytes": 5256
+    },
+    {
+      "path": "FIXTURES.md",
+      "sha256": "72b7b325c2b48eb090ae2dd898d3964a66ec75665f920f7762fa2fdcb96d79da",
+      "bytes": 11109
+    }
+  ]
+}

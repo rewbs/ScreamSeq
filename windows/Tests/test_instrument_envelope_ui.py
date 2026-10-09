@@ -47,7 +47,7 @@ class InstrumentEnvelopeUITests(unittest.TestCase):
     def preset(self):self.create();self.press(4410);self.press(4450);self.assertEqual(len(self.saved()['points']),5)
 
     def test_api_carry_release_atomic_validation_noop_history_and_reopen(self):
-        self.create();index=self.state()['index'];other=self.saved('pan');baseline=self.settings()
+        self.create();index=self.state()['index'];identity=self.state()['instrument'];other=self.saved('pan');baseline=self.settings()
         values=dict(envelope=0,points=[[0,0],[2,64],[12,48],[32,48],[48,0]],enabled=True,carry=True,releaseNode=3,sustain=True,sustainPoint=1,sustainEnd=2,loop=True,loopStart=0,loopEnd=3)
         self.write('instrument.patch',instrument=index,values=values);saved=self.settings();self.assertEqual(self.saved('pan'),other);self.assertEqual(saved['envelopes'][0]['releaseNode'],3);self.assertTrue(saved['envelopes'][0]['carry'])
         before=self.doc();self.write('instrument.patch',instrument=index,values=values);self.assertEqual(self.doc(),before)
@@ -55,7 +55,12 @@ class InstrumentEnvelopeUITests(unittest.TestCase):
             with self.assertRaises(ApiError):self.write('instrument.patch',instrument=index,values=invalid)
             self.assertEqual(self.doc(),before);self.assertEqual(self.settings(),saved)
         self.write('history.undo',domain='document');self.assertEqual(self.settings(),baseline);self.write('history.redo',domain='document');self.assertEqual(self.settings(),saved)
-        path=self.folder/'instrument-api.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.assertEqual(self.settings(),saved)
+        path=self.folder/'instrument-api.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        self.assertFalse(self.state()['visible'])  # Old document-scoped owner retired.
+        self.start();instruments=self.read('document.get')['instruments']
+        self.select(4401,next(i for i,item in enumerate(instruments) if item['id']==identity))
+        self.assertEqual(self.state()['instrument'],identity);self.assertEqual(self.state()['index'],index)
+        self.assertEqual(self.settings(),saved)
         self.write('instrument.patch',instrument=index,values=dict(carry=False,releaseNode=255));self.assertEqual(self.settings()['envelopes'][0]['releaseNode'],255);self.assertFalse(self.settings()['envelopes'][0]['carry'])
 
     def test_native_markers_settings_keymap_one_undo_and_all_envelope_kinds(self):

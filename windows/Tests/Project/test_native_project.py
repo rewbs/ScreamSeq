@@ -95,8 +95,8 @@ class NativeProjectTests(unittest.TestCase):
 
     def test_rejects_unsupported_or_noninteger_versions_on_load_and_dump(self):
         codec = self.codec()
-        for location, bad_versions in (("container", [0, 6, -1, True, 4.0, "4"]),
-                                       ("native", [0, 15, -1, True, 14.0, "14"])):
+        for location, bad_versions in (("container", [0, 7, -1, True, 6.0, "6"]),
+                                       ("native", [0, 18, -1, True, 17.0, "17"])):
             for version in bad_versions:
                 with self.subTest(location=location, version=version):
                     root = generated_project()
@@ -138,7 +138,7 @@ class NativeProjectTests(unittest.TestCase):
         bad = [payload[:10], payload[:-1], payload + b"trailing",
                b"RSONGS3\0" + payload[8:],
                payload[:8] + struct.pack("<III", 0, 1, 1) + b"xx",
-               payload[:8] + struct.pack("<III", 1, 1, 0) + b"xx",
+               payload[:8] + struct.pack("<III", 1, 0, 1) + b"xx",
                payload[:8] + struct.pack("<III", 0xffffffff, 1, 1) + b"xx",
                b"ordinary module is not an exact snapshot"]
         for value in bad:
@@ -174,6 +174,15 @@ class NativeProjectTests(unittest.TestCase):
                 self.assertEqual(module, b"opaque module qualification payload\x00\xff")
                 self.assertEqual(samples, bytes(range(256)) + b"\x00\x80\xff\x7f\x00\x00")
                 self.assertEqual(timing, b"opaque timing payload\x00" if timed else b"")
+
+    def test_current_snapshot_allows_empty_timing_but_not_empty_core_sections(self):
+        codec = self.codec()
+        payload = b"RSONGS2\0" + struct.pack("<III", 1, 1, 0) + b"ms"
+        self.assertEqual(tuple(bytes(part) for part in codec.split_snapshot(payload)), (b"m", b"s", b""))
+        for module, samples in ((0, 1), (1, 0), (0, 0)):
+            invalid = b"RSONGS2\0" + struct.pack("<III", module, samples, 0) + b"x" * (module + samples)
+            with self.assertRaisesRegex(ValueError, "lengths"):
+                codec.split_snapshot(invalid)
 
     def test_size_limits_apply_to_load_dump_and_snapshot_split(self):
         codec = self.codec()
@@ -248,7 +257,7 @@ class NativeProjectTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
             self.assertEqual(source.read_bytes(), original)
             self.assertEqual(output.read_bytes(), saved)
-            root["native"]["version"] = 15
+            root["native"]["version"] = 18
             source.write_bytes(plistlib.dumps(root, fmt=plistlib.FMT_BINARY))
             rejected_output = Path(tmp) / "must-not-exist.screamseq"
             result = subprocess.run(command + [str(source), "--repack", str(rejected_output)],

@@ -5,6 +5,18 @@ struct InterfaceFailure: Error { let message: String }
   static func require(_ value: @autoclosure () -> Bool, _ message: String) throws {
     if !value() { throw InterfaceFailure(message: message) }
   }
+  static func pumpMainRunLoop(_ seconds: TimeInterval) {
+    let deadline = Date().addingTimeInterval(seconds)
+    // These offscreen tests do not enter NSApplication.run(). Keep a source
+    // attached and return through short run-loop turns so a dispatch callback
+    // can schedule another retry within the original assertion deadline.
+    let wake = Timer(timeInterval: 0.005, repeats: true) { _ in }
+    RunLoop.current.add(wake, forMode: .default)
+    defer { wake.invalidate() }
+    while Date() < deadline {
+      _ = RunLoop.current.run(mode: .default, before: min(deadline, Date().addingTimeInterval(0.005)))
+    }
+  }
   static func key(
     _ view: PatternView, _ code: UInt16, _ text: String,
     flags: NSEvent.ModifierFlags = [], repeatKey: Bool = false, up: Bool = false
@@ -744,7 +756,7 @@ struct InterfaceFailure: Error { let message: String }
           if let control = view as? NSControl {
             let rect = control.convert(control.bounds, to: mixerView.inspector), bounds = mixerView.inspector.bounds
             try require(rect.width > 0 && rect.height > 0 && rect.minX >= -1 && rect.maxX <= bounds.width + 1 && rect.minY >= -1 && rect.maxY <= bounds.height + 1,
-              "Scrolling mixer inspector control fits: \(type(of: control)) \(rect)")
+              "Scrolling mixer inspector control fits: \(type(of: control)) \((control as? NSButton)?.title ?? "") \(rect), inspector \(bounds)")
           }
           for child in view.subviews { try checkInspector(child) }
         }
@@ -773,7 +785,28 @@ struct InterfaceFailure: Error { let message: String }
       }
     }
   }
+  static var interfaceGroups: [(String, () throws -> Void)] {
+    editorDraftGroups + [
+      ("automation-tools", automationToolsChecks), ("automation-target", automationTargetChecks),
+      ("parameter-activity", parameterActivityChecks), ("mixer-strips", mixerStripsChecks),
+      ("plugin-preset", pluginPresetChecks), ("song-timing", songTimingChecks),
+      ("plugin-programs", pluginProgramsChecks), ("precise-notes", preciseNotesChecks),
+      ("workspace", workspaceChecks), ("signal-graph", signalGraphChecks),
+      ("graph-actions", graphActionCatalogChecks), ("graph-ports", graphPortActionChecks),
+      ("graph-preview", graphConnectionPreviewChecks), ("sample-browser", sampleBrowserChecks),
+      ("sample-recording", sampleRecordingChecks), ("parameter-boundary", parameterBoundaryChecks),
+      ("pattern-performance", patternPerformanceChecks), ("plugin-instruments", pluginInstrumentsChecks),
+      ("instrument-envelope", instrumentEnvelopeChecks), ("envelope-bank", envelopeBankChecks),
+      ("scratch", scratchGestureChecks), ("navigation", navigationChecks),
+      ("pattern-grid", patternGridChecks), ("note-tracks", noteTrackChecks),
+      ("plugin-browser", pluginBrowserChecks)]
+  }
   static func main() {
+    if CommandLine.arguments.contains("--list-groups") {
+      let names = interfaceGroups.map { $0.0 } + ["core-layout"]
+      let data = try! JSONSerialization.data(withJSONObject: names)
+      print(String(decoding: data, as: UTF8.self)); return
+    }
     _ = NSApplication.shared
     NSApp.setActivationPolicy(.prohibited)
     NSApp.appearance = NSAppearance(named: .darkAqua)
@@ -787,32 +820,16 @@ struct InterfaceFailure: Error { let message: String }
     ]
     UserDefaults.standard.setVolatileDomain(defaults, forName: UserDefaults.argumentDomain)
     do {
-      try editorDraftChecks()
-      try automationToolsChecks()
-      try automationTargetChecks()
-      try parameterActivityChecks()
-      try mixerStripsChecks()
-      try pluginPresetChecks()
-      try songTimingChecks()
-      try pluginProgramsChecks()
-      try preciseNotesChecks()
-      try workspaceChecks()
-      try signalGraphChecks()
-      try graphActionCatalogChecks()
-      try graphPortActionChecks()
-      try graphConnectionPreviewChecks()
-      try sampleBrowserChecks()
-      try sampleRecordingChecks()
-      try parameterBoundaryChecks()
-      try patternPerformanceChecks()
-      try pluginInstrumentsChecks()
-      try instrumentEnvelopeChecks()
-      try envelopeBankChecks()
-      try scratchGestureChecks()
-      try navigationChecks()
-      try patternGridChecks()
-      try noteTrackChecks()
-      try pluginBrowserChecks()
+      if let index = CommandLine.arguments.firstIndex(of: "--group") {
+        guard index + 1 < CommandLine.arguments.count else { throw InterfaceFailure(message: "--group requires a name") }
+        let name = CommandLine.arguments[index + 1]
+        if let (_, check) = interfaceGroups.first(where: { $0.0 == name }) {
+          try check(); print("PASS interface group \(name)"); return
+        }
+        guard name == "core-layout" else { throw InterfaceFailure(message: "Unknown interface group: \(name)") }
+      } else {
+        for (name, check) in interfaceGroups { try check(); print("PASS interface group \(name)") }
+      }
       let grid = PatternView()
       grid.frame=NSRect(x:0,y:0,width:640,height:360);grid.layout()
       try require(grid.drawableSize==grid.convertToBacking(grid.bounds).size,"Paused Metal view publishes a nonzero drawable size after initial layout")

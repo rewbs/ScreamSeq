@@ -1,6 +1,7 @@
 #pragma once
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -9,13 +10,25 @@ namespace ScreamSeq::GraphCableEdits {
 using Json=nlohmann::json;
 struct Endpoint {std::string node;bool output=false,modulation=false;uint32_t port=0;};
 struct Result {Json edges;size_t selected=0;bool changed=false;};
+struct ModulationDefault {double base=0;bool quantized=false;};
+inline ModulationDefault modulationDefault(const Json &parameters,uint32_t id) {
+  const auto p=std::find_if(parameters.begin(),parameters.end(),[&](const auto &p){return p.at("id")==id;});
+  if(p==parameters.end()||!p->value("writable",false))throw std::invalid_argument("Select a writable modulation parameter");
+  const double low=p->at("min").get<double>(),high=p->at("max").get<double>(),value=p->at("manualValue").get<double>();
+  if(!std::isfinite(low)||!std::isfinite(high)||!std::isfinite(value)||high<=low||value<low||value>high)
+    throw std::invalid_argument("The modulation parameter's manual range is unavailable");
+  const bool discrete=!p->value("canSlide",true);
+  if(discrete&&!(p->value("step",0.0)>0))throw std::invalid_argument("The discrete parameter has no quantization step");
+  return {(value-low)/(high-low),discrete};
+}
 inline bool sameEdge(const Json &a,const Json &b,bool modulation) {
   return a.at("source")==b.at("source")&&a.at("target")==b.at("target")&&
     (modulation?a.at("parameter")==b.at("parameter"):(a.value("output",0u)==b.value("output",0u)&&a.value("input",0u)==b.value("input",0u)));
 }
 // Socket drags always add. Only a captured, explicitly selected cable can be
 // replaced; colliding with another cable leaves both original cables intact.
-inline Result connect(const Json &edges,Endpoint first,Endpoint second,const std::optional<Json> &replace={}) {
+inline Result connect(const Json &edges,Endpoint first,Endpoint second,const std::optional<Json> &replace={},
+                      const std::optional<ModulationDefault> &initial={}) {
   if(first.output==second.output||first.modulation!=second.modulation||first.node==second.node)
     throw std::invalid_argument("Connect an output to a different node's matching input");
   if(!first.output)std::swap(first,second);
@@ -23,9 +36,15 @@ inline Result connect(const Json &edges,Endpoint first,Endpoint second,const std
   if(replace){old=std::find_if(result.edges.begin(),result.edges.end(),[&](const auto &e){return sameEdge(e,*replace,modulation);});
     if(old==result.edges.end()||*old!=*replace)throw std::invalid_argument("Selected cable changed; select it again before rewiring");}
   Json edge=replace?*replace:Json::object();edge["source"]=first.node;edge["target"]=second.node;
-  if(modulation){edge["parameter"]=second.port;if(!replace){edge["minimum"]=0;edge["maximum"]=1;edge["base"]=0;edge["enabled"]=true;}
-    const Json *peer=nullptr;for(const auto &e:edges)if(e.at("target")==second.node&&e.at("parameter")==second.port){peer=&e;if(e.value("enabled",true))break;}
-    if(peer){edge["base"]=peer->value("base",0.0);edge["quantized"]=peer->value("quantized",false);}}
+  if(modulation){edge["parameter"]=second.port;
+    const Json *peer=nullptr;for(const auto &e:edges)if(e.at("target")==second.node&&e.at("parameter")==second.port&&e.value("enabled",true)){peer=&e;break;}
+    if(!replace){
+      if(!peer&&!initial)throw std::invalid_argument("Read the target's manual value before adding modulation");
+      edge["minimum"]=0;edge["maximum"]=0;edge["base"]=initial?initial->base:0;edge["quantized"]=initial?initial->quantized:false;edge["enabled"]=true;
+    }
+    if(peer&&(!replace||replace->at("target")!=second.node||replace->at("parameter")!=second.port)){
+      edge["base"]=peer->value("base",0.0);edge["quantized"]=peer->value("quantized",false);
+    }}
   else{edge["output"]=first.port;edge["input"]=second.port;if(!replace)edge["gain"]=1;}
   auto found=std::find_if(result.edges.begin(),result.edges.end(),[&](const auto &e){return sameEdge(e,edge,modulation);});
   if(found!=result.edges.end()&&(!replace||found!=old)){

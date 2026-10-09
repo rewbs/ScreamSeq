@@ -88,6 +88,8 @@ class GraphEditorTests(unittest.TestCase):
         self.select(443, 3)  # Plugin controls.
         self.command(460)
         self.select(458, 1)  # The stable Gain parameter, after Enabled.
+        parameter = next(p for p in self.read('graph.plugin.get', graph=graph, node=plugin)['parameters'] if p['id'] == 1)
+        manual_base = (parameter['manualValue'] - parameter['min']) / (parameter['max'] - parameter['min'])
         sockets = self.state()['sockets']
         output = next(s for s in sockets if s['node'] == source and s['modulation'] and s['output'])
         target = next(s for s in sockets if s['node'] == plugin and s['modulation'] and not s['output'])
@@ -99,6 +101,9 @@ class GraphEditorTests(unittest.TestCase):
         self.command(440)
         changed = self.read('graph.get')['library'][0]
         self.assertEqual(len(changed['modulation']), 1)
+        self.assertEqual(changed['modulation'][0]['minimum'], 0)
+        self.assertEqual(changed['modulation'][0]['maximum'], 0)
+        self.assertEqual(changed['modulation'][0]['base'], manual_base)
         self.assertEqual(changed['audio'], definition['audio'])
         # Actual Bezier midpoint hit test selects exactly one audio connection.
         wire = next(w for w in self.state()['wires'] if not w['modulation'] and w['index'] == 0)
@@ -114,6 +119,58 @@ class GraphEditorTests(unittest.TestCase):
         self.assertEqual(updated['modulation'], changed['modulation'])
         self.write('history.undo', domain='document')
         self.assertEqual(self.read('graph.get')['library'][0], changed)
+
+    def test_new_modulation_fields_default_to_zero_depth_and_manual_base(self):
+        graph, plugin = self.setup_graph()
+        self.select(435, 1)
+        self.command(436)
+        original = self.read('graph.get')['library'][0]
+        parameter = next(p for p in self.read('graph.plugin.get', graph=graph, node=plugin)['parameters'] if p['id'] == 1)
+        self.select(443, 2)
+        self.select(447, 3)  # LFO, following input/output/plugin.
+        self.select(448, 2)  # Plugin.
+        self.field(451, '1')
+        self.command(456)
+        self.command(440)
+        edited = self.read('graph.get')['library'][0]
+        self.assertEqual(edited['audio'], original['audio'])
+        self.assertEqual(edited['nodes'], original['nodes'])
+        self.assertEqual(len(edited['modulation']), 1)
+        edge = edited['modulation'][0]
+        self.assertEqual((edge['minimum'], edge['maximum']), (0, 0))
+        self.assertEqual(edge['base'], (parameter['manualValue'] - parameter['min']) / (parameter['max'] - parameter['min']))
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('graph.get')['library'][0], original)
+        self.write('history.redo', domain='document')
+        self.assertEqual(self.read('graph.get')['library'][0], edited)
+
+    def test_modulation_field_edit_retains_quantized_disabled_wire_and_history(self):
+        graph, plugin = self.setup_graph()
+        source = self.write('graph.node.add', graph=graph, kind='lfo')['node']
+        definition = self.read('graph.get')['library'][0]
+        definition['modulation'] = [dict(source=source, target=plugin, parameter=0,
+                                        minimum=0, maximum=0, base=1, enabled=False, quantized=True)]
+        self.write('graph.update', definition=definition)
+        original = self.read('graph.get')['library'][0]
+        self.command(441)
+        self.select(443, 2)  # Modulation fields.
+        self.select(449, 1)  # First saved wire, after New connection.
+        self.field(452, '-.25')
+        self.command(456)
+        self.command(440)
+        edited = self.read('graph.get')['library'][0]
+        expected = dict(original['modulation'][0], minimum=-.25)
+        self.assertEqual(edited['modulation'], [expected])
+        self.assertEqual(edited['audio'], original['audio'])
+        self.assertEqual(edited['nodes'], original['nodes'])
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('graph.get')['library'][0], original)
+        self.write('history.redo', domain='document')
+        self.assertEqual(self.read('graph.get')['library'][0], edited)
+        path = self.folder / 'quantized-wire.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path), discard=True)
+        self.assertEqual(self.read('graph.get')['library'][0], edited)
 
     def test_audio_socket_adds_and_explicit_handle_rewires_one_branch(self):
         graph, plugin = self.setup_graph()

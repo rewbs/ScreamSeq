@@ -42,10 +42,18 @@ private:
     for(int id:{sectionName,patternName,patternNotes}){auto &view=views[index++];const auto control=controls_.at(id);SendMessageW(control,EM_GETSEL,reinterpret_cast<WPARAM>(&view.first),reinterpret_cast<LPARAM>(&view.last));view.line=int(SendMessageW(control,EM_GETFIRSTVISIBLELINE,0,0));}return views;
   }
   void restoreFieldViews(const std::array<FieldView,3> &views){
-    size_t index=0;for(int id:{sectionName,patternName,patternNotes}){const auto &view=views[index++];const auto control=controls_.at(id);DWORD first=0,last=0;SendMessageW(control,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));if(first!=view.first||last!=view.last)SendMessageW(control,EM_SETSEL,view.first,view.last);if(id==patternNotes){const auto line=int(SendMessageW(control,EM_GETFIRSTVISIBLELINE,0,0));if(line!=view.line)SendMessageW(control,EM_LINESCROLL,0,view.line-line);}}
+    size_t index=0;for(int id:{sectionName,patternName,patternNotes}){const auto &view=views[index++];const auto control=controls_.at(id);DWORD first=0,last=0;SendMessageW(control,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));if(first!=view.first||last!=view.last)ScreamSeq::NativeInputGate::present(control,EM_SETSEL,view.first,view.last);if(id==patternNotes){const auto line=int(SendMessageW(control,EM_GETFIRSTVISIBLELINE,0,0));if(line!=view.line)SendMessageW(control,EM_LINESCROLL,0,view.line-line);}}
   }
   uint64_t documentGeneration_=0,draftGeneration_=0,selectionGeneration_=0,requestGeneration_=0;
   bool loaded_=false,opened_=false,setting_=false,pending_=false,dirty_=false,resizingColumns_=false;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    auto result=describeDraft(draftDocument_,draftRevision_,sourceID_,draftGeneration_,
+      dirty_||sectionDraft_.dirty||patternDraft_.dirty,pending_);
+    Json details=Json::array();
+    for(const auto *detail:{&sectionDraft_,&patternDraft_})if(detail->dirty)
+      details.push_back(Json::array({detail->document,detail->revision,detail->sequence,detail->target,detail->generation}));
+    result.subdrafts=details.dump();return result;
+  }
   HWND pendingFocus_{};
   HIMAGELIST rowHeight_{};
   std::array<float,4> columnWidths_{68,290,64,200};
@@ -73,9 +81,9 @@ private:
     size_t used=0;for(const auto &value:patterns_)if(value.index<maximum)++used;return used<maximum;
   }
   void fillPatterns(int control,const std::vector<Pattern> &values,const std::string &chosen){
-    const auto handle=controls_.at(control);SendMessageW(handle,CB_RESETCONTENT,0,0);int selection=-1;
-    for(size_t i=0;i<values.size();++i){SendMessageW(handle,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(values[i].label.c_str()));if(values[i].id==chosen)selection=int(i);}
-    SendMessageW(handle,CB_SETCURSEL,selection,0);
+    const auto handle=controls_.at(control);ScreamSeq::NativeInputGate::present(handle,CB_RESETCONTENT,0,0);int selection=-1;
+    for(size_t i=0;i<values.size();++i){ScreamSeq::NativeInputGate::present(handle,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(values[i].label.c_str()));if(values[i].id==chosen)selection=int(i);}
+    ScreamSeq::NativeInputGate::present(handle,CB_SETCURSEL,selection,0);
   }
   void captureDraft(std::string requested={}){
     if(!loaded_)return;
@@ -194,7 +202,7 @@ private:
       // Host publication during the pumped callback may already have advanced
       // selectionGeneration_. Reveal the accepted current selection, including
       // a newer retained selection, without changing ordinary update() scroll.
-      if(visible()){const auto selected=orderIndex(selected_);if(selected>=0)ListView_EnsureVisible(controls_.at(orders),selected,FALSE);}
+      if(visible()){const auto selected=orderIndex(selected_);if(selected>=0)NativeReportList::ensureVisible(controls_.at(orders),selected,FALSE);}
       if(creation&&draftGeneration==draftGeneration_){draftRevision_=state_.at("revision");dirty_=false;}
       error_.clear();statusText();layout();
     } catch(const std::exception &value){
@@ -239,7 +247,7 @@ private:
     if(id==sequence&&notification==CBN_SELCHANGE){
       const auto index=SendMessageW(controls_.at(sequence),CB_GETCURSEL,0,0);
       if(index>=0&&size_t(index)<sequences_.size())execute("sequence.select",{{"sequence",sequences_[size_t(index)].first}});
-      setting_=true;for(size_t i=0;i<sequences_.size();++i)if(sequences_[i].first==unsignedValue(document().at("sequence")))SendMessageW(controls_.at(sequence),CB_SETCURSEL,i,0);setting_=false;return;
+      setting_=true;for(size_t i=0;i<sequences_.size();++i)if(sequences_[i].first==unsignedValue(document().at("sequence")))ScreamSeq::NativeInputGate::present(controls_.at(sequence),CB_SETCURSEL,i,0);setting_=false;return;
     }
     if(notification!=BN_CLICKED)return;
     if(id==close){leave();return;}if(id==returnPattern){if(callbacks_.returnToPattern)callbacks_.returnToPattern();return;}
@@ -274,7 +282,7 @@ private:
     const auto list=controls_.at(orders);RECT bounds{};GetClientRect(list,&bounds);const auto dpi=GetDpiForWindow(window_);const float width=bounds.right*96.f/dpi;
     if(width==listWidth_&&dpi==columnDpi_)return;
     columnWidths_[1]=std::max(180.f,columnWidths_[1]+(listWidth_>0?width-listWidth_:width-columnWidths_[0]-columnWidths_[1]-columnWidths_[2]-columnWidths_[3]-18));
-    listWidth_=width;columnDpi_=dpi;resizingColumns_=true;for(int i=0;i<4;++i)ListView_SetColumnWidth(list,i,int(std::lround(columnWidths_[size_t(i)]*dpi/96.f)));resizingColumns_=false;
+    listWidth_=width;columnDpi_=dpi;resizingColumns_=true;for(int i=0;i<4;++i)NativeReportList::setColumnWidth(list,i,int(std::lround(columnWidths_[size_t(i)]*dpi/96.f)));resizingColumns_=false;
   }
   void layout()override{
     if(!ready_)return;const auto [w,h]=size();const auto focus=GetFocus();
@@ -402,12 +410,12 @@ public:
     if(selected_!=selected){selected_=selected;++selectionGeneration_;}
     setting_=true;
     if(patternsChanged){if(!pattern(patterns_,assignmentID_))assignmentID_=patterns_.empty()?std::string():patterns_.front().id;fillPatterns(assignment,patterns_,assignmentID_);}
-    if(sequencesChanged){SendMessageW(controls_.at(sequence),CB_RESETCONTENT,0,0);for(const auto &[index,label]:sequences_)SendMessageW(controls_.at(sequence),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
-    for(size_t i=0;i<sequences_.size();++i)if(sequences_[i].first==currentSequence)SendMessageW(controls_.at(sequence),CB_SETCURSEL,i,0);
+    if(sequencesChanged){ScreamSeq::NativeInputGate::present(controls_.at(sequence),CB_RESETCONTENT,0,0);for(const auto &[index,label]:sequences_)ScreamSeq::NativeInputGate::present(controls_.at(sequence),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+    for(size_t i=0;i<sequences_.size();++i)if(sequences_[i].first==currentSequence)ScreamSeq::NativeInputGate::present(controls_.at(sequence),CB_SETCURSEL,i,0);
     const auto chosen=std::find_if(orderList.begin(),orderList.end(),[&](const auto &value){return value.id==selected_;});const auto chosenIndex=chosen==orderList.end()?-1:int(chosen-orderList.begin());
     if(orders_!=orderList||ListView_GetNextItem(list,-1,LVNI_SELECTED)!=chosenIndex){
-      orders_=std::move(orderList);SendMessageW(list,WM_SETREDRAW,FALSE,0);ListView_SetItemCountEx(list,int(orders_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);ListView_SetItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);const auto selectedIndex=orderIndex(selected_);if(selectedIndex>=0)ListView_SetItemState(list,selectedIndex,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
-      const auto top=orderIndex(topID);if(top>=0){RECT row{};if(ListView_GetItemRect(list,top,&row,LVIR_BOUNDS))ListView_Scroll(list,0,(top-ListView_GetTopIndex(list))*(row.bottom-row.top));}SendMessageW(list,WM_SETREDRAW,TRUE,0);InvalidateRect(list,nullptr,FALSE);
+      orders_=std::move(orderList);SendMessageW(list,WM_SETREDRAW,FALSE,0);NativeReportList::setItemCount(list,int(orders_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);NativeReportList::setItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);const auto selectedIndex=orderIndex(selected_);if(selectedIndex>=0)NativeReportList::setItemState(list,selectedIndex,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+      const auto top=orderIndex(topID);if(top>=0){RECT row{};if(ListView_GetItemRect(list,top,&row,LVIR_BOUNDS))NativeReportList::scroll(list,0,(top-ListView_GetTopIndex(list))*(row.bottom-row.top));}SendMessageW(list,WM_SETREDRAW,TRUE,0);InvalidateRect(list,nullptr,FALSE);
     }
     setting_=false;
     if(first)captureDraft();
@@ -421,12 +429,12 @@ public:
     if(first){mode_=mode;captureDraft(std::move(sourcePatternID));clampToOwnerWorkArea();opened_=true;}
     if(mode=="section"||mode=="pattern")changePage(mode);else if(mode=="new"||mode=="duplicate")changePage("orders");
     const auto views=fieldViews();NativeToolWindow::show();if(retainedFocus&&IsWindowVisible(focused)&&IsWindowEnabled(focused))SetFocus(focused);else {const auto retained=pageFocus_[size_t(pageIndex())];if(retained&&IsWindowVisible(retained)&&IsWindowEnabled(retained))SetFocus(retained);else SetFocus(controls_.at(page_=="section"?sectionPage:page_=="pattern"?patternPage:first&&mode_!="arrange"?rows:orders));}restoreFieldViews(views);
-    if(first){const auto selected=orderIndex(selected_);if(selected>=0)ListView_EnsureVisible(controls_.at(orders),selected,FALSE);}
+    if(first){const auto selected=orderIndex(selected_);if(selected>=0)NativeReportList::ensureVisible(controls_.at(orders),selected,FALSE);}
   }
   void navigateSection(bool next){
     if(unavailable())return;const auto index=sectionIndex(next);if(index<0)return;
     const auto id=orders_[size_t(index)].id;select(id,true);
-    setting_=true;ListView_SetItemState(controls_.at(orders),-1,0,LVIS_SELECTED|LVIS_FOCUSED);const auto current=orderIndex(selected_);if(current>=0){ListView_SetItemState(controls_.at(orders),current,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);ListView_EnsureVisible(controls_.at(orders),current,FALSE);}setting_=false;
+    setting_=true;NativeReportList::setItemState(controls_.at(orders),-1,0,LVIS_SELECTED|LVIS_FOCUSED);const auto current=orderIndex(selected_);if(current>=0){NativeReportList::setItemState(controls_.at(orders),current,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);NativeReportList::ensureVisible(controls_.at(orders),current,FALSE);}setting_=false;
   }
   Json snapshot()const{
     Json bounds=Json::array();const float scale=96.f/GetDpiForWindow(window_);

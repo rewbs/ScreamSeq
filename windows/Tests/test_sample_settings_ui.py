@@ -67,7 +67,11 @@ class SampleSettingsUITests(unittest.TestCase):
         dialog=self.dialog(SimpleNamespace(pid=self.pid),title)
         private_desktop.user.PostMessageW(dialog,0x111,2,0);self.wait_dialog_close(dialog)
     def reopen(self,name='sample-settings.screamseq'):
-        path=self.folder/name;self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.press(4802)
+        identity=self.state()['id'];slot=self.state()['sample'];saved=self.info(slot);pcm=self.pcm(slot)
+        path=self.folder/name;self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        self.start();index=next(i for i,sample in enumerate(self.read('document.get')['samples']) if sample['id']==identity);self.select(4801,index)
+        self.assertEqual(self.state()['id'],identity);self.assertEqual(self.state()['sample'],slot)
+        self.assertEqual(self.info(slot),saved);self.assertEqual(self.pcm(slot),pcm)
 
     def test_settings_one_transaction_history_noop_and_native_reopen(self):
         before=self.saved();pcm=self.pcm();other=self.info(2);identity=self.state()['id']
@@ -86,7 +90,11 @@ class SampleSettingsUITests(unittest.TestCase):
         self.assertEqual(self.state()['sample'],1);self.assertEqual(self.text(4856),'Keep my draft')
         self.write('document.patch',title='Unrelated edit');before=self.doc();self.press(4860);self.assertEqual(self.doc(),before);self.assertTrue(self.state()['stale']);self.assertEqual(self.text(4856),'Keep my draft')
         self.press(4803);self.assertFalse(self.state()['fieldDraft']);self.assertEqual(self.text(4856),self.info()['name'])
-        self.field(4856,'Old document');self.reopen();self.assertEqual(self.text(4856),self.info()['name'])
+        self.field(4856,'Old document');path=self.folder/'retained-settings.screamseq';self.write('document.save',path=str(path))
+        with self.assertRaisesRegex(Exception,'[Rr]etained|[Dd]raft|[Nn]ative'):
+            self.write('document.open',path=str(path),discard=True)
+        self.assertEqual(self.text(4856),'Old document');self.press(4861)
+        self.reopen();self.assertEqual(self.text(4856),self.info()['name'])
 
     def test_settings_and_audio_drafts_do_not_silently_overwrite_each_other(self):
         self.page('process')

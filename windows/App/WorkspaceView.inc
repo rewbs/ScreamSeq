@@ -170,20 +170,21 @@
             SendMessageW(controls.at(id),EM_SETLIMITTEXT,10,0);
         }
         for(int id:{patternChooser,orderChooser,octaveChooser,stepChooser,effectColumnChooser,soundChooser}) controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
-        for(unsigned i=1;i<=8;++i) {auto label=std::to_wstring(i)+L" FX";SendMessageW(controls.at(effectColumnChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
-        for(unsigned i=0;i<=9;++i) {auto label=L"Oct "+std::to_wstring(i);SendMessageW(controls.at(octaveChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
-        for(unsigned i=0;i<=16;++i) {auto label=L"Step "+std::to_wstring(i);SendMessageW(controls.at(stepChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+        for(unsigned i=1;i<=8;++i) {auto label=std::to_wstring(i)+L" FX";ScreamSeq::NativeInputGate::present(controls.at(effectColumnChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+        for(unsigned i=0;i<=9;++i) {auto label=L"Oct "+std::to_wstring(i);ScreamSeq::NativeInputGate::present(controls.at(octaveChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+        for(unsigned i=0;i<=16;++i) {auto label=L"Step "+std::to_wstring(i);ScreamSeq::NativeInputGate::present(controls.at(stepChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
         controls[sampleCommandBase]=CreateWindowExW(0,L"LISTBOX",L"Samples",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(sampleCommandBase)),GetModuleHandleW(nullptr),nullptr);
         for(const auto &[i,sample]:view->samples) {
             auto label=std::to_wstring(i)+L"  "+wide(sample.at("name").get<std::string>());
-            auto index=SendMessageW(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
-            SendMessageW(controls.at(sampleCommandBase),LB_SETITEMDATA,index,i);
+            auto index=ScreamSeq::NativeInputGate::present(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+            ScreamSeq::NativeInputGate::present(controls.at(sampleCommandBase),LB_SETITEMDATA,index,i);
         }
         installPluginControls();
         installEffectControls();
         installMixerControls();
         installGraphControls();
         installWorkspaceRegionControls();
+        registerMainDrafts();
         if(inspection)SetPropW(window,ScreamSeq::NativeControls::inspectionProperty,reinterpret_cast<HANDLE>(1));
         for(auto [id,h]:controls)ScreamSeq::NativeControls::install(h,inspection);
 		configureWorkspaceCommands();
@@ -201,6 +202,7 @@
             if(id==dockToggle){workspaceState.lowerVisible=!workspaceState.lowerVisible;workspaceState.focus="pattern";SetFocus(window);if(graphEditorVisible())SetTimer(window,4,100,nullptr);if(mixerEditorVisible())SetTimer(window,3,100,nullptr);layoutControls();ensureCursorVisible();return;}
             if(id==focusPatternCommand&&!drainingViews)deferredViews.clear();
             if(deferView(id))return;
+            if(id==sampleImportCommand||id==sampleImportRawCommand||id==sampleImportInstrumentsCommand){sampleCommand(id);layoutControls();return;}
             if(id==notesCommand){openNoteEditor();return;}
             if(id==notesInspectorCommand){workspace("workspace.panel",{{"panel","notes"},{"focus",true}});return;}
             if(id==samplesCommand||id==sampleCommandBase)revealWorkspaceMainEditor("samples");

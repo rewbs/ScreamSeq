@@ -1,6 +1,8 @@
 # Commit pinned source map
 
-All links below point to inspected main `ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`. The review-refresh checkout is `61a28b489`, with a separate eight-file product/test P0a candidate; use these pinned links for baseline line references and [review-refresh.md](review-refresh.md) for that delta. New module names in the plan are proposals.
+**Status superseded:** [current review](current-review.md) pins main to `16cab100b` and checkout to `07060e1c4`, records successful P0a CI and remaining P0b work. Source/CI status below retains its original checkpoint; use the current review and main plan for the next batch.
+
+All links below point to inspected main `ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`. Use these pinned links for baseline line references. The [latest planning review](planning-review-refresh.md) describes checkout `c76439494` and its pre-existing dirty census. [Current source review](current-source-review.md) retains the earlier `e7f165eb4` candidate checkpoint; [review refresh](review-refresh.md) retains `61a28b489`. These candidate changes do not alter the baseline links. New module names in the plan are proposals.
 
 | Source | SHA-256 of inspected Git archive bytes |
 |---|---|

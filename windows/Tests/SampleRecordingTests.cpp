@@ -39,7 +39,7 @@ static void lifecycle(){
   SampleRecordingOperations::Hooks hooks;
   hooks.devices=[] {return std::vector<CaptureDevice>{{"input-A","Input",4,true}};};
   hooks.capture=[&]{++starts;return std::make_unique<FakeCapture>(fail);};hooks.uniqueID=[&]{return "take-"+std::to_string(++serial);};
-  hooks.append=[&](std::span<const float> pcm,uint32_t rate,uint32_t channels,const std::string &name,bool instrument,bool dry){check(pcm.size()==4&&rate==48000&&channels==2&&(name=="Take"||name=="Recorded sample")&&instrument,"Append must preserve capture parameters");if(appendFails)throw Api::ApiError(-32602,"Capacity");++preflights;if(!dry)++commits;return nlohmann::json{{"sample",5},{"instrument",2},{"dryRun",dry}};};
+  hooks.append=[&](std::span<const float> pcm,uint32_t rate,uint32_t channels,const std::string &name,bool instrument,bool dry,const std::string &take){check(take=="take-"+std::to_string(serial),"Append receipt needs exact take identity");check(pcm.size()==4&&rate==48000&&channels==2&&(name=="Take"||name=="Recorded sample")&&instrument,"Append must preserve capture parameters");if(appendFails)throw Api::ApiError(-32602,"Capacity");++preflights;if(!dry)++commits;return nlohmann::json{{"sample",5},{"instrument",2},{"dryRun",dry}};};
   SampleRecordingOperations operation(std::move(hooks));
   auto call=[&](const char *method,nlohmann::json p=nlohmann::json::object(),std::string doc="song-A",std::string rev="r1"){return operation.invoke(method,p,doc,rev);};
   check(call("sample.recording.devices")["devices"].size()==1&&starts==0,"Enumerating must never start a microphone");
@@ -55,11 +55,19 @@ static void lifecycle(){
   check(!call("sample.recording.stop",{{"take",take}})["capturing"].get<bool>(),"Stop must retain PCM");
   rejects([&]{call("sample.recording.commit",commit,"song-B");},-32001);
   rejects([&]{call("sample.recording.commit",commit,"song-A","r2");},-32001);
+  bool rejectedBeforeAppend=false;
+  try{call("sample.recording.commit",commit,"song-A","r2");}
+  catch(const Api::ApiError &e){rejectedBeforeAppend=e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted;}
+  check(rejectedBeforeAppend&&commits==0,"Stale Keep must prove rejection before append");
   check(call("sample.recording.get")["take"]==take&&commits==0,"Stale/replaced-document commit must retain take");
   commit["expectedRevision"]="r2";commit["dryRun"]=true;call("sample.recording.commit",commit,"song-A","r2");
   check(commits==0&&preflights==1&&call("sample.recording.get")["take"]==take,"Dry run validates but retains PCM");
   commit["dryRun"]=false;appendFails=true;rejects([&]{call("sample.recording.commit",commit,"song-A","r2");},-32602);appendFails=false;
   check(call("sample.recording.get")["take"]==take,"Failed append must retain PCM");
+  appendFails=true;bool appendUnclassified=false;
+  try{call("sample.recording.commit",commit,"song-A","r2");}
+  catch(const Api::ApiError &e){appendUnclassified=!e.outcome;}
+  appendFails=false;check(appendUnclassified,"Append callback failure cannot prove rejection from its error code alone");
   call("sample.recording.commit",commit,"song-A","r2");check(commits==1&&call("sample.recording.get")["take"]=="","Current same-document revision may append after other edits, then consume once");
   const auto take2=call("sample.recording.start",{{"device",""},{"expectedRevision","r1"}}).at("take");operation.documentReplaced();
   const auto defaultName=call("sample.recording.commit",{{"take",take2},{"createInstrument",true},{"dryRun",true},{"expectedRevision","r1"}});check(defaultName.at("take")==take2&&operation.hasTake(),"Default sample name and explicit default endpoint retain dry-run take");

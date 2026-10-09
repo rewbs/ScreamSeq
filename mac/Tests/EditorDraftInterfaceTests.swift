@@ -21,19 +21,14 @@ extension InterfaceTests {
     guard let button = find(root) else { throw InterfaceFailure(message: "Missing button \(title)") }
     button.handler?()
   }
-  private static func wait(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
+  private static func wait(_ seconds: Double) { pumpMainRunLoop(seconds) }
 
-  static func editorDraftChecks() throws {
-    try assetCatalogueChecks()
-    try textHistoryChecks()
-    try popupIdentityChecks()
-    try mixerDraftChecks()
-    try graphDraftChecks()
-    try songGraphEnvelopeChecks()
-    try automationDraftChecks()
-    try pluginDraftChecks()
-    try envelopeBankDraftChecks()
-    print("PASS editor drafts: popups resolve stable IDs, reloads keep drafts, busy edits retry, Tab leaves canvases")
+  static var editorDraftGroups: [(String, () throws -> Void)] {
+    [("draft-assets", assetCatalogueChecks), ("draft-text-history", textHistoryChecks),
+     ("draft-popups", popupIdentityChecks), ("draft-mixer", mixerDraftChecks),
+     ("draft-graph", graphDraftChecks), ("draft-song-envelope", songGraphEnvelopeChecks),
+     ("draft-automation", automationDraftChecks), ("draft-plugin", pluginDraftChecks),
+     ("draft-envelope-bank", envelopeBankDraftChecks)]
   }
   static func assetCatalogueChecks() throws {
     var model=PatternModel(["format":"MPTM","samples":[["index":1,"id":"s1","name":"Kick"],["index":2,"id":"s2","name":"Snare"]]])
@@ -271,7 +266,17 @@ extension InterfaceTests {
       "mixer": ["buses": [["id": "n1", "name": "Drums", "kind": "track", "output": "n2"], ["id": "n3", "name": "Bass", "kind": "track", "output": "n2"], ["id": "n2", "name": "Master", "kind": "master", "output": ""]]],
       "assignments": [], "commands": [], "lanes": []]
     var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
-    editor.onRequest = { method, params, reply in calls.append((method, params)); replies.append(reply) }
+    var trimReads = [[String: Any]]()
+    editor.onRequest = { method, params, reply in
+      // Inspector context now reads trims even for a source with no audio ports.
+      // Keep that read separate from pending graph edits and their replies.
+      if method == "graph.trim.get" {
+        trimReads.append(params)
+        reply(["result": ["revision": editor.revision, "data": ["ports": [[String: Any]](), "sources": [[String: Any]]()]]])
+        return
+      }
+      calls.append((method, params)); replies.append(reply)
+    }
     editor.load(); replies.removeFirst()(["result": ["revision": "g:0", "data": data]]); calls = []
     editor.graphID = "n100"; editor.update(data)
     editor.disconnect()
@@ -287,6 +292,8 @@ extension InterfaceTests {
     try require(editor.canvas.selectedEdge == nil && calls.isEmpty, "A wire that no longer exists is deselected, never replaced by its neighbour")
 
     editor.update(data); editor.selectedID = "n104"; editor.canvas.selected = "n104"; editor.inspect()
+    try require(trimReads.last?["graph"] as? String == "n100" && trimReads.last?["node"] as? String == "n104" && editor.trimControls.isHidden,
+      "LFO inspection reads its captured trim target and hides the empty audio-port controls")
     editor.canvas.nudgeDelay = 5
     for index in 0..<3 { editor.canvas.keyDown(with: keyEvent(124, repeating: index > 0)) }
     try require(calls.isEmpty && editor.canvas.nodes.first { $0.id == "n104" }?.x == 42, "Repeated arrow nudges move the node without writing the definition each time")
@@ -427,10 +434,10 @@ extension InterfaceTests {
     row.slider.doubleValue = 0.8; row.slider.update()
     try require(edits.isEmpty, "A busy document does not take the parameter edit")
     busy = false; wait(0.08)
-    try require(edits == [0.8], "The edit is sent once the document is free instead of being lost")
+    try require(edits == [0.8], "The edit is sent once the document is free instead of being lost (edits: \(edits), slider: \(row.slider.doubleValue), selected: \(editor.selectedPlugin ?? "none"), status: \(editor.note.stringValue))")
     busy = true; editor.parameterRetryLimit = 2
     row.slider.doubleValue = 0.2; row.slider.update(); wait(0.12)
-    try require(edits == [0.8] && row.slider.doubleValue == 0.8 && editor.note.stringValue.contains("busy"), "An edit that never gets through restores the real value and says so")
+    try require(edits == [0.8] && row.slider.doubleValue == 0.8 && editor.note.stringValue.contains("busy"), "An edit that never gets through restores the real value and says so (edits: \(edits), slider: \(row.slider.doubleValue), status: \(editor.note.stringValue))")
     busy = false
     row.slider.doubleValue = 0.2; row.slider.update()
     try require(edits == [0.8, 0.2], "The restored value is still the baseline for the next edit")

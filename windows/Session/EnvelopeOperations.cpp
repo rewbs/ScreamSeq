@@ -382,8 +382,10 @@ Json EnvelopeOperations::invoke(const std::string &method,const Json &p) {
       const bool changed=found==entries.end()||*found!=item;
       if(found==entries.end()) entries.push_back(item); else *found=item;
       require(entries.size()<=256,"Catalogue holds at most 256 envelopes");
+      Json result={{"id",wanted},{"dryRun",dry},{"wouldChange",changed}};
+      auto completed=changed&&!dry&&host_.prepareCompletion?host_.prepareCompletion(result,false):std::function<void()>{};
       if(changed) writeCatalogue(catalogue,*cataloguePath_,dry);
-      return {{"id",wanted},{"dryRun",dry},{"wouldChange",changed}};
+      if(completed)completed();return result;
     }
     const auto supported=writes();
     if(std::find(supported.begin(),supported.end(),method)==supported.end()) throw Api::ApiError(-32601,"Unknown envelope bank operation");
@@ -457,6 +459,8 @@ Json EnvelopeOperations::invoke(const std::string &method,const Json &p) {
     bool changed=next!=document_.native();
     for(const auto &[t,e]:baked) changed|=!sameInstrumentEnvelope(instrument(next,song,t),e);
     if(changed&&host_.validateCandidate)host_.validateCandidate(next);
+    Json result={{"id",id(affected)},{"dryRun",dry},{"wouldChange",changed}};
+    auto completed=changed&&!dry&&host_.prepareCompletion?host_.prepareCompletion(result,true):std::function<void()>{};
     if(changed&&!dry) {
       if(baked.empty()) {
         const auto &before=document_.native();
@@ -469,7 +473,7 @@ Json EnvelopeOperations::invoke(const std::string &method,const Json &p) {
         document_.transaction([&](OpenMPT::CSoundFile &s,NativeSong &n){n=next;for(const auto &[t,e]:baked) instrument(n,s,t)=e;});
       }
     }
-    return {{"id",id(affected)},{"dryRun",dry},{"wouldChange",changed}};
+    if(completed)completed();return result;
   } catch(const std::invalid_argument &e) { throw Api::ApiError(-32602,e.what()); }
     catch(const std::out_of_range &e) { throw Api::ApiError(-32602,e.what()); }
 }

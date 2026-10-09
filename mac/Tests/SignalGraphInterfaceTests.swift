@@ -1402,8 +1402,12 @@ extension InterfaceTests {
     }
     editor.load();editor.rewire(index,source:"n4",target:"plugin:compressor",out:0,input:1,modulation:false)
     pendingRead?(["result":["revision":"routing:2","data":connected]])
-    RunLoop.current.run(until:Date().addingTimeInterval(0.12))
-    try require(writes.count==1 && writes[0]["expectedRevision"] as? String=="routing:1" && (writes[0]["sources"] as? [[String:Any]])?.first?["source"] as? String=="n4" && (writes[0]["sources"] as? [[String:Any]])?.first?["gainDB"] as? Double == -3,"A handle release during refresh retains its revision, chosen source and existing sidechain gain")
+    pumpMainRunLoop(0.12)
+    try require(writes.count==1,"A handle release during refresh submits exactly once: \(writes); status: \(editor.status.stringValue), loading: \(editor.loading)")
+    try require(writes[0]["expectedRevision"] as? String=="routing:1","A queued handle release keeps its captured revision: \(writes[0])")
+    let capturedSources=writes[0]["sources"] as? [[String:Any]]
+    try require(capturedSources?.first?["source"] as? String=="n4","A queued handle release keeps its chosen source: \(writes[0])")
+    try require(capturedSources?.first?["gainDB"] as? Double == -3,"A queued handle release keeps the existing sidechain gain: \(writes[0])")
     try require(editor.status.stringValue=="Captured revision is stale","A queued rewire conflict stays visible instead of silently rebasing the gesture")
 
     editor.update(connected);editor.canvas.selectedEdge=editor.songConnections.firstIndex{$0["kind"] as? String=="plugin-input"}!
