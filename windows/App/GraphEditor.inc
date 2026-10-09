@@ -49,7 +49,7 @@
         Json edge=graphWireIndex>=0?edges[size_t(graphWireIndex)]:Json::object();
         graphFillNodes(graphSource,edge.value("source",graphNode));graphFillNodes(graphDestination,edge.value("target",std::string{}));
         graphText(graphOutputPort,edge.value("output",0u));graphText(graphInputPort,graphPageIndex==2?edge.value("parameter",graphExposedParameter):edge.value("input",0u));
-        graphText(graphGain,edge.value("gain",1.0));graphText(graphMinimum,edge.value("minimum",0.0));graphText(graphMaximum,edge.value("maximum",1.0));graphText(graphBase,edge.value("base",0.0));
+        graphText(graphGain,edge.value("gain",1.0));graphText(graphMinimum,edge.value("minimum",0.0));graphText(graphMaximum,edge.value("maximum",0.0));graphText(graphBase,edge.value("base",Json("")));
         Json assignment=Json::object();if(graphData.contains("mixer")){const auto &buses=graphData.at("mixer").at("buses");if(graphBusIndex>=0&&size_t(graphBusIndex)<buses.size())for(const auto &a:graphData.at("assignments"))if(a.at("target")==buses[size_t(graphBusIndex)].at("id"))assignment=a;}
         graphText(graphAmount,assignment.value("amount",1.0));graphText(graphWet,assignment.value("wet",1.0));settingGraphFields=false;graphFieldDirty=false;
     }
@@ -158,7 +158,7 @@
         field(graphPropertyValue,result.sourceProperty==1||result.sourceProperty==2?result.draft.value(property,Json("")):node!=nodes.end()?node->value(property,Json("")):Json(""));
         field(graphParameterValue,"");field(graphOutputPort,edge.value("output",0u));
         field(graphInputPort,modulation?edge.value("parameter",result.sourceParameter):edge.value("input",0u));
-        field(graphGain,edge.value("gain",1.0));field(graphMinimum,edge.value("minimum",0.0));field(graphMaximum,edge.value("maximum",1.0));field(graphBase,edge.value("base",0.0));
+        field(graphGain,edge.value("gain",1.0));field(graphMinimum,edge.value("minimum",0.0));field(graphMaximum,edge.value("maximum",0.0));field(graphBase,edge.value("base",Json("")));
         Json assignment=Json::object();if(!buses.empty())for(const auto &item:result.data.at("assignments"))if(item.at("target")==buses[size_t(result.busIndex)].at("id"))assignment=item;
         field(graphAmount,assignment.value("amount",1.0));field(graphWet,assignment.value("wet",1.0));
         result.canvas.rebuild(result.draft,{},result.sourceParameter);
@@ -217,6 +217,13 @@
         auto selectedNode=graphSelectedNode();const bool vst3=selectedNode&&selectedNode->at("kind")=="plugin"&&selectedNode->at("plugin").at("format")=="VST3";EnableWindow(controls.at(graphOpenPlugin),vst3);EnableWindow(controls.at(graphReconnect),vst3&&!graphPending);EnableWindow(controls.at(graphSavePlugin),!graphEditorToken.empty()&&graphID==graphEditorTokenGraph&&graphNode==graphEditorTokenNode);EnableWindow(controls.at(graphClosePlugin),!graphEditorToken.empty());for(int id=graphLibrary;id<=graphReconnect;++id)if(!placed.contains(id))ScreamSeq::NativeControls::show(controls.at(id),false);rebuildGraphCanvas();if(show)SetTimer(window,4,100,nullptr);
     }
     void graphRequireCurrent(bool clean=true){if(graphDocument!=documentId||graphRevision!=view->session.revision)throw std::runtime_error("Song changed; graph draft retained. Reload before applying");if(clean&&(graphDirty||graphFieldDirty))throw std::runtime_error("Apply or reload the graph draft before this action");}
+    ScreamSeq::GraphCableEdits::ModulationDefault graphInitialModulation(const std::string &target,uint32_t parameter){
+        graphRequireCurrent(false);const auto generation=graphGeneration;const auto capturedGraph=graphID;
+        const auto catalog=documentOperation("graph.plugin.get",{{"graph",capturedGraph},{"node",target}});
+        graphRequireCurrent(false);
+        if(generation!=graphGeneration||capturedGraph!=graphID)throw std::runtime_error("Graph draft changed while reading the target; current draft retained");
+        return ScreamSeq::GraphCableEdits::modulationDefault(catalog.at("parameters"),parameter);
+    }
     Json graphMutate(const std::string &method,Json p,bool commitFields=false){graphRequireCurrent(!commitFields);p["expectedRevision"]=graphRevision;const auto generation=graphGeneration;graphPending=true;try{auto result=documentOperation(method,p);graphPending=false;if(generation==graphGeneration){if(commitFields)graphFieldDirty=false;if(method=="graph.create"||method=="graph.clone")graphID=result.at("graph").get<std::string>();if(method=="graph.node.add")graphNode=result.at("node").get<std::string>();refreshGraph();}return result;}catch(...){graphPending=false;throw;}}
     void graphLoadPluginControls(){graphRequireCurrent();auto node=graphSelectedNode();if(!node||node->at("kind")!="plugin")throw std::runtime_error("Select an effect node");const auto generation=graphGeneration;const auto target=graphNode;auto catalog=documentOperation("graph.plugin.get",{{"graph",graphID},{"node",graphNode}});if(generation!=graphGeneration||target!=graphNode)throw std::runtime_error("Plugin catalog completed for an older draft; current fields retained");graphPluginData=std::move(catalog);graphExposedNode=graphPluginTarget=graphNode;SendMessageW(controls.at(graphParameter),CB_RESETCONTENT,0,0);for(const auto &p:graphPluginData.at("parameters")){auto name=wide(p.at("name").get<std::string>()+" / "+p.at("unitLabel").get<std::string>());SendMessageW(controls.at(graphParameter),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}SendMessageW(controls.at(graphParameter),CB_SETCURSEL,0,0);graphParameterSelected();}
     void graphParameterSelected(){const auto i=SendMessageW(controls.at(graphParameter),CB_GETCURSEL,0,0);if(i>=0&&graphPluginData.contains("parameters")&&size_t(i)<graphPluginData.at("parameters").size()){const auto &p=graphPluginData.at("parameters")[size_t(i)];graphExposedParameter=p.at("id").get<uint32_t>();settingGraphFields=true;graphText(graphParameterValue,p.at("value"));settingGraphFields=false;graphFieldDirty=false;rebuildGraphCanvas();}}
@@ -240,7 +247,32 @@
         if(id==graphLibrary){if(graphDirty||graphFieldDirty)for(size_t i=0;i<graphData.at("library").size();++i)if(graphData.at("library")[i].at("id")==graphID)SendMessageW(controls.at(id),CB_SETCURSEL,i,0);graphRequireCurrent();const auto i=SendMessageW(controls.at(id),CB_GETCURSEL,0,0);if(i>=0){graphID=graphData.at("library").at(size_t(i)).at("id").get<std::string>();graphNode.clear();refreshGraph();graphCanvas.fit(graphDraft);rebuildGraphCanvas();}return true;}
         if(id==graphApply){graphRequireCurrent(false);if(graphFieldDirty)throw std::runtime_error("Use Set property or Add / update wire before applying the graph");const auto generation=graphGeneration;graphPending=true;try{documentOperation("graph.update",{{"expectedRevision",graphRevision},{"definition",graphDraft}});graphPending=false;if(generation==graphGeneration){graphDirty=false;refreshGraph();}graphStatus=L"Graph applied / document Undo available";}catch(...){graphPending=false;throw;}return true;}
         if(id==graphSetProperty){graphRequireCurrent(false);auto node=graphSelectedNode();const char *properties[]={"name","name","number","rate","phase","attack","release","controller"};auto &target=graphPropertyIndex==1||graphPropertyIndex==2?graphDraft:node?*node:graphDraft;target[properties[graphPropertyIndex]]=graphPropertyIndex<2?Json(utf8Path(effectField(graphPropertyValue))):graphPropertyIndex==2||graphPropertyIndex==7?Json(graphInteger(graphPropertyValue)):Json(graphNumber(graphPropertyValue));graphDirty=true;graphFieldDirty=false;++graphGeneration;loadGraphFields();rebuildGraphCanvas();return true;}
-        if(id==graphConnect||id==graphDeleteWire){graphRequireCurrent(false);auto &edges=graphDraft[graphPageIndex==2?"modulation":"audio"];if(id==graphDeleteWire){if(graphWireIndex<0||size_t(graphWireIndex)>=edges.size())throw std::runtime_error("Select a wire");edges.erase(edges.begin()+graphWireIndex);graphWireIndex=-1;}else{Json e={{"source",graphChosenNode(graphSource)},{"target",graphChosenNode(graphDestination)}};if(graphPageIndex==2){e["parameter"]=graphInteger(graphInputPort);e["minimum"]=graphNumber(graphMinimum);e["maximum"]=graphNumber(graphMaximum);e["base"]=graphNumber(graphBase);e["enabled"]=graphWireIndex>=0?edges.at(size_t(graphWireIndex)).value("enabled",true):true;}else{e["output"]=graphInteger(graphOutputPort,63);e["input"]=graphInteger(graphInputPort,63);e["gain"]=graphNumber(graphGain);}if(graphWireIndex>=0)edges.at(size_t(graphWireIndex))=e;else edges.push_back(e);}graphDirty=true;graphFieldDirty=false;++graphGeneration;loadGraphFields();rebuildGraphCanvas();return true;}
+        if(id==graphConnect||id==graphDeleteWire){
+            graphRequireCurrent(false);const bool modulation=graphPageIndex==2;const auto selected=graphWireIndex;
+            auto edges=graphDraft.at(modulation?"modulation":"audio");
+            if(id==graphDeleteWire){if(selected<0||size_t(selected)>=edges.size())throw std::runtime_error("Select a wire");edges.erase(edges.begin()+selected);graphWireIndex=-1;}
+            else{
+                // Update only displayed fields; retain quantized/enabled and
+                // any other saved fields on a selected wire.
+                Json e=selected>=0?edges.at(size_t(selected)):Json::object();
+                e["source"]=graphChosenNode(graphSource);e["target"]=graphChosenNode(graphDestination);
+                if(modulation){
+                    e["parameter"]=graphInteger(graphInputPort);e["minimum"]=graphNumber(graphMinimum);e["maximum"]=graphNumber(graphMaximum);
+                    const auto baseText=effectField(graphBase);
+                    if(!baseText.empty())e["base"]=graphNumber(graphBase);
+                    if(selected<0){
+                        const auto initial=graphInitialModulation(e.at("target").get<std::string>(),e.at("parameter").get<uint32_t>());
+                        auto defaults=ScreamSeq::GraphCableEdits::connect(edges,{e.at("source").get<std::string>(),true,true,0},
+                            {e.at("target").get<std::string>(),false,true,e.at("parameter").get<uint32_t>()},{},initial);
+                        if(!defaults.changed)throw std::runtime_error("That cable already exists; select it to edit its fields");
+                        const auto &fresh=defaults.edges.at(defaults.selected);
+                        if(baseText.empty())e["base"]=fresh.at("base");e["quantized"]=fresh.at("quantized");e["enabled"]=true;
+                    }else if(baseText.empty())throw std::runtime_error("Enter the selected cable's base value");
+                }else{e["output"]=graphInteger(graphOutputPort,63);e["input"]=graphInteger(graphInputPort,63);e["gain"]=graphNumber(graphGain);}
+                if(selected>=0)edges.at(size_t(selected))=std::move(e);else edges.push_back(std::move(e));
+            }
+            graphDraft[modulation?"modulation":"audio"]=std::move(edges);graphDirty=true;graphFieldDirty=false;++graphGeneration;loadGraphFields();rebuildGraphCanvas();return true;
+        }
         if(id==graphLoadPlugin){graphLoadPluginControls();return true;}
         if(id==graphSetParameter){graphRequireCurrent(false);if(graphDirty)throw std::runtime_error("Apply the graph before editing its plugin");const auto i=SendMessageW(controls.at(graphParameter),CB_GETCURSEL,0,0);if(i<0||graphPluginTarget!=graphNode||!graphPluginData.contains("parameters"))throw std::runtime_error("Load plugin controls first");const auto value=graphNumber(graphParameterValue);const auto parameter=graphPluginData.at("parameters").at(size_t(i)).at("id");const auto generation=graphGeneration;graphPending=true;try{documentOperation("graph.plugin.set",{{"expectedRevision",graphRevision},{"graph",graphID},{"node",graphNode},{"parameters",Json::array({{{"id",parameter},{"value",value}}})}});graphPending=false;if(generation==graphGeneration){graphFieldDirty=false;refreshGraph();graphLoadPluginControls();}}catch(...){graphPending=false;throw;}return true;}
         if(id==graphOpenPlugin){auto result=graphMutate("graph.plugin.editor.open",{{"graph",graphID},{"node",graphNode}});graphEditorToken=result.at("editor").get<std::string>();graphEditorTokenNode=graphNode;graphEditorTokenGraph=graphID;return true;}
@@ -275,9 +307,18 @@
     void graphMouseMove(float x,float y){if(!graphDragging())return;graphPointer={x,y};if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=std::clamp(double(graphDragCoordinates[0]+(x-graphDragStart.x)/graphCanvas.zoom),-100000.0,100000.0);(*n)["y"]=std::clamp(double(graphDragCoordinates[1]+(y-graphDragStart.y)/graphCanvas.zoom),-100000.0,100000.0);graphDirty=true;++graphGeneration;rebuildGraphCanvas();}}
         if(dragging==8){graphCanvas.panX=graphDragOrigin.x+x-graphDragStart.x;graphCanvas.panY=graphDragOrigin.y+y-graphDragStart.y;rebuildGraphCanvas();}frameRequested=true;}
     void graphMouseUp(float x,float y){
-        if(dragging==7){const auto target=graphCanvas.socketAt(x,y);if(target>=0){const auto &socket=graphCanvas.sockets[size_t(target)];
-            try{const auto endpoint=[](const auto &v){return ScreamSeq::GraphCableEdits::Endpoint{v.node,v.output,v.modulation,v.port};};
-                auto edited=ScreamSeq::GraphCableEdits::connect(graphDraft.at(socket.modulation?"modulation":"audio"),endpoint(graphDragSocket),endpoint(socket),graphDragReplace);
+        if(dragging==7){const auto target=graphCanvas.socketAt(x,y);if(target>=0){
+            // A worker catalog read pumps native messages and may rebuild the
+            // socket vector. Capture both endpoints and the selected cable by value.
+            const auto socket=graphCanvas.sockets[size_t(target)],origin=graphDragSocket;const auto replace=graphDragReplace;
+            try{graphRequireCurrent(false);const auto endpoint=[](const auto &v){return ScreamSeq::GraphCableEdits::Endpoint{v.node,v.output,v.modulation,v.port};};
+                std::optional<ScreamSeq::GraphCableEdits::ModulationDefault> initial;
+                if(socket.modulation&&!replace){
+                    const auto destination=socket.output?origin:socket;
+                    initial=graphInitialModulation(destination.node,destination.port);
+                    if(dragging!=7)throw std::runtime_error("Graph drag ended while reading the target; drag the cable again");
+                }
+                auto edited=ScreamSeq::GraphCableEdits::connect(graphDraft.at(socket.modulation?"modulation":"audio"),endpoint(origin),endpoint(socket),replace,initial);
                 if(edited.changed){graphDraft[socket.modulation?"modulation":"audio"]=std::move(edited.edges);graphDirty=true;++graphGeneration;}
                 graphWireIndex=int(edited.selected);graphWireModulation=socket.modulation;graphPageIndex=socket.modulation?2:1;
                 SendMessageW(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);loadGraphFields();
@@ -314,7 +355,7 @@
         if(dragging==7){const auto wire=graphDragSocket.output?ScreamSeq::GraphCanvas::curve(graphDragSocket.at,graphPointer):ScreamSeq::GraphCanvas::curve(graphPointer,graphDragSocket.at);for(size_t i=1;i<wire.size();++i)s.line(wire[i-1].x,wire[i-1].y,wire[i].x,wire[i].y,graphDragSocket.modulation?0xd7ae64:0x56bda9,2);}
         s.unclip();
         if(graphPageIndex==0)s.uiText(L"Captured property",x,r.y+65,248,0x8390a2);
-        if(graphPageIndex==1||graphPageIndex==2){s.uiText(L"Source",x,r.y+63,120,0x8390a2);s.uiText(L"Destination",x+128,r.y+63,120,0x8390a2);s.uiText(graphPageIndex==1?L"Output port":L"Stable parameter ID →",x,r.y+107,120,0x8390a2);s.uiText(graphPageIndex==1?L"Input port":L"Parameter",x+128,r.y+107,120,0x8390a2);s.uiText(graphPageIndex==1?L"Gain multiplier":L"Minimum",x,r.y+152,120,0x8390a2);if(graphPageIndex==2){s.uiText(L"Maximum",x+84,r.y+152,76,0x8390a2);s.uiText(L"Base",x+168,r.y+152,80,0x8390a2);}}
+        if(graphPageIndex==1||graphPageIndex==2){s.uiText(L"Source",x,r.y+63,120,0x8390a2);s.uiText(L"Destination",x+128,r.y+63,120,0x8390a2);s.uiText(graphPageIndex==1?L"Output port":L"Stable parameter ID →",x,r.y+107,120,0x8390a2);s.uiText(graphPageIndex==1?L"Input port":L"Parameter",x+128,r.y+107,120,0x8390a2);s.uiText(graphPageIndex==1?L"Gain multiplier":L"Minimum",x,r.y+152,120,0x8390a2);if(graphPageIndex==2){s.uiText(L"Maximum",x+84,r.y+152,76,0x8390a2);s.uiText(L"Base / auto",x+168,r.y+152,80,0x8390a2);}}
         if(graphPageIndex==4){s.uiText(L"Amount / 0…1",x,r.y+73,120,0x8390a2);s.uiText(L"Wet / 0…1",x+128,r.y+73,120,0x8390a2);}
         const bool stale=graphDocument!=documentId||graphRevision!=view->session.revision;
         s.uiText(stale&&(graphDirty||graphFieldDirty)?L"Song changed / captured graph retained — Reload before applying":graphFieldDirty?L"Field draft / Set property or update wire":graphDirty?L"Graph draft / Apply commits one document Undo":L"Drag either socket to add · selected wire handles rewire · Ctrl+Tab selects wires",r.x+8,r.y+r.h-23,r.w-16,stale?0xe7bb79:0x8390a2);s.unclip();s.outline(r.x,r.y,r.w,r.h,workspacePresentationFocus()=="graph"?0x6edac5:0x303b49);

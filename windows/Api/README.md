@@ -237,6 +237,17 @@ transport or changing history; unsupported preparations also preserve playback.
 draft flags, selection and retained hit-test geometry. The contextual workspace
 panel API is unchanged.
 
+The reusable Windows graph editor starts new modulation cables at zero depth.
+Their base comes from an enabled contribution to the same target, or from the
+target catalogue's normalized manual value. New discrete targets retain an
+explicit quantized mode. In the new-wire form, an empty Base field means this
+automatic baseline; entering a number remains an explicit normalized base edit.
+Updating a selected cable preserves its saved quantized/enabled flags and all
+fields not displayed by the form. These remain local drafts until Apply, which
+uses the existing guarded `graph.update` transaction and document history.
+Catalogue reads capture endpoint identities and reject a changed draft/revision
+before adopting new wire defaults.
+
 The retained Graph Curve editor uses `graph.automation.get/set` and
 `automation.formula.preview`. Graph's Pattern curve action opens that editor
 while routing remains on its previous page. `workspace.get.graphCurve` reports
