@@ -1,5 +1,6 @@
 # Current source and peer-plan review
 
+> Historical checkpoint: the [final planning review](final-planning-review.md) supersedes this document’s checkout identity, uncommitted reconnect status, missing-retirement statement and evidence comparisons. Other detailed contracts remain applicable.
 Planning only, 9 October 2026. This is the current-state supplement to the [comprehensive plan](README.md), [117-row parity matrix](parity-matrix.csv), [419-command inventory](command-inventory.csv), [232-method API inventory](api-inventory.csv), and [84-row peer reconciliation](peer-matrix-review.csv). It supersedes earlier checkout-status statements, including `followup-review.md`; the architecture, A01–A18 acceptance recipes and phase specifications in README remain authoritative. No product code was changed, application launched, build/test run, or implementation begun in this review.
 
 ## Observed baseline
