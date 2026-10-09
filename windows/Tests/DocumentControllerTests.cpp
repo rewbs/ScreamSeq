@@ -51,6 +51,9 @@ void publicationTests(const std::filesystem::path &directory) {
     need(e.outcome && e.outcome->document==controller.view()->session.documentId,"postcommit outcome lost document identity");
     committedRevision=e.outcome->revision;
     need(!committedRevision.empty() && committedRevision!=priorRevision,"postcommit outcome advertised pre-write revision");
+    need(e.completed&&e.completed->method=="pattern.apply"&&e.completed->document==e.outcome->document&&e.completed->revision==committedRevision,
+      "publication failure lost the original worker result identity");
+    need(e.completed->result.is_object(),"publication failure lost the original operation result");
   }
   need(rejected && controller.publicationPending(),"persistent postcommit failure must explicitly report committed state");
   persistent=false;
@@ -58,6 +61,19 @@ void publicationTests(const std::filesystem::path &directory) {
   need(!controller.publicationPending() && controller.view()->cell(0,0,0).note==63,"read-side repair left a forever-stale cache");
   need(controller.view()->session.revision==committedRevision,"read-side repair disagrees with committed outcome");
   invoke(controller,"history.undo",{{"domain","document"}});
+  auto returned=controller.invokeCompleted("document.patch",{{"title","First queued receipt"},{"expectedRevision",controller.view()->session.revision}});
+  while(returned.wait_for(std::chrono::milliseconds(1))!=std::future_status::ready)controller.service();
+  const auto firstRevision=controller.view()->session.revision;
+  invoke(controller,"document.patch",{{"title","Later queued edit"}});
+  const auto receipt=returned.get();
+  need(receipt.method=="document.patch"&&receipt.document==controller.view()->session.documentId&&receipt.revision==firstRevision&&receipt.revision!=controller.view()->session.revision,
+    "Later worker edit relabelled an unconsumed operation receipt");
+  for(const auto method:{"sample.renderSelection","instrument.importMultisample"}){
+    bool classified=false;
+    try{invoke(controller,method,{{"unknown",true}});}
+    catch(const Api::ApiError &e){classified=e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;}
+    need(classified,"Rejected prepared import lacks a proven noncommit outcome");
+  }
   std::cout<<"publication tests passed\n";
 }
 

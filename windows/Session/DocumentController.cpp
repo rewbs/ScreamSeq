@@ -387,12 +387,18 @@ void DocumentController::publish() {
   if(view_) retired_.push_back(view_);
   install(std::move(next));
 }
-void DocumentController::publishCommitted() {
+void DocumentController::publishCommitted(const std::string &method,const Json &result) {
   publicationPending_=true;
   try {publish();} catch(...) {
     // Shared by ordinary edits and recording commits: a repaired publication
     // must report success after the retained take has already been consumed.
-    try {publish();} catch(...) {throw Api::ApiError(-32003,"Document operation committed; view publication unavailable. Read state before retrying the write.", Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,identity_+":"+std::to_string(generation_),revision()});}
+    try {publish();} catch(...) {
+      const auto document=identity_+":"+std::to_string(generation_),current=revision();
+      completedCall_=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,document,current,result});
+      throw Api::ApiError(-32003,"Document operation committed; view publication unavailable. Read state before retrying the write.",
+        Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,document,current},
+        completedCall_);
+    }
   }
 }
 void DocumentController::preflightGrowth(const std::string &method,const Json &params) {
@@ -530,7 +536,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     const auto before=revision();
     if(method=="sample.recording.commit")preflightGrowth(method,params);
     auto result=sampleRecording_->invoke(method,params,identity_+":"+std::to_string(generation_),before);
-    if(revision()!=before){scanWaves_=true;scanPatterns_=true;publishCommitted();}return result;
+    if(revision()!=before){scanWaves_=true;scanPatterns_=true;publishCommitted(method,result);}return result;
   }
   // Browser preferences are independent of the song. Do not flush vendor
   // editors, require a document revision, or allocate musical history here.
@@ -735,23 +741,54 @@ Json DocumentController::operation(const std::string &method,Json params) {
     }
   }
   if(write && (beforeRevision!=revision() || beforePath!=project_.path || beforeSaved!=project_.savedRevision || beforeSavedPlugins!=project_.savedPluginRevision || beforeEditors!=plugins_->openEditorCount() || beforeRecovered!=project_.recoveredUnsaved)) {
-    publishCommitted();
+    publishCommitted(method,result);
   }
   return result;
 }
+Api::CompletedCall DocumentController::invokeOperation(const std::string &method,Json params) {
+  completedCall_.reset();
+  struct Reset {std::shared_ptr<const Api::CompletedCall> &value;~Reset(){value.reset();}} reset{completedCall_};
+  const auto before=revision();const auto path=project_.path;const auto saved=project_.savedRevision;
+  bool returned=false;
+  try {
+    auto result=operation(method,std::move(params));returned=true;
+    // Capture on the serial worker, before any later queued operation can edit
+    // the view. Reading view() on the native owner after await is too late.
+    return {method,identity_+":"+std::to_string(generation_),revision(),std::move(result)};
+  } catch(...) {
+    const auto failure=std::current_exception();
+    if(before!=revision() || path!=project_.path || saved!=project_.savedRevision) {
+      publicationPending_=true;scanPatterns_=true;scanWaves_=true;
+      try {publish();} catch(...) {}
+      // Only our own publication boundary can supply this invocation's result.
+      // Never adopt a receipt thrown by a nested host callback, even when its
+      // method and document happen to match.
+      throw Api::ApiError(-32003,"Document operation committed but completion failed; read current state before retrying the write.",
+        Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,identity_+":"+std::to_string(generation_),revision()},completedCall_);
+    }
+    if(returned)throw Api::ApiError(-32003,"Operation returned but completion identity could not be retained; read state before retrying.",Tracker::WriteOutcome{});
+    // These two operations publish only a prepared document import. Their
+    // failure before a revision change proves that no import was committed.
+    // Do not extend this inference to takes, files, catalogues or vendor calls.
+    if(method=="instrument.importMultisample"||method=="sample.renderSelection") {
+      const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
+      try {std::rethrow_exception(failure);}
+      catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),rejected);}
+      catch(const std::exception &e){throw Api::ApiError(-32003,e.what(),rejected);}
+      catch(...){throw Api::ApiError(-32003,"Import failed before document commit",rejected);}
+    }
+    std::rethrow_exception(failure);
+  }
+}
 std::future<Json> DocumentController::invoke(std::string method,Json params) {
   auto task=std::make_shared<std::packaged_task<Json()>>([this,method=std::move(method),params=std::move(params)]() mutable {
-    const auto before=revision();const auto path=project_.path;const auto saved=project_.savedRevision;
-    try {return operation(method,std::move(params));} catch(...) {
-      if(before!=revision() || path!=project_.path || saved!=project_.savedRevision) {
-        // Includes an exception in an edit/playback callback after the shared
-        // model committed. Preserve/recover the actual new revision, not the old cache.
-        publicationPending_=true;scanPatterns_=true;scanWaves_=true;
-        try {publish();} catch(...) {} // A later snapshot read retries on this worker.
-        throw Api::ApiError(-32003,"Document operation committed but completion failed; read current state before retrying the write.", Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,identity_+":"+std::to_string(generation_),revision()});
-      }
-      throw;
-    }
+    return invokeOperation(method,std::move(params)).result;
+  });
+  auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
+}
+std::future<Api::CompletedCall> DocumentController::invokeCompleted(std::string method,Json params) {
+  auto task=std::make_shared<std::packaged_task<Api::CompletedCall()>>([this,method=std::move(method),params=std::move(params)]() mutable {
+    return invokeOperation(method,std::move(params));
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
 }

@@ -23,7 +23,8 @@
                 if(instrument||!view->instruments){const auto target=typingTarget(!instrument,instrument?instrument:first.at("sample").get<unsigned>(),49,window);typingSoundId=target.identity;refreshTypingSounds();}
                 layoutControls();
             },
-            [this](unsigned instrument,const std::string &document){if(documentId!=document)return;const auto target=typingTarget(false,instrument,49,window);typingSoundId=target.identity;refreshTypingSounds();status=L"Multi-sample instrument imported / selected for musical typing";});
+            [this](unsigned instrument,const std::string &document){if(documentId!=document)return;const auto target=typingTarget(false,instrument,49,window);typingSoundId=target.identity;refreshTypingSounds();status=L"Multi-sample instrument imported / selected for musical typing";},
+            [this](const auto &method,const auto &params){return documentOperationWithOutcome(method,params);});
         sampleBrowser->show();
     }
 

@@ -20,7 +20,7 @@ void multisampleRequestRetention(HWND main){
       if(inject==Inject::Read)SetWindowTextW(GetDlgItem(owner->window(),5602),L"-");
       return {{"zones",Json::array({{{"rootNote",37},{"lowNote",37},{"highNote",37}}})}};
     }
-    if(inject==Inject::Reject)throw std::runtime_error("Fixture import refusal");
+    if(inject==Inject::Reject)throw ScreamSeq::Api::ApiError(-32003,"Fixture import refusal",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
     ++commits;context.second="r"+std::to_string(commits+1);return {{"instrument",3}};
   };
   const auto applied=[&](unsigned instrument,const std::string &document){
@@ -28,7 +28,7 @@ void multisampleRequestRetention(HWND main){
     if(inject==Inject::Completion)SetWindowTextW(GetDlgItem(owner->window(),5601),L"Later family name");
   };
   {
-    ScreamSeq::MultisampleImportWindow tool(main,request,[&]{return context;},applied);owner=&tool;ScreamSeq::Tests::ownGuiWindow(tool.window());tool.open(family);
+    ScreamSeq::MultisampleImportWindow tool(main,request,[&]{return context;},applied,[&](const auto &method,const auto &params){auto result=request(method,params);return ScreamSeq::Api::CompletedCall{method,context.first,context.second,std::move(result)};});owner=&tool;ScreamSeq::Tests::ownGuiWindow(tool.window());tool.open(family);
     const auto opened=draftOf(tool);require(opened.dirty,"Configured multisample family was omitted from the draft census");
     tool.hide();require(draftOf(tool).sameWork(opened),"Hiding an import changed its captured work");
     auto other=family;other["name"]="Other";tool.open(other);
@@ -133,8 +133,8 @@ void recordingSetupRetention(HWND main){
     if(method=="sample.recording.stop"){take["capturing"]=false;return take;}
     if(method=="sample.recording.discard"){take={{"take",nullptr}};return Json::object();}
     if(method=="sample.recording.commit"){
-      submitted=params;if(reject)throw std::runtime_error("Fixture recording commit refusal");
-      ++commits;context.second="r"+std::to_string(commits+1);take={{"take",nullptr}};return {{"sample",8},{"instrument",0}};
+      submitted=params;if(reject)throw ScreamSeq::Api::ApiError(-32003,"Fixture recording commit refusal",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+      ++commits;context.second="r"+std::to_string(commits+1);take={{"take",nullptr}};return {{"sample",8},{"instrument",0},{"take",params.at("take")}};
     }
     throw std::runtime_error("Unexpected recording request");
   };
@@ -143,7 +143,7 @@ void recordingSetupRetention(HWND main){
     if(inject){SetWindowTextW(GetDlgItem(owner->window(),6508),L"Later take name");chooseDraftField(owner->window(),6509,1);}
   };
   {
-    ScreamSeq::SampleRecordingWindow tool(main,request,[&]{return context;},committed);owner=&tool;ScreamSeq::Tests::ownGuiWindow(tool.window());tool.openAt();
+    ScreamSeq::SampleRecordingWindow tool(main,request,[&]{return context;},committed,[&](const auto &method,const auto &params){auto result=request(method,params);return ScreamSeq::Api::CompletedCall{method,context.first,context.second,std::move(result)};});owner=&tool;ScreamSeq::Tests::ownGuiWindow(tool.window());tool.openAt();
     require(pendingObserved&&discardRefused&&host.registry.capture(context.first,context.second).drafts.empty(),"Recording reads omitted pending work or fabricated a draft");
     chooseDraftField(tool.window(),6501,1);chooseDraftField(tool.window(),6502,2);
     require(host.registry.capture(context.first,context.second).drafts.empty(),"Global capture preferences counted as a song edit");

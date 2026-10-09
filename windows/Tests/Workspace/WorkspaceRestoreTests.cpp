@@ -1016,6 +1016,8 @@ void nativeCompletionRetainsOutcome() {
         catch(const ScreamSeq::Api::ApiError &error) {
             failed=error.code==-32003&&error.outcome&&error.outcome->state==Tracker::CommitOutcome::Unknown;
             restoreCheck(error.outcome->revision.empty(),"Native completion must not advertise pre-write revision");
+            restoreCheck(error.completed&&error.completed->method=="pattern.apply"&&error.completed->document==app.view->session.documentId&&error.completed->revision==app.view->session.revision,
+                "Native completion failed to retain its exact worker result identity");
         }
         restoreCheck(failed&&app.view->session.revision!=prior&&app.view->cell(0,0,0).note==note,"Native completion misreported or reverted an accepted worker edit");
         const auto committed=app.view->session.revision;
@@ -1026,11 +1028,15 @@ void nativeCompletionRetainsOutcome() {
         // A nested callback's refusal cannot prove the returned outer operation
         // was rejected, nor can it supply the outer operation's revision.
         const Tracker::WriteOutcome typed{Tracker::CommitOutcome::NotCommitted,"other-document","other-revision"};
-        app.completionFault=[&]{throw ScreamSeq::Api::ApiError(-32003,"Typed completion",typed);};
+        const auto falseReceipt=std::make_shared<const ScreamSeq::Api::CompletedCall>(ScreamSeq::Api::CompletedCall{
+            "synchronizeView",app.view->session.documentId,app.view->session.revision,{{"nestedWrongResult",true}}});
+        app.completionFault=[&]{throw ScreamSeq::Api::ApiError(-32003,"Typed completion",typed,falseReceipt);};
         failed=false;
         try {app.documentOperation("synchronizeView",Json::object());}
         catch(const ScreamSeq::Api::ApiError &error) {
             failed=error.outcome&&error.outcome->state==Tracker::CommitOutcome::Unknown&&error.outcome->document.empty()&&error.outcome->revision.empty();
+            restoreCheck(error.completed&&error.completed!=falseReceipt&&error.completed->method=="synchronizeView"&&!error.completed->result.contains("nestedWrongResult"),
+                "Matching nested callback receipt replaced the original result");
         }
         restoreCheck(failed,"Nested completion refusal falsified the outer operation's outcome");
         bool rejected=false;
@@ -1054,6 +1060,7 @@ int wmain(int argc,wchar_t **argv) {
                 nativeDraftCensusRetainsRawOwners();std::cout<<"PASS draft census: real native raw fields, hidden/reparented owners and nested formula lifetimes\n";
                 mainAndTimingDraftCensus();std::cout<<"PASS draft census: Main nudge review and captured timing sequence\n";
                 importAndRecorderDraftCensus();std::cout<<"PASS draft census: recorder setup and actual Application hidden path repair ownership\n";
+                directRenderCompletionCensus();std::cout<<"PASS direct render: pending census, retained result, read-only review, one Undo and stale selection\n";
                 return;
             }
             nativeCompletionRetainsOutcome();std::cout<<"PASS native completion: real worker commit, classified error, readback and one Undo\n";

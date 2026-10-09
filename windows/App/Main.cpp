@@ -348,7 +348,7 @@ public:
             {"sampleDetail",sampleDetailWindow?sampleDetailWindow->snapshot():Json{{"visible",false}}},
             {"sampleRecording",sampleRecordingWindow?sampleRecordingWindow->snapshot():Json{{"visible",false}}},
             {"patternSampleRender",patternSampleRenderWindow?patternSampleRenderWindow->snapshot():Json{{"visible",false}}},
-            {"patternSampleRenderAction",{{"pending",directSampleRenderPending},{"target",directSampleRenderTarget},{"report",directSampleRenderReport}}},
+            {"patternSampleRenderAction",{{"pending",directSampleRenderPending},{"completion",directSampleRenderCompletion.snapshot()},{"target",directSampleRenderTarget},{"report",directSampleRenderReport}}},
             {"audition",auditionWindow?auditionWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
@@ -505,13 +505,18 @@ public:
     #include "SignalObservation.inc"
     Json documentOperation(const std::string &method,const Json &params) override {
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
-        if(busy||recoveryRestoring) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
+        if(busy||recoveryRestoring) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         if(method=="graph.signal.get"||method=="graph.signal.clear"||method=="graph.scope.get"||method=="graph.scope.watch"||method=="graph.listen.get"||method=="graph.listen.set")return signalObservationOperation(method,params);
+        return documentOperationWithOutcome(method,params).result;
+    }
+    ScreamSeq::Api::CompletedCall documentOperationWithOutcome(const std::string &method,const Json &params) {
+        if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        ScreamSeq::Api::CompletedCall call;call.method=method;
         bool completed=false;
         try {
-            auto result=await(controller->invoke(method,params));completed=true;
-            finishDocumentOperation(method,result);
-            return result;
+            call=await(controller->invokeCompleted(method,params));completed=true;
+            finishDocumentOperation(method,call.result);
+            return call;
         }
         catch(...) {
             // Repair presentation without replacing the worker's outcome with
@@ -525,15 +530,15 @@ public:
                 // An outcome from a later callback can describe its own work,
                 // not the worker operation that already returned. Do not
                 // transplant a rejection or another document's identity.
-                throw ScreamSeq::Api::ApiError(error.code,error.what(),Tracker::WriteOutcome{});
+                throw ScreamSeq::Api::ApiError(error.code,error.what(),Tracker::WriteOutcome{},std::make_shared<const ScreamSeq::Api::CompletedCall>(std::move(call)));
             }
             catch(const std::exception &error) {
                 if(!completed)throw;
-                throw ScreamSeq::Api::ApiError(-32003,std::string("Operation completed but native completion failed; read state before retrying. ")+error.what(),Tracker::WriteOutcome{});
+                throw ScreamSeq::Api::ApiError(-32003,std::string("Operation completed but native completion failed; read state before retrying. ")+error.what(),Tracker::WriteOutcome{},std::make_shared<const ScreamSeq::Api::CompletedCall>(std::move(call)));
             }
             catch(...) {
                 if(!completed)throw;
-                throw ScreamSeq::Api::ApiError(-32003,"Operation completed but native completion failed; read state before retrying.",Tracker::WriteOutcome{});
+                throw ScreamSeq::Api::ApiError(-32003,"Operation completed but native completion failed; read state before retrying.",Tracker::WriteOutcome{},std::make_shared<const ScreamSeq::Api::CompletedCall>(std::move(call)));
             }
         }
     }

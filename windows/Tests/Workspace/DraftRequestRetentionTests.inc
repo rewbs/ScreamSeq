@@ -76,16 +76,16 @@ void renderRequestRetention(HWND main){
     const auto state=host.registry.capture(target.document,target.revision);
     pendingObserved=method=="sample.renderSelection"&&state.drafts.size()==1&&state.drafts.front().pending;
     discardRefused=host.registry.authorize(state,true).status==Tracker::DocumentDeparture::Status::Pending;
-    if(reject)throw std::runtime_error("Fixture render refusal");
+    if(reject)throw ScreamSeq::Api::ApiError(-32003,"Fixture render refusal",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+    if(!params.value("dryRun",false))target.revision="r"+std::to_string(commits+2);
     return {{"sample",7},{"instrument",0}};
   };
   const auto committed=[&](const std::string &document,const Json &){
     if(document==target.document)++commits;
-    target.revision="r"+std::to_string(commits+1);
     if(newer)SetWindowTextW(GetDlgItem(owner->window(),6602),L"Newer name");
   };
   {
-    ScreamSeq::PatternSampleRenderWindow render(main,request,[&]{return target;},committed);owner=&render;ScreamSeq::Tests::ownGuiWindow(render.window());render.openAt(false,target);
+    ScreamSeq::PatternSampleRenderWindow render(main,request,[&]{return target;},committed,[&](const auto &method,const auto &params){auto result=request(method,params);return ScreamSeq::Api::CompletedCall{method,target.document,target.revision,std::move(result)};});owner=&render;ScreamSeq::Tests::ownGuiWindow(render.window());render.openAt(false,target);
     require(host.registry.capture(target.document,target.revision).drafts.empty(),"Clean render form must not require review");
     SetWindowTextW(GetDlgItem(render.window(),6602),L"Submitted name");SetWindowTextW(GetDlgItem(render.window(),6603),L"2.5");
     const auto draft=draftOf(render);

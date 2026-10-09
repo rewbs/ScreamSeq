@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "NativeWriteCompletion.hpp"
 #include <iomanip>
 #include <sstream>
 
@@ -16,6 +17,8 @@ private:
   enum:int {device=6501,channels,refresh,record,stop,keep,discard,name,output,close,discardSetup,
     heading=6550,deviceLabel,channelLabel,nameLabel,outputLabel,permissionLabel,takeLabel,statusLabel,helpLabel};
   Request request_;Context context_;Committed committed_;
+  NativeWriteCompletion::Write write_;NativeWriteCompletion completion_;
+  std::string completionTake_;
   Json devices_=Json::array(),takeState_=Json::object(),report_=Json::object();
   std::string selectedDevice_,document_,baseRevision_,take_,permission_;
   struct Input {unsigned first=0,count=1;};
@@ -28,8 +31,9 @@ private:
     // Takes have their own session guard. Name/output intent belongs to a song;
     // idle endpoint/channel choices are global capture configuration.
     const auto &captured=draft_?draftContext_:pending_?pendingContext_:draftContext_;
-    return describeDraft(captured.first,captured.second,Json::array({"sample-recording",take_,selectedDevice_,input_.first,input_.count}).dump(),generation_,draft_,pending_);
+    return describeDraft(captured.first,captured.second,Json::array({"sample-recording",take_,selectedDevice_,input_.first,input_.count}).dump(),generation_,draft_,pending_,!pending_&&completion_.retained());
   }
+  void requireResolved()const{require(!completion_.retained(),"Review the Keep result before changing the retained take or setup");}
   void requireSetupDocument()const{require(!draft_||draftContext_.first==context_().first,"Sample setup belongs to the previous song / Discard setup before recording into another song");}
   int choice(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
   bool capturing()const{return !take_.empty()&&takeState_.value("capturing",false);}
@@ -115,6 +119,7 @@ private:
     });
   }
   void begin(){
+    requireResolved();
     requireSetupDocument();
     require(take_.empty(),"Keep or discard the retained take before recording again");
     require(inputAvailable(),"Choose an available input and channel range");
@@ -128,8 +133,9 @@ private:
       if(!result.contains("error"))status(L"Recording / Stop retains the take / Close also stops the microphone");
     });
   }
-  void end(){require(!take_.empty(),"There is no retained take");perform([&]{accept(request_("sample.recording.stop",{{"take",take_}}));if(!takeState_.contains("error"))status(L"Take stopped / Keep adds a new sample with one Undo");});}
+  void end(){requireResolved();require(!take_.empty(),"There is no retained take");perform([&]{accept(request_("sample.recording.stop",{{"take",take_}}));if(!takeState_.contains("error"))status(L"Take stopped / Keep adds a new sample with one Undo");});}
   void commit(){
+    if(completion_.retained()){reviewCommit();return;}
     requireSetupDocument();
     require(!take_.empty()&&!capturing(),"Stop the take before keeping it");
     require(takeState_.value("frames",uint64_t(0))>0,"The take contains no audio frames");
@@ -137,16 +143,31 @@ private:
     const auto identity=take_,title=utf8(field(name));const bool instrument=choice(output)==1;const auto generation=generation_;const auto fields=raw();
     require(!title.empty()&&title.size()<=128,"Enter a sample name using 1–128 UTF-8 bytes");
     perform([&]{
-      auto result=request_("sample.recording.commit",{{"take",identity},{"name",title},{"createInstrument",instrument},{"expectedRevision",target.second},{"dryRun",false}});
-      report_=std::move(result);clearTake();
-      auto text=L"Created sample "+std::to_wstring(report_.at("sample").get<unsigned>());
-      if(const auto instrument=report_.value("instrument",0u))text+=L" + mapped instrument "+std::to_wstring(instrument);
-      status(text+L" / document Undo available");
-      committed_(target.first,report_);
-      baseline_=fields;draft_=generation!=generation_;
+      completionTake_=identity;
+      completion_.submit(write_,"sample.recording.commit",{{"take",identity},{"name",title},{"createInstrument",instrument},{"expectedRevision",target.second},{"dryRun",false}},target.first,generation,fields);
+      finishCommit();
     });
   }
-  void discardTake(){require(!take_.empty(),"There is no retained take");perform([&]{request_("sample.recording.discard",{{"take",take_}});clearTake();status(L"Take discarded / ready to record");});}
+  void finishCommit(){
+    const auto returned=completion_.returned();
+    require(bool(returned),"Keep outcome is still unknown / the take cannot be kept again until the operation is reconciled");
+    const auto &result=returned->result;
+    require(result.at("take")==completionTake_,"Keep result belongs to another take / retained result needs review");
+    auto text=L"Created sample "+std::to_wstring(result.at("sample").get<unsigned>());
+    if(const auto instrument=result.value("instrument",0u))text+=L" + mapped instrument "+std::to_wstring(instrument);
+    // A new take may have been created externally after this Keep. Read it,
+    // never clear/discard it to complete presentation of the original result.
+    const auto current=request_("sample.recording.get",Json::object());
+    require(current.at("take")!=completionTake_,"Committed result still has its original take / retained result needs review");
+    const auto now=context_();
+    if(now.first==returned->document&&now.second==returned->revision)committed_(returned->document,result);
+    else text+=L" / song changed since completion; selection left unchanged";
+    accept(current,true);report_=result;
+    baseline_=completion_.fields();draft_=generation_!=completion_.generation();
+    status(text+L" / result reviewed without repeating Keep");completion_.finish();completionTake_.clear();
+  }
+  void reviewCommit(){perform([&]{request_("synchronizeView",Json::object());finishCommit();});}
+  void discardTake(){requireResolved();require(!take_.empty(),"There is no retained take");perform([&]{request_("sample.recording.discard",{{"take",take_}});clearTake();status(L"Take discarded / ready to record");});}
   void action(int id,unsigned notification)override{
     if(setting_)return;
     if((id==name&&notification==EN_CHANGE)||(id==output&&notification==CBN_SELCHANGE)){
@@ -157,7 +178,7 @@ private:
     if(id==device&&notification==CBN_SELCHANGE){const auto index=choice(device);if(index>=0&&size_t(index)<devices_.size()){selectedDevice_=devices_[size_t(index)].at("id").get<std::string>();inputChoices(true);}return;}
     if(id==channels&&notification==CBN_SELCHANGE){const auto index=choice(channels);if(index>=0&&size_t(index)<inputs_.size())input_=inputs_[size_t(index)];return;}
     if(notification!=BN_CLICKED)return;
-    if(id==discardSetup){setting_=true;set(name,L"Recording");SendMessageW(controls_.at(output),CB_SETCURSEL,0,0);setting_=false;baseline_=raw();draft_=false;draftContext_=context_();++generation_;status(L"Sample name and output reset / retained take unchanged");return;}
+    if(id==discardSetup){requireResolved();setting_=true;set(name,L"Recording");SendMessageW(controls_.at(output),CB_SETCURSEL,0,0);setting_=false;baseline_=raw();draft_=false;draftContext_=context_();++generation_;status(L"Sample name and output reset / retained take unchanged");return;}
     if(id==refresh)loadDevices();else if(id==record)begin();else if(id==stop)end();else if(id==keep)commit();else if(id==discard)discardTake();else if(id==close)hide();
   }
   bool key(WPARAM value,bool,bool)override{
@@ -166,7 +187,7 @@ private:
     return false;
   }
   void timer(UINT_PTR id)override{
-    if(id!=3)return;KillTimer(window_,3);if(!visible()||take_.empty())return;if(pending_){schedule();return;}
+    if(id!=3)return;KillTimer(window_,3);if(!visible()||take_.empty()||completion_.retained())return;if(pending_){schedule();return;}
     try{perform([&]{accept(request_("sample.recording.get",{{"take",take_}}));});}
     catch(const Api::ApiError &e){
       if(e.code==-32001){try{loadTake();}catch(const Api::ApiError &next){if(next.code!=-32002)error(next);}catch(const std::exception &next){error(next);}}
@@ -181,19 +202,21 @@ private:
     place(nameLabel,18,180,90,20);place(name,18,204,w-272,27);place(outputLabel,w-240,180,222,20);place(output,w-240,204,222,180);
     place(takeLabel,18,250,w-36,50);place(helpLabel,18,332,w-36,46);place(statusLabel,18,388,w-36,std::max(48.f,h-446));
     place(record,18,h-46,92,28);place(stop,118,h-46,80,28);place(keep,206,h-46,110,28);place(discard,324,h-46,100,28);place(close,w-118,h-46,100,28);
-    for(int id:{device,channels,refresh})EnableWindow(controls_.at(id),!pending_&&take_.empty());
-    EnableWindow(controls_.at(record),!pending_&&take_.empty()&&inputAvailable());
+    for(int id:{device,channels,refresh})EnableWindow(controls_.at(id),!pending_&&!completion_.retained()&&take_.empty());
+    EnableWindow(controls_.at(record),!pending_&&!completion_.retained()&&take_.empty()&&inputAvailable());
     EnableWindow(controls_.at(stop),!pending_&&capturing());
-    EnableWindow(controls_.at(keep),!pending_&&!take_.empty()&&!capturing()&&sameDocument()&&takeState_.value("frames",uint64_t(0))>0);
-    EnableWindow(controls_.at(discard),!pending_&&!take_.empty());
+    set(keep,completion_.retained()?L"Review result":L"Keep take");
+    EnableWindow(controls_.at(keep),!pending_&&(completion_.retained()||(!take_.empty()&&!capturing()&&sameDocument()&&takeState_.value("frames",uint64_t(0))>0)));
+    EnableWindow(controls_.at(discard),!pending_&&!completion_.retained()&&!take_.empty());
     for(int id:{name,output,close,discardSetup})EnableWindow(controls_.at(id),!pending_);
+    EnableWindow(controls_.at(discardSetup),!pending_&&!completion_.retained());
   }
   void paint(RenderSurface &s)override{
     const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);s.fill(18,310,w-36,12,0x0c141c);
     const auto peak=std::clamp(takeState_.value("peak",0.0),0.0,1.0);s.fill(18,310,float(peak)*(w-36),12,takeState_.value("clipped",uint64_t(0))>0?0xe27a73:0x72dcc6);
   }
 public:
-  SampleRecordingWindow(HWND owner,Request request,Context context,Committed committed):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),committed_(std::move(committed)){
+  SampleRecordingWindow(HWND owner,Request request,Context context,Committed committed,NativeWriteCompletion::Write write):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),committed_(std::move(committed)),write_(std::move(write)){
     minimumWidth_=600;minimumHeight_=530;create(L"ScreamSeq.SampleRecording",L"Record a sample",660,560);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"RECORD A SAMPLE"},{deviceLabel,L"Input device"},{channelLabel,L"Input channels"},{nameLabel,L"Sample name"},{outputLabel,L"Keep as"},{permissionLabel,L""},{takeLabel,L""},{statusLabel,L""},{helpLabel,L"Record opens the selected microphone. No input monitoring.\nStop or Close retains the take; Keep adds it to the original song."}})label(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{record,L"Record"},{stop,L"Stop"},{keep,L"Keep take"},{discard,L"Discard take"},{close,L"Close"},{discardSetup,L"Discard setup"}})button(id,text);
@@ -203,14 +226,14 @@ public:
   }
   ~SampleRecordingWindow()override{ready_=false;if(window_)KillTimer(window_,3);}
   bool hasRetainedTake()const{return !take_.empty();}
-  void protectTake(const Json &value){require(!pending_,"Wait for the recording request before leaving this song");accept(value,true);protectTake();}
+  void protectTake(const Json &value){require(!pending_,"Wait for the recording request before leaving this song");requireResolved();accept(value,true);protectTake();}
   void protectTake(){show();status(capturing()?L"Stop, then Keep or Discard this take before leaving the song":L"Keep or Discard this take before leaving the song");layout();schedule();}
   void documentChanged(){if(ready_&&!pending_){describe();layout();requestPaint();}}
-  void openAt(){show();if(pending_)return;if(!loaded_)try{loadDevices();}catch(const std::exception &e){error(e);}try{loadTake();}catch(const std::exception &e){error(e);}describe();layout();schedule();}
+  void openAt(){show();if(pending_)return;if(completion_.retained()){status(L"Review the retained Keep result before recording again");layout();return;}if(!loaded_)try{loadDevices();}catch(const std::exception &e){error(e);}try{loadTake();}catch(const std::exception &e){error(e);}describe();layout();schedule();}
   void hide()override{
     if(pending_){status(L"Wait for the recording request to finish before closing");return;}
     if(capturing())end();KillTimer(window_,3);NativeToolWindow::hide();
   }
-  Json snapshot()const{Json inputs=Json::array();for(const auto &v:inputs_)inputs.push_back({{"firstChannel",v.first},{"channels",v.count}});return {{"visible",visible()},{"pending",pending_},{"draft",draft_},{"draftDocument",draftContext_.first},{"draftRevision",draftContext_.second},{"generation",generation_},{"document",document_},{"baseRevision",baseRevision_},{"take",take_},{"capturing",capturing()},{"staleDocument",!sameDocument()},{"device",selectedDevice_},{"devices",devices_},{"permission",permission_},{"firstChannel",input_.first},{"channels",input_.count},{"inputChoices",inputs},{"name",utf8(field(name))},{"createInstrument",choice(output)==1},{"state",takeState_},{"report",report_},{"status",utf8(status_)}};}
+  Json snapshot()const{Json inputs=Json::array();for(const auto &v:inputs_)inputs.push_back({{"firstChannel",v.first},{"channels",v.count}});return {{"visible",visible()},{"pending",pending_},{"completion",completion_.snapshot()},{"draft",draft_},{"draftDocument",draftContext_.first},{"draftRevision",draftContext_.second},{"generation",generation_},{"document",document_},{"baseRevision",baseRevision_},{"take",take_},{"capturing",capturing()},{"staleDocument",!sameDocument()},{"device",selectedDevice_},{"devices",devices_},{"permission",permission_},{"firstChannel",input_.first},{"channels",input_.count},{"inputChoices",inputs},{"name",utf8(field(name))},{"createInstrument",choice(output)==1},{"state",takeState_},{"report",report_},{"status",utf8(status_)}};}
 };
 }

@@ -33,4 +33,9 @@
             pluginDraftGeneration,pluginDraft,pluginPresetPending);},[this]{reviewMainDraft("plugins",pluginValue);});
         add("Graph recipe",[this]{return mainDraft(graphDocument,graphRevision,graphID,graphGeneration,
             graphDirty||graphFieldDirty||dragging==7,graphPending);},[this]{reviewMainDraft("graph",graphPropertyValue);});
+        add("Render selection result",[this]{
+            auto result=mainDraft(directSampleRenderTarget.value("documentId",std::string()),directSampleRenderTarget.value("expectedRevision",std::string()),
+                directSampleRenderTarget.dump(),directSampleRenderGeneration,false,directSampleRenderPending);
+            result.uncertain=!directSampleRenderPending&&directSampleRenderCompletion.retained();return result;
+        },[this]{reviewDirectSampleRender();});
     }

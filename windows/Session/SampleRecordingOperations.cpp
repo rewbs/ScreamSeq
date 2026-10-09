@@ -36,6 +36,8 @@ SampleRecordingOperations::Json SampleRecordingOperations::invoke(const std::str
     if(method=="sample.recording.stop")return state();Json discarded={{"take",take_},{"discarded",true}};capture_.reset();take_.clear();document_.clear();baseRevision_.clear();return discarded;
   }
   if(method=="sample.recording.commit") {
+    bool appending=false;
+    try {
     keys(p,{"take","name","createInstrument","dryRun","expectedRevision"});
     if(text(p,"expectedRevision",200)!=revision)throw Api::ApiError(-32001,"Song changed; take is retained. Read its current revision before adding");
     requireTake(p);
@@ -44,11 +46,19 @@ SampleRecordingOperations::Json SampleRecordingOperations::invoke(const std::str
     if(s.capturing)throw Api::ApiError(-32002,"Stop recording before adding the retained take");require(s.frames>0,"The microphone take is empty");
     capture_->stop(); // Join a limit/error-completed capture before borrowing PCM.
     Json result,identity={{"take",take_}};
+    appending=true;
     try{result=hooks_.append(capture_->pcm(),s.sampleRate,s.channels,name,instrument,dry);}
     catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
     catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
     result.get_ref<Json::object_t&>().merge(identity.get_ref<Json::object_t&>());
     if(!dry){capture_.reset();take_.clear();document_.clear();baseRevision_.clear();}return result;
+    }catch(const Api::ApiError &e){
+      // Before append, Keep has not changed the song or consumed the take.
+      // Once append starts, the controller owns commit classification: a
+      // callback can throw after publishing the document but before returning.
+      if(!appending)throw Api::ApiError(e.code,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+      throw;
+    }
   }
   throw Api::ApiError(-32601,"Unknown sample recording operation");
 }

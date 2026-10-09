@@ -142,3 +142,69 @@ void importAndRecorderDraftCensus() {
         restoreCheck(census(app).drafts.empty(),"Destroyed setup/path owners stayed registered");
     });
 }
+
+void directRenderCompletionCensus() {
+    using Status=Tracker::DocumentDeparture::Status;
+    withRestoreFixture([](RestoreApplication &app) {
+        const auto before=app.view->samples.size();
+        bool sawPending=false;
+        app.completionFault=[&]{
+            const auto state=census(app);const auto draft=namedDraft(state,"Render selection result");
+            sawPending=draft.pending&&!draft.uncertain&&draft.document==app.documentId;
+            restoreCheck(app.documentDrafts.authorize(state,true).status==Status::Pending,"Direct render allowed departure during native completion");
+            throw std::runtime_error("Injected direct render completion failure");
+        };
+        restoreRejected([&]{app.renderPatternSample(false);});
+        const auto retained=census(app);const auto draft=namedDraft(retained,"Render selection result");
+        restoreCheck(sawPending&&draft.uncertain&&!draft.pending&&app.view->samples.size()==before+1,
+            "Direct render lost pending ownership or its committed result");
+        restoreCheck(app.documentDrafts.authorize(retained,true).status==Status::Uncertain,"Direct render result was silently discardable");
+        const auto result=app.directSampleRenderCompletion.returned()->result;
+        const auto revision=app.view->session.revision;
+        const auto captured=app.directSampleRenderTarget;
+        const auto generation=app.directSampleRenderGeneration;
+        app.completionFault=[]{throw std::runtime_error("Injected review refresh failure");};
+        restoreRejected([&]{app.documentDrafts.review(draft.owner);});
+        restoreCheck(census(app).sameWork(retained)&&app.directSampleRenderCompletion.returned()->result==result,
+            "Failed read-only review erased or replaced the original render result");
+        // Choosing the other render command must review, not reinterpret the
+        // captured Sample request as a second instrument import.
+        app.renderPatternSample(true);
+        restoreCheck(!app.directSampleRenderCompletion.retained()&&census(app).drafts.empty()&&app.view->samples.size()==before+1&&
+            app.view->session.revision==revision&&app.directSampleRenderTarget==captured&&app.directSampleRenderGeneration==generation,
+            "Direct render retry wrote again or changed the captured operation");
+        restoreCheck(app.directSampleRenderReport==result,"Direct result review did not expose the original report");
+        app.documentOperation("history.undo",{{"expectedRevision",revision},{"domain","all"}});
+        restoreCheck(app.view->samples.size()==before,"Direct result review created an extra Undo entry");
+        app.documentOperation("history.redo",{{"expectedRevision",app.view->session.revision},{"domain","all"}});
+        restoreCheck(app.view->samples.size()==before+1,"Direct rendered sample did not survive Redo");
+
+        app.completionFault=[]{throw std::runtime_error("Injected second render completion failure");};
+        restoreRejected([&]{app.renderPatternSample(false);});
+        const auto original=app.directSampleRenderCompletion.returned();
+        app.documentOperation("document.patch",{{"expectedRevision",app.view->session.revision},{"title","Later song edit"}});
+        const auto current=app.view->session.revision;const auto selection=app.workspaceState.panel("samples").sample;
+        const auto sound=app.typingSoundId;
+        app.openPatternSampleRender(true);
+        restoreCheck(!app.patternSampleRenderWindow&&!app.directSampleRenderCompletion.retained()&&app.view->session.revision==current&&
+            app.view->samples.size()==before+2&&app.workspaceState.panel("samples").sample==selection&&app.typingSoundId==sound&&
+            app.directSampleRenderReport==original->result&&app.status.find(L"selection left unchanged")!=std::wstring::npos,
+            "Options bypassed unresolved direct render or stale review changed selection/history");
+
+        // Unknown without a worker receipt stays retained through all native
+        // entry points. This fake boundary intentionally supplies no result to
+        // infer; the real successful/faulted worker path is exercised above.
+        const auto target=app.directSampleRenderTarget;
+        restoreRejected([&]{app.directSampleRenderCompletion.submit([](const auto &,const auto &)->ScreamSeq::Api::CompletedCall{
+            throw ScreamSeq::Api::ApiError(-32003,"Unclassified render outcome",Tracker::WriteOutcome{});
+        },"sample.renderSelection",target,app.documentId,++app.directSampleRenderGeneration,target);});
+        const auto unknown=census(app);const auto unchanged=songState(app);
+        for(int command:{patternRenderSampleCommand,patternRenderInstrumentCommand,patternRenderOptionsCommand}){
+            // Invoke the actual entry functions; Application::command catches
+            // errors to status, which would hide accidental acceptance here.
+            restoreRejected([&]{if(command==patternRenderOptionsCommand)app.openPatternSampleRender(false);else app.renderPatternSample(command==patternRenderInstrumentCommand);});
+            restoreCheck(census(app).sameWork(unknown)&&songState(app)==unchanged&&!app.patternSampleRenderWindow,
+                "Unknown direct result allowed another render or lost its owner");
+        }
+    });
+}

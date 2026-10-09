@@ -160,9 +160,9 @@ class NativeToolWindow {
   }
 protected:
   static Tracker::DocumentDraft describeDraft(std::string document,std::string revision,std::string target,
-      uint64_t generation,bool dirty,bool pending=false) {
+      uint64_t generation,bool dirty,bool pending=false,bool uncertain=false) {
     Tracker::DocumentDraft result;result.document=std::move(document);result.revision=std::move(revision);
-    result.target=std::move(target);result.generation=generation;result.dirty=dirty;result.pending=pending;return result;
+    result.target=std::move(target);result.generation=generation;result.dirty=dirty;result.pending=pending;result.uncertain=uncertain;return result;
   }
   const std::optional<Tracker::DocumentDraft> &parentDraftIdentity()const noexcept{return parentDraftIdentity_;}
   HWND owner_{},window_{};

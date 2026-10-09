@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <deque>
 #include <optional>
+#include <memory>
 #include <stdexcept>
 #include <set>
 #include <string>
@@ -30,11 +31,19 @@ inline bool validEnvelope(const Json &q) {
     && q.contains("id") && bounded(q["id"]) && q.contains("method") && bounded(q["method"])
     && q.contains("params") && q["params"].is_object();
 }
+// Internal native completion receipt. This is not added to the wire error or
+// inferred from a snapshot: only the operation which returned may supply it.
+struct CompletedCall {
+  std::string method,document,revision;
+  Json result;
+};
 struct ApiError : std::runtime_error {
   int code;
   std::optional<Tracker::WriteOutcome> outcome;
-  ApiError(int c, const std::string &message, std::optional<Tracker::WriteOutcome> effect = {})
-    : std::runtime_error(message), code(c), outcome(std::move(effect)) {}
+  std::shared_ptr<const CompletedCall> completed;
+  ApiError(int c, const std::string &message, std::optional<Tracker::WriteOutcome> effect = {},
+      std::shared_ptr<const CompletedCall> returned = {})
+    : std::runtime_error(message), code(c), outcome(std::move(effect)),completed(std::move(returned)) {}
 };
 inline Json outcomeData(const Tracker::WriteOutcome &outcome) {
   const char *state = "unknown";

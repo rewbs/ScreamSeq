@@ -143,7 +143,9 @@ class DocumentController {
   std::shared_ptr<DocumentView> buildView(Tracker::Document &document,const Project::ProjectState &project,uint64_t generation);
   void install(std::shared_ptr<const DocumentView> next);
   void publish();
-  void publishCommitted();
+  void publishCommitted(const std::string &method,const Json &result);
+  std::shared_ptr<const Api::CompletedCall> completedCall_; // Worker-owned, scoped to one invocation.
+  Api::CompletedCall invokeOperation(const std::string &method,Json params);
   void preflightGrowth(const std::string &method,const Json &params);
   void validateAssetCandidate(const Tracker::Document &candidate) const;
   void validateGraphViewGrowth(const Tracker::NativeSong &candidate) const;
@@ -178,6 +180,7 @@ public:
   bool publicationPending() const {return publicationPending_.load();}
   std::shared_ptr<const DocumentView> view();
   std::future<Json> invoke(std::string method,Json params);
+  std::future<Api::CompletedCall> invokeCompleted(std::string method,Json params);
   std::future<std::shared_ptr<const RecoverySnapshot>> captureRecovery(std::string expectedRevision);
   // Parse, validate and allocate the complete next view before stopping or
   // replacing anything. A recovered document has a new identity, no file path,

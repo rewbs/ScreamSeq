@@ -1,6 +1,30 @@
 # Parity implementation progress
 
-Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](current-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
+Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](followup-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
+
+## P0b.1 native completion retention and direct render
+
+Implementation continuation from planning commit `a2e14eccd`. This completes and qualifies the pre-existing known-result candidate and extends it to the one-click selection-render commands. It is a partial safety slice, not complete P0b.1, final departure admission or Windows parity.
+
+- `CompletedCall` retains method/document/revision/result from the worker, before an interleaved later edit can change UI state. Controller postcommit publication errors and native completion failures preserve the original result; nested callbacks cannot replace it with a different receipt. The internal receipt is not serialized into the public API error.
+- `NativeWriteCompletion` retains the submitted target, generation, raw fields and known result. Render/import/Keep owners expose Review after completion failure and do not repeat the write. Generic or unknown errors without a result remain retained. Typed NotCommitted/NoChange can release the submission; error numbers or unchanged song revision alone cannot prove rejection.
+- `SampleRecordingWindow` now accepts the typed-write callback, resolving the earlier caller/constructor mismatch. Keep verifies its take identity, reads current take state without consuming a newer external take, preserves later name/output intent and avoids a stale sample reveal. Start/Stop/Discard have separate effects and are not declared reconciled by this change.
+- The direct Sample/Instrument render actions in `SampleCaptureIntegration.inc` now use the same completion helper and enter `DocumentDrafts.inc` as pending/uncertain owners. Their command-palette and context-menu labels expose Review when needed. Switching to the other render command or Render options reviews the original result instead of starting another import. A newer document/revision prevents stale selection changes. The normal Render options owner also blocks a direct-command bypass while unresolved.
+- `Workspace/NativeWriteCompletionTests.inc` exercises postcommit callback and preview-stop faults, mismatched identity, unknown outcomes, newer raw fields and externally replaced takes. `DocumentDraftCensusTests.inc` adds actual worker direct-render failure, registry review, failed read-only review, cross-command retry, exact result retention and one-step Undo/Redo. Actual-app cases cover both direct destinations and the retained options window with exact sample PCM after save/reopen.
+
+Validation used dedicated ARM64 Release outputs and owned private desktops. `bin/parity-evidence/p0b-direct-result-receipt.json` records 1,836 matching frozen source/dependency hashes, seven executables, both CMake caches, compiler hashes and 22 retained logs. No musician app was present at preflight/final checks; no device capture or audio-default change occurred. The source changes are Windows adapters/owners/tests; no project version, shared DSP, Mac UI or device callback implementation changed.
+
+| Final log under `bin/parity-evidence/` | Result and boundary |
+|---|---|
+| `p0b-direct-result-build.log`, `p0b-direct-result-api-build.log` | App, workspace, native tool, controller and sample-recording targets plus standalone API built successfully |
+| `p0b-direct-result-census-tests.log`, `p0b-direct-result-census-detail.log` | Expanded real-owner census passed, 6.34 s; direct-render pending/uncertain retention, failed Review, cross-command retry, stale-selection protection and one Undo |
+| `p0b-direct-result-native-tests.log`, `p0b-direct-result-native-detail.log` | 29/29 passed, 101.92 s: full workspace restore, native tool, 26 controller/fixture entries and sample recording |
+| `p0b-direct-result-api-tests.log`, `p0b-direct-result-api-detail.log` | 2/2 passed, 4.43 s: actual protocol/outcome and bounded replay-cache cases |
+| `p0b-direct-result-app-tests.log` | 8/8 passed, 5.302 s: direct Sample/Instrument and retained Render options, exact sample/PCM save/reopen, Undo/Redo, multisample import/rebase/retention, context and Activity/recorded points |
+
+Earlier `p0b-native-result-*` logs are retained as intermediate evidence: native-tool behavioral cases initially reached a strict desktop-close failure, then passed after moving to the existing private-process harness; app setup initially lacked TMPDIR; an incorrect CTest filter correctly failed on zero tests. The final run above passed without relaxing assertions, cleanup checks or private-child deadlines. The planning receipt remains a historical read-only snapshot; it is not rewritten as implementation evidence.
+
+**Remaining:** domain reconciliation/recovery when no authoritative result exists, uncertain Start/Stop/Discard and plugin repair, remaining owner audit, stable FX identity/unavailable nudge review, final Open/API/recovery/Close/session-end admission and its input lease. The new direct owner is visible to the registry, but Application still does not consult that registry for final departure. Windows x64/Mac gates, reciprocal supplied fixtures, foreground accessibility and physical devices remain open. Full P0c–P8 scope is unchanged.
 
 ## P0b.1 outcome boundaries — partial implementation
 
