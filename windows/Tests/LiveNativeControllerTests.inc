@@ -115,9 +115,20 @@ void liveNativeControllerTests() {
   need(playback->render(pcm.data(),512),"Live Undo plan failed render");
   invoke(c,"history.redo",{{"domain","document"}});need(active&&stops==beforeStops,"Live native Redo stopped playback");
   need(playback->render(pcm.data(),512),"Live Redo plan failed render");
-  const auto retained=c.view();rejected=false;
-  try{invoke(c,"graph.node.add",{{"graph",graph},{"kind","plugin"},{"slot",0},{"insertAfter",input}});}catch(const Api::ApiError &e){rejected=e.code==-32002;}
-  need(rejected&&c.view()==retained&&active&&stops==beforeStops,"Unsupported live processor addition consumed history or stopped playback");
+  // Recipe topology is supported by prepared graph controls. Refusal must
+  // remain atomic, but a valid addition must not require stopped playback.
+  const auto retained=c.view();const auto originalGraph=call(c,"graph.get",Json::object());rejected=false;refuse=true;
+  const auto addProcessor=[&]{return invoke(c,"graph.node.add",{{"graph",graph},{"kind","plugin"},{"slot",0},{"insertAfter",input}});};
+  try{addProcessor();}catch(const Api::ApiError &e){rejected=e.code==-32002;}refuse=false;
+  need(rejected&&c.view()==retained&&call(c,"graph.get",Json::object())==originalGraph&&active&&stops==beforeStops,
+    "Refused live processor addition consumed history or stopped playback");
+  const auto addedNode=addProcessor().at("node"),addedGraph=call(c,"graph.get",Json::object());
+  need(addedNode!=node&&addedGraph!=originalGraph&&active&&stops==beforeStops,"Supported live processor addition did not publish");
+  const auto settle=[&]{for(unsigned i=0;i<32;++i)need(playback->render(pcm.data(),512),"Live topology transition failed rendering");};settle();
+  invoke(c,"history.undo",{{"domain","all"}});settle();
+  need(call(c,"graph.get",Json::object())==originalGraph&&active&&stops==beforeStops,"Live processor Undo lost the original graph or stopped playback");
+  invoke(c,"history.redo",{{"domain","all"}});settle();
+  need(call(c,"graph.get",Json::object())==addedGraph&&active&&stops==beforeStops,"Live processor Redo lost stable identity or stopped playback");
   // A bank's metadata-only edits and their chronological history must not
   // consume a graph publication, even with an actual prepared graph playing.
   active=false;
@@ -139,7 +150,7 @@ void liveNativeControllerTests() {
   invoke(c,"history.undo",{{"domain","all"}});need(readBank()==renamedBank,"One unlink Undo lost bank binding");
   invoke(c,"history.redo",{{"domain","all"}});need(readBank()==unlinkedBank,"One unlink Redo changed retained envelope");
   need(active&&stops==bankStops&&publishes==bankPublishes,"Bank metadata edits or Undo/Redo stopped or published audio");
-  std::cout<<"PASS prepared native dry/no-op/refusal/epoch/Undo/Redo and unsupported active topology preservation\n";
+  std::cout<<"PASS prepared native dry/no-op/refusal/epoch/Undo/Redo and live topology admission/history\n";
   std::cout<<"PASS bank rename/link metadata edits and chronological Undo/Redo preserve active playback without publication\n";
   livePatternAutomationControllerTests();
 }

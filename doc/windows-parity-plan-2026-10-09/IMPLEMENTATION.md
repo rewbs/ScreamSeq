@@ -1,6 +1,17 @@
 # Parity implementation progress
 
-The active objective is implementation of the **entire** [reviewed parity plan](README.md). This receipt does not replace or narrow it. The earlier planning-only review is complete; implementation resumes under the explicit implementation goal. P0a is still being qualified. P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.
+Implementation has resumed under the active user goal, “Go ahead with the implementation as per the latest plan.” The preceding [planning review](review-refresh.md) was documentation-only; its provenance and observations remain historical. The complete scope is the [reviewed parity plan](README.md). P0a is not fully qualified or merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.
+
+## Resumed P0a: exposed Windows worker failures
+
+The original CI runs are terminal failures: both Mac jobs reached the already-repaired Swift expression failure, while Windows x64 compiled and passed 60 of 62 worker checks. The two failures were reproduced in the isolated local ARM64 build before editing:
+
+- `document-controller-live-graph-publication`: a full prepared graph-control queue escaped as `std::runtime_error`, yielding the generic engine error instead of guarded `-32002`. The native preparation boundary now translates host preparation exceptions consistently with rack preparation. It does not alter queue budgets, publication ordering, audio, history or accepted model state. Existing full-queue, bypass, Undo/Redo and persistence assertions remain intact.
+- `document-controller-live-native`: the test still expected a valid processor addition to be unsupported. The current shared implementation supports prepared live recipe topology. The replacement case explicitly refuses publication and asserts unchanged exact graph/view/history/transport, then accepts the same operation and verifies rendered transition, one Undo and one Redo with exact graph/stable-identity restoration. It does not remove rejection coverage.
+
+After the repair, all four focused publication/native cases passed (plus their automatic scratch-directory setup), then all 25 `document-controller-*` CTest entries passed in 14.61 seconds. This covers worker/model behavior with the real prepared render chain, not a physical device or foreground UI. Only `document-controller-tests` was rebuilt; no musician process was present and no audio defaults were changed. One intermediate test compilation exposed a mixed-type `auto` declaration; it was corrected before the successful rebuild.
+
+Evidence: `bin/parity-evidence/p0-exposed-worker-before.log`, `p0-exposed-worker-build.log`, `p0-exposed-worker-after.log`, `p0-controller-regression.log`. Current ARM64 Release `document-controller-tests.exe` SHA-256: `9efb29082d42cccc9566bf66bed1c1a5bd2d9fa178f112efe1f0bc142b42cb59`. The older hash below remains the earlier receipt. Both-platform CI must still qualify the final candidate before P0a integration.
 
 ## P0a candidate
 

@@ -453,7 +453,10 @@ std::function<void()> DocumentController::prepareNativeUpdate(const Tracker::Nat
   if(!feedback.playing&&!feedback.audioActive)return [this]{onMain(stop_);};
   auto *owner=playback_.get();
   if(!owner||playbackDocumentGeneration_!=generation_||!playbackHooks_.publishNativeUpdate)throw Api::ApiError(-32002,"Stop playback and preview notes for this edit; active playback has been preserved");
-  std::shared_ptr<HostedProjectPlayback::PreparedNativeUpdate> prepared=owner->prepareNativeUpdate(before,next);
+  std::shared_ptr<HostedProjectPlayback::PreparedNativeUpdate> prepared;
+  try{prepared=owner->prepareNativeUpdate(before,next);}
+  catch(const Api::ApiError &){throw;}
+  catch(const std::exception &e){throw Api::ApiError(-32002,std::string("Native update preparation failed; playback was preserved: ")+e.what());}
   if(!prepared)throw Api::ApiError(-32002,"This edit needs stopped playback; active playback has been preserved");
   return [this,owner,prepared=std::move(prepared),generation=feedback.generation]{
     bool accepted=false;onMain([&]{

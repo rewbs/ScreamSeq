@@ -10,13 +10,20 @@
     "scope": "Planning documents only; no product edits, application launches, builds, tests, workflow dispatches, branch changes, merges or process control in this review pass",
     "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
     "checkout_branch": "codex/windows-parity-p0",
-    "checkout_head": "605c7c688e8fb5e3876b1b086ea6b4f1a1e17309",
+    "checkout_head": "61a28b4892b89e6c1e0445dd3b16f975fd222c9e",
     "clean_at_start": true,
-    "existing_candidate_product_test_files": 7,
-    "candidate_status": "Source inspected; not a merged main milestone; runtime/build results not qualified by this review",
+    "existing_candidate_product_test_files": 8,
+    "candidate_status": "Existing source and retained logs reviewed; no builds/tests run in this planning pass; not merged to main or fully qualified",
     "input_hashes_rechecked": true,
     "notes": "review-refresh.md",
-    "historical_checkout_head_note": "The top-level checkout_head records initial discovery. Use review_refresh.checkout_head for this review's actual starting checkout."
+    "historical_checkout_head_note": "The top-level checkout_head records initial discovery. Use review_refresh.checkout_head for this review's actual starting checkout.",
+    "remote_head_read_utc": "2026-10-09; rechecked during this review",
+    "additional_findings": [
+      "F28: recorded automation already has prepared live publication and history on both platforms; corrected stopped-only acceptance",
+      "Existing branch adds Swift menu type-check workaround and percent-display expectation with exact raw-value protection",
+      "Peer proposal columns remain reference proposals, subordinate to integrated acceptance and corrections"
+    ],
+    "handoff": "handoff-details.md"
   },
   "archive": "~/Downloads/screamseq-mac-ui-reference-2026-10-09.zip",
   "archive_sha256": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81",

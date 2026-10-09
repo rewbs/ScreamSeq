@@ -1,6 +1,6 @@
 # Commit pinned source map
 
-All links below point to inspected main `ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`. The review-refresh checkout is `605c7c688`, with a separate seven-file P0a candidate; use these pinned links for baseline line references and [review-refresh.md](review-refresh.md) for that delta. New module names in the plan are proposals.
+All links below point to inspected main `ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`. The review-refresh checkout is `61a28b489`, with a separate eight-file product/test P0a candidate; use these pinned links for baseline line references and [review-refresh.md](review-refresh.md) for that delta. New module names in the plan are proposals.
 
 | Source | SHA-256 of inspected Git archive bytes |
 |---|---|

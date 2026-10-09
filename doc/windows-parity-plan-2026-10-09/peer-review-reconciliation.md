@@ -74,6 +74,8 @@ The reviewer also correctly identified existing Windows strengths: retained targ
 
 The peer's invalid-inline-formula autosave claim, stopped activity list/refresh behavior, context-specific command gaps, exact visual contrast values, float placement persistence and pin shortcut scope remain explicit review/runtime leads where not independently traced end to end. The row reconciliation keeps their proposed checks without asserting that all are confirmed defects.
 
+The latest review also corrected the integrated plan itself: recorded-automation point edits are not stopped-only. Both native session adapters have prepared live timeline publication and history paths; `windows/Tests/LiveGraphPublicationTests.inc` already contains a targeted worker scenario. The Activity panel's initial prepared-copy list can limit that particular entry point while stopped, but saved point reads and the separate Absolute Automation editor have a different path. A12 now tests stopped access, supported live edits and atomic queue/refusal behavior separately from manual gesture recording. See [handoff details](handoff-details.md) for exact source and candidate evidence.
+
 ## Sequence and decisions
 
 **Adopted sequence change:** P0a green builds/take protection → P0b safety and P0c typed conformance/harness → P1 Mixer → P2 tracks → domain slices on shared main. UI foundations may move earlier when independent, but a universal theme/docking/SessionCore rewrite is not a prerequisite to every feature. Mac regression protection is included in each shared slice and the reciprocal final gate.
