@@ -2,6 +2,46 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## Standing build cadence (user instruction)
+
+From this checkpoint onward, batch related code and test changes before building
+or executing tests. Aim for at most one consolidated build cycle per hour. Do not
+run a build for each owner, control, small edit or audit finding. Schedule required
+platform/target builds together at a source-freeze checkpoint, reuse valid evidence,
+and repeat only checks invalidated by changes or unresolved failures. Source audit,
+implementation and fixture preparation continue between checkpoints. The cadence
+does not waive necessary tests or authorize a narrower parity result.
+
+## Closure candidate preparation (not yet built or tested)
+
+Prepared C4 single-asset completion changes in AssetOperations and DocumentController:
+sample.import, instrument.import and both instrument.create forms stage exact result
+receipts before Stop/commit and publish after successful adoption. Mapped instrument
+creation now adopts a validated prepared candidate. Related test edits cover prepared
+allocation/Stop failures, exact results, Undo/Redo, unchanged replacements, initial and
+existing instrument collections, real worker publication loss and NotCommitted Stop
+refusal. These edits are uncompiled and untested; they are not a qualified milestone.
+
+Prepared C5 scheduling changes as part of the grouped candidate: default workspace
+execution no longer repeats sample readback, sample mutation, instrument creation,
+preset and generic completion cases already assigned to named groups. Direct render
+census runs in receipts rather than both receipts and drafts. Windows CI explicitly
+selects all six registered workspace groups plus its existing precise-note and graph-
+curve groups. No scenario body, assertion or deadline changed. These changes have
+not been built, tested or qualified; they await the C1–C4 source freeze and C6 gate.
+
+## Remaining P0b closure checklist
+
+[The finite closure checkpoint](P0B-CLOSURE.md) records the current owner census,
+confirmed result/draft gaps, exact source boundaries, grouped acceptance cases and
+integration gate. It supersedes the open-ended “next owner audit” instructions in
+older entries below. The verified inventory is 29 native tool classes (24 draft
+summaries) and eight Main registrations. C1–C4 form one grouped implementation
+candidate; C5 prepares non-overlapping test/CI scheduling; C6 qualifies the frozen
+candidate. The checkpoint and standing cadence were prepared without any build,
+test, application launch or device operation. No new product qualification is
+claimed by this documentation checkpoint.
+
 ## Execution adjustment: close P0b in cohesive batches
 
 The user asked to accelerate progress while P0b is still open. Stop treating each
