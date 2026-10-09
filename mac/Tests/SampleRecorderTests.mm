@@ -1,4 +1,5 @@
 #include "../Audio/SampleRecorder.hpp"
+#include "../Audio/CaptureEndMonitor.hpp"
 #include "GraphRealtimeAudit.hpp"
 #include <algorithm>
 #include <array>
@@ -14,7 +15,40 @@ template<typename F> static void rejects(F run, const char *message) {
   bool rejected = false; try { run(); } catch(const std::exception &) { rejected = true; }
   check(rejected, message);
 }
+static void monitorChecks() {
+  auto waitFor = [](const std::atomic<bool> &value) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while(!value.load() && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+    check(value.load(), "Capture end monitor did not respond within two seconds");
+  };
+  std::atomic<bool> capturing{true}, ended{false};
+  CaptureEndMonitor monitor;
+  monitor.stop(); // Partial setup and repeated teardown need no worker.
+  monitor.start([&] { return capturing.load(); }, [&] { ended = true; });
+  monitor.stop(); monitor.stop();
+  check(!ended, "Explicit owner stop must not call the autonomous end action");
+  // A previous stop request must not poison a restarted limit/device-loss run.
+  for(unsigned run = 0; run != 2; ++run) {
+    capturing = true; ended = false;
+    monitor.start([&] { return capturing.load(); }, [&] { ended = true; });
+    capturing = false;
+    waitFor(ended); monitor.stop();
+  }
+  std::atomic<bool> entered{false}, finished{false};
+  auto finish = [&] { entered = true; std::this_thread::sleep_for(std::chrono::milliseconds(25)); finished = true; };
+  monitor.start([] { return false; }, finish);
+  waitFor(entered); monitor.stop();
+  check(finished, "Explicit stop must join an already-entered device stop before disposal");
+  entered = false; finished = false;
+  {
+    CaptureEndMonitor owned;
+    owned.start([] { return false; }, finish);
+    waitFor(entered);
+  }
+  check(finished, "Destructor must join the autonomous device stop before owner teardown");
+}
 int main() { try {
+  monitorChecks();
   using End = SampleCaptureBuffer::End;
   SampleCaptureBuffer buffer;
   check(!buffer.reading().capturing && buffer.pcm().empty(), "Idle recorder contains no take");

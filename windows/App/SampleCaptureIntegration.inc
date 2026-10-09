@@ -37,13 +37,22 @@
         ensureSampleRecordingWindow();
         sampleRecordingWindow->openAt();
     }
-    bool protectRecordingTake(){
+    bool protectSampleRecordingTake(){
         Json state;
         try{state=documentOperation("sample.recording.get",Json::object());}
         catch(...){if(sampleRecordingWindow&&sampleRecordingWindow->hasRetainedTake()){recordingTakeKnown=true;sampleRecordingWindow->protectTake();return false;}throw;}
         recordingTakeKnown=!state.at("take").is_null()&&state.at("take")!="";if(!recordingTakeKnown)return true;
         ensureSampleRecordingWindow();sampleRecordingWindow->protectTake(state);
         status=L"Keep or Discard the microphone take before leaving this song";frameRequested=true;return false;
+    }
+    bool protectRecordingTake(){
+        // Each session owns its take independently. Show one review at a time;
+        // resolving it must never allow the other take to be discarded.
+        if(!protectMidiRecordingTake())return false;
+        if(!protectSampleRecordingTake())return false;
+        // Reading sample state pumps UI/API messages on the document worker
+        // boundary, so MIDI capture may have begun since the first check.
+        return protectMidiRecordingTake();
     }
     ScreamSeq::PatternSampleRenderWindow::Target patternSampleTarget()const{
         const auto s=selection();return {documentId,view->session.revision,patternIndex,s.at("startRow").get<unsigned>(),s.at("endRow").get<unsigned>(),s.at("startChannel").get<unsigned>(),s.at("endChannel").get<unsigned>()};

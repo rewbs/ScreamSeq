@@ -794,7 +794,7 @@ public:
 		frameRequested=true;
 		try {
 			status=L"Not closed / "+reason;
-			if(recordingTakeKnown||(sampleRecordingWindow&&sampleRecordingWindow->hasRetainedTake()))return false;
+			if(hasRecordingTake()||recordingTakeKnown||(sampleRecordingWindow&&sampleRecordingWindow->hasRetainedTake()))return false;
 			// The song is known to be dirty and its save (or prompt) failed:
 			// keep it. Closing again offers Save/Discard/Cancel once more.
 			if(unsavedChecked) return false;

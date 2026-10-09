@@ -65,10 +65,21 @@ struct RestoreApplication final:Application {
     std::promise<RestoreJson> *inputCompletion=nullptr;
     unsigned dispatchedInput=0;
     bool pumpOrdinaryReads=false;
+    std::optional<Json> sampleGuardState;
+    bool sampleGuardFails=false;
+    std::function<void()> duringSampleGuard;
 
     explicit RestoreApplication(const std::filesystem::path &folder)
         :Application({},true,folder/L"envelope-catalogue.json",folder/L"plugin-library.json"){}
     Json documentOperation(const std::string &method,const Json &params)override {
+        if(method=="sample.recording.get"&&sampleGuardState) {
+            // Only the device-backed sample read is substituted. The aggregate
+            // Application guard, native review windows and MIDI worker are real.
+            const auto result=*sampleGuardState;
+            if(auto action=std::exchange(duringSampleGuard,{}))action();
+            if(sampleGuardFails)throw ScreamSeq::Api::ApiError(-32003,"Owned sample-state read failure");
+            return result;
+        }
         ordinaryReads.push_back(method);auto result=Application::documentOperation(method,params);if(pumpOrdinaryReads)pumpInputAfterRead(method);return result;
     }
     Json workspacePreparationRead(const std::string &method,const Json &params)override {
@@ -902,6 +913,43 @@ void provenanceNavigationUsesCapturedTargets() {
 }
 }
 
+static void retainedTakesProtectLeavingDocument() {
+    using Json=RestoreJson;
+    withRestoreFixture([](RestoreApplication &app) {
+        restoreCheck(app.protectRecordingTake(),"No takes must allow the leaving-document guard");
+        const auto revision=app.view->session.revision;
+        const auto midi=app.documentOperation("recording.start",{{"expectedRevision",revision},{"channels",Json::array({0})},{"instrument",1}}).at("take");
+        restoreCheck(!app.protectRecordingTake()&&!app.canClose(),"MIDI-only take must block leaving/closing");
+        app.sampleGuardState=Json{{"take","owned-sample"},{"documentId",app.documentId},{"baseRevision",revision},
+            {"device","owned-input"},{"firstChannel",0},{"channels",1},{"capturing",false},{"frames",32},{"sampleRate",48000}};
+        restoreCheck(!app.protectRecordingTake(),"Both takes must remain protected");
+        restoreCheck(app.hasRecordingTake()&&app.sampleGuardState->at("take")=="owned-sample","Guard must not consume either take");
+        app.documentOperation("recording.discard",{{"expectedRevision",app.view->session.revision},{"take",midi}});
+        restoreCheck(!app.protectRecordingTake()&&app.sampleRecordingWindow&&app.sampleRecordingWindow->hasRetainedTake(),
+            "Resolving MIDI must reveal and retain the microphone take");
+        restoreCheck(!app.saveFile(),"Microphone-only take must block Save before opening a chooser");
+        app.openFile();
+        restoreCheck(!app.canClose()&&app.view->session.revision==revision,"Open/Close must not replace the song with a microphone take");
+        app.sampleGuardFails=true;
+        restoreCheck(!app.canClose()&&app.sampleRecordingWindow->hasRetainedTake(),"Read failure must preserve the last known microphone take");
+        app.sampleRecordingWindow.reset();
+    });
+    withRestoreFixture([](RestoreApplication &app) {
+        app.sampleGuardState=Json{{"take",""}};
+        app.duringSampleGuard=[&] {
+            app.documentOperation("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",Json::array({0})},{"instrument",1}});
+        };
+        restoreCheck(!app.protectRecordingTake()&&app.hasRecordingTake(),"MIDI begun while sample read pumps must be rechecked");
+        const auto midi=app.view->recording.at("take");
+        app.documentOperation("recording.discard",{{"expectedRevision",app.view->session.revision},{"take",midi}});
+        app.duringSampleGuard=[&] {
+            app.documentOperation("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",Json::array({0})},{"instrument",1}});
+        };
+        app.sampleGuardFails=true;
+        restoreCheck(!app.canClose()&&app.hasRecordingTake(),"Failed sample read after MIDI start must not offer Close anyway");
+    });
+}
+
 int wmain(int argc,wchar_t **argv) {
     try {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -909,6 +957,7 @@ int wmain(int argc,wchar_t **argv) {
             const auto initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);ScreamSeq::check(initialized,"Initialize restore test COM");
             struct Com {~Com(){CoUninitialize();}} com;
             INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_LISTVIEW_CLASSES};restoreCheck(InitCommonControlsEx(&controls)!=FALSE,"Initialize restore native lists");
+            retainedTakesProtectLeavingDocument();std::cout<<"PASS take protection: MIDI, microphone, both, read failure and reentrant input\n";
             firstRestoreMatchesOrdinaryOpen();std::cout<<"PASS first restore: independent Notes inspector/native target and FX binding equivalence\n";
             requiredReadFailuresAreAtomic();std::cout<<"PASS required reads: errors and malformed Notes/Graph/Mixer are atomic\n";
             secondHiddenEditorFailureIsAtomic();std::cout<<"PASS all-before-any: second hidden editor failure and normal adopted callbacks\n";

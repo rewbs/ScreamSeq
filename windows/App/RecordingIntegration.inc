@@ -244,7 +244,7 @@
         if(busy||midiBusy||midiServicing){recordingFinishRequested=recordingTarget();stop();return;}
         finishRecordingTake(view->recording.at("take"),false);
     }
-    bool protectRecordingTake() {
+    bool protectMidiRecordingTake() {
         if(!hasRecordingTake())return true;
         openMidiRecording();recordingError="Finish or discard the retained take before saving or leaving this song";
         status=wide(recordingError);updateRecordingWindow();return false;
