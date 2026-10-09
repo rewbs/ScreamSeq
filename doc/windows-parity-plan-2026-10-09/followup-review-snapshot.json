@@ -1,0 +1,122 @@
+{
+  "reviewed_utc": "2026-10-09T14:09:50.339495+00:00",
+  "scope": "Planning only. Source, images, fixtures and existing logs inspected; no product edits, builds, tests or application launches. This is an inspection receipt, not execution qualification.",
+  "reference_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+  "remote_main": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
+  "checkout": "be0b5e177c5b8f5f11a2ff26500b1d42e2242a34",
+  "branch": "codex/windows-parity-safety",
+  "inputs": {
+    "screamseq-mac-ui-reference-2026-10-09.zip": {
+      "bytes": 22362982,
+      "sha256": "030bfcf7471228cbce516426f756c2e5a3d4ce6ff760a92f7d31b0cbe54ade81"
+    },
+    "SCREAMSEQ_WINDOWS_PARITY_PLAN_2026-10-09.md": {
+      "bytes": 166644,
+      "sha256": "c1b50ca8424da02bd2e0dced7e7129e928d7e4de5e25d7cd31aae0378a8d73ce"
+    },
+    "SCREAMSEQ_WINDOWS_PARITY_MATRIX_2026-10-09.csv": {
+      "bytes": 37671,
+      "sha256": "ec2bbc2c01769072f6cc3edc3e9d331122e2656f53d6cb793fcdd4a444aa91f5"
+    }
+  },
+  "preexisting_product_worktree": {
+    "windows/Api/SessionAdapter.hpp": "eb17f038ea659e08a2e5f843d4422524677bf45e7536c9986827d85d0b795a5a",
+    "windows/App/Main.cpp": "ba3c181ac66da8cfdc252ca7c494062359cb4e46fe7ae33cc490a5209389654c",
+    "windows/App/MultisampleImportWindow.hpp": "f4352b74d519c0ed2be4ac39d654ec9ce7d1eaa6cda0cd58d35214bdc113f4cb",
+    "windows/App/NativeToolWindow.hpp": "2ba0e735a288a03614c5172e49a7af38a803fd1c366c72c9cfb59f3da08aba06",
+    "windows/App/PatternSampleRenderWindow.hpp": "c078a39f5a7c2214e86a94786f8e31e42e7cb52dc207acb9c5e31b9edb8cc8df",
+    "windows/App/SampleCaptureIntegration.inc": "8bc71a996d916149101825ac79974ac091dc2f58121a1f1f1f8799dca048ffea",
+    "windows/App/SampleLibrary.inc": "2d4067e9986080f903b314f7d1d4ebfbdafcfb39c64e57f845ef796f6e21c5c2",
+    "windows/App/SampleLibraryWindow.hpp": "afd396b1ce4f8ae95bf2a769ee4a543cda8d40271bb12323b48dbb4affa0faed",
+    "windows/App/SampleRecordingWindow.hpp": "9b08610b9395d56896a0c77b42ee222f33109bf6b00f98d3ce6b7d925fd8cfea",
+    "windows/Session/DocumentController.cpp": "6bbd91b9069f3477e13cf263601ec3233105b2eb110381d10d68072426cf9420",
+    "windows/Session/DocumentController.hpp": "90b6932f48c8830cfe5378f75e58546c703a385734882efa7ba5511480a135b2",
+    "windows/Session/SampleRecordingOperations.cpp": "aa390b33bcf0f4b8cef7f0229511959425dbcb40fdf3adf26c15b046e4826735",
+    "windows/Tests/DocumentControllerTests.cpp": "64b508e0ccd65d308d09a13099042d2e2919ea0229d8cfbddec01cab8300e487",
+    "windows/Tests/SampleRecordingTests.cpp": "deed20df8c7b92622965b4eb07a245ec3a87749ebd9016f6b7b6226969f23d40",
+    "windows/Tests/Workspace/DraftImportRetentionTests.inc": "ec2f6def5b605b778bc65eb12eee86bbd99a28af85be5fefc30b3476494c1b54",
+    "windows/Tests/Workspace/DraftRequestRetentionTests.inc": "cee0611ab9f1c2af8f8f23de056573b6412e0a1d17dc642ca6ab805da0a3fced",
+    "windows/Tests/Workspace/NativeToolWindowTests.cpp": "7330659b57335ff1cb412cc8c54e53ef2ab4b17c80b794d3e834708fe596eed1",
+    "windows/Tests/Workspace/WorkspaceRestoreTests.cpp": "9533747786a1d2b0bf64181cf90e3bcacd1a962d55000b961546bdae6c124460",
+    "windows/Tests/test_main_integration.py": "6a4c313862a89f9143f885a4eb6664858d549bf68ace0e95a6c6b15ff7674c87",
+    "windows/App/NativeWriteCompletion.hpp": "0176dbe56198366f51b9b561a2590cf5f9226e36db4b66272f1edbad95e567ba",
+    "windows/Tests/Workspace/NativeWriteCompletionTests.inc": "34cda02c53f578b84f63a082e2986a912570106b95c9f2e511722c6b2d51291d"
+  },
+  "extracted_reference_comparison": {
+    "matching_archive_members": 392,
+    "mismatches": []
+  },
+  "fixtures": {
+    "fixtures/01-midnight-circuit.screamseq": "e6d7a0ea19f0327ebb0b1e6e2a5885c525916e0f1a2fb0977b602c2efb8e4f58",
+    "fixtures/02-editors-and-effects.screamseq": "5ca8394b2a597e044421834d0b8b7167560e13a599b32194651f05dd03fb73e6",
+    "fixtures/03-routing-and-modulation.screamseq": "fb2289429c269c69d4e25f1b8a6358d1a747c44629f603b9f882e3b39ed937b2",
+    "fixtures/04-complete-reference.screamseq": "ec36560ceecc0baaf4e127217d1637cd5e387fbd9d4c42163e99b467e84fe813",
+    "fixtures/05-arrangement-copy-after.screamseq": "f8ea7cc23b73cf2aa7b911867dc3bdb0c1718f32ed7e06a6a3413ed34350efaf",
+    "fixtures/manifest.json": "c0d49f7e7d9995aa17e7991e727811f7650c6df49a031bb2175aebe95d388bae",
+    "fixtures/audio/Parity_C3.wav": "7a7e84d9780aa0f37d36b81d9f3bf8f447cf052b8a2a70832da910f04146625a",
+    "fixtures/audio/Parity_C4.wav": "28031f4594b430d5f7c6981ed458eda8728a41a149e04a8072d3567ca43eba8f",
+    "fixtures/audio/Parity_G3.wav": "be80b6c0e2688870236bd526395a8254ea786efadaf5dceaf64869140999f653"
+  },
+  "existing_logs": {
+    "bin/parity-evidence/p0b-native-result-api-build.log": {
+      "sha256": "040ab5fb3910ce1a9470176f5831b3dda37e7295012e11fb042f4f8614ceaaef",
+      "bytes": 437
+    },
+    "bin/parity-evidence/p0b-native-result-api-tests.log": {
+      "sha256": "0a0c8500a2ef45549c7f4c8a269f53e412a104aaa8c91ae51df1db5ee9a6abff",
+      "bytes": 471
+    },
+    "bin/parity-evidence/p0b-native-result-app-build.log": {
+      "sha256": "2ff5010bc7b8e76ecc22239ead6f7b816b40be393e4bdaac343bfe92424944be",
+      "bytes": 3960
+    },
+    "bin/parity-evidence/p0b-native-result-app-final-tests.log": {
+      "sha256": "e21653000d12fea89ae5493f2550efdc9c59d27f597ccbf653fe879387e5c39a",
+      "bytes": 1399
+    },
+    "bin/parity-evidence/p0b-native-result-app-tests.log": {
+      "sha256": "fe8ef5b7607727ff9d5cc566d7b7a52dc90f97594f3be9dc40c3d232ba0761d3",
+      "bytes": 6888
+    },
+    "bin/parity-evidence/p0b-native-result-controller-tests.log": {
+      "sha256": "00fd411a1cba07a811fa60023b1cdf02c328ec757aa41166b115ca6732cbabe0",
+      "bytes": 4128
+    },
+    "bin/parity-evidence/p0b-native-result-owner-complete-tests.log": {
+      "sha256": "cf41ef29b1ed056fb81da69c4937711c8f06cfd9da4bbd328803db4a424941a0",
+      "bytes": 502
+    },
+    "bin/parity-evidence/p0b-native-result-owner-final-build.log": {
+      "sha256": "f602073347550dbb1a81c991fc4cc06e9635e3c0aa49abea50c3078b203b9e1d",
+      "bytes": 794
+    },
+    "bin/parity-evidence/p0b-native-result-owner-final-tests.log": {
+      "sha256": "0e657c958d270eeab4a96598d3b4c631c24afbe4794ebb267946152858369a18",
+      "bytes": 502
+    },
+    "bin/parity-evidence/p0b-native-result-owner-tests.log": {
+      "sha256": "a646ae4b9a3de03c80030cb3f16459f5b6347f616b6a3896d8b4e94f7f64ff20",
+      "bytes": 1695
+    },
+    "bin/parity-evidence/p0b-native-result-small-build.log": {
+      "sha256": "1ee20fc99dc137952d67bbee06fc437293ef783601347ed1c1620d49da12f3d8",
+      "bytes": 2703
+    },
+    "bin/parity-evidence/p0b-native-result-workspace-final-tests.log": {
+      "sha256": "087350b96ff89011e7a2d8ad05753b7ecadbe03c3c4f116747ace31dc93e25cb",
+      "bytes": 756
+    },
+    "bin/parity-evidence/p0b-native-result-workspace-tests.log": {
+      "sha256": "4e0f7ed4240232b4b76338d6a844b0c741efec60e525a87136891eb73c07017f",
+      "bytes": 241
+    }
+  },
+  "inventory_counts": {
+    "parity-matrix.csv": 117,
+    "command-inventory.csv": 419,
+    "api-inventory.csv": 232,
+    "peer-matrix-review.csv": 84
+  },
+  "product_unchanged_after_document_edit": true,
+  "product_changes_during_review": []
+}

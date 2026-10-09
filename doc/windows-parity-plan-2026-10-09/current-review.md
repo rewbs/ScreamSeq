@@ -1,5 +1,7 @@
 # Current main and consolidated parity review
 
+**Follow-up status:** [Final planning review](followup-review.md) at HEAD `be0b5e177` supersedes current-checkout statements below. Recorder Keep now has a matching typed-write constructor and retained-result path; targeted existing ARM64 logs are inspected with explicit limits. Final departure admission and unknown-result recovery remain open. The earlier snapshot below is retained for provenance; no product implementation or validation was executed during this planning review.
+
 **Planning only, 9 October 2026.** Use the [complete plan](README.md) for architecture, Windows design, all phases and A01–A18 acceptance. This review refreshes its current-state findings and first implementation batch. Existing source, images, fixtures and logs were inspected; no product files were modified and no builds, tests, workflows or applications were run. Existing implementation receipts do not authorize further implementation in this task.
 
 ## Source identities and evidence
