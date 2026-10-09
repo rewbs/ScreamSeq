@@ -220,9 +220,16 @@ class PreciseNoteNativeMixin:
         private_desktop.check(user.GetClientRect(owner, ctypes.byref(client)))
         private_desktop.check(user.GetWindowRect(owner, ctypes.byref(outer)))
         scale = user.GetDpiForWindow(owner) / 96
+        # Establish this owned fixture's actual client geometry even when the CI
+        # desktop is smaller. DefWindowProc(WM_WINDOWPOSCHANGING) otherwise clamps
+        # to the desktop's maximum tracking size. SWP_NOSENDCHANGING skips only
+        # that preflight; WM_WINDOWPOSCHANGED/WM_SIZE still drive the real app's
+        # reflow and focus retention. This is not a test of interactive limits.
+        # Keep the exact-size assertions and both wide/compact scenarios below.
+        flags = 0x2 | 0x4 | 0x10 | 0x400  # NOMOVE, NOZORDER, NOACTIVATE, NOSENDCHANGING
         private_desktop.check(user.SetWindowPos(owner, None, 0, 0,
             round(width * scale) + outer.right - outer.left - client.right,
-            round(height * scale) + outer.bottom - outer.top - client.bottom, 0x16))
+            round(height * scale) + outer.bottom - outer.top - client.bottom, flags))
         private_desktop.check(user.GetClientRect(owner, ctypes.byref(client)))
         self.assertAlmostEqual(client.right / scale, width, delta=.5)
         self.assertAlmostEqual(client.bottom / scale, height, delta=.5)
