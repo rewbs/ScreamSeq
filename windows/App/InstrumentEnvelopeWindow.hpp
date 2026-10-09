@@ -2,6 +2,7 @@
 #include "EnvelopeBankWindow.hpp"
 #include "NativeContextMenu.hpp"
 #include "SampleFileDialog.hpp"
+#include "NativeWriteCompletion.hpp"
 #include "editor/TrackerDocument.hpp"
 
 namespace ScreamSeq {
@@ -64,7 +65,8 @@ private:
   void showMapFields(){setting_=true;set(mapFrom,selectedKey_>=0?selectedKey_:0);set(mapTo,selectedKey_>=0?selectedKey_:119);unsigned slot=selectedKey_>=0&&size_t(selectedKey_)<mapping_.size()?mapping_[size_t(selectedKey_)].get<unsigned>():0;int choice=0;for(size_t i=0;i<captured_.samples.size();++i)if(captured_.samples[i].at("index")==slot)choice=int(i)+1;choose(mapSample,choice);mappingFields_=false;setting_=false;}
   void choices(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(instrument),CB_RESETCONTENT,0,0);int position=0;for(const auto &i:captured_.instruments){auto text=std::to_wstring(i.at("index").get<unsigned>())+L" · "+wide(i.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(instrument),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));if(i.at("id")==identity_)choose(instrument,position);++position;}choose(kind,kind_);
     const auto oldSample=selection(mapSample);ScreamSeq::NativeInputGate::present(controls_.at(mapSample),CB_RESETCONTENT,0,0);ScreamSeq::NativeInputGate::present(controls_.at(mapSample),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"No sample"));for(const auto &s:captured_.samples){auto text=std::to_wstring(s.at("index").get<unsigned>())+L" · "+wide(s.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(mapSample),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}choose(mapSample,std::clamp(oldSample,0,int(captured_.samples.size())));setting_=false;}
-  void load(bool follow,std::string wanted={},std::optional<int> wantedKind={}){
+  void load(bool follow,std::string wanted={},std::optional<int> wantedKind={},bool adoptingResult=false){
+    require(!creationCompletion_.retained()||adoptingResult,"Review the instrument creation result before reloading");
     if(pending_)return;const auto c=context_();require(follow||c.document==captured_.document,"Document changed / use From cursor to capture the new song");
     const auto selectedKind=wantedKind.value_or(kind_);if(wanted.empty()&&!follow)wanted=identity_;
     auto chosen=std::find_if(c.instruments.begin(),c.instruments.end(),[&](const auto &i){return wanted.empty()?i.at("index")==c.instrument:i.at("id")==wanted;});
@@ -93,7 +95,7 @@ private:
     if(propertiesDirty_){Json fields={{"name",utf8(field(name))},{"volume",whole(volume,0,64)},{"pan",whole(pan,0,256)},{"fadeout",whole(fade,0,32768)},{"nna",selection(nna)},{"dct",selection(dct)},{"dna",selection(dna)}};for(auto i=fields.begin();i!=fields.end();++i)if(i.value()!=properties_.at(i.key()))values[i.key()]=i.value();}
     if(mappingDirty_)values["mapping"]=mapping_;return values;}
   void commit(){requireCurrent();require(!identity_.empty(),"Choose an instrument");require(!pointFields_&&!markerFields_&&!mappingFields_,"Set or discard pending point, marker and key range fields before Apply");auto values=patch();const auto token=generation_;pending_=true;layout();try{request_("instrument.patch",{{"expectedRevision",captured_.revision},{"instrument",index_},{"values",values}});pending_=false;require(context_().document==captured_.document&&generation_==token,"Source changed during Apply / newer draft retained");load(false);status(L"Instrument saved / document Undo restores its settings, points and markers");}catch(...){pending_=false;layout();throw;}layout();}
-  void createInstrument(){require(!draft(),"Apply or Reload the current instrument draft first");const auto c=context_();pending_=true;layout();try{auto result=request_("instrument.create",{{"expectedRevision",c.revision},{"sample",c.sample}});pending_=false;const auto now=context_();require(now.document==c.document,"Document changed during instrument creation");auto found=std::find_if(now.instruments.begin(),now.instruments.end(),[&](const auto &i){return i.at("index")==result.at("instrument");});require(found!=now.instruments.end(),"Created instrument is unavailable");load(true,found->at("id"));}catch(...){pending_=false;layout();throw;}}
+  #include "InstrumentCreation.inc"
   uint32_t seedValue()const{const auto n=number(toolValue2);require(n>=0&&n<=UINT32_MAX&&n==std::floor(n),"Seed must be a whole number from 0 to 4294967295");return uint32_t(n);}
   Json toolSignature()const{return Json::array({tool_,field(rangeStart),field(rangeEnd),field(toolValue0),field(toolValue1),field(toolValue2),field(toolValue3),field(toolValue4)});}
   void transform(bool copy){requireCurrent();require(editable()&&!draft(),"Apply or Reload before copying or transforming saved envelope points");const auto first=whole(rangeStart,0,65535),last=(copy||tool_<7)?whole(rangeEnd,1,65536):first+1;require(first<last,"Choose a nonempty tick range");Json p={{"instrument",identity_},{"envelope",kinds[size_t(kind_)]},{"start",first}};
@@ -109,7 +111,7 @@ private:
   bool contextMenu(HWND source,POINT screen)override{
     // Text and selectors keep their own native editing/navigation menus.
     for(auto child=source;child&&child!=window_;child=GetParent(child)){wchar_t type[32]{};GetClassNameW(child,type,32);if(!_wcsicmp(type,L"EDIT")||!_wcsicmp(type,L"COMBOBOX")||!_wcsicmp(type,L"LISTBOX"))return false;}
-    if(contextOpen_||pending_||dragging_)return true;
+    if(contextOpen_||pending_||creationFrozen()||dragging_)return true;
     const bool keyboard=screen.x==-1&&screen.y==-1;POINT local=screen;
     const float scale=GetDpiForWindow(window_)/96.f;const auto r=canvas_.viewport;
     if(keyboard){
@@ -157,7 +159,8 @@ private:
   }
   void action(int id,unsigned notification)override{
     if(setting_)return;if(id==shortOptions&&notification==BN_CLICKED){if(dragging_)cancelDrag();shortEnvelopeOptions_=!shortEnvelopeOptions_;layout();requestPaint();return;}if(id>=pageEnvelope&&id<=pageKeymap&&notification==BN_CLICKED){if(dragging_)cancelDrag();selectPage(id-pageEnvelope);layout();requestPaint();return;}if(id==audition){require(current(),"Instrument changed / Reload before audition");audition_(index_,identity_,captured_.document,captured_.revision);return;}if(id==close){if(dragging_)cancelDrag();hide();return;}
-    if(notification==EN_CHANGE){if(id==tick||id==value){pointFields_=true;++generation_;}else if(id>=loopStart&&id<=release){markerFields_=true;++generation_;}else if(id>=name&&id<=fade){propertiesDirty_=true;++generation_;}else if(id==mapFrom||id==mapTo){mappingFields_=true;++generation_;}else if(id==rangeStart||id==rangeEnd||(id>=toolValue0&&id<=toolValue4)){toolFieldsDirty_=true;++generation_;}return;}if(pending_)return;
+    if(notification==EN_CHANGE){if(id==tick||id==value){pointFields_=true;++generation_;}else if(id>=loopStart&&id<=release){markerFields_=true;++generation_;}else if(id>=name&&id<=fade){propertiesDirty_=true;++generation_;}else if(id==mapFrom||id==mapTo){mappingFields_=true;++generation_;}else if(id==rangeStart||id==rangeEnd||(id>=toolValue0&&id<=toolValue4)){toolFieldsDirty_=true;++generation_;}return;}if(pending_||creationWorking_)return;
+    if(creationCompletion_.retained()){if(id==reload||id==importFile||id==newInstrument)reviewCreation();else if(id==fromCursor&&creationNeedsAcknowledgement_)acknowledgeCreation();else throw std::runtime_error("Review the retained instrument result first");return;}
     if(id==keymap&&notification==LBN_SELCHANGE){if(mappingFields_){ScreamSeq::NativeInputGate::present(controls_.at(keymap),LB_SETCURSEL,selectedKey_,0);throw std::runtime_error("Stage or discard the key range fields before selecting another note");}selectedKey_=int(SendMessageW(controls_.at(keymap),LB_GETCURSEL,0,0));showMapFields();return;}
     if(notification==CBN_SELCHANGE){if(id==instrument||id==kind){if(draft()){choices();throw std::runtime_error("Apply or Reload the instrument draft before changing target");}try{if(id==instrument){const auto i=selection(id);if(i>=0)load(false,captured_.instruments.at(size_t(i)).at("id"));}else load(false,{},std::clamp(selection(kind),0,2));}catch(...){choices();throw;}return;}
       if(id==node){if(pointFields_){choose(node,selected_);throw std::runtime_error("Set or discard the point fields first");}selected_=selection(node);showPoint();requestPaint();return;}if(id==tool){tool_=std::clamp(selection(tool),0,8);toolFields();return;}if(id>=nna&&id<=dna){propertiesDirty_=true;++generation_;return;}if(id==mapSample){mappingFields_=true;++generation_;return;}}
@@ -173,7 +176,7 @@ private:
   void cancelDrag(){if(!dragging_)return;dragging_=false;envelope_=dragBefore_;envelopeDirty_=dragDirty_;selected_=dragSelection_;++generation_;showPoint();showMarkers();rebuild();ReleaseCapture();}
   void movePoint(int at,int amount){if(selected_<0)return;const auto &p=points();if(selected_==0)at=0;else{const int low=p[size_t(selected_-1)][0].get<int>()+1,high=size_t(selected_+1)<p.size()?p[size_t(selected_+1)][0].get<int>()-1:65535;at=low<=high?std::clamp(at,low,high):p[size_t(selected_)][0].get<int>();}Json point=Json::array({at,std::clamp(amount,0,64)});if(point!=p[size_t(selected_)]){envelope_["points"][size_t(selected_)]=point;changed();}showPoint();}
   void mouse(UINT message,float x,float y,WPARAM)override{
-    if(message==WM_CAPTURECHANGED){cancelDrag();return;}if(message==WM_LBUTTONUP){dragging_=false;ReleaseCapture();return;}if(!canvasVisible_||pending_||pointFields_||markerFields_)return;
+    if(message==WM_CAPTURECHANGED){cancelDrag();return;}if(message==WM_LBUTTONUP){dragging_=false;ReleaseCapture();return;}if(!canvasVisible_||pending_||creationFrozen()||pointFields_||markerFields_)return;
     const auto r=canvas_.viewport;const WorkspaceRect hitBounds{r.x-7,r.y-7,r.w+14,r.h+14};
     if(message==WM_LBUTTONDOWN&&hitBounds.contains(x,y)){SetFocus(window_);selected_=canvas_.hit(x,y);showPoint();if(selected_>=0&&editable()){dragBefore_=envelope_;dragDirty_=envelopeDirty_;dragSelection_=selected_;dragging_=true;SetCapture(window_);}requestPaint();return;}
     if(message==WM_LBUTTONDBLCLK&&canvas_.viewport.contains(x,y)&&editable()&&canvas_.hit(x,y)<0){selected_=-1;setting_=true;set(tick,points().empty()?0:int(std::clamp(std::round(canvas_.position(x)/256),0.,65535.)));set(value,int(std::lround(canvas_.value(y)*64)));setting_=false;setPointFields();return;}
@@ -182,7 +185,7 @@ private:
   bool wheel(UINT message,float x,float y,WPARAM w)override{if(!canvasVisible_||!canvas_.viewport.contains(x,y)||dragging_)return false;const auto delta=GET_WHEEL_DELTA_WPARAM(w)/120.;if(GET_KEYSTATE_WPARAM(w)&MK_CONTROL)canvas_.zoom(std::pow(1.25,delta),65536);else canvas_.pan(delta*(message==WM_MOUSEHWHEEL?1:-1)*(canvas_.end-canvas_.start)*.1,65536);rebuild();return true;}
   bool key(WPARAM k,bool ctrl,bool shift)override{if(k==VK_ESCAPE){if(dragging_)cancelDrag();else if(pointFields_||markerFields_||mappingFields_){++generation_;showPoint();showMarkers();showMapFields();}else hide();return true;}if(k==VK_F6){const auto entry=compact_?std::array<int,5>{kind,node,tool,name,keymap}.at(size_t(page_)):node;SetFocus(GetFocus()==window_?controls_.at(entry):window_);requestPaint();return true;}if(ctrl&&k==VK_RETURN){action(apply,BN_CLICKED);return true;}if(ctrl&&k=='R'){action(reload,BN_CLICKED);return true;}
     if(k==VK_RETURN){const auto id=GetDlgCtrlID(GetFocus());if(id==tick||id==value){action(setPoint,BN_CLICKED);return true;}if(id==mapFrom||id==mapTo||id==mapSample){action(mapStage,BN_CLICKED);return true;}if(id>=loopStart&&id<=release){action(setMarkers,BN_CLICKED);return true;}wchar_t cls[32]{};GetClassNameW(GetFocus(),cls,32);if(_wcsicmp(cls,L"Button")==0){action(id,BN_CLICKED);return true;}}
-    if(GetFocus()!=window_||pending_||!canvasVisible_)return false;if(ctrl&&(k==VK_LEFT||k==VK_RIGHT)){action(k==VK_LEFT?panLeft:panRight,BN_CLICKED);return true;}if(ctrl)return false;if(k==VK_HOME){action(fit,BN_CLICKED);return true;}if(k==VK_OEM_PLUS||k==VK_ADD||k==VK_OEM_MINUS||k==VK_SUBTRACT){action(k==VK_OEM_PLUS||k==VK_ADD?zoomIn:zoomOut,BN_CLICKED);return true;}if(!editable()||pointFields_||markerFields_)return false;
+    if(GetFocus()!=window_||pending_||creationFrozen()||!canvasVisible_)return false;if(ctrl&&(k==VK_LEFT||k==VK_RIGHT)){action(k==VK_LEFT?panLeft:panRight,BN_CLICKED);return true;}if(ctrl)return false;if(k==VK_HOME){action(fit,BN_CLICKED);return true;}if(k==VK_OEM_PLUS||k==VK_ADD||k==VK_OEM_MINUS||k==VK_SUBTRACT){action(k==VK_OEM_PLUS||k==VK_ADD?zoomIn:zoomOut,BN_CLICKED);return true;}if(!editable()||pointFields_||markerFields_)return false;
     if(k==VK_DELETE){removePoint();return true;}if(k==VK_INSERT){action(addPoint,BN_CLICKED);return true;}if(k==VK_TAB&&!points().empty()){selected_=(selected_+(shift?-1:1)+int(points().size()))%int(points().size());showPoint();requestPaint();return true;}
     if(selected_>=0&&(k==VK_LEFT||k==VK_RIGHT||k==VK_UP||k==VK_DOWN)){const int amount=shift?4:1;movePoint(points()[size_t(selected_)][0].get<int>()+(k==VK_LEFT?-amount:k==VK_RIGHT?amount:0),points()[size_t(selected_)][1].get<int>()+(k==VK_UP?amount:k==VK_DOWN?-amount:0));return true;}return false;}
   void layoutShortDock(float w,float h){
@@ -311,10 +314,17 @@ private:
     set(nodeLabel,inlinePoint?L"Point":L"Selected node");set(tickLabel,inlinePoint?L"Tick":L"Tick / 0–65535");set(valueLabel,inlinePoint?L"Value":L"Value / 0–64");set(deletePoint,inlinePoint?L"Delete":L"Delete point");
     for(auto [id,title,key]:std::initializer_list<std::tuple<int,const wchar_t *,const char *>>{{enabled,L"Envelope","enabled"},{sustain,L"Sustain","sustain"},{loop,L"Loop","loop"},{carry,L"Carry","carry"},{filter,L"Filter","filter"}})set(id,std::wstring(inlinePoint&&id==enabled?L"Env":title)+(envelope_.value(key,false)?(inlinePoint?L" on":L" · on"):(inlinePoint?L" off":L" · off")));
     for(auto [id,control]:controls_)if(id>=instrument&&id<=keymap)EnableWindow(control,!pending_||id==close);for(int id=enabled;id<=previewTool;++id)EnableWindow(controls_.at(id),!pending_&&editable());for(int id=name;id<=apply;++id)EnableWindow(controls_.at(id),!pending_&&!identity_.empty());EnableWindow(controls_.at(keymap),!pending_&&!identity_.empty());EnableWindow(controls_.at(filter),!pending_&&editable()&&kind_==2);EnableWindow(controls_.at(bank),!pending_&&editable());
+    if(creationFrozen()){
+      for(auto [id,control]:controls_)if(id>=instrument&&id<=keymap)EnableWindow(control,id==close);
+      EnableWindow(controls_.at(reload),!creationWorking_&&!pending_);
+      EnableWindow(controls_.at(fromCursor),!creationWorking_&&!pending_&&creationNeedsAcknowledgement_);
+    }
+    set(reload,creationCompletion_.retained()?(shortDock_?L"Review":L"Review result"):L"Reload");
+    if(creationCompletion_.retained())set(fromCursor,shortDock_?L"Accept":L"Use current song");
     // Native disabling clears focus during a document request. Restore only
     // that lost focus, never a newer choice made while the request was pending.
     if(pending_&&focus&&IsChild(window_,focus)&&!GetFocus())pendingFocus_=focus;
-    if(!pending_&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
+    if(!pending_&&!creationFrozen()&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
   }
   void drawControl(const DRAWITEMSTRUCT &d)override{
     NativeToolWindow::drawControl(d);if(d.CtlType!=ODT_BUTTON||d.CtlID!=unsigned(pageEnvelope+page_))return;
@@ -331,7 +341,11 @@ private:
     wchar_t text[180]{};swprintf_s(text,compact_?L"Ticks %.2f–%.2f":L"Ticks %.2f–%.2f · loop: gold · sustain: blue · release: rose · playback: white",canvas_.start/256,canvas_.end/256);s.uiText(text,r.x,r.y-(shortDock_?15:23),r.w,0x93aabd);
   }
 public:
-  InstrumentEnvelopeWindow(HWND owner,Request request,std::function<Context()> context,Audition auditionCallback,SelectSound selectSound):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),audition_(std::move(auditionCallback)),selectSound_(std::move(selectSound)){
+  InstrumentEnvelopeWindow(HWND owner,Request request,std::function<Context()> context,Audition auditionCallback,SelectSound selectSound)
+    :InstrumentEnvelopeWindow(owner,request,context,std::move(auditionCallback),std::move(selectSound),
+      [request,context](const auto &method,const auto &params){const auto before=context();auto result=request(method,params);return Api::CompletedCall{method,before.document,context().revision,std::move(result)};}){}
+  InstrumentEnvelopeWindow(HWND owner,Request request,std::function<Context()> context,Audition auditionCallback,SelectSound selectSound,NativeWriteCompletion::Write write):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),audition_(std::move(auditionCallback)),selectSound_(std::move(selectSound)){
+    creationWrite_=std::move(write);
     minimumClientWidth_=440;minimumClientHeight_=500;create(L"ScreamSeq.InstrumentEnvelope",L"Instrument & envelopes",1200,880,true);
     for(int id:{instrument,kind,node,tool,nna,dct,dna,mapSample})combo(id);add(keymap,L"LISTBOX",L"",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL);label(keymapLabel,L"Sample keymap · select a note");button(importFile,L"Import instrument…");for(int id:{tick,value,loopStart,loopEnd,sustainStart,sustainEnd,release,rangeStart,rangeEnd,toolValue0,toolValue1,toolValue2,toolValue3,toolValue4,name,volume,pan,fade,mapFrom,mapTo})edit(id,L"",id==name?200:32);
     auto items=[&](int id,std::initializer_list<const wchar_t *> names){for(auto name:names)ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(id,0);};items(kind,{L"Volume envelope",L"Pan envelope",L"Pitch / filter envelope"});items(tool,{L"Flip time",L"Flip values",L"Shift",L"Scale",L"Ramp",L"Sine",L"Humanize",L"Paste",L"Insert paste"});items(nna,{L"Cut",L"Continue",L"Note off",L"Fade"});items(dct,{L"Off",L"Note",L"Sample",L"Instrument",L"Plugin"});items(dna,{L"Cut",L"Note off",L"Fade"});
@@ -347,8 +361,10 @@ public:
     require(!(GetWindowLongPtrW(window_,GWL_STYLE)&WS_VISIBLE)&&!docked()&&captured_.document.empty()&&generation_==0&&!retainedDraft(),"Initialize only a fresh hidden instrument editor");
     load(true);
   }
-  bool retainedDraft()const{return pending_||draft()||toolFieldsDirty_||dragging_||(bank_&&bank_->retainedDraft());}
+  bool retainedDraft()const{return pending_||creationFrozen()||draft()||toolFieldsDirty_||dragging_||(bank_&&bank_->retainedDraft());}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    if(creationFrozen())return describeDraft(creationTarget_.value("documentId",std::string()),creationTarget_.value("expectedRevision",std::string()),
+      Json::array({creationTarget_,identity_,kind_}).dump(),generation_,draft()||toolFieldsDirty_||dragging_,pending_||creationWorking_,!pending_&&!creationWorking_&&creationCompletion_.retained());
     return describeDraft(captured_.document,captured_.revision,Json::array({identity_,kind_}).dump(),generation_,
       draft()||toolFieldsDirty_||dragging_,pending_);
   }
@@ -357,19 +373,9 @@ public:
     const std::string wanted=chosen==c.instruments.end()?std::string{}:chosen->at("id").get<std::string>();
     if(c.document!=captured_.document||c.revision!=captured_.revision||wanted!=identity_)load(true);return true;
   }
-  void importInstrument(){
-    require(!pending_,"Instrument editor is busy");require(!draft()&&!(bank_&&bank_->retainedDraft()),"Apply or Reload the instrument and envelope-bank drafts before importing");
-    const auto captured=context_();const auto token=generation_;pending_=true;layout();
-    try{const auto paths=chooseSampleFiles(window_,L"Import instrument",false,L"Tracker instruments\0*.iti;*.xi;*.pat;*.sfz\0Audio samples\0*.wav;*.aif;*.aiff;*.flac;*.ogg\0All files\0*.*\0\0");
-      if(paths.empty()){pending_=false;layout();return;}const auto now=context_();require(now.document==captured.document&&now.revision==captured.revision&&token==generation_&&!draft(),"Song or draft changed while choosing an instrument / import cancelled");
-      const auto result=request_("instrument.import",{{"expectedRevision",captured.revision},{"path",utf8(paths.front().wstring())},{"slot",0}});pending_=false;const auto after=context_();
-      require(after.document==captured.document&&token==generation_&&!draft(),"Instrument imported / newer editor draft retained; Reload to inspect it");
-      const auto slot=result.at("index").get<unsigned>();const auto found=std::find_if(after.instruments.begin(),after.instruments.end(),[&](const auto &i){return i.at("index")==slot;});require(found!=after.instruments.end(),"Imported instrument is unavailable");const auto identity=found->at("id").get<std::string>();
-      load(true,identity);selectSound_(slot,identity);status(L"Instrument imported and selected / document Undo restores the previous song");
-    }catch(...){pending_=false;layout();throw;}layout();
-  }
+  void importInstrument(std::function<std::vector<std::filesystem::path>()> choose={}){beginCreation(true,std::move(choose));}
   Json musicalTarget()const{return {{"document",captured_.document},{"revision",captured_.revision},{"sample",false},{"slot",index_},{"id",identity_}};}
   void playback(const std::string &document,const Json &instruments,const std::vector<Tracker::VoicePosition> &voices){if(!visible())return;std::vector<double> next;if(document==captured_.document&&std::any_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.at("id")==identity_&&i.at("index")==index_;}))for(const auto &v:voices)if(v.instrument==index_)next.push_back(v.envelopeTicks[size_t(kind_)]);if(next!=playbackTicks_){playbackTicks_=std::move(next);requestPaint();}}
-  Json snapshot()const{const auto r=canvas_.viewport;Json handles=Json::array(),bounds=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});for(const auto &[id,control]:controls_)if(IsWindowVisible(control)){RECT rect{};GetWindowRect(control,&rect);MapWindowPoints(nullptr,window_,reinterpret_cast<POINT *>(&rect),2);bounds.push_back({{"id",id},{"bounds",{rect.left,rect.top,rect.right,rect.bottom}}});}return {{"visible",visible()},{"compactLayout",compact_},{"shortDock",shortDock_},{"shortEnvelopeOptions",shortEnvelopeOptions_},{"generation",generation_},{"controlBounds",bounds},{"toolFieldDraft",toolFieldsDirty_},{"retainedDraft",retainedDraft()},{"page",pages[size_t(page_)]},{"canvasVisible",canvasVisible_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"instrument",identity_},{"index",index_},{"kind",kinds[size_t(kind_)]},{"dirty",draft()},{"envelopeDirty",envelopeDirty_},{"fieldDraft",pointFields_||markerFields_||mappingFields_},{"mappingFields",mappingFields_},{"mappingDirty",mappingDirty_},{"selectedKey",selectedKey_},{"pending",pending_},{"stale",!current()},{"envelope",envelope_},{"selectedPoint",selected_},{"mapping",mapping_},{"handles",handles},{"playbackTicks",playbackTicks_},{"canvas",{r.x,r.y,r.w,r.h}},{"start",canvas_.start/256},{"end",canvas_.end/256},{"status",utf8(status_)},{"envelopeBank",bank_?bank_->snapshot():Json{{"visible",false}}}};}
+  Json snapshot()const{const auto r=canvas_.viewport;Json handles=Json::array(),bounds=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});for(const auto &[id,control]:controls_)if(IsWindowVisible(control)){RECT rect{};GetWindowRect(control,&rect);MapWindowPoints(nullptr,window_,reinterpret_cast<POINT *>(&rect),2);bounds.push_back({{"id",id},{"bounds",{rect.left,rect.top,rect.right,rect.bottom}}});}return {{"visible",visible()},{"compactLayout",compact_},{"shortDock",shortDock_},{"shortEnvelopeOptions",shortEnvelopeOptions_},{"generation",generation_},{"controlBounds",bounds},{"toolFieldDraft",toolFieldsDirty_},{"retainedDraft",retainedDraft()},{"creationCompletion",creationCompletion_.snapshot()},{"creationTarget",creationTarget_},{"creationReport",creationReport_},{"creationNeedsAcknowledgement",creationNeedsAcknowledgement_},{"page",pages[size_t(page_)]},{"canvasVisible",canvasVisible_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"instrument",identity_},{"index",index_},{"kind",kinds[size_t(kind_)]},{"dirty",draft()},{"envelopeDirty",envelopeDirty_},{"fieldDraft",pointFields_||markerFields_||mappingFields_},{"mappingFields",mappingFields_},{"mappingDirty",mappingDirty_},{"selectedKey",selectedKey_},{"pending",pending_||creationWorking_},{"stale",!current()},{"envelope",envelope_},{"selectedPoint",selected_},{"mapping",mapping_},{"handles",handles},{"playbackTicks",playbackTicks_},{"canvas",{r.x,r.y,r.w,r.h}},{"start",canvas_.start/256},{"end",canvas_.end/256},{"status",utf8(status_)},{"envelopeBank",bank_?bank_->snapshot():Json{{"visible",false}}}};}
 };
 }

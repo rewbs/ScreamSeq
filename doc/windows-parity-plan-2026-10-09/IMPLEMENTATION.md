@@ -2,6 +2,79 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Instrument import and creation recovery
+
+`InstrumentEnvelopeWindow` now shares one native creation-result path for **Import
+instrument** and **New from sample** (`windows/App/InstrumentCreation.inc`). It
+captures the original song/revision, source sample list/identities, inspector
+identity, request and generation before the chooser/write. The owner contributes
+pending work even before it has loaded an instrument target. Cancellation,
+chooser failure and stale pre-submission context leave no unresolved write.
+Instrument, tool-field and nested envelope-bank drafts must be resolved before
+starting a new creation.
+
+Production Application wiring passes `documentOperationWithOutcome` and its exact
+per-call worker receipt. A post-write native failure retains the original result;
+reopening the inspector or invoking another creation cannot append another asset.
+Reload becomes **Review result** and From cursor becomes **Use current song** while
+unresolved; short docks use **Review** / **Accept**. Pending/uncertain work blocks
+API replacement and departure and cannot be discarded. Hide and layout navigation
+remain available. Mutating controls, canvas gestures and conflicting inspector
+retargeting are disabled until Review/acknowledgement.
+
+Successful immediate completion selects the created instrument and sound only
+when the returned song revision and original draft generation still match. Review
+of a returned completion presents its historical slot/result without retargeting,
+reloading, replaying the write or clearing newer raw fields, selection or focus.
+The existing APIs return an index for these operations; the native caller resolves
+a stable identity for immediate selection only against that exact returned
+revision, never against a later occupant of the slot.
+
+An absent receipt triggers a synchronized document-snapshot read of instruments
+and samples. Application supplies this read from its published view; `document.get`
+is not a direct worker operation. Readback validates collections and identities,
+labels the earlier effect **unverified**, retains the unresolved owner and requires
+explicit acknowledgement before a fresh operation. Read failure/malformed state or
+a changed observed revision cannot discharge that work. Acknowledgement does not
+write, rebase a draft or imply that a particular instrument came from the uncertain
+request. Untyped import decode errors take this same conservative Review path.
+
+No shared musical operation, codec, public import API, plugin state, audio/device
+integration or Mac product code changed. Both platforms retain their existing
+musical import/creation semantics and chronological history. This is the native
+caller batch; prepared commit receipts inside the remaining asset operations,
+sample replacement and the rest of the P0b owner audit remain separate work.
+
+The first native/actual-app validation exposed the incorrect direct-worker
+`document.get` dispatch; it was corrected to Application snapshot readback. An
+older API save/reopen test also expected a retired inspector to survive document
+replacement. It now explicitly reopens that inspector and checks the same stable
+instrument identity, slot and full saved contents. The chooser test now asserts
+that API Open is refused while the original instrument chooser owns pending work,
+and that corrupt imports require Review/acknowledgement rather than blind retry.
+Original atomicity/history/content assertions are retained.
+
+Validation (Release ARM64, `bin/windows-parity-p0`):
+
+- Application, workspace harness and compact instrument harness built successfully.
+- **4/4 targeted CTests passed, 54.34 s**: draft census, document departure,
+  native receipts and compact instrument docking. New real-worker cases cover
+  both Create and Import after lost completion, raw-draft/focus retention,
+  read-only Review, one Undo/Redo, nested chooser/API replacement refusal,
+  cancellation/failure/stale chooser, unknown outcomes, failed/malformed readback,
+  explicit/stale acknowledgement and compact recovery labels.
+- **5/5 actual-app tests passed, 28.694 s, no skips**: native SFZ import and sound
+  selection, pattern preservation, Undo/Redo and native save/reopen; corrupt/
+  canceled/stale chooser and API departure protection; instrument/bank draft
+  retention; envelope validation/no-op/history/persistence; all envelope tools.
+- `bin/parity-evidence/p0b-instrument-creation-receipt.json` records 1,857 source/
+  dependency inputs, three executables, compiler/cache and all six build/test logs.
+  The initial failed runs remain recorded alongside the corrected final runs.
+
+Evidence remains limited to ARM64/private desktops. No broad engine suite was
+repeated for this native-caller change. Mac/x64, foreground/UIA, physical devices,
+supplied reciprocal fixture exchange and P0c–P8 remain open.
+
 ## P0b.1 Native plugin preset file-result recovery
 
 Native rack preset Save/Load now captures its stable plugin ID, document/revision,

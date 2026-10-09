@@ -1040,6 +1040,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "SampleLibraryApplicationTests.inc"
 #include "NativeReceiptApplicationTests.inc"
 #include "PluginPresetApplicationTests.inc"
+#include "InstrumentCreationApplicationTests.inc"
 
 void nativeCompletionRetainsOutcome() {
     using Json=RestoreJson;
@@ -1094,7 +1095,7 @@ int wmain(int argc,wchar_t **argv) {
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
                 if(length<std::size(group)&&std::wstring_view(group)==L"receipts") {
-                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();applicationDirectSampleImportRetention();applicationSampleLibraryRecovery();applicationPluginPresetRecovery();
+                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();applicationDirectSampleImportRetention();applicationSampleLibraryRecovery();applicationPluginPresetRecovery();applicationInstrumentCreationRecovery();
                     std::cout<<"PASS Native receipts: worker identity, lost callback, retained render and one Undo\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"departure") {
@@ -1109,6 +1110,7 @@ int wmain(int argc,wchar_t **argv) {
                 directRenderCompletionCensus();std::cout<<"PASS direct render: pending census, retained result, read-only review, one Undo and stale selection\n";
                 return;
             }
+            applicationInstrumentCreationRecovery();std::cout<<"PASS instrument creation recovery: receipt, domain readback, chooser and newer draft retention\n";
             applicationPluginPresetRecovery();std::cout<<"PASS preset recovery: exact receipts, unknown readback, pending departure and draft retention\n";
             nativeCompletionRetainsOutcome();std::cout<<"PASS native completion: real worker commit, classified error, readback and one Undo\n";
             retainedTakesProtectLeavingDocument();std::cout<<"PASS take protection: MIDI, microphone, both, read failure and reentrant input\n";
