@@ -1015,6 +1015,7 @@ static void retainedTakesProtectLeavingDocument() {
 
 #include "DocumentDraftCensusTests.inc"
 #include "DocumentDepartureApplicationTests.inc"
+#include "NativeReceiptApplicationTests.inc"
 
 void nativeCompletionRetainsOutcome() {
     using Json=RestoreJson;
@@ -1068,6 +1069,10 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"receipts") {
+                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();
+                    std::cout<<"PASS Native receipts: worker identity, lost callback, retained render and one Undo\n";return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"departure") {
                     applicationDepartureRefusalAndAdoption();applicationDepartureRefreshFailure();applicationDepartureSessionCancel();applicationDepartureRecoveryBrowser();
                     std::cout<<"PASS Application departure: native/API consent, stale input, Stop rollback, retirement, refresh retry and canceled shutdown\n";return;

@@ -133,6 +133,9 @@ if(BUILD_TESTING)
     # sharing the executable avoids another compilation of the native app TU.
     add_test(NAME workspace-draft-census-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-departure-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-receipt-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-receipt-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=receipts" TIMEOUT 120)
     set_tests_properties(workspace-departure-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=departure" TIMEOUT 120)
     set_tests_properties(workspace-draft-census-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts"

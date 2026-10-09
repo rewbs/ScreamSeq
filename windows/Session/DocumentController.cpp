@@ -745,7 +745,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
   }
   return result;
 }
-Api::CompletedCall DocumentController::invokeOperation(const std::string &method,Json params) {
+Api::CompletedCall DocumentController::invokeOperation(const std::string &method,Json params,const std::shared_ptr<NativeCallReceipt> &receipt) {
   completedCall_.reset();
   struct Reset {std::shared_ptr<const Api::CompletedCall> &value;~Reset(){value.reset();}} reset{completedCall_};
   const auto before=revision();const auto path=project_.path;const auto saved=project_.savedRevision;
@@ -754,9 +754,17 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
     auto result=operation(method,std::move(params));returned=true;
     // Capture on the serial worker, before any later queued operation can edit
     // the view. Reading view() on the native owner after await is too late.
+    if(receipt){
+      auto completed=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,identity_+":"+std::to_string(generation_),revision(),std::move(result)});
+      receipt->publish(completed);
+      return *completed;
+    }
     return {method,identity_+":"+std::to_string(generation_),revision(),std::move(result)};
   } catch(...) {
     const auto failure=std::current_exception();
+    // Only our own publication boundary can supply a failed invocation's
+    // result. An ApiError from a nested callback is never receipt provenance.
+    if(receipt&&completedCall_)receipt->publish(completedCall_);
     if(before!=revision() || path!=project_.path || saved!=project_.savedRevision) {
       publicationPending_=true;scanPatterns_=true;scanWaves_=true;
       try {publish();} catch(...) {}
@@ -786,9 +794,9 @@ std::future<Json> DocumentController::invoke(std::string method,Json params) {
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
 }
-std::future<Api::CompletedCall> DocumentController::invokeCompleted(std::string method,Json params) {
-  auto task=std::make_shared<std::packaged_task<Api::CompletedCall()>>([this,method=std::move(method),params=std::move(params)]() mutable {
-    return invokeOperation(method,std::move(params));
+std::future<Api::CompletedCall> DocumentController::invokeCompleted(std::string method,Json params,std::shared_ptr<NativeCallReceipt> receipt) {
+  auto task=std::make_shared<std::packaged_task<Api::CompletedCall()>>([this,method=std::move(method),params=std::move(params),receipt=std::move(receipt)]() mutable {
+    return invokeOperation(method,std::move(params),receipt);
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
 }

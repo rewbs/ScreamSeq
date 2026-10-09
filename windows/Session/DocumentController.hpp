@@ -8,6 +8,7 @@
 #include "EnvelopeOperations.hpp"
 #include "MixerOperations.hpp"
 #include "../Api/SessionAdapter.hpp"
+#include "NativeCallReceipt.hpp"
 #include "../Project/NativeProject.hpp"
 #include "../Audio/PresentationClock.hpp"
 #include "editor/NoteRecording.hpp"
@@ -145,7 +146,7 @@ class DocumentController {
   void publish();
   void publishCommitted(const std::string &method,const Json &result);
   std::shared_ptr<const Api::CompletedCall> completedCall_; // Worker-owned, scoped to one invocation.
-  Api::CompletedCall invokeOperation(const std::string &method,Json params);
+  Api::CompletedCall invokeOperation(const std::string &method,Json params,const std::shared_ptr<NativeCallReceipt> &receipt={});
   void preflightGrowth(const std::string &method,const Json &params);
   void validateAssetCandidate(const Tracker::Document &candidate) const;
   void validateGraphViewGrowth(const Tracker::NativeSong &candidate) const;
@@ -180,7 +181,7 @@ public:
   bool publicationPending() const {return publicationPending_.load();}
   std::shared_ptr<const DocumentView> view();
   std::future<Json> invoke(std::string method,Json params);
-  std::future<Api::CompletedCall> invokeCompleted(std::string method,Json params);
+  std::future<Api::CompletedCall> invokeCompleted(std::string method,Json params,std::shared_ptr<NativeCallReceipt> receipt={});
   std::future<std::shared_ptr<const RecoverySnapshot>> captureRecovery(std::string expectedRevision);
   // Parse, validate and allocate the complete next view before stopping or
   // replacing anything. A recovered document has a new identity, no file path,

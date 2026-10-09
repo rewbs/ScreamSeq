@@ -26,6 +26,26 @@ void completionClassification(){
   },"sample.renderSelection",Json::object(),"document",9,Json::array({"name"}));},"Committed error returned success");
   require(committed.retained()&&committed.returned()==receipt&&committed.generation()==9,"Worker publication error lost its known result");
   committed.finish();require(!committed.retained()&&!committed.returned(),"Reviewed result remained unresolved");
+  for(const std::string method:{"sample.renderSelection","instrument.importMultisample","sample.recording.commit"}){
+    NativeWriteCompletion retained;unsigned writes=0;
+    std::shared_ptr<NativeCallReceipt> first;
+    const NativeWriteCompletion::Write tracked=[&](const auto &name,const auto &,const auto &ticket)->Api::CompletedCall{
+      ++writes;first=ticket;
+      ticket->publish(std::make_shared<const Api::CompletedCall>(Api::CompletedCall{name,"document","r7",{{"sample",7},{"instrument",2},{"take","original"}}}));
+      throw Api::ApiError(-32003,"Native callback dropped its result",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+    };
+    rejected([&]{retained.submit(tracked,method,Json::object(),"document",11,Json::array({"original raw"}));},"Lost native result did not fail");
+    require(writes==1&&retained.retained()&&retained.returned()&&retained.returned()->method==method&&retained.returned()->revision=="r7",
+      "Worker receipt was lost or a later callback refusal overrode actual completion");
+    rejected([&]{retained.submit(tracked,method,Json::object(),"document",12,Json::array());},"Retained receipt permitted another write");
+    retained.finish();require(!retained.returned(),"Completed review retained its old request ticket");
+    rejected([&]{retained.submit([&](const auto &,const auto &,const auto &ticket)->Api::CompletedCall{
+      require(ticket!=first,"A new write reused the old request ticket");
+      first->publish(std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,"document","late",{{"sample",99}}}));
+      throw std::runtime_error("New request has no result");
+    },method,Json::object(),"document",12,Json::array({"new raw"}));},"Missing second result was accepted");
+    require(!retained.returned()&&retained.generation()==12,"Late old receipt resolved another request");
+  }
 }
 
 void pluginPathCompletionReview(HWND main){

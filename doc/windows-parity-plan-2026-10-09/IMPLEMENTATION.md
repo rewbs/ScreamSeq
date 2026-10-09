@@ -2,6 +2,49 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Native request receipts survive callback loss
+
+Each retained native render, multisample import, recorder Keep and plugin reconnect
+submission now allocates a separate `NativeCallReceipt` before queuing work.
+`DocumentController::invokeCompleted` publishes its exact method, document,
+revision and result on that ticket before Application completion callbacks run.
+On failed view publication it publishes only the controller's own result, never a
+receipt supplied by a nested callback. Native Review can recover this result even
+when an outer callback drops the inline return value or misclassifies its failure
+as NotCommitted. A later queued edit cannot relabel the original result.
+
+The ticket is in-process and scoped to one invocation; it introduces no wire ID,
+replay cache, persisted field or shared song-model change. `NativeWriteCompletion`
+keeps raw fields/generation and blocks resubmission until Review finishes. Finishing
+releases the ticket; a new submission receives a different one. Existing native
+owners retain their current readback/reveal and newer-draft preservation policies.
+
+This closes **lost native callback results when the worker owns an exact result**.
+It does not close every unknown import/render/Keep outcome: an exception before
+an operation produces its result, including result/identity allocation after a
+commit, may still have no receipt. Keep that state unresolved; sample presence or
+an absent take is not proof of the original write. The remaining P0b audit must
+cover those commit/result boundaries and the other retained owner/cache paths.
+
+ARM64 Release evidence is pinned in
+`bin/parity-evidence/p0b-native-call-receipt-receipt.json`: 1,846 source/dependency
+inputs, six executable hashes, compiler/cache/provider inputs and seven logs.
+
+| Check | Result and scope |
+|---|---|
+| App, workspace, native-tool, controller and recorder builds | Passed; Windows native/session changes only |
+| Native tool suite | 1/1 CTest entry, 3.25 s; exact receipts override downstream false refusal, no resubmit, no late-ticket crossover |
+| Focused workspace groups | 3/3, 17.34 s; real worker render with dropped callback, later edit, readback and exact one-render Undo; draft census and Application departure |
+| Worker/recorder selection | 7/7, 1.12 s, including two fixture preparation entries; publication failure retains the controller receipt, rejected imports have no receipt, subsequent edits do not relabel results, sampling/assets/recording regressions |
+| Actual app on private desktop | 7/7, 10.599 s, no skips; direct/options render Undo and exact reopen, multisample import/draft guards, browser import transaction, recorder setup retention, native reconnect and real-effect recipe/Undo |
+
+No physical recording was needed. No foreground/accessibility, Windows x64, Mac,
+supplied reciprocal-fixture or final P0b/P8 gate is claimed. The full workspace
+suite was not rerun: the receipt/departure/draft groups target this change, while
+older broad evidence retains its original checkpoint. Production source did not
+change between the build and those tests; the additional publication assertions
+required only a focused controller-test rebuild.
+
 ## P0b.1 Plugin path and scan readback
 
 `PluginPathWindow` now retains explicit path-scan and installed-rescan intent

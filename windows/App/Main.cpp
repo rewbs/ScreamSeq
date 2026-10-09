@@ -516,14 +516,14 @@ public:
         if(method=="graph.signal.get"||method=="graph.signal.clear"||method=="graph.scope.get"||method=="graph.scope.watch"||method=="graph.listen.get"||method=="graph.listen.set")return signalObservationOperation(method,params);
         return documentOperationWithOutcome(method,params).result;
     }
-    ScreamSeq::Api::CompletedCall documentOperationWithOutcome(const std::string &method,const Json &params) {
+    ScreamSeq::Api::CompletedCall documentOperationWithOutcome(const std::string &method,const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt={}) {
         guardDepartureOperation(method);
         if(busy||(recoveryRestoring&&!departureRefreshing))throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         struct ClearConsent {Application &app;bool open;~ClearConsent(){if(open)app.nativeDepartureConsent.reset();}}clearConsent{*this,method=="document.open"};
         ScreamSeq::Api::CompletedCall call;call.method=method;
         bool completed=false;
         try {
-            call=await(controller->invokeCompleted(method,params));completed=true;
+            call=await(controller->invokeCompleted(method,params,receipt));completed=true;
             finishDocumentOperation(method,call.result);
             return call;
         }

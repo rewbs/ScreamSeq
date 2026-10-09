@@ -32,7 +32,7 @@
             [this](const auto &method,const auto &params){return documentOperation(method,params);},
             [this]{return std::pair(documentId,view->session.revision);},
             [this](const auto &document,const auto &result){revealCapturedSample(document,result);},
-            [this](const auto &method,const auto &params){return documentOperationWithOutcome(method,params);});
+            [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
             connectSampleCaptureTransport(*sampleRecordingWindow);}
     }
     void openSampleRecording(){
@@ -73,7 +73,7 @@
         directSampleRenderTarget=params;directSampleRenderTarget["documentId"]=target.document;directSampleRenderReport=Json::object();
         ++directSampleRenderGeneration;
         directSampleRenderPending=true;struct Guard{bool &value;~Guard(){value=false;}} guard{directSampleRenderPending};
-        directSampleRenderCompletion.submit([this](const auto &method,const auto &request){return documentOperationWithOutcome(method,request);},
+        directSampleRenderCompletion.submit([this](const auto &method,const auto &request,const auto &receipt){return documentOperationWithOutcome(method,request,receipt);},
             "sample.renderSelection",params,target.document,directSampleRenderGeneration,directSampleRenderTarget);
         finishDirectSampleRender();
     }
@@ -104,7 +104,7 @@
             [this](const auto &method,const auto &params){return documentOperation(method,params);},
             [this]{return patternSampleTarget();},
             [this](const auto &document,const auto &result){revealCapturedSample(document,result);},
-            [this](const auto &method,const auto &params){return documentOperationWithOutcome(method,params);});
+            [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
             connectSampleCaptureTransport(*patternSampleRenderWindow);}
         patternSampleRenderWindow->openAt(instrument,captured?std::move(*captured):patternSampleTarget());
     }

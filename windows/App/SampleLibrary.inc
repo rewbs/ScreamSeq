@@ -24,7 +24,7 @@
                 layoutControls();
             },
             [this](unsigned instrument,const std::string &document){if(documentId!=document)return;const auto target=typingTarget(false,instrument,49,window);typingSoundId=target.identity;refreshTypingSounds();status=L"Multi-sample instrument imported / selected for musical typing";},
-            [this](const auto &method,const auto &params){return documentOperationWithOutcome(method,params);});
+            [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
         sampleBrowser->show();
     }
 
