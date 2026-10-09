@@ -12,6 +12,70 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## P0c codec recovery corpus, helper alignment and scheduling audit — 9 October
+
+Twenty-one owned F04 derivatives completed through the actual Windows pipe on the
+unchanged **5358a8ebc** binary. Unknown root/native/entity/node fields, reordered and
+damaged identities, future versions, missing sections/duration, numeric boundaries,
+Unicode, corrupt snapshot/encoding and unavailable AU/VST3 state are retained with
+full requests, warnings, protection results and typed save differences in
+`bin/parity-evidence/p0c-windows-codec-01/codec`. Original and derivative inputs stayed
+unchanged; rejected loads preserved the prior document; every protected source refused
+overwrite; canonical copies reopened; missing-provider plugin records stayed exact.
+This is recovery evidence, not a blanket lossless or playable-project pass.
+
+[Codec observations](../api/codec-observations.json) pin all 21 Windows classifications
+and saved typed hashes. Unknown root fields preserved without warning; unknown native,
+track and node fields preserved with source protection. Invalid identity layers and
+missing command duration recovered with explicit loss warnings. Mac classifications
+remain unset pending current native execution. The strengthened API corpus also
+completed in this run; its exact saved no-op defect remains an unresolved P4b issue.
+
+**F25 clarification:** the current shared `NativeNoteEffectSupported` requires
+parameter zero for `CMD_NONE`, and `NativeSong::validate` uses it. Thus the injected
+effect-zero/parameter-37 event is invalid model data. Windows skips it with a warning
+and source protection. The encoder condition difference alone is not evidence of
+losing a valid reachable musical edit. Missing non-nudge duration remains a separate
+Mac/Windows recovery/defaulting question.
+
+The legacy Python framing helper now accepts container 6 / metadata 17 while keeping
+historical versions unchanged and rejecting newer/incorrect primitive types. The
+first new all-five-fixture check exposed its obsolete requirement for nonempty timing
+data. Current `SampleArchive.cpp` permits zero timing length in RSONGS2; the helper
+now follows that framing rule while still rejecting empty module/sample sections,
+bad length sums, truncation and trailing data. The corrected suite passed **17 tests**
+in 5.242 s; **one separate September external-reference test was skipped** because
+its opt-in file was not configured. All five original October projects were included.
+Both attempts remain in `p0c-project-helper-01.log` and `-02.log`; no assertion was
+removed to conceal a failure. Documentation now separates helper framing/repacking
+from native recovery, strict canonical saves and playback.
+
+The read-only scheduling audit found **165 configured CTests**, three outside the
+prepared CI label union, zero duplicates and **18 separate CMake projects**. The
+three are parameter provenance, synthetic MIDI/clock callback auditing, and sample
+preview decoding. Source inspection confirms the registered latter two do not open
+hardware (the preview executable's separate `--device` mode is not registered).
+Their labels and portable target dependencies are now prepared for the grouped gate.
+The old configuration's three missing selections remain visible in
+`p0c-schedule-before-reconfigure-01.json`; only the next configure/build can supply
+current registration evidence. The inventory also lists separate project targets and
+Python declarations without treating matching names as execution proof.
+
+CI now retains test-registration/schedule reports and executes helper/codec probes
+from the same built apps. The codec ratchet was checked against retained outputs
+without another application run. The final workflow/inventory changes and both Mac
+baselines remain unqualified until the grouped gate. No native build ran in this slice;
+P0b's next build remains no earlier than 21:10:15 UTC. Reciprocal file exchange and
+P1–P8 remain outstanding.
+
+The grouped CI candidate additionally retains executable archives, their hashes and
+actual source/build-receipt identities independently of test success. Mac bundles
+use tar to preserve modes and symlinks; Windows keeps the scanner and both attribution
+directories with the app. This allows reciprocal or tooling-only follow-up checks
+without recompiling the same product. Archive retention is not qualification. Both
+workflows now follow main and PRs targeting main, removing the obsolete permanent
+platform-branch trigger; temporary implementation branches still qualify through PRs.
+
 ## P0c actual API baseline and grouped CI preparation — 9 October
 
 The shared pipe/socket corpus now records 27 table-driven input cases plus rejected

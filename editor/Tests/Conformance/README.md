@@ -78,8 +78,9 @@ pass its `first/` directory as `--input-directory`; use a new output directory a
 the receiving platform's actual build identities. Link the receiving input hashes
 to the preceding `firstSave.sha256` records. Returning the Mac `first/` to Windows
 completes the no-edit round trip. Keep every intermediate report, including failures.
-This runner does not yet implement reciprocal edited legs, provider fixtures, audio
-comparison or codec warning-classification vectors; these remain distinct gates.
+This runner does not yet implement reciprocal edited legs, provider audio fixtures
+or audio comparison; these remain distinct gates. Optional codec classification
+vectors are described below.
 
 Add `--api-vectors` to execute the shared pipe/socket API corpus after the five
 no-edit legs. It uses an owned F04 document, validates the advertised method
@@ -108,3 +109,44 @@ payload difference. There is no general permission to ignore revisions, Undo ent
 plugin bytes or unknown fields. Update both vectors and the owned difference entry
 when a domain implementation fixes it. Broader codec recovery vectors, raw malformed
 wire inputs, cache bounds and full musical behavior remain separate coverage.
+
+`--codec-vectors` additionally generates 21 owned F04 derivatives covering unknown
+root/native/entity/node fields, reordered/duplicate/deleted identities, future
+versions, absent sections/duration, numeric types/ranges, Unicode/invalid encoding,
+required snapshot corruption and unavailable AU/VST3 state. It retains each input,
+saved copy, actual load warnings, source-protection decision and exact typed changes.
+Rejected Open must preserve the loaded document; a protected source must refuse
+overwrite and remain byte-identical; canonical copies must reopen. Missing-provider
+files must preserve their exact plugin records. No provider audio is started.
+
+`doc/api/codec-observations.json` pins the reviewed Windows classifications and
+saved typed hashes; Mac is unqualified until current native observations are reviewed.
+`safetyPassed`, `baselineMatched` and `parityComplete` are separate fields. A recovered
+file may have intentional, warned loss; an exact baseline match does not excuse an
+unresolved platform discrepancy or qualify an edited reciprocal leg. The original
+21-case report can be checked against `codec_vectors.observations(report, directory)`
+without rerunning the application when its inputs are unchanged.
+
+The precise-note effect-zero/parameter-nonzero vector is invalid in the current
+shared model: `NativeNoteEffectSupported(CMD_NONE, parameter)` requires zero.
+Windows recovery drops the incompatible event and protects its source. Preserve
+this case as malformed-input evidence; differing encoder conditions alone do not
+establish loss of a valid reachable edit.
+
+`schedule_inventory.py --ctest-json REGISTRATIONS.json --platform windows|macos
+--output NEW_REPORT.json` consumes `ctest --show-only=json-v1` without building or
+running tests. It requires every configured CTest to be selected exactly once by
+the workflow's declared groups. Separate CMake projects, matching executable names,
+Python method declarations, explicit unittest selections and non-CTest workflow
+commands are listed separately. Those source declarations are not runtime passes;
+inherited cases and runtime skips are not inferred. Regenerate registrations after
+CMake changes at the next build checkpoint, rather than calling a stale configuration
+current evidence. CI retains registration and scheduling reports alongside results.
+
+CI also retains each built native app (Windows zip / Mac tar.gz), attribution and
+an identity manifest containing the actual built commit, executable hash, archive
+hash and build-receipt hash. These are candidate binaries, not passing qualification
+claims. Use those exact archived apps and retained `first/` songs for reciprocal
+checks or tooling-only corrections; do not rebuild unchanged product inputs merely
+to review a baseline. Preserve Mac executable permissions and bundle symlinks when
+extracting its tar archive. Compare all identity hashes before launching an archive.

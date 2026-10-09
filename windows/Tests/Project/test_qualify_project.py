@@ -65,7 +65,7 @@ class QualificationUtilityTests(unittest.TestCase):
 
     def test_cli_failures_emit_no_success_report_or_traceback(self):
         future = generated_project()
-        future["native"]["version"] = 15
+        future["native"]["version"] = 18
         for data in (None, b"not a plist", plistlib.dumps(future, fmt=plistlib.FMT_BINARY)):
             with self.subTest(data_type=type(data).__name__):
                 if data is not None:

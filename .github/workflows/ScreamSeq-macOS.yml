@@ -2,7 +2,7 @@ name: ScreamSeq macOS
 
 on:
   push:
-    branches: [main, codex/windows-native]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -65,20 +65,46 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         with:
           python-version: '3.12'
+      - name: Retain the built app for reciprocal checks without rebuilding
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          tar -czf "$SCREAMSEQ_BUILD_DIR/native-app.tar.gz" -C "$SCREAMSEQ_BUILD_DIR" ScreamSeq.app
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          build = pathlib.Path(os.environ['SCREAMSEQ_BUILD_DIR'])
+          def digest(path):
+              return hashlib.sha256((build / path).read_bytes()).hexdigest()
+          identity = dict(sourceCommit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              executableSHA256=digest('ScreamSeq.app/Contents/MacOS/ScreamSeq'),
+              archiveSHA256=digest('native-app.tar.gz'),
+              buildReceiptSHA256=digest('ScreamSeq.app/Contents/Resources/BuildInfo.json'),
+              qualification='Built candidate; test results are separate and may fail.')
+          (build / 'native-app-identity.json').write_text(json.dumps(identity, indent=2) + '\n')
+          PY
       - name: Typed fixtures and actual socket conformance baseline
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
         run: |
           set -o pipefail
           python -B -m unittest discover -s editor/Tests/Conformance -p 'test_*.py' -v 2>&1 | tee screamseq-macos-conformance-tools.log
+          python -B -m unittest discover -s windows/Tests/Project -p 'test_*.py' -v 2>&1 | tee screamseq-macos-conformance-project-helper.log
           executable="$SCREAMSEQ_BUILD_DIR/ScreamSeq.app/Contents/MacOS/ScreamSeq"
           binary_hash="$(shasum -a 256 "$executable" | cut -d ' ' -f 1)"
           python -B editor/Tests/Conformance/native_roundtrip.py \
             --executable "$executable" --binary-sha256 "$binary_hash" \
             --binary-source-commit "$(git rev-parse HEAD)" \
             --build-receipt "$SCREAMSEQ_BUILD_DIR/ScreamSeq.app/Contents/Resources/BuildInfo.json" \
-            --output "$SCREAMSEQ_BUILD_DIR/parity-conformance" --api-vectors \
+            --output "$SCREAMSEQ_BUILD_DIR/parity-conformance" --api-vectors --codec-vectors \
             2>&1 | tee screamseq-macos-conformance-native.log
+      - name: Configured test scheduling inventory
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          ctest --test-dir "$SCREAMSEQ_BUILD_DIR" --show-only=json-v1 > "$SCREAMSEQ_BUILD_DIR/test-registration.json"
+          python -B editor/Tests/Conformance/schedule_inventory.py \
+            --ctest-json "$SCREAMSEQ_BUILD_DIR/test-registration.json" --platform macos \
+            --output "$SCREAMSEQ_BUILD_DIR/test-schedule.json"
       - name: Preserve qualification logs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -89,6 +115,10 @@ jobs:
             bin/mac-ci/Testing/Temporary/*.log
             bin/mac-ci/CMakeFiles/CMakeConfigureLog.yaml
             bin/mac-ci/CMakeCache.txt
+            bin/mac-ci/native-app.tar.gz
+            bin/mac-ci/native-app-identity.json
+            bin/mac-ci/test-registration.json
+            bin/mac-ci/test-schedule.json
             bin/mac-ci/parity-conformance/**
             bin/mac-ci/ScreamSeq.app/Contents/Resources/BuildInfo.json
           if-no-files-found: warn

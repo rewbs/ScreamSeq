@@ -2,7 +2,7 @@ name: ScreamSeq Windows
 
 on:
   push:
-    branches: [main, codex/windows-native]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -38,6 +38,21 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         with:
           python-version: '3.12'
+      - name: Retain the built app for reciprocal checks without rebuilding
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          python mac/Tools/build_manifest.py bin/windows-ci/BuildInfo.json
+          if ($LASTEXITCODE -ne 0) { throw 'Build receipt capture failed.' }
+          $release = (Resolve-Path bin/windows-ci/Release).Path
+          Compress-Archive -Path "$release/ScreamSeq.exe", "$release/ScreamSeqVST3Scanner.exe", "$release/THIRD-PARTY-NOTICES", "$release/VST3-NOTICES" -DestinationPath bin/windows-ci/native-app.zip
+          @{
+            sourceCommit = (git rev-parse HEAD).Trim()
+            executableSHA256 = (Get-FileHash "$release/ScreamSeq.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+            archiveSHA256 = (Get-FileHash bin/windows-ci/native-app.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+            buildReceiptSHA256 = (Get-FileHash bin/windows-ci/BuildInfo.json -Algorithm SHA256).Hash.ToLowerInvariant()
+            qualification = 'Built candidate; test results are separate and may fail.'
+          } | ConvertTo-Json | Set-Content bin/windows-ci/native-app-identity.json -Encoding utf8
       - name: Scratch editor on an owned private desktop
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
@@ -89,13 +104,21 @@ jobs:
         run: |
           python -B -m unittest discover -s editor/Tests/Conformance -p 'test_*.py' -v *>&1 | Tee-Object screamseq-conformance-tools.log
           if ($LASTEXITCODE -ne 0) { throw 'Conformance tool checks failed.' }
-          python mac/Tools/build_manifest.py bin/windows-ci/BuildInfo.json
-          if ($LASTEXITCODE -ne 0) { throw 'Build receipt capture failed.' }
+          python -B -m unittest discover -s windows/Tests/Project -p 'test_*.py' -v *>&1 | Tee-Object screamseq-conformance-project-helper.log
+          if ($LASTEXITCODE -ne 0) { throw 'Project framing helper checks failed.' }
           $executable = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
           $binaryHash = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
           $builtCommit = (git rev-parse HEAD).Trim()
-          python -B editor/Tests/Conformance/native_roundtrip.py --executable $executable --binary-sha256 $binaryHash --binary-source-commit $builtCommit --build-receipt bin/windows-ci/BuildInfo.json --output bin/windows-ci/parity-conformance --api-vectors *>&1 | Tee-Object screamseq-conformance-native.log
+          python -B editor/Tests/Conformance/native_roundtrip.py --executable $executable --binary-sha256 $binaryHash --binary-source-commit $builtCommit --build-receipt bin/windows-ci/BuildInfo.json --output bin/windows-ci/parity-conformance --api-vectors --codec-vectors *>&1 | Tee-Object screamseq-conformance-native.log
           if ($LASTEXITCODE -ne 0) { throw 'Native conformance baseline did not match; inspect retained reports.' }
+      - name: Configured test scheduling inventory
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          ctest --test-dir bin/windows-ci -C Release --show-only=json-v1 | Set-Content bin/windows-ci/test-registration.json -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw 'CTest inventory failed.' }
+          python -B editor/Tests/Conformance/schedule_inventory.py --ctest-json bin/windows-ci/test-registration.json --platform windows --output bin/windows-ci/test-schedule.json
+          if ($LASTEXITCODE -ne 0) { throw 'Registered tests are unscheduled or repeated; inspect the inventory.' }
       - name: Preserve qualification logs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -110,7 +133,11 @@ jobs:
             screamseq-conformance-*.log
             bin/windows-ci/parity-conformance/**
             bin/windows-ci/BuildInfo.json
+            bin/windows-ci/native-app.zip
+            bin/windows-ci/native-app-identity.json
             bin/windows-ci/CMakeCache.txt
+            bin/windows-ci/test-registration.json
+            bin/windows-ci/test-schedule.json
             bin/windows-ci/Testing/Temporary/*.log
             bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: warn
