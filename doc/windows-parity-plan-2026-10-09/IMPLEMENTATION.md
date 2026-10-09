@@ -12,6 +12,62 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Consolidated native checkpoint — 9 October, 22:19 UTC
+
+Frozen product/test commit: `494d6556367ee6ac9c592ae19cc7a858e6bc2e1b`.
+One local ARM64 build ran **22:11:49–22:13:34 UTC**, after the hourly boundary,
+for the app, workspace harness and three affected native fixture targets. It
+passed without warnings; the source hashes stayed unchanged across the build.
+Compiler and CMake cache hashes match the previous checkpoint. The next normal
+local build is no earlier than **23:13:34 UTC**.
+
+All **13/13 targeted native tests passed in 260.29 seconds**: ten workspace
+groups plus parameter-automation dock, instrument short dock and graph workflow.
+This confirms the three corrections on ARM64, including the temporary-snapshot
+lifetime repair and the compact floating focus/geometry cases. All **30/30 actual
+application integration cases passed in 53.933 seconds**, with no skips, covering
+shortcuts, recording, MIDI/sample capture UI, recovery cleanup, musical typing,
+pattern edits and retained editor hosts. Tests used owned private desktops and
+disposable files. No musician process was present before the run. These are not
+foreground visual or physical-device qualification claims.
+
+Receipt: `bin/parity-evidence/p0b-closure-receipt-03.json`; logs:
+`p0b-closure-build-03.log`, `p0b-closure-native-03.log`, `p0b-closure-app-05.log`.
+The current ARM64 app SHA-256 is
+`c32dca81899bc82fe00a487842b3b10cd84d27d86f84bd05ec435f4b191e443e`.
+Unchanged worker/model evidence retains its earlier scope and source/compiler
+checks; changed native targets were rebuilt and tested together.
+
+Mac ARM interface-only run **37997879633**, job **114048444110**, compiled the
+new harness successfully and completed all **35 groups: 31 passed, four failed**:
+
+* `draft-plugin`: the deferred edit succeeds, but exhaustion does not restore the
+  baseline within the existing wait; actual edits `[0.8]`, slider `0.2`, ordinary
+  plugin status. The one-shot run-loop timer did not resolve the complete case.
+* `signal-graph`: queued handle release during refresh does not meet the combined
+  captured revision/source/existing sidechain gain assertion.
+* `graph-ports`: Back does not meet the combined original-connection/view/no-write
+  assertion. Diagnose the individual clauses before declaring a navigation bug.
+* `core-layout`: a mixer inspector ActionButton is outside its asserted bounds
+  at rectangle `(631, 300, 108, 32)`.
+
+No assertion was removed or relaxed, and no group was retried. All failure logs
+are retained in `bin/parity-evidence/macos-interface-03.log`. Artifact
+**11648031958**, `screamseq-interface-macos-15`, includes the compiled harness,
+source manifest and log; its advertised ZIP SHA-256 is
+`e4574995745165c6bec50e9b15cf248f4ce6ea35b059a4cec6179fc830ab4973`.
+The archive has not yet been downloaded locally; job-log evidence was inspected.
+These four failures require one cohesive source/harness investigation before the
+next native checkpoint; no Mac app rebuild was used for this result.
+
+Windows x64 run **37997874323** / job **114048426317** and Intel Mac run
+**37997877049** / job **114048437720** were confirmed live in their build steps
+after this local gate. Both use the same frozen commit. Keep observing those
+specific runs; do not restart them merely because another observation times out.
+P0b/P0c remain incomplete. The seven-file prior ARM Mac reciprocal checkpoint is
+still valid for its exact earlier product inputs; Intel exchange and P1–P8 remain
+outstanding.
+
 ## Batched harness and CI corrections — 9 October, 22:05 UTC
 
 No product build ran during this preparation. Native changes in `5561ca900`
