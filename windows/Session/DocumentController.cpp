@@ -392,7 +392,7 @@ void DocumentController::publishCommitted() {
   try {publish();} catch(...) {
     // Shared by ordinary edits and recording commits: a repaired publication
     // must report success after the retained take has already been consumed.
-    try {publish();} catch(...) {throw Api::ApiError(-32003,"Document operation committed; view publication unavailable. Read state before retrying the write.");}
+    try {publish();} catch(...) {throw Api::ApiError(-32003,"Document operation committed; view publication unavailable. Read state before retrying the write.", Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,identity_+":"+std::to_string(generation_),revision()});}
   }
 }
 void DocumentController::preflightGrowth(const std::string &method,const Json &params) {
@@ -748,7 +748,7 @@ std::future<Json> DocumentController::invoke(std::string method,Json params) {
         // model committed. Preserve/recover the actual new revision, not the old cache.
         publicationPending_=true;scanPatterns_=true;scanWaves_=true;
         try {publish();} catch(...) {} // A later snapshot read retries on this worker.
-        throw Api::ApiError(-32003,"Document operation committed but completion failed; read current state before retrying the write.");
+        throw Api::ApiError(-32003,"Document operation committed but completion failed; read current state before retrying the write.", Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,identity_+":"+std::to_string(generation_),revision()});
       }
       throw;
     }

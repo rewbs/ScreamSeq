@@ -41,14 +41,22 @@ void publicationTests(const std::filesystem::path &directory) {
   invoke(controller,"history.undo",{{"domain","document"}});
   need(controller.view()->cell(0,0,0).note==61,"recovered history must remain usable");
   invoke(controller,"document.open",{{"path",(directory/"unicode.screamseq").generic_string()},{"discard",true}});
+  const auto priorRevision=controller.view()->session.revision;
+  std::string committedRevision;
   persistent=true;
   rejected=false;
   try {invoke(controller,"pattern.apply",{{"cells",Json::array({{{"pattern",0},{"row",0},{"channel",0},{"note",63}}})}});}
-  catch(const Api::ApiError &e) {rejected=std::string(e.what()).find("committed")!=std::string::npos;}
+  catch(const Api::ApiError &e) {
+    rejected=e.code==-32003 && e.outcome && e.outcome->state==Tracker::CommitOutcome::Committed;
+    need(e.outcome && e.outcome->document==controller.view()->session.documentId,"postcommit outcome lost document identity");
+    committedRevision=e.outcome->revision;
+    need(!committedRevision.empty() && committedRevision!=priorRevision,"postcommit outcome advertised pre-write revision");
+  }
   need(rejected && controller.publicationPending(),"persistent postcommit failure must explicitly report committed state");
   persistent=false;
   controller.invoke("synchronizeView",Json::object()).get();
   need(!controller.publicationPending() && controller.view()->cell(0,0,0).note==63,"read-side repair left a forever-stale cache");
+  need(controller.view()->session.revision==committedRevision,"read-side repair disagrees with committed outcome");
   invoke(controller,"history.undo",{{"domain","document"}});
   std::cout<<"publication tests passed\n";
 }

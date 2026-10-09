@@ -2,6 +2,31 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](current-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 outcome boundaries — partial implementation
+
+This continuation implements and qualifies the existing partial outcome candidate; it does **not** close P0b.1 or retained-work protection. The planning readback's hashes and “not executed” labels remain the earlier checkpoint, not the status of the code below.
+
+- `editor/WriteOutcome.hpp` defines a portable value-only outcome. `ApiError` optionally carries it without changing public error numbers. Known worker postcommit publication failures report committed identity/revision; controller tests now assert typed data instead of searching message text.
+- `SessionAdapter` preserves an outcome thrown by the write itself. Failures after the host returns (snapshot, envelope serialization or wire-size admission) become `unknown`, with no pre-write revision. A later callback's own typed refusal or foreign identity cannot be attributed to the original write. The native Application uses the same distinction and repairs presentation without replacing the original worker exception.
+- The existing FIFO cache retains classified committed/unknown error responses as well as successes. Same-ID/same-content replay returns the retained response; changed content rejects. Bounds remain 64 entries/8 MiB, best effort and non-durable. Deliverable oversize-cache successes still return normally. Undeliverable write replies now become a small classified error before the pipe serialization boundary. Shared `ProtocolLimits.hpp` keeps adapter/transport byte limits aligned.
+- [API guide](../../windows/Api/README.md#classified-write-outcomes) and [optional error-data schema](../../windows/Api/write-outcome.schema.json) document coverage and limits. The Python client already preserves error data and performs no send retries. No project format, history policy, audio/device path or Mac UI changed.
+
+Qualification uses the dedicated Windows ARM64 Release app/controller/workspace directory and a separate small `bin/windows-parity-api` C++17 target. Actual named-pipe fault cases cover equal error codes/messages with different commit outcomes, authoritative worker identity, snapshot failures (including a nested typed refusal), invalid UTF-8, the 32 MiB reply bound, exact replay and side effects that leave the song revision unchanged. Domain readback must show exactly one effect. Native Application fault injection runs after the real worker edit and checks the retained new cell, readback, one Undo, nested-callback attribution and ordinary stale refusal.
+
+Final qualification results and exact source/binary/log identities are recorded in `bin/parity-evidence/p0b-outcome-receipt.json`: 1,834 source/dependency hashes, both CMake caches, five executables and retained logs. All frozen inputs matched after the final checks.
+
+| Final evidence | Result |
+|---|---|
+| `p0b-outcome-api-final-build.log`, `p0b-outcome-boundary-build.log` | Standalone API, controller, workspace and app built successfully |
+| `p0b-outcome-api-final-tests.log` | 2/2 API targets, 4.67 s; detail log retains individual protocol/cache assertions |
+| `p0b-outcome-controller-final-tests.log` | Full 26-entry controller inventory, 14.78 s, including scratch/fixture setup |
+| `p0b-outcome-workspace-final-tests.log` | Full workspace restore and draft census, 2/2, 89.38 s; detail log includes actual worker/UI completion and one-Undo assertions |
+| `p0b-outcome-app-final-tests.log` | Five actual-app/private-pipe scenarios, 2.559 s, no skips: context, Activity, recorded automation/history/save, sample import/history/persistence and independently revisioned library replay |
+
+Intermediate evidence is retained: the first workspace compile found a test-local `Json` alias missing; the correction changed only test compilation. The first workspace suite and five app cases passed; later review tightened callback attribution in both adapters, requiring the final rebuild/recheck above. No assertions, private-child timeout or error checks were weakened. Qualification used owned private desktops and disposable documents; no system audio defaults or musician sessions were changed. These checks do not establish physical audio or foreground presentation.
+
+**Next required work:** native owners must retain submitted generation/target/result and expose domain-specific reconciliation before uncertain imports, Keep, repair or render can be retried. Cached receipts alone do not prevent replay after eviction/nonretention/restart, and an unchanged song token cannot establish filesystem/catalogue/take outcome. Complete direct-render registration and every owner census; wire final replacement/Close/recovery/session-end admission. Mac and Windows x64 gates, reciprocal fixtures, foreground/accessibility and device qualification remain open. Do not merge this partial checkpoint as completed P0b.1 or mark the full parity goal achieved.
+
 ## P0b plugin repair, configured import and recorder setup
 
 This continuation completes the three owner omissions identified by the latest review. It is branch work; it does not close F21 or qualify the final departure path.

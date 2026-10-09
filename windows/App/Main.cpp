@@ -507,16 +507,45 @@ public:
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
         if(busy||recoveryRestoring) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
         if(method=="graph.signal.get"||method=="graph.signal.clear"||method=="graph.scope.get"||method=="graph.scope.watch"||method=="graph.listen.get"||method=="graph.listen.set")return signalObservationOperation(method,params);
+        bool completed=false;
         try {
-            auto result=await(controller->invoke(method,params));refreshDocument();
-            if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
-            // A dropped vendor editor never blocks the operation; say what happened.
-            if(result.is_object()&&result.contains("pluginEditorWarning")&&result.at("pluginEditorWarning").is_string()) {
-                pluginEditorWarning=wide(result.at("pluginEditorWarning").get<std::string>());status=pluginEditorWarning;frameRequested=true;
-            }
+            auto result=await(controller->invoke(method,params));completed=true;
+            finishDocumentOperation(method,result);
             return result;
         }
-        catch(...) {refreshDocument();throw;}
+        catch(...) {
+            // Repair presentation without replacing the worker's outcome with
+            // a second refresh exception. A returned worker operation may have
+            // changed files/takes/catalogues even when the song token is equal.
+            const auto failure=std::current_exception();
+            try {refreshDocument();} catch(...) {}
+            try {std::rethrow_exception(failure);}
+            catch(const ScreamSeq::Api::ApiError &error) {
+                if(!completed)throw;
+                // An outcome from a later callback can describe its own work,
+                // not the worker operation that already returned. Do not
+                // transplant a rejection or another document's identity.
+                throw ScreamSeq::Api::ApiError(error.code,error.what(),Tracker::WriteOutcome{});
+            }
+            catch(const std::exception &error) {
+                if(!completed)throw;
+                throw ScreamSeq::Api::ApiError(-32003,std::string("Operation completed but native completion failed; read state before retrying. ")+error.what(),Tracker::WriteOutcome{});
+            }
+            catch(...) {
+                if(!completed)throw;
+                throw ScreamSeq::Api::ApiError(-32003,"Operation completed but native completion failed; read state before retrying.",Tracker::WriteOutcome{});
+            }
+        }
+    }
+    // Keep presentation/recovery completion separate from worker success. The
+    // owned native fixture injects faults here after the real worker has run.
+    virtual void finishDocumentOperation(const std::string &method,const Json &result) {
+        refreshDocument();
+        if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
+        // A dropped vendor editor never blocks the operation; say what happened.
+        if(result.is_object()&&result.contains("pluginEditorWarning")&&result.at("pluginEditorWarning").is_string()) {
+            pluginEditorWarning=wide(result.at("pluginEditorWarning").get<std::string>());status=pluginEditorWarning;frameRequested=true;
+        }
     }
     std::wstring pluginEditorWarning;
     // Internal first-open reads must not refresh presentation until the whole

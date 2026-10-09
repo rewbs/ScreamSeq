@@ -641,12 +641,32 @@ response dictionaries. Unknown envelope keys/batches/notifications are -32600.
 Unbound adapters only describe capabilities; song requests return busy rather
 than fabricated state.
 
-### Bounded successful-write replay
+### Classified write outcomes
+
+A failure to deliver or present a result is separate from whether the operation
+took effect. Classified errors retain the existing public error codes and may
+add `error.data.writeOutcome`: `notCommitted`, `noChange`, `committed` or `unknown`.
+See [write-outcome.schema.json](write-outcome.schema.json) for this optional data.
+`documentId` and `revision` are included only when known at that boundary; a
+post-write snapshot or serialization failure never advertises the pre-write
+revision as current. `committed` means an effect occurred but completion failed;
+`unknown` requires reconciliation. Neither permits blind resubmission.
+
+The current worker classifies known committed publication failures. The adapter
+classifies completion failures after a returned host write, including invalid
+UTF-8 or a result exceeding the wire bound. The native application preserves a
+classified worker exception through best-effort view repair. This is not yet
+exhaustive classification of every host side effect. Absence of outcome data,
+an ordinary `-32003`, or an unchanged song revision does **not** prove rejection.
+Filesystem, library, take and device effects require their own domain readback.
+Transport loss after sending can also leave the outcome unknown to the client.
+
+### Bounded write replay
 
 `api.describe.result.data.writeReplayCache` reports the policy and aggregate
 occupancy (`retainedEntries`, `retainedSerializedBytes`), never cached IDs,
 parameters, paths or response contents. Per SessionAdapter, retention is limited
-to **64 successful writes and 8 MiB (8,388,608 bytes)**, whichever binds first.
+to **64 write responses and 8 MiB (8,388,608 bytes)**, whichever binds first.
 The byte charge is precisely `request.dump().size() + response.dump().size()`:
 compact, sorted-object-key UTF-8 JSON envelopes, without newline delimiters or
 original request whitespace. It is **not an 8 MiB heap/RSS guarantee**: retained
@@ -654,23 +674,26 @@ response JSON nodes, string capacities, ID copies, containers and allocator
 overhead cost additional memory. Temporary snapshots, serialization buffers and
 in-flight responses are outside this retention accounting.
 
-Only successful write-method results enter the cache, including successful
-no-ops and `dryRun:true` previews. Validation/host errors and all reads remain
-uncached. A retained request's ID, method and parameters must match its canonical
-parsed JSON exactly; key order/whitespace are irrelevant, but an integer changed
+Successful write-method results enter the cache, including successful no-ops
+and `dryRun:true` previews. Classified `committed` and `unknown` write errors
+also enter it. Proven `notCommitted`/`noChange`, unclassified validation/host
+errors and all reads remain uncached. A retained request's ID, method and
+parameters must match its canonical parsed JSON exactly; key order/whitespace
+are irrelevant, but an integer changed
 to a floating-point parameter is different. An exact retry returns the original
 complete response without invoking the host or rechecking now-stale tokens.
 Reusing that ID for a different write returns `-32600` and preserves the original
 entry. Applying a dry-run proposal requires a new ID and current revision.
 
-Successful insertions evict the oldest entries until both limits hold; a replay
+Insertions evict the oldest entries until both limits hold; a replay
 does not refresh an entry's age. An entry whose charge alone exceeds 8 MiB is
-not retained and does not evict older entries. Retention is best effort: size,
-serialization or allocation failure must not convert an already completed write
-into a rejection with the pre-write revision. The original success is returned
-even when it cannot be cached. A host result that cannot serialize still reaches
-the transport's existing bounded `-32003` fallback (currently with null ID), not
-a claim that the write was unchanged; inspect state to determine the outcome.
+not retained and does not evict older entries. Retention is best effort: a size
+limit or allocation failure must not convert an already completed write into a rejection
+with the pre-write revision. A deliverable success is returned even when it
+cannot be cached. Undeliverable write results instead produce a small `-32003`
+error with the original ID and `writeOutcome:"unknown"`, retained under the same
+bounds. The transport still has a generic fallback for failures outside this
+adapter (including malformed read replies); it makes no rejection claim.
 
 This is a **bounded, session-local replay window**, not durable/global
 idempotency. After eviction, skipped retention or adapter destruction, a request

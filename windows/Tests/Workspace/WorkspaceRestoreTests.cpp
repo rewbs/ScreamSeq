@@ -69,9 +69,14 @@ struct RestoreApplication final:Application {
     std::optional<Json> sampleGuardState;
     bool sampleGuardFails=false;
     std::function<void()> duringSampleGuard;
+    std::function<void()> completionFault;
 
     explicit RestoreApplication(const std::filesystem::path &folder)
         :Application({},true,folder/L"envelope-catalogue.json",folder/L"plugin-library.json"){}
+    void finishDocumentOperation(const std::string &method,const Json &result)override {
+        Application::finishDocumentOperation(method,result);
+        if(auto fault=std::exchange(completionFault,{}))fault();
+    }
     Json documentOperation(const std::string &method,const Json &params)override {
         if(method=="sample.recording.get"&&sampleGuardState) {
             // Only the device-backed sample read is substituted. The aggregate
@@ -999,6 +1004,42 @@ static void retainedTakesProtectLeavingDocument() {
 
 #include "DocumentDraftCensusTests.inc"
 
+void nativeCompletionRetainsOutcome() {
+    using Json=RestoreJson;
+    withRestoreFixture([](RestoreApplication &app) {
+        const auto prior=app.view->session.revision;
+        const auto before=app.view->cell(0,0,0);
+        const auto note=before.note==61?62:61;
+        app.completionFault=[]{throw std::runtime_error("Injected native completion failure");};
+        bool failed=false;
+        try {app.documentOperation("pattern.apply",{{"expectedRevision",prior},{"cells",Json::array({{{"pattern",0},{"row",0},{"channel",0},{"note",note}}})}});}
+        catch(const ScreamSeq::Api::ApiError &error) {
+            failed=error.code==-32003&&error.outcome&&error.outcome->state==Tracker::CommitOutcome::Unknown;
+            restoreCheck(error.outcome->revision.empty(),"Native completion must not advertise pre-write revision");
+        }
+        restoreCheck(failed&&app.view->session.revision!=prior&&app.view->cell(0,0,0).note==note,"Native completion misreported or reverted an accepted worker edit");
+        const auto committed=app.view->session.revision;
+        const auto saved=app.snapshot();
+        restoreCheck(saved.revision==committed&&app.view->session.revision==committed,"Readback changed committed document");
+        app.documentOperation("history.undo",{{"expectedRevision",committed},{"domain","document"}});
+        restoreCheck(app.view->cell(0,0,0)==before,"Native completion inserted another history edit or lost original cell");
+        // A nested callback's refusal cannot prove the returned outer operation
+        // was rejected, nor can it supply the outer operation's revision.
+        const Tracker::WriteOutcome typed{Tracker::CommitOutcome::NotCommitted,"other-document","other-revision"};
+        app.completionFault=[&]{throw ScreamSeq::Api::ApiError(-32003,"Typed completion",typed);};
+        failed=false;
+        try {app.documentOperation("synchronizeView",Json::object());}
+        catch(const ScreamSeq::Api::ApiError &error) {
+            failed=error.outcome&&error.outcome->state==Tracker::CommitOutcome::Unknown&&error.outcome->document.empty()&&error.outcome->revision.empty();
+        }
+        restoreCheck(failed,"Nested completion refusal falsified the outer operation's outcome");
+        bool rejected=false;
+        try {app.documentOperation("pattern.apply",{{"expectedRevision","stale"},{"cells",Json::array()}});}
+        catch(const ScreamSeq::Api::ApiError &error) {rejected=error.code==-32001&&!error.outcome;}
+        restoreCheck(rejected,"Precommit stale refusal acquired a false completion outcome");
+    });
+}
+
 int wmain(int argc,wchar_t **argv) {
     try {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -1015,6 +1056,7 @@ int wmain(int argc,wchar_t **argv) {
                 importAndRecorderDraftCensus();std::cout<<"PASS draft census: recorder setup and actual Application hidden path repair ownership\n";
                 return;
             }
+            nativeCompletionRetainsOutcome();std::cout<<"PASS native completion: real worker commit, classified error, readback and one Undo\n";
             retainedTakesProtectLeavingDocument();std::cout<<"PASS take protection: MIDI, microphone, both, read failure and reentrant input\n";
             modulationCatalogueReadRetainsNewerDraft();std::cout<<"PASS modulation catalogue: manual baseline and pumped raw-draft retention\n";
             firstRestoreMatchesOrdinaryOpen();std::cout<<"PASS first restore: independent Notes inspector/native target and FX binding equivalence\n";

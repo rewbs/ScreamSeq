@@ -149,10 +149,11 @@ void pipeTests() {
 }
 void serializationPipeTests() {
   struct SerializationHost : TestHost {
+    unsigned calls=0;
     bool supportsDocumentOperations() const override { return true; }
     Json documentOperation(const std::string &,const Json &) override {
       // Deliberately invalid host output after a protocol-fixture commit.
-      state.revision="committed:1";
+      ++calls;state.revision="committed:1";
       return {{"invalid",std::string("\xFF",1)}};
     }
   } host;
@@ -167,14 +168,79 @@ void serializationPipeTests() {
   const auto wire=pipeExchange(name,q.dump()+"\n");
   check(wire.size()<1024,"serialization fallback is a bounded ordinary JSON response");
   const auto reply=json::parse(wire);
-  check(reply["error"]["code"]==-32003 && reply["id"].is_null(),"existing transport serialization fallback");
-  check(!reply.contains("result") && !reply["error"].contains("data"),"serialization fallback must not assert unchanged or return a pre-commit revision");
+  check(reply["error"]["code"]==-32003 && reply["id"]==q["id"],"adapter preserves serialization failure request identity");
+  check(!reply.contains("result") && reply["error"]["data"]==json({{"writeOutcome","unknown"}}),"serialization failure must not assert unchanged or return a pre-commit revision");
   const auto readback=json::parse(pipeExchange(name,request("document.get").dump()+"\n"));
   check(readback["result"]["revision"]=="committed:1","transport failure leaves committed state visible on readback");
   const auto retry=json::parse(pipeExchange(name,q.dump()+"\n"));
-  check(retry["error"]["code"]==-32001,"unserializable reply was not cached; revision guard prevents reexecution");
+  check(retry==reply,"retained serialization outcome must replay instead of re-entering host");
   server.stop();
-  std::cout<<"PASS bounded real-pipe serialization fallback and committed-state readback (outcome uncertain until read)\n";
+  check(host.calls==1,"serialization replay entered host twice");
+  std::cout<<"PASS bounded real-pipe serialization outcome/replay and committed-state readback\n";
+}
+void completionPipeTests() {
+  struct OutcomeHost : TestHost {
+    unsigned effects=0;
+    bool failSnapshot=false,typedSnapshot=false;
+    bool supportsDocumentOperations() const override {return true;}
+    SessionSnapshot snapshot()override {
+      if(failSnapshot){
+        failSnapshot=false;
+        if(typedSnapshot)throw ApiError(-32003,"Injected snapshot refusal",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted,"other-document","other-revision"});
+        throw ApiError(-32003,"Injected snapshot failure");
+      }
+      state.document["effects"]=effects;return state;
+    }
+    Json documentOperation(const std::string &,const Json &p)override {
+      const auto stage=p.at("stage").get<std::string>();
+      if(stage=="before")throw ApiError(-32003,"Injected boundary failure",
+        Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted,state.documentId,state.revision});
+      ++effects;
+      if(p.value("bump",true))state.revision="committed:"+std::to_string(effects);
+      if(stage=="after")throw ApiError(-32003,"Injected boundary failure",
+        Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,state.documentId,state.revision});
+      if(stage=="snapshot"||stage=="snapshot-rejected"){failSnapshot=true;typedSnapshot=stage=="snapshot-rejected";}
+      if(stage=="serialize")return {{"invalid",std::string("\xFF",1)}};
+      if(stage=="oversize")return {{"large",std::string(PipeServer::maxResponseBytes,'x')}};
+      return {{"effects",effects}};
+    }
+  }host;
+  std::unique_ptr<SessionAdapter> api;
+  const auto name=L"\\\\.\\pipe\\ScreamSeq.Api.Outcomes."+std::to_wstring(GetCurrentProcessId());
+  PipeServer server(name,[&](const json &q){if(!api)api=std::make_unique<SessionAdapter>(host);return api->handle(q);});
+  server.start();
+  const auto send=[&](const json &q){return json::parse(pipeExchange(name,q.dump()+"\n"));};
+  auto current=send(request("document.get"))["result"];
+  const auto rejectedRequest=request("pattern.apply",{{"expectedRevision",current["revision"]},{"stage","before"}},"rejected");
+  const auto rejected=send(rejectedRequest);
+  check(rejected["error"]["data"]["writeOutcome"]=="notCommitted","pipe lost proven rejection");
+  check(send(rejectedRequest)==rejected,"proven rejection retry changed outcome");
+  const auto afterRequest=request("pattern.apply",{{"expectedRevision",current["revision"]},{"stage","after"}},"committed");
+  const auto after=send(afterRequest);
+  check(after["error"]["code"]==rejected["error"]["code"] &&
+    after["error"]["message"]==rejected["error"]["message"] &&
+    after["error"]["data"]["writeOutcome"]=="committed","pipe collapsed equal code/message outcomes");
+  check(after["error"]["data"]["documentId"]=="test" &&
+    after["error"]["data"]["revision"]!=current["revision"],"committed pipe error lost actual identity/revision");
+  check(send(afterRequest)==after,"committed pipe receipt not retained");
+  auto changed=afterRequest;changed["params"]["bump"]=false;
+  check(send(changed)["error"]["code"]==-32600,"retained error allowed changed request payload");
+  for(const auto *stage:{"snapshot","snapshot-rejected","serialize","oversize"}) {
+    current=send(request("document.get"))["result"];
+    const auto q=request("pattern.apply",{{"expectedRevision",current["revision"]},{"stage",stage},{"bump",false}},stage);
+    const auto result=send(q);
+    check(result["error"]["code"]==-32003 && result["id"]==stage &&
+      result["error"]["data"]==json({{"writeOutcome","unknown"}}),"post-host failure asserted rejection or stale revision");
+    check(send(q)==result,"unchanged-revision completion error repeated side effect");
+    const auto read=send(request("document.get"))["result"];
+    check(read["revision"]==current["revision"] &&
+      read["data"]["effects"].get<unsigned>()==current["data"]["effects"].get<unsigned>()+1,
+      "domain readback must reveal exactly one effect despite unchanged song revision");
+  }
+  check(send(afterRequest)==after,"later failures lost earlier committed receipt");
+  server.stop();
+  check(host.effects==5,"pipe completion scenarios duplicated effects");
+  std::cout<<"PASS real-pipe typed boundaries, unchanged-revision effects, snapshot/serialization/size failures and exact replay\n";
 }
 void requestBoundaryTests() {
   const auto name=L"\\\\.\\pipe\\ScreamSeq.Api.Bounds."+std::to_wstring(GetCurrentProcessId());
@@ -230,6 +296,7 @@ int main(int argc, char **argv) {
     transientInputTests();
     pipeTests();
     serializationPipeTests();
+    completionPipeTests();
     requestBoundaryTests();
     return 0;
   } catch(const std::exception &e) { std::cerr << "FAIL: " << e.what() << '\n'; return 1; }
