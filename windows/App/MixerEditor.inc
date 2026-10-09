@@ -14,7 +14,7 @@
             [this](const auto &method,const auto &params){return documentOperation(method,params);},
             [this]{return std::pair(documentId,view->session.revision);},
             [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},
-            [this]{if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the retained Mixer Details draft first");},
+            [this]{if(nativeCommandPending||nativeCommandCompletion.retained())throw std::runtime_error("Review the previous command result before adjusting the mixer");if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the retained Mixer Details draft first");},
             [this](const auto &bus){if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the retained Mixer Details draft before changing buses");mixerTarget=bus;mixerStripsMode=false;refreshMixer();layoutControls();SetFocus(controls.at(mixerName));},
             [this]{mixerStripsMode=true;revealWorkspaceMainEditor("mixer");layoutControls();});
         mixerStrips->dock(window);
@@ -171,6 +171,7 @@
         EnableWindow(controls.at(mixerAdd),active&&!mixerDirty&&!mixerPending);EnableWindow(controls.at(mixerRemove),selected&&!mixerDirty&&!mixerPending&&(mixerDraft.value("kind","")=="group"||mixerDraft.value("kind","")=="return"));
         for(int id=mixerName;id<=mixerTiming;++id)EnableWindow(controls.at(id),selected);
         EnableWindow(controls.at(mixerOutput),selected&&mixerDraft.value("kind","")!="master");EnableWindow(controls.at(mixerApply),selected&&!mixerPending);
+        ScreamSeq::NativeControls::text(controls.at(mixerReload),nativeCommandCompletion.retained()?L"Review result":L"Reload");
         for(int id:{mixerMute,mixerSolo}){EnableWindow(controls.at(id),selected);ScreamSeq::NativeControls::text(controls.at(id),id==mixerMute?(mixerDraft.value("mute",false)?L"Mute on":L"Mute off"):(mixerDraft.value("solo",false)?L"Solo on":L"Solo off"));}
         if(visible)SetTimer(window,3,50,nullptr);
     }
@@ -185,6 +186,10 @@
             SetFocus(mixerStripsMode?mixerStrips->window():controls.at(mixerList));return true;
         }
         if(busy||mixerPending)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(nativeCommandCompletion.retained()) {
+            if(id==mixerReload){reviewNativeCommand();return true;}
+            throw std::runtime_error("Review the earlier command result before changing Mixer Details");
+        }
         if(mixerStrips&&!mixerStrips->retired()&&mixerStrips->hasGesture())throw std::runtime_error("Finish or cancel the retained mixer strip gesture first");
         if(id==mixerReload){mixerDirty=false;++mixerGeneration;refreshMixer();return true;}
         if(id==mixerList){if(mixerDirty){ScreamSeq::NativeInputGate::present(controls.at(mixerList),LB_SETCURSEL,mixerSelected(),0);throw std::runtime_error("Apply or reload the captured mixer draft before changing buses");}const auto index=SendMessageW(controls.at(mixerList),LB_GETCURSEL,0,0);if(index>=0&&size_t(index)<mixerData.at("buses").size()){mixerTarget=mixerData.at("buses")[size_t(index)].at("id").get<std::string>();loadMixerFields();}return true;}
@@ -201,8 +206,13 @@
             const auto output=SendMessageW(controls.at(mixerOutput),CB_GETCURSEL,0,0);p["output"]=output<=0?Json():mixerData.at("buses").at(size_t(output-1)).at("id");
         }else return true;
         const auto generation=mixerGeneration;mixerPending=true;
-        try{const auto result=documentOperation(method,p);mixerPending=false;if(generation==mixerGeneration){mixerDirty=false;if(id==mixerAdd)mixerTarget=result.at("bus").get<std::string>();refreshMixer();}mixerStatus=L"Mixer edit applied / document Undo available";}
-        catch(...){mixerPending=false;mixerStatus=L"Edit rejected / captured values retained";throw;}
+        try{
+            retainedNativeCommand("mixer",method,p,{{"bus",mixerTarget}},[&](const Json &result){
+                mixerPending=false;
+                if(generation==mixerGeneration){mixerDirty=false;if(id==mixerAdd)mixerTarget=result.at("bus").get<std::string>();refreshMixer();}
+                mixerStatus=L"Mixer edit applied / document Undo available";
+            });
+        }catch(...){mixerPending=false;mixerStatus=nativeCommandCompletion.retained()?L"Mixer result retained / Review before another edit":L"Edit rejected / captured values retained";throw;}
         return true;
     }
     bool mixerKey(WPARAM key){const auto id=GetFocus()==window?0:GetDlgCtrlID(GetFocus());if(id<mixerList||id>mixerTiming)return false;if(key==VK_ESCAPE){command(mixerReload);return true;}if(key==VK_RETURN&&id>=mixerName){command(mixerApply);return true;}return false;}

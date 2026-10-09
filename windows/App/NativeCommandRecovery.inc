@@ -39,6 +39,10 @@
             }
         }else if(domain=="midi"){
             auto recording=documentOperation("recording.get",Json::object());const auto &take=recording.at("take");if(!take.is_null()&&!take.is_string())throw std::runtime_error("Invalid MIDI take readback");(void)recording.at("capturing").get<bool>();observed["recording"]=std::move(recording);
+        }else if(domain=="mixer"){
+            auto mixer=documentOperation("mixer.get",Json::object());
+            if(!mixer.at("buses").is_array())throw std::runtime_error("Mixer readback is unavailable / result retained");
+            observed["mixer"]=std::move(mixer);
         }else if(domain=="save"){
             const auto path=std::filesystem::u8path(nativeCommandTarget.at("params").at("path").get<std::string>());
             observed["file"]=await(std::async(std::launch::async,[path]{return inspectSavedCommandFile(path);}));observed["recoveryStatus"]=recoveryStatus();observed["recoveryCopies"]=recoveryCopies();
@@ -58,7 +62,7 @@
         if(const auto result=nativeCommandCompletion.returned()){
             nativeCommandReport={{"outcome","verified"},{"submission",nativeCommandTarget},{"result",result->result},{"revision",result->revision}};
             const auto domain=nativeCommandTarget.at("domain").get<std::string>();
-            status=domain=="save"?L"Earlier Save completed / current file was not overwritten and recovery cleanup was not repeated":domain=="midi"?L"Earlier recording operation completed / current take retained / no operation repeated":L"Earlier sample operation completed / current selection and raw fields retained / no write repeated";
+            status=domain=="save"?L"Earlier Save completed / current file was not overwritten and recovery cleanup was not repeated":domain=="midi"?L"Earlier recording operation completed / current take retained / no operation repeated":domain=="mixer"?L"Earlier mixer operation completed / current draft retained / no write repeated":L"Earlier sample operation completed / current selection and raw fields retained / no write repeated";
             if(domain=="midi")updateRecordingWindow();nativeCommandCompletion.finish();frameRequested=true;return;
         }
         nativeCommandReport=readNativeCommandState();const auto observation=nativeCommandReport;

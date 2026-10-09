@@ -1,5 +1,21 @@
 void applicationNativeCommandRecovery(){
   withRestoreFixture([](RestoreApplication &app){
+    app.documentOperation("mixer.enable",{{"expectedRevision",app.view->session.revision}});
+    app.command(mixerDetailsCommand);unsigned writes=0;
+    rawDraftText(app.controls.at(mixerName),L"Saved bus name");app.mixerFieldChanged();
+    app.sampleMutationCompletion=[&](const std::string &method){if(method=="mixer.bus.set"){
+      ++writes;rawDraftText(app.controls.at(mixerName),L"Later raw bus name");app.mixerFieldChanged();
+      throw std::runtime_error("Owned mixer presentation failure");}};
+    restoreRejected([&]{app.mixerControlCommand(mixerApply);});
+    restoreCheck(writes==1&&app.nativeCommandCompletion.retained()&&app.nativeCommandCompletion.returned()&&app.mixerDirty,
+      "Mixer Details lost its completed result or later raw draft");
+    restoreRejected([&]{app.mixerControlCommand(mixerApply);});
+    app.mixerControlCommand(mixerReload);
+    restoreCheck(writes==1&&!app.nativeCommandCompletion.retained()&&app.mixerDirty&&restoreText(app.controls.at(mixerName))==L"Later raw bus name",
+      "Mixer result Review replayed a write or discarded a newer name draft");
+    app.sampleMutationCompletion={};
+  });
+  withRestoreFixture([](RestoreApplication &app){
     app.documentOperation("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",RestoreJson::array({0})},{"instrument",1}});unsigned stops=0;
     app.sampleMutationCompletion=[&](const std::string &method){if(method=="recording.stop"){++stops;throw std::runtime_error("Owned transport Stop completion failure");}};
     app.stop();restoreCheck(stops==1&&app.nativeCommandCompletion.retained()&&app.nativeCommandCompletion.returned()->method=="recording.stop","Transport Stop lost its MIDI result");
@@ -42,12 +58,14 @@ void applicationNativeCommandRecovery(){
   }
   // Unknown outcomes use actual side effects but deliberately drop every route
   // by which the fixture could return a receipt. This is not the ordinary API.
-  for(const std::string domain:{"sample","midi","save"}){
+  for(const std::string domain:{"sample","midi","save","mixer"}){
     RestoreFixture fixture;auto &app=*fixture.app;const auto path=saveDepartureFixture(fixture);const auto doc=app.documentId;
-    const std::string method=domain=="sample"?"sample.clipboard.copy":domain=="midi"?"recording.start":"document.save";
+    if(domain=="mixer")app.documentOperation("mixer.enable",{{"expectedRevision",app.view->session.revision}});
+    const std::string method=domain=="sample"?"sample.clipboard.copy":domain=="midi"?"recording.start":domain=="mixer"?"mixer.bus.set":"document.save";
     RestoreJson params={{"expectedRevision",app.view->session.revision}},target=RestoreJson::object();
     if(domain=="sample"){params["sample"]=1;params["start"]=0;params["end"]=16;const auto &samples=app.view->session.document.at("samples");const auto found=std::find_if(samples.begin(),samples.end(),[](const auto &sample){return sample.at("index")==1;});restoreCheck(found!=samples.end(),"Clipboard fixture sample unavailable");target["id"]=found->at("id");}
     else if(domain=="midi"){params["channels"]=RestoreJson::array({0});params["instrument"]=1;}
+    else if(domain=="mixer"){params["bus"]=app.documentOperation("mixer.get",RestoreJson::object()).at("buses")[0].at("id");params["gainDB"]=-12;}
     else{params["path"]=utf8Path(path);params["overwrite"]=true;}
     app.nativeCommandTarget={{"domain",domain},{"method",method},{"documentId",doc},{"revision",app.view->session.revision},{"params",params},{"target",target}};
     unsigned writes=0;restoreRejected([&]{app.nativeCommandCompletion.submit([&](const auto &name,const auto &values,const auto &)->ScreamSeq::Api::CompletedCall{++writes;(void)app.documentOperation(name,values);throw std::runtime_error("Owned unknown command result");},method,params,doc,++app.nativeCommandGeneration,app.nativeCommandTarget);});
@@ -61,6 +79,9 @@ void applicationNativeCommandRecovery(){
     }else if(domain=="midi"){
       app.duringCommandAcknowledgement=[&]{const auto take=app.view->recording.at("take");app.documentOperation("recording.discard",{{"expectedRevision",app.view->session.revision},{"take",take}});app.documentOperation("recording.start",params);};
       restoreRejected([&]{app.reviewNativeCommand();});restoreCheck(app.nativeCommandCompletion.retained(),"New MIDI take bypassed acknowledgement guard");
+    }else if(domain=="mixer"){
+      app.duringCommandAcknowledgement=[&]{auto changed=params;changed["expectedRevision"]=app.view->session.revision;changed["gainDB"]=-6;app.documentOperation("mixer.bus.set",changed);};
+      restoreRejected([&]{app.reviewNativeCommand();});restoreCheck(app.nativeCommandCompletion.retained(),"Changed mixer bypassed acknowledgement revision guard");
     }
     app.reviewNativeCommand();restoreCheck(writes==1&&!app.nativeCommandCompletion.retained()&&app.nativeCommandReport.at("outcome")=="unverified","Unknown command recovery replayed or fabricated success");
     if(domain=="save")restoreCheck(!std::filesystem::exists(path),"Save acknowledgement rewrote the absent file");

@@ -207,3 +207,19 @@ New candidate HWND checks cover each added control, independent pre/post fields,
 exact pre-gain precision, invalid value retention/cancel, keyboard scrolling and
 a late Master. The older focus/reorder cases were updated for the internal IDs.
 No test was weakened, executed, or rebuilt in this slice.
+
+## Details completion ownership — source only
+
+Mixer Details enable/add/remove/apply now submits through the existing retained
+native command-result owner. A completion/presentation failure retains the exact
+receipt and original request; an unknown outcome blocks a second command and
+document retirement. Reload becomes Review result while reconciliation is needed.
+Known-result review retains newer raw Details fields. Unknown-result review reads
+the current mixer and guards the observed document/revision/generation through
+acknowledgment; it never resends the write. Strips cannot begin a competing gesture
+while this command result is unresolved.
+
+The existing workspace command-result fixture now includes completed Mixer Apply
+with a later raw name and an unknown mixer result whose review is invalidated by
+a concurrent bus edit. These are source-only additions to the same bounded
+workspace command-result group; include that group at the P1 checkpoint.
