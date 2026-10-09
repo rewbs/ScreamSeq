@@ -208,10 +208,10 @@
             if(id==samplesCommand||id==sampleCommandBase)revealWorkspaceMainEditor("samples");
             else if(id==effectsCommand)revealWorkspaceMainEditor("effects");
             else if(id==pluginsCommand)revealWorkspaceMainEditor("plugins");
-            else if(id==mixerCommand)revealWorkspaceMainEditor("mixer");
+            else if(id==mixerCommand||id==mixerStripsCommand||id==mixerDetailsCommand)revealWorkspaceMainEditor("mixer");
             else if(id==graphCommand)revealWorkspaceMainEditor("graph");
             else if(id==focusPatternCommand||id==graphLanesFocus||id==patternChooser||id==orderChooser)revealWorkspacePattern();
-            if(id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==graphCommand||id==mixerCommand)workspaceState.lowerVisible=true;
+            if(id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==graphCommand||id==mixerCommand||id==mixerStripsCommand||id==mixerDetailsCommand)workspaceState.lowerVisible=true;
             if(id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==soundCommand){mixerEditorOpen=false;graphEditorOpen=false;}
             if(graphCurveCommand(id) || graphControlCommand(id) || mixerControlCommand(id) || noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
             else if(id==graphWorkflowCommand){openGraphWorkflow();return;}
@@ -288,7 +288,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=curvePattern&&id<=curveReference) && id!=openGraphCurveCommand && id!=dockGraphCurveCommand && id!=editorGraphCurveTab && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouting) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginReconnect) && id!=effectsCommand && !isEffectControl(id)) SetFocus(window);
+            if(!(id>=curvePattern&&id<=curveReference) && id!=openGraphCurveCommand && id!=dockGraphCurveCommand && id!=editorGraphCurveTab && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerColor) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginReconnect) && id!=effectsCommand && !isEffectControl(id)) SetFocus(window);
             if(GetFocus()==window&&!workspaceFocusedCanvasVisible())focusVisibleWorkspaceCanvas();
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}

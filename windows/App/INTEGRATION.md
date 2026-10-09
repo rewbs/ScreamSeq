@@ -284,9 +284,14 @@ candidate still requires the qualification gates in
 `../../doc/windows-parity-plan-2026-10-09/P1-IMPLEMENTATION.md`.
 
 The native mixer Details dock has a captured, revision-guarded bus draft, compact numeric
-controls, main-output selection (including disconnect), mute/solo, group creation
+controls, main-output selection (including disconnect), mute/solo, group/return creation
 and removal, reload, Apply, keyboard access and stereo meters. Unfinished fields
 survive navigation and stale revisions; async completion checks draft generation.
+Name and six-digit RGB color edits share the retained Apply transaction; invalid
+color text stays visible until corrected or reloaded. Add group and Add return
+appear beneath the bus list and in the command palette. A new bus opens its
+Details name field; existing sends remain unchanged. Add/remove commands reject
+while Details has unfinished work, including when invoked from the palette.
 It reuses the same API operations as external clients. Painting reads retained
 UI state, with meter snapshots collected by a UI timer. The reusable graph dock
 adds cached nodes, ports and wires, socket dragging, pan/zoom, definition/property

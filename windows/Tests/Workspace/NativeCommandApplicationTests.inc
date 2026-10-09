@@ -1,5 +1,64 @@
 void applicationNativeCommandRecovery(){
   withRestoreFixture([](RestoreApplication &app){
+    app.command(patternCommand);app.command(mixerStripsCommand);
+    restoreCheck(app.mixerEditorVisible()&&app.mixerStrips&&app.mixerStrips->visible()&&GetFocus()==app.mixerStrips->window(),
+      "Strips command did not reveal the mixer and retain its keyboard focus");
+    const auto before=songState(app);const auto target=app.mixerTarget;
+    app.busy=true;app.command(mixerDetailsCommand);
+    restoreCheck(app.deferredViews.size()==1&&app.deferredViews.front().command==mixerDetailsCommand&&app.mixerStripsMode,
+      "Busy Details activation was lost or executed reentrantly");
+    app.busy=false;app.drainViews();
+    restoreCheck(app.deferredViews.empty()&&!app.mixerStripsMode&&app.mixerEditorVisible()&&GetFocus()==app.controls.at(mixerList)&&songState(app)==before,
+      "Deferred Details opening changed music or lost its native focus");
+    app.busy=true;app.command(mixerStripsCommand);app.mixerTarget="missing-captured-bus";
+    app.busy=false;app.drainViews();
+    restoreCheck(app.deferredViews.empty()&&!app.mixerStripsMode&&app.status.find(L"View target changed")!=std::wstring::npos,
+      "Deferred mixer activation followed a changed target");
+    app.mixerTarget=target;
+  });
+  {
+    RestoreFixture fixture;auto &app=*fixture.app;
+    app.documentOperation("mixer.enable",{{"expectedRevision",app.view->session.revision}});
+    app.command(mixerDetailsCommand);
+    const auto before=app.documentOperation("mixer.get",RestoreJson::object());
+    app.mixerControlCommand(mixerAddReturn);
+    const auto added=app.documentOperation("mixer.get",RestoreJson::object());
+    const auto id=app.mixerTarget;
+    auto bus=[&](const RestoreJson &data)->RestoreJson {
+      for(const auto &entry:data.at("buses"))if(entry.at("id")==id)return entry;
+      throw std::runtime_error("Created return identity is missing");
+    };
+    restoreCheck(added.at("buses").size()==before.at("buses").size()+1&&bus(added).at("kind")=="return"&&
+      app.mixerEditorVisible()&&!app.mixerStripsMode&&GetFocus()==app.controls.at(mixerName),
+      "Add Return did not expose the new stable bus in retained Details");
+    for(size_t i=0;i<before.at("buses").size();++i)restoreCheck(added.at("buses")[i]==before.at("buses")[i],
+      "Add Return changed an existing bus or created an unsolicited send");
+    app.edit("history.undo",{{"domain","all"}});
+    restoreCheck(app.documentOperation("mixer.get",RestoreJson::object()).at("buses")==before.at("buses"),"Add Return Undo changed existing routes");
+    app.edit("history.redo",{{"domain","all"}});app.mixerTarget=id;app.refreshMixer();
+    restoreCheck(app.documentOperation("mixer.get",RestoreJson::object()).at("buses")==added.at("buses"),"Add Return Redo changed its stable identity");
+    rawDraftText(app.controls.at(mixerName),L"Texture return");rawDraftText(app.controls.at(mixerColor),L"12zz90");app.mixerFieldChanged();
+    const auto generation=app.mixerGeneration;const auto revision=app.view->session.revision;
+    for(const auto command:{mixerApply,mixerAdd,mixerAddReturn,mixerRemove})restoreRejected([&]{app.mixerControlCommand(command);});
+    restoreCheck(app.mixerDirty&&app.mixerGeneration==generation&&app.view->session.revision==revision&&
+      restoreText(app.controls.at(mixerColor))==L"12zz90"&&app.documentOperation("mixer.get",RestoreJson::object())==added,
+      "Invalid color or structural command discarded a raw draft or changed the mixer");
+    app.command(mixerStripsCommand);app.command(mixerDetailsCommand);
+    restoreCheck(restoreText(app.controls.at(mixerColor))==L"12zz90"&&app.mixerTarget==id&&app.mixerGeneration==generation,
+      "Switching mixer views discarded or retargeted the color/name draft");
+    rawDraftText(app.controls.at(mixerColor),L"12AB90");app.mixerFieldChanged();app.mixerControlCommand(mixerApply);
+    const auto named=bus(app.documentOperation("mixer.get",RestoreJson::object()));
+    auto expected=bus(added);expected["name"]="Texture return";expected["color"]=0x12ab90;
+    restoreCheck(named==expected&&!app.mixerDirty,"Applying name/color lost unrelated return settings");
+    app.edit("history.undo",{{"domain","all"}});
+    restoreCheck(bus(app.documentOperation("mixer.get",RestoreJson::object()))==bus(added),"Name and color did not Undo as one edit");
+    app.edit("history.redo",{{"domain","all"}});
+    restoreCheck(bus(app.documentOperation("mixer.get",RestoreJson::object()))==named,"Name/color Redo changed the stable return identity");
+    const auto path=saveDepartureFixture(fixture);
+    app.documentOperation("document.open",departureOpenRequest(app,path));
+    restoreCheck(bus(app.documentOperation("mixer.get",RestoreJson::object()))==named,"Return name, color or stable identity did not survive native save/reopen");
+  }
+  withRestoreFixture([](RestoreApplication &app){
     app.documentOperation("mixer.enable",{{"expectedRevision",app.view->session.revision}});
     app.command(mixerDetailsCommand);unsigned writes=0;
     rawDraftText(app.controls.at(mixerName),L"Saved bus name");app.mixerFieldChanged();

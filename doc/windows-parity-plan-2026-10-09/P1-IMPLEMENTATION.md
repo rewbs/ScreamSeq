@@ -259,3 +259,33 @@ and high-contrast treatment, Add Return and destination-aware routing/effect ent
 points, naming/color ergonomics, F04 audible gesture/Undo/save checks and both
 platform qualification. This supersedes the earlier page-only limitation, not
 any unexecuted qualification gate.
+
+## Bus creation, color and view dispatch — source only
+
+Details now exposes Add Return alongside Add Group below its bus list. Both also
+have palette entries. They use existing `mixer.bus.add`, select the returned
+stable bus ID and reveal its name field. No implicit send is added. Structural
+commands reject unfinished Details drafts even when invoked outside the disabled
+button path. Names and a six-digit RGB color field use one existing guarded Apply
+operation; invalid raw color remains owned by the same draft and revision.
+Stored colors appear as a small strip accent, with names still providing identity.
+No codec, API shape or native audio change is needed for these existing fields.
+
+Strips/Details view commands now participate in deferred view opening, captured
+target checks, lower-host reveal and native focus retention. A song-routing bus
+inspection explicitly opens Details. Existing Main draft Review already selects
+Details, and continues to do so.
+
+Added unexecuted workspace command/recovery cases for opening from Pattern focus,
+busy/deferred activation and stale target refusal, stable Return creation with
+Undo/Redo, preservation of existing routes, invalid color/raw-draft protection,
+Strips/Details switching, combined name/color Undo/Redo and native save/reopen.
+The new color field is included in initial-layout preparation and adoption. Its
+normal keyboard and mixed-DPI presentation still require the next native gate.
+Because common command dispatch changed, that checkpoint must also include the
+workspace/departure/shortcut/typing/recovery application group, in addition to P1
+native strip/model/PCM checks. No build or test was run for these changes.
+
+Remaining bounded P1 feature work includes instrument Route Here and destination-
+aware effect insertion/sidechain catalogs. Physical UI/accessibility and reciprocal
+Mac fixture checks remain open; prepared source does not close them.

@@ -341,6 +341,8 @@ private:
       if(positions_[i]==SIZE_MAX)continue;
       const float x=8+(float(positions_[i])-float(first_))*132;
       if(x>=w||x+124<=0)continue;
+      if(const auto *saved=bus(bindings_[i]))if(const auto color=saved->value("color",0u))
+        s.fill(x,stripTop_-float(scrollOffset_)+20,124,2,color);
       const auto found=meters_.find(bindings_[i]);
       for(int channel=0;channel<2;++channel) {
         const float value=found==meters_.end()?0:(channel?found->second.right:found->second.left);
