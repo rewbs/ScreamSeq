@@ -737,8 +737,56 @@
       }
     ],
     "ci_excerpts": "ci-evidence.md",
-    "ci_excerpts_sha256": "1425e664493500b9509c46998939f881e22d6d47d534e106d92d22f9794d8eeb",
+    "ci_excerpts_sha256": "a1bfe67131215343cefce5bd4d11847c5d2bfe4609e27520452c51873debdb88",
     "no_workflows_started_or_rerun": true,
     "matrix_dispositions": "peer-matrix-review.csv"
+  },
+  "latest_planning_review": {
+    "scope": "Planning documents only; no product code changes, builds, tests, application launches, CI dispatches, merges, branch switches or process control",
+    "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+    "post_reference_main_commits": 0,
+    "checkout_branch": "codex/windows-parity-safety",
+    "checkout_head": "e7f165eb4e54e522eac747561a16aa539b04519b",
+    "clean_at_start": true,
+    "changed_product_test_paths_relative_to_main": 17,
+    "additional_api_guide_change": true,
+    "existing_candidates": [
+      "605c7c688",
+      "61a28b489",
+      "4a5c8ed88",
+      "d59c24c8c",
+      "e7f165eb4"
+    ],
+    "reference_and_peer_hashes_rechecked": true,
+    "notes": "current-source-review.md",
+    "provenance_note": "Top-level checkout_head and review_refresh retain earlier discovery checkpoints; this object describes the current planning review.",
+    "ci_snapshot": {
+      "read_before_utc": "2026-10-09 10:08:53 UTC",
+      "mac_run": 37913656837,
+      "windows_run": 37913656606,
+      "status": "in progress, not a pass; existing P0a runs only"
+    },
+    "remaining_safety_gap": "F21 aggregate native raw draft protection; F22/F23 have unmerged candidates, not main fixes",
+    "new_runtime_results": false,
+    "followup_review": {
+      "scope": "Read-only source, gallery, peer-plan and existing CI review; only planning documents edited",
+      "working_tree_at_followup_start": "Pre-existing planning-document edits; no uncommitted product changes",
+      "remote_main_rechecked": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+      "input_hashes_rechecked": true,
+      "ci_read_utc": "2026-10-09 10:16 UTC",
+      "ci_checkout": "29149338d67f81677700aee820291ba4927a87e4",
+      "candidate_head": "4a5c8ed881a3168b7804ed6ddad8a62ed771c757",
+      "mac_arm64": "job 113765034330: success; app build, 120 CTests, Swift recovery/picker",
+      "mac_intel": "job 113765034523: build in progress; tests pending at snapshot",
+      "windows_x64": "job 113764926489: build, 46 portable, 62 worker, 3 scratch cases pass; workspace-restore and graph-curve-window fail; precise-note-window passes; later 5 Python cases not reached",
+      "new_executions_started": false,
+      "p0a_status": "Open: investigate observed retained-editor failures, retain assertions, await eventual Intel result; see ci-evidence.md",
+      "does_not_qualify": [
+        "later P0b commits",
+        "full interface and socket suites",
+        "foreground accessibility",
+        "hardware/audio performance"
+      ]
+    }
   }
 }

@@ -1,6 +1,6 @@
 # Parity implementation progress
 
-Implementation has resumed under the active user goal, “Go ahead with the implementation as per the latest plan.” The preceding [planning review](review-refresh.md) was documentation-only; its provenance and observations remain historical. The complete scope is the [reviewed parity plan](README.md). P0a is not fully qualified or merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.
+Historical receipt of implementation already present before the current planning-only review. Its earlier implementation authorization does not authorize execution under the current request. The complete proposed scope is the [reviewed parity plan](README.md); [current source review](current-source-review.md) distinguishes main and candidates. The results below retain their original scope and dates. P0a is not recorded here as fully qualified or merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.
 
 ## Resumed P0a: exposed Windows worker failures
 

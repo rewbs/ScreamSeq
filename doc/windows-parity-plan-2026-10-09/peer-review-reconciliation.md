@@ -1,5 +1,7 @@
 # Review of the supplied parity plan and matrix
 
+The [current source review](current-source-review.md) updates candidate disposition through `e7f165eb4` and rechecks both supplied files' hashes. Findings below about main still apply at `ffe81aa4b`; F22/F23 now have existing local candidate fixes. Main status and candidate evidence are kept separate in the parity matrix.
+
 Reviewed on 9 October 2026, planning only. The integrated implementation plan is [README.md](README.md). This document records why the peer review changed it and where the peer's assertions or prescriptions were not adopted. No product code, build, test, workflow dispatch, application launch or implementation was performed in this review pass. [Review refresh](review-refresh.md) distinguishes the current checkout's pre-existing candidate changes from the main baseline.
 
 ## Inputs and method
