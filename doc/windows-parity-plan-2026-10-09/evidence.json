@@ -2,7 +2,19 @@
   "planning_only": true,
   "no_builds_tests_or_app_launches": true,
   "date": "2026-10-09 America/Los_Angeles",
-  "checkout_head": "d37ecf785cfc7ab3a7ac66e1d888f4bf91a00921",
+  "checkout_head": "3d6a194fbab1713057e34fbcf64c7ba7107d1e30",
+  "final_planning_recheck": {
+    "read_utc": "2026-10-09 11:42 UTC",
+    "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+    "checkout_head": "3d6a194fbab1713057e34fbcf64c7ba7107d1e30",
+    "delta_from_previous_review": "Seven planning documents only; no new product commit since d37ecf785",
+    "peer_file_hashes_match": true,
+    "scope": "Read-only source, archive, image and GitHub evidence inspection; planning-document edits only. No product edits, builds, tests, app launches, workflow dispatches, commits, pushes or merges.",
+    "candidate_pr": 3,
+    "candidate_head": "6c3eea908fd3167ada681b2c44be551cb7eb94a3",
+    "candidate_status": "Open draft, unmerged; Windows job 113798216568 and Mac jobs 113798215876/113798216235 still in progress when read",
+    "plan_refinement": "P3c owns New/Demo/song settings/load report; P6 consumes those interfaces for exports and codec convergence. Subphase estimates are included in parent estimates."
+  },
   "inspected_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
   "remote_main_equal_to_reference": true,
   "post_reference_main_commits": 0,
@@ -1105,5 +1117,5 @@
       "windows/App/WorkspaceView.inc": "f4c023615d5bc785fbf0d0fe0b87d90870492ac3e3a5a5eea35d3efe8841765a"
     }
   },
-  "snapshot_precedence": "Top-level checkout_head and latest_planning_review identify this review. prior_candidate_review, previous_planning_review and review_refresh are retained historical snapshots."
+  "snapshot_precedence": "Top-level checkout_head and final_planning_recheck identify the final read-only recheck. latest_planning_review supplies the unchanged product hashes and preceding detailed inspection. prior_candidate_review, previous_planning_review and review_refresh are retained historical snapshots."
 }
