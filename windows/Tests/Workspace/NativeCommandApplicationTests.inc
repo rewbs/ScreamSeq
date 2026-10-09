@@ -32,8 +32,12 @@ void applicationNativeCommandRecovery(){
       app.sampleMutationCompletion=[&](const std::string &method){if(method==failing){++calls;throw std::runtime_error("Owned MIDI native completion failure");}};
       if(failing=="recording.discard")restoreRejected([&]{app.discardRecordingTake(take);});else restoreRejected([&]{app.finishRecordingTake(take);});
       restoreCheck(calls==1&&app.nativeCommandCompletion.retained()&&app.nativeCommandCompletion.returned()->method==failing,"MIDI failure lost its own exact operation");
-      const auto state=app.documentOperation("recording.get",RestoreJson::object());app.reviewNativeCommand();
-      restoreCheck(!app.nativeCommandCompletion.retained()&&calls==1&&app.documentOperation("recording.get",RestoreJson::object())==state,"MIDI Review repeated Stop/commit/discard or changed the retained take");app.sampleMutationCompletion={};
+      auto state=app.documentOperation("recording.get",RestoreJson::object());app.reviewNativeCommand();
+      auto after=app.documentOperation("recording.get",RestoreJson::object());
+      // hostTime is sampled on every read, including a stopped/absent take.
+      // All take identity, events, loss counters and state still compare exactly.
+      state.erase("hostTime");after.erase("hostTime");
+      restoreCheck(!app.nativeCommandCompletion.retained()&&calls==1&&after==state,"MIDI Review repeated Stop/commit/discard or changed the retained take");app.sampleMutationCompletion={};
     });
   }
   // Unknown outcomes use actual side effects but deliberately drop every route

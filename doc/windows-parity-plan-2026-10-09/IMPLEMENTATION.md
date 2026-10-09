@@ -12,6 +12,40 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Initial grouped P0b gate — 9 October, 20:06–20:17 UTC
+
+Candidate `5358a8ebc` built successfully in one consolidated ARM64 invocation,
+starting after the hourly checkpoint. The next normal build checkpoint is no earlier
+than 21:10:15 UTC. Source repairs are batched until then; no per-failure rebuild.
+
+- The 66-check native/worker gate passed 62 checks, including F04 and all three Parity
+  WAVs, bank/master/catalogue result recovery, all 23 envelope scenarios, all controller
+  checks, and native docking/ownership. The three failing receipt/unknown-asset/command
+  groups stopped early; their later scenarios remain unexecuted.
+- The fourth failure occurred after every sample-readback assertion passed: the observer
+  detected a changed foreground window. The same binary's focused rerun passed in 68.15 s,
+  including foreground/clipboard preservation. The initial failure remains recorded;
+  its cause is not inferred as a product defect or user interaction from this evidence.
+- All 26 selected actual application tests passed without skips in 44.919 s: recording,
+  MIDI setup/review, sample recorder ownership, shortcut/text ownership, recovery, typing,
+  note release and worker-wait input. Audio-dependent cases used explicit silent output;
+  this does not qualify a physical input device or foreground appearance.
+
+Source repairs prepared together: typed strings in the direct-render observation
+adapter (MSVC warned about comparing literal arrays); unknown-render entry tests now
+assert declined unverified observation plus unchanged song/exact owner instead of
+expecting the old permanent exception; the real multisample fixture supplies the API's
+required two files and asserts preview zones; MIDI comparison excludes only the changing
+per-read hostTime and still compares all take/events/loss state. They are not rebuilt
+or qualified yet. No production/API validation or safety assertion was relaxed.
+
+Logs under `bin/parity-evidence`: `p0b-closure-build-01.log`,
+`p0b-closure-native-worker-01.log`, `p0b-closure-app-01.log`, and
+`p0b-closure-readback-recheck-01.log`. `p0b-closure-receipt.json` pins 1,884
+source/dependency inputs, compiler/cache identities, nine executables and logs for the
+initial candidate. Windows x64, affected Mac builds and reciprocal fixture exchange
+remain unqualified. P0b is not complete; these scoped passes are not a parity percentage.
+
 ## Grouped closure candidate (source prepared; qualification pending)
 
 C1–C5 are now prepared together for one consolidated build, rather than one build

@@ -97,7 +97,7 @@
         directSampleRenderPending=true;struct Guard{bool &value;~Guard(){value=false;}} guard{directSampleRenderPending};
         documentOperation("synchronizeView",Json::object());
         if(directSampleRenderCompletion.returned()){finishDirectSampleRender();return;}
-        directSampleRenderObservation.read([this](const auto &method,const auto &params){if(method=="document.get")return view->session.document;return documentOperation(method,params);},
+        directSampleRenderObservation.read([this](const std::string &method,const Json &params){if(method=="document.get")return view->session.document;return documentOperation(method,params);},
           [this]{return std::pair(documentId,view->session.revision);},[this]{return directSampleRenderGeneration;},directSampleRenderTarget.at("documentId").get<std::string>(),
           Json{{"completion",directSampleRenderCompletion.snapshot()},{"params",directSampleRenderTarget}});
         directSampleRenderReport=directSampleRenderObservation.report();

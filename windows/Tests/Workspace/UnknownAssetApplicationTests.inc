@@ -16,12 +16,17 @@ void applicationUnknownAssetRecovery(){
   {
     RestoreFixture fixture;auto &app=*fixture.app;const auto path=fixture.folder/L"Parity_C3.wav";
     {auto source=Tracker::Document::demo();std::ofstream file(path,std::ios::binary);restoreCheck(source->song().SaveWAVSample(1,file),"Write owned multisample fixture");}
-    const RestoreJson family={{"name","Parity"},{"suggestedOctaveShift",0},{"explanation","Owned unknown-result fixture"},{"samples",RestoreJson::array({{{"path",utf8Path(path)},{"filename","Parity_C3.wav"},{"sourceNote","C3"},{"semitone",36}}})}};
+    const auto upper=fixture.folder/L"Parity_C4.wav";
+    {auto source=Tracker::Document::demo();std::ofstream file(upper,std::ios::binary);restoreCheck(source->song().SaveWAVSample(2,file),"Write second owned multisample fixture");}
+    const RestoreJson family={{"name","Parity"},{"suggestedOctaveShift",0},{"explanation","Owned unknown-result fixture"},{"samples",RestoreJson::array({
+      {{"path",utf8Path(path)},{"filename","Parity_C3.wav"},{"sourceNote","C3"},{"semitone",36}},
+      {{"path",utf8Path(upper)},{"filename","Parity_C4.wav"},{"sourceNote","C4"},{"semitone",48}}})}};
     const auto before=app.view->instruments;unsigned writes=0;
     ScreamSeq::MultisampleImportWindow tool(app.window,[&](const std::string &method,const RestoreJson &params){if(method=="document.get")return app.view->session.document;if(method=="sample.library.preview.stop")return RestoreJson::object();return app.documentOperation(method,params);},
       [&]{return std::pair(app.documentId,app.view->session.revision);},[](unsigned,const auto &){throw std::runtime_error("Unknown import must not select a guessed instrument");},
       [&](const auto &method,const auto &params,const auto &)->ScreamSeq::Api::CompletedCall{++writes;(void)app.documentOperation(method,params);throw std::runtime_error("Owned unknown family import");});
-    ScreamSeq::Tests::ownGuiWindow(tool.window());tool.open(family);click(tool.window(),5603);click(tool.window(),5604);
+    ScreamSeq::Tests::ownGuiWindow(tool.window());tool.open(family);click(tool.window(),5603);
+    restoreCheck(tool.snapshot().at("zones").size()==2,"Real multisample preview did not validate both owned note files");click(tool.window(),5604);
     restoreCheck(writes==1&&!tool.snapshot().at("completion").at("returned").get<bool>(),"Family import did not retain its unknown result");
     click(tool.window(),5604);rawDraftText(GetDlgItem(tool.window(),5601),L"Later family name");click(tool.window(),5611);restoreCheck(!tool.snapshot().at("completion").is_null(),"Family acknowledgement consumed newer fields");
     click(tool.window(),5604);click(tool.window(),5611);restoreCheck(writes==1&&tool.snapshot().at("completion").is_null()&&tool.snapshot().at("needsRebase")&&tool.snapshot().at("name")=="Later family name"&&tool.snapshot().at("draft"),"Family acknowledgement repeated import or discarded its raw draft");

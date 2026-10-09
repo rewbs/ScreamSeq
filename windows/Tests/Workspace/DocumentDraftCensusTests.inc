@@ -273,11 +273,13 @@ void directRenderCompletionCensus() {
         },"sample.renderSelection",target,app.documentId,++app.directSampleRenderGeneration,target);});
         const auto unknown=census(app);const auto unchanged=songState(app);
         for(int command:{patternRenderSampleCommand,patternRenderInstrumentCommand,patternRenderOptionsCommand}){
-            // Invoke the actual entry functions; Application::command catches
-            // errors to status, which would hide accidental acceptance here.
-            restoreRejected([&]{if(command==patternRenderOptionsCommand)app.openPatternSampleRender(false);else app.renderPatternSample(command==patternRenderInstrumentCommand);});
-            restoreCheck(census(app).sameWork(unknown)&&songState(app)==unchanged&&!app.patternSampleRenderWindow,
-                "Unknown direct result allowed another render or lost its owner");
+            // Actual entries now offer read-only unknown-state observation.
+            // Declining acknowledgement must retain the exact owner and song.
+            app.nativeCommandChoice=IDNO;
+            if(command==patternRenderOptionsCommand)app.openPatternSampleRender(false);else app.renderPatternSample(command==patternRenderInstrumentCommand);
+            restoreCheck(census(app).sameWork(unknown)&&songState(app)==unchanged&&!app.patternSampleRenderWindow&&
+                app.directSampleRenderCompletion.retained()&&app.directSampleRenderReport.at("outcome")=="unverified",
+                "Declined unknown direct observation allowed another render or lost its owner");
         }
     });
 }
