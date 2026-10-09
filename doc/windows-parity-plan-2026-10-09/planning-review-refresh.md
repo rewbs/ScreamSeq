@@ -1,5 +1,7 @@
 # ScreamSeq parity planning review
 
+**Status superseded:** [current review](current-review.md) pins main to `16cab100b` and checkout to `07060e1c4`, records successful P0a CI and remaining P0b work. Source/CI status below retains its original checkpoint; use the current review and main plan for the next batch.
+
 This review consolidates the supplied Downloads plan and matrix into [the implementation plan](README.md). It is planning only. Only planning documents were written; no product code, tests, builds, app launches, CI dispatches, commits, pushes or merges were performed. Existing implementation and execution receipts are treated as evidence at their recorded inputs.
 
 ## Current source and evidence

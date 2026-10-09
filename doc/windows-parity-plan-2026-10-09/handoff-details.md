@@ -1,5 +1,7 @@
 # Implementation handoff details
 
+**Status superseded:** [current review](current-review.md) pins main to `16cab100b` and checkout to `07060e1c4`, records successful P0a CI and remaining P0b work. Source/CI status below retains its original checkpoint; use the current review and main plan for the next batch.
+
 This supplements the [implementation plan](README.md). It specifies future work. This review read source, fixtures, images and retained logs; it did not modify product code, launch the app, build, run tests, dispatch workflows or integrate a branch.
 
 **Historical checkpoint:** the candidate discussion below records `e7f165eb4` and earlier source. The [latest planning review](planning-review-refresh.md) pins the inspected checkout to `c76439494` plus pre-existing dirty source and supersedes candidate/evidence status here. The eight-file list records `61a28b489`. Departure tokens, a native registry and selected owner summaries/tests now exist; aggregate application admission/input/retirement remains future work. Cable, stage-role, layout/fixture and timing/nudge corrections also have candidate implementations. Do not implement those foundations or repairs twice; use the latest review's remaining-owner and admission checklist.

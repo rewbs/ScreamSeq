@@ -1,5 +1,7 @@
 # Review of the supplied parity plan and matrix
 
+**Status superseded:** [current review](current-review.md) pins main to `16cab100b` and checkout to `07060e1c4`, records successful P0a CI and remaining P0b work. Source/CI status below retains its original checkpoint; use the current review and main plan for the next batch.
+
 The [latest planning review](planning-review-refresh.md) refreshes this reconciliation at checkout `c76439494` and its pre-existing uncommitted owner census. It records existing fixture/timing/nudge corrections and scoped local evidence. At the 12:00 UTC snapshot, P0a Apple Silicon passed at actual PR merge `6433dc0`; Windows and Intel were still in progress. Earlier CI results remain historical evidence. [Local action audit](local-action-audit.md) adds handler-level evidence, including Activity zoom and the distinction between song and recipe modulation controls. Main-pinned findings below remain at `ffe81aa4b`; candidate status is governed by the latest review.
 
 The [current source review](current-source-review.md) updates candidate disposition through `e7f165eb4` and rechecks both supplied files' hashes. Findings below about main still apply at `ffe81aa4b`; F22/F23 now have existing local candidate fixes. Main status and candidate evidence are kept separate in the parity matrix.

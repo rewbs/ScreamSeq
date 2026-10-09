@@ -1,5 +1,7 @@
 # Planning review refresh and handoff
 
+**Status superseded:** [current review](current-review.md) pins main to `16cab100b` and checkout to `07060e1c4`, records successful P0a CI and remaining P0b work. Source/CI status below retains its original checkpoint; use the current review and main plan for the next batch.
+
 Historical review checkpoint at `61a28b489`. For the current inspected `e7f165eb4` checkout and later existing candidate evidence, use [current source review](current-source-review.md). The source status below is retained for provenance, not presented as current branch state.
 
 This is a documentation-only review of the two supplied peer files and the existing integrated plan. The comprehensive proposal remains [README.md](README.md), with its [117-row parity matrix](parity-matrix.csv), [419-entry command inventory](command-inventory.csv), [232-method API inventory](api-inventory.csv), [source map](source-map.md) and [84-row peer reconciliation](peer-matrix-review.csv). No implementation is requested by this document.
