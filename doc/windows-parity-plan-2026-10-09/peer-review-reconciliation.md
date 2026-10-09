@@ -1,14 +1,10 @@
 # Review of the supplied parity plan and matrix
 
-**Follow-up status:** [Final planning review](followup-review.md) at HEAD `be0b5e177` supersedes current-checkout statements below. Recorder Keep now has a matching typed-write constructor and retained-result path; targeted existing ARM64 logs are inspected with explicit limits. Final departure admission and unknown-result recovery remain open. The earlier snapshot below is retained for provenance; no product implementation or validation was executed during this planning review.
+**Current authority:** [Comprehensive plan](README.md) and [current source review](planning-readback.md), with [inspection receipt](planning-readback-snapshot.json). They distinguish main `16cab100b`, committed product checkpoint `e68b94c03`, docs-only HEAD `9a40d6599`, and the seven pre-existing uncommitted plugin-reconnect files. All older checkout and CI statements below are historical; they do not override that separation.
 
-**Current consolidated status:** [current review](current-review.md) pins main to `16cab100b` and checkout to `09a45783b` (product checkpoint `68c2cf1de`), separates the incomplete uncommitted native-reconciliation candidate, and records existing P0a/outcome evidence with its limits. Both supplied peer-file hashes were rechecked and match. The complete plan incorporates valid recommendations and corrects stale or overbroad claims; source/CI statements below retain their original checkpoint. Use the current review for the first remaining batch. Render/import reconciliation and worker-owned result identity have advanced in source; recorder wiring, unknown-result resolution and final departure remain unfinished and unqualified.
+Both Downloads files were reviewed again for this planning-only update. The integrated plan remains the base. The peer's complete architecture, visual/interaction guidance, phase specifications, validation rules, decisions and all 84 matrix acceptance proposals were considered. No product changes, builds, tests, application launches, commits or CI dispatches were performed during this review.
 
-The [earlier planning review](planning-review-refresh.md) records checkout `c76439494` and its then-uncommitted owner census. It records existing fixture/timing/nudge corrections and scoped local evidence. At that 12:00 UTC snapshot, P0a Apple Silicon passed at actual PR merge `6433dc0`; Windows and Intel were still in progress. All three later passed as recorded in the current review. [Local action audit](local-action-audit.md) adds handler-level evidence, including Activity zoom and the distinction between song and recipe modulation controls. Baseline findings below remain pinned to `ffe81aa4b`; current main and candidate status are governed by the current review.
-
-The [current source review](current-source-review.md) updates candidate disposition through `e7f165eb4` and rechecks both supplied files' hashes. Findings below about main still apply at `ffe81aa4b`; F22/F23 now have existing local candidate fixes. Main status and candidate evidence are kept separate in the parity matrix.
-
-Reviewed on 9 October 2026, planning only. The integrated implementation plan is [README.md](README.md). This document records why the peer review changed it and where the peer's assertions or prescriptions were not adopted. No product code, build, test, workflow dispatch, application launch or implementation was performed in this review pass. [Review refresh](review-refresh.md) distinguishes the current checkout's pre-existing candidate changes from the main baseline.
+The historical reconciliation below records the original adoption rationale. Its red-main recommendation is superseded by merged P0a repairs. Its missing result-retention findings are superseded where the current branch and reconnect candidate provide those paths; unknown-result recovery and final document admission remain open. [Local action audit](local-action-audit.md) retains handler-level detail rather than inferring missing behavior from palette counts.
 
 ## Inputs and method
 
@@ -93,3 +89,26 @@ The latest review also corrected the integrated plan itself: recorded-automation
 The peer supplied fourteen decision prompts. Most are routine implementation recommendations that do not require blocking user input: small generated fixture corpus, scoped existing JSON use, reviewing rather than blindly adopting the Mixer proposal, stable command IDs, typed numeric policy, supported compiler repair and one-main integration. The plan states recommended behavior and requires compatibility tests instead of asking the user to choose low-level implementation details.
 
 No decision blocks the first batch. Required device/commercial-plugin support and any reduction of the currently assumed platform/architecture scope still genuinely require user input before qualification/release. Branch protection settings, paid/available runners or new automatic recovery-deletion policy may require owner authorization when proposed concretely; none is changed or needed to complete this plan. Mac defects that threaten shared correctness or the integration gate are in scope; discretionary Mac restyling is not.
+
+## Disposition of the peer decision prompts
+
+These are planning recommendations, not authorization to implement or change repository settings. Routine engineering choices need no additional product decision.
+
+| Peer ID | Integrated decision and reason | Owner phase |
+|---|---|---|
+| D1 Commit model | Gesture-end commit and one Undo for direct manipulation; retain Preview/Apply for compound edits. Never discard invalid text on blur or blindly rebase a stale request | P1, P3, P4 |
+| D2 Mac scope | Shared correctness, compatibility, native build viability and necessary regression repairs are in scope. Discretionary Mac restyling is not required | All shared batches |
+| D3 Integral values | Use typed range-checked validation: reject booleans/fractions; preserve exact integer tokens. Accept integral real input only under a safe documented conversion policy; no blanket rejection above 2^53 | P0c, domain migration |
+| D4 Unknown metadata | Preserve safe unknown data without implying understood semantics. Protect the source when meaning is unsupported or conversion is lossy; keep strict mutation/save validation | P0c, P6 |
+| D5 Keyboard/playback defaults | Keep existing saved bindings, add explicit focus-return and Stop, resolve local editing before transport, and qualify IME/AltGr. Loop/Follow are independent visible states; do not silently change user preferences to match a screenshot | P3 |
+| D6 JSON dependency | The existing vendored JSON library is a reasonable scoped codec/adapter dependency. Do not introduce JSON or Foundation into render callbacks or the musical model just to share code | P3a, P6 |
+| D7 Fixtures in Git | Recommend the small generated fixture/WAV corpus plus hashes/provenance; keep the gallery external and immutable. No arbitrary user songs are imported | P0c |
+| D8 CI policy | Both platforms must pass the applicable same-candidate checks before main integration. Current workflows already run on main-targeted PRs. Paid runner or branch-protection changes require owner approval only when concretely proposed | P0c, P8 |
+| D9 Mixer proposal | Review and reuse compatible pieces against current source and A02; never import stale Main.cpp/API/CMake wholesale. This is an engineering assessment, not a blocking user choice | P1 |
+| D10 Recovery pruning | No new automatic age-based deletion is required for parity. Preserve current recovery/take protections. A future retention-policy change needs an explicit product decision | P6, if later proposed |
+| D11 PCM tolerance | Characterize unchanged deterministic paths, preserve existing strict assertions, and justify tolerances per renderer/provider/rate/partition. A user-selected tolerance must not hide a regression | P6, P8 |
+| D12 dryRun differences | Record exact method contracts in conformance cases, then add safe nonmutating validation paths as each family migrates; do not call vendor/file effects twice | P0c, P4, P6 |
+| D13 Audio backend scope | Keep WASAPI native. Device robustness is required; exclusive-mode/ASIO expansion is not assumed necessary for Mac parity. A new backend is a separate scope decision | P7 |
+| D14 Priority | P0a is already merged. Finish P0b retained-work safety, establish P0c conformance, then Mixer and tracks. Commands/UI foundation and file entry points can start earlier at their stated dependencies | P0b–P3 |
+
+The only anticipated release inputs are required audio/MIDI devices and must-have commercial plugins, plus an explicit decision if the existing architecture support is to be reduced. None blocks completing this plan or defining the first batch.
