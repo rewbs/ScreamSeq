@@ -12,6 +12,57 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Grouped ARM64 closure gate and draft PR — 9 October, 21:18 UTC
+
+Candidate **8709816852aefad865911b13041371a55f621f9e** built successfully from
+21:10:15 to 21:11:49 UTC, after the hourly cadence interval. The single invocation
+built ScreamSeq, workspace-restore-tests and portable-tests; no warnings were found
+in the retained log. All **13 targeted CTests passed in 256.95 s**: ten workspace
+groups plus synthetic recording-device, sample-preview and parameter-provenance.
+The three originally failing receipt/asset/command groups completed their remaining
+assertions, and sample readback passed with its foreground/clipboard checks.
+
+The source receipt records 1,897 inputs, unchanged compiler identities and an
+unchanged CMake cache. The seven previously captured worker/envelope/native-owner
+executables are byte-identical; their unchanged implementation/test/dependency
+paths permit bounded reuse of successful earlier checks. The receipt keeps the
+changed-path list and original failures; no failed result is reused as a pass.
+Current registration evidence lists **165 CTests, zero unscheduled and zero repeated**
+under the prepared CI groups, plus 18 separate projects. This is scheduling evidence,
+not a claim that every standalone project has executed.
+
+Actual-app qualification first failed at fixture setup because the caller omitted
+TMPDIR; no product assertion ran. With the required owned temporary directory,
+**25/26 passed, zero skipped, in 44.915 s**. The remaining recording-autosave case
+received an explicit busy reply from a read immediately after MIDI injection.
+It now uses the existing `wait_recording` helper's eight-second, read-only busy
+poll and captures the returned take. No mutation is replayed, no deadline is enlarged
+and every history/recovery assertion remains. That sole case passed in **1.059 s**
+on the same executable. The Python-only correction is local pending the next push;
+the active CI candidate still contains the original polling call.
+
+The native F04 test retained `original.screamseq`, `rendered.screamseq`,
+`imported.screamseq` and exact PCM/identity observations under
+`bin/windows-parity-p0/parity-fixture-output/ScreamSeqRestore-6512-3886339994713/`.
+Both edited files then passed exact typed two-save/reopen checks through the actual
+Windows pipe in `bin/parity-evidence/p0b-windows-edited-01/`. These are the Windows
+edited legs; Mac-and-return checks remain outstanding. Original files, executable,
+foreground and clipboard were preserved by the owned runner.
+
+Evidence: `bin/parity-evidence/p0b-closure-receipt-02.json`, build/native `-02` logs,
+application `-02` setup failure, `-03` full run and `app-autosave-04` focused correction;
+`p0c-ctest-registration-02.json` and `p0c-schedule-after-build-02.json` retain the census.
+The conformance tools passed **13 tests in 6.578 s** before this build. The prior helper
+result remains 17 passes and one separately configured historical-reference skip.
+
+[Draft PR #4](https://github.com/rewbs/ScreamSeq/pull/4) targets main and contains
+the frozen candidate. Main remains 16cab100; the PR is mergeable. Windows x64 run
+**37991809865** and Mac Apple Silicon/Intel run **37991809860** are confirmed live;
+both are still building at this checkpoint. Do not push each local fixture/docs fix
+and restart those jobs. The next normal local build is no earlier than **22:11:49 UTC**.
+P0b stays open for the cross-platform/reciprocal gate; P0c Mac baselines and P1–P8
+remain outstanding. No foreground/device/release qualification is claimed.
+
 ## P0c codec recovery corpus, helper alignment and scheduling audit — 9 October
 
 Twenty-one owned F04 derivatives completed through the actual Windows pipe on the
